@@ -22,6 +22,7 @@ import {
 } from './dto/manage-reimbursement-item.dto';
 import { NotificationService } from '../notification/notification.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AI_AGENT_CORE_PRINCIPLES } from '../ai/ai-principles';
 
 interface UserContext {
   id: string;
@@ -59,7 +60,11 @@ export class ExpenseService {
     return this.submitIntelligentExpenseRequest(data, requestedBy);
   }
 
-  async predictReimbursementItem(entityId: string, description: string, model?: string) {
+  async predictReimbursementItem(
+    entityId: string,
+    description: string,
+    model?: string,
+  ) {
     const geminiApiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!geminiApiKey) {
       throw new BadRequestException('GEMINI_API_KEY is not configured');
@@ -122,12 +127,19 @@ export class ExpenseService {
 
     // 2. Prepare prompt for Gemini
     const accountListText = accounts
-      .map((a) => `- ${a.code} ${a.name} (${a.description || ''}) [ID: ${a.id}]`)
+      .map(
+        (a) => `- ${a.code} ${a.name} (${a.description || ''}) [ID: ${a.id}]`,
+      )
       .join('\n');
 
     const prompt = `
-You are a Senior CPA (Certified Public Accountant) and CFO for a large Taiwanese E-commerce Enterprise.
-Your goal is to build a "Standardized Reimbursement Policy" and "Item Master Data".
+${AI_AGENT_CORE_PRINCIPLES}
+
+Role:
+You are a Senior CPA and CFO for a Taiwanese e-commerce company.
+
+Goal:
+Build practical reimbursement policy master data that employees can actually use.
 
 Context:
 - Location: Taiwan (R.O.C.)
@@ -135,8 +147,9 @@ Context:
 - Tax System: VAT (Value Added Tax), GUI (Government Uniform Invoice)
 
 Task:
-Generate a professional, granular, and tax-compliant list of 40-50 Reimbursement Items.
-These items must bridge the gap between "Employee Language" (what they buy) and "Accounting Language" (General Ledger Accounts).
+Generate a practical, tax-compliant list of 40-50 reimbursement items.
+The list should bridge employee language and accounting language.
+Less is more: avoid duplicate, overly narrow, or hard-to-understand items.
 
 Categories to cover deeply:
 1. **Digital Marketing (Ads & Traffic)**:
@@ -166,8 +179,8 @@ For each item, provide:
 Available Accounts:
 ${accountListText}
 
-Return the result as a JSON array of objects.
-Do not include any markdown formatting (like \`\`\`json), just the raw JSON string.
+Return the result as a raw JSON array of objects only.
+Do not include markdown or explanation.
 `;
 
     try {
@@ -184,7 +197,9 @@ Do not include any markdown formatting (like \`\`\`json), just the raw JSON stri
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Gemini API Error: ${response.statusText} - ${errorText}`);
+        throw new Error(
+          `Gemini API Error: ${response.statusText} - ${errorText}`,
+        );
       }
 
       const data = await response.json();
@@ -194,7 +209,10 @@ Do not include any markdown formatting (like \`\`\`json), just the raw JSON stri
         throw new Error('Empty response from Gemini');
       }
 
-      const jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const jsonString = text
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
       const items = JSON.parse(jsonString);
 
       let createdCount = 0;
@@ -749,7 +767,10 @@ Do not include any markdown formatting (like \`\`\`json), just the raw JSON stri
       description: dto.description ?? request.description,
       suggestedItemId: dto.suggestedItemId ?? request.suggestedItemId ?? null,
       chosenItemId:
-        dto.chosenItemId ?? request.reimbursementItemId ?? request.suggestedItemId ?? null,
+        dto.chosenItemId ??
+        request.reimbursementItemId ??
+        request.suggestedItemId ??
+        null,
       expenseRequestId: requestId,
       suggestedAccountId: dto.suggestedAccountId ?? null,
       chosenAccountId: dto.chosenAccountId ?? null,
@@ -966,17 +987,13 @@ Do not include any markdown formatting (like \`\`\`json), just the raw JSON stri
       payload.defaultReceiptType = dto.defaultReceiptType ?? null;
     }
     if (typeof dto.allowedReceiptTypes !== 'undefined') {
-      payload.allowedReceiptTypes = this.stringifyList(
-        dto.allowedReceiptTypes,
-      );
+      payload.allowedReceiptTypes = this.stringifyList(dto.allowedReceiptTypes);
     }
     if (typeof dto.allowedRoles !== 'undefined') {
       payload.allowedRoles = this.stringifyList(dto.allowedRoles);
     }
     if (typeof dto.allowedDepartments !== 'undefined') {
-      payload.allowedDepartments = this.stringifyList(
-        dto.allowedDepartments,
-      );
+      payload.allowedDepartments = this.stringifyList(dto.allowedDepartments);
     }
     if (typeof dto.isActive !== 'undefined') {
       payload.isActive = dto.isActive;

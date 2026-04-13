@@ -1,42 +1,18 @@
-import React, { useState, useRef, useEffect } from "react";
-import { Button, Input, Avatar, Card, Typography, Space } from "antd";
+import React, { useEffect, useRef, useState } from "react";
+import { Button, Card, Input, Typography } from "antd";
 import {
-  SendOutlined,
-  CloseOutlined,
-  UserOutlined,
-  BulbOutlined,
   BarChartOutlined,
-  SearchOutlined,
-  AudioOutlined,
-  PictureOutlined,
+  BulbOutlined,
+  CloseOutlined,
   DollarOutlined,
+  RobotOutlined,
+  SendOutlined,
 } from "@ant-design/icons";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { aiService } from "../services/ai.service";
 import { useAI } from "../contexts/AIContext";
 
 const { Text } = Typography;
-
-// Gemini Sparkle Icon
-const GeminiIcon = ({
-  className = "",
-  style = {},
-}: {
-  className?: string;
-  style?: React.CSSProperties;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-    style={style}
-    width="1em"
-    height="1em"
-  >
-    <path d="M12 2C12 2 13.5 7.5 16 10C18.5 12.5 22 12 22 12C22 12 18.5 13.5 16 16C13.5 18.5 12 22 12 22C12 22 10.5 18.5 8 16C5.5 13.5 2 12 2 12C2 12 5.5 12.5 8 10C10.5 7.5 12 2 12 2Z" />
-  </svg>
-);
 
 interface Message {
   id: string;
@@ -46,10 +22,23 @@ interface Message {
 }
 
 const SUGGESTED_PROMPTS = [
-  { icon: <DollarOutlined />, text: "查詢 Power Bank 成本" },
-  { icon: <BarChartOutlined />, text: "分析本月銷售趨勢" },
-  { icon: <SearchOutlined />, text: "查詢未付款訂單" },
+  { icon: <BarChartOutlined />, text: "本月銷售總額是多少？" },
+  { icon: <BulbOutlined />, text: "昨天支出大概多少？" },
+  { icon: <DollarOutlined />, text: "Power Bank 的成本與庫存" },
+  { icon: <RobotOutlined />, text: "本月薪資成本是多少？" },
 ];
+
+const AssistantBadge: React.FC<{ muted?: boolean }> = ({ muted = false }) => (
+  <div
+    className={`flex h-9 w-9 items-center justify-center rounded-2xl border ${
+      muted
+        ? "border-slate-200 bg-white text-slate-500"
+        : "border-sky-200 bg-sky-50 text-sky-700"
+    }`}
+  >
+    <RobotOutlined />
+  </div>
+);
 
 const AICopilotWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -60,7 +49,7 @@ const AICopilotWidget: React.FC = () => {
       id: "welcome",
       type: "ai",
       content:
-        "你好！我是財務助手。我會先理解你的問題，再去找最相關的資料，並用最簡單的方式回答你。",
+        "你好，我是 AI 助手。我會先理解你的問題，再用目前系統裡最相關的資料，給你一個直接、簡單的答案。",
       timestamp: new Date(),
     },
   ]);
@@ -68,31 +57,26 @@ const AICopilotWidget: React.FC = () => {
   const { selectedModelId } = useAI();
   const entityId = import.meta.env.VITE_DEFAULT_ENTITY_ID || "tw-entity-001";
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
   const handleSend = async (text: string = inputValue) => {
     if (!text.trim()) return;
 
-    // Add user message
     const userMsg: Message = {
       id: Date.now().toString(),
       type: "user",
       content: text,
       timestamp: new Date(),
     };
+
     setMessages((prev) => [...prev, userMsg]);
     setInputValue("");
     setIsTyping(true);
 
     try {
       const response = await aiService.chat(text, entityId, selectedModelId);
-
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         type: "ai",
@@ -103,13 +87,15 @@ const AICopilotWidget: React.FC = () => {
     } catch (error: any) {
       if (error.response?.status !== 401) {
         console.error("AI Chat Error", error);
-        const errorMsg: Message = {
-          id: (Date.now() + 1).toString(),
-          type: "ai",
-          content: "抱歉，我現在無法連線到 AI 服務，請稍後再試。",
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, errorMsg]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: (Date.now() + 1).toString(),
+            type: "ai",
+            content: "抱歉，我現在暫時無法整理資料回覆你，請稍後再試一次。",
+            timestamp: new Date(),
+          },
+        ]);
       }
     } finally {
       setIsTyping(false);
@@ -118,44 +104,43 @@ const AICopilotWidget: React.FC = () => {
 
   return (
     <>
-      {/* Floating Action Button */}
       <motion.div
         className="fixed bottom-8 right-8 z-50"
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
+        whileHover={{ scale: 1.04 }}
+        whileTap={{ scale: 0.98 }}
       >
         <Button
           type="primary"
           shape="circle"
           size="large"
-          className={`!w-14 !h-14 !border-0 !shadow-lg flex items-center justify-center overflow-hidden relative group ${isOpen ? "!bg-gray-900" : ""}`}
+          className="!h-14 !w-14 !border-0 !shadow-xl"
           style={{
             background: isOpen
-              ? "#1f1f1f"
-              : "linear-gradient(135deg, #4E75F6 0%, #8E4EC6 50%, #E34F6F 100%)",
+              ? "#0f172a"
+              : "linear-gradient(135deg, #0f766e 0%, #2563eb 100%)",
           }}
-          onClick={() => setIsOpen(!isOpen)}
-        >
-          {isOpen ? (
-            <CloseOutlined className="text-xl text-white" />
-          ) : (
-            <GeminiIcon className="text-2xl text-white animate-pulse" />
-          )}
-        </Button>
+          onClick={() => setIsOpen((prev) => !prev)}
+          icon={
+            isOpen ? (
+              <CloseOutlined className="text-white" />
+            ) : (
+              <RobotOutlined className="text-white" />
+            )
+          }
+        />
       </motion.div>
 
-      {/* Chat Window */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            initial={{ opacity: 0, y: 18, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            exit={{ opacity: 0, y: 18, scale: 0.96 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="fixed bottom-28 right-8 z-40 w-[400px] h-[650px] max-h-[80vh]"
+            className="fixed bottom-28 right-8 z-40 h-[650px] max-h-[80vh] w-[400px] max-w-[calc(100vw-2rem)]"
           >
             <Card
-              className="h-full shadow-2xl !rounded-3xl overflow-hidden flex flex-col !border-0 !bg-white/95 backdrop-blur-xl"
+              className="flex h-full flex-col overflow-hidden !rounded-3xl !border-0 !bg-white/95 shadow-2xl backdrop-blur-xl"
               bodyStyle={{
                 padding: 0,
                 height: "100%",
@@ -163,143 +148,117 @@ const AICopilotWidget: React.FC = () => {
                 flexDirection: "column",
               }}
             >
-              {/* Header */}
-              <div className="p-5 border-b border-gray-100/50 flex items-center justify-between bg-white/50 backdrop-blur-md sticky top-0 z-10">
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <GeminiIcon
-                      className="text-2xl text-transparent bg-clip-text bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"
-                      style={{ fill: "url(#gemini-gradient)" }}
-                    />
-                    {/* SVG Gradient Definition */}
-                    <svg width="0" height="0" className="absolute">
-                      <linearGradient
-                        id="gemini-gradient"
-                        x1="0%"
-                        y1="0%"
-                        x2="100%"
-                        y2="100%"
-                      >
-                        <stop stopColor="#4E75F6" offset="0%" />
-                        <stop stopColor="#8E4EC6" offset="50%" />
-                        <stop stopColor="#E34F6F" offset="100%" />
-                      </linearGradient>
-                    </svg>
-                  </div>
-                  <div>
-                    <div className="font-semibold text-gray-800 text-base bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-                      Gemini
-                    </div>
-                    <div className="text-[10px] text-gray-400 font-medium tracking-wide">
-                      GEMINI 3.0 PRO
+              <div className="border-b border-slate-200 bg-[linear-gradient(135deg,rgba(240,249,255,0.95),rgba(236,253,245,0.9))] px-5 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <AssistantBadge />
+                    <div>
+                      <div className="text-base font-semibold text-slate-900">
+                        AI 助手
+                      </div>
+                      <div className="mt-1 text-xs leading-relaxed text-slate-500">
+                        先理解你的問題，再找資料回答你。
+                      </div>
                     </div>
                   </div>
+                  <Button
+                    type="text"
+                    shape="circle"
+                    icon={<CloseOutlined className="text-slate-400" />}
+                    onClick={() => setIsOpen(false)}
+                    className="hover:!bg-white/70"
+                  />
                 </div>
-                <Button
-                  type="text"
-                  shape="circle"
-                  icon={<CloseOutlined className="text-gray-400" />}
-                  onClick={() => setIsOpen(false)}
-                  className="hover:!bg-gray-100"
-                />
               </div>
 
-              {/* Messages Area */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-white scrollbar-hide">
-                {messages.map((msg) => (
-                  <motion.div
-                    key={msg.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={`flex ${msg.type === "user" ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`flex gap-3 max-w-[85%] ${msg.type === "user" ? "flex-row-reverse" : "flex-row"}`}
-                    >
-                      {msg.type === "ai" && (
-                        <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center mt-1">
-                          <GeminiIcon
-                            className="text-xl"
-                            style={{ fill: "url(#gemini-gradient)" }}
-                          />
-                        </div>
-                      )}
+              <div className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.08),transparent_32%),linear-gradient(180deg,#f8fafc_0%,#ffffff_35%)] px-5 py-5">
+                <div className="mb-5 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-xs leading-6 text-slate-500">
+                  可直接問我銷售、支出、產品成本、庫存或薪資摘要。我會盡量用最短、最清楚的方式回答。
+                </div>
 
+                <div className="space-y-5">
+                  {messages.map((msg) => (
+                    <motion.div
+                      key={msg.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`flex ${msg.type === "user" ? "justify-end" : "justify-start"}`}
+                    >
                       <div
-                        className={`py-3 px-4 text-[15px] leading-relaxed ${
-                          msg.type === "user"
-                            ? "bg-[#f0f4f9] text-gray-800 rounded-[20px] rounded-tr-sm"
-                            : "text-gray-700"
+                        className={`flex max-w-[88%] gap-3 ${
+                          msg.type === "user" ? "flex-row-reverse" : "flex-row"
                         }`}
                       >
-                        {msg.content}
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
+                        {msg.type === "ai" && <AssistantBadge muted />}
 
-                {isTyping && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="flex justify-start"
-                  >
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center mt-1">
-                        <GeminiIcon
-                          className="text-xl animate-pulse"
-                          style={{ fill: "url(#gemini-gradient)" }}
-                        />
-                      </div>
-                      <div className="py-3 px-4">
-                        <div className="flex gap-1.5">
-                          <span
-                            className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"
-                            style={{ animationDelay: "0ms" }}
-                          />
-                          <span
-                            className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"
-                            style={{ animationDelay: "150ms" }}
-                          />
-                          <span
-                            className="w-2 h-2 bg-pink-400 rounded-full animate-bounce"
-                            style={{ animationDelay: "300ms" }}
-                          />
+                        <div
+                          className={`rounded-3xl px-4 py-3 text-[15px] leading-7 ${
+                            msg.type === "user"
+                              ? "rounded-tr-md bg-slate-900 text-white"
+                              : "rounded-tl-md border border-slate-200 bg-white text-slate-700 shadow-sm"
+                          }`}
+                        >
+                          {msg.content}
                         </div>
                       </div>
-                    </div>
-                  </motion.div>
-                )}
-                <div ref={messagesEndRef} />
+                    </motion.div>
+                  ))}
+
+                  {isTyping && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="flex justify-start"
+                    >
+                      <div className="flex gap-3">
+                        <AssistantBadge muted />
+                        <div className="rounded-3xl rounded-tl-md border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                          <div className="flex gap-1.5">
+                            {[0, 1, 2].map((dot) => (
+                              <span
+                                key={dot}
+                                className="h-2 w-2 rounded-full bg-slate-300 animate-bounce"
+                                style={{ animationDelay: `${dot * 140}ms` }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  <div ref={messagesEndRef} />
+                </div>
               </div>
 
-              {/* Suggested Prompts */}
               {messages.length === 1 && (
-                <div className="px-6 pb-4">
-                  <div className="flex flex-col gap-2">
-                    {SUGGESTED_PROMPTS.map((prompt, idx) => (
+                <div className="border-t border-slate-100 bg-white/90 px-5 py-4">
+                  <div className="mb-3 text-xs font-medium tracking-wide text-slate-400">
+                    你可以直接這樣問
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {SUGGESTED_PROMPTS.map((prompt) => (
                       <motion.button
-                        key={idx}
-                        whileHover={{ scale: 1.02, backgroundColor: "#f8fafc" }}
-                        whileTap={{ scale: 0.98 }}
-                        className="w-full text-left p-3 rounded-xl bg-[#f0f4f9] hover:bg-gray-100 transition-colors flex items-center gap-3 text-gray-600 text-sm group border-0 cursor-pointer"
+                        key={prompt.text}
+                        whileHover={{ scale: 1.01 }}
+                        whileTap={{ scale: 0.99 }}
+                        className="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-left text-sm text-slate-600 transition-colors hover:bg-white"
                         onClick={() => handleSend(prompt.text)}
                       >
-                        <span className="p-2 bg-white rounded-full shadow-sm text-indigo-500 group-hover:text-indigo-600 transition-colors">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-sky-700 shadow-sm">
                           {prompt.icon}
                         </span>
-                        {prompt.text}
+                        <span>{prompt.text}</span>
                       </motion.button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Input Area */}
-              <div className="p-5 bg-white">
-                <div className="relative bg-[#f0f4f9] rounded-[24px] p-2 transition-all focus-within:ring-2 focus-within:ring-blue-100 focus-within:bg-white focus-within:shadow-md border border-transparent focus-within:border-blue-200">
+              <div className="border-t border-slate-200 bg-white px-5 py-4">
+                <div className="rounded-[26px] border border-slate-200 bg-slate-50 p-2 transition-all focus-within:border-sky-200 focus-within:bg-white focus-within:shadow-md">
                   <Input.TextArea
-                    placeholder="問問 Gemini..."
+                    placeholder="直接描述你想知道的事情"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onPressEnter={(e) => {
@@ -309,44 +268,30 @@ const AICopilotWidget: React.FC = () => {
                       }
                     }}
                     autoSize={{ minRows: 1, maxRows: 4 }}
-                    className="!bg-transparent !border-0 !shadow-none !resize-none !text-base !px-3 !py-2 focus:!shadow-none"
+                    className="!resize-none !border-0 !bg-transparent !px-3 !py-2 !text-base !shadow-none focus:!shadow-none"
                     disabled={isTyping}
                   />
-                  <div className="flex justify-between items-center px-2 pb-1 mt-1">
-                    <div className="flex gap-1">
-                      <Button
-                        type="text"
-                        shape="circle"
-                        size="small"
-                        icon={<PictureOutlined className="text-gray-400" />}
-                      />
-                      <Button
-                        type="text"
-                        shape="circle"
-                        size="small"
-                        icon={<AudioOutlined className="text-gray-400" />}
-                      />
-                    </div>
+                  <div className="mt-2 flex items-center justify-between px-2 pb-1">
+                    <Text type="secondary" className="text-[11px] leading-5">
+                      重要金額與結論仍請再次確認。
+                    </Text>
                     <Button
                       type="text"
                       shape="circle"
                       icon={
-                        inputValue.trim() ? (
-                          <SendOutlined className="text-blue-600" />
-                        ) : (
-                          <SendOutlined className="text-gray-400" />
-                        )
+                        <SendOutlined
+                          className={
+                            inputValue.trim()
+                              ? "text-sky-600"
+                              : "text-slate-300"
+                          }
+                        />
                       }
                       onClick={() => handleSend()}
                       disabled={isTyping || !inputValue.trim()}
-                      className={inputValue.trim() ? "!bg-blue-50" : ""}
+                      className={inputValue.trim() ? "!bg-sky-50" : ""}
                     />
                   </div>
-                </div>
-                <div className="text-center mt-2">
-                  <Text type="secondary" className="text-[10px]">
-                    Gemini 可能會顯示不準確的資訊，請務必再次確認。
-                  </Text>
                 </div>
               </div>
             </Card>

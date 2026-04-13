@@ -1,7 +1,5 @@
-
 import { PrismaClient } from '@prisma/client';
-import * as fs from 'fs';
-import * as path from 'path';
+import { AI_AGENT_CORE_PRINCIPLES } from '../modules/ai/ai-principles';
 
 // Note: Ensure GEMINI_API_KEY is set in your environment variables
 // or run with: export GEMINI_API_KEY=your_key && npm run seed:ai-items
@@ -55,9 +53,15 @@ async function main() {
     .join('\n');
 
   const prompt = `
-You are an expert accountant setting up an expense reimbursement system for a Taiwanese E-commerce company.
-Your task is to generate a comprehensive list of "Reimbursement Items" (Question Bank) that employees will see when they apply for expenses.
-These items should cover common scenarios like Travel, Office Supplies, Marketing, Software, Meals, etc.
+${AI_AGENT_CORE_PRINCIPLES}
+
+Role:
+You are an accountant setting up reimbursement master data for a Taiwanese e-commerce company.
+
+Task:
+Generate a practical list of reimbursement items that employees can easily understand and choose from.
+Cover common scenarios like travel, office supplies, marketing, software, meals, and logistics.
+Less is more: avoid duplicate, overlapping, or overly specific items.
 
 Based on the provided list of Accounting Accounts, generate 30-50 common Reimbursement Items.
 
@@ -72,8 +76,8 @@ For each item, provide:
 Available Accounts:
 ${accountListText}
 
-Return the result as a JSON array of objects.
-Do not include any markdown formatting (like \`\`\`json), just the raw JSON string.
+Return the result as a raw JSON array of objects only.
+Do not include markdown or explanation.
 `;
 
   console.log('🧠 Asking Gemini to generate reimbursement items...');
@@ -87,7 +91,7 @@ Do not include any markdown formatting (like \`\`\`json), just the raw JSON stri
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
         }),
-      }
+      },
     );
 
     if (!response.ok) {
@@ -102,17 +106,24 @@ Do not include any markdown formatting (like \`\`\`json), just the raw JSON stri
     }
 
     // Clean up markdown code blocks if present
-    const jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const jsonString = text
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim();
     const items = JSON.parse(jsonString);
 
-    console.log(`✨ AI generated ${items.length} items. Inserting into database...`);
+    console.log(
+      `✨ AI generated ${items.length} items. Inserting into database...`,
+    );
 
     let createdCount = 0;
     for (const item of items) {
       // Verify account exists (double check)
       const accountExists = accounts.find((a) => a.id === item.accountId);
       if (!accountExists) {
-        console.warn(`⚠️ Account ID ${item.accountId} not found for item ${item.name}. Skipping.`);
+        console.warn(
+          `⚠️ Account ID ${item.accountId} not found for item ${item.name}. Skipping.`,
+        );
         continue;
       }
 
@@ -145,7 +156,6 @@ Do not include any markdown formatting (like \`\`\`json), just the raw JSON stri
     }
 
     console.log(`✅ Successfully created ${createdCount} reimbursement items.`);
-
   } catch (error) {
     console.error('❌ Error during AI generation or insertion:', error);
   } finally {

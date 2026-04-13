@@ -12,18 +12,27 @@ export interface AiModel {
 export class AiService {
   private readonly logger = new Logger(AiService.name);
   private readonly apiKey: string;
-  
+
   // Default supported models - this can be moved to DB later for full dynamic control
   private readonly supportedModels: AiModel[] = [
-    // Prefer stable, widely-available models by default.
-    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Fast and cost-effective' },
-    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Best for complex reasoning' },
+    {
+      id: 'gemini-1.5-flash',
+      name: '標準模式',
+      description: '速度較快，適合日常問答與建議',
+    },
+    {
+      id: 'gemini-1.5-pro',
+      name: '深度模式',
+      description: '思考較深，適合分析與判斷',
+    },
   ];
 
   constructor(private configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY') || '';
     if (!this.apiKey) {
-      this.logger.warn('GEMINI_API_KEY is not set. AI features will be disabled.');
+      this.logger.warn(
+        'GEMINI_API_KEY is not set. AI features will be disabled.',
+      );
     }
   }
 
@@ -31,7 +40,10 @@ export class AiService {
     return this.supportedModels;
   }
 
-  async generateContent(prompt: string, modelId: string = 'gemini-1.5-flash'): Promise<string | null> {
+  async generateContent(
+    prompt: string,
+    modelId: string = 'gemini-1.5-flash',
+  ): Promise<string | null> {
     if (!this.apiKey) {
       this.logger.warn('Attempted to use AI without API Key');
       return null;
@@ -40,7 +52,7 @@ export class AiService {
     try {
       // Use v1 API; some models return 404 on v1beta for generateContent.
       const url = `https://generativelanguage.googleapis.com/v1/models/${modelId}:generateContent?key=${this.apiKey}`;
-      
+
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -58,7 +70,7 @@ export class AiService {
 
       const data = await response.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      
+
       return text || null;
     } catch (error) {
       this.logger.error(`AI Generation failed for model ${modelId}`, error);
@@ -71,7 +83,10 @@ export class AiService {
    */
   parseJsonOutput<T>(text: string): T | null {
     try {
-      const jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const jsonString = text
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
       return JSON.parse(jsonString) as T;
     } catch (error) {
       this.logger.error('Failed to parse AI JSON output', error);

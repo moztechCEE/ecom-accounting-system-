@@ -1,6 +1,6 @@
-import React from 'react'
+import React from "react";
 import {
-  Card,
+  Alert,
   Switch,
   Slider,
   InputNumber,
@@ -10,30 +10,30 @@ import {
   Form,
   message,
   Select,
-} from 'antd'
-import { motion } from 'framer-motion'
+} from "antd";
+import { motion } from "framer-motion";
 import {
   SettingOutlined,
   BellOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
-} from '@ant-design/icons'
+} from "@ant-design/icons";
 
-const { Title, Text } = Typography
-const { Option } = Select
+const { Title, Text } = Typography;
+const { Option } = Select;
 
 const SystemSettingsPage: React.FC = () => {
-  const [form] = Form.useForm()
+  const [form] = Form.useForm();
 
   const handleSave = async () => {
     try {
-      const values = await form.validateFields()
-      console.log('Settings saved:', values)
-      message.success('系統參數已更新')
+      const values = await form.validateFields();
+      console.log("Settings saved:", values);
+      message.success("系統參數已更新");
     } catch (error) {
-      console.error(error)
+      console.error(error);
     }
-  }
+  };
 
   return (
     <motion.div
@@ -47,12 +47,25 @@ const SystemSettingsPage: React.FC = () => {
           <Title level={2} className="!mb-1 !font-light">
             系統參數設定
           </Title>
-          <Text type="secondary">管理全域系統配置、通知與 AI 模型參數</Text>
+          <Text type="secondary">管理通知、安全與 AI 協作方式</Text>
         </div>
-        <Button type="primary" icon={<SettingOutlined />} onClick={handleSave} size="large">
+        <Button
+          type="primary"
+          icon={<SettingOutlined />}
+          onClick={handleSave}
+          size="large"
+        >
           儲存變更
         </Button>
       </div>
+
+      <Alert
+        type="info"
+        showIcon
+        message="少即是多，大道至簡"
+        description="AI 的工作是理解問題、找資料、整理答案；高風險決策仍應由制度、權限與人工複核來把關。"
+        className="!rounded-2xl !border-sky-200 !bg-sky-50/80"
+      />
 
       <Form
         form={form}
@@ -61,10 +74,10 @@ const SystemSettingsPage: React.FC = () => {
           emailNotifications: true,
           pushNotifications: true,
           aiConfidenceThreshold: 80,
-          aiAutoApprove: false,
+          aiAutoFillSuggestions: true,
           sessionTimeout: 30,
           passwordExpiry: 90,
-          language: 'zh-TW',
+          language: "zh-TW",
         }}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -76,7 +89,7 @@ const SystemSettingsPage: React.FC = () => {
                 通知設定
               </Title>
             </div>
-            
+
             <Form.Item
               label="電子郵件通知"
               name="emailNotifications"
@@ -85,9 +98,9 @@ const SystemSettingsPage: React.FC = () => {
             >
               <Switch />
             </Form.Item>
-            
+
             <Divider />
-            
+
             <Form.Item
               label="系統推播通知"
               name="pushNotifications"
@@ -101,28 +114,33 @@ const SystemSettingsPage: React.FC = () => {
           {/* AI Settings */}
           <div className="glass-panel p-6">
             <div className="flex items-center gap-3 mb-6">
-              <RobotOutlined className="text-2xl text-purple-500" />
+              <RobotOutlined className="text-2xl text-sky-600" />
               <Title level={4} className="!m-0">
-                AI 模型參數
+                AI 協作方式
               </Title>
             </div>
 
+            <div className="mb-5 rounded-2xl border border-slate-200 bg-white/50 px-4 py-3 text-xs leading-6 text-slate-500">
+              原則很簡單：AI
+              先幫你縮小範圍、整理答案；真的需要拍板的地方，再交回人工確認。
+            </div>
+
             <Form.Item
-              label="AI 信心值門檻 (%)"
+              label="低信心轉人工複核門檻 (%)"
               name="aiConfidenceThreshold"
-              extra="低於此門檻的預測將標記為「需人工複核」"
+              extra="低於此門檻時，系統只提供建議，不幫你直接下判斷。"
             >
               <Slider
-                marks={{ 0: '0%', 50: '50%', 80: '80%', 100: '100%' }}
+                marks={{ 0: "0%", 50: "50%", 80: "80%", 100: "100%" }}
                 step={5}
               />
             </Form.Item>
 
             <Form.Item
-              label="自動核准高信心申請"
-              name="aiAutoApprove"
+              label="自動帶入 AI 建議欄位"
+              name="aiAutoFillSuggestions"
               valuePropName="checked"
-              extra="若 AI 信心值 > 95% 且金額 < 1000，自動通過初審"
+              extra="例如自動帶入推薦項目、預估金額或摘要，但不直接替你核准。"
             >
               <Switch />
             </Form.Item>
@@ -140,7 +158,7 @@ const SystemSettingsPage: React.FC = () => {
             <Form.Item
               label="閒置登出時間 (分鐘)"
               name="sessionTimeout"
-              rules={[{ required: true, type: 'number', min: 5, max: 120 }]}
+              rules={[{ required: true, type: "number", min: 5, max: 120 }]}
             >
               <InputNumber className="w-full" />
             </Form.Item>
@@ -148,7 +166,7 @@ const SystemSettingsPage: React.FC = () => {
             <Form.Item
               label="密碼強制更換週期 (天)"
               name="passwordExpiry"
-              rules={[{ required: true, type: 'number', min: 30, max: 365 }]}
+              rules={[{ required: true, type: "number", min: 30, max: 365 }]}
             >
               <InputNumber className="w-full" />
             </Form.Item>
@@ -173,7 +191,7 @@ const SystemSettingsPage: React.FC = () => {
         </div>
       </Form>
     </motion.div>
-  )
-}
+  );
+};
 
-export default SystemSettingsPage
+export default SystemSettingsPage;

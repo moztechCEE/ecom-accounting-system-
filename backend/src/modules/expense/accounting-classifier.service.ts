@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
+import { AI_AGENT_CORE_PRINCIPLES } from '../ai/ai-principles';
 
 export interface SuggestAccountInput {
   entityId: string;
@@ -185,15 +186,20 @@ export class AccountingClassifierService {
         return undefined;
       }
 
-      const frequency = records.reduce<Record<string, number>>((acc, record) => {
-        if (!record.finalAccountId) {
+      const frequency = records.reduce<Record<string, number>>(
+        (acc, record) => {
+          if (!record.finalAccountId) {
+            return acc;
+          }
+          acc[record.finalAccountId] = (acc[record.finalAccountId] ?? 0) + 1;
           return acc;
-        }
-        acc[record.finalAccountId] = (acc[record.finalAccountId] ?? 0) + 1;
-        return acc;
-      }, {});
+        },
+        {},
+      );
 
-      const [topAccount] = Object.entries(frequency).sort((a, b) => b[1] - a[1]);
+      const [topAccount] = Object.entries(frequency).sort(
+        (a, b) => b[1] - a[1],
+      );
       return topAccount?.[0];
     } catch (error) {
       this.logger.warn(
@@ -227,36 +233,49 @@ export class AccountingClassifierService {
       .join('\n');
 
     const prompt = `
-You are an expert accountant assisting employees with expense reimbursement.
-Analyze the following expense description and select the most appropriate Reimbursement Item from the list below.
-Also, extract the expense amount from the description if present.
+${AI_AGENT_CORE_PRINCIPLES}
+
+Role:
+You help employees submit reimbursement requests.
+
+Task:
+Read the expense description, choose the single best reimbursement item from the list, and extract the amount if present.
 
 Expense Description: "${description}"
 
 Available Reimbursement Items:
 ${itemListText}
 
-Instructions:
-1. Select the best matching item based on the description and keywords.
-2. Even if the description is short (e.g. "taxi", "lunch", "pen"), try to match it to the most logical item (e.g. "Travel", "Meals", "Office Supplies").
-3. Extract the expense amount from the description. Look for numbers that represent the cost.
-4. Return the result in JSON format: { "itemId": "THE_ID", "confidence": 0.95, "amount": 500 }
-5. Confidence should be between 0.0 and 1.0. If the match is weak, use a lower confidence.
-6. If no item is suitable, return null.
-7. If no amount is found, set "amount" to null.
-8. Do not include any markdown formatting or explanation, just the raw JSON string.
+Rules:
+1. Prefer the simplest practical match, not an overly clever one.
+2. If the description is short, still infer the most reasonable item.
+3. Extract the amount only if it is clearly present.
+4. If no item is suitable, return null.
+5. If no amount is found, set "amount" to null.
+6. Confidence must be between 0.0 and 1.0.
+
+Return raw JSON only:
+{ "itemId": "THE_ID", "confidence": 0.95, "amount": 500 }
 `;
 
     try {
       const text = await this.aiService.generateContent(prompt, model);
       if (!text) return null;
 
-      const result = this.aiService.parseJsonOutput<{ itemId: string; confidence: number; amount?: number }>(text);
+      const result = this.aiService.parseJsonOutput<{
+        itemId: string;
+        confidence: number;
+        amount?: number;
+      }>(text);
 
       if (result && result.itemId && typeof result.confidence === 'number') {
         const exists = items.find((i) => i.id === result.itemId);
         if (exists) {
-          return { itemId: result.itemId, confidence: result.confidence, amount: result.amount };
+          return {
+            itemId: result.itemId,
+            confidence: result.confidence,
+            amount: result.amount,
+          };
         }
       }
       return null;
@@ -284,32 +303,43 @@ Instructions:
     if (accounts.length === 0) return null;
 
     const accountListText = accounts
-      .map((a) => `- ${a.code} ${a.name} (${a.description || ''}) [ID: ${a.id}]`)
+      .map(
+        (a) => `- ${a.code} ${a.name} (${a.description || ''}) [ID: ${a.id}]`,
+      )
       .join('\n');
 
     const prompt = `
+${AI_AGENT_CORE_PRINCIPLES}
+
+Role:
 You are an expert accountant.
-Analyze the following expense description and select the most appropriate accounting account from the list below.
+
+Task:
+Read the expense description and select the single best accounting account from the list below.
 
 Expense Description: "${description}"
 
 Available Accounts:
 ${accountListText}
 
-Instructions:
-1. Select the best matching account based on the description.
-2. Even if the description is short or informal, try to infer the correct account (e.g. "taxi" -> "Travel Expense", "server" -> "IT Expense").
-3. Return the result in JSON format: { "accountId": "THE_ID", "confidence": 0.95 }
-4. Confidence should be between 0.0 and 1.0.
-5. If no account is suitable, return null.
-6. Do not include any markdown formatting or explanation, just the JSON string.
+Rules:
+1. Prefer the most practical match.
+2. Short or informal wording should still map to the most likely account.
+3. If no account is suitable, return null.
+4. Confidence must be between 0.0 and 1.0.
+
+Return raw JSON only:
+{ "accountId": "THE_ID", "confidence": 0.95 }
 `;
 
     try {
       const text = await this.aiService.generateContent(prompt, model);
       if (!text) return null;
 
-      const result = this.aiService.parseJsonOutput<{ accountId: string; confidence: number }>(text);
+      const result = this.aiService.parseJsonOutput<{
+        accountId: string;
+        confidence: number;
+      }>(text);
 
       if (result && result.accountId && typeof result.confidence === 'number') {
         // Verify account exists
