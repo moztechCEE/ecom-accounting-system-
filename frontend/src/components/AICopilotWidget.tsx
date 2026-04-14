@@ -9,7 +9,8 @@ import {
   SendOutlined,
 } from "@ant-design/icons";
 import { AnimatePresence, motion } from "framer-motion";
-import { aiService } from "../services/ai.service";
+import { useNavigate } from "react-router-dom";
+import { aiService, AiCopilotSource } from "../services/ai.service";
 import { useAI } from "../contexts/AIContext";
 
 const { Text } = Typography;
@@ -19,14 +20,21 @@ interface Message {
   type: "user" | "ai";
   content: React.ReactNode;
   timestamp: Date;
+  sources?: AiCopilotSource[];
 }
 
 const SUGGESTED_PROMPTS = [
   { icon: <BarChartOutlined />, text: "本月銷售總額是多少？" },
   { icon: <BulbOutlined />, text: "昨天支出大概多少？" },
   { icon: <DollarOutlined />, text: "Power Bank 的成本與庫存" },
-  { icon: <RobotOutlined />, text: "本月薪資成本是多少？" },
+  { icon: <RobotOutlined />, text: "去哪裡設定 AI 工作模式？" },
 ];
+
+const SOURCE_KIND_LABELS: Record<AiCopilotSource["kind"], string> = {
+  metric: "統計結果",
+  record: "實際資料",
+  knowledge: "系統知識",
+};
 
 const AssistantBadge: React.FC<{ muted?: boolean }> = ({ muted = false }) => (
   <div
@@ -49,11 +57,12 @@ const AICopilotWidget: React.FC = () => {
       id: "welcome",
       type: "ai",
       content:
-        "你好，我是 AI 助手。我會先理解你的問題，再用目前系統裡最相關的資料，給你一個直接、簡單的答案。",
+        "你好，我是 AI 助手。我會先理解你的問題，再用目前系統裡最相關的資料或頁面知識，給你一個直接、簡單的答案。",
       timestamp: new Date(),
     },
   ]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   const { selectedModelId } = useAI();
   const entityId = import.meta.env.VITE_DEFAULT_ENTITY_ID || "tw-entity-001";
 
@@ -82,6 +91,7 @@ const AICopilotWidget: React.FC = () => {
         type: "ai",
         content: response.reply,
         timestamp: new Date(),
+        sources: response.sources,
       };
       setMessages((prev) => [...prev, aiMsg]);
     } catch (error: any) {
@@ -174,6 +184,7 @@ const AICopilotWidget: React.FC = () => {
               <div className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.08),transparent_32%),linear-gradient(180deg,#f8fafc_0%,#ffffff_35%)] px-5 py-5">
                 <div className="mb-5 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-xs leading-6 text-slate-500">
                   可直接問我銷售、支出、產品成本、庫存或薪資摘要。我會盡量用最短、最清楚的方式回答。
+                  也可以直接問我「去哪裡設定」、「怎麼建立費用申請」這類系統問題。
                 </div>
 
                 <div className="space-y-5">
@@ -199,6 +210,46 @@ const AICopilotWidget: React.FC = () => {
                           }`}
                         >
                           {msg.content}
+
+                          {msg.type === "ai" &&
+                            msg.sources &&
+                            msg.sources.length > 0 && (
+                              <div className="mt-4 space-y-2 border-t border-slate-100 pt-3">
+                                <div className="text-[11px] font-medium tracking-wide text-slate-400">
+                                  資料來源
+                                </div>
+                                {msg.sources.map((source, index) => (
+                                  <button
+                                    key={`${source.title}-${index}`}
+                                    type="button"
+                                    className="block w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-left transition-colors hover:bg-white"
+                                    onClick={() => {
+                                      if (!source.path) return;
+                                      navigate(source.path);
+                                      setIsOpen(false);
+                                    }}
+                                    disabled={!source.path}
+                                  >
+                                    <div className="text-[11px] font-medium tracking-wide text-slate-400">
+                                      {SOURCE_KIND_LABELS[source.kind]}
+                                    </div>
+                                    <div className="text-sm font-medium text-slate-700">
+                                      {source.title}
+                                    </div>
+                                    {source.detail && (
+                                      <div className="mt-1 text-xs leading-5 text-slate-500">
+                                        {source.detail}
+                                      </div>
+                                    )}
+                                    {source.path && (
+                                      <div className="mt-2 text-[11px] text-sky-600">
+                                        前往 {source.path}
+                                      </div>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                         </div>
                       </div>
                     </motion.div>

@@ -1,5 +1,10 @@
 import { Controller, Get, Post, Body, UseGuards, Req } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { AiService, AiModel } from './ai.service';
 import { AiInsightsService } from './ai-insights.service';
 import { AiCopilotService } from './ai-copilot.service';
@@ -27,14 +32,25 @@ export class AiController {
   @Post('insights/daily-briefing')
   @ApiOperation({ summary: '取得每日財務 AI 簡報' })
   async getDailyBriefing(@Body() body: { entityId: string; modelId?: string }) {
-    const insight = await this.insightsService.getDailyBriefing(body.entityId, body.modelId);
+    const insight = await this.insightsService.getDailyBriefing(
+      body.entityId,
+      body.modelId,
+    );
     return { insight };
   }
 
   @Post('copilot/chat')
-  @ApiOperation({ summary: '與 AI 財務助手對話' })
-  async chat(@Req() req: Request, @Body() body: { message: string; entityId: string; modelId?: string }) {
+  @ApiOperation({ summary: '與 AI 助手對話（系統知識 + 實際資料查詢）' })
+  async chat(
+    @Req() req: Request,
+    @Body() body: { message: string; entityId: string; modelId?: string },
+  ) {
     const user = req.user as any;
-    return this.copilotService.processChat(body.entityId, user.id, body.message, body.modelId);
+    return this.copilotService.processChat(
+      body.entityId,
+      user.id,
+      body.message,
+      body.modelId,
+    );
   }
 }

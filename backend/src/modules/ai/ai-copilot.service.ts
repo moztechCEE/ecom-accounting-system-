@@ -1,19 +1,38 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AiService } from './ai.service';
+import { AiKnowledgeService } from './ai-knowledge.service';
 import {
   AI_AGENT_CORE_PRINCIPLES,
   AI_AGENT_RESPONSE_STYLE,
 } from './ai-principles';
 import dayjs from 'dayjs';
 
+interface CopilotIntent {
+  tool: string;
+  params: Record<string, any>;
+  reply?: string;
+}
+
+export interface AiCopilotSource {
+  kind: 'metric' | 'record' | 'knowledge';
+  title: string;
+  detail?: string;
+  path?: string;
+}
+
+interface CopilotResponse {
+  reply: string;
+  data?: any;
+  sources?: AiCopilotSource[];
+}
+
 @Injectable()
 export class AiCopilotService {
-  private readonly logger = new Logger(AiCopilotService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiService: AiService,
+    private readonly knowledgeService: AiKnowledgeService,
   ) {}
 
   async processChat(
@@ -21,56 +40,60 @@ export class AiCopilotService {
     userId: string,
     message: string,
     modelId?: string,
-  ): Promise<{ reply: string; data?: any }> {
-    // 1. Intent Classification & Parameter Extraction
+  ): Promise<CopilotResponse> {
     const prompt = `
 ${AI_AGENT_CORE_PRINCIPLES}
 
 Role:
-You are a Financial Copilot for an E-commerce Accounting System.
+You are a business copilot inside an e-commerce accounting system.
 
 User Query: "${message}"
 Current Date: ${dayjs().format('YYYY-MM-DD')}
 
 Available Tools:
-1. get_sales_stats(startDate: string, endDate: string) - Get total sales amount and count.
-2. get_expense_stats(startDate: string, endDate: string, status?: string) - Get total expense amount and count. Status can be 'pending', 'approved', 'rejected', 'paid', 'draft'.
-3. get_product_cost(productName: string) - Get the floating cost and stock info of a product.
-4. get_bank_balances() - Get current balances of all bank accounts.
-5. get_payroll_summary(month?: string) - Get total payroll cost for a specific month (YYYY-MM).
-6. general_chat() - For greetings or questions not related to data.
+1. get_sales_stats(startDate: string, endDate: string)
+2. get_expense_stats(startDate: string, endDate: string, status?: string)
+3. get_product_cost(productName: string)
+4. find_product(keyword: string)
+5. find_sales_order(keyword: string)
+6. find_customer(keyword: string)
+7. find_vendor(keyword: string)
+8. search_system_knowledge(query: string)
+9. get_bank_balances()
+10. get_payroll_summary(month?: string)
+11. general_chat()
 
 Decision Rules:
 - First understand the user's real goal.
-- If system data is required, choose the single best tool for the job.
-- If the user asks about product cost, price, or stock, use 'get_product_cost'.
-- If the user asks about bank balance, cash, or money in bank, use 'get_bank_balances'.
-- If the user asks about payroll, salaries, or employee costs, use 'get_payroll_summary'.
+- If the user is asking how to use the system, where to find something, or what a page is for, use "search_system_knowledge".
+- If the user mentions an order number, customer order, platform order, or wants to find a specific order, use "find_sales_order".
+- If the user wants to find a customer record, use "find_customer".
+- If the user wants to find a vendor or supplier, use "find_vendor".
+- If the user wants to find a product record or SKU, use "find_product".
+- If the user asks about product cost or stock value, use "get_product_cost".
+- If the user asks about bank balance, cash, or money in bank, use "get_bank_balances".
+- If the user asks about payroll, salaries, or employee costs, use "get_payroll_summary".
 - Convert natural language dates into exact YYYY-MM-DD ranges.
 - If no date is specified for sales or expenses, default to the current month through today.
-- If the user asks for "pending" or "waiting" expenses, set status to 'pending'.
-- If the request is greeting, chit-chat, or cannot be answered with current tools, use 'general_chat'.
+- If the user asks for "pending" or "waiting" expenses, set status to "pending".
+- If the request is greeting, chit-chat, or cannot be answered with current tools, use "general_chat".
 
 Return JSON ONLY:
 { "tool": "TOOL_NAME", "params": { ... }, "reply": "Optional short conversational filler" }
 `;
 
     const aiResponse = await this.aiService.generateContent(prompt, modelId);
-    const intent = this.aiService.parseJsonOutput<{
-      tool: string;
-      params: any;
-      reply?: string;
-    }>(aiResponse || '{}');
+    const intent =
+      this.aiService.parseJsonOutput<CopilotIntent>(aiResponse || '{}') ||
+      ({
+        tool: 'general_chat',
+        params: {},
+      } satisfies CopilotIntent);
 
-    if (!intent || !intent.tool) {
+    if (!intent.tool) {
       return { reply: '抱歉，我暫時無法理解您的需求。' };
     }
 
-    // 2. Permission Check & Execute Tool
-    let toolResult = null;
-    let toolData = null;
-
-    // Check permissions for sensitive tools
     if (
       ['get_product_cost', 'get_bank_balances', 'get_payroll_summary'].includes(
         intent.tool,
@@ -82,90 +105,293 @@ Return JSON ONLY:
       });
 
       const isSuperAdmin = user?.roles.some(
-        (r) => r.role.code === 'SUPER_ADMIN',
+        (relation) => relation.role.code === 'SUPER_ADMIN',
       );
 
       if (!isSuperAdmin) {
         return {
-          reply: `抱歉，您沒有權限查詢此敏感資訊 (${intent.tool})。此功能僅限超級管理員 (SUPER_ADMIN) 使用。`,
+          reply: `抱歉，您沒有權限查詢此敏感資訊 (${intent.tool})。此功能僅限超級管理員使用。`,
         };
       }
     }
 
-    if (intent.tool === 'get_sales_stats') {
-      toolData = await this.getSalesStats(
-        entityId,
-        intent.params.startDate,
-        intent.params.endDate,
-      );
-      toolResult = `Sales: TWD ${toolData.total} (${toolData.count} orders)`;
-    } else if (intent.tool === 'get_expense_stats') {
-      toolData = await this.getExpenseStats(
-        entityId,
-        intent.params.startDate,
-        intent.params.endDate,
-        intent.params.status,
-      );
-      toolResult = `Expenses: TWD ${toolData.total} (${toolData.count} requests)`;
-    } else if (intent.tool === 'get_product_cost') {
-      toolData = await this.getProductCost(entityId, intent.params.productName);
-      if (!toolData) {
-        toolResult = `Product '${intent.params.productName}' not found.`;
-      } else {
-        toolResult = `Product: ${toolData.name} (${toolData.sku})\nFloating Cost: TWD ${toolData.movingAverageCost}\nLatest Purchase Price: TWD ${toolData.latestPurchasePrice}\nStock: ${toolData.stock} units`;
+    let toolResult = '';
+    let toolData: unknown = null;
+    let sources: AiCopilotSource[] = [];
+
+    switch (intent.tool) {
+      case 'get_sales_stats': {
+        const data = await this.getSalesStats(
+          entityId,
+          intent.params.startDate,
+          intent.params.endDate,
+        );
+        toolData = data;
+        toolResult = `Sales: TWD ${data.total} (${data.count} orders)`;
+        sources = [
+          {
+            kind: 'metric',
+            title: '銷售訂單',
+            detail: `${data.startDate} 至 ${data.endDate}`,
+            path: '/sales/orders',
+          },
+        ];
+        break;
       }
-    } else if (intent.tool === 'get_bank_balances') {
-      toolData = await this.getBankBalances(entityId);
-      toolResult = `Bank Balances:\n${toolData.map((b) => `- ${b.name}: ${b.currency} ${b.balance}`).join('\n')}`;
-    } else if (intent.tool === 'get_payroll_summary') {
-      toolData = await this.getPayrollSummary(entityId, intent.params.month);
-      toolResult = `Payroll Summary for ${toolData.month}:\nTotal Cost: TWD ${toolData.totalCost}\nHeadcount: ${toolData.headcount}`;
-    } else {
-      // General chat
-      return { reply: intent.reply || '您好！我是您的 AI 財務助手。' };
+
+      case 'get_expense_stats': {
+        const data = await this.getExpenseStats(
+          entityId,
+          intent.params.startDate,
+          intent.params.endDate,
+          intent.params.status,
+        );
+        toolData = data;
+        toolResult = `Expenses: TWD ${data.total} (${data.count} requests)`;
+        sources = [
+          {
+            kind: 'metric',
+            title:
+              intent.params.status === 'pending' ? '待審費用申請' : '費用申請',
+            detail: `${data.startDate} 至 ${data.endDate}`,
+            path:
+              intent.params.status === 'pending'
+                ? '/ap/expense-review'
+                : '/ap/expenses',
+          },
+        ];
+        break;
+      }
+
+      case 'get_product_cost': {
+        const productName =
+          intent.params.productName || intent.params.keyword || message;
+        const data = await this.getProductCost(entityId, productName);
+        toolData = data;
+        toolResult = data
+          ? `Product: ${data.name} (${data.sku})
+Floating Cost: TWD ${data.movingAverageCost}
+Latest Purchase Price: TWD ${data.latestPurchasePrice}
+Stock: ${data.stock} units`
+          : `Product "${productName}" not found.`;
+        sources = data
+          ? [
+              {
+                kind: 'record',
+                title: `${data.name} (${data.sku})`,
+                detail: `庫存 ${data.stock}，移動平均成本 TWD ${data.movingAverageCost}`,
+                path: '/inventory/products',
+              },
+            ]
+          : [];
+        break;
+      }
+
+      case 'find_product': {
+        const keyword = intent.params.keyword || message;
+        const data = await this.findProducts(entityId, keyword);
+        toolData = data;
+        toolResult = data.length
+          ? `Matching products:
+${data
+  .map(
+    (product) =>
+      `- ${product.name} (${product.sku}) / ${product.category || '未分類'} / ${product.isActive ? '啟用中' : '停用中'}`,
+  )
+  .join('\n')}`
+          : `No product found for "${keyword}".`;
+        sources = data.map((product) => ({
+          kind: 'record',
+          title: `${product.name} (${product.sku})`,
+          detail: product.category || '商品資料',
+          path: '/inventory/products',
+        }));
+        break;
+      }
+
+      case 'find_sales_order': {
+        const keyword = intent.params.keyword || message;
+        const data = await this.findSalesOrders(entityId, keyword);
+        toolData = data;
+        toolResult = data.length
+          ? `Matching orders:
+${data
+  .map(
+    (order) =>
+      `- ${order.externalOrderId || order.id} / ${order.customerName || '未指定客戶'} / ${order.channelName} / ${order.status} / TWD ${order.total}`,
+  )
+  .join('\n')}`
+          : `No order found for "${keyword}".`;
+        sources = data.map((order) => ({
+          kind: 'record',
+          title: order.externalOrderId || order.id,
+          detail: `${order.customerName || '未指定客戶'} / ${order.channelName} / ${order.status}`,
+          path: '/sales/orders',
+        }));
+        break;
+      }
+
+      case 'find_customer': {
+        const keyword = intent.params.keyword || message;
+        const data = await this.findCustomers(entityId, keyword);
+        toolData = data;
+        toolResult = data.length
+          ? `Matching customers:
+${data
+  .map(
+    (customer) =>
+      `- ${customer.name} / ${customer.type} / ${customer.email || '無 Email'} / ${customer.phone || '無電話'}`,
+  )
+  .join('\n')}`
+          : `No customer found for "${keyword}".`;
+        sources = data.map((customer) => ({
+          kind: 'record',
+          title: customer.name,
+          detail: `${customer.type} / ${customer.email || customer.phone || '無聯絡方式'}`,
+          path: '/sales/customers',
+        }));
+        break;
+      }
+
+      case 'find_vendor': {
+        const keyword = intent.params.keyword || message;
+        const data = await this.findVendors(entityId, keyword);
+        toolData = data;
+        toolResult = data.length
+          ? `Matching vendors:
+${data
+  .map(
+    (vendor) =>
+      `- ${vendor.name} / ${vendor.contactPerson || '無聯絡人'} / ${vendor.contactEmail || vendor.contactPhone || '無聯絡方式'}`,
+  )
+  .join('\n')}`
+          : `No vendor found for "${keyword}".`;
+        sources = data.map((vendor) => ({
+          kind: 'record',
+          title: vendor.name,
+          detail:
+            vendor.contactPerson ||
+            vendor.contactEmail ||
+            vendor.contactPhone ||
+            '供應商資料',
+          path: '/vendors',
+        }));
+        break;
+      }
+
+      case 'search_system_knowledge': {
+        const query = intent.params.query || message;
+        const data = this.knowledgeService.search(query);
+        toolData = data;
+        toolResult = data.length
+          ? `Knowledge results:
+${data
+  .map(
+    (entry) =>
+      `- ${entry.title} / ${entry.summary}${entry.path ? ` / Path: ${entry.path}` : ''}`,
+  )
+  .join('\n')}`
+          : `No system knowledge found for "${query}".`;
+        sources = data.map((entry) => ({
+          kind: 'knowledge',
+          title: entry.title,
+          detail: entry.summary,
+          path: entry.path,
+        }));
+        break;
+      }
+
+      case 'get_bank_balances': {
+        const data = await this.getBankBalances(entityId);
+        toolData = data;
+        toolResult = `Bank Balances:
+${data.map((item) => `- ${item.name}: ${item.currency} ${item.balance}`).join('\n')}`;
+        sources = [
+          {
+            kind: 'metric',
+            title: '銀行帳戶餘額',
+            detail: '目前帳戶資金與餘額摘要',
+            path: '/banking',
+          },
+        ];
+        break;
+      }
+
+      case 'get_payroll_summary': {
+        const data = await this.getPayrollSummary(
+          entityId,
+          intent.params.month,
+        );
+        toolData = data;
+        toolResult = `Payroll Summary for ${data.month}:
+Total Cost: TWD ${data.totalCost}
+Headcount: ${data.headcount}`;
+        sources = [
+          {
+            kind: 'metric',
+            title: '薪資批次摘要',
+            detail: `${data.month} / 共 ${data.headcount} 人`,
+            path: '/payroll/runs',
+          },
+        ];
+        break;
+      }
+
+      default:
+        return { reply: intent.reply || '您好！我是您的 AI 助手。' };
     }
 
-    // 3. Generate Final Natural Language Response
     const finalPrompt = `
 ${AI_AGENT_CORE_PRINCIPLES}
 ${AI_AGENT_RESPONSE_STYLE}
 
 User Query: "${message}"
-Tool Result: "${toolResult}"
+Tool Result:
+${toolResult}
+
+Relevant Sources:
+${sources.map((source) => `- ${source.title}${source.detail ? ` / ${source.detail}` : ''}${source.path ? ` / ${source.path}` : ''}`).join('\n') || '- none'}
 
 Task:
 Answer the user's question directly based on the tool result.
-Be concise, natural, and useful.
-If the tool result is limited, say so honestly and give the simplest next step.
+If there are matching records, summarize the best matches clearly.
+If a route or page is relevant, mention it naturally.
+If nothing was found, say so honestly and suggest the simplest next keyword or action.
 `;
+
     const finalReply = await this.aiService.generateContent(
       finalPrompt,
       modelId,
     );
 
     return {
-      reply: finalReply || '數據查詢成功，但無法生成回應。',
+      reply: finalReply || '資料已查詢完成，但暫時無法整理回覆。',
       data: toolData,
+      sources,
     };
   }
 
   private async getSalesStats(
     entityId: string,
-    startDate: string,
-    endDate: string,
+    startDate?: string,
+    endDate?: string,
   ) {
+    const range = this.resolveDateRange(startDate, endDate);
     const data = await this.prisma.salesOrder.aggregate({
       where: {
         entityId,
-        createdAt: {
-          gte: new Date(startDate),
-          lte: new Date(endDate),
+        orderDate: {
+          gte: range.start,
+          lte: range.end,
         },
       },
       _sum: { totalGrossBase: true },
       _count: { id: true },
     });
+
     return {
+      startDate: range.startLabel,
+      endDate: range.endLabel,
       total: data._sum.totalGrossBase || 0,
       count: data._count.id || 0,
     };
@@ -173,15 +399,16 @@ If the tool result is limited, say so honestly and give the simplest next step.
 
   private async getExpenseStats(
     entityId: string,
-    startDate: string,
-    endDate: string,
+    startDate?: string,
+    endDate?: string,
     status?: string,
   ) {
+    const range = this.resolveDateRange(startDate, endDate);
     const where: any = {
       entityId,
       createdAt: {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
+        gte: range.start,
+        lte: range.end,
       },
     };
 
@@ -194,14 +421,30 @@ If the tool result is limited, say so honestly and give the simplest next step.
       _sum: { amountOriginal: true },
       _count: { id: true },
     });
+
     return {
+      startDate: range.startLabel,
+      endDate: range.endLabel,
       total: data._sum.amountOriginal || 0,
       count: data._count.id || 0,
     };
   }
 
+  private resolveDateRange(startDate?: string, endDate?: string) {
+    const start = startDate
+      ? dayjs(startDate).startOf('day')
+      : dayjs().startOf('month');
+    const end = endDate ? dayjs(endDate).endOf('day') : dayjs().endOf('day');
+
+    return {
+      start: start.toDate(),
+      end: end.toDate(),
+      startLabel: start.format('YYYY-MM-DD'),
+      endLabel: end.format('YYYY-MM-DD'),
+    };
+  }
+
   private async getProductCost(entityId: string, productName: string) {
-    // Fuzzy search for product
     const product = await this.prisma.product.findFirst({
       where: {
         entityId,
@@ -218,7 +461,7 @@ If the tool result is limited, say so honestly and give the simplest next step.
     if (!product) return null;
 
     const totalStock = product.inventorySnapshots.reduce(
-      (sum, snap) => sum + Number(snap.qtyOnHand),
+      (sum, snapshot) => sum + Number(snapshot.qtyOnHand),
       0,
     );
 
@@ -231,10 +474,114 @@ If the tool result is limited, say so honestly and give the simplest next step.
     };
   }
 
+  private async findProducts(entityId: string, keyword: string) {
+    const products = await this.prisma.product.findMany({
+      where: {
+        entityId,
+        OR: [
+          { name: { contains: keyword, mode: 'insensitive' } },
+          { sku: { contains: keyword, mode: 'insensitive' } },
+          { barcode: { contains: keyword, mode: 'insensitive' } },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        category: true,
+        isActive: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 5,
+    });
+
+    return products;
+  }
+
+  private async findSalesOrders(entityId: string, keyword: string) {
+    const orders = await this.prisma.salesOrder.findMany({
+      where: {
+        entityId,
+        OR: [
+          { externalOrderId: { contains: keyword, mode: 'insensitive' } },
+          { id: { contains: keyword, mode: 'insensitive' } },
+          {
+            customer: {
+              is: { name: { contains: keyword, mode: 'insensitive' } },
+            },
+          },
+        ],
+      },
+      include: {
+        customer: true,
+        channel: true,
+      },
+      orderBy: { orderDate: 'desc' },
+      take: 5,
+    });
+
+    return orders.map((order) => ({
+      id: order.id,
+      externalOrderId: order.externalOrderId,
+      customerName: order.customer?.name || null,
+      channelName: order.channel.name,
+      status: order.status,
+      total: Number(order.totalGrossBase),
+    }));
+  }
+
+  private async findCustomers(entityId: string, keyword: string) {
+    const customers = await this.prisma.customer.findMany({
+      where: {
+        entityId,
+        OR: [
+          { name: { contains: keyword, mode: 'insensitive' } },
+          { email: { contains: keyword, mode: 'insensitive' } },
+          { phone: { contains: keyword, mode: 'insensitive' } },
+          { taxId: { contains: keyword, mode: 'insensitive' } },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        email: true,
+        phone: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 5,
+    });
+
+    return customers;
+  }
+
+  private async findVendors(entityId: string, keyword: string) {
+    const vendors = await this.prisma.vendor.findMany({
+      where: {
+        entityId,
+        OR: [
+          { name: { contains: keyword, mode: 'insensitive' } },
+          { contactPerson: { contains: keyword, mode: 'insensitive' } },
+          { contactEmail: { contains: keyword, mode: 'insensitive' } },
+          { contactPhone: { contains: keyword, mode: 'insensitive' } },
+          { taxId: { contains: keyword, mode: 'insensitive' } },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        contactPerson: true,
+        contactEmail: true,
+        contactPhone: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 5,
+    });
+
+    return vendors;
+  }
+
   private async getBankBalances(entityId: string) {
-    // Find Asset accounts that are likely Bank/Cash
-    // In a real system, we would look for Account Type = ASSET and SubType = CASH/BANK
-    // Here we look for accounts starting with '11' (Standard Chart of Accounts for Cash/Bank)
     const accounts = await this.prisma.account.findMany({
       where: {
         entityId,
@@ -252,8 +599,8 @@ If the tool result is limited, say so honestly and give the simplest next step.
 
       return {
         name: account.name,
-        currency: 'TWD', // Simplified, should come from account or lines
-        balance: balance,
+        currency: 'TWD',
+        balance,
       };
     });
   }
@@ -278,9 +625,6 @@ If the tool result is limited, say so honestly and give the simplest next step.
     let headcount = 0;
 
     for (const run of payrollRuns) {
-      // Sum all items that are earnings or company contributions
-      // We exclude employee deductions (INS_EMP_*) as they are part of Gross Pay (Earnings)
-      // We exclude TAX_WITHHOLD for the same reason
       const runCost = run.items.reduce((sum, item) => {
         if (
           ['INS_EMP_LABOR', 'INS_EMP_HEALTH', 'TAX_WITHHOLD'].includes(
@@ -293,10 +637,7 @@ If the tool result is limited, say so honestly and give the simplest next step.
       }, 0);
 
       totalCost += runCost;
-
-      // Count unique employees in this run
-      const uniqueEmployees = new Set(run.items.map((i) => i.employeeId));
-      headcount += uniqueEmployees.size;
+      headcount += new Set(run.items.map((item) => item.employeeId)).size;
     }
 
     return {
