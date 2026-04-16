@@ -1,5 +1,11 @@
 import { Decimal } from '@prisma/client/runtime/library';
 
+export type UnifiedTransactionFeeStatus =
+  | 'actual'
+  | 'estimated'
+  | 'unavailable'
+  | 'not_applicable';
+
 export interface UnifiedOrder {
   externalId: string;
   orderDate: Date;
@@ -45,6 +51,9 @@ export interface UnifiedTransaction {
   net: Decimal; // Amount - Fee
   currency: string;
   status: 'pending' | 'success' | 'failed';
+  gateway?: string;
+  feeStatus?: UnifiedTransactionFeeStatus;
+  feeSource?: string;
   raw: any;
 }
 
@@ -62,10 +71,7 @@ export interface ISalesChannelAdapter {
   /**
    * Fetch orders within a date range and normalize them
    */
-  fetchOrders(params: {
-    start: Date;
-    end: Date;
-  }): Promise<UnifiedOrder[]>;
+  fetchOrders(params: { start: Date; end: Date }): Promise<UnifiedOrder[]>;
 
   /**
    * Fetch financial transactions (payments/payouts)

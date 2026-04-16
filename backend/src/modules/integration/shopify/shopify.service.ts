@@ -3,7 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ShopifyHttpAdapter } from './shopify.adapter';
-import { UnifiedOrder, UnifiedTransaction } from '../interfaces/sales-channel-adapter.interface';
+import {
+  UnifiedOrder,
+  UnifiedTransaction,
+} from '../interfaces/sales-channel-adapter.interface';
 
 const SHOPIFY_CHANNEL_CODE = 'SHOPIFY';
 
@@ -16,7 +19,7 @@ export class ShopifyService {
     private readonly prisma: PrismaService,
     private readonly adapter: ShopifyHttpAdapter,
     private readonly config: ConfigService,
-  ) { }
+  ) {}
 
   onModuleInit() {
     this.defaultEntityId =
@@ -42,11 +45,17 @@ export class ShopifyService {
 
     for (const order of orders) {
       try {
-        const result = await this.upsertSalesOrder(params.entityId, channel.id, order);
+        const result = await this.upsertSalesOrder(
+          params.entityId,
+          channel.id,
+          order,
+        );
         if (result === 'created') created++;
         if (result === 'updated') updated++;
       } catch (e) {
-        this.logger.error(`Failed to sync order ${order.externalId}: ${e.message}`);
+        this.logger.error(
+          `Failed to sync order ${order.externalId}: ${e.message}`,
+        );
       }
     }
 
@@ -58,7 +67,11 @@ export class ShopifyService {
     };
   }
 
-  async syncTransactions(params: { entityId: string; since?: Date; until?: Date }) {
+  async syncTransactions(params: {
+    entityId: string;
+    since?: Date;
+    until?: Date;
+  }) {
     await this.assertEntityExists(params.entityId);
     const transactions = await this.adapter.fetchTransactions({
       start: params.since || new Date(0),
@@ -93,7 +106,21 @@ export class ShopifyService {
       return Object.keys(filter).length ? { [field]: filter } : {};
     };
 
-    const [ordersAgg, paymentsAgg, ordersCount] = await Promise.all([
+    const paymentWhere = {
+      entityId,
+      ...dateFilter('payoutDate'),
+    };
+
+    const [
+      ordersAgg,
+      paymentsAgg,
+      ordersCount,
+      paymentsCount,
+      actualFeeCount,
+      estimatedFeeCount,
+      unavailableFeeCount,
+      notApplicableFeeCount,
+    ] = await Promise.all([
       this.prisma.salesOrder.aggregate({
         where: {
           entityId,
@@ -107,10 +134,7 @@ export class ShopifyService {
         },
       }),
       this.prisma.payment.aggregate({
-        where: {
-          entityId,
-          ...dateFilter('payoutDate'),
-        },
+        where: paymentWhere,
         _sum: {
           amountGrossOriginal: true,
           amountNetOriginal: true,
@@ -123,13 +147,97 @@ export class ShopifyService {
           ...dateFilter('orderDate'),
         },
       }),
+      this.prisma.payment.count({
+        where: paymentWhere,
+      }),
+      this.prisma.payment.count({
+        where: {
+          ...paymentWhere,
+          notes: { contains: 'feeStatus=actual' },
+        },
+      }),
+      this.prisma.payment.count({
+        where: {
+          ...paymentWhere,
+          notes: { contains: 'feeStatus=estimated' },
+        },
+      }),
+      this.prisma.payment.count({
+        where: {
+          ...paymentWhere,
+          notes: { contains: 'feeStatus=unavailable' },
+        },
+      }),
+      this.prisma.payment.count({
+        where: {
+          ...paymentWhere,
+          notes: { contains: 'feeStatus=not_applicable' },
+        },
+      }),
     ]);
 
     const num = (value: any) => (value ? Number(value) : 0);
+    const hasActualFee = actualFeeCount > 0;
+    const hasEstimatedFee = estimatedFeeCount > 0;
+    const hasUnavailableFee = unavailableFeeCount > 0;
+    const allPaymentsAreNoFee =
+      paymentsCount > 0 &&
+      notApplicableFeeCount === paymentsCount &&
+      !hasActualFee &&
+      !hasEstimatedFee;
+
+    let platformFeeStatus:
+      | 'actual'
+      | 'estimated'
+      | 'mixed'
+      | 'unavailable'
+      | 'not_applicable'
+      | 'empty' = 'empty';
+    let platformFeeValue: number | null = num(
+      paymentsAgg._sum.feePlatformOriginal,
+    );
+    let platformFeeSource = 'Shopify transactions.fee';
+    let platformFeeMessage: string | null = null;
+
+    if (!paymentsCount) {
+      platformFeeStatus = 'empty';
+      platformFeeSource = '尚未同步交易資料';
+      platformFeeMessage = '請先執行交易同步，平台費用才會開始計算。';
+    } else if (hasActualFee && !hasEstimatedFee && !hasUnavailableFee) {
+      platformFeeStatus = 'actual';
+      platformFeeSource = 'Shopify transaction fee';
+      platformFeeMessage =
+        '這個期間內的手續費來自 Shopify 回傳的實際交易資料。';
+    } else if (hasEstimatedFee && !hasActualFee && !hasUnavailableFee) {
+      platformFeeStatus = 'estimated';
+      platformFeeSource = '已設定的金流費率規則';
+      platformFeeMessage = '這個期間內的手續費是依金流費率規則估算。';
+    } else if (hasActualFee || hasEstimatedFee) {
+      platformFeeStatus = 'mixed';
+      platformFeeSource = hasActualFee
+        ? '實際交易費 + 金流費率規則'
+        : '部分金流費率規則';
+      platformFeeMessage =
+        '這個期間內有部分交易能計算手續費，但仍有部分外部金流沒有費率來源。';
+    } else if (allPaymentsAreNoFee) {
+      platformFeeStatus = 'not_applicable';
+      platformFeeSource = '無平台費付款方式';
+      platformFeeMessage =
+        '這個期間內的交易都屬於貨到付款或其他無平台費付款方式。';
+    } else {
+      platformFeeStatus = 'unavailable';
+      platformFeeSource = '外部金流未提供手續費';
+      platformFeeValue = null;
+      platformFeeMessage =
+        '目前 Shopify 對綠界、LINE Pay 這類外部金流不會回傳實際手續費；請串接金流 API 或設定費率規則。';
+    }
 
     return {
       entityId,
-      range: { since: since?.toISOString() || null, until: until?.toISOString() || null },
+      range: {
+        since: since?.toISOString() || null,
+        until: until?.toISOString() || null,
+      },
       orders: {
         count: ordersCount,
         gross: num(ordersAgg._sum.totalGrossOriginal),
@@ -140,13 +248,18 @@ export class ShopifyService {
       payouts: {
         gross: num(paymentsAgg._sum.amountGrossOriginal),
         net: num(paymentsAgg._sum.amountNetOriginal),
-        platformFee: num(paymentsAgg._sum.feePlatformOriginal),
+        platformFee: platformFeeValue,
+        platformFeeStatus,
+        platformFeeSource,
+        platformFeeMessage,
       },
     };
   }
 
   async handleWebhook(event: string, payload: any, hmacValid: boolean) {
-    this.logger.log(`Received Shopify webhook ${event}, hmacValid=${hmacValid}`);
+    this.logger.log(
+      `Received Shopify webhook ${event}, hmacValid=${hmacValid}`,
+    );
 
     if (!hmacValid) {
       return { received: false, event, hmacValid };
@@ -195,10 +308,18 @@ export class ShopifyService {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
 
-        await this.syncOrders({ entityId: this.defaultEntityId, since: yesterday });
-        await this.syncTransactions({ entityId: this.defaultEntityId, since: yesterday });
+        await this.syncOrders({
+          entityId: this.defaultEntityId,
+          since: yesterday,
+        });
+        await this.syncTransactions({
+          entityId: this.defaultEntityId,
+          since: yesterday,
+        });
       } catch (error) {
-        this.logger.error(`Auto-sync failed for event ${event}: ${error.message}`);
+        this.logger.error(
+          `Auto-sync failed for event ${event}: ${error.message}`,
+        );
       }
     }
 
@@ -254,7 +375,8 @@ export class ShopifyService {
     channelId: string,
     externalOrderId: string,
   ) {
-    const transactions = await this.adapter.fetchTransactionsForOrder(externalOrderId);
+    const transactions =
+      await this.adapter.fetchTransactionsForOrder(externalOrderId);
     let created = 0;
     let updated = 0;
 
@@ -284,27 +406,27 @@ export class ShopifyService {
       },
     });
 
-    // FX Rate is already handled in Adapter, so here we just use it? 
+    // FX Rate is already handled in Adapter, so here we just use it?
     // Wait, UnifiedOrder result depends on how Adapter constructed it.
     // In our Adapter implementation:
     // currency is set, but we didn't explicitly demand specific fields for 'Original' vs 'Base' in UnifiedOrder.
     // UnifiedOrder.totals.gross is Decimal.
     // We need to calculate Base amount here using the FX rate.
 
-    // Oh, the Adapter's `getFxRate` is private. 
+    // Oh, the Adapter's `getFxRate` is private.
     // We need the FX rate that WAS used or should be used.
     // Ideally UnifiedOrder should carry the exchange rate used, or we recalculate it?
     // Let's assume we re-fetch FX rate here or rely on the fact that we fixed the Adapter to use a better rate?
-    // Actually, `UnifiedOrder` interface didn't have `fxRate`. 
+    // Actually, `UnifiedOrder` interface didn't have `fxRate`.
     // I should add `fxRate` to `UnifiedOrder` to persist it!
 
-    // Quick fix: Add getFxRate logic here again OR update Interface. 
-    // Updating Interface is better. 
-    // But for now to avoid changing interface file again (which I just wrote), 
-    // I will use a helper here or duplicate the mock logic. 
-    // Actually, I can add `fxRate` to `UnifiedOrder` easily if I edit the interface... 
+    // Quick fix: Add getFxRate logic here again OR update Interface.
+    // Updating Interface is better.
+    // But for now to avoid changing interface file again (which I just wrote),
+    // I will use a helper here or duplicate the mock logic.
+    // Actually, I can add `fxRate` to `UnifiedOrder` easily if I edit the interface...
     // Let's stick to calculating it here to keep `UnifiedOrder` generic?
-    // No, FX rate is a property of the transaction/order time and currency. 
+    // No, FX rate is a property of the transaction/order time and currency.
 
     const currency = order.totals.currency;
     const fxRate = new Decimal(await this.getFxRate(currency, order.orderDate));
@@ -352,7 +474,9 @@ export class ShopifyService {
         externalOrderId: order.externalId,
         hasInvoice: false,
         ...data,
-        customerId: order.customer ? await this.ensureCustomer(entityId, order.customer) : undefined,
+        customerId: order.customer
+          ? await this.ensureCustomer(entityId, order.customer)
+          : undefined,
       },
     });
     return 'created';
@@ -373,18 +497,19 @@ export class ShopifyService {
 
     const salesOrder = tx.orderId
       ? await this.prisma.salesOrder.findFirst({
-        where: {
-          entityId,
-          channelId,
-          externalOrderId: tx.orderId,
-        },
-      })
+          where: {
+            entityId,
+            channelId,
+            externalOrderId: tx.orderId,
+          },
+        })
       : null;
 
     const currency = tx.currency;
     const fxRate = new Decimal(await this.getFxRate(currency, tx.date));
     const toBase = (amount: Decimal) => amount.mul(fxRate);
 
+    const paymentNotes = this.buildPaymentNotes(existing?.notes, tx);
     const data = {
       entityId,
       channelId,
@@ -420,6 +545,7 @@ export class ShopifyService {
 
       reconciledFlag: false,
       bankAccountId: null,
+      notes: paymentNotes,
     };
 
     if (existing) {
@@ -434,7 +560,10 @@ export class ShopifyService {
     return 'created';
   }
 
-  private async ensureCustomer(entityId: string, customerData: NonNullable<UnifiedOrder['customer']>) {
+  private async ensureCustomer(
+    entityId: string,
+    customerData: NonNullable<UnifiedOrder['customer']>,
+  ) {
     // Check by email or external ID
     let customer = null;
     if (customerData.email) {
@@ -473,9 +602,7 @@ export class ShopifyService {
     });
 
     if (!entity) {
-      throw new BadRequestException(
-        `Entity not found: ${entityId}.`,
-      );
+      throw new BadRequestException(`Entity not found: ${entityId}.`);
     }
   }
 
@@ -486,5 +613,28 @@ export class ShopifyService {
     if (currency === 'CNY') return 4.5;
     if (currency === 'JPY') return 0.21;
     return 1;
+  }
+
+  private buildPaymentNotes(
+    existingNotes: string | null | undefined,
+    tx: UnifiedTransaction,
+  ) {
+    const gateway = tx.gateway?.trim();
+    const feeStatus = tx.feeStatus || 'unavailable';
+    const feeSource = tx.feeSource || 'unknown';
+    const parts = [`feeStatus=${feeStatus}`, `feeSource=${feeSource}`];
+
+    if (gateway) {
+      parts.push(`gateway=${gateway}`);
+    }
+
+    const syncNote = `[shopify-sync] ${parts.join('; ')}`;
+    const preservedNotes = (existingNotes || '')
+      .split('\n')
+      .filter((line) => !line.startsWith('[shopify-sync]'))
+      .join('\n')
+      .trim();
+
+    return preservedNotes ? `${preservedNotes}\n${syncNote}` : syncNote;
   }
 }

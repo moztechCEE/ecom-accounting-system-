@@ -4,6 +4,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import {
   ISalesChannelAdapter,
   UnifiedOrder,
+  UnifiedTransactionFeeStatus,
   UnifiedTransaction,
 } from '../interfaces/sales-channel-adapter.interface';
 
@@ -20,11 +21,23 @@ interface ShopifyOrderPayload {
   financial_status: string;
   fulfillment_status: string;
   email: string;
-  customer?: { id: number; email: string; first_name: string; last_name: string; phone: string };
+  customer?: {
+    id: number;
+    email: string;
+    first_name: string;
+    last_name: string;
+    phone: string;
+  };
   line_items: any[];
   shipping_lines: any[];
   cancelled_at: string | null;
 }
+
+type GatewayFeeRule = {
+  match: string;
+  rate: number;
+  fixed: number;
+};
 
 @Injectable()
 export class ShopifyHttpAdapter implements ISalesChannelAdapter {
@@ -35,15 +48,24 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
   private readonly clientId: string;
   private readonly clientSecret: string;
   private readonly apiVersion: string;
+  private readonly gatewayFeeRules: GatewayFeeRule[];
   private accessTokenCache: { token: string; expiresAt: number } | null = null;
   private accessTokenPromise: Promise<string> | null = null;
 
   constructor(private readonly configService: ConfigService) {
     this.shopDomain = this.configService.get<string>('SHOPIFY_SHOP', '') || '';
     this.token = this.configService.get<string>('SHOPIFY_TOKEN', '') || '';
-    this.clientId = this.configService.get<string>('SHOPIFY_CLIENT_ID', '') || '';
-    this.clientSecret = this.configService.get<string>('SHOPIFY_CLIENT_SECRET', '') || '';
-    this.apiVersion = this.configService.get<string>('SHOPIFY_API_VERSION', '2024-10');
+    this.clientId =
+      this.configService.get<string>('SHOPIFY_CLIENT_ID', '') || '';
+    this.clientSecret =
+      this.configService.get<string>('SHOPIFY_CLIENT_SECRET', '') || '';
+    this.apiVersion = this.configService.get<string>(
+      'SHOPIFY_API_VERSION',
+      '2024-10',
+    );
+    this.gatewayFeeRules = this.parseGatewayFeeRules(
+      this.configService.get<string>('SHOPIFY_GATEWAY_FEE_RULES', '') || '',
+    );
   }
 
   private get baseUrl() {
@@ -54,7 +76,10 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
   }
 
   async testConnection(): Promise<{ success: boolean; message?: string }> {
-    if (!this.shopDomain || (!this.token && !(this.clientId && this.clientSecret))) {
+    if (
+      !this.shopDomain ||
+      (!this.token && !(this.clientId && this.clientSecret))
+    ) {
       return {
         success: false,
         message:
@@ -70,7 +95,10 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
     }
   }
 
-  async fetchOrders(params: { start: Date; end: Date }): Promise<UnifiedOrder[]> {
+  async fetchOrders(params: {
+    start: Date;
+    end: Date;
+  }): Promise<UnifiedOrder[]> {
     this.assertConfig();
     const limit = 250;
     let path = `/orders.json?status=any&limit=${limit}`;
@@ -95,7 +123,9 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
 
         const linkHeader = headers.get('Link');
         if (linkHeader) {
-          const nextLink = linkHeader.split(',').find((s: string) => s.includes('rel="next"'));
+          const nextLink = linkHeader
+            .split(',')
+            .find((s: string) => s.includes('rel="next"'));
           if (nextLink) {
             const match = nextLink.match(/<([^>]+)>/);
             if (match) {
@@ -146,23 +176,36 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
       return [];
     }
 
-    const { body } = await this.request('GET', `/orders/${orderId}/transactions.json`);
+    const { body } = await this.request(
+      'GET',
+      `/orders/${orderId}/transactions.json`,
+    );
     return Promise.all(
-      (body.transactions || []).map((tx: any) => this.mapToUnifiedTransaction(tx, resolvedOrder)),
+      (body.transactions || []).map((tx: any) =>
+        this.mapToUnifiedTransaction(tx, resolvedOrder),
+      ),
     );
   }
 
-  async fetchTransactions(params: { start: Date; end: Date }): Promise<UnifiedTransaction[]> {
+  async fetchTransactions(params: {
+    start: Date;
+    end: Date;
+  }): Promise<UnifiedTransaction[]> {
     this.assertConfig();
     const orders = await this.fetchOrders(params);
     const transactions: UnifiedTransaction[] = [];
 
     for (const order of orders) {
       try {
-        const txs = await this.fetchTransactionsForOrder(order.externalId, order);
+        const txs = await this.fetchTransactionsForOrder(
+          order.externalId,
+          order,
+        );
         transactions.push(...txs);
       } catch (error: any) {
-        this.logger.error(`Failed to fetch txs for order ${order.externalId}: ${error.message}`);
+        this.logger.error(
+          `Failed to fetch txs for order ${order.externalId}: ${error.message}`,
+        );
       }
     }
     return transactions;
@@ -170,7 +213,9 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
 
   // --- Private Helpers ---
 
-  private async mapToUnifiedOrder(raw: ShopifyOrderPayload): Promise<UnifiedOrder> {
+  private async mapToUnifiedOrder(
+    raw: ShopifyOrderPayload,
+  ): Promise<UnifiedOrder> {
     const currency = raw.currency;
     const fxRate = await this.getFxRate(currency, new Date(raw.created_at));
 
@@ -180,7 +225,7 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
 
     const shippingAmount = (raw.shipping_lines || []).reduce(
       (sum: Decimal, line: any) => sum.add(new Decimal(line.price)),
-      new Decimal(0)
+      new Decimal(0),
     );
 
     let status: 'pending' | 'completed' | 'cancelled' | 'refunded' = 'pending';
@@ -188,7 +233,7 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
     else if (raw.financial_status === 'refunded') status = 'refunded';
     else if (raw.financial_status === 'paid') status = 'completed';
 
-    // Calculate Net Sales (Gross - Tax - Discount + Shipping ?? ) 
+    // Calculate Net Sales (Gross - Tax - Discount + Shipping ?? )
     // Usually: Gross (Total Price user pays) = ItemsTotal - Discount + Tax + Shipping
     // Net for Accounting usually means Excl. Tax.
     // UnifiedOrderTotals.net here is just a placeholder, usage depends on service logic.
@@ -198,12 +243,14 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
       externalId: raw.id.toString(),
       orderDate: new Date(raw.created_at),
       status,
-      customer: raw.customer ? {
-        externalId: raw.customer.id.toString(),
-        email: raw.customer.email || raw.email,
-        name: `${raw.customer.first_name} ${raw.customer.last_name}`.trim(),
-        phone: raw.customer.phone,
-      } : undefined,
+      customer: raw.customer
+        ? {
+            externalId: raw.customer.id.toString(),
+            email: raw.customer.email || raw.email,
+            name: `${raw.customer.first_name} ${raw.customer.last_name}`.trim(),
+            phone: raw.customer.phone,
+          }
+        : undefined,
       items: (raw.line_items || []).map((item: any) => ({
         sku: item.sku || 'UNKNOWN',
         productName: item.title,
@@ -211,7 +258,9 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
         unitPrice: new Decimal(item.price),
         discount: new Decimal(item.total_discount || 0),
         tax: new Decimal(0), // Shopify items don't easily expose tax per line without digging
-        total: new Decimal(item.price).mul(item.quantity).sub(item.total_discount || 0),
+        total: new Decimal(item.price)
+          .mul(item.quantity)
+          .sub(item.total_discount || 0),
       })),
       totals: {
         currency,
@@ -225,12 +274,13 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
     };
   }
 
-  private async mapToUnifiedTransaction(raw: any, order: UnifiedOrder): Promise<UnifiedTransaction> {
+  private async mapToUnifiedTransaction(
+    raw: any,
+    order: UnifiedOrder,
+  ): Promise<UnifiedTransaction> {
     const currency = raw.currency;
     const amount = new Decimal(raw.amount);
-
-    let fee = new Decimal(0);
-    // TODO: Implement fee mapping based on Gateway
+    const feeResolution = this.resolveTransactionFee(raw, amount);
 
     return {
       externalId: raw.id.toString(),
@@ -238,12 +288,153 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
       date: new Date(raw.processed_at || raw.created_at),
       type: raw.kind === 'refund' ? 'refund' : 'sale',
       amount,
-      fee,
-      net: amount.sub(fee),
+      fee: feeResolution.fee,
+      net: amount.sub(feeResolution.fee),
       currency,
       status: raw.status === 'success' ? 'success' : 'failed',
+      gateway: raw.gateway || undefined,
+      feeStatus: feeResolution.status,
+      feeSource: feeResolution.source,
       raw,
     };
+  }
+
+  private resolveTransactionFee(raw: any, amount: Decimal) {
+    const gateway = String(raw.gateway || '').trim();
+    const actualFee = this.extractActualFee(raw);
+
+    if (actualFee) {
+      return {
+        fee: actualFee,
+        status: 'actual' as UnifiedTransactionFeeStatus,
+        source: 'shopify.transaction.fee',
+      };
+    }
+
+    const gatewayRule = this.matchGatewayFeeRule(gateway);
+    if (gatewayRule) {
+      const estimatedFee = amount
+        .mul(gatewayRule.rate)
+        .add(gatewayRule.fixed)
+        .toDecimalPlaces(2);
+      return {
+        fee: estimatedFee,
+        status: 'estimated' as UnifiedTransactionFeeStatus,
+        source: `gateway-rule:${gatewayRule.match}`,
+      };
+    }
+
+    if (this.isNoFeeGateway(gateway, raw)) {
+      return {
+        fee: new Decimal(0),
+        status: 'not_applicable' as UnifiedTransactionFeeStatus,
+        source: gateway ? `gateway:${gateway}` : 'manual-gateway',
+      };
+    }
+
+    return {
+      fee: new Decimal(0),
+      status: 'unavailable' as UnifiedTransactionFeeStatus,
+      source: gateway ? `gateway:${gateway}` : 'unknown-gateway',
+    };
+  }
+
+  private extractActualFee(raw: any) {
+    const receipt = raw?.receipt || {};
+    const directCandidates = [
+      raw?.fee,
+      raw?.fees,
+      receipt?.fee,
+      receipt?.payment_fee,
+      receipt?.processor_fee,
+      receipt?.handling_fee,
+    ];
+
+    for (const candidate of directCandidates) {
+      if (candidate === null || candidate === undefined || candidate === '') {
+        continue;
+      }
+
+      try {
+        return new Decimal(candidate);
+      } catch {
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  private isNoFeeGateway(gateway: string, raw: any) {
+    const normalizedGateway = gateway.toLowerCase();
+    const sourceName = String(raw?.source_name || '').toLowerCase();
+    const noFeeKeywords = [
+      'cash on delivery',
+      'cod',
+      'bank transfer',
+      'manual',
+      '貨到付款',
+      '超商貨到付款',
+      '銀行轉帳',
+      'atm',
+    ];
+
+    return noFeeKeywords.some(
+      (keyword) =>
+        normalizedGateway.includes(keyword) || sourceName.includes(keyword),
+    );
+  }
+
+  private matchGatewayFeeRule(gateway: string) {
+    if (!gateway) {
+      return null;
+    }
+
+    const exactMatch = this.gatewayFeeRules.find(
+      (rule) => rule.match === gateway,
+    );
+    if (exactMatch) {
+      return exactMatch;
+    }
+
+    return this.gatewayFeeRules.find((rule) => gateway.includes(rule.match));
+  }
+
+  private parseGatewayFeeRules(rawRules: string): GatewayFeeRule[] {
+    if (!rawRules.trim()) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(rawRules) as Record<
+        string,
+        number | { rate?: number; fixed?: number }
+      >;
+
+      return Object.entries(parsed)
+        .map(([match, config]) => {
+          if (typeof config === 'number') {
+            return { match, rate: config, fixed: 0 };
+          }
+
+          return {
+            match,
+            rate: Number(config?.rate || 0),
+            fixed: Number(config?.fixed || 0),
+          };
+        })
+        .filter(
+          (rule) =>
+            rule.match &&
+            Number.isFinite(rule.rate) &&
+            Number.isFinite(rule.fixed),
+        );
+    } catch (error: any) {
+      this.logger.warn(
+        `Invalid SHOPIFY_GATEWAY_FEE_RULES config: ${error.message}`,
+      );
+      return [];
+    }
   }
 
   private async getFxRate(currency: string, date: Date): Promise<number> {
@@ -254,7 +445,11 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
     return 1;
   }
 
-  private async request(method: string, path: string, body?: any): Promise<{ body: any; headers: Headers }> {
+  private async request(
+    method: string,
+    path: string,
+    body?: any,
+  ): Promise<{ body: any; headers: Headers }> {
     const url = path.startsWith('https://') ? path : `${this.baseUrl}${path}`;
     const accessToken = await this.getAccessToken();
     const options: RequestInit = {
@@ -282,7 +477,7 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
 
     if (!this.token && !(this.clientId && this.clientSecret)) {
       throw new Error(
-        'Shopify configuration missing: provide SHOPIFY_TOKEN or SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET'
+        'Shopify configuration missing: provide SHOPIFY_TOKEN or SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET',
       );
     }
   }
@@ -295,14 +490,18 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
     }
 
     const now = Date.now();
-    if (this.accessTokenCache && this.accessTokenCache.expiresAt - 60_000 > now) {
+    if (
+      this.accessTokenCache &&
+      this.accessTokenCache.expiresAt - 60_000 > now
+    ) {
       return this.accessTokenCache.token;
     }
 
     if (!this.accessTokenPromise) {
-      this.accessTokenPromise = this.fetchAccessTokenWithClientCredentials().finally(() => {
-        this.accessTokenPromise = null;
-      });
+      this.accessTokenPromise =
+        this.fetchAccessTokenWithClientCredentials().finally(() => {
+          this.accessTokenPromise = null;
+        });
     }
 
     return this.accessTokenPromise;
@@ -313,21 +512,26 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
       .replace(/^https?:\/\//, '')
       .replace(/\.myshopify\.com$/, '');
 
-    const response = await fetch(`https://${domain}.myshopify.com/admin/oauth/access_token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+    const response = await fetch(
+      `https://${domain}.myshopify.com/admin/oauth/access_token`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+        }),
       },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-      }),
-    });
+    );
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Shopify token request failed ${response.status}: ${text}`);
+      throw new Error(
+        `Shopify token request failed ${response.status}: ${text}`,
+      );
     }
 
     const data = await response.json();
@@ -335,7 +539,9 @@ export class ShopifyHttpAdapter implements ISalesChannelAdapter {
     const accessToken = data.access_token;
 
     if (!accessToken) {
-      throw new Error('Shopify token request succeeded but no access_token was returned');
+      throw new Error(
+        'Shopify token request succeeded but no access_token was returned',
+      );
     }
 
     this.accessTokenCache = {
