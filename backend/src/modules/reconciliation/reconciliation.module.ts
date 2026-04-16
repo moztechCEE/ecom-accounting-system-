@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { ReconciliationController } from './reconciliation.controller';
 import { ReconciliationService } from './reconciliation.service';
 import { ProviderPayoutReconciliationService } from './provider-payout-reconciliation.service';
 import { PrismaModule } from '../../common/prisma/prisma.module';
+import { EcpayShopifyPayoutService } from './ecpay-shopify-payout.service';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 /**
  * ReconciliationModule
@@ -24,9 +27,18 @@ import { PrismaModule } from '../../common/prisma/prisma.module';
  * - 異常交易告警
  */
 @Module({
-  imports: [PrismaModule],
+  imports: [ConfigModule, PrismaModule],
   controllers: [ReconciliationController],
-  providers: [ReconciliationService, ProviderPayoutReconciliationService],
-  exports: [ReconciliationService, ProviderPayoutReconciliationService],
+  providers: [
+    ReconciliationService,
+    ProviderPayoutReconciliationService,
+    EcpayShopifyPayoutService,
+    RolesGuard,
+  ],
+  exports: [
+    ReconciliationService,
+    ProviderPayoutReconciliationService,
+    EcpayShopifyPayoutService,
+  ],
 })
 export class ReconciliationModule {}

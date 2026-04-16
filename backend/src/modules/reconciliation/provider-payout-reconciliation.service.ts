@@ -107,6 +107,8 @@ const COMMON_ALIASES: Record<string, string[]> = {
     'netAmount',
     'net',
     '淨額',
+    '應收款項(淨額)',
+    '應收款項淨額',
     '實收金額',
     '撥款金額',
     '入帳金額',
@@ -131,7 +133,12 @@ const PROVIDER_ALIASES: Record<
   Partial<typeof COMMON_ALIASES>
 > = {
   ecpay: {
-    externalOrderId: ['MerchantTradeNo', '商店訂單編號', '訂單編號'],
+    externalOrderId: [
+      'MerchantTradeNo',
+      '廠商訂單編號',
+      '商店訂單編號',
+      '訂單編號',
+    ],
     providerTradeNo: ['TradeNo', '綠界交易編號', '交易單號'],
     providerPaymentId: ['payment_id', 'PaymentID', '交易序號'],
   },

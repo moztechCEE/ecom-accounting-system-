@@ -17,10 +17,13 @@ import { ReconciliationService } from './reconciliation.service';
 import { ImportBankTransactionsDto } from './dto/import-bank-transactions.dto';
 import { AutoMatchDto } from './dto/auto-match.dto';
 import { ImportProviderPayoutsDto } from './dto/import-provider-payouts.dto';
+import { SyncEcpayShopifyPayoutsDto } from './dto/sync-ecpay-shopify-payouts.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ProviderPayoutReconciliationService } from './provider-payout-reconciliation.service';
+import { EcpayShopifyPayoutService } from './ecpay-shopify-payout.service';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @ApiTags('Reconciliation')
 @ApiBearerAuth()
@@ -30,6 +33,7 @@ export class ReconciliationController {
   constructor(
     private readonly reconciliationService: ReconciliationService,
     private readonly providerPayoutService: ProviderPayoutReconciliationService,
+    private readonly ecpayShopifyPayoutService: EcpayShopifyPayoutService,
   ) {}
 
   @Post('bank/import')
@@ -146,5 +150,21 @@ export class ReconciliationController {
   @ApiResponse({ status: 200, description: '查詢成功' })
   async getPayoutImportBatchDetail(@Param('batchId') batchId: string) {
     return this.providerPayoutService.getPayoutImportBatchDetail(batchId);
+  }
+
+  @Post('payouts/ecpay-shopify/sync')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  @ApiOperation({
+    summary: '直接從綠界 Shopify API 同步撥款對帳資料',
+    description:
+      '不需手動匯出報表，系統會直接向綠界 Shopify 專用 API 取回撥款資料並回填到既有 Payment。',
+  })
+  @ApiResponse({ status: 201, description: '同步成功' })
+  async syncEcpayShopifyPayouts(
+    @Body() dto: SyncEcpayShopifyPayoutsDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.ecpayShopifyPayoutService.syncShopifyPayouts(dto, user.userId);
   }
 }
