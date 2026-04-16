@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -58,7 +59,7 @@ export class PayrollService {
       items,
       totalAmount,
       employeeCount:
-        employeeCount > 0 ? employeeCount : run._count?.items ?? undefined,
+        employeeCount > 0 ? employeeCount : (run._count?.items ?? undefined),
     };
   }
 
@@ -74,7 +75,9 @@ export class PayrollService {
     });
 
     if (!employee) {
-      throw new NotFoundException('Current user is not linked to an employee record');
+      throw new NotFoundException(
+        'Current user is not linked to an employee record',
+      );
     }
 
     return employee;
@@ -123,6 +126,43 @@ export class PayrollService {
     return fallbackEntity.id;
   }
 
+  private async ensureDepartmentInEntity(
+    departmentId: string | undefined,
+    entityId: string,
+  ) {
+    if (!departmentId) {
+      return null;
+    }
+
+    const department = await this.prisma.department.findFirst({
+      where: {
+        id: departmentId,
+        entityId,
+      },
+    });
+
+    if (!department) {
+      throw new NotFoundException('Department not found');
+    }
+
+    return department;
+  }
+
+  async getEmployeeById(id: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id },
+      include: {
+        department: true,
+      },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    return employee;
+  }
+
   async getEmployees(userId: string, entityId?: string) {
     const resolvedEntityId = entityId
       ? await this.resolveEntityId(userId, entityId)
@@ -143,6 +183,217 @@ export class PayrollService {
 
     return this.prisma.department.findMany({
       where: resolvedEntityId ? { entityId: resolvedEntityId } : undefined,
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async createDepartment(
+    userId: string,
+    data: {
+      entityId?: string;
+      name: string;
+      costCenterId?: string;
+      isActive?: boolean;
+    },
+  ) {
+    const entityId = await this.resolveEntityId(userId, data.entityId);
+    const name = data.name?.trim();
+
+    if (!name) {
+      throw new BadRequestException('Department name is required');
+    }
+
+    const existingDepartment = await this.prisma.department.findFirst({
+      where: {
+        entityId,
+        name,
+      },
+      select: { id: true },
+    });
+
+    if (existingDepartment) {
+      throw new ConflictException('Department already exists');
+    }
+
+    return this.prisma.department.create({
+      data: {
+        entityId,
+        name,
+        costCenterId: data.costCenterId?.trim() || null,
+        isActive: data.isActive ?? true,
+      },
+    });
+  }
+
+  async createEmployee(
+    userId: string,
+    data: {
+      entityId?: string;
+      employeeNo: string;
+      name: string;
+      departmentId?: string;
+      hireDate: string | Date;
+      salaryBaseOriginal: number;
+      isActive?: boolean;
+      location?: string;
+    },
+  ) {
+    const entityId = await this.resolveEntityId(userId, data.entityId);
+    const entity = await this.prisma.entity.findUnique({
+      where: { id: entityId },
+      select: {
+        id: true,
+        country: true,
+        baseCurrency: true,
+      },
+    });
+
+    if (!entity) {
+      throw new NotFoundException('Entity not found');
+    }
+
+    const employeeNo = data.employeeNo.trim();
+    if (!employeeNo) {
+      throw new BadRequestException('Employee number is required');
+    }
+
+    const name = data.name.trim();
+    if (!name) {
+      throw new BadRequestException('Employee name is required');
+    }
+
+    const existingEmployee = await this.prisma.employee.findFirst({
+      where: {
+        entityId,
+        employeeNo,
+      },
+      select: { id: true },
+    });
+
+    if (existingEmployee) {
+      throw new ConflictException(
+        `Employee number ${employeeNo} already exists`,
+      );
+    }
+
+    await this.ensureDepartmentInEntity(data.departmentId, entityId);
+
+    const salaryBaseOriginal = Number(data.salaryBaseOriginal);
+    if (!Number.isFinite(salaryBaseOriginal) || salaryBaseOriginal < 0) {
+      throw new BadRequestException(
+        'Salary must be a valid non-negative number',
+      );
+    }
+
+    const employee = await this.prisma.employee.create({
+      data: {
+        entityId,
+        employeeNo,
+        name,
+        country: entity.country,
+        location: data.location?.trim() || null,
+        departmentId: data.departmentId || null,
+        hireDate: new Date(data.hireDate),
+        salaryBaseOriginal,
+        salaryBaseCurrency: entity.baseCurrency,
+        salaryBaseFxRate: 1,
+        salaryBaseBase: salaryBaseOriginal,
+        isActive: data.isActive ?? true,
+      },
+      include: {
+        department: true,
+      },
+    });
+
+    return employee;
+  }
+
+  async updateEmployee(
+    id: string,
+    userId: string,
+    data: {
+      name?: string;
+      departmentId?: string | null;
+      hireDate?: string | Date;
+      salaryBaseOriginal?: number;
+      isActive?: boolean;
+      location?: string | null;
+      terminateDate?: string | Date | null;
+    },
+  ) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        entityId: true,
+      },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const resolvedEntityId = await this.resolveEntityId(
+      userId,
+      employee.entityId,
+    );
+    if (resolvedEntityId !== employee.entityId) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    if (data.departmentId !== undefined && data.departmentId !== null) {
+      await this.ensureDepartmentInEntity(data.departmentId, employee.entityId);
+    }
+
+    const updateData: Record<string, any> = {};
+
+    if (data.name !== undefined) {
+      const name = data.name.trim();
+      if (!name) {
+        throw new BadRequestException('Employee name is required');
+      }
+      updateData.name = name;
+    }
+
+    if (data.departmentId !== undefined) {
+      updateData.departmentId = data.departmentId || null;
+    }
+
+    if (data.hireDate !== undefined) {
+      updateData.hireDate = new Date(data.hireDate);
+    }
+
+    if (data.salaryBaseOriginal !== undefined) {
+      const salaryBaseOriginal = Number(data.salaryBaseOriginal);
+      if (!Number.isFinite(salaryBaseOriginal) || salaryBaseOriginal < 0) {
+        throw new BadRequestException(
+          'Salary must be a valid non-negative number',
+        );
+      }
+      updateData.salaryBaseOriginal = salaryBaseOriginal;
+      updateData.salaryBaseBase = salaryBaseOriginal;
+    }
+
+    if (data.isActive !== undefined) {
+      updateData.isActive = data.isActive;
+    }
+
+    if (data.location !== undefined) {
+      updateData.location = data.location?.trim() || null;
+    }
+
+    if (data.terminateDate !== undefined) {
+      updateData.terminateDate = data.terminateDate
+        ? new Date(data.terminateDate)
+        : null;
+    }
+
+    return this.prisma.employee.update({
+      where: { id },
+      data: updateData,
+      include: {
+        department: true,
+      },
     });
   }
 
@@ -225,10 +476,7 @@ export class PayrollService {
               },
             },
           },
-          orderBy: [
-            { employeeId: 'asc' },
-            { type: 'asc' },
-          ],
+          orderBy: [{ employeeId: 'asc' }, { type: 'asc' }],
         },
       },
     });
@@ -355,12 +603,15 @@ export class PayrollService {
   /**
    * 建立薪資批次
    */
-  async createPayrollRun(data: {
-    entityId?: string;
-    periodStart: Date;
-    periodEnd: Date;
-    payDate: Date;
-  }, userId: string) {
+  async createPayrollRun(
+    data: {
+      entityId?: string;
+      periodStart: Date;
+      periodEnd: Date;
+      payDate: Date;
+    },
+    userId: string,
+  ) {
     const entityId = await this.resolveEntityId(userId, data.entityId);
     const { periodStart, periodEnd, payDate } = data;
 
@@ -406,10 +657,7 @@ export class PayrollService {
         entityId,
         isActive: true,
         hireDate: { lte: periodEnd },
-        OR: [
-          { terminateDate: null },
-          { terminateDate: { gte: periodStart } },
-        ],
+        OR: [{ terminateDate: null }, { terminateDate: { gte: periodStart } }],
       },
     });
 
@@ -834,7 +1082,7 @@ export class PayrollService {
 
     const items: { type: string; amount: number; remark?: string }[] = [];
     const baseSalary = Number(employee.salaryBaseOriginal);
-    
+
     // Standard working hours per month (30 days * 8 hours)
     const STANDARD_MONTHLY_HOURS = 240;
     const hourlyRate = baseSalary / STANDARD_MONTHLY_HOURS;
@@ -935,9 +1183,9 @@ export class PayrollService {
   async calculateSocialInsurance(salary: number, city: string) {
     // Simplified calculation
     const rates = {
-      'shanghai': 0.105,
-      'beijing': 0.102,
-      'shenzhen': 0.100,
+      shanghai: 0.105,
+      beijing: 0.102,
+      shenzhen: 0.1,
     };
     const rate = rates[city.toLowerCase()] || 0.105; // Default to Shanghai rate
     return Math.round(salary * rate);

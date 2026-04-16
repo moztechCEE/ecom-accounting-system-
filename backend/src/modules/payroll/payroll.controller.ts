@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   UseGuards,
@@ -36,8 +37,20 @@ export class PayrollController {
   @UseGuards(RolesGuard)
   @ApiOperation({ summary: '查詢部門列表' })
   @ApiResponse({ status: 200, description: '成功取得部門列表' })
-  async getDepartments(@Request() req: any, @Query('entityId') entityId?: string) {
+  async getDepartments(
+    @Request() req: any,
+    @Query('entityId') entityId?: string,
+  ) {
     return this.payrollService.getDepartments(req.user.id, entityId);
+  }
+
+  @Post('departments')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '建立部門' })
+  @ApiResponse({ status: 201, description: '成功建立部門' })
+  async createDepartment(@Request() req: any, @Body() data: any) {
+    return this.payrollService.createDepartment(req.user.id, data);
   }
 
   @Get('bank-accounts')
@@ -45,7 +58,10 @@ export class PayrollController {
   @UseGuards(RolesGuard)
   @ApiOperation({ summary: '查詢可用發薪帳戶' })
   @ApiResponse({ status: 200, description: '成功取得銀行帳戶列表' })
-  async getBankAccounts(@Request() req: any, @Query('entityId') entityId?: string) {
+  async getBankAccounts(
+    @Request() req: any,
+    @Query('entityId') entityId?: string,
+  ) {
     return this.payrollService.getBankAccounts(req.user.id, entityId);
   }
 
@@ -54,22 +70,42 @@ export class PayrollController {
   @UseGuards(RolesGuard)
   @ApiOperation({ summary: '查詢員工列表' })
   @ApiResponse({ status: 200, description: '成功取得員工列表' })
-  async getEmployees(@Request() req: any, @Query('entityId') entityId?: string) {
+  async getEmployees(
+    @Request() req: any,
+    @Query('entityId') entityId?: string,
+  ) {
     return this.payrollService.getEmployees(req.user.id, entityId);
   }
 
   @Get('employees/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '查詢單一員工' })
   @ApiResponse({ status: 200, description: '成功取得員工詳情' })
   async getEmployee(@Param('id') id: string) {
-    throw new Error('Not implemented');
+    return this.payrollService.getEmployeeById(id);
   }
 
   @Post('employees')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '建立員工資料' })
   @ApiResponse({ status: 201, description: '成功建立員工' })
-  async createEmployee(@Body() data: any) {
-    throw new Error('Not implemented');
+  async createEmployee(@Request() req: any, @Body() data: any) {
+    return this.payrollService.createEmployee(req.user.id, data);
+  }
+
+  @Patch('employees/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '更新員工資料' })
+  @ApiResponse({ status: 200, description: '成功更新員工' })
+  async updateEmployee(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() data: any,
+  ) {
+    return this.payrollService.updateEmployee(id, req.user.id, data);
   }
 
   @Get('runs')
@@ -77,7 +113,10 @@ export class PayrollController {
   @UseGuards(RolesGuard)
   @ApiOperation({ summary: '查詢薪資計算批次' })
   @ApiResponse({ status: 200, description: '成功取得薪資計算批次' })
-  async getPayrollRuns(@Request() req: any, @Query('entityId') entityId?: string) {
+  async getPayrollRuns(
+    @Request() req: any,
+    @Query('entityId') entityId?: string,
+  ) {
     return this.payrollService.getPayrollRuns(req.user.id, entityId);
   }
 
@@ -162,7 +201,7 @@ export class PayrollController {
     @Query('month') month?: number,
   ) {
     // This might be for individual payslips, keeping it for now but implementing basic return
-    return []; 
+    return [];
   }
 
   @Get('payrolls/:id')
