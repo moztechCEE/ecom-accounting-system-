@@ -1,5 +1,5 @@
 import api from './api'
-import { Employee, Department, PayrollRun, PaginatedResult } from '../types'
+import { Employee, Department, PayrollRun, PaginatedResult, BankAccount } from '../types'
 
 export const payrollService = {
   // Employees
@@ -83,6 +83,11 @@ export const payrollService = {
     return response.data
   },
 
+  getBankAccounts: async () => {
+    const response = await api.get<BankAccount[]>('/payroll/bank-accounts')
+    return response.data
+  },
+
   submitPayrollRun: async (id: string) => {
     const response = await api.post<PayrollRun>(`/payroll/runs/${id}/submit`)
     return response.data
@@ -95,6 +100,11 @@ export const payrollService = {
 
   postPayrollRun: async (id: string) => {
     const response = await api.post<PayrollRun>(`/payroll/runs/${id}/post`)
+    return response.data
+  },
+
+  payPayrollRun: async (id: string, data: { bankAccountId: string; paidAt?: string }) => {
+    const response = await api.post<PayrollRun>(`/payroll/runs/${id}/pay`, data)
     return response.data
   },
 }

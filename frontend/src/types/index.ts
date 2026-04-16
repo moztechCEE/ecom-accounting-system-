@@ -228,6 +228,7 @@ export interface PayrollRun {
   employeeCount?: number
   createdAt?: string
   approvedAt?: string | null
+  paidAt?: string | null
   creator?: {
     id: string
     name: string
@@ -236,6 +237,11 @@ export interface PayrollRun {
     id: string
     name: string
   } | null
+  payor?: {
+    id: string
+    name: string
+  } | null
+  bankAccount?: Pick<BankAccount, 'id' | 'bankName' | 'accountNo' | 'currency'> | null
   items?: PayrollItem[]
 }
 

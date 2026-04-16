@@ -7,7 +7,9 @@ import {
   DatePicker,
   Empty,
   Form,
+  Modal,
   Row,
+  Select,
   Space,
   Statistic,
   Table,
@@ -30,7 +32,7 @@ import { motion } from 'framer-motion'
 import dayjs from 'dayjs'
 import { GlassDrawer, GlassDrawerSection } from '../components/ui/GlassDrawer'
 import { payrollService } from '../services/payroll.service'
-import { PayrollItem, PayrollRun } from '../types'
+import { BankAccount, PayrollItem, PayrollRun } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 
 const { Title, Text } = Typography
@@ -40,6 +42,7 @@ const statusMetaMap: Record<string, { label: string; color: string }> = {
   pending_approval: { label: '待批准', color: 'blue' },
   approved: { label: '已批准', color: 'green' },
   posted: { label: '已封存', color: 'purple' },
+  paid: { label: '已發薪', color: 'gold' },
 }
 
 type DetailScope = 'admin' | 'mine'
@@ -53,11 +56,14 @@ const PayrollPage: React.FC = () => {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [payModalOpen, setPayModalOpen] = useState(false)
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailScope, setDetailScope] = useState<DetailScope>('admin')
   const [myRunsError, setMyRunsError] = useState<string | null>(null)
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [form] = Form.useForm()
+  const [payForm] = Form.useForm()
 
   const canManagePayroll = useMemo(
     () => (user?.roles ?? []).some((role) => role === 'SUPER_ADMIN' || role === 'ADMIN'),
@@ -104,10 +110,26 @@ const PayrollPage: React.FC = () => {
     }
   }
 
+  const fetchBankAccounts = async () => {
+    if (!canManagePayroll) {
+      setBankAccounts([])
+      return
+    }
+
+    try {
+      const accounts = await payrollService.getBankAccounts()
+      setBankAccounts(Array.isArray(accounts) ? accounts : [])
+    } catch (error) {
+      message.error('載入發薪帳戶失敗')
+      setBankAccounts([])
+    }
+  }
+
   useEffect(() => {
     fetchAdminRuns()
     fetchMyRuns()
-  }, [canReviewPayroll])
+    fetchBankAccounts()
+  }, [canReviewPayroll, canManagePayroll])
 
   const adminMonthTotal = useMemo(() => {
     const currentMonth = dayjs().format('YYYY-MM')
@@ -218,6 +240,42 @@ const PayrollPage: React.FC = () => {
       fetchMyRuns()
     } catch (error: any) {
       message.error(error?.response?.data?.message || '過帳失敗')
+    } finally {
+      setActionLoadingId(null)
+    }
+  }
+
+  const openPayModal = (run: PayrollRun) => {
+    setSelectedRun(run)
+    payForm.setFieldsValue({
+      bankAccountId: run.bankAccount?.id,
+      paidAt: dayjs(),
+    })
+    setPayModalOpen(true)
+  }
+
+  const handlePayRun = async () => {
+    if (!selectedRun) {
+      return
+    }
+
+    try {
+      const values = await payForm.validateFields()
+      setActionLoadingId(selectedRun.id)
+      const updated = await payrollService.payPayrollRun(selectedRun.id, {
+        bankAccountId: values.bankAccountId,
+        paidAt: values.paidAt?.toISOString(),
+      })
+      message.success('薪資已標記為完成發薪')
+      syncRunIntoLists(updated)
+      setPayModalOpen(false)
+      payForm.resetFields()
+      fetchMyRuns()
+    } catch (error: any) {
+      if (error?.errorFields) {
+        return
+      }
+      message.error(error?.response?.data?.message || '發薪失敗')
     } finally {
       setActionLoadingId(null)
     }
@@ -384,6 +442,16 @@ const PayrollPage: React.FC = () => {
               onClick={() => handlePostRun(record.id)}
             >
               過帳
+            </Button>
+          ) : null}
+          {canManagePayroll && record.status === 'posted' ? (
+            <Button
+              type="text"
+              icon={<DollarOutlined />}
+              loading={actionLoadingId === record.id}
+              onClick={() => openPayModal(record)}
+            >
+              發薪
             </Button>
           ) : null}
         </Space>
@@ -681,6 +749,9 @@ const PayrollPage: React.FC = () => {
                 <span>建立者：{selectedRun.creator?.name || '—'}</span>
                 <span>批准者：{selectedRun.approver?.name || '—'}</span>
                 <span>批准時間：{selectedRun.approvedAt ? dayjs(selectedRun.approvedAt).format('YYYY-MM-DD HH:mm') : '—'}</span>
+                <span>發薪帳戶：{selectedRun.bankAccount ? `${selectedRun.bankAccount.bankName} ${selectedRun.bankAccount.accountNo.slice(-5)}` : '—'}</span>
+                <span>發薪人：{selectedRun.payor?.name || '—'}</span>
+                <span>發薪時間：{selectedRun.paidAt ? dayjs(selectedRun.paidAt).format('YYYY-MM-DD HH:mm') : '—'}</span>
               </div>
             </GlassDrawerSection>
 
@@ -717,6 +788,15 @@ const PayrollPage: React.FC = () => {
                     過帳到會計
                   </Button>
                 ) : null}
+                {canManagePayroll && detailScope === 'admin' && selectedRun.status === 'posted' ? (
+                  <Button
+                    type="primary"
+                    loading={actionLoadingId === selectedRun.id}
+                    onClick={() => openPayModal(selectedRun)}
+                  >
+                    標記已發薪
+                  </Button>
+                ) : null}
                 {detailScope === 'mine' ? (
                   <Button icon={<PrinterOutlined />} onClick={handlePrintPayslip}>
                     列印 / 另存 PDF
@@ -737,6 +817,44 @@ const PayrollPage: React.FC = () => {
           <div className="py-12 text-center text-slate-400">{detailLoading ? '載入中...' : '尚未選取薪資資料'}</div>
         )}
       </GlassDrawer>
+
+      <Modal
+        title="完成薪資發放"
+        open={payModalOpen}
+        onCancel={() => {
+          setPayModalOpen(false)
+          payForm.resetFields()
+        }}
+        onOk={handlePayRun}
+        okText="確認發薪"
+        confirmLoading={Boolean(selectedRun && actionLoadingId === selectedRun.id)}
+      >
+        <Form form={payForm} layout="vertical">
+          <Form.Item
+            name="bankAccountId"
+            label="出款帳戶"
+            rules={[{ required: true, message: '請選擇出款帳戶' }]}
+          >
+            <Select
+              placeholder="選擇銀行帳戶"
+              options={bankAccounts.map((account) => ({
+                value: account.id,
+                label: `${account.bankName} ${account.accountNo}`,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="paidAt"
+            label="實際發薪時間"
+            rules={[{ required: true, message: '請選擇發薪時間' }]}
+          >
+            <DatePicker showTime className="w-full" />
+          </Form.Item>
+          <Text type="secondary" className="text-xs">
+            系統會同步建立薪資付款分錄，借記應付薪資、貸記銀行存款。
+          </Text>
+        </Form>
+      </Modal>
     </motion.div>
   )
 }

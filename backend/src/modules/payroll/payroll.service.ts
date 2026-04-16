@@ -146,6 +146,18 @@ export class PayrollService {
     });
   }
 
+  async getBankAccounts(userId: string, entityId?: string) {
+    const resolvedEntityId = await this.resolveEntityId(userId, entityId);
+
+    return this.prisma.bankAccount.findMany({
+      where: {
+        entityId: resolvedEntityId,
+        isActive: true,
+      },
+      orderBy: [{ bankName: 'asc' }, { accountNo: 'asc' }],
+    });
+  }
+
   async getPayrollRuns(userId: string, entityId?: string) {
     const resolvedEntityId = entityId
       ? await this.resolveEntityId(userId, entityId)
@@ -160,6 +172,17 @@ export class PayrollService {
         },
         approver: {
           select: { id: true, name: true },
+        },
+        payor: {
+          select: { id: true, name: true },
+        },
+        bankAccount: {
+          select: {
+            id: true,
+            bankName: true,
+            accountNo: true,
+            currency: true,
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -180,6 +203,17 @@ export class PayrollService {
         },
         approver: {
           select: { id: true, name: true },
+        },
+        payor: {
+          select: { id: true, name: true },
+        },
+        bankAccount: {
+          select: {
+            id: true,
+            bankName: true,
+            accountNo: true,
+            currency: true,
+          },
         },
         items: {
           include: {
@@ -211,7 +245,7 @@ export class PayrollService {
     const runs = await this.prisma.payrollRun.findMany({
       where: {
         status: {
-          in: ['approved', 'posted'],
+          in: ['approved', 'posted', 'paid'],
         },
         items: {
           some: {
@@ -225,6 +259,17 @@ export class PayrollService {
         },
         approver: {
           select: { id: true, name: true },
+        },
+        payor: {
+          select: { id: true, name: true },
+        },
+        bankAccount: {
+          select: {
+            id: true,
+            bankName: true,
+            accountNo: true,
+            currency: true,
+          },
         },
         items: {
           where: {
@@ -254,7 +299,7 @@ export class PayrollService {
       where: {
         id,
         status: {
-          in: ['approved', 'posted'],
+          in: ['approved', 'posted', 'paid'],
         },
         items: {
           some: {
@@ -271,6 +316,17 @@ export class PayrollService {
         },
         approver: {
           select: { id: true, name: true },
+        },
+        payor: {
+          select: { id: true, name: true },
+        },
+        bankAccount: {
+          select: {
+            id: true,
+            bankName: true,
+            accountNo: true,
+            currency: true,
+          },
         },
         items: {
           where: {
@@ -624,6 +680,128 @@ export class PayrollService {
       where: { id },
       data: {
         status: 'posted',
+      },
+    });
+
+    return this.getPayrollRunById(id);
+  }
+
+  async payPayrollRun(
+    id: string,
+    userId: string,
+    data: { bankAccountId: string; paidAt?: string },
+  ) {
+    const run = await this.prisma.payrollRun.findUnique({
+      where: { id },
+      include: {
+        entity: true,
+        items: true,
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException('Payroll run not found');
+    }
+
+    if (run.status !== 'posted') {
+      throw new BadRequestException('只有已過帳批次可以標記已發薪');
+    }
+
+    const bankAccount = await this.prisma.bankAccount.findFirst({
+      where: {
+        id: data.bankAccountId,
+        entityId: run.entityId,
+        isActive: true,
+      },
+    });
+
+    if (!bankAccount) {
+      throw new NotFoundException('Bank account not found');
+    }
+
+    const payAmount = run.items.reduce(
+      (sum, item) => sum + this.toNumber(item.amountBase),
+      0,
+    );
+
+    if (payAmount <= 0) {
+      throw new BadRequestException('薪資批次實發金額異常，無法標記已發薪');
+    }
+
+    const [payrollPayableAccount, bankDepositAccount] = await Promise.all([
+      this.prisma.account.findUnique({
+        where: {
+          entityId_code: {
+            entityId: run.entityId,
+            code: '2191',
+          },
+        },
+      }),
+      this.prisma.account.findUnique({
+        where: {
+          entityId_code: {
+            entityId: run.entityId,
+            code: '1113',
+          },
+        },
+      }),
+    ]);
+
+    if (!payrollPayableAccount || !bankDepositAccount) {
+      throw new NotFoundException('缺少薪資付款所需會計科目（2191 / 1113）');
+    }
+
+    const paidAt = data.paidAt ? new Date(data.paidAt) : new Date();
+
+    const existingPaymentJournal = await this.prisma.journalEntry.findFirst({
+      where: {
+        sourceModule: 'payroll_payment',
+        sourceId: run.id,
+      },
+      select: { id: true, approvedAt: true },
+    });
+
+    if (!existingPaymentJournal) {
+      const paymentJournal = await this.journalService.createJournalEntry({
+        entityId: run.entityId,
+        date: paidAt,
+        description: `薪資付款 ${run.entity.name} ${run.periodStart.toISOString().slice(0, 10)} ~ ${run.periodEnd.toISOString().slice(0, 10)}`,
+        sourceModule: 'payroll_payment',
+        sourceId: run.id,
+        createdBy: userId,
+        lines: [
+          {
+            accountId: payrollPayableAccount.id,
+            debit: payAmount,
+            credit: 0,
+            amountBase: payAmount,
+            memo: '沖銷應付薪資',
+          },
+          {
+            accountId: bankDepositAccount.id,
+            debit: 0,
+            credit: payAmount,
+            amountBase: payAmount,
+            memo: `銀行出款 ${bankAccount.bankName} ${bankAccount.accountNo.slice(-5)}`,
+          },
+        ],
+      });
+
+      await this.journalService.approveJournalEntry(paymentJournal.id, userId);
+    } else if (!existingPaymentJournal.approvedAt) {
+      await this.journalService.approveJournalEntry(
+        existingPaymentJournal.id,
+        userId,
+      );
+    }
+
+    await this.prisma.payrollRun.update({
+      where: { id },
+      data: {
+        status: 'paid',
+        bankAccountId: bankAccount.id,
+        paidBy: userId,
+        paidAt,
       },
     });
 

@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PayrollService } from './payroll.service';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { PayPayrollRunDto } from './dto/pay-payroll-run.dto';
 
 /**
  * 薪資控制器
@@ -37,6 +38,15 @@ export class PayrollController {
   @ApiResponse({ status: 200, description: '成功取得部門列表' })
   async getDepartments(@Request() req: any, @Query('entityId') entityId?: string) {
     return this.payrollService.getDepartments(req.user.id, entityId);
+  }
+
+  @Get('bank-accounts')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '查詢可用發薪帳戶' })
+  @ApiResponse({ status: 200, description: '成功取得銀行帳戶列表' })
+  async getBankAccounts(@Request() req: any, @Query('entityId') entityId?: string) {
+    return this.payrollService.getBankAccounts(req.user.id, entityId);
   }
 
   @Get('employees')
@@ -128,6 +138,19 @@ export class PayrollController {
   @ApiResponse({ status: 200, description: '成功過帳薪資批次' })
   async postPayrollRun(@Request() req: any, @Param('id') id: string) {
     return this.payrollService.postPayrollRun(id, req.user.id);
+  }
+
+  @Post('runs/:id/pay')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '標記薪資批次已發薪' })
+  @ApiResponse({ status: 200, description: '成功完成薪資發放' })
+  async payPayrollRun(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: PayPayrollRunDto,
+  ) {
+    return this.payrollService.payPayrollRun(id, req.user.id, dto);
   }
 
   @Get('payrolls')
