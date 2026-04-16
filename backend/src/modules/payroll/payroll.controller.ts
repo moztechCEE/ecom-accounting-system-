@@ -6,6 +6,7 @@ import {
   Param,
   UseGuards,
   Query,
+  Request,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -15,6 +16,8 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PayrollService } from './payroll.service';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 /**
  * 薪資控制器
@@ -28,17 +31,21 @@ export class PayrollController {
   constructor(private readonly payrollService: PayrollService) {}
 
   @Get('departments')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '查詢部門列表' })
   @ApiResponse({ status: 200, description: '成功取得部門列表' })
-  async getDepartments(@Query('entityId') entityId?: string) {
-    return this.payrollService.getDepartments(entityId);
+  async getDepartments(@Request() req: any, @Query('entityId') entityId?: string) {
+    return this.payrollService.getDepartments(req.user.id, entityId);
   }
 
   @Get('employees')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '查詢員工列表' })
   @ApiResponse({ status: 200, description: '成功取得員工列表' })
-  async getEmployees(@Query('entityId') entityId?: string) {
-    return this.payrollService.getEmployees(entityId);
+  async getEmployees(@Request() req: any, @Query('entityId') entityId?: string) {
+    return this.payrollService.getEmployees(req.user.id, entityId);
   }
 
   @Get('employees/:id')
@@ -56,17 +63,48 @@ export class PayrollController {
   }
 
   @Get('runs')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '查詢薪資計算批次' })
   @ApiResponse({ status: 200, description: '成功取得薪資計算批次' })
-  async getPayrollRuns(@Query('entityId') entityId?: string) {
-    return this.payrollService.getPayrollRuns(entityId);
+  async getPayrollRuns(@Request() req: any, @Query('entityId') entityId?: string) {
+    return this.payrollService.getPayrollRuns(req.user.id, entityId);
+  }
+
+  @Get('runs/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '查詢單一薪資批次' })
+  @ApiResponse({ status: 200, description: '成功取得薪資批次詳情' })
+  async getPayrollRun(@Param('id') id: string) {
+    return this.payrollService.getPayrollRunById(id);
   }
 
   @Post('runs')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '建立薪資計算批次' })
   @ApiResponse({ status: 201, description: '成功建立薪資計算批次' })
-  async createPayrollRun(@Body() data: any) {
-    return this.payrollService.createPayrollRun(data);
+  async createPayrollRun(@Request() req: any, @Body() data: any) {
+    return this.payrollService.createPayrollRun(data, req.user.id);
+  }
+
+  @Post('runs/:id/submit')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '送審薪資批次' })
+  @ApiResponse({ status: 200, description: '成功送審薪資批次' })
+  async submitPayrollRun(@Request() req: any, @Param('id') id: string) {
+    return this.payrollService.submitPayrollRun(id, req.user.id);
+  }
+
+  @Post('runs/:id/approve')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '批准並封存薪資批次' })
+  @ApiResponse({ status: 200, description: '成功批准薪資批次' })
+  async approvePayrollRun(@Request() req: any, @Param('id') id: string) {
+    return this.payrollService.approvePayrollRun(id, req.user.id);
   }
 
   @Get('payrolls')
@@ -89,10 +127,12 @@ export class PayrollController {
   }
 
   @Post('payrolls')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '建立薪資記錄' })
   @ApiResponse({ status: 201, description: '成功建立薪資記錄' })
-  async createPayroll(@Body() data: any) {
-    return this.payrollService.createPayrollRun(data);
+  async createPayroll(@Request() req: any, @Body() data: any) {
+    return this.payrollService.createPayrollRun(data, req.user.id);
   }
 
   @Post('payrolls/:id/process')

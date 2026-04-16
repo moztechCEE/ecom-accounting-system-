@@ -48,7 +48,10 @@ export class RolesGuard implements CanActivate {
       include: { role: true },
     });
 
-    const userRoleNames = userRoles.map((ur) => ur.role.name);
+    const userRoleNames = userRoles.flatMap((ur) => {
+      const roleNames = [ur.role.code, ur.role.name].filter(Boolean);
+      return roleNames;
+    });
 
     // 檢查是否擁有任一所需角色
     const hasRole = requiredRoles.some((role) => userRoleNames.includes(role));

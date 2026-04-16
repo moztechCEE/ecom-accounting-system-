@@ -1,4 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { AttendanceIntegrationService } from '../attendance/services/integration.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
@@ -20,37 +25,194 @@ export class PayrollService {
     private readonly attendanceIntegration: AttendanceIntegrationService,
   ) {}
 
-  async getEmployees(entityId?: string) {
+  private toNumber(value: unknown): number {
+    if (value == null) {
+      return 0;
+    }
+
+    return Number(value);
+  }
+
+  private serializePayrollRun<T extends Record<string, any>>(run: T) {
+    const items: Record<string, any>[] | undefined = Array.isArray(run.items)
+      ? run.items.map((item: Record<string, any>) => ({
+          ...item,
+          amountOriginal: this.toNumber(item.amountOriginal),
+          amountFxRate: this.toNumber(item.amountFxRate),
+          amountBase: this.toNumber(item.amountBase),
+        }))
+      : undefined;
+
+    const totalAmount = (items ?? []).reduce(
+      (sum, item) => sum + this.toNumber(item.amountBase),
+      0,
+    );
+
+    const employeeCount = new Set((items ?? []).map((item) => item.employeeId))
+      .size;
+
+    return {
+      ...run,
+      items,
+      totalAmount,
+      employeeCount:
+        employeeCount > 0 ? employeeCount : run._count?.items ?? undefined,
+    };
+  }
+
+  private async resolveEntityId(userId: string, requestedEntityId?: string) {
+    if (requestedEntityId) {
+      const entity = await this.prisma.entity.findUnique({
+        where: { id: requestedEntityId },
+        select: { id: true },
+      });
+
+      if (!entity) {
+        throw new NotFoundException('Entity not found');
+      }
+
+      return entity.id;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        employee: {
+          select: { entityId: true },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.employee?.entityId) {
+      return user.employee.entityId;
+    }
+
+    const fallbackEntity = await this.prisma.entity.findFirst({
+      orderBy: { id: 'asc' },
+      select: { id: true },
+    });
+
+    if (!fallbackEntity) {
+      throw new NotFoundException('No entity configured');
+    }
+
+    return fallbackEntity.id;
+  }
+
+  async getEmployees(userId: string, entityId?: string) {
+    const resolvedEntityId = entityId
+      ? await this.resolveEntityId(userId, entityId)
+      : undefined;
+
     return this.prisma.employee.findMany({
-      where: entityId ? { entityId } : undefined,
+      where: resolvedEntityId ? { entityId: resolvedEntityId } : undefined,
       include: {
         department: true,
       },
     });
   }
 
-  async getDepartments(entityId?: string) {
+  async getDepartments(userId: string, entityId?: string) {
+    const resolvedEntityId = entityId
+      ? await this.resolveEntityId(userId, entityId)
+      : undefined;
+
     return this.prisma.department.findMany({
-      where: entityId ? { entityId } : undefined,
+      where: resolvedEntityId ? { entityId: resolvedEntityId } : undefined,
     });
   }
 
-  async getPayrollRuns(entityId?: string) {
-    return this.prisma.payrollRun.findMany({
-      where: entityId ? { entityId } : undefined,
+  async getPayrollRuns(userId: string, entityId?: string) {
+    const resolvedEntityId = entityId
+      ? await this.resolveEntityId(userId, entityId)
+      : undefined;
+
+    const runs = await this.prisma.payrollRun.findMany({
+      where: resolvedEntityId ? { entityId: resolvedEntityId } : undefined,
+      include: {
+        items: true,
+        creator: {
+          select: { id: true, name: true },
+        },
+        approver: {
+          select: { id: true, name: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
+
+    return runs.map((run) => this.serializePayrollRun(run));
+  }
+
+  async getPayrollRunById(id: string) {
+    const run = await this.prisma.payrollRun.findUnique({
+      where: { id },
+      include: {
+        entity: {
+          select: { id: true, name: true },
+        },
+        creator: {
+          select: { id: true, name: true },
+        },
+        approver: {
+          select: { id: true, name: true },
+        },
+        items: {
+          include: {
+            employee: {
+              select: {
+                id: true,
+                employeeNo: true,
+                name: true,
+              },
+            },
+          },
+          orderBy: [
+            { employeeId: 'asc' },
+            { type: 'asc' },
+          ],
+        },
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException('Payroll run not found');
+    }
+
+    return this.serializePayrollRun(run);
   }
   /**
    * 建立薪資批次
    */
   async createPayrollRun(data: {
-    entityId: string;
+    entityId?: string;
     periodStart: Date;
     periodEnd: Date;
     payDate: Date;
-  }) {
-    const { entityId, periodStart, periodEnd, payDate } = data;
+  }, userId: string) {
+    const entityId = await this.resolveEntityId(userId, data.entityId);
+    const { periodStart, periodEnd, payDate } = data;
+
+    if (periodEnd < periodStart) {
+      throw new BadRequestException('計薪期間結束日不可早於開始日');
+    }
+
+    const overlappingRun = await this.prisma.payrollRun.findFirst({
+      where: {
+        entityId,
+        periodStart,
+        periodEnd,
+      },
+      select: { id: true },
+    });
+
+    if (overlappingRun) {
+      throw new BadRequestException('相同計薪期間的薪資批次已存在');
+    }
 
     // 1. Get Entity to know the country
     const entity = await this.prisma.entity.findUnique({
@@ -67,7 +229,7 @@ export class PayrollService {
         periodEnd,
         payDate,
         status: 'draft',
-        createdBy: 'SYSTEM', // Should be current user ID in real scenario
+        createdBy: userId,
       },
     });
 
@@ -118,10 +280,134 @@ export class PayrollService {
       }
     }
 
-    return this.prisma.payrollRun.findUnique({
-      where: { id: payrollRun.id },
-      include: { items: true },
+    return this.getPayrollRunById(payrollRun.id);
+  }
+
+  async submitPayrollRun(id: string, userId: string) {
+    const run = await this.prisma.payrollRun.findUnique({
+      where: { id },
+      include: {
+        items: {
+          select: { id: true },
+        },
+      },
     });
+
+    if (!run) {
+      throw new NotFoundException('Payroll run not found');
+    }
+
+    if (run.status !== 'draft') {
+      throw new BadRequestException('只有草稿批次可以送審');
+    }
+
+    if (run.items.length === 0) {
+      throw new BadRequestException('薪資批次尚未產生任何薪資明細');
+    }
+
+    await this.prisma.payrollRun.update({
+      where: { id },
+      data: {
+        status: 'pending_approval',
+        approvedBy: null,
+        approvedAt: null,
+      },
+    });
+
+    const existingApproval = await this.prisma.approvalRequest.findFirst({
+      where: {
+        type: 'payroll_run',
+        refId: id,
+      },
+      select: { id: true },
+    });
+
+    if (existingApproval) {
+      await this.prisma.approvalRequest.update({
+        where: { id: existingApproval.id },
+        data: {
+          status: 'pending',
+          requestedBy: userId,
+          approverId: null,
+          approvedAt: null,
+        },
+      });
+    } else {
+      await this.prisma.approvalRequest.create({
+        data: {
+          entityId: run.entityId,
+          type: 'payroll_run',
+          refId: id,
+          status: 'pending',
+          requestedBy: userId,
+        },
+      });
+    }
+
+    return this.getPayrollRunById(id);
+  }
+
+  async approvePayrollRun(id: string, userId: string) {
+    const run = await this.prisma.payrollRun.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        entityId: true,
+        status: true,
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException('Payroll run not found');
+    }
+
+    if (run.status !== 'pending_approval') {
+      throw new BadRequestException('只有待批准批次可以批准');
+    }
+
+    const approvedAt = new Date();
+
+    await this.prisma.payrollRun.update({
+      where: { id },
+      data: {
+        status: 'approved',
+        approvedBy: userId,
+        approvedAt,
+      },
+    });
+
+    const existingApproval = await this.prisma.approvalRequest.findFirst({
+      where: {
+        type: 'payroll_run',
+        refId: id,
+      },
+      select: { id: true },
+    });
+
+    if (existingApproval) {
+      await this.prisma.approvalRequest.update({
+        where: { id: existingApproval.id },
+        data: {
+          status: 'approved',
+          approverId: userId,
+          approvedAt,
+        },
+      });
+    } else {
+      await this.prisma.approvalRequest.create({
+        data: {
+          entityId: run.entityId,
+          type: 'payroll_run',
+          refId: id,
+          status: 'approved',
+          requestedBy: userId,
+          approverId: userId,
+          approvedAt,
+        },
+      });
+    }
+
+    return this.getPayrollRunById(id);
   }
 
   /**

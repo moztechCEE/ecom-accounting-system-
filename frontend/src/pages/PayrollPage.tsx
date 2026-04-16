@@ -1,11 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   Button,
   Card,
   DatePicker,
   Form,
-  Input,
-  Drawer,
   Table,
   Tag,
   Typography,
@@ -13,28 +11,48 @@ import {
   Statistic,
   Row,
   Col,
-  Space
+  Space,
 } from 'antd'
-import { 
-  DollarOutlined, 
-  PlayCircleOutlined, 
+import {
+  CheckCircleOutlined,
+  CalendarOutlined,
+  DollarOutlined,
   FileTextOutlined,
+  PlayCircleOutlined,
+  SendOutlined,
   TeamOutlined,
-  CalendarOutlined
 } from '@ant-design/icons'
 import { GlassDrawer, GlassDrawerSection } from '../components/ui/GlassDrawer'
 import { motion } from 'framer-motion'
 import dayjs from 'dayjs'
 import { payrollService } from '../services/payroll.service'
-import { PayrollRun } from '../types'
+import { PayrollItem, PayrollRun } from '../types'
+import { useAuth } from '../contexts/AuthContext'
 
 const { Title, Text } = Typography
 
+const statusMetaMap: Record<string, { label: string; color: string }> = {
+  draft: { label: '草稿', color: 'orange' },
+  pending_approval: { label: '待批准', color: 'blue' },
+  approved: { label: '已批准', color: 'green' },
+  posted: { label: '已封存', color: 'purple' },
+}
+
 const PayrollPage: React.FC = () => {
+  const { user } = useAuth()
   const [runs, setRuns] = useState<PayrollRun[]>([])
   const [loading, setLoading] = useState(false)
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
   const [form] = Form.useForm()
+
+  const canManagePayroll = useMemo(
+    () => (user?.roles ?? []).some((role) => role === 'SUPER_ADMIN' || role === 'ADMIN'),
+    [user],
+  )
 
   const fetchRuns = async () => {
     setLoading(true)
@@ -42,7 +60,7 @@ const PayrollPage: React.FC = () => {
       const result = await payrollService.getPayrollRuns()
       setRuns(Array.isArray(result?.items) ? result.items : [])
     } catch (error) {
-      message.error('載入薪資單失敗')
+      message.error('載入薪資批次失敗')
       setRuns([])
     } finally {
       setLoading(false)
@@ -53,6 +71,30 @@ const PayrollPage: React.FC = () => {
     fetchRuns()
   }, [])
 
+  const currentMonthTotal = useMemo(() => {
+    const currentMonth = dayjs().format('YYYY-MM')
+    return runs
+      .filter((run) => dayjs(run.payDate).format('YYYY-MM') === currentMonth)
+      .reduce((sum, run) => sum + (run.totalAmount ?? 0), 0)
+  }, [runs])
+
+  const pendingEmployees = useMemo(
+    () =>
+      runs
+        .filter((run) => run.status === 'draft' || run.status === 'pending_approval')
+        .reduce((sum, run) => sum + (run.employeeCount ?? 0), 0),
+    [runs],
+  )
+
+  const nextPayDate = useMemo(() => {
+    const upcoming = runs
+      .map((run) => dayjs(run.payDate))
+      .filter((date) => date.isSame(dayjs(), 'day') || date.isAfter(dayjs(), 'day'))
+      .sort((a, b) => a.valueOf() - b.valueOf())
+
+    return upcoming[0]?.format('YYYY-MM-DD') ?? '尚未排程'
+  }, [runs])
+
   const handleCreate = async () => {
     try {
       const values = await form.validateFields()
@@ -61,55 +103,158 @@ const PayrollPage: React.FC = () => {
         periodEnd: values.period[1].toISOString(),
         payDate: values.payDate.toISOString(),
       })
-      message.success('薪資計算已啟動')
+      message.success('薪資批次已建立')
       setDrawerOpen(false)
       form.resetFields()
       fetchRuns()
     } catch (error) {
-      // Error
+      // handled by form/api
     }
   }
 
-  const columns = [
-    { 
-      title: '計薪期間', 
+  const handleViewDetail = async (runId: string) => {
+    setDetailLoading(true)
+    setDetailOpen(true)
+    try {
+      const detail = await payrollService.getPayrollRun(runId)
+      setSelectedRun(detail)
+    } catch (error) {
+      message.error('載入薪資批次明細失敗')
+      setDetailOpen(false)
+      setSelectedRun(null)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const handleSubmitRun = async (runId: string) => {
+    setActionLoadingId(runId)
+    try {
+      const updated = await payrollService.submitPayrollRun(runId)
+      message.success('薪資批次已送審')
+      setRuns((prev) => prev.map((run) => (run.id === updated.id ? updated : run)))
+      if (selectedRun?.id === updated.id) {
+        setSelectedRun(updated)
+      }
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '送審失敗')
+    } finally {
+      setActionLoadingId(null)
+    }
+  }
+
+  const handleApproveRun = async (runId: string) => {
+    setActionLoadingId(runId)
+    try {
+      const updated = await payrollService.approvePayrollRun(runId)
+      message.success('薪資批次已批准並封存')
+      setRuns((prev) => prev.map((run) => (run.id === updated.id ? updated : run)))
+      if (selectedRun?.id === updated.id) {
+        setSelectedRun(updated)
+      }
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '批准失敗')
+    } finally {
+      setActionLoadingId(null)
+    }
+  }
+
+  const runColumns = [
+    {
+      title: '計薪期間',
       key: 'period',
-      render: (_: any, record: PayrollRun) => (
-        `${dayjs(record.periodStart).format('YYYY-MM-DD')} ~ ${dayjs(record.periodEnd).format('YYYY-MM-DD')}`
-      )
+      render: (_: unknown, record: PayrollRun) =>
+        `${dayjs(record.periodStart).format('YYYY-MM-DD')} ~ ${dayjs(record.periodEnd).format('YYYY-MM-DD')}`,
     },
-    { 
-      title: '發薪日', 
-      dataIndex: 'payDate', 
+    {
+      title: '發薪日',
+      dataIndex: 'payDate',
       key: 'payDate',
-      render: (date: string) => dayjs(date).format('YYYY-MM-DD')
+      render: (date: string) => dayjs(date).format('YYYY-MM-DD'),
     },
-    { 
-      title: '總金額', 
-      dataIndex: 'totalAmount', 
+    {
+      title: '人數',
+      dataIndex: 'employeeCount',
+      key: 'employeeCount',
+      render: (value?: number) => `${value ?? 0} 人`,
+    },
+    {
+      title: '總金額',
+      dataIndex: 'totalAmount',
       key: 'totalAmount',
-      render: (val: number) => `$${(val || 0).toLocaleString()}`
+      render: (val?: number) => `$${(val || 0).toLocaleString()}`,
     },
     {
       title: '狀態',
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => {
-        let color = 'default'
-        if (status === 'COMPLETED') color = 'green'
-        if (status === 'DRAFT') color = 'orange'
-        if (status === 'APPROVED') color = 'blue'
-        return <Tag color={color}>{status}</Tag>
-      }
+        const meta = statusMetaMap[status] ?? { label: status, color: 'default' }
+        return <Tag color={meta.color}>{meta.label}</Tag>
+      },
     },
     {
       title: '操作',
       key: 'actions',
-      render: () => (
-        <Button type="text" icon={<FileTextOutlined />}>明細</Button>
-      )
-    }
+      render: (_: unknown, record: PayrollRun) => (
+        <Space wrap>
+          <Button type="text" icon={<FileTextOutlined />} onClick={() => handleViewDetail(record.id)}>
+            明細
+          </Button>
+          {canManagePayroll && record.status === 'draft' ? (
+            <Button
+              type="text"
+              icon={<SendOutlined />}
+              loading={actionLoadingId === record.id}
+              onClick={() => handleSubmitRun(record.id)}
+            >
+              送審
+            </Button>
+          ) : null}
+          {canManagePayroll && record.status === 'pending_approval' ? (
+            <Button
+              type="text"
+              icon={<CheckCircleOutlined />}
+              loading={actionLoadingId === record.id}
+              onClick={() => handleApproveRun(record.id)}
+            >
+              批准
+            </Button>
+          ) : null}
+        </Space>
+      ),
+    },
   ]
+
+  const itemColumns = [
+    {
+      title: '員工',
+      key: 'employee',
+      render: (_: unknown, item: PayrollItem) =>
+        item.employee ? `${item.employee.name} (${item.employee.employeeNo})` : item.employeeId,
+    },
+    {
+      title: '項目',
+      dataIndex: 'type',
+      key: 'type',
+    },
+    {
+      title: '金額',
+      dataIndex: 'amountBase',
+      key: 'amountBase',
+      render: (amount: number) => `$${(amount || 0).toLocaleString()}`,
+    },
+    {
+      title: '備註',
+      dataIndex: 'remark',
+      key: 'remark',
+      render: (remark?: string | null) => remark || '—',
+    },
+  ]
+
+  const selectedStatusMeta = selectedRun
+    ? statusMetaMap[selectedRun.status] ?? { label: selectedRun.status, color: 'default' }
+    : null
 
   return (
     <motion.div
@@ -121,11 +266,13 @@ const PayrollPage: React.FC = () => {
       <div className="flex justify-between items-end">
         <div>
           <Title level={2} className="!mb-1 !font-light">薪資管理</Title>
-          <Text className="text-gray-500">薪資計算與發放紀錄</Text>
+          <Text className="text-gray-500">薪資計算、送審與批准封存</Text>
         </div>
-        <Button type="primary" icon={<PlayCircleOutlined />} onClick={() => setDrawerOpen(true)}>
-          執行薪資計算
-        </Button>
+        {canManagePayroll ? (
+          <Button type="primary" icon={<PlayCircleOutlined />} onClick={() => setDrawerOpen(true)}>
+            執行薪資計算
+          </Button>
+        ) : null}
       </div>
 
       <Row gutter={16}>
@@ -133,7 +280,7 @@ const PayrollPage: React.FC = () => {
           <Card bordered={false} className="glass-card">
             <Statistic
               title="本月預估薪資支出"
-              value={1250000}
+              value={currentMonthTotal}
               prefix={<DollarOutlined />}
               precision={0}
               valueStyle={{ color: '#cf1322' }}
@@ -143,8 +290,8 @@ const PayrollPage: React.FC = () => {
         <Col span={8}>
           <Card bordered={false} className="glass-card">
             <Statistic
-              title="待發放人數"
-              value={45}
+              title="待處理人數"
+              value={pendingEmployees}
               prefix={<TeamOutlined />}
               suffix="人"
               valueStyle={{ color: '#1890ff' }}
@@ -155,7 +302,7 @@ const PayrollPage: React.FC = () => {
           <Card bordered={false} className="glass-card">
             <Statistic
               title="下次發薪日"
-              value="2025-12-05"
+              value={nextPayDate}
               prefix={<CalendarOutlined />}
               valueStyle={{ fontSize: '20px' }}
             />
@@ -167,8 +314,9 @@ const PayrollPage: React.FC = () => {
         <Table
           rowKey="id"
           loading={loading}
-          columns={columns}
+          columns={runColumns}
           dataSource={runs}
+          pagination={{ pageSize: 8 }}
         />
       </Card>
 
@@ -189,14 +337,11 @@ const PayrollPage: React.FC = () => {
                 <DatePicker className="w-full" />
               </Form.Item>
             </GlassDrawerSection>
-            
+
             <GlassDrawerSection>
-              <div className="mb-4 font-semibold text-slate-800">進階選項</div>
-              <Form.Item label="包含獎金" name="includeBonus" valuePropName="checked" initialValue={true}>
-                 <Input type="checkbox" className="w-4 h-4" />
-              </Form.Item>
+              <div className="mb-4 font-semibold text-slate-800">說明</div>
               <Text type="secondary" className="text-xs">
-                系統將自動計算本期出勤、加班費與勞健保扣除額。
+                系統會自動帶入本期已核准請假、加班與勞健保扣項，建立草稿批次後再由主管或人資送審與批准。
               </Text>
             </GlassDrawerSection>
           </div>
@@ -210,6 +355,87 @@ const PayrollPage: React.FC = () => {
             </div>
           </GlassDrawerSection>
         </Form>
+      </GlassDrawer>
+
+      <GlassDrawer
+        title="薪資批次明細"
+        open={detailOpen}
+        onClose={() => {
+          setDetailOpen(false)
+          setSelectedRun(null)
+        }}
+        width={720}
+      >
+        {selectedRun ? (
+          <div className="space-y-4">
+            <GlassDrawerSection>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-lg font-semibold text-slate-800">
+                    {dayjs(selectedRun.periodStart).format('YYYY-MM-DD')} ~ {dayjs(selectedRun.periodEnd).format('YYYY-MM-DD')}
+                  </div>
+                  <Text type="secondary">
+                    發薪日 {dayjs(selectedRun.payDate).format('YYYY-MM-DD')}
+                  </Text>
+                </div>
+                {selectedStatusMeta ? <Tag color={selectedStatusMeta.color}>{selectedStatusMeta.label}</Tag> : null}
+              </div>
+
+              <Row gutter={16} className="mt-4">
+                <Col span={8}>
+                  <Statistic title="總金額" value={selectedRun.totalAmount ?? 0} prefix="$" precision={0} />
+                </Col>
+                <Col span={8}>
+                  <Statistic title="涉及員工" value={selectedRun.employeeCount ?? 0} suffix="人" />
+                </Col>
+                <Col span={8}>
+                  <Statistic title="建立日期" value={selectedRun.createdAt ? dayjs(selectedRun.createdAt).format('YYYY-MM-DD') : '—'} />
+                </Col>
+              </Row>
+
+              <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-500">
+                <span>建立者：{selectedRun.creator?.name || '—'}</span>
+                <span>批准者：{selectedRun.approver?.name || '—'}</span>
+                <span>批准時間：{selectedRun.approvedAt ? dayjs(selectedRun.approvedAt).format('YYYY-MM-DD HH:mm') : '—'}</span>
+              </div>
+            </GlassDrawerSection>
+
+            <GlassDrawerSection>
+              <div className="mb-4 flex items-center justify-between">
+                <div className="font-semibold text-slate-800">薪資項目</div>
+                {canManagePayroll && selectedRun.status === 'draft' ? (
+                  <Button
+                    icon={<SendOutlined />}
+                    loading={actionLoadingId === selectedRun.id}
+                    onClick={() => handleSubmitRun(selectedRun.id)}
+                  >
+                    送審
+                  </Button>
+                ) : null}
+                {canManagePayroll && selectedRun.status === 'pending_approval' ? (
+                  <Button
+                    type="primary"
+                    icon={<CheckCircleOutlined />}
+                    loading={actionLoadingId === selectedRun.id}
+                    onClick={() => handleApproveRun(selectedRun.id)}
+                  >
+                    批准封存
+                  </Button>
+                ) : null}
+              </div>
+
+              <Table
+                rowKey="id"
+                loading={detailLoading}
+                columns={itemColumns}
+                dataSource={selectedRun.items ?? []}
+                pagination={{ pageSize: 8 }}
+              />
+            </GlassDrawerSection>
+          </div>
+        ) : (
+          <div className="py-12 text-center text-slate-400">{detailLoading ? '載入中...' : '尚未選取薪資批次'}</div>
+        )}
       </GlassDrawer>
     </motion.div>
   )

@@ -6,6 +6,7 @@ import { PrismaModule } from '../../common/prisma/prisma.module';
 import { AccountingModule } from '../accounting/accounting.module'; // 依賴：薪資分錄
 import { ApprovalsModule } from '../approvals/approvals.module'; // 依賴：薪資審批
 import { AttendanceModule } from '../attendance/attendance.module'; // 依賴：考勤數據
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 /**
  * PayrollModule
@@ -19,7 +20,7 @@ import { AttendanceModule } from '../attendance/attendance.module'; // 依賴：
 @Module({
   imports: [PrismaModule, AccountingModule, ApprovalsModule, AttendanceModule],
   controllers: [PayrollController],
-  providers: [PayrollService, PayrollRepository],
+  providers: [PayrollService, PayrollRepository, RolesGuard],
   exports: [PayrollService],
 })
 export class PayrollModule {}

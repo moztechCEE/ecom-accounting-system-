@@ -219,9 +219,37 @@ export interface Employee {
 
 export interface PayrollRun {
   id: string
+  entityId?: string
   periodStart: string
   periodEnd: string
   payDate: string
   status: string
   totalAmount?: number
+  employeeCount?: number
+  createdAt?: string
+  approvedAt?: string | null
+  creator?: {
+    id: string
+    name: string
+  }
+  approver?: {
+    id: string
+    name: string
+  } | null
+  items?: PayrollItem[]
+}
+
+export interface PayrollItem {
+  id: string
+  employeeId: string
+  type: string
+  amountOriginal: number
+  amountBase: number
+  currency?: string
+  remark?: string | null
+  employee?: {
+    id: string
+    employeeNo: string
+    name: string
+  }
 }

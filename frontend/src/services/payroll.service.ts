@@ -67,4 +67,19 @@ export const payrollService = {
     const response = await api.post<PayrollRun>('/payroll/runs', data)
     return response.data
   },
+
+  getPayrollRun: async (id: string) => {
+    const response = await api.get<PayrollRun>(`/payroll/runs/${id}`)
+    return response.data
+  },
+
+  submitPayrollRun: async (id: string) => {
+    const response = await api.post<PayrollRun>(`/payroll/runs/${id}/submit`)
+    return response.data
+  },
+
+  approvePayrollRun: async (id: string) => {
+    const response = await api.post<PayrollRun>(`/payroll/runs/${id}/approve`)
+    return response.data
+  },
 }

@@ -12,6 +12,7 @@ import { GpsValidationStrategy } from './strategies/gps-validation.strategy';
 import { IpValidationStrategy } from './strategies/ip-validation.strategy';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { NotificationModule } from '../notification/notification.module';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Module({
   imports: [PrismaModule, NotificationModule],
@@ -26,6 +27,7 @@ import { NotificationModule } from '../notification/notification.module';
     AttendanceIntegrationService,
     GpsValidationStrategy,
     IpValidationStrategy,
+    RolesGuard,
   ],
   exports: [AttendanceService, LeaveService, AttendanceIntegrationService],
 })
