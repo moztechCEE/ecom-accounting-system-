@@ -21,7 +21,7 @@ export interface AiCopilotSource {
   path?: string;
 }
 
-interface CopilotResponse {
+export interface CopilotResponse {
   reply: string;
   data?: any;
   sources?: AiCopilotSource[];

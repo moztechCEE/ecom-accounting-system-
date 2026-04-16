@@ -8,6 +8,7 @@ import {
 import { AiService, AiModel } from './ai.service';
 import { AiInsightsService } from './ai-insights.service';
 import { AiCopilotService } from './ai-copilot.service';
+import type { CopilotResponse } from './ai-copilot.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import type { Request } from 'express';
 
@@ -44,7 +45,7 @@ export class AiController {
   async chat(
     @Req() req: Request,
     @Body() body: { message: string; entityId: string; modelId?: string },
-  ) {
+  ): Promise<CopilotResponse> {
     const user = req.user as any;
     return this.copilotService.processChat(
       body.entityId,
