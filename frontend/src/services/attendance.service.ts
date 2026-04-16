@@ -5,6 +5,8 @@ import {
   CreateLeaveRequestDto,
   LeaveRequest,
   AttendanceRecord,
+  LeaveType,
+  LeaveBalance,
 } from '../types/attendance';
 
 export const attendanceService = {
@@ -33,14 +35,15 @@ export const attendanceService = {
     return response.data;
   },
   
-  // Mock for now, should be implemented in backend
-  getLeaveTypes: async (): Promise<any[]> => {
-    // This endpoint might not exist yet in backend, but we need it for the form
-    // Assuming it will be implemented or we mock it for now
-    return [
-      { id: 'mock-sick', code: 'SICK', name: '病假' },
-      { id: 'mock-personal', code: 'PERSONAL', name: '事假' },
-      { id: 'mock-annual', code: 'ANNUAL', name: '特休' },
-    ];
-  }
+  getLeaveTypes: async (): Promise<LeaveType[]> => {
+    const response = await api.get<LeaveType[]>('/attendance/leaves/types');
+    return response.data;
+  },
+
+  getLeaveBalances: async (year?: number): Promise<LeaveBalance[]> => {
+    const response = await api.get<LeaveBalance[]>('/attendance/leaves/balances', {
+      params: year ? { year } : undefined,
+    });
+    return response.data;
+  },
 };

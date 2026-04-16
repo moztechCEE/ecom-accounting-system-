@@ -62,6 +62,13 @@ export class PayrollController {
     return this.payrollService.getPayrollRuns(entityId);
   }
 
+  @Post('runs')
+  @ApiOperation({ summary: '建立薪資計算批次' })
+  @ApiResponse({ status: 201, description: '成功建立薪資計算批次' })
+  async createPayrollRun(@Body() data: any) {
+    return this.payrollService.createPayrollRun(data);
+  }
+
   @Get('payrolls')
   @ApiOperation({ summary: '查詢薪資記錄列表' })
   @ApiResponse({ status: 200, description: '成功取得薪資記錄' })

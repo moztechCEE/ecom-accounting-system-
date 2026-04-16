@@ -4,9 +4,20 @@ import { Employee, Department, PayrollRun, PaginatedResult } from '../types'
 export const payrollService = {
   // Employees
   getEmployees: async (page = 1, limit = 20) => {
-    const response = await api.get<PaginatedResult<Employee>>('/payroll/employees', {
+    const response = await api.get<PaginatedResult<Employee> | Employee[]>('/payroll/employees', {
       params: { page, limit },
     })
+    if (Array.isArray(response.data)) {
+      return {
+        items: response.data,
+        meta: {
+          total: response.data.length,
+          page,
+          limit,
+          totalPages: 1,
+        },
+      }
+    }
     return response.data
   },
 
@@ -35,9 +46,20 @@ export const payrollService = {
 
   // Payroll Runs
   getPayrollRuns: async (page = 1, limit = 20) => {
-    const response = await api.get<PaginatedResult<PayrollRun>>('/payroll/runs', {
+    const response = await api.get<PaginatedResult<PayrollRun> | PayrollRun[]>('/payroll/runs', {
       params: { page, limit },
     })
+    if (Array.isArray(response.data)) {
+      return {
+        items: response.data,
+        meta: {
+          total: response.data.length,
+          page,
+          limit,
+          totalPages: 1,
+        },
+      }
+    }
     return response.data
   },
 

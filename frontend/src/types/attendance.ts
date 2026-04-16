@@ -57,10 +57,27 @@ export interface LeaveType {
   id: string;
   code: string;
   name: string;
+  balanceResetPolicy?: 'CALENDAR_YEAR' | 'HIRE_ANNIVERSARY' | 'NONE';
   requiresDocument: boolean;
   maxDaysPerYear?: number;
   paidPercentage?: number;
   minNoticeHours?: number;
+  allowCarryOver?: boolean;
+  carryOverLimitHours?: number;
+}
+
+export interface LeaveBalance {
+  id: string;
+  year: number;
+  periodStart: string;
+  periodEnd: string;
+  accruedHours: number;
+  usedHours: number;
+  carryOverHours: number;
+  pendingHours: number;
+  manualAdjustmentHours: number;
+  remainingHours: number;
+  leaveType: LeaveType;
 }
 
 export interface LeaveRequest {

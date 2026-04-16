@@ -769,6 +769,7 @@ async function main() {
     {
       code: 'SICK',
       name: '病假',
+      balanceResetPolicy: 'CALENDAR_YEAR',
       requiresDocument: true,
       maxDaysPerYear: 30,
       paidPercentage: 50,
@@ -777,6 +778,7 @@ async function main() {
     {
       code: 'PERSONAL',
       name: '事假',
+      balanceResetPolicy: 'CALENDAR_YEAR',
       requiresDocument: false,
       maxDaysPerYear: 14,
       paidPercentage: 0,
@@ -785,6 +787,7 @@ async function main() {
     {
       code: 'ANNUAL',
       name: '特休',
+      balanceResetPolicy: 'HIRE_ANNIVERSARY',
       requiresDocument: false,
       paidPercentage: 100,
       minNoticeHours: 24,
@@ -792,6 +795,7 @@ async function main() {
     {
       code: 'MENSTRUAL',
       name: '生理假',
+      balanceResetPolicy: 'CALENDAR_YEAR',
       requiresDocument: false,
       maxDaysPerYear: 12, // 1 day per month
       paidPercentage: 50,
@@ -800,6 +804,7 @@ async function main() {
     {
       code: 'MARRIAGE',
       name: '婚假',
+      balanceResetPolicy: 'NONE',
       requiresDocument: true,
       maxDaysPerYear: 8,
       paidPercentage: 100,
@@ -808,6 +813,7 @@ async function main() {
     {
       code: 'FUNERAL',
       name: '喪假',
+      balanceResetPolicy: 'NONE',
       requiresDocument: true,
       paidPercentage: 100,
       minNoticeHours: 0,
@@ -815,6 +821,7 @@ async function main() {
     {
       code: 'MATERNITY',
       name: '產假',
+      balanceResetPolicy: 'NONE',
       requiresDocument: true,
       maxDaysPerYear: 56, // 8 weeks
       paidPercentage: 100,
@@ -824,6 +831,7 @@ async function main() {
     {
       code: 'PATERNITY',
       name: '陪產假',
+      balanceResetPolicy: 'NONE',
       requiresDocument: true,
       maxDaysPerYear: 7,
       paidPercentage: 100,
@@ -845,6 +853,7 @@ async function main() {
         entityId: taiwanEntity.id,
         code: leave.code,
         name: leave.name,
+        balanceResetPolicy: leave.balanceResetPolicy,
         requiresDocument: leave.requiresDocument,
         maxDaysPerYear: leave.maxDaysPerYear,
         paidPercentage: leave.paidPercentage,

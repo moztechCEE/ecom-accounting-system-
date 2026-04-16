@@ -3,7 +3,7 @@ import { message } from 'antd';
 import { motion } from 'framer-motion';
 import { PlusOutlined, CalendarOutlined, ClockCircleOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { attendanceService } from '../../services/attendance.service';
-import { LeaveRequest, LeaveStatus } from '../../types/attendance';
+import { LeaveBalance, LeaveRequest, LeaveStatus, LeaveType } from '../../types/attendance';
 import dayjs from 'dayjs';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { GlassButton } from '../../components/ui/GlassButton';
@@ -15,7 +15,8 @@ import { GlassTextarea } from '../../components/ui/GlassTextarea';
 const LeaveRequestPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
-  const [leaveTypes, setLeaveTypes] = useState<any[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
   // Form State
@@ -36,12 +37,14 @@ const LeaveRequestPage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [requestsData, typesData] = await Promise.all([
+      const [requestsData, typesData, balancesData] = await Promise.all([
         attendanceService.getLeaveRequests(),
         attendanceService.getLeaveTypes(),
+        attendanceService.getLeaveBalances(dayjs().year()),
       ]);
       setRequests(requestsData);
       setLeaveTypes(typesData);
+      setLeaveBalances(balancesData);
     } catch (error) {
       console.error(error);
       message.error('無法載入資料');
@@ -107,6 +110,27 @@ const LeaveRequestPage: React.FC = () => {
     );
   };
 
+  const formatHours = (hours?: number) => {
+    if (hours === undefined || hours === null) {
+      return '--';
+    }
+
+    if (Number.isInteger(hours / 8)) {
+      return `${hours / 8} 天`;
+    }
+
+    return `${hours} 小時`;
+  };
+
+  const annualBalance =
+    leaveBalances.find((balance) => balance.leaveType.code === 'ANNUAL') ||
+    leaveBalances[0];
+  const usedHours = leaveBalances.reduce((sum, balance) => sum + balance.usedHours, 0);
+  const selectedLeaveType = leaveTypes.find((type) => type.id === formData.leaveTypeId);
+  const selectedLeaveBalance = leaveBalances.find(
+    (balance) => balance.leaveType.id === formData.leaveTypeId,
+  );
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -136,8 +160,14 @@ const LeaveRequestPage: React.FC = () => {
             <CalendarOutlined className="text-6xl text-blue-500" />
           </div>
           <div className="text-sm text-slate-500 mb-2 font-medium">特休剩餘</div>
-          <div className="text-3xl font-semibold text-slate-800 mb-1">10 <span className="text-sm font-normal text-slate-400">天</span></div>
-          <div className="text-xs text-slate-400">有效期至 2025/12/31</div>
+          <div className="text-3xl font-semibold text-slate-800 mb-1">
+            {annualBalance ? formatHours(annualBalance.remainingHours) : '--'}
+          </div>
+          <div className="text-xs text-slate-400">
+            {annualBalance
+              ? `有效期至 ${dayjs(annualBalance.periodEnd).format('YYYY/MM/DD')}`
+              : '尚未建立年度額度'}
+          </div>
         </GlassCard>
 
         <GlassCard className="relative overflow-hidden group h-full">
@@ -145,8 +175,8 @@ const LeaveRequestPage: React.FC = () => {
             <CheckCircleOutlined className="text-6xl text-green-500" />
           </div>
           <div className="text-sm text-slate-500 mb-2 font-medium">本年度已休</div>
-          <div className="text-3xl font-semibold text-slate-800 mb-1">3.5 <span className="text-sm font-normal text-slate-400">天</span></div>
-          <div className="text-xs text-slate-400">包含病假與事假</div>
+          <div className="text-3xl font-semibold text-slate-800 mb-1">{formatHours(usedHours)}</div>
+          <div className="text-xs text-slate-400">依核准後的年度額度即時更新</div>
         </GlassCard>
 
         <GlassCard className="relative overflow-hidden group h-full">
@@ -237,6 +267,16 @@ const LeaveRequestPage: React.FC = () => {
               ...leaveTypes.map(t => ({ value: t.id, label: t.name }))
             ]}
           />
+
+          {selectedLeaveType && (
+            <div className="rounded-2xl border border-white/20 bg-white/20 p-4 text-sm text-slate-600">
+              <div className="font-medium text-slate-800 mb-1">{selectedLeaveType.name}</div>
+              <div>
+                支薪比例：{selectedLeaveType.paidPercentage ?? 100}%
+                {selectedLeaveBalance ? `，剩餘額度：${formatHours(selectedLeaveBalance.remainingHours)}` : '，此假別不追蹤年度額度'}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <GlassInput

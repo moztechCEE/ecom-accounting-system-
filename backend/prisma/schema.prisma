@@ -1813,6 +1813,7 @@ model LeaveType {
   entityId          String   @map("entity_id")
   code              String // SICK, PERSONAL, ANNUAL, MENSTRUAL, MARRIAGE, FUNERAL, MATERNITY, PATERNITY, COMP_TIME, CUSTOM
   name              String
+  balanceResetPolicy String   @default("CALENDAR_YEAR") @map("balance_reset_policy") // CALENDAR_YEAR, HIRE_ANNIVERSARY, NONE
   requiresDocument  Boolean  @default(false) @map("requires_document")
   documentExamples  String?  @map("document_examples")
   maxDaysPerYear    Decimal? @map("max_days_per_year") @db.Decimal(5, 2)
@@ -1821,6 +1822,8 @@ model LeaveType {
   autoApprovalHours Int?     @map("auto_approval_hours")
   approvalPolicyId  String?  @map("approval_policy_id")
   requiresChildData Boolean  @default(false) @map("requires_child_data") // for maternity/paternity
+  allowCarryOver    Boolean  @default(false) @map("allow_carry_over")
+  carryOverLimitHours Decimal @default(0) @map("carry_over_limit_hours") @db.Decimal(6, 2)
   metadata          Json?
   isActive          Boolean  @default(true) @map("is_active")
   createdAt         DateTime @default(now()) @map("created_at")
@@ -1841,10 +1844,13 @@ model LeaveBalance {
   employeeId     String   @map("employee_id")
   leaveTypeId    String   @map("leave_type_id")
   year           Int
+  periodStart    DateTime @map("period_start")
+  periodEnd      DateTime @map("period_end")
   accruedHours   Decimal  @default(0) @map("accrued_hours") @db.Decimal(6, 2)
   usedHours      Decimal  @default(0) @map("used_hours") @db.Decimal(6, 2)
   carryOverHours Decimal  @default(0) @map("carry_over_hours") @db.Decimal(6, 2)
   pendingHours   Decimal  @default(0) @map("pending_hours") @db.Decimal(6, 2)
+  manualAdjustmentHours Decimal  @default(0) @map("manual_adjustment_hours") @db.Decimal(6, 2)
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   entity    Entity    @relation(fields: [entityId], references: [id], onDelete: Cascade)

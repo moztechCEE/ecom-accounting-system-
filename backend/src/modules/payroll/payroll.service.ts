@@ -107,6 +107,7 @@ export class PayrollService {
               amountFxRate: 1, // Assuming base currency for now
               amountBase: item.amount,
               currency: entity.baseCurrency,
+              remark: item.remark,
             })),
           });
         }
@@ -147,7 +148,7 @@ export class PayrollService {
 
     this.logger.log(`Attendance data: ${JSON.stringify(attendanceData)}`);
 
-    const items: { type: string; amount: number }[] = [];
+    const items: { type: string; amount: number; remark?: string }[] = [];
     const baseSalary = Number(employee.salaryBaseOriginal);
     
     // Standard working hours per month (30 days * 8 hours)
@@ -167,6 +168,45 @@ export class PayrollService {
       items.push({
         type: 'OVERTIME',
         amount: Math.round(overtimePay),
+      });
+    }
+
+    const leaveDeductions = new Map<
+      string,
+      { amount: number; hours: number; paidPercentage: number; name: string }
+    >();
+    for (const leaveEntry of attendanceData.leaveEntries || []) {
+      if (!leaveEntry.deductionFactor) {
+        continue;
+      }
+
+      const deductionAmount = Math.round(
+        leaveEntry.hours * hourlyRate * leaveEntry.deductionFactor,
+      );
+
+      if (deductionAmount <= 0) {
+        continue;
+      }
+
+      const existing = leaveDeductions.get(leaveEntry.code);
+      if (existing) {
+        existing.amount += deductionAmount;
+        existing.hours += leaveEntry.hours;
+      } else {
+        leaveDeductions.set(leaveEntry.code, {
+          amount: deductionAmount,
+          hours: leaveEntry.hours,
+          paidPercentage: leaveEntry.paidPercentage,
+          name: leaveEntry.name,
+        });
+      }
+    }
+
+    for (const [code, deduction] of leaveDeductions.entries()) {
+      items.push({
+        type: 'LEAVE_DEDUCTION',
+        amount: -deduction.amount,
+        remark: `${deduction.name} ${deduction.hours}h (${deduction.paidPercentage}% 支薪, ${code})`,
       });
     }
 

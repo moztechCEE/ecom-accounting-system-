@@ -1,0 +1,591 @@
+[
+  {
+    "id": "T001",
+    "title": "設計與實作「出勤編碼」管理後端API",
+    "description": "開發出勤編碼的增刪改查API，包含編碼名稱、類型等屬性。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能成功建立、查詢、更新、刪除出勤編碼，確保數據完整性與一致性。"
+    ],
+    "timestamp_refs": [
+      "00:00:09",
+      "00:00:20"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "T002",
+    "title": "開發「出勤編碼」設定前端UI頁面",
+    "description": "開發管理出勤編碼的UI頁面，讓使用者能直觀地進行增刪改查操作。",
+    "priority": "high",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "UI頁面能正確顯示出勤編碼列表，並能流暢地新增、編輯和刪除編碼。",
+      "使用者界面操作符合預期，無明顯錯誤。"
+    ],
+    "timestamp_refs": [
+      "00:00:09",
+      "00:00:20"
+    ],
+    "dependencies": [
+      "T001"
+    ]
+  },
+  {
+    "id": "T003",
+    "title": "設計與實作「休假項目」管理後端API",
+    "description": "開發休假項目的增刪改查API，包含項目名稱、有效期間（起訖日）、計算單位（時間/天數）、與出勤編碼的綁定關係等屬性。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能成功建立、查詢、更新、刪除休假項目，並正確儲存其有效期間與計算單位。",
+      "休假項目能正確綁定至出勤編碼。"
+    ],
+    "timestamp_refs": [
+      "00:00:20",
+      "00:00:35",
+      "00:00:51"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "T004",
+    "title": "開發「休假項目」設定前端UI頁面",
+    "description": "開發管理休假項目的UI頁面，讓使用者能設定休假類型、有效期間及計算單位，並與出勤編碼關聯。",
+    "priority": "high",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "UI頁面能正確顯示休假項目列表，並能流暢地新增、編輯和刪除休假項目。",
+      "使用者能為休假項目設定有效期間和計算單位，並與現有出勤編碼進行綁定。"
+    ],
+    "timestamp_refs": [
+      "00:00:20",
+      "00:00:35",
+      "00:00:51"
+    ],
+    "dependencies": [
+      "T003"
+    ]
+  },
+  {
+    "id": "T005",
+    "title": "設計與實作「職員休假額度」調整後端API",
+    "description": "開發調整個別職員休假額度的API，需包含根據入職年資自動計算特休時數的邏輯，並支援管理者手動調整其他假別額度。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能根據員工入職年資，正確計算並更新特休時數。",
+      "API能接受管理者手動調整特定員工的休假額度（如補休額度）。"
+    ],
+    "timestamp_refs": [
+      "00:01:29",
+      "00:01:36"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "T006",
+    "title": "開發「職員休假額度」調整前端UI頁面",
+    "description": "開發職員休假額度管理頁面，顯示每位員工的休假餘額，並提供手動調整入口，同時可查看年資計算的特休額度。",
+    "priority": "high",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "UI頁面能正確顯示員工休假額度列表，包含特休與其他假別。",
+      "管理者能透過UI為員工調整休假額度，並查看額度變更歷史。"
+    ],
+    "timestamp_refs": [
+      "00:01:29",
+      "00:01:36"
+    ],
+    "dependencies": [
+      "T005"
+    ]
+  },
+  {
+    "id": "T007",
+    "title": "設計與實作「津貼項目」管理後端API",
+    "description": "開發津貼項目的增刪改查API，需包含計算公式的儲存、解析與執行引擎，例如月薪、主管加給、車資補助等。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能成功建立、查詢、更新、刪除津貼項目，並儲存其計算公式。",
+      "計算公式解析引擎能正確解析並執行自定義的津貼計算公式。"
+    ],
+    "timestamp_refs": [
+      "00:02:08",
+      "00:02:40"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "T008",
+    "title": "開發「津貼項目」設定前端UI頁面",
+    "description": "開發津貼項目設定頁面，提供計算公式編輯器，讓使用者能靈活定義津貼的計算方式。",
+    "priority": "high",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "UI頁面能顯示津貼項目列表，並提供易於使用的計算公式編輯器。",
+      "管理者能新增、編輯津貼項目及其計算公式，並預覽公式效果。"
+    ],
+    "timestamp_refs": [
+      "00:02:08",
+      "00:02:40"
+    ],
+    "dependencies": [
+      "T007"
+    ]
+  },
+  {
+    "id": "T009",
+    "title": "設計與實作「扣除項目」管理後端API",
+    "description": "開發扣除項目的增刪改查API，需包含計算公式的儲存、解析與執行引擎，例如勞健保、事假扣款、薪資預支等。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能成功建立、查詢、更新、刪除扣除項目，並儲存其計算公式。",
+      "計算公式解析引擎能正確解析並執行自定義的扣除計算公式。"
+    ],
+    "timestamp_refs": [
+      "00:04:56"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "T010",
+    "title": "開發「扣除項目」設定前端UI頁面",
+    "description": "開發扣除項目設定頁面，提供計算公式編輯器，讓使用者能靈活定義扣除項的計算方式。",
+    "priority": "high",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "UI頁面能顯示扣除項目列表，並提供易於使用的計算公式編輯器。",
+      "管理者能新增、編輯扣除項目及其計算公式，並預覽公式效果。"
+    ],
+    "timestamp_refs": [
+      "00:04:56"
+    ],
+    "dependencies": [
+      "T009"
+    ]
+  },
+  {
+    "id": "T011",
+    "title": "設計與實作「部門管理」後端API",
+    "description": "開發部門的增刪改查API，用於職員的分類與分組。",
+    "priority": "medium",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能成功建立、查詢、更新、刪除部門資料。"
+    ],
+    "timestamp_refs": [
+      "00:05:25"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "T012",
+    "title": "開發「部門管理」前端UI頁面",
+    "description": "開發部門管理頁面，讓使用者能方便地新增、編輯和管理部門資訊。",
+    "priority": "medium",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "UI頁面能正確顯示部門列表，並能流暢地新增、編輯和刪除部門。"
+    ],
+    "timestamp_refs": [
+      "00:05:25"
+    ],
+    "dependencies": [
+      "T011"
+    ]
+  },
+  {
+    "id": "T013",
+    "title": "設計與實作「職員基本資料」管理後端API",
+    "description": "開發職員基本資料的增刪改查API，包含姓名、部門、入職日期、聯絡方式、薪資給付類型（固定/變動）、支付頻率（每月/每日/時薪），並處理生日的西元年/民國年兼容邏輯。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能成功建立、查詢、更新、刪除職員基本資料。",
+      "職員資料中的薪資給付類型和支付頻率能正確儲存。",
+      "職員生日輸入時，系統能正確處理西元年與民國年之間的轉換或兼容。"
+    ],
+    "timestamp_refs": [
+      "00:05:40",
+      "00:06:16",
+      "00:06:49"
+    ],
+    "dependencies": [
+      "T011"
+    ]
+  },
+  {
+    "id": "T014",
+    "title": "開發「職員基本資料」管理前端UI頁面",
+    "description": "開發職員基本資料管理頁面，讓管理者能新增、編輯職員資訊，包含薪資給付設定和生日格式處理。",
+    "priority": "high",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "UI頁面能顯示職員列表與詳細資料，並支援新增、編輯職員。",
+      "薪資給付設定（固定/變動薪資、支付頻率）能在UI上正確操作與顯示。",
+      "生日輸入框能清晰指示格式要求，並在輸入不同年份格式時，系統後端能正確儲存。"
+    ],
+    "timestamp_refs": [
+      "00:05:40",
+      "00:06:16",
+      "00:06:49"
+    ],
+    "dependencies": [
+      "T013",
+      "T012"
+    ]
+  },
+  {
+    "id": "T015",
+    "title": "設計與實作「薪資計算週期」管理後端API",
+    "description": "開發薪資計算週期的增刪改查API，包含支付條件、期間、支付日設定，並支援選擇適用於該週期的計算項目與職員對象。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能成功建立、查詢、更新、刪除薪資計算週期。",
+      "能正確儲存薪資週期的支付條件、期間與支付日。",
+      "支援選擇和關聯該週期需要套用的計算項目（津貼、扣除）及職員對象。"
+    ],
+    "timestamp_refs": [
+      "00:08:41",
+      "00:08:49",
+      "00:09:30"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "T016",
+    "title": "開發「薪資計算週期」設定前端UI頁面",
+    "description": "開發薪資計算週期設定頁面，讓管理者能建立新的薪資計算批次，設定其條件並選擇適用的計算項目與員工。",
+    "priority": "high",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "UI頁面能讓管理者建立薪資週期，設定支付條件、期間、支付日。",
+      "UI頁面能支援批量選擇計算項目及職員對象。"
+    ],
+    "timestamp_refs": [
+      "00:08:41",
+      "00:08:49",
+      "00:09:30"
+    ],
+    "dependencies": [
+      "T015",
+      "T008",
+      "T010",
+      "T014"
+    ]
+  },
+  {
+    "id": "T017",
+    "title": "設計與實作「出勤紀錄審核」後端API",
+    "description": "開發主管審核員工請假申請的API，確保只有經審核的請假紀錄才會進入薪資計算流程。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能處理主管審核請假申請，並更新請假紀錄的審核狀態。",
+      "經審核的請假紀錄能被薪資計算引擎讀取，未審核的則不被採納。"
+    ],
+    "timestamp_refs": [
+      "00:13:10",
+      "00:13:20"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "T018",
+    "title": "開發「出勤紀錄審核」前端UI功能",
+    "description": "開發出勤紀錄審核頁面，顯示待審核請假列表，並提供主管進行批准或拒絕操作。",
+    "priority": "high",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "UI頁面能顯示所有待審核的請假申請，並清晰展示申請人、假別、時數等資訊。",
+      "主管能透過UI執行批准或拒絕操作，並附帶備註。"
+    ],
+    "timestamp_refs": [
+      "00:13:10",
+      "00:13:20"
+    ],
+    "dependencies": [
+      "T017"
+    ]
+  },
+  {
+    "id": "T019",
+    "title": "實作核心「薪資計算引擎」",
+    "description": "開發薪資計算的核心引擎，整合出勤紀錄、津貼項目、扣除項目、手動調整金額等數據，依據公式計算每位員工的最終薪資。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "薪資計算引擎能根據設定的公式、審核後的出勤紀錄、津貼與扣除項，準確計算每位員工的應發、應扣及實領金額。",
+      "在有手動調整金額時，引擎能正確納入計算。"
+    ],
+    "timestamp_refs": [
+      "00:09:56",
+      "00:11:46"
+    ],
+    "dependencies": [
+      "T007",
+      "T009",
+      "T013",
+      "T015",
+      "T017"
+    ]
+  },
+  {
+    "id": "T020",
+    "title": "設計與實作「手動調整薪資」後端API",
+    "description": "開發允許管理者手動調整特定員工、特定薪資項目金額的API，並支援添加備忘錄。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能成功接收對特定員工特定薪資項目的手動調整金額與備忘錄，並正確儲存。"
+    ],
+    "timestamp_refs": [
+      "00:11:15"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "T021",
+    "title": "開發「手動調整薪資」前端UI功能",
+    "description": "開發手動調整薪資金額的UI，讓管理者能選定員工、薪資項目，輸入調整金額並填寫備忘錄。",
+    "priority": "high",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "UI頁面能讓管理者為員工手動調整薪資項目金額並填寫備忘錄。",
+      "調整後的金額與備忘錄能正確顯示和更新。"
+    ],
+    "timestamp_refs": [
+      "00:11:15"
+    ],
+    "dependencies": [
+      "T020"
+    ]
+  },
+  {
+    "id": "T022",
+    "title": "設計與實作「薪資批准」及「薪資帳簿生成」後端API",
+    "description": "開發薪資計算完成後，執行批准操作的API，並自動生成詳細的薪資帳簿數據。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能執行薪資批次的批准操作，將薪資計算結果定案。",
+      "批准後，系統能自動生成每位員工的詳細薪資帳簿數據。"
+    ],
+    "timestamp_refs": [
+      "00:11:46"
+    ],
+    "dependencies": [
+      "T019"
+    ]
+  },
+  {
+    "id": "T023",
+    "title": "開發「薪資帳簿」顯示前端UI",
+    "description": "開發薪資帳簿顯示頁面，清晰展示每位員工的詳細薪資構成，包含應發、津貼、扣除、實領金額。",
+    "priority": "high",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "UI頁面能清晰展示每位員工的薪資帳簿，包含所有明細項目，且總額計算正確。",
+      "薪資帳簿顯示的數據與批准後的計算結果一致。"
+    ],
+    "timestamp_refs": [
+      "00:11:46"
+    ],
+    "dependencies": [
+      "T022"
+    ]
+  },
+  {
+    "id": "T024",
+    "title": "設計與實作「員工個人薪資查詢」後端API",
+    "description": "開發員工個人查詢自己歷史薪資明細的API，需確保嚴格的權限控管，僅能查詢自身資料。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能讓員工查詢到自己的歷史薪資明細。",
+      "任何情況下，員工無法透過API查詢到其他人的薪資資料。"
+    ],
+    "timestamp_refs": [
+      "00:05:40",
+      "00:12:38"
+    ],
+    "dependencies": [
+      "T022"
+    ]
+  },
+  {
+    "id": "T025",
+    "title": "開發「員工個人薪資查詢」前端UI頁面",
+    "description": "開發員工登入後可查詢自己歷史薪資明細的UI頁面，提供友善的查詢介面。",
+    "priority": "high",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "員工登入後能安全地查詢自己的歷史薪資明細，顯示清晰。",
+      "UI介面簡潔直觀，便於員工操作。"
+    ],
+    "timestamp_refs": [
+      "00:05:40",
+      "00:12:38"
+    ],
+    "dependencies": [
+      "T024"
+    ]
+  },
+  {
+    "id": "T026",
+    "title": "設計與實作「管理員薪資查詢」後端API",
+    "description": "開發管理員查詢所有員工薪資明細的API，支援多條件篩選（如部門、時間範圍、員工姓名）與排序。",
+    "priority": "high",
+    "category": "backend",
+    "acceptance_criteria": [
+      "API能讓管理員查詢所有員工的薪資明細。",
+      "支援按部門、日期、員工姓名等多條件進行篩選與排序。"
+    ],
+    "timestamp_refs": [
+      "00:14:37"
+    ],
+    "dependencies": [
+      "T022"
+    ]
+  },
+  {
+    "id": "T027",
+    "title": "開發「管理員薪資查詢」前端UI頁面",
+    "description": "開發管理員專屬的薪資查詢頁面，提供全面的篩選、排序功能，並可預覽或匯出薪資報表。",
+    "priority": "high",
+    "category": "frontend",
+    "acceptance_criteria": [
+      "管理員能透過UI查詢並篩選所有員工的薪資明細。",
+      "查詢結果能清晰顯示，並支援匯出功能（如CSV、Excel）。"
+    ],
+    "timestamp_refs": [
+      "00:14:37"
+    ],
+    "dependencies": [
+      "T026"
+    ]
+  },
+  {
+    "id": "T028",
+    "title": "QA - 撰寫並執行出勤與請假管理模組測試案例",
+    "description": "為出勤編碼、休假項目設定、員工休假額度調整及請假審核流程設計並執行測試案例。",
+    "priority": "high",
+    "category": "qa",
+    "acceptance_criteria": [
+      "所有出勤與請假相關功能測試案例通過，確保功能正確且符合業務邏輯。",
+      "邊界條件測試（如跨年度休假、0時數請假）無誤。"
+    ],
+    "timestamp_refs": [],
+    "dependencies": [
+      "T001",
+      "T002",
+      "T003",
+      "T004",
+      "T005",
+      "T006",
+      "T017",
+      "T018"
+    ]
+  },
+  {
+    "id": "T029",
+    "title": "QA - 撰寫並執行薪資計算核心模組測試案例",
+    "description": "為薪資計算引擎、津貼與扣除項公式、手動調整、薪資批准及帳簿生成功能設計並執行測試案例。",
+    "priority": "high",
+    "category": "qa",
+    "acceptance_criteria": [
+      "所有薪資計算核心功能測試案例通過，確保計算結果準確無誤。",
+      "複雜計算公式測試、手動調整生效測試、批准流程測試均無誤。"
+    ],
+    "timestamp_refs": [],
+    "dependencies": [
+      "T007",
+      "T008",
+      "T009",
+      "T010",
+      "T015",
+      "T016",
+      "T019",
+      "T020",
+      "T021",
+      "T022",
+      "T023"
+    ]
+  },
+  {
+    "id": "T030",
+    "title": "QA - 撰寫並執行薪資查詢模組測試案例",
+    "description": "為員工個人與管理員的薪資查詢功能及權限控管設計並執行測試案例。",
+    "priority": "high",
+    "category": "qa",
+    "acceptance_criteria": [
+      "所有薪資查詢功能測試案例通過，確保查詢結果正確且權限控管嚴謹。",
+      "員工無法越權查詢他人資料，管理員查詢權限正常。"
+    ],
+    "timestamp_refs": [],
+    "dependencies": [
+      "T024",
+      "T025",
+      "T026",
+      "T027"
+    ]
+  },
+  {
+    "id": "T031",
+    "title": "Ops - 建立薪資服務的CI/CD流程",
+    "description": "建立自動化的持續整合/持續部署(CI/CD)流程，用於薪資管理相關服務的建構、測試與部署。",
+    "priority": "medium",
+    "category": "ops",
+    "acceptance_criteria": [
+      "CI/CD管線能自動化執行代碼提交後的測試、建構和部署，減少手動介入。",
+      "部署流程穩定，可快速回溯到先前版本。"
+    ],
+    "timestamp_refs": [],
+    "dependencies": []
+  },
+  {
+    "id": "T032",
+    "title": "Ops - 部署與監控薪資計算服務",
+    "description": "部署薪資計算與管理服務至正式環境，並建立完善的監控與告警機制。",
+    "priority": "medium",
+    "category": "ops",
+    "acceptance_criteria": [
+      "薪資服務能穩定運行，且有實時監控儀表板。",
+      "當服務異常時，能自動觸發告警並通知相關人員。"
+    ],
+    "timestamp_refs": [],
+    "dependencies": []
+  },
+  {
+    "id": "T033",
+    "title": "General - 研究與評估電子勞動契約線上簽署解決方案",
+    "description": "針對電子勞動契約的線上簽署功能進行市場調研與技術可行性評估，探討其法律效力與集成方案。",
+    "priority": "low",
+    "category": "general",
+    "acceptance_criteria": [
+      "完成一份包含市場現有解決方案、技術棧分析、成本效益評估和法律合規性分析的報告。"
+    ],
+    "timestamp_refs": [
+      "00:15:03"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "T034",
+    "title": "General - 定義不同使用者角色權限控管細節",
+    "description": "詳細定義員工、主管、管理員等不同角色在薪資系統中的操作權限與資料可視範圍，產出權限矩陣文件。",
+    "priority": "high",
+    "category": "general",
+    "acceptance_criteria": [
+      "完成一份清晰、詳細的權限矩陣文件，明確指出各角色可執行的操作和可查看的數據。",
+      "權限定義能完全覆蓋系統所有功能模組，無遺漏。"
+    ],
+    "timestamp_refs": [],
+    "dependencies": []
+  }
+]
