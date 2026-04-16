@@ -1,30 +1,33 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
+  Alert,
   Button,
   Card,
+  Col,
   DatePicker,
+  Empty,
   Form,
+  Row,
+  Space,
+  Statistic,
   Table,
+  Tabs,
   Tag,
   Typography,
   message,
-  Statistic,
-  Row,
-  Col,
-  Space,
 } from 'antd'
 import {
-  CheckCircleOutlined,
   CalendarOutlined,
+  CheckCircleOutlined,
   DollarOutlined,
   FileTextOutlined,
   PlayCircleOutlined,
   SendOutlined,
   TeamOutlined,
 } from '@ant-design/icons'
-import { GlassDrawer, GlassDrawerSection } from '../components/ui/GlassDrawer'
 import { motion } from 'framer-motion'
 import dayjs from 'dayjs'
+import { GlassDrawer, GlassDrawerSection } from '../components/ui/GlassDrawer'
 import { payrollService } from '../services/payroll.service'
 import { PayrollItem, PayrollRun } from '../types'
 import { useAuth } from '../contexts/AuthContext'
@@ -38,15 +41,21 @@ const statusMetaMap: Record<string, { label: string; color: string }> = {
   posted: { label: '已封存', color: 'purple' },
 }
 
+type DetailScope = 'admin' | 'mine'
+
 const PayrollPage: React.FC = () => {
   const { user } = useAuth()
-  const [runs, setRuns] = useState<PayrollRun[]>([])
-  const [loading, setLoading] = useState(false)
+  const [adminRuns, setAdminRuns] = useState<PayrollRun[]>([])
+  const [myRuns, setMyRuns] = useState<PayrollRun[]>([])
+  const [loadingAdmin, setLoadingAdmin] = useState(false)
+  const [loadingMine, setLoadingMine] = useState(false)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [detailScope, setDetailScope] = useState<DetailScope>('admin')
+  const [myRunsError, setMyRunsError] = useState<string | null>(null)
   const [form] = Form.useForm()
 
   const canManagePayroll = useMemo(
@@ -54,46 +63,86 @@ const PayrollPage: React.FC = () => {
     [user],
   )
 
-  const fetchRuns = async () => {
-    setLoading(true)
+  const canReviewPayroll = useMemo(
+    () =>
+      (user?.roles ?? []).some(
+        (role) => role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'ACCOUNTANT',
+      ),
+    [user],
+  )
+
+  const fetchAdminRuns = async () => {
+    if (!canReviewPayroll) {
+      setAdminRuns([])
+      return
+    }
+
+    setLoadingAdmin(true)
     try {
       const result = await payrollService.getPayrollRuns()
-      setRuns(Array.isArray(result?.items) ? result.items : [])
+      setAdminRuns(Array.isArray(result?.items) ? result.items : [])
     } catch (error) {
       message.error('載入薪資批次失敗')
-      setRuns([])
+      setAdminRuns([])
     } finally {
-      setLoading(false)
+      setLoadingAdmin(false)
+    }
+  }
+
+  const fetchMyRuns = async () => {
+    setLoadingMine(true)
+    try {
+      const result = await payrollService.getMyPayrollRuns()
+      setMyRuns(Array.isArray(result) ? result : [])
+      setMyRunsError(null)
+    } catch (error: any) {
+      setMyRuns([])
+      setMyRunsError(error?.response?.data?.message || '尚未綁定員工資料，暫時無法顯示個人薪資單。')
+    } finally {
+      setLoadingMine(false)
     }
   }
 
   useEffect(() => {
-    fetchRuns()
-  }, [])
+    fetchAdminRuns()
+    fetchMyRuns()
+  }, [canReviewPayroll])
 
-  const currentMonthTotal = useMemo(() => {
+  const adminMonthTotal = useMemo(() => {
     const currentMonth = dayjs().format('YYYY-MM')
-    return runs
+    return adminRuns
       .filter((run) => dayjs(run.payDate).format('YYYY-MM') === currentMonth)
       .reduce((sum, run) => sum + (run.totalAmount ?? 0), 0)
-  }, [runs])
+  }, [adminRuns])
 
   const pendingEmployees = useMemo(
     () =>
-      runs
+      adminRuns
         .filter((run) => run.status === 'draft' || run.status === 'pending_approval')
         .reduce((sum, run) => sum + (run.employeeCount ?? 0), 0),
-    [runs],
+    [adminRuns],
   )
 
   const nextPayDate = useMemo(() => {
-    const upcoming = runs
+    const sourceRuns = canReviewPayroll ? adminRuns : myRuns
+    const upcoming = sourceRuns
       .map((run) => dayjs(run.payDate))
       .filter((date) => date.isSame(dayjs(), 'day') || date.isAfter(dayjs(), 'day'))
       .sort((a, b) => a.valueOf() - b.valueOf())
 
     return upcoming[0]?.format('YYYY-MM-DD') ?? '尚未排程'
-  }, [runs])
+  }, [adminRuns, myRuns, canReviewPayroll])
+
+  const latestMyRun = myRuns[0]
+  const myLatestNetPay = latestMyRun?.totalAmount ?? 0
+  const myApprovedCount = myRuns.length
+
+  const syncRunIntoLists = (updated: PayrollRun) => {
+    setAdminRuns((prev) => prev.map((run) => (run.id === updated.id ? updated : run)))
+    if (selectedRun?.id === updated.id) {
+      setSelectedRun(updated)
+    }
+  }
 
   const handleCreate = async () => {
     try {
@@ -106,20 +155,24 @@ const PayrollPage: React.FC = () => {
       message.success('薪資批次已建立')
       setDrawerOpen(false)
       form.resetFields()
-      fetchRuns()
+      fetchAdminRuns()
     } catch (error) {
-      // handled by form/api
+      // validation/api handled elsewhere
     }
   }
 
-  const handleViewDetail = async (runId: string) => {
+  const handleViewDetail = async (runId: string, scope: DetailScope) => {
     setDetailLoading(true)
     setDetailOpen(true)
+    setDetailScope(scope)
     try {
-      const detail = await payrollService.getPayrollRun(runId)
+      const detail =
+        scope === 'admin'
+          ? await payrollService.getPayrollRun(runId)
+          : await payrollService.getMyPayrollRun(runId)
       setSelectedRun(detail)
-    } catch (error) {
-      message.error('載入薪資批次明細失敗')
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '載入薪資明細失敗')
       setDetailOpen(false)
       setSelectedRun(null)
     } finally {
@@ -132,10 +185,7 @@ const PayrollPage: React.FC = () => {
     try {
       const updated = await payrollService.submitPayrollRun(runId)
       message.success('薪資批次已送審')
-      setRuns((prev) => prev.map((run) => (run.id === updated.id ? updated : run)))
-      if (selectedRun?.id === updated.id) {
-        setSelectedRun(updated)
-      }
+      syncRunIntoLists(updated)
     } catch (error: any) {
       message.error(error?.response?.data?.message || '送審失敗')
     } finally {
@@ -148,10 +198,8 @@ const PayrollPage: React.FC = () => {
     try {
       const updated = await payrollService.approvePayrollRun(runId)
       message.success('薪資批次已批准並封存')
-      setRuns((prev) => prev.map((run) => (run.id === updated.id ? updated : run)))
-      if (selectedRun?.id === updated.id) {
-        setSelectedRun(updated)
-      }
+      syncRunIntoLists(updated)
+      fetchMyRuns()
     } catch (error: any) {
       message.error(error?.response?.data?.message || '批准失敗')
     } finally {
@@ -159,7 +207,7 @@ const PayrollPage: React.FC = () => {
     }
   }
 
-  const runColumns = [
+  const adminColumns = [
     {
       title: '計薪期間',
       key: 'period',
@@ -198,7 +246,7 @@ const PayrollPage: React.FC = () => {
       key: 'actions',
       render: (_: unknown, record: PayrollRun) => (
         <Space wrap>
-          <Button type="text" icon={<FileTextOutlined />} onClick={() => handleViewDetail(record.id)}>
+          <Button type="text" icon={<FileTextOutlined />} onClick={() => handleViewDetail(record.id, 'admin')}>
             明細
           </Button>
           {canManagePayroll && record.status === 'draft' ? (
@@ -226,18 +274,63 @@ const PayrollPage: React.FC = () => {
     },
   ]
 
+  const myColumns = [
+    {
+      title: '計薪期間',
+      key: 'period',
+      render: (_: unknown, record: PayrollRun) =>
+        `${dayjs(record.periodStart).format('YYYY-MM-DD')} ~ ${dayjs(record.periodEnd).format('YYYY-MM-DD')}`,
+    },
+    {
+      title: '發薪日',
+      dataIndex: 'payDate',
+      key: 'payDate',
+      render: (date: string) => dayjs(date).format('YYYY-MM-DD'),
+    },
+    {
+      title: '實發金額',
+      dataIndex: 'totalAmount',
+      key: 'totalAmount',
+      render: (value?: number) => `$${(value ?? 0).toLocaleString()}`,
+    },
+    {
+      title: '狀態',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status: string) => {
+        const meta = statusMetaMap[status] ?? { label: status, color: 'default' }
+        return <Tag color={meta.color}>{meta.label}</Tag>
+      },
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      render: (_: unknown, record: PayrollRun) => (
+        <Button type="text" icon={<FileTextOutlined />} onClick={() => handleViewDetail(record.id, 'mine')}>
+          查看薪資單
+        </Button>
+      ),
+    },
+  ]
+
   const itemColumns = [
     {
-      title: '員工',
+      title: detailScope === 'admin' ? '員工' : '項目',
       key: 'employee',
       render: (_: unknown, item: PayrollItem) =>
-        item.employee ? `${item.employee.name} (${item.employee.employeeNo})` : item.employeeId,
+        detailScope === 'admin'
+          ? item.employee
+            ? `${item.employee.name} (${item.employee.employeeNo})`
+            : item.employeeId
+          : item.type,
     },
-    {
-      title: '項目',
-      dataIndex: 'type',
-      key: 'type',
-    },
+    detailScope === 'admin'
+      ? {
+          title: '項目',
+          dataIndex: 'type',
+          key: 'type',
+        }
+      : null,
     {
       title: '金額',
       dataIndex: 'amountBase',
@@ -250,37 +343,20 @@ const PayrollPage: React.FC = () => {
       key: 'remark',
       render: (remark?: string | null) => remark || '—',
     },
-  ]
+  ].filter(Boolean) as any[]
 
   const selectedStatusMeta = selectedRun
     ? statusMetaMap[selectedRun.status] ?? { label: selectedRun.status, color: 'default' }
     : null
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="space-y-6"
-    >
-      <div className="flex justify-between items-end">
-        <div>
-          <Title level={2} className="!mb-1 !font-light">薪資管理</Title>
-          <Text className="text-gray-500">薪資計算、送審與批准封存</Text>
-        </div>
-        {canManagePayroll ? (
-          <Button type="primary" icon={<PlayCircleOutlined />} onClick={() => setDrawerOpen(true)}>
-            執行薪資計算
-          </Button>
-        ) : null}
-      </div>
-
+  const adminPanel = (
+    <div className="space-y-6">
       <Row gutter={16}>
         <Col span={8}>
           <Card bordered={false} className="glass-card">
             <Statistic
               title="本月預估薪資支出"
-              value={currentMonthTotal}
+              value={adminMonthTotal}
               prefix={<DollarOutlined />}
               precision={0}
               valueStyle={{ color: '#cf1322' }}
@@ -313,12 +389,99 @@ const PayrollPage: React.FC = () => {
       <Card className="glass-card" bordered={false}>
         <Table
           rowKey="id"
-          loading={loading}
-          columns={runColumns}
-          dataSource={runs}
+          loading={loadingAdmin}
+          columns={adminColumns}
+          dataSource={adminRuns}
           pagination={{ pageSize: 8 }}
         />
       </Card>
+    </div>
+  )
+
+  const myPanel = (
+    <div className="space-y-6">
+      {myRunsError ? <Alert type="info" showIcon message="個人薪資單尚未啟用" description={myRunsError} /> : null}
+
+      <Row gutter={16}>
+        <Col span={8}>
+          <Card bordered={false} className="glass-card">
+            <Statistic
+              title="最近一期實發薪資"
+              value={myLatestNetPay}
+              prefix={<DollarOutlined />}
+              precision={0}
+              valueStyle={{ color: '#1677ff' }}
+            />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card bordered={false} className="glass-card">
+            <Statistic
+              title="已發佈薪資單"
+              value={myApprovedCount}
+              prefix={<FileTextOutlined />}
+              suffix="期"
+              valueStyle={{ color: '#16a34a' }}
+            />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card bordered={false} className="glass-card">
+            <Statistic
+              title="最近發薪日"
+              value={latestMyRun ? dayjs(latestMyRun.payDate).format('YYYY-MM-DD') : '尚無資料'}
+              prefix={<CalendarOutlined />}
+              valueStyle={{ fontSize: '20px' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <Card className="glass-card" bordered={false}>
+        {myRuns.length === 0 && !loadingMine ? (
+          <Empty description="目前還沒有可查看的薪資單" />
+        ) : (
+          <Table
+            rowKey="id"
+            loading={loadingMine}
+            columns={myColumns}
+            dataSource={myRuns}
+            pagination={{ pageSize: 8 }}
+          />
+        )}
+      </Card>
+    </div>
+  )
+
+  const tabItems = canReviewPayroll
+    ? [
+        { key: 'admin', label: '薪資批次', children: adminPanel },
+        { key: 'mine', label: '我的薪資單', children: myPanel },
+      ]
+    : [{ key: 'mine', label: '我的薪資單', children: myPanel }]
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="space-y-6"
+    >
+      <div className="flex justify-between items-end">
+        <div>
+          <Title level={2} className="!mb-1 !font-light">薪資管理</Title>
+          <Text className="text-gray-500">
+            {canReviewPayroll ? '薪資計算、送審、批准與個人薪資查詢' : '查看個人薪資單與每期薪資明細'}
+          </Text>
+        </div>
+        {canManagePayroll ? (
+          <Button type="primary" icon={<PlayCircleOutlined />} onClick={() => setDrawerOpen(true)}>
+            執行薪資計算
+          </Button>
+        ) : null}
+      </div>
+
+      <Tabs defaultActiveKey={canReviewPayroll ? 'admin' : 'mine'} items={tabItems} />
 
       <GlassDrawer
         title="執行薪資計算"
@@ -358,7 +521,7 @@ const PayrollPage: React.FC = () => {
       </GlassDrawer>
 
       <GlassDrawer
-        title="薪資批次明細"
+        title={detailScope === 'admin' ? '薪資批次明細' : '我的薪資單'}
         open={detailOpen}
         onClose={() => {
           setDetailOpen(false)
@@ -383,10 +546,14 @@ const PayrollPage: React.FC = () => {
 
               <Row gutter={16} className="mt-4">
                 <Col span={8}>
-                  <Statistic title="總金額" value={selectedRun.totalAmount ?? 0} prefix="$" precision={0} />
+                  <Statistic title={detailScope === 'admin' ? '總金額' : '實發金額'} value={selectedRun.totalAmount ?? 0} prefix="$" precision={0} />
                 </Col>
                 <Col span={8}>
-                  <Statistic title="涉及員工" value={selectedRun.employeeCount ?? 0} suffix="人" />
+                  <Statistic
+                    title={detailScope === 'admin' ? '涉及員工' : '薪資項目'}
+                    value={detailScope === 'admin' ? selectedRun.employeeCount ?? 0 : selectedRun.items?.length ?? 0}
+                    suffix={detailScope === 'admin' ? '人' : '項'}
+                  />
                 </Col>
                 <Col span={8}>
                   <Statistic title="建立日期" value={selectedRun.createdAt ? dayjs(selectedRun.createdAt).format('YYYY-MM-DD') : '—'} />
@@ -402,8 +569,10 @@ const PayrollPage: React.FC = () => {
 
             <GlassDrawerSection>
               <div className="mb-4 flex items-center justify-between">
-                <div className="font-semibold text-slate-800">薪資項目</div>
-                {canManagePayroll && selectedRun.status === 'draft' ? (
+                <div className="font-semibold text-slate-800">
+                  {detailScope === 'admin' ? '薪資項目' : '薪資單明細'}
+                </div>
+                {canManagePayroll && detailScope === 'admin' && selectedRun.status === 'draft' ? (
                   <Button
                     icon={<SendOutlined />}
                     loading={actionLoadingId === selectedRun.id}
@@ -412,7 +581,7 @@ const PayrollPage: React.FC = () => {
                     送審
                   </Button>
                 ) : null}
-                {canManagePayroll && selectedRun.status === 'pending_approval' ? (
+                {canManagePayroll && detailScope === 'admin' && selectedRun.status === 'pending_approval' ? (
                   <Button
                     type="primary"
                     icon={<CheckCircleOutlined />}
@@ -434,7 +603,7 @@ const PayrollPage: React.FC = () => {
             </GlassDrawerSection>
           </div>
         ) : (
-          <div className="py-12 text-center text-slate-400">{detailLoading ? '載入中...' : '尚未選取薪資批次'}</div>
+          <div className="py-12 text-center text-slate-400">{detailLoading ? '載入中...' : '尚未選取薪資資料'}</div>
         )}
       </GlassDrawer>
     </motion.div>

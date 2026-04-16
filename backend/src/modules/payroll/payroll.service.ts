@@ -60,6 +60,24 @@ export class PayrollService {
     };
   }
 
+  private async getEmployeeForUser(userId: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { userId },
+      select: {
+        id: true,
+        entityId: true,
+        employeeNo: true,
+        name: true,
+      },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Current user is not linked to an employee record');
+    }
+
+    return employee;
+  }
+
   private async resolveEntityId(userId: string, requestedEntityId?: string) {
     if (requestedEntityId) {
       const entity = await this.prisma.entity.findUnique({
@@ -175,6 +193,97 @@ export class PayrollService {
             { employeeId: 'asc' },
             { type: 'asc' },
           ],
+        },
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException('Payroll run not found');
+    }
+
+    return this.serializePayrollRun(run);
+  }
+
+  async getMyPayrollRuns(userId: string) {
+    const employee = await this.getEmployeeForUser(userId);
+    const runs = await this.prisma.payrollRun.findMany({
+      where: {
+        status: {
+          in: ['approved', 'posted'],
+        },
+        items: {
+          some: {
+            employeeId: employee.id,
+          },
+        },
+      },
+      include: {
+        creator: {
+          select: { id: true, name: true },
+        },
+        approver: {
+          select: { id: true, name: true },
+        },
+        items: {
+          where: {
+            employeeId: employee.id,
+          },
+          include: {
+            employee: {
+              select: {
+                id: true,
+                employeeNo: true,
+                name: true,
+              },
+            },
+          },
+          orderBy: { type: 'asc' },
+        },
+      },
+      orderBy: { payDate: 'desc' },
+    });
+
+    return runs.map((run) => this.serializePayrollRun(run));
+  }
+
+  async getMyPayrollRunById(userId: string, id: string) {
+    const employee = await this.getEmployeeForUser(userId);
+    const run = await this.prisma.payrollRun.findFirst({
+      where: {
+        id,
+        status: {
+          in: ['approved', 'posted'],
+        },
+        items: {
+          some: {
+            employeeId: employee.id,
+          },
+        },
+      },
+      include: {
+        entity: {
+          select: { id: true, name: true },
+        },
+        creator: {
+          select: { id: true, name: true },
+        },
+        approver: {
+          select: { id: true, name: true },
+        },
+        items: {
+          where: {
+            employeeId: employee.id,
+          },
+          include: {
+            employee: {
+              select: {
+                id: true,
+                employeeNo: true,
+                name: true,
+              },
+            },
+          },
+          orderBy: { type: 'asc' },
         },
       },
     });

@@ -73,6 +73,16 @@ export const payrollService = {
     return response.data
   },
 
+  getMyPayrollRuns: async () => {
+    const response = await api.get<PayrollRun[]>('/payroll/my/runs')
+    return response.data
+  },
+
+  getMyPayrollRun: async (id: string) => {
+    const response = await api.get<PayrollRun>(`/payroll/my/runs/${id}`)
+    return response.data
+  },
+
   submitPayrollRun: async (id: string) => {
     const response = await api.post<PayrollRun>(`/payroll/runs/${id}/submit`)
     return response.data

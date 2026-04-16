@@ -80,6 +80,20 @@ export class PayrollController {
     return this.payrollService.getPayrollRunById(id);
   }
 
+  @Get('my/runs')
+  @ApiOperation({ summary: '查詢我的薪資單列表' })
+  @ApiResponse({ status: 200, description: '成功取得個人薪資單列表' })
+  async getMyPayrollRuns(@Request() req: any) {
+    return this.payrollService.getMyPayrollRuns(req.user.id);
+  }
+
+  @Get('my/runs/:id')
+  @ApiOperation({ summary: '查詢我的單張薪資單' })
+  @ApiResponse({ status: 200, description: '成功取得個人薪資單明細' })
+  async getMyPayrollRun(@Request() req: any, @Param('id') id: string) {
+    return this.payrollService.getMyPayrollRunById(req.user.id, id);
+  }
+
   @Post('runs')
   @Roles('SUPER_ADMIN', 'ADMIN')
   @UseGuards(RolesGuard)
