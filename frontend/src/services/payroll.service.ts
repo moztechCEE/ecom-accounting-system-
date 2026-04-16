@@ -92,4 +92,9 @@ export const payrollService = {
     const response = await api.post<PayrollRun>(`/payroll/runs/${id}/approve`)
     return response.data
   },
+
+  postPayrollRun: async (id: string) => {
+    const response = await api.post<PayrollRun>(`/payroll/runs/${id}/post`)
+    return response.data
+  },
 }

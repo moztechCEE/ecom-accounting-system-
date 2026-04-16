@@ -22,6 +22,7 @@ import {
   DollarOutlined,
   FileTextOutlined,
   PlayCircleOutlined,
+  PrinterOutlined,
   SendOutlined,
   TeamOutlined,
 } from '@ant-design/icons'
@@ -139,6 +140,7 @@ const PayrollPage: React.FC = () => {
 
   const syncRunIntoLists = (updated: PayrollRun) => {
     setAdminRuns((prev) => prev.map((run) => (run.id === updated.id ? updated : run)))
+    setMyRuns((prev) => prev.map((run) => (run.id === updated.id ? updated : run)))
     if (selectedRun?.id === updated.id) {
       setSelectedRun(updated)
     }
@@ -207,6 +209,111 @@ const PayrollPage: React.FC = () => {
     }
   }
 
+  const handlePostRun = async (runId: string) => {
+    setActionLoadingId(runId)
+    try {
+      const updated = await payrollService.postPayrollRun(runId)
+      message.success('薪資批次已過帳至會計')
+      syncRunIntoLists(updated)
+      fetchMyRuns()
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '過帳失敗')
+    } finally {
+      setActionLoadingId(null)
+    }
+  }
+
+  const escapeHtml = (value: string) =>
+    value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;')
+
+  const handlePrintPayslip = () => {
+    if (!selectedRun || detailScope !== 'mine') {
+      return
+    }
+
+    const itemRows = (selectedRun.items ?? [])
+      .map(
+        (item) => `
+          <tr>
+            <td>${escapeHtml(item.type)}</td>
+            <td>${escapeHtml(item.remark || '—')}</td>
+            <td style="text-align:right;">$${(item.amountBase ?? 0).toLocaleString()}</td>
+          </tr>
+        `,
+      )
+      .join('')
+
+    const html = `
+      <!doctype html>
+      <html lang="zh-Hant">
+        <head>
+          <meta charset="utf-8" />
+          <title>薪資單 ${dayjs(selectedRun.payDate).format('YYYY-MM-DD')}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif; padding: 32px; color: #0f172a; }
+            h1 { margin: 0 0 8px; font-size: 28px; }
+            .meta { margin-bottom: 24px; color: #475569; font-size: 14px; line-height: 1.8; }
+            .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+            .box { border: 1px solid #dbeafe; border-radius: 16px; padding: 16px; background: #f8fbff; }
+            .label { font-size: 12px; color: #64748b; margin-bottom: 6px; }
+            .value { font-size: 24px; font-weight: 700; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border-bottom: 1px solid #e2e8f0; padding: 12px 8px; font-size: 14px; text-align: left; vertical-align: top; }
+            th { color: #475569; }
+          </style>
+        </head>
+        <body>
+          <h1>員工薪資單</h1>
+          <div class="meta">
+            <div>計薪期間：${dayjs(selectedRun.periodStart).format('YYYY-MM-DD')} ~ ${dayjs(selectedRun.periodEnd).format('YYYY-MM-DD')}</div>
+            <div>發薪日：${dayjs(selectedRun.payDate).format('YYYY-MM-DD')}</div>
+            <div>批准者：${escapeHtml(selectedRun.approver?.name || '—')}</div>
+          </div>
+          <div class="summary">
+            <div class="box">
+              <div class="label">實發金額</div>
+              <div class="value">$${(selectedRun.totalAmount ?? 0).toLocaleString()}</div>
+            </div>
+            <div class="box">
+              <div class="label">薪資項目</div>
+              <div class="value">${selectedRun.items?.length ?? 0}</div>
+            </div>
+            <div class="box">
+              <div class="label">狀態</div>
+              <div class="value">${escapeHtml(selectedStatusMeta?.label || '已批准')}</div>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>項目</th>
+                <th>備註</th>
+                <th style="text-align:right;">金額</th>
+              </tr>
+            </thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+        </body>
+      </html>
+    `
+
+    const printWindow = window.open('', '_blank', 'width=960,height=720')
+    if (!printWindow) {
+      message.error('瀏覽器阻擋了列印視窗，請允許彈出視窗後重試。')
+      return
+    }
+
+    printWindow.document.write(html)
+    printWindow.document.close()
+    printWindow.focus()
+    printWindow.print()
+  }
+
   const adminColumns = [
     {
       title: '計薪期間',
@@ -267,6 +374,16 @@ const PayrollPage: React.FC = () => {
               onClick={() => handleApproveRun(record.id)}
             >
               批准
+            </Button>
+          ) : null}
+          {canManagePayroll && record.status === 'approved' ? (
+            <Button
+              type="text"
+              icon={<CheckCircleOutlined />}
+              loading={actionLoadingId === record.id}
+              onClick={() => handlePostRun(record.id)}
+            >
+              過帳
             </Button>
           ) : null}
         </Space>
@@ -589,6 +706,20 @@ const PayrollPage: React.FC = () => {
                     onClick={() => handleApproveRun(selectedRun.id)}
                   >
                     批准封存
+                  </Button>
+                ) : null}
+                {canManagePayroll && detailScope === 'admin' && selectedRun.status === 'approved' ? (
+                  <Button
+                    type="primary"
+                    loading={actionLoadingId === selectedRun.id}
+                    onClick={() => handlePostRun(selectedRun.id)}
+                  >
+                    過帳到會計
+                  </Button>
+                ) : null}
+                {detailScope === 'mine' ? (
+                  <Button icon={<PrinterOutlined />} onClick={handlePrintPayslip}>
+                    列印 / 另存 PDF
                   </Button>
                 ) : null}
               </div>
