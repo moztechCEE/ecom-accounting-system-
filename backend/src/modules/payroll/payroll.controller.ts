@@ -121,6 +121,15 @@ export class PayrollController {
     return this.payrollService.approvePayrollRun(id, req.user.id);
   }
 
+  @Post('runs/:id/post')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '過帳薪資批次至會計' })
+  @ApiResponse({ status: 200, description: '成功過帳薪資批次' })
+  async postPayrollRun(@Request() req: any, @Param('id') id: string) {
+    return this.payrollService.postPayrollRun(id, req.user.id);
+  }
+
   @Get('payrolls')
   @ApiOperation({ summary: '查詢薪資記錄列表' })
   @ApiResponse({ status: 200, description: '成功取得薪資記錄' })

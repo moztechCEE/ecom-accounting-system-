@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { AttendanceIntegrationService } from '../attendance/services/integration.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { JournalService } from '../accounting/services/journal.service';
 
 /**
  * 薪資管理服務
@@ -23,6 +24,7 @@ export class PayrollService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly attendanceIntegration: AttendanceIntegrationService,
+    private readonly journalService: JournalService,
   ) {}
 
   private toNumber(value: unknown): number {
@@ -515,6 +517,115 @@ export class PayrollService {
         },
       });
     }
+
+    return this.getPayrollRunById(id);
+  }
+
+  async postPayrollRun(id: string, userId: string) {
+    const run = await this.prisma.payrollRun.findUnique({
+      where: { id },
+      include: {
+        entity: true,
+        items: true,
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException('Payroll run not found');
+    }
+
+    if (run.status !== 'approved') {
+      throw new BadRequestException('只有已批准批次可以過帳');
+    }
+
+    const postingAmount = run.items.reduce(
+      (sum, item) => sum + this.toNumber(item.amountBase),
+      0,
+    );
+
+    if (postingAmount <= 0) {
+      throw new BadRequestException('薪資批次金額異常，無法過帳');
+    }
+
+    const [salaryExpenseAccount, payrollPayableAccount] = await Promise.all([
+      this.prisma.account.findUnique({
+        where: {
+          entityId_code: {
+            entityId: run.entityId,
+            code: '6111',
+          },
+        },
+      }),
+      this.prisma.account.findUnique({
+        where: {
+          entityId_code: {
+            entityId: run.entityId,
+            code: '2191',
+          },
+        },
+      }),
+    ]);
+
+    if (!salaryExpenseAccount || !payrollPayableAccount) {
+      throw new NotFoundException('缺少薪資過帳所需會計科目（6111 / 2191）');
+    }
+
+    const period = await this.prisma.period.findFirst({
+      where: {
+        entityId: run.entityId,
+        status: 'open',
+        startDate: { lte: run.payDate },
+        endDate: { gte: run.payDate },
+      },
+      select: { id: true },
+    });
+
+    const existingJournal = await this.prisma.journalEntry.findFirst({
+      where: {
+        sourceModule: 'payroll',
+        sourceId: run.id,
+      },
+      select: { id: true, approvedAt: true },
+    });
+
+    if (!existingJournal) {
+      const journalEntry = await this.journalService.createJournalEntry({
+        entityId: run.entityId,
+        date: run.payDate,
+        description: `薪資批次過帳 ${run.entity.name} ${run.periodStart.toISOString().slice(0, 10)} ~ ${run.periodEnd.toISOString().slice(0, 10)}`,
+        sourceModule: 'payroll',
+        sourceId: run.id,
+        periodId: period?.id,
+        createdBy: userId,
+        lines: [
+          {
+            accountId: salaryExpenseAccount.id,
+            debit: postingAmount,
+            credit: 0,
+            amountBase: postingAmount,
+            memo: '薪資支出',
+          },
+          {
+            accountId: payrollPayableAccount.id,
+            debit: 0,
+            credit: postingAmount,
+            amountBase: postingAmount,
+            memo: '應付薪資',
+          },
+        ],
+      });
+
+      await this.journalService.approveJournalEntry(journalEntry.id, userId);
+    } else if (!existingJournal.approvedAt) {
+      await this.journalService.approveJournalEntry(existingJournal.id, userId);
+    }
+
+    await this.prisma.payrollRun.update({
+      where: { id },
+      data: {
+        status: 'posted',
+      },
+    });
 
     return this.getPayrollRunById(id);
   }
