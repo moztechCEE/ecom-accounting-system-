@@ -263,6 +263,21 @@ export interface PayrollItem {
   };
 }
 
+export interface AuditLogEntry {
+  id: string;
+  tableName: string;
+  recordId: string;
+  action: string;
+  createdAt: string;
+  user?: {
+    id: string;
+    name: string;
+    email?: string;
+  } | null;
+  oldData?: Record<string, unknown> | null;
+  newData?: Record<string, unknown> | null;
+}
+
 export interface PayrollSettings {
   id: string;
   entityId: string;

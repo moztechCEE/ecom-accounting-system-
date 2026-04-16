@@ -8,6 +8,8 @@ import {
   UseGuards,
   Query,
   Request,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +23,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { PayPayrollRunDto } from './dto/pay-payroll-run.dto';
 import { UpsertPayrollPolicyDto } from './dto/upsert-payroll-policy.dto';
+import type { Response } from 'express';
 
 /**
  * 薪資控制器
@@ -154,6 +157,34 @@ export class PayrollController {
     return this.payrollService.getPayrollRunById(id);
   }
 
+  @Get('runs/:id/audit-logs')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '查詢薪資批次操作紀錄' })
+  @ApiResponse({ status: 200, description: '成功取得薪資批次操作紀錄' })
+  async getPayrollRunAuditLogs(@Param('id') id: string) {
+    return this.payrollService.getPayrollRunAuditLogs(id);
+  }
+
+  @Get('runs/:id/pdf')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '下載指定員工薪資單 PDF' })
+  @ApiResponse({ status: 200, description: '成功下載薪資單 PDF' })
+  async downloadPayrollRunPdf(
+    @Param('id') id: string,
+    @Query('employeeId') employeeId: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.payrollService.getPayrollRunPdf(id, employeeId);
+    response.setHeader('Content-Type', 'application/pdf');
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"`,
+    );
+    return new StreamableFile(result.buffer);
+  }
+
   @Get('my/runs')
   @ApiOperation({ summary: '查詢我的薪資單列表' })
   @ApiResponse({ status: 200, description: '成功取得個人薪資單列表' })
@@ -166,6 +197,26 @@ export class PayrollController {
   @ApiResponse({ status: 200, description: '成功取得個人薪資單明細' })
   async getMyPayrollRun(@Request() req: any, @Param('id') id: string) {
     return this.payrollService.getMyPayrollRunById(req.user.id, id);
+  }
+
+  @Get('my/runs/:id/pdf')
+  @ApiOperation({ summary: '下載我的薪資單 PDF' })
+  @ApiResponse({ status: 200, description: '成功下載個人薪資單 PDF' })
+  async downloadMyPayrollRunPdf(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.payrollService.getMyPayrollRunPdf(
+      req.user.id,
+      id,
+    );
+    response.setHeader('Content-Type', 'application/pdf');
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"`,
+    );
+    return new StreamableFile(result.buffer);
   }
 
   @Post('runs')

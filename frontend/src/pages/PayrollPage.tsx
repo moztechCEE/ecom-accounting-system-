@@ -15,12 +15,14 @@ import {
   Table,
   Tabs,
   Tag,
+  Timeline,
   Typography,
   message,
 } from 'antd'
 import {
   CalendarOutlined,
   CheckCircleOutlined,
+  DownloadOutlined,
   DollarOutlined,
   FileTextOutlined,
   PlayCircleOutlined,
@@ -32,7 +34,7 @@ import { motion } from 'framer-motion'
 import dayjs from 'dayjs'
 import { GlassDrawer, GlassDrawerSection } from '../components/ui/GlassDrawer'
 import { payrollService } from '../services/payroll.service'
-import { BankAccount, PayrollItem, PayrollRun } from '../types'
+import { AuditLogEntry, BankAccount, PayrollItem, PayrollRun } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 
 const { Title, Text } = Typography
@@ -60,6 +62,7 @@ const PayrollPage: React.FC = () => {
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailScope, setDetailScope] = useState<DetailScope>('admin')
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([])
   const [myRunsError, setMyRunsError] = useState<string | null>(null)
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [form] = Form.useForm()
@@ -190,15 +193,21 @@ const PayrollPage: React.FC = () => {
     setDetailOpen(true)
     setDetailScope(scope)
     try {
-      const detail =
+      const [detail, logs] = await Promise.all([
         scope === 'admin'
-          ? await payrollService.getPayrollRun(runId)
-          : await payrollService.getMyPayrollRun(runId)
+          ? payrollService.getPayrollRun(runId)
+          : payrollService.getMyPayrollRun(runId),
+        scope === 'admin'
+          ? payrollService.getPayrollRunAuditLogs(runId)
+          : Promise.resolve([] as AuditLogEntry[]),
+      ])
       setSelectedRun(detail)
+      setAuditLogs(logs)
     } catch (error: any) {
       message.error(error?.response?.data?.message || '載入薪資明細失敗')
       setDetailOpen(false)
       setSelectedRun(null)
+      setAuditLogs([])
     } finally {
       setDetailLoading(false)
     }
@@ -370,6 +379,18 @@ const PayrollPage: React.FC = () => {
     printWindow.document.close()
     printWindow.focus()
     printWindow.print()
+  }
+
+  const handleDownloadPayslipPdf = async () => {
+    if (!selectedRun || detailScope !== 'mine') {
+      return
+    }
+
+    try {
+      await payrollService.downloadMyPayrollRunPdf(selectedRun.id)
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '下載薪資單 PDF 失敗')
+    }
   }
 
   const adminColumns = [
@@ -711,6 +732,7 @@ const PayrollPage: React.FC = () => {
         onClose={() => {
           setDetailOpen(false)
           setSelectedRun(null)
+          setAuditLogs([])
         }}
         width={720}
       >
@@ -798,9 +820,14 @@ const PayrollPage: React.FC = () => {
                   </Button>
                 ) : null}
                 {detailScope === 'mine' ? (
-                  <Button icon={<PrinterOutlined />} onClick={handlePrintPayslip}>
-                    列印 / 另存 PDF
-                  </Button>
+                  <Space>
+                    <Button icon={<DownloadOutlined />} onClick={() => void handleDownloadPayslipPdf()}>
+                      下載正式 PDF
+                    </Button>
+                    <Button icon={<PrinterOutlined />} onClick={handlePrintPayslip}>
+                      列印預覽
+                    </Button>
+                  </Space>
                 ) : null}
               </div>
 
@@ -812,6 +839,39 @@ const PayrollPage: React.FC = () => {
                 pagination={{ pageSize: 8 }}
               />
             </GlassDrawerSection>
+
+            {detailScope === 'admin' ? (
+              <GlassDrawerSection>
+                <div className="mb-4 font-semibold text-slate-800">流程紀錄</div>
+                {auditLogs.length === 0 ? (
+                  <div className="text-sm text-slate-400">目前尚無可顯示的操作紀錄。</div>
+                ) : (
+                  <Timeline
+                    items={auditLogs.map((log) => ({
+                      color:
+                        log.action === 'APPROVE'
+                          ? 'green'
+                          : log.action === 'PAY'
+                            ? 'gold'
+                            : log.action === 'POST'
+                              ? 'purple'
+                              : 'blue',
+                      children: (
+                        <div className="space-y-1">
+                          <div className="font-medium text-slate-800">{log.action}</div>
+                          <div className="text-xs text-slate-500">
+                            {log.user?.name || '系統'} · {dayjs(log.createdAt).format('YYYY-MM-DD HH:mm')}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {log.newData?.status ? `狀態：${String(log.newData.status)}` : '已更新紀錄'}
+                          </div>
+                        </div>
+                      ),
+                    }))}
+                  />
+                )}
+              </GlassDrawerSection>
+            ) : null}
           </div>
         ) : (
           <div className="py-12 text-center text-slate-400">{detailLoading ? '載入中...' : '尚未選取薪資資料'}</div>

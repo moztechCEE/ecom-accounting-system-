@@ -8,6 +8,8 @@ import {
 import { AttendanceIntegrationService } from '../attendance/services/integration.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { JournalService } from '../accounting/services/journal.service';
+import { AuditLogService } from '../../common/audit/audit-log.service';
+import PDFDocument = require('pdfkit');
 
 const DEFAULT_PAYROLL_POLICY = {
   standardMonthlyHours: 240,
@@ -34,6 +36,7 @@ export class PayrollService {
     private readonly prisma: PrismaService,
     private readonly attendanceIntegration: AttendanceIntegrationService,
     private readonly journalService: JournalService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   private toNumber(value: unknown): number {
@@ -80,6 +83,182 @@ export class PayrollService {
       twHealthInsuranceRate: this.toNumber(policy.twHealthInsuranceRate),
       cnSocialInsuranceRate: this.toNumber(policy.cnSocialInsuranceRate),
     };
+  }
+
+  private serializeAuditLog<T extends Record<string, any>>(log: T) {
+    return {
+      ...log,
+      createdAt:
+        log.createdAt instanceof Date
+          ? log.createdAt.toISOString()
+          : log.createdAt,
+    };
+  }
+
+  private maskAccountNo(accountNo?: string | null) {
+    if (!accountNo) {
+      return '—';
+    }
+
+    const tail = accountNo.slice(-5);
+    return `***${tail}`;
+  }
+
+  private buildPayslipFileName(
+    employeeNo: string,
+    payDate: Date,
+    suffix = 'payslip',
+  ) {
+    return `${suffix}-${employeeNo}-${payDate.toISOString().slice(0, 10)}.pdf`;
+  }
+
+  private async buildPayslipPdfBuffer(params: {
+    run: Record<string, any>;
+    employee: {
+      id: string;
+      employeeNo: string;
+      name: string;
+      department?: { name?: string | null } | null;
+    };
+    items: Array<Record<string, any>>;
+  }) {
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 48,
+      info: {
+        Title: this.buildPayslipFileName(params.employee.employeeNo, params.run.payDate),
+        Author: 'MOZTECH E-Accounting',
+      },
+    });
+
+    const chunks: Buffer[] = [];
+
+    return new Promise<Buffer>((resolve, reject) => {
+      doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const totalAmount = params.items.reduce(
+        (sum, item) => sum + this.toNumber(item.amountBase),
+        0,
+      );
+
+      const formatCurrency = (amount: number) => {
+        return `$${amount.toLocaleString('en-US', {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        })}`;
+      };
+
+      doc.fontSize(22).text('Payroll Payslip', { align: 'left' });
+      doc.moveDown(0.4);
+      doc
+        .fontSize(11)
+        .fillColor('#475569')
+        .text(`Entity: ${params.run.entity?.name ?? '—'}`)
+        .text(`Employee: ${params.employee.name} (${params.employee.employeeNo})`)
+        .text(`Department: ${params.employee.department?.name ?? '—'}`)
+        .text(
+          `Period: ${params.run.periodStart.toISOString().slice(0, 10)} - ${params.run.periodEnd.toISOString().slice(0, 10)}`,
+        )
+        .text(`Pay Date: ${params.run.payDate.toISOString().slice(0, 10)}`)
+        .text(`Status: ${String(params.run.status || '').toUpperCase()}`)
+        .text(`Approver: ${params.run.approver?.name ?? '—'}`)
+        .text(
+          `Bank Account: ${params.run.bankAccount ? `${params.run.bankAccount.bankName} ${this.maskAccountNo(params.run.bankAccount.accountNo)}` : '—'}`,
+        )
+        .fillColor('#0f172a');
+
+      doc.moveDown(1);
+      doc
+        .roundedRect(48, doc.y, 499, 72, 16)
+        .fillAndStroke('#eff6ff', '#bfdbfe');
+      doc
+        .fillColor('#64748b')
+        .fontSize(11)
+        .text('Net Pay', 68, doc.y - 60)
+        .fillColor('#0f172a')
+        .fontSize(26)
+        .text(formatCurrency(totalAmount), 68, doc.y - 38);
+      doc
+        .fillColor('#64748b')
+        .fontSize(11)
+        .text('Items', 250, doc.y - 48)
+        .fillColor('#0f172a')
+        .fontSize(18)
+        .text(String(params.items.length), 250, doc.y - 28);
+      doc
+        .fillColor('#64748b')
+        .fontSize(11)
+        .text('Created', 400, doc.y - 40)
+        .fillColor('#0f172a')
+        .fontSize(14)
+        .text(
+          params.run.createdAt
+            ? params.run.createdAt.toISOString().slice(0, 10)
+            : '—',
+          400,
+          doc.y - 22,
+        );
+      doc.moveDown(4.8);
+
+      const startX = 48;
+      const itemColX = 48;
+      const remarkColX = 220;
+      const amountColX = 470;
+
+      doc
+        .fontSize(11)
+        .fillColor('#475569')
+        .text('Item', itemColX, doc.y)
+        .text('Remark', remarkColX, doc.y)
+        .text('Amount', amountColX, doc.y, { width: 70, align: 'right' });
+      doc.moveDown(0.8);
+      doc
+        .moveTo(startX, doc.y)
+        .lineTo(547, doc.y)
+        .strokeColor('#cbd5e1')
+        .stroke();
+      doc.moveDown(0.5);
+
+      params.items.forEach((item) => {
+        const currentY = doc.y;
+        doc
+          .fillColor('#0f172a')
+          .fontSize(11)
+          .text(String(item.type || '—'), itemColX, currentY, {
+            width: 150,
+          })
+          .fillColor('#475569')
+          .text(String(item.remark || '—'), remarkColX, currentY, {
+            width: 200,
+          })
+          .fillColor('#0f172a')
+          .text(formatCurrency(this.toNumber(item.amountBase)), amountColX, currentY, {
+            width: 70,
+            align: 'right',
+          });
+        doc.moveDown(1.2);
+        doc
+          .moveTo(startX, doc.y - 6)
+          .lineTo(547, doc.y - 6)
+          .strokeColor('#e2e8f0')
+          .stroke();
+        if (doc.y > 720) {
+          doc.addPage();
+        }
+      });
+
+      doc.moveDown(1.5);
+      doc
+        .fontSize(10)
+        .fillColor('#64748b')
+        .text(
+          'This payslip is generated by the payroll system. Please contact HR if any amount looks incorrect.',
+        );
+
+      doc.end();
+    });
   }
 
   private async getEmployeeForUser(userId: string) {
@@ -196,6 +375,9 @@ export class PayrollService {
     },
   ) {
     const resolvedEntityId = await this.resolveEntityId(userId, data.entityId);
+    const previousPolicy = await this.prisma.payrollPolicy.findUnique({
+      where: { entityId: resolvedEntityId },
+    });
 
     const updateData: Record<string, number> = {};
 
@@ -227,6 +409,15 @@ export class PayrollService {
         ...DEFAULT_PAYROLL_POLICY,
         ...updateData,
       },
+    });
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'payroll_policies',
+      recordId: policy.id,
+      action: previousPolicy ? 'UPDATE' : 'CREATE',
+      oldData: previousPolicy,
+      newData: policy,
     });
 
     return this.serializePayrollPolicy(policy);
@@ -299,7 +490,7 @@ export class PayrollService {
       throw new ConflictException('Department already exists');
     }
 
-    return this.prisma.department.create({
+    const department = await this.prisma.department.create({
       data: {
         entityId,
         name,
@@ -307,6 +498,16 @@ export class PayrollService {
         isActive: data.isActive ?? true,
       },
     });
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'departments',
+      recordId: department.id,
+      action: 'CREATE',
+      newData: department,
+    });
+
+    return department;
   }
 
   async createEmployee(
@@ -389,6 +590,14 @@ export class PayrollService {
       },
     });
 
+    await this.auditLogService.record({
+      userId,
+      tableName: 'employees',
+      recordId: employee.id,
+      action: 'CREATE',
+      newData: employee,
+    });
+
     return employee;
   }
 
@@ -407,9 +616,8 @@ export class PayrollService {
   ) {
     const employee = await this.prisma.employee.findUnique({
       where: { id },
-      select: {
-        id: true,
-        entityId: true,
+      include: {
+        department: true,
       },
     });
 
@@ -472,13 +680,24 @@ export class PayrollService {
         : null;
     }
 
-    return this.prisma.employee.update({
+    const updatedEmployee = await this.prisma.employee.update({
       where: { id },
       data: updateData,
       include: {
         department: true,
       },
     });
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'employees',
+      recordId: id,
+      action: 'UPDATE',
+      oldData: employee,
+      newData: updatedEmployee,
+    });
+
+    return updatedEmployee;
   }
 
   async getBankAccounts(userId: string, entityId?: string) {
@@ -570,6 +789,20 @@ export class PayrollService {
     }
 
     return this.serializePayrollRun(run);
+  }
+
+  async getPayrollRunAuditLogs(id: string) {
+    const run = await this.prisma.payrollRun.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!run) {
+      throw new NotFoundException('Payroll run not found');
+    }
+
+    const logs = await this.auditLogService.listByRecord('payroll_runs', id);
+    return logs.map((log) => this.serializeAuditLog(log));
   }
 
   async getMyPayrollRuns(userId: string) {
@@ -684,6 +917,148 @@ export class PayrollService {
 
     return this.serializePayrollRun(run);
   }
+
+  async getPayrollRunPdf(id: string, employeeId?: string) {
+    const run = await this.prisma.payrollRun.findUnique({
+      where: { id },
+      include: {
+        entity: {
+          select: { id: true, name: true },
+        },
+        approver: {
+          select: { id: true, name: true },
+        },
+        bankAccount: {
+          select: {
+            id: true,
+            bankName: true,
+            accountNo: true,
+            currency: true,
+          },
+        },
+        items: {
+          include: {
+            employee: {
+              select: {
+                id: true,
+                employeeNo: true,
+                name: true,
+                department: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { type: 'asc' },
+        },
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException('Payroll run not found');
+    }
+
+    const availableEmployeeIds = Array.from(
+      new Set(run.items.map((item) => item.employeeId)),
+    );
+    const resolvedEmployeeId =
+      employeeId ||
+      (availableEmployeeIds.length === 1 ? availableEmployeeIds[0] : undefined);
+
+    if (!resolvedEmployeeId) {
+      throw new BadRequestException('請指定要下載哪位員工的薪資單');
+    }
+
+    const employeeItems = run.items.filter(
+      (item) => item.employeeId === resolvedEmployeeId,
+    );
+
+    if (employeeItems.length === 0) {
+      throw new NotFoundException('Payroll items not found for selected employee');
+    }
+
+    const employee = employeeItems[0].employee;
+    const buffer = await this.buildPayslipPdfBuffer({
+      run,
+      employee,
+      items: employeeItems,
+    });
+
+    return {
+      buffer,
+      filename: this.buildPayslipFileName(employee.employeeNo, run.payDate),
+    };
+  }
+
+  async getMyPayrollRunPdf(userId: string, id: string) {
+    const employee = await this.getEmployeeForUser(userId);
+    const run = await this.prisma.payrollRun.findFirst({
+      where: {
+        id,
+        status: {
+          in: ['approved', 'posted', 'paid'],
+        },
+        items: {
+          some: {
+            employeeId: employee.id,
+          },
+        },
+      },
+      include: {
+        entity: {
+          select: { id: true, name: true },
+        },
+        approver: {
+          select: { id: true, name: true },
+        },
+        bankAccount: {
+          select: {
+            id: true,
+            bankName: true,
+            accountNo: true,
+            currency: true,
+          },
+        },
+        items: {
+          where: {
+            employeeId: employee.id,
+          },
+          include: {
+            employee: {
+              select: {
+                id: true,
+                employeeNo: true,
+                name: true,
+                department: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { type: 'asc' },
+        },
+      },
+    });
+
+    if (!run || run.items.length === 0) {
+      throw new NotFoundException('Payroll run not found');
+    }
+
+    const buffer = await this.buildPayslipPdfBuffer({
+      run,
+      employee: run.items[0].employee,
+      items: run.items,
+    });
+
+    return {
+      buffer,
+      filename: this.buildPayslipFileName(employee.employeeNo, run.payDate),
+    };
+  }
   /**
    * 建立薪資批次
    */
@@ -779,7 +1154,25 @@ export class PayrollService {
       }
     }
 
-    return this.getPayrollRunById(payrollRun.id);
+    const createdRun = await this.getPayrollRunById(payrollRun.id);
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'payroll_runs',
+      recordId: payrollRun.id,
+      action: 'CREATE',
+      newData: {
+        entityId,
+        periodStart,
+        periodEnd,
+        payDate,
+        status: 'draft',
+        employeeCount: createdRun.employeeCount,
+        totalAmount: createdRun.totalAmount,
+      },
+    });
+
+    return createdRun;
   }
 
   async submitPayrollRun(id: string, userId: string) {
@@ -843,6 +1236,19 @@ export class PayrollService {
       });
     }
 
+    await this.auditLogService.record({
+      userId,
+      tableName: 'payroll_runs',
+      recordId: id,
+      action: 'SUBMIT',
+      oldData: {
+        status: run.status,
+      },
+      newData: {
+        status: 'pending_approval',
+      },
+    });
+
     return this.getPayrollRunById(id);
   }
 
@@ -905,6 +1311,20 @@ export class PayrollService {
         },
       });
     }
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'payroll_runs',
+      recordId: id,
+      action: 'APPROVE',
+      oldData: {
+        status: run.status,
+      },
+      newData: {
+        status: 'approved',
+        approvedAt,
+      },
+    });
 
     return this.getPayrollRunById(id);
   }
@@ -1012,6 +1432,20 @@ export class PayrollService {
       where: { id },
       data: {
         status: 'posted',
+      },
+    });
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'payroll_runs',
+      recordId: id,
+      action: 'POST',
+      oldData: {
+        status: run.status,
+      },
+      newData: {
+        status: 'posted',
+        postingAmount,
       },
     });
 
@@ -1134,6 +1568,22 @@ export class PayrollService {
         bankAccountId: bankAccount.id,
         paidBy: userId,
         paidAt,
+      },
+    });
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'payroll_runs',
+      recordId: id,
+      action: 'PAY',
+      oldData: {
+        status: run.status,
+      },
+      newData: {
+        status: 'paid',
+        bankAccountId: bankAccount.id,
+        paidAt,
+        payAmount,
       },
     });
 

@@ -1,5 +1,6 @@
 import api from "./api";
 import {
+  AuditLogEntry,
   Employee,
   Department,
   PayrollRun,
@@ -7,6 +8,17 @@ import {
   BankAccount,
   PayrollSettings,
 } from "../types";
+
+const triggerFileDownload = (blob: Blob, fallbackFilename: string) => {
+  const objectUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = fallbackFilename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(objectUrl);
+};
 
 export const payrollService = {
   // Employees
@@ -89,6 +101,11 @@ export const payrollService = {
     return response.data;
   },
 
+  getPayrollRunAuditLogs: async (id: string) => {
+    const response = await api.get<AuditLogEntry[]>(`/payroll/runs/${id}/audit-logs`);
+    return response.data;
+  },
+
   getMyPayrollRuns: async () => {
     const response = await api.get<PayrollRun[]>("/payroll/my/runs");
     return response.data;
@@ -97,6 +114,13 @@ export const payrollService = {
   getMyPayrollRun: async (id: string) => {
     const response = await api.get<PayrollRun>(`/payroll/my/runs/${id}`);
     return response.data;
+  },
+
+  downloadMyPayrollRunPdf: async (id: string) => {
+    const response = await api.get<Blob>(`/payroll/my/runs/${id}/pdf`, {
+      responseType: "blob",
+    });
+    triggerFileDownload(response.data, `payslip-${id}.pdf`);
   },
 
   getBankAccounts: async () => {

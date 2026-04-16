@@ -6,6 +6,7 @@ import { LeaveStatus, Prisma } from '@prisma/client';
 import { BalanceService } from './balance.service';
 import { UpsertLeaveTypeDto } from '../dto/upsert-leave-type.dto';
 import { AdjustLeaveBalanceDto } from '../dto/adjust-leave-balance.dto';
+import { AuditLogService } from '../../../common/audit/audit-log.service';
 
 @Injectable()
 export class LeaveService {
@@ -13,6 +14,7 @@ export class LeaveService {
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
     private readonly balanceService: BalanceService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async createLeaveRequest(userId: string, dto: CreateLeaveRequestDto) {
@@ -62,6 +64,14 @@ export class LeaveService {
         location: dto.location,
         status: LeaveStatus.SUBMITTED,
       },
+    });
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'leave_requests',
+      recordId: leaveRequest.id,
+      action: 'CREATE',
+      newData: leaveRequest,
     });
 
     // Notify Employee
@@ -116,6 +126,21 @@ export class LeaveService {
         reviewerId,
       },
       include: { employee: true, leaveType: true },
+    });
+
+    await this.auditLogService.record({
+      userId: reviewerId,
+      tableName: 'leave_requests',
+      recordId: requestId,
+      action: 'STATUS_CHANGE',
+      oldData: {
+        status: existingRequest.status,
+        reviewerId: existingRequest.reviewerId,
+      },
+      newData: {
+        status: request.status,
+        reviewerId: request.reviewerId,
+      },
     });
 
     if (request.employee?.userId) {
@@ -207,7 +232,7 @@ export class LeaveService {
   async createLeaveType(userId: string, dto: UpsertLeaveTypeDto) {
     const entityId = await this.resolveEntityId(userId, dto.entityId);
 
-    return this.prisma.leaveType.create({
+    const leaveType = await this.prisma.leaveType.create({
       data: {
         entityId,
         code: dto.code.trim().toUpperCase(),
@@ -227,6 +252,16 @@ export class LeaveService {
         carryOverLimitHours: new Prisma.Decimal(dto.carryOverLimitHours || 0),
       },
     });
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'leave_types',
+      recordId: leaveType.id,
+      action: 'CREATE',
+      newData: leaveType,
+    });
+
+    return leaveType;
   }
 
   async updateLeaveType(userId: string, id: string, dto: UpsertLeaveTypeDto) {
@@ -243,7 +278,7 @@ export class LeaveService {
       throw new BadRequestException('Leave type not found in current entity');
     }
 
-    return this.prisma.leaveType.update({
+    const leaveType = await this.prisma.leaveType.update({
       where: { id },
       data: {
         code: dto.code ? dto.code.trim().toUpperCase() : existing.code,
@@ -270,6 +305,17 @@ export class LeaveService {
             : existing.carryOverLimitHours,
       },
     });
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'leave_types',
+      recordId: id,
+      action: 'UPDATE',
+      oldData: existing,
+      newData: leaveType,
+    });
+
+    return leaveType;
   }
 
   async getAdminLeaveBalances(
@@ -282,6 +328,47 @@ export class LeaveService {
     },
   ) {
     const entityId = await this.resolveEntityId(userId, filters.entityId);
+
+    if (entityId) {
+      const [employees, leaveTypes] = await Promise.all([
+        this.prisma.employee.findMany({
+          where: {
+            entityId,
+            ...(filters.employeeId ? { id: filters.employeeId } : {}),
+            isActive: true,
+          },
+          select: {
+            id: true,
+            entityId: true,
+            hireDate: true,
+          },
+        }),
+        this.prisma.leaveType.findMany({
+          where: {
+            entityId,
+            isActive: true,
+            ...(filters.leaveTypeId ? { id: filters.leaveTypeId } : {}),
+          },
+        }),
+      ]);
+
+      for (const employee of employees) {
+        for (const leaveType of leaveTypes.filter((type) =>
+          this.balanceService.leaveTypeUsesBalance(type),
+        )) {
+          await this.balanceService.ensureBalanceForDate(
+            employee,
+            leaveType,
+            this.resolveReferenceDateForAdminBalance(
+              employee.hireDate,
+              leaveType.balanceResetPolicy,
+              filters.year,
+            ),
+          );
+        }
+      }
+    }
+
     const balances = await this.prisma.leaveBalance.findMany({
       where: {
         ...(entityId ? { entityId } : {}),
@@ -336,7 +423,7 @@ export class LeaveService {
       );
     }
 
-    return this.prisma.leaveBalance.update({
+    const updated = await this.prisma.leaveBalance.update({
       where: { id },
       data: {
         accruedHours:
@@ -353,6 +440,17 @@ export class LeaveService {
             : existing.manualAdjustmentHours,
       },
     });
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'leave_balances',
+      recordId: id,
+      action: 'ADJUST',
+      oldData: existing,
+      newData: updated,
+    });
+
+    return updated;
   }
 
   private async resolveEntityId(userId: string, requestedEntityId?: string) {
@@ -379,5 +477,29 @@ export class LeaveService {
     }
 
     return firstEntity.id;
+  }
+
+  private resolveReferenceDateForAdminBalance(
+    hireDate: Date,
+    balanceResetPolicy: string,
+    year?: number,
+  ) {
+    if (year === undefined) {
+      return new Date();
+    }
+
+    if (balanceResetPolicy === 'HIRE_ANNIVERSARY') {
+      return new Date(
+        year,
+        hireDate.getMonth(),
+        hireDate.getDate(),
+        12,
+        0,
+        0,
+        0,
+      );
+    }
+
+    return new Date(year, 11, 31, 12, 0, 0, 0);
   }
 }

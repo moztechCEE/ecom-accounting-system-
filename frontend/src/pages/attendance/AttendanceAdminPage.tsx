@@ -701,6 +701,11 @@ const AttendanceAdminPage: React.FC = () => {
                         ? `可結轉，最多 ${leaveType.carryOverLimitHours ?? 0} 小時`
                         : "不結轉"}
                     </div>
+                    {leaveType.code === "ANNUAL" ? (
+                      <div className="mt-3 rounded-2xl border border-emerald-100/60 bg-emerald-50/70 px-4 py-3 text-xs leading-6 text-emerald-700">
+                        特休目前會依到職年資自動計算年度額度，未手動設定固定天數時，系統會套用標準年資級距。
+                      </div>
+                    ) : null}
                   </div>
                   <div className="mt-5 flex justify-end">
                     <GlassButton
@@ -811,6 +816,11 @@ const AttendanceAdminPage: React.FC = () => {
         }
       >
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {(typeForm.code || editingLeaveType?.code) === "ANNUAL" ? (
+            <div className="md:col-span-2 rounded-2xl border border-emerald-100/60 bg-emerald-50/70 px-4 py-3 text-xs leading-6 text-emerald-700">
+              特休假別若使用到職週年制，系統會依年資自動計算額度。若你另外填入固定年度額度，會優先採用固定值。
+            </div>
+          ) : null}
           <GlassInput
             label="假別代碼"
             value={typeForm.code}

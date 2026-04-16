@@ -14,6 +14,21 @@ type BalancePeriod = {
   end: Date;
 };
 
+type SeniorityTier = {
+  minYears: number;
+  maxYears?: number;
+  days: number;
+};
+
+const DEFAULT_TW_ANNUAL_LEAVE_TIERS: SeniorityTier[] = [
+  { minYears: 0.5, maxYears: 1, days: 3 },
+  { minYears: 1, maxYears: 2, days: 7 },
+  { minYears: 2, maxYears: 3, days: 10 },
+  { minYears: 3, maxYears: 5, days: 14 },
+  { minYears: 5, maxYears: 10, days: 15 },
+  { minYears: 10, days: 16 },
+];
+
 @Injectable()
 export class BalanceService {
   constructor(private readonly prisma: PrismaService) {}
@@ -43,11 +58,36 @@ export class BalanceService {
       select: {
         id: true,
         entityId: true,
+        hireDate: true,
       },
     });
 
     if (!employee) {
       throw new BadRequestException('Employee record not found for this user');
+    }
+
+    const leaveTypes = await this.prisma.leaveType.findMany({
+      where: {
+        entityId: employee.entityId,
+        isActive: true,
+      },
+      orderBy: [{ code: 'asc' }],
+    });
+
+    for (const leaveType of leaveTypes) {
+      if (!this.leaveTypeUsesBalance(leaveType)) {
+        continue;
+      }
+
+      await this.ensureBalanceForDate(
+        {
+          id: employee.id,
+          entityId: employee.entityId,
+          hireDate: employee.hireDate,
+        },
+        leaveType,
+        this.resolveReferenceDateForYear(employee.hireDate, leaveType, year),
+      );
     }
 
     const balances = await this.prisma.leaveBalance.findMany({
@@ -188,16 +228,22 @@ export class BalanceService {
         year: period.year,
         periodStart: period.start,
         periodEnd: period.end,
-        accruedHours: this.calculateDefaultAccruedHours(leaveType),
+        accruedHours: this.calculateDefaultAccruedHours(
+          leaveType,
+          employee,
+          referenceDate,
+        ),
         carryOverHours,
       },
     });
   }
 
-  private leaveTypeUsesBalance(leaveType: LeaveType) {
+  leaveTypeUsesBalance(leaveType: LeaveType) {
     return (
       leaveType.balanceResetPolicy !== 'NONE' &&
-      leaveType.maxDaysPerYear !== null
+      (leaveType.maxDaysPerYear !== null ||
+        leaveType.code === 'ANNUAL' ||
+        this.getSeniorityTiers(leaveType).length > 0)
     );
   }
 
@@ -236,9 +282,120 @@ export class BalanceService {
     };
   }
 
-  private calculateDefaultAccruedHours(leaveType: LeaveType) {
+  private calculateDefaultAccruedHours(
+    leaveType: LeaveType,
+    employee: EmployeeRecord,
+    referenceDate: Date,
+  ) {
+    if (leaveType.maxDaysPerYear !== null) {
+      return leaveType.maxDaysPerYear.mul(8);
+    }
+
+    const tierDays = this.calculateTierDays(leaveType, employee, referenceDate);
+    if (tierDays !== null) {
+      return new Prisma.Decimal(tierDays).mul(8);
+    }
+
     const days = leaveType.maxDaysPerYear || new Prisma.Decimal(0);
     return days.mul(8);
+  }
+
+  private calculateTierDays(
+    leaveType: LeaveType,
+    employee: EmployeeRecord,
+    referenceDate: Date,
+  ) {
+    const tiers = this.getSeniorityTiers(leaveType);
+    if (tiers.length === 0) {
+      return null;
+    }
+
+    const serviceYears = this.calculateServiceYears(employee.hireDate, referenceDate);
+    const matchedTier = tiers.find((tier) => {
+      if (serviceYears < tier.minYears) {
+        return false;
+      }
+
+      if (tier.maxYears === undefined) {
+        return true;
+      }
+
+      return serviceYears < tier.maxYears;
+    });
+
+    if (!matchedTier) {
+      return 0;
+    }
+
+    if (matchedTier.minYears >= 10 && matchedTier.maxYears === undefined) {
+      const additionalYears = Math.max(0, Math.floor(serviceYears) - 10);
+      return Math.min(30, matchedTier.days + additionalYears);
+    }
+
+    return matchedTier.days;
+  }
+
+  private calculateServiceYears(hireDate: Date, referenceDate: Date) {
+    const diffMs = referenceDate.getTime() - hireDate.getTime();
+    if (diffMs <= 0) {
+      return 0;
+    }
+
+    return diffMs / (365.2425 * 24 * 60 * 60 * 1000);
+  }
+
+  private getSeniorityTiers(leaveType: LeaveType): SeniorityTier[] {
+    const metadata = leaveType.metadata as
+      | { seniorityTiers?: SeniorityTier[] }
+      | null
+      | undefined;
+    const configuredTiers = Array.isArray(metadata?.seniorityTiers)
+      ? metadata.seniorityTiers
+          .filter(
+            (tier) =>
+              typeof tier?.minYears === 'number' &&
+              typeof tier?.days === 'number',
+          )
+          .map((tier) => ({
+            minYears: tier.minYears,
+            maxYears: tier.maxYears,
+            days: tier.days,
+          }))
+      : [];
+
+    if (configuredTiers.length > 0) {
+      return configuredTiers.sort((a, b) => a.minYears - b.minYears);
+    }
+
+    if (leaveType.code === 'ANNUAL') {
+      return DEFAULT_TW_ANNUAL_LEAVE_TIERS;
+    }
+
+    return [];
+  }
+
+  private resolveReferenceDateForYear(
+    hireDate: Date,
+    leaveType: LeaveType,
+    requestedYear?: number,
+  ) {
+    if (requestedYear === undefined) {
+      return new Date();
+    }
+
+    if (leaveType.balanceResetPolicy === 'HIRE_ANNIVERSARY') {
+      return new Date(
+        requestedYear,
+        hireDate.getMonth(),
+        hireDate.getDate(),
+        12,
+        0,
+        0,
+        0,
+      );
+    }
+
+    return new Date(requestedYear, 11, 31, 12, 0, 0, 0);
   }
 
   private async calculateCarryOverHours(

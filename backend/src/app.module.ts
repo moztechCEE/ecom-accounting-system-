@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 // Common modules
 import { ConfigModule } from './common/config/config.module';
 import { PrismaModule } from './common/prisma/prisma.module';
+import { AuditModule } from './common/audit/audit.module';
 import { DatabaseModule } from './common/database/database.module';
 import { RedisModule } from './common/redis/redis.module'; // Added RedisModule
 import { GlobalQueueModule } from './common/queue/queue.module'; // Added QueueModule
@@ -68,6 +69,7 @@ import { AssemblyModule } from './modules/assembly/assembly.module';
   imports: [
     ConfigModule,
     PrismaModule,
+    AuditModule,
     DatabaseModule,
     RedisModule, // Added logic
     GlobalQueueModule, // Global Queue
