@@ -57,8 +57,10 @@ export interface CreateLeaveRequestDto {
 
 export interface LeaveType {
   id: string;
+  entityId?: string;
   code: string;
   name: string;
+  isActive?: boolean;
   balanceResetPolicy?: "CALENDAR_YEAR" | "HIRE_ANNIVERSARY" | "NONE";
   requiresDocument: boolean;
   maxDaysPerYear?: number;
