@@ -15,13 +15,15 @@
   - `POST /api/v1/integrations/shopline/webhook`
 - 已接入 `SalesOrder`
 - 已接入 `Customer`
+- 已可從 `order_payment` 產生 `Payment` 草稿資料
+- 已可把 `待付款 / 待撥款 / 待對帳` 狀態送進 Dashboard 對帳視角
 - Dashboard reports bucket 已預留 `Shopline 業績`
 
 ## 這一版尚未完成
 
-- `transactions / payouts` 仍是 placeholder
-- 自動對帳尚未把 Shopline 金流接進 `Payment`
-- webhook 目前已開 endpoint，但尚未接正式 topic business logic
+- 尚未接正式 `payout / settlement` API 或報表
+- 尚未把實際撥款淨額與手續費回填成 `reconciled`
+- webhook 目前已可觸發增量同步，但尚未補簽章驗證與 topic 細緻處理
 
 ## 官方條件摘要
 
@@ -116,10 +118,25 @@ curl -H "Authorization: Bearer <token>" \
   "https://<backend>/api/v1/integrations/shopline/summary?entityId=tw-entity-001"
 ```
 
+### 6. 手動同步近三天收款草稿
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  https://<backend>/api/v1/integrations/shopline/sync/transactions \
+  -d '{
+    "entityId": "tw-entity-001",
+    "since": "2026-04-14T00:00:00.000Z",
+    "until": "2026-04-17T23:59:59.000Z"
+  }'
+```
+
 ## 下一步
 
 1. 補 token 後，先跑 `token-info`
 2. 確認 handle / merchant id
-3. 接 Cloud Scheduler
-4. 接 webhook topic
-5. 把 payment / payout / reconciliation 串進既有對帳流程
+3. 驗證 `orders / customers / transactions` 三段同步
+4. 接 Cloud Scheduler
+5. 補 webhook topic 簽章驗證
+6. 把 payout / reconciliation 串進既有對帳流程

@@ -8,7 +8,10 @@ import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../../common/prisma/prisma.service';
-import { UnifiedOrder } from '../interfaces/sales-channel-adapter.interface';
+import {
+  UnifiedOrder,
+  UnifiedTransaction,
+} from '../interfaces/sales-channel-adapter.interface';
 import { ShoplineHttpAdapter } from './shopline.adapter';
 
 const SHOPLINE_CHANNEL_CODE = 'SHOPLINE';
@@ -147,14 +150,38 @@ export class ShoplineService {
     since?: Date;
     until?: Date;
   }) {
+    await this.assertEntityExists(_params.entityId);
+
+    const transactions = await this.adapter.fetchTransactions({
+      start: _params.since || new Date(0),
+      end: _params.until || new Date(),
+    });
+
+    const channel = await this.ensureSalesChannel(_params.entityId);
+    let created = 0;
+    let updated = 0;
+
+    for (const tx of transactions) {
+      try {
+        const result = await this.upsertPayment(
+          _params.entityId,
+          channel.id,
+          tx,
+        );
+        if (result === 'created') created++;
+        if (result === 'updated') updated++;
+      } catch (error: any) {
+        this.logger.error(
+          `Failed to sync SHOPLINE payment ${tx.externalId}: ${error.message}`,
+        );
+      }
+    }
+
     return {
       success: true,
-      fetched: 0,
-      created: 0,
-      updated: 0,
-      skipped: true,
-      message:
-        'SHOPLINE transactions / payout sync will be connected in the reconciliation phase.',
+      fetched: transactions.length,
+      created,
+      updated,
     };
   }
 
@@ -278,12 +305,47 @@ export class ShoplineService {
   }
 
   async handleWebhook(topic: string, payload: any) {
+    const normalizedTopic = (topic || '').trim().toLowerCase();
+    const lookbackMinutes = Number(
+      this.config.get<string>('SHOPLINE_WEBHOOK_LOOKBACK_MINUTES', '240'),
+    );
+    const until = new Date();
+    const since = new Date(until.getTime() - lookbackMinutes * 60 * 1000);
+
+    if (
+      [
+        'order/create',
+        'order/update',
+        'order/confirm',
+        'order/complete',
+        'order_payment/update',
+        'order_payment/complete',
+        'order_delivery/update',
+        'order_delivery/status_update',
+      ].includes(normalizedTopic)
+    ) {
+      await this.autoSync({
+        entityId: this.defaultEntityId,
+        since,
+        until,
+      });
+    }
+
+    if (
+      ['user/create', 'user/update', 'user/remove'].includes(normalizedTopic)
+    ) {
+      await this.syncCustomers({
+        entityId: this.defaultEntityId,
+        since,
+        until,
+      });
+    }
+
     return {
       success: true,
       accepted: true,
       topic,
-      message:
-        'SHOPLINE webhook endpoint is ready. Business handling will be connected after webhook credentials are confirmed.',
+      message: 'SHOPLINE webhook accepted and queued for incremental sync.',
       resourceId:
         payload?.resource?.id ||
         payload?.resource?._id ||
@@ -430,6 +492,94 @@ export class ShoplineService {
     return notes.join('; ');
   }
 
+  private async upsertPayment(
+    entityId: string,
+    channelId: string,
+    tx: UnifiedTransaction,
+  ): Promise<'created' | 'updated'> {
+    const salesOrder = tx.orderId
+      ? await this.prisma.salesOrder.findFirst({
+          where: {
+            entityId,
+            channelId,
+            externalOrderId: tx.orderId,
+          },
+        })
+      : null;
+
+    const existing = await this.prisma.payment.findFirst({
+      where: {
+        entityId,
+        channelId,
+        payoutBatchId: tx.externalId,
+      },
+    });
+
+    const currency = tx.currency || 'TWD';
+    const fxRate = new Decimal(await this.getFxRate(currency));
+    const zero = new Decimal(0);
+    const hasLockedProviderPayout = this.hasLockedProviderPayout(existing?.notes);
+    const paymentNotes = this.buildPaymentNotes(existing?.notes, tx);
+
+    const data = {
+      entityId,
+      channelId,
+      salesOrderId: salesOrder?.id ?? null,
+      payoutBatchId: tx.externalId,
+      channel: SHOPLINE_CHANNEL_CODE,
+      payoutDate: tx.date,
+      amountGrossOriginal: tx.amount,
+      amountGrossCurrency: currency,
+      amountGrossFxRate: fxRate,
+      amountGrossBase: tx.amount.mul(fxRate),
+      feePlatformOriginal: hasLockedProviderPayout
+        ? existing?.feePlatformOriginal || zero
+        : tx.fee,
+      feePlatformCurrency: currency,
+      feePlatformFxRate: fxRate,
+      feePlatformBase: hasLockedProviderPayout
+        ? existing?.feePlatformBase || zero
+        : tx.fee.mul(fxRate),
+      feeGatewayOriginal: hasLockedProviderPayout
+        ? existing?.feeGatewayOriginal || zero
+        : zero,
+      feeGatewayCurrency: currency,
+      feeGatewayFxRate: fxRate,
+      feeGatewayBase: hasLockedProviderPayout
+        ? existing?.feeGatewayBase || zero
+        : zero,
+      shippingFeePaidOriginal: zero,
+      shippingFeePaidCurrency: currency,
+      shippingFeePaidFxRate: fxRate,
+      shippingFeePaidBase: zero,
+      amountNetOriginal: hasLockedProviderPayout
+        ? existing?.amountNetOriginal || tx.net
+        : tx.net,
+      amountNetCurrency: currency,
+      amountNetFxRate: fxRate,
+      amountNetBase: hasLockedProviderPayout
+        ? existing?.amountNetBase || tx.net.mul(fxRate)
+        : tx.net.mul(fxRate),
+      reconciledFlag: hasLockedProviderPayout
+        ? existing?.reconciledFlag || false
+        : false,
+      bankAccountId: null,
+      status: tx.status === 'success' ? 'completed' : tx.status,
+      notes: paymentNotes,
+    };
+
+    if (existing) {
+      await this.prisma.payment.update({
+        where: { id: existing.id },
+        data,
+      });
+      return 'updated';
+    }
+
+    await this.prisma.payment.create({ data });
+    return 'created';
+  }
+
   private async ensureCustomer(
     entityId: string,
     customerData: NonNullable<UnifiedOrder['customer']>,
@@ -491,6 +641,60 @@ export class ShoplineService {
     return customerData.externalId ? { id: created.id } : 'created';
   }
 
+  private buildPaymentNotes(
+    existingNotes: string | null | undefined,
+    tx: UnifiedTransaction,
+  ) {
+    const raw = tx.raw || {};
+    const payment = raw.order_payment || {};
+    const paymentData = payment.payment_data || {};
+    const createResp = paymentData.create_payment?.resp || {};
+    const notifyResponse = paymentData.notify_response || {};
+    const parts = [
+      `feeStatus=${tx.feeStatus || 'unavailable'}`,
+      `feeSource=${tx.feeSource || 'unknown'}`,
+      `gateway=${tx.gateway || payment.payment_type || ''}`,
+      `storeHandle=${raw.sourceStoreHandle || ''}`,
+      `storeName=${raw.sourceStoreName || ''}`,
+      `paymentStatus=${payment.status || ''}`,
+      `deliveryStatus=${raw.order_delivery?.delivery_status || ''}`,
+      `invoiceStatus=${raw.invoice?.invoice_status || ''}`,
+      `invoiceNumber=${raw.invoice?.invoice_number || ''}`,
+      `providerPaymentId=${this.pickMetadata(
+        createResp.paymentOrderId,
+        notifyResponse.id,
+      )}`,
+      `providerTradeNo=${this.pickMetadata(
+        createResp.chDealId,
+        createResp.chOrderId,
+      )}`,
+      `authorization=${this.pickMetadata(
+        createResp.merchantOrderId,
+        createResp.orderId,
+      )}`,
+    ].filter((part) => !part.endsWith('='));
+
+    if (tx.orderId) {
+      parts.push(`shoplineOrderId=${tx.orderId}`);
+    }
+
+    const syncNote = `[shopline-sync] ${parts.join('; ')}`;
+    const preservedNotes = (existingNotes || '')
+      .split('\n')
+      .filter((line) => !line.startsWith('[shopline-sync]'))
+      .join('\n')
+      .trim();
+
+    return preservedNotes ? `${preservedNotes}\n${syncNote}` : syncNote;
+  }
+
+  private hasLockedProviderPayout(notes: string | null | undefined) {
+    const text = notes || '';
+    return (
+      text.includes('[provider-payout]') && text.includes('feeStatus=actual')
+    );
+  }
+
   private async assertEntityExists(entityId: string) {
     if (!entityId?.trim()) {
       throw new BadRequestException('entityId is required');
@@ -512,5 +716,13 @@ export class ShoplineService {
     if (currency === 'CNY') return 4.5;
     if (currency === 'JPY') return 0.21;
     return 1;
+  }
+
+  private pickMetadata(...values: Array<unknown>) {
+    return values
+      .map((value) =>
+        value === undefined || value === null ? '' : String(value).trim(),
+      )
+      .find((value) => value);
   }
 }

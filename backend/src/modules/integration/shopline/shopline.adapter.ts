@@ -58,12 +58,33 @@ type ShoplineOrderPayload = {
     invoice_status?: string;
   };
   order_payment?: {
+    id?: string;
     payment_type?: string;
     status?: string;
     paid_at?: string | null;
     updated_at?: string;
+    created_at?: string;
     total?: ShoplineMoney;
     payment_fee?: ShoplineMoney;
+    payment_data?: {
+      create_payment?: {
+        resp?: {
+          paymentOrderId?: string;
+          merchantOrderId?: string;
+          chOrderId?: string;
+          amount?: number | string;
+          statusCode?: string;
+          statusMsg?: string;
+          chDealId?: string;
+          chDealTime?: string;
+        };
+      };
+      notify_response?: {
+        payment_gateway?: string;
+        id?: string;
+        bizContent?: string;
+      };
+    };
   };
   order_delivery?: {
     status?: string;
@@ -218,7 +239,13 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     start: Date;
     end: Date;
   }): Promise<UnifiedTransaction[]> {
-    return [];
+    this.assertConfig();
+
+    const transactions = await Promise.all(
+      this.stores.map((store) => this.fetchTransactionsForStore(store, _params)),
+    );
+
+    return transactions.flat();
   }
 
   private async fetchOrdersForStore(
@@ -260,6 +287,19 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     }
 
     return orders;
+  }
+
+  private async fetchTransactionsForStore(
+    store: ShoplineStoreConfig,
+    params: {
+      start: Date;
+      end: Date;
+    },
+  ) {
+    const orders = await this.fetchOrdersForStore(store, params);
+    return orders
+      .map((order) => this.mapOrderToUnifiedTransaction(order))
+      .filter((value): value is UnifiedTransaction => Boolean(value));
   }
 
   private async fetchCustomersForStore(
@@ -351,6 +391,56 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     };
   }
 
+  private mapOrderToUnifiedTransaction(
+    order: UnifiedOrder,
+  ): UnifiedTransaction | null {
+    const raw = order.raw || {};
+    const payment = raw.order_payment || {};
+    const paymentType = this.pickString(
+      payment.payment_data?.notify_response?.payment_gateway,
+      payment.payment_type,
+    );
+    const fee = this.moneyToDecimal(payment.payment_fee);
+    const amount =
+      this.moneyToDecimal(payment.total).greaterThan(0)
+        ? this.moneyToDecimal(payment.total)
+        : order.totals.gross;
+    const status = this.mapTransactionStatus(raw);
+    const feeMeta = this.resolveFeeMeta(paymentType, fee);
+    const externalId = this.pickString(
+      payment.payment_data?.create_payment?.resp?.paymentOrderId,
+      payment.payment_data?.notify_response?.id,
+      payment.id,
+      `${raw.sourceStoreHandle || 'shopline'}:${order.externalId}:payment`,
+    );
+
+    const type: UnifiedTransaction['type'] =
+      status === 'failed' && order.status === 'refunded' ? 'refund' : 'sale';
+
+    return {
+      externalId,
+      orderId: order.externalId,
+      date: new Date(
+        payment.paid_at ||
+          payment.updated_at ||
+          payment.created_at ||
+          raw.updated_at ||
+          raw.created_at ||
+          order.orderDate,
+      ),
+      type,
+      amount,
+      fee,
+      net: amount.sub(fee),
+      currency: order.totals.currency || 'TWD',
+      status,
+      gateway: paymentType || undefined,
+      feeStatus: feeMeta.status,
+      feeSource: feeMeta.source,
+      raw,
+    };
+  }
+
   private mapToUnifiedOrderItem(item: ShoplineOrderItem, currency: string) {
     const quantity = this.toNumber(item.quantity, 1);
     const unitPrice = this.moneyToDecimal(item.price || item.item_price);
@@ -410,6 +500,68 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     return new Decimal(value || 0);
   }
 
+  private mapTransactionStatus(
+    raw: ShoplineOrderPayload,
+  ): 'pending' | 'success' | 'failed' {
+    const paymentStatus = (raw.order_payment?.status || '').trim().toLowerCase();
+    const orderStatus = (raw.status || '').trim().toLowerCase();
+
+    if (
+      ['completed', 'paid', 'success'].includes(paymentStatus) ||
+      (raw.order_payment?.paid_at && paymentStatus !== 'failed')
+    ) {
+      return 'success';
+    }
+
+    if (
+      ['failed', 'cancelled', 'canceled', 'refunded', 'refund'].includes(
+        paymentStatus,
+      ) ||
+      ['cancelled', 'canceled', 'removed'].includes(orderStatus)
+    ) {
+      return 'failed';
+    }
+
+    return 'pending';
+  }
+
+  private resolveFeeMeta(
+    paymentType: string,
+    fee: Decimal,
+  ): {
+    status: 'actual' | 'estimated' | 'unavailable' | 'not_applicable';
+    source: string;
+  } {
+    const normalized = paymentType.trim().toLowerCase();
+
+    if (
+      [
+        'cash_on_delivery',
+        'cod',
+        'cash',
+        'bank_transfer',
+        'atm',
+      ].includes(normalized)
+    ) {
+      return {
+        status: 'not_applicable',
+        source: 'shopline.payment.no_fee',
+      };
+    }
+
+    if (fee.greaterThanOrEqualTo(0)) {
+      return {
+        status: 'actual',
+        source: 'shopline.order_payment.fee',
+      };
+    }
+
+    return {
+      status: 'unavailable',
+      source: 'shopline.payment.pending',
+    };
+  }
+
   private toNumber(value: unknown, fallback = 0) {
     const num = Number(value);
     return Number.isFinite(num) && num > 0 ? num : fallback;
@@ -423,6 +575,16 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
       item.title_translations?.en ||
       item.fields_translations?.en?.filter(Boolean).join(' / ');
     return zh || en || item.sku || 'SHOPLINE Item';
+  }
+
+  private pickString(...values: Array<unknown>) {
+    return (
+      values
+        .map((value) =>
+          value === undefined || value === null ? '' : String(value).trim(),
+        )
+        .find((value) => value) || ''
+    );
   }
 
   private async request<T>(path: string, store: ShoplineStoreConfig) {
