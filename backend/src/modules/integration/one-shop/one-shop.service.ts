@@ -35,7 +35,10 @@ export class OneShopService implements OnModuleInit {
 
   getConnectionInfo() {
     return {
-      storeName: this.config.get<string>('ONESHOP_STORE_NAME', '') || null,
+      stores: this.adapter.getStores().map((store) => ({
+        account: store.account || null,
+        storeName: store.storeName || null,
+      })),
       apiBaseUrl:
         this.config.get<string>('ONESHOP_API_BASE_URL', '') ||
         'https://api.1shop.tw/v1',
@@ -196,7 +199,10 @@ export class OneShopService implements OnModuleInit {
         type: 'group_buy',
         defaultCurrency: 'TWD',
         configJson: {
-          storeName: this.config.get<string>('ONESHOP_STORE_NAME', '') || null,
+          stores: this.adapter.getStores().map((store) => ({
+            account: store.account || null,
+            storeName: store.storeName || null,
+          })),
           apiBaseUrl:
             this.config.get<string>('ONESHOP_API_BASE_URL', '') ||
             'https://api.1shop.tw/v1',
@@ -279,6 +285,30 @@ export class OneShopService implements OnModuleInit {
       `orderId=${order.externalId}`,
       `status=${order.status}`,
     ];
+    const sourceStoreAccount =
+      typeof order.raw?.sourceStoreAccount === 'string'
+        ? order.raw.sourceStoreAccount.trim()
+        : '';
+    const sourceStoreName =
+      typeof order.raw?.sourceStoreName === 'string'
+        ? order.raw.sourceStoreName.trim()
+        : '';
+    const originalOrderNumber =
+      typeof order.raw?.originalOrderNumber === 'string'
+        ? order.raw.originalOrderNumber.trim()
+        : '';
+
+    if (sourceStoreAccount) {
+      notes.push(`storeAccount=${sourceStoreAccount}`);
+    }
+
+    if (sourceStoreName) {
+      notes.push(`storeName=${sourceStoreName}`);
+    }
+
+    if (originalOrderNumber) {
+      notes.push(`originalOrderNumber=${originalOrderNumber}`);
+    }
 
     const rawNote =
       typeof order.raw?.note === 'string' ? order.raw.note.trim() : '';

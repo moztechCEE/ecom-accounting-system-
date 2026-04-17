@@ -7,6 +7,13 @@ import {
   UnifiedTransaction,
 } from '../interfaces/sales-channel-adapter.interface';
 
+export type OneShopStoreConfig = {
+  account?: string;
+  storeName?: string;
+  appId: string;
+  secret: string;
+};
+
 type OneShopListOrder = {
   order_number: string;
   create_date: string;
@@ -40,41 +47,45 @@ export class OneShopHttpAdapter implements ISalesChannelAdapter {
   readonly code = '1SHOP';
   private readonly logger = new Logger(OneShopHttpAdapter.name);
   private readonly baseUrl: string;
-  private readonly appId: string;
-  private readonly secret: string;
   private readonly minRequestIntervalMs: number;
   private lastRequestAt = 0;
+  private readonly stores: OneShopStoreConfig[];
 
   constructor(private readonly configService: ConfigService) {
     this.baseUrl =
       this.configService.get<string>('ONESHOP_API_BASE_URL', '') ||
       'https://api.1shop.tw/v1';
-    this.appId = this.configService.get<string>('ONESHOP_APP_ID', '') || '';
-    this.secret = this.configService.get<string>('ONESHOP_SECRET', '') || '';
     this.minRequestIntervalMs = Number(
       this.configService.get<string>('ONESHOP_MIN_REQUEST_INTERVAL_MS', '1100'),
     );
+    this.stores = this.loadStores();
   }
 
   async testConnection(): Promise<{ success: boolean; message?: string }> {
-    if (!this.appId || !this.secret) {
+    if (!this.stores.length) {
       return {
         success: false,
-        message: 'ONESHOP_APP_ID and ONESHOP_SECRET are required',
+        message: 'ONESHOP stores configuration is required',
       };
     }
 
     try {
-      await this.fetchOrderPage({
-        page: 1,
-        start: undefined,
-        end: undefined,
-      });
+      for (const store of this.stores) {
+        await this.fetchOrderPage(store, {
+          page: 1,
+          start: undefined,
+          end: undefined,
+        });
+      }
       return { success: true, message: 'Connection successful' };
     } catch (error: any) {
       this.logger.error(`1Shop connection failed: ${error.message}`);
       return { success: false, message: error.message };
     }
+  }
+
+  getStores() {
+    return this.stores;
   }
 
   async fetchOrders(params: {
@@ -83,12 +94,28 @@ export class OneShopHttpAdapter implements ISalesChannelAdapter {
   }): Promise<UnifiedOrder[]> {
     this.assertConfig();
 
+    const orders = await Promise.all(
+      this.stores.map((store) => this.fetchOrdersForStore(store, params)),
+    );
+
+    return orders.flat();
+  }
+
+  async fetchOrdersForStore(
+    store: OneShopStoreConfig,
+    params: {
+      start: Date;
+      end: Date;
+    },
+  ): Promise<UnifiedOrder[]> {
+    this.assertStoreConfig(store);
+
     const allOrders: UnifiedOrder[] = [];
     let page = 1;
     let totalPages = 1;
 
     do {
-      const body = await this.fetchOrderPage({
+      const body = await this.fetchOrderPage(store, {
         page,
         start: params.start,
         end: params.end,
@@ -96,7 +123,7 @@ export class OneShopHttpAdapter implements ISalesChannelAdapter {
       const orders = this.extractOrders(body);
 
       for (const order of orders) {
-        allOrders.push(this.mapToUnifiedOrder(order));
+        allOrders.push(this.mapToUnifiedOrder(store, order));
       }
 
       totalPages = Number(body.data?.page?.total_page || page);
@@ -110,14 +137,17 @@ export class OneShopHttpAdapter implements ISalesChannelAdapter {
     return [];
   }
 
-  private async fetchOrderPage(params: {
+  private async fetchOrderPage(
+    store: OneShopStoreConfig,
+    params: {
     page: number;
     start?: Date;
     end?: Date;
-  }) {
+    },
+  ) {
     const search = new URLSearchParams({
-      appid: this.appId,
-      secret: this.secret,
+      appid: store.appId,
+      secret: store.secret,
       progress_status: 'all',
       payment_status: 'all',
       logistic_status: 'all',
@@ -143,16 +173,21 @@ export class OneShopHttpAdapter implements ISalesChannelAdapter {
     return Array.isArray(payload) ? payload : [payload];
   }
 
-  private mapToUnifiedOrder(raw: OneShopListOrder): UnifiedOrder {
+  private mapToUnifiedOrder(
+    store: OneShopStoreConfig,
+    raw: OneShopListOrder,
+  ): UnifiedOrder {
     const gross = new Decimal(raw.total_price || 0);
     const status = this.mapStatus(raw.progress_status, raw.payment_status);
+    const externalOrderId = String(raw.order_number);
+    const externalStoreId = store.account || store.appId;
 
     return {
-      externalId: String(raw.order_number),
+      externalId: `${externalStoreId}:${externalOrderId}`,
       orderDate: this.parseOneShopDate(raw.create_date),
       status,
       customer: {
-        externalId: String(raw.order_number),
+        externalId: `${externalStoreId}:${externalOrderId}`,
         email: raw.email || undefined,
         name: raw.name || undefined,
         phone: raw.phone || undefined,
@@ -166,7 +201,13 @@ export class OneShopHttpAdapter implements ISalesChannelAdapter {
         shipping: new Decimal(0),
         net: gross,
       },
-      raw,
+      raw: {
+        ...raw,
+        sourceStoreAccount: store.account || null,
+        sourceStoreName: store.storeName || null,
+        sourceAppId: store.appId,
+        originalOrderNumber: externalOrderId,
+      },
     };
   }
 
@@ -259,10 +300,62 @@ export class OneShopHttpAdapter implements ISalesChannelAdapter {
       throw new Error('1Shop configuration missing: ONESHOP_API_BASE_URL');
     }
 
-    if (!this.appId || !this.secret) {
-      throw new Error(
-        '1Shop configuration missing: ONESHOP_APP_ID and ONESHOP_SECRET are required',
-      );
+    if (!this.stores.length) {
+      throw new Error('1Shop configuration missing: ONESHOP stores are required');
     }
+  }
+
+  private assertStoreConfig(store: OneShopStoreConfig) {
+    if (!store.appId || !store.secret) {
+      throw new Error('1Shop store configuration missing: appId and secret are required');
+    }
+  }
+
+  private loadStores(): OneShopStoreConfig[] {
+    const storesJson =
+      this.configService.get<string>('ONESHOP_STORES_JSON', '') || '';
+
+    if (storesJson.trim()) {
+      try {
+        const parsed = JSON.parse(storesJson);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map((store) => ({
+              account:
+                typeof store?.account === 'string' ? store.account.trim() : '',
+              storeName:
+                typeof store?.storeName === 'string'
+                  ? store.storeName.trim()
+                  : '',
+              appId: typeof store?.appId === 'string' ? store.appId.trim() : '',
+              secret:
+                typeof store?.secret === 'string' ? store.secret.trim() : '',
+            }))
+            .filter((store) => store.appId && store.secret);
+        }
+      } catch (error: any) {
+        this.logger.error(`Invalid ONESHOP_STORES_JSON config: ${error.message}`);
+      }
+    }
+
+    const appId = this.configService.get<string>('ONESHOP_APP_ID', '') || '';
+    const secret = this.configService.get<string>('ONESHOP_SECRET', '') || '';
+    const account =
+      this.configService.get<string>('ONESHOP_ACCOUNT', '') || '';
+    const storeName =
+      this.configService.get<string>('ONESHOP_STORE_NAME', '') || '';
+
+    if (appId && secret) {
+      return [
+        {
+          account,
+          storeName,
+          appId,
+          secret,
+        },
+      ];
+    }
+
+    return [];
   }
 }

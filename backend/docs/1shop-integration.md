@@ -57,12 +57,33 @@
 
 ## 後端環境變數
 
-請至少設定：
+如有多個 1Shop 帳號，建議使用 `ONESHOP_STORES_JSON` 一次配置：
+
+```env
+ONESHOP_STORES_JSON='[
+  {
+    "account": "0978072278",
+    "storeName": "萬魔未來工學院",
+    "appId": "...",
+    "secret": "..."
+  },
+  {
+    "account": "0938970369",
+    "storeName": "萬魔未來工學院",
+    "appId": "...",
+    "secret": "..."
+  }
+]'
+```
+
+若只有單一商店，也可沿用舊格式。至少設定：
 
 ```env
 ONESHOP_API_BASE_URL="https://api.1shop.tw/v1"
+ONESHOP_STORES_JSON=""
 ONESHOP_APP_ID="..."
 ONESHOP_SECRET="..."
+ONESHOP_ACCOUNT=""
 ONESHOP_DEFAULT_ENTITY_ID="tw-entity-001"
 ONESHOP_STORE_NAME="..."
 ONESHOP_SYNC_ENABLED="false"
