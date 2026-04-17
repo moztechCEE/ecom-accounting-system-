@@ -991,6 +991,237 @@ export class ReportsService {
     }
   }
 
+  async getMonthlyChannelReconciliation(
+    entityId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ) {
+    const stores = this.getOneShopStores();
+    const buckets = this.buildDashboardBuckets(stores);
+    const bucketMap = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+    const orderDateFilter = this.buildDateFilter(startDate, endDate);
+    const paymentDateFilter = this.buildDateFilter(startDate, endDate);
+    const payoutDateFilter = this.buildDateFilter(startDate, endDate);
+    const payoutLineWhere = {
+      provider: 'ecpay',
+      batch: {
+        entityId,
+      },
+      ...(payoutDateFilter
+        ? {
+            OR: [
+              { payoutDate: payoutDateFilter },
+              { statementDate: payoutDateFilter },
+            ],
+          }
+        : {}),
+    };
+
+    const [orders, payments, payoutLines] = await Promise.all([
+      this.prisma.salesOrder.findMany({
+        where: {
+          entityId,
+          ...(orderDateFilter ? { orderDate: orderDateFilter } : {}),
+        },
+        select: {
+          id: true,
+          externalOrderId: true,
+          orderDate: true,
+          notes: true,
+          totalGrossOriginal: true,
+          channel: {
+            select: {
+              code: true,
+            },
+          },
+        },
+      }),
+      this.prisma.payment.findMany({
+        where: {
+          entityId,
+          ...(paymentDateFilter ? { payoutDate: paymentDateFilter } : {}),
+        },
+        select: {
+          id: true,
+          channel: true,
+          payoutDate: true,
+          amountGrossOriginal: true,
+          amountNetOriginal: true,
+          feePlatformOriginal: true,
+          feeGatewayOriginal: true,
+          reconciledFlag: true,
+          notes: true,
+          salesOrder: {
+            select: {
+              externalOrderId: true,
+              orderDate: true,
+              notes: true,
+              channel: {
+                select: {
+                  code: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.payoutImportLine.findMany({
+        where: payoutLineWhere,
+        select: {
+          status: true,
+          externalOrderId: true,
+          payoutDate: true,
+          statementDate: true,
+          batch: {
+            select: {
+              importedAt: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const rows = new Map<
+      string,
+      {
+        month: string;
+        bucketKey: string;
+        bucketLabel: string;
+        account: string | null;
+        salesGross: number;
+        orderCount: number;
+        payoutGross: number;
+        payoutNet: number;
+        feeTotal: number;
+        paymentCount: number;
+        reconciledCount: number;
+        pendingPayoutCount: number;
+        ecpayBatchLineCount: number;
+        ecpayMatchedLineCount: number;
+        ecpayUnmatchedLineCount: number;
+      }
+    >();
+    const orderBucketByExternalId = new Map<string, string>();
+
+    const ensureRow = (month: string, bucketKey: string) => {
+      const key = `${month}::${bucketKey}`;
+      const existing = rows.get(key);
+      if (existing) {
+        return existing;
+      }
+
+      const bucket = bucketMap.get(bucketKey) || bucketMap.get('other');
+      const created = {
+        month,
+        bucketKey,
+        bucketLabel: bucket?.label || '其他業績',
+        account:
+          bucketKey.startsWith('oneshop:') ? bucketKey.replace('oneshop:', '') : null,
+        salesGross: 0,
+        orderCount: 0,
+        payoutGross: 0,
+        payoutNet: 0,
+        feeTotal: 0,
+        paymentCount: 0,
+        reconciledCount: 0,
+        pendingPayoutCount: 0,
+        ecpayBatchLineCount: 0,
+        ecpayMatchedLineCount: 0,
+        ecpayUnmatchedLineCount: 0,
+      };
+      rows.set(key, created);
+      return created;
+    };
+
+    for (const order of orders) {
+      const bucketKey = this.resolvePerformanceBucket({
+        channelCode: order.channel?.code,
+        notes: order.notes,
+        stores,
+      });
+      const month = this.toMonthKey(order.orderDate);
+      const row = ensureRow(month, bucketKey);
+      row.salesGross += Number(order.totalGrossOriginal || 0);
+      row.orderCount += 1;
+
+      if (order.externalOrderId) {
+        orderBucketByExternalId.set(order.externalOrderId, bucketKey);
+      }
+    }
+
+    for (const payment of payments) {
+      const metadata = {
+        ...this.extractMetadata(payment.notes),
+        ...this.extractMetadata(payment.salesOrder?.notes),
+      };
+      const bucketKey = this.resolvePerformanceBucket({
+        channelCode: payment.salesOrder?.channel?.code || payment.channel,
+        notes: payment.salesOrder?.notes || payment.notes,
+        fallbackNotes: payment.notes,
+        stores,
+      });
+      const month = this.toMonthKey(
+        payment.payoutDate || payment.salesOrder?.orderDate || new Date(),
+      );
+      const row = ensureRow(month, bucketKey);
+      const feeTotal =
+        Number(payment.feePlatformOriginal || 0) +
+        Number(payment.feeGatewayOriginal || 0);
+
+      row.payoutGross += Number(payment.amountGrossOriginal || 0);
+      row.payoutNet += Number(payment.amountNetOriginal || 0);
+      row.feeTotal += feeTotal;
+      row.paymentCount += 1;
+      if (payment.reconciledFlag) {
+        row.reconciledCount += 1;
+      } else {
+        row.pendingPayoutCount += 1;
+      }
+    }
+
+    for (const line of payoutLines) {
+      const bucketKey =
+        (line.externalOrderId &&
+          orderBucketByExternalId.get(line.externalOrderId)) ||
+        'other';
+      const month = this.toMonthKey(
+        line.payoutDate || line.statementDate || line.batch.importedAt,
+      );
+      const row = ensureRow(month, bucketKey);
+      row.ecpayBatchLineCount += 1;
+      if (line.status === 'matched') {
+        row.ecpayMatchedLineCount += 1;
+      }
+      if (line.status === 'unmatched') {
+        row.ecpayUnmatchedLineCount += 1;
+      }
+    }
+
+    const items = Array.from(rows.values())
+      .map((row) => ({
+        ...row,
+        salesVsPayoutGap: Number((row.salesGross - row.payoutGross).toFixed(2)),
+        payoutVsNetGap: Number(
+          (row.payoutGross - row.payoutNet - row.feeTotal).toFixed(2),
+        ),
+      }))
+      .sort((left, right) => {
+        if (left.month === right.month) {
+          return left.bucketLabel.localeCompare(right.bucketLabel, 'zh-Hant');
+        }
+        return right.month.localeCompare(left.month);
+      });
+
+    return {
+      entityId,
+      range: {
+        startDate: startDate?.toISOString() || null,
+        endDate: endDate?.toISOString() || null,
+      },
+      items,
+    };
+  }
+
   /**
    * 損益表 (Income Statement / P&L)
    * 已在 AccountingModule 實作，這裡提供增強版
@@ -1244,5 +1475,10 @@ export class ReportsService {
     }
 
     return meta;
+  }
+
+  private toMonthKey(date: Date | string) {
+    const value = date instanceof Date ? date : new Date(date);
+    return value.toISOString().slice(0, 7);
   }
 }

@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 /**
@@ -129,25 +134,168 @@ export class AccountingService {
    * @param approvedBy - 審核者 ID
    */
   async postJournalEntry(journalEntryId: string, approvedBy: string) {
-    // TODO: 實作分錄過帳
-    // 1. 檢查分錄是否已審核
-    // 2. 更新 approvedBy 和 approvedAt
-    // 3. 記錄 audit log
-    this.logger.log(`Posting journal entry ${journalEntryId}...`);
-    throw new Error('Not implemented: postJournalEntry');
+    const journal = await this.prisma.journalEntry.findUnique({
+      where: { id: journalEntryId },
+      include: {
+        journalLines: true,
+      },
+    });
+
+    if (!journal) {
+      throw new NotFoundException(`Journal entry ${journalEntryId} not found`);
+    }
+
+    const period = journal.periodId
+      ? await this.prisma.period.findUnique({
+          where: { id: journal.periodId },
+        })
+      : null;
+
+    if (period && period.status !== 'open') {
+      throw new BadRequestException(
+        `Cannot approve journal entry in ${period.status} period`,
+      );
+    }
+
+    const totalDebit = journal.journalLines.reduce(
+      (sum, line) => sum + Number(line.debit || 0),
+      0,
+    );
+    const totalCredit = journal.journalLines.reduce(
+      (sum, line) => sum + Number(line.credit || 0),
+      0,
+    );
+
+    if (Math.abs(totalDebit - totalCredit) > 0.01) {
+      throw new BadRequestException('Journal entry is not balanced');
+    }
+
+    if (journal.approvedAt) {
+      return journal;
+    }
+
+    const approvedJournal = await this.prisma.journalEntry.update({
+      where: { id: journalEntryId },
+      data: {
+        approvedBy,
+        approvedAt: new Date(),
+      },
+      include: {
+        journalLines: {
+          include: {
+            account: true,
+          },
+        },
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: approvedBy,
+        tableName: 'journal_entries',
+        recordId: journalEntryId,
+        action: 'APPROVE',
+        oldData: {
+          approvedAt: journal.approvedAt,
+          approvedBy: journal.approvedBy,
+        },
+        newData: {
+          approvedAt: approvedJournal.approvedAt?.toISOString() || null,
+          approvedBy: approvedJournal.approvedBy,
+        },
+      },
+    });
+
+    return approvedJournal;
   }
 
   /**
    * 關閉會計期間
    * @param periodId - 期間 ID
    */
-  async closePeriod(periodId: string) {
-    // TODO: 實作期間關閉
-    // 1. 檢查期間內所有分錄是否已審核
-    // 2. 產生結轉分錄（損益類科目轉本期損益）
-    // 3. 更新期間狀態為 closed
-    this.logger.log(`Closing period ${periodId}...`);
-    throw new Error('Not implemented: closePeriod');
+  async closePeriod(periodId: string, userId: string) {
+    const period = await this.prisma.period.findUnique({
+      where: { id: periodId },
+    });
+
+    if (!period) {
+      throw new NotFoundException(`Period ${periodId} not found`);
+    }
+
+    if (period.status === 'locked') {
+      throw new BadRequestException('Locked period cannot be closed again');
+    }
+
+    if (period.status === 'closed') {
+      return period;
+    }
+
+    const unapprovedCount = await this.prisma.journalEntry.count({
+      where: {
+        periodId,
+        approvedAt: null,
+      },
+    });
+
+    if (unapprovedCount > 0) {
+      throw new BadRequestException(
+        `此期間仍有 ${unapprovedCount} 筆分錄尚未審核，無法關帳。`,
+      );
+    }
+
+    const closedPeriod = await this.prisma.period.update({
+      where: { id: periodId },
+      data: { status: 'closed' },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        tableName: 'periods',
+        recordId: periodId,
+        action: 'CLOSE',
+        oldData: { status: period.status },
+        newData: { status: closedPeriod.status },
+      },
+    });
+
+    return closedPeriod;
+  }
+
+  async lockPeriod(periodId: string, userId: string) {
+    const period = await this.prisma.period.findUnique({
+      where: { id: periodId },
+    });
+
+    if (!period) {
+      throw new NotFoundException(`Period ${periodId} not found`);
+    }
+
+    if (period.status === 'locked') {
+      return period;
+    }
+
+    if (period.status !== 'closed') {
+      throw new BadRequestException('Only closed periods can be locked');
+    }
+
+    const lockedPeriod = await this.prisma.period.update({
+      where: { id: periodId },
+      data: { status: 'locked' },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        tableName: 'periods',
+        recordId: periodId,
+        action: 'LOCK',
+        oldData: { status: period.status },
+        newData: { status: lockedPeriod.status },
+      },
+    });
+
+    return lockedPeriod;
   }
 
   /**
@@ -192,12 +340,80 @@ export class AccountingService {
     endDate: Date,
     accountId?: string,
   ) {
-    // TODO: 實作總分類帳查詢
-    // 1. 查詢期間內所有已審核的分錄明細
-    // 2. 按科目分組
-    // 3. 計算累計餘額
     this.logger.log('Fetching general ledger...');
-    throw new Error('Not implemented: getGeneralLedger');
+
+    const lines = await this.prisma.journalLine.findMany({
+      where: {
+        journalEntry: {
+          entityId,
+          date: {
+            gte: startDate,
+            lte: endDate,
+          },
+          approvedAt: {
+            not: null,
+          },
+        },
+        ...(accountId ? { accountId } : {}),
+      },
+      include: {
+        account: true,
+        journalEntry: true,
+      },
+      orderBy: [
+        { account: { code: 'asc' } },
+        { journalEntry: { date: 'asc' } },
+      ],
+    });
+
+    const balances = new Map<string, number>();
+    const entries = lines.map((line) => {
+      const debit = Number(line.debit || 0);
+      const credit = Number(line.credit || 0);
+      const delta =
+        line.account.type === 'asset' || line.account.type === 'expense'
+          ? debit - credit
+          : credit - debit;
+      const runningBalance = (balances.get(line.accountId) || 0) + delta;
+      balances.set(line.accountId, runningBalance);
+
+      return {
+        id: line.id,
+        journalEntryId: line.journalEntryId,
+        date: line.journalEntry.date,
+        description: line.journalEntry.description,
+        sourceModule: line.journalEntry.sourceModule,
+        sourceId: line.journalEntry.sourceId,
+        accountId: line.accountId,
+        accountCode: line.account.code,
+        accountName: line.account.name,
+        accountType: line.account.type,
+        debit,
+        credit,
+        currency: line.currency,
+        amountBase: Number(line.amountBase || 0),
+        memo: line.memo,
+        runningBalance,
+      };
+    });
+
+    const summary = entries.reduce(
+      (acc, entry) => ({
+        totalDebit: acc.totalDebit + entry.debit,
+        totalCredit: acc.totalCredit + entry.credit,
+      }),
+      { totalDebit: 0, totalCredit: 0 },
+    );
+
+    return {
+      entityId,
+      startDate,
+      endDate,
+      accountId: accountId || null,
+      totalDebit: summary.totalDebit,
+      totalCredit: summary.totalCredit,
+      entries,
+    };
   }
 
   /**
@@ -206,11 +422,82 @@ export class AccountingService {
    * @param asOfDate - 截止日期
    */
   async getTrialBalance(entityId: string, asOfDate: Date) {
-    // TODO: 實作試算表
-    // 1. 查詢截止日前所有已審核的分錄明細
-    // 2. 按科目加總借貸金額
-    // 3. 計算餘額並驗證借貸平衡
     this.logger.log(`Fetching trial balance as of ${asOfDate}...`);
-    throw new Error('Not implemented: getTrialBalance');
+
+    const lines = await this.prisma.journalLine.findMany({
+      where: {
+        journalEntry: {
+          entityId,
+          date: {
+            lte: asOfDate,
+          },
+          approvedAt: {
+            not: null,
+          },
+        },
+      },
+      include: {
+        account: true,
+      },
+      orderBy: {
+        account: {
+          code: 'asc',
+        },
+      },
+    });
+
+    const accountMap = new Map<
+      string,
+      {
+        accountId: string;
+        code: string;
+        name: string;
+        type: string;
+        debit: number;
+        credit: number;
+        balance: number;
+      }
+    >();
+
+    for (const line of lines) {
+      const current = accountMap.get(line.accountId) || {
+        accountId: line.accountId,
+        code: line.account.code,
+        name: line.account.name,
+        type: line.account.type,
+        debit: 0,
+        credit: 0,
+        balance: 0,
+      };
+      const debit = Number(line.debit || 0);
+      const credit = Number(line.credit || 0);
+      current.debit += debit;
+      current.credit += credit;
+      current.balance =
+        current.type === 'asset' || current.type === 'expense'
+          ? current.debit - current.credit
+          : current.credit - current.debit;
+      accountMap.set(line.accountId, current);
+    }
+
+    const items = Array.from(accountMap.values()).sort((a, b) =>
+      a.code.localeCompare(b.code),
+    );
+    const totals = items.reduce(
+      (acc, item) => ({
+        debit: acc.debit + item.debit,
+        credit: acc.credit + item.credit,
+      }),
+      { debit: 0, credit: 0 },
+    );
+
+    return {
+      entityId,
+      asOfDate,
+      items,
+      totalDebit: totals.debit,
+      totalCredit: totals.credit,
+      balanced: Math.abs(totals.debit - totals.credit) < 0.01,
+    };
   }
 }

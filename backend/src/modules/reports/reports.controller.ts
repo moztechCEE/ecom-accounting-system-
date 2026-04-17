@@ -261,6 +261,24 @@ export class ReportsController {
     );
   }
 
+  @Get('monthly-channel-reconciliation')
+  @ApiOperation({ summary: '按月份查看平台營收與綠界對帳矩陣' })
+  @ApiResponse({ status: 200, description: '成功取得月度對帳矩陣' })
+  @ApiQuery({ name: 'entityId', required: true })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  async getMonthlyChannelReconciliation(
+    @Query('entityId') entityId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getMonthlyChannelReconciliation(
+      entityId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
   @Get(':id/export')
   @ApiOperation({ summary: '匯出報表 (Excel/PDF)' })
   @ApiResponse({ status: 200, description: '成功匯出報表' })

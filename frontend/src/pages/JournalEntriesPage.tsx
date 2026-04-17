@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Card, Input, Select, Space, Table, Tag, Typography, message } from 'antd'
-import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
+import { Button, Card, Input, Select, Space, Table, Tag, Typography, message } from 'antd'
+import { CheckCircleOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
   accountingService,
@@ -16,6 +16,7 @@ const JournalEntriesPage: React.FC = () => {
   const [periods, setPeriods] = useState<AccountingPeriod[]>([])
   const [periodId, setPeriodId] = useState<string | undefined>()
   const [searchText, setSearchText] = useState('')
+  const [approvingId, setApprovingId] = useState<string | null>(null)
 
   const loadData = async (nextPeriodId?: string) => {
     setLoading(true)
@@ -36,6 +37,19 @@ const JournalEntriesPage: React.FC = () => {
   useEffect(() => {
     loadData(periodId)
   }, [periodId])
+
+  const handleApprove = async (journalEntryId: string) => {
+    setApprovingId(journalEntryId)
+    try {
+      await accountingService.approveJournal(journalEntryId)
+      message.success('分錄已審核')
+      await loadData(periodId)
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '分錄審核失敗')
+    } finally {
+      setApprovingId(null)
+    }
+  }
 
   const filtered = useMemo(() => {
     const keyword = searchText.trim().toLowerCase()
@@ -170,6 +184,24 @@ const JournalEntriesPage: React.FC = () => {
                 )
                 return <span className="font-mono">{total.toLocaleString()}</span>
               },
+            },
+            {
+              title: '操作',
+              key: 'actions',
+              width: 130,
+              render: (_, record: JournalEntry) =>
+                record.approvedAt ? (
+                  <Tag color="green">已完成</Tag>
+                ) : (
+                  <Button
+                    type="link"
+                    icon={<CheckCircleOutlined />}
+                    loading={approvingId === record.id}
+                    onClick={() => handleApprove(record.id)}
+                  >
+                    審核分錄
+                  </Button>
+                ),
             },
           ]}
           pagination={{ pageSize: 12, showSizeChanger: true }}

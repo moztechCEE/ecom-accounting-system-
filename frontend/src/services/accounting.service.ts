@@ -33,6 +33,21 @@ export const accountingService = {
     return response.data
   },
 
+  async approveJournal(journalEntryId: string): Promise<JournalEntry> {
+    const response = await api.post<JournalEntry>(`/accounting/journals/${journalEntryId}/approve`)
+    return response.data
+  },
+
+  async closePeriod(periodId: string): Promise<AccountingPeriod> {
+    const response = await api.post<AccountingPeriod>(`/accounting/periods/${periodId}/close`)
+    return response.data
+  },
+
+  async lockPeriod(periodId: string): Promise<AccountingPeriod> {
+    const response = await api.post<AccountingPeriod>(`/accounting/periods/${periodId}/lock`)
+    return response.data
+  },
+
   async getIncomeStatement(startDate: string, endDate: string, entityId?: string): Promise<IncomeStatement> {
     const effectiveEntityId = entityId?.trim() || DEFAULT_ENTITY_ID
     const response = await api.get<IncomeStatement>('/accounting/reports/income-statement', {
@@ -45,6 +60,27 @@ export const accountingService = {
     const effectiveEntityId = entityId?.trim() || DEFAULT_ENTITY_ID
     const response = await api.get<BalanceSheet>('/accounting/reports/balance-sheet', {
       params: { entityId: effectiveEntityId, asOfDate },
+    })
+    return response.data
+  },
+
+  async getTrialBalance(asOfDate: string, entityId?: string): Promise<TrialBalance> {
+    const effectiveEntityId = entityId?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.get<TrialBalance>('/accounting/reports/trial-balance', {
+      params: { entityId: effectiveEntityId, asOfDate },
+    })
+    return response.data
+  },
+
+  async getGeneralLedger(
+    startDate: string,
+    endDate: string,
+    entityId?: string,
+    accountId?: string,
+  ): Promise<GeneralLedger> {
+    const effectiveEntityId = entityId?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.get<GeneralLedger>('/accounting/reports/general-ledger', {
+      params: { entityId: effectiveEntityId, startDate, endDate, accountId },
     })
     return response.data
   },
@@ -90,6 +126,7 @@ export interface JournalEntry {
   sourceModule?: string | null
   sourceId?: string | null
   periodId?: string | null
+  approvedBy?: string | null
   approvedAt?: string | null
   journalLines: JournalLine[]
 }
@@ -121,4 +158,52 @@ export interface BalanceSheet {
   totalLiabilities: number
   totalEquity: number
   calculatedRetainedEarnings: number
+}
+
+export interface TrialBalanceItem {
+  accountId: string
+  code: string
+  name: string
+  type: string
+  debit: number
+  credit: number
+  balance: number
+}
+
+export interface TrialBalance {
+  entityId: string
+  asOfDate: string
+  items: TrialBalanceItem[]
+  totalDebit: number
+  totalCredit: number
+  balanced: boolean
+}
+
+export interface GeneralLedgerEntry {
+  id: string
+  journalEntryId: string
+  date: string
+  description: string
+  sourceModule?: string | null
+  sourceId?: string | null
+  accountId: string
+  accountCode: string
+  accountName: string
+  accountType: string
+  debit: number
+  credit: number
+  currency: string
+  amountBase: number
+  memo?: string | null
+  runningBalance: number
+}
+
+export interface GeneralLedger {
+  entityId: string
+  startDate: string
+  endDate: string
+  accountId: string | null
+  totalDebit: number
+  totalCredit: number
+  entries: GeneralLedgerEntry[]
 }

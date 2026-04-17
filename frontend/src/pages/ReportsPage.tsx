@@ -46,8 +46,18 @@ import {
 } from 'recharts'
 import { motion } from 'framer-motion'
 import dayjs from 'dayjs'
-import { accountingService, IncomeStatement, BalanceSheet, ReportItem } from '../services/accounting.service'
-import { dashboardService, DashboardOperationsHub } from '../services/dashboard.service'
+import {
+  accountingService,
+  IncomeStatement,
+  BalanceSheet,
+  GeneralLedger,
+  TrialBalance,
+} from '../services/accounting.service'
+import {
+  dashboardService,
+  DashboardOperationsHub,
+  MonthlyChannelReconciliation,
+} from '../services/dashboard.service'
 import { invoicingService, InvoiceQueueResponse } from '../services/invoicing.service'
 
 const { Title, Text } = Typography
@@ -72,7 +82,10 @@ const ReportsPage: React.FC = () => {
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs().startOf('year'), dayjs()])
   const [incomeStatement, setIncomeStatement] = useState<IncomeStatement | null>(null)
   const [balanceSheet, setBalanceSheet] = useState<BalanceSheet | null>(null)
+  const [trialBalance, setTrialBalance] = useState<TrialBalance | null>(null)
+  const [generalLedger, setGeneralLedger] = useState<GeneralLedger | null>(null)
   const [operationsHub, setOperationsHub] = useState<DashboardOperationsHub | null>(null)
+  const [monthlyReconciliation, setMonthlyReconciliation] = useState<MonthlyChannelReconciliation | null>(null)
   const [invoiceQueue, setInvoiceQueue] = useState<InvoiceQueueResponse | null>(null)
 
   // AI State
@@ -85,10 +98,16 @@ const ReportsPage: React.FC = () => {
     setLoading(true)
     try {
       const [start, end] = dateRange
-      const [isData, bsData, opsData, invoiceData] = await Promise.all([
+      const [isData, bsData, tbData, glData, opsData, monthlyData, invoiceData] = await Promise.all([
         accountingService.getIncomeStatement(start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')),
         accountingService.getBalanceSheet(end.format('YYYY-MM-DD')),
+        accountingService.getTrialBalance(end.format('YYYY-MM-DD')),
+        accountingService.getGeneralLedger(start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')),
         dashboardService.getOperationsHub({
+          startDate: start.format('YYYY-MM-DD'),
+          endDate: end.format('YYYY-MM-DD'),
+        }),
+        dashboardService.getMonthlyChannelReconciliation({
           startDate: start.format('YYYY-MM-DD'),
           endDate: end.format('YYYY-MM-DD'),
         }),
@@ -100,7 +119,10 @@ const ReportsPage: React.FC = () => {
       ])
       setIncomeStatement(isData)
       setBalanceSheet(bsData)
+      setTrialBalance(tbData)
+      setGeneralLedger(glData)
       setOperationsHub(opsData)
+      setMonthlyReconciliation(monthlyData)
       setInvoiceQueue(invoiceData)
     } catch (error) {
       console.error(error)
@@ -402,8 +424,270 @@ const ReportsPage: React.FC = () => {
               </Row>
             </TabPane>
 
+            <TabPane
+              tab={
+                <span className="flex items-center gap-2">
+                  <FileTextOutlined />
+                  會計閉環
+                </span>
+              }
+              key="1.5"
+            >
+              <Row gutter={[24, 24]}>
+                <Col xs={24} lg={10}>
+                  <Card title="試算表 (Trial Balance)" bordered={false} className="shadow-sm">
+                    {trialBalance ? (
+                      <>
+                        <div className="mb-4 flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
+                          <div>
+                            <div className="text-slate-400">截止日</div>
+                            <div className="font-medium text-slate-800">
+                              {dayjs(trialBalance.asOfDate).format('YYYY/MM/DD')}
+                            </div>
+                          </div>
+                          <Tag color={trialBalance.balanced ? 'green' : 'red'}>
+                            {trialBalance.balanced ? '借貸平衡' : '借貸不平'}
+                          </Tag>
+                        </div>
+                        <Table
+                          dataSource={trialBalance.items}
+                          rowKey="accountId"
+                          size="small"
+                          pagination={{ pageSize: 8 }}
+                          columns={[
+                            {
+                              title: '科目',
+                              key: 'account',
+                              render: (_, record) => (
+                                <div>
+                                  <div className="font-mono text-slate-500">{record.code}</div>
+                                  <div className="text-slate-800">{record.name}</div>
+                                </div>
+                              ),
+                            },
+                            {
+                              title: '借方',
+                              dataIndex: 'debit',
+                              key: 'debit',
+                              align: 'right',
+                              render: (value: number) => value.toLocaleString(),
+                            },
+                            {
+                              title: '貸方',
+                              dataIndex: 'credit',
+                              key: 'credit',
+                              align: 'right',
+                              render: (value: number) => value.toLocaleString(),
+                            },
+                            {
+                              title: '餘額',
+                              dataIndex: 'balance',
+                              key: 'balance',
+                              align: 'right',
+                              render: (value: number) => value.toLocaleString(),
+                            },
+                          ]}
+                        />
+                      </>
+                    ) : <Empty description="無試算表資料" />}
+                  </Card>
+                </Col>
+                <Col xs={24} lg={14}>
+                  <Card title="總分類帳 (General Ledger)" bordered={false} className="shadow-sm">
+                    {generalLedger ? (
+                      <>
+                        <div className="mb-4 grid gap-3 md:grid-cols-2">
+                          <div className="rounded-xl bg-slate-50 px-4 py-3">
+                            <div className="text-xs text-slate-400">總借方</div>
+                            <div className="mt-1 text-xl font-semibold text-slate-800">
+                              {generalLedger.totalDebit.toLocaleString()}
+                            </div>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 px-4 py-3">
+                            <div className="text-xs text-slate-400">總貸方</div>
+                            <div className="mt-1 text-xl font-semibold text-slate-800">
+                              {generalLedger.totalCredit.toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                        <Table
+                          dataSource={generalLedger.entries}
+                          rowKey="id"
+                          size="small"
+                          scroll={{ x: 980 }}
+                          pagination={{ pageSize: 8 }}
+                          columns={[
+                            {
+                              title: '日期',
+                              dataIndex: 'date',
+                              key: 'date',
+                              render: (value: string) => dayjs(value).format('MM/DD'),
+                              width: 90,
+                            },
+                            {
+                              title: '科目',
+                              key: 'account',
+                              render: (_, record) => (
+                                <div>
+                                  <div className="font-mono text-slate-500">{record.accountCode}</div>
+                                  <div className="text-slate-800">{record.accountName}</div>
+                                </div>
+                              ),
+                              width: 180,
+                            },
+                            {
+                              title: '描述',
+                              dataIndex: 'description',
+                              key: 'description',
+                            },
+                            {
+                              title: '借方',
+                              dataIndex: 'debit',
+                              key: 'debit',
+                              align: 'right',
+                              render: (value: number) => value ? value.toLocaleString() : '—',
+                              width: 120,
+                            },
+                            {
+                              title: '貸方',
+                              dataIndex: 'credit',
+                              key: 'credit',
+                              align: 'right',
+                              render: (value: number) => value ? value.toLocaleString() : '—',
+                              width: 120,
+                            },
+                            {
+                              title: '餘額',
+                              dataIndex: 'runningBalance',
+                              key: 'runningBalance',
+                              align: 'right',
+                              render: (value: number) => value.toLocaleString(),
+                              width: 120,
+                            },
+                          ]}
+                        />
+                      </>
+                    ) : <Empty description="無總分類帳資料" />}
+                  </Card>
+                </Col>
+              </Row>
+            </TabPane>
+
             {/* Tab 2: Sales Analysis */}
-            <TabPane 
+            <TabPane
+              tab={
+                <span className="flex items-center gap-2">
+                  <BarChartOutlined />
+                  月度對帳矩陣
+                </span>
+              }
+              key="1.7"
+            >
+              <Card
+                title="Shopify / 1Shop / 綠界 月度對帳矩陣"
+                bordered={false}
+                className="shadow-sm"
+              >
+                {monthlyReconciliation ? (
+                  <Table
+                    rowKey={(record) => `${record.month}-${record.bucketKey}`}
+                    dataSource={monthlyReconciliation.items}
+                    size="small"
+                    scroll={{ x: 1280 }}
+                    pagination={{ pageSize: 12 }}
+                    columns={[
+                      {
+                        title: '月份',
+                        dataIndex: 'month',
+                        key: 'month',
+                        width: 100,
+                      },
+                      {
+                        title: '通路',
+                        key: 'bucket',
+                        width: 220,
+                        render: (_, record) => (
+                          <div>
+                            <div className="font-medium text-slate-800">{record.bucketLabel}</div>
+                            <div className="text-xs text-slate-400">
+                              {record.account ? `帳號 ${record.account}` : record.bucketKey}
+                            </div>
+                          </div>
+                        ),
+                      },
+                      {
+                        title: '業績',
+                        dataIndex: 'salesGross',
+                        key: 'salesGross',
+                        align: 'right',
+                        render: (value: number) => value.toLocaleString(),
+                      },
+                      {
+                        title: '訂單數',
+                        dataIndex: 'orderCount',
+                        key: 'orderCount',
+                        align: 'right',
+                      },
+                      {
+                        title: '收款總額',
+                        dataIndex: 'payoutGross',
+                        key: 'payoutGross',
+                        align: 'right',
+                        render: (value: number) => value.toLocaleString(),
+                      },
+                      {
+                        title: '淨入帳',
+                        dataIndex: 'payoutNet',
+                        key: 'payoutNet',
+                        align: 'right',
+                        render: (value: number) => value.toLocaleString(),
+                      },
+                      {
+                        title: '手續費',
+                        dataIndex: 'feeTotal',
+                        key: 'feeTotal',
+                        align: 'right',
+                        render: (value: number) => value.toLocaleString(),
+                      },
+                      {
+                        title: '待撥款',
+                        dataIndex: 'pendingPayoutCount',
+                        key: 'pendingPayoutCount',
+                        align: 'right',
+                      },
+                      {
+                        title: '綠界匯入',
+                        dataIndex: 'ecpayBatchLineCount',
+                        key: 'ecpayBatchLineCount',
+                        align: 'right',
+                      },
+                      {
+                        title: '綠界未匹配',
+                        dataIndex: 'ecpayUnmatchedLineCount',
+                        key: 'ecpayUnmatchedLineCount',
+                        align: 'right',
+                        render: (value: number) => (
+                          <Tag color={value > 0 ? 'red' : 'green'}>{value}</Tag>
+                        ),
+                      },
+                      {
+                        title: '業績差額',
+                        dataIndex: 'salesVsPayoutGap',
+                        key: 'salesVsPayoutGap',
+                        align: 'right',
+                        render: (value: number) => (
+                          <span className={value === 0 ? 'text-slate-500' : 'text-amber-600'}>
+                            {value.toLocaleString()}
+                          </span>
+                        ),
+                      },
+                    ]}
+                  />
+                ) : <Empty description="無月度對帳資料" />}
+              </Card>
+            </TabPane>
+
+            <TabPane
               tab={
                 <span className="flex items-center gap-2">
                   <BarChartOutlined />

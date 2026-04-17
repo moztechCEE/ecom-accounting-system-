@@ -2,6 +2,8 @@ import {
   BadRequestException,
   Controller,
   Get,
+  Param,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -12,6 +14,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AccountingService } from './accounting.service';
 import { ReportService } from './services/report.service';
 import { JournalService } from './services/journal.service';
@@ -89,6 +92,33 @@ export class AccountingController {
     return this.journalService.getJournalEntriesByPeriod(safeEntityId, periodId);
   }
 
+  @Post('journals/:journalEntryId/approve')
+  @ApiOperation({ summary: '審核會計分錄' })
+  async approveJournalEntry(
+    @Param('journalEntryId') journalEntryId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.accountingService.postJournalEntry(journalEntryId, userId);
+  }
+
+  @Post('periods/:periodId/close')
+  @ApiOperation({ summary: '關閉會計期間' })
+  async closePeriod(
+    @Param('periodId') periodId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.accountingService.closePeriod(periodId, userId);
+  }
+
+  @Post('periods/:periodId/lock')
+  @ApiOperation({ summary: '鎖定會計期間' })
+  async lockPeriod(
+    @Param('periodId') periodId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.accountingService.lockPeriod(periodId, userId);
+  }
+
   /**
    * 產生損益表
    */
@@ -135,5 +165,57 @@ export class AccountingController {
   ) {
     const safeEntityId = this.ensureEntityId(entityId);
     return this.reportService.getBalanceSheet(safeEntityId, new Date(asOfDate));
+  }
+
+  @Get('reports/trial-balance')
+  @ApiOperation({ summary: '產生試算表' })
+  @ApiQuery({ name: 'entityId', required: true, description: '公司實體 ID' })
+  @ApiQuery({
+    name: 'asOfDate',
+    required: true,
+    description: '截止日期 (YYYY-MM-DD)',
+  })
+  async getTrialBalance(
+    @Query('entityId') entityId: string,
+    @Query('asOfDate') asOfDate: string,
+  ) {
+    const safeEntityId = this.ensureEntityId(entityId);
+    return this.accountingService.getTrialBalance(
+      safeEntityId,
+      new Date(asOfDate),
+    );
+  }
+
+  @Get('reports/general-ledger')
+  @ApiOperation({ summary: '產生總分類帳' })
+  @ApiQuery({ name: 'entityId', required: true, description: '公司實體 ID' })
+  @ApiQuery({
+    name: 'startDate',
+    required: true,
+    description: '開始日期 (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'endDate',
+    required: true,
+    description: '結束日期 (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'accountId',
+    required: false,
+    description: '指定科目 ID',
+  })
+  async getGeneralLedger(
+    @Query('entityId') entityId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Query('accountId') accountId?: string,
+  ) {
+    const safeEntityId = this.ensureEntityId(entityId);
+    return this.accountingService.getGeneralLedger(
+      safeEntityId,
+      new Date(startDate),
+      new Date(endDate),
+      accountId,
+    );
   }
 }

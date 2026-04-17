@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Card, Segmented, Statistic, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Segmented, Space, Statistic, Table, Tag, Typography, message } from 'antd'
 import dayjs from 'dayjs'
 import {
   accountingService,
@@ -12,6 +12,7 @@ const AccountingPeriodsPage: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [periods, setPeriods] = useState<AccountingPeriod[]>([])
   const [status, setStatus] = useState<string | undefined>()
+  const [actionPeriodId, setActionPeriodId] = useState<string | null>(null)
 
   const loadPeriods = async (nextStatus?: string) => {
     setLoading(true)
@@ -28,6 +29,32 @@ const AccountingPeriodsPage: React.FC = () => {
   useEffect(() => {
     loadPeriods(status)
   }, [status])
+
+  const handleClosePeriod = async (periodId: string) => {
+    setActionPeriodId(periodId)
+    try {
+      await accountingService.closePeriod(periodId)
+      message.success('會計期間已關帳')
+      await loadPeriods(status)
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '會計期間關帳失敗')
+    } finally {
+      setActionPeriodId(null)
+    }
+  }
+
+  const handleLockPeriod = async (periodId: string) => {
+    setActionPeriodId(periodId)
+    try {
+      await accountingService.lockPeriod(periodId)
+      message.success('會計期間已鎖定')
+      await loadPeriods(status)
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '會計期間鎖定失敗')
+    } finally {
+      setActionPeriodId(null)
+    }
+  }
 
   const summary = useMemo(() => ({
     open: periods.filter((period) => period.status === 'open').length,
@@ -105,6 +132,34 @@ const AccountingPeriodsPage: React.FC = () => {
               key: 'updatedAt',
               width: 160,
               render: (value: string) => dayjs(value).format('YYYY/MM/DD HH:mm'),
+            },
+            {
+              title: '操作',
+              key: 'actions',
+              width: 220,
+              render: (_, record: AccountingPeriod) => (
+                <Space>
+                  {record.status === 'open' && (
+                    <Button
+                      size="small"
+                      onClick={() => handleClosePeriod(record.id)}
+                      loading={actionPeriodId === record.id}
+                    >
+                      關帳
+                    </Button>
+                  )}
+                  {record.status === 'closed' && (
+                    <Button
+                      size="small"
+                      onClick={() => handleLockPeriod(record.id)}
+                      loading={actionPeriodId === record.id}
+                    >
+                      鎖帳
+                    </Button>
+                  )}
+                  {record.status === 'locked' && <Tag>已鎖定</Tag>}
+                </Space>
+              ),
             },
           ]}
           pagination={{ pageSize: 12, showSizeChanger: true }}

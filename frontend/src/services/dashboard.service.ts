@@ -185,6 +185,35 @@ export type DashboardOperationsHub = {
   }>;
 };
 
+export type MonthlyChannelReconciliationItem = {
+  month: string;
+  bucketKey: string;
+  bucketLabel: string;
+  account: string | null;
+  salesGross: number;
+  orderCount: number;
+  payoutGross: number;
+  payoutNet: number;
+  feeTotal: number;
+  paymentCount: number;
+  reconciledCount: number;
+  pendingPayoutCount: number;
+  ecpayBatchLineCount: number;
+  ecpayMatchedLineCount: number;
+  ecpayUnmatchedLineCount: number;
+  salesVsPayoutGap: number;
+  payoutVsNetGap: number;
+};
+
+export type MonthlyChannelReconciliation = {
+  entityId: string;
+  range: {
+    startDate: string | null;
+    endDate: string | null;
+  };
+  items: MonthlyChannelReconciliationItem[];
+};
+
 export const dashboardService = {
   async getSalesOverview(params?: {
     entityId?: string;
@@ -270,6 +299,27 @@ export const dashboardService = {
 
     const response = await api.get<DashboardOperationsHub>(
       `/reports/dashboard-operations-hub?${query.toString()}`,
+    );
+    return response.data;
+  },
+
+  async getMonthlyChannelReconciliation(params?: {
+    entityId?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<MonthlyChannelReconciliation> {
+    const query = new URLSearchParams();
+    query.set("entityId", params?.entityId?.trim() || DEFAULT_ENTITY_ID);
+    if (params?.startDate) {
+      query.set("startDate", params.startDate);
+    }
+    if (params?.endDate) {
+      query.set("endDate", params.endDate);
+    }
+    query.set("_ts", String(Date.now()));
+
+    const response = await api.get<MonthlyChannelReconciliation>(
+      `/reports/monthly-channel-reconciliation?${query.toString()}`,
     );
     return response.data;
   },
