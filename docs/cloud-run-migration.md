@@ -53,6 +53,28 @@ DATABASE_URL: postgresql://USER:PASSWORD@HOST:5432/DB?schema=public
 - `DB_PASSWORD`
 - `DB_NAME`
 
+如果後續要把 Shopline 一起部署到 Cloud Run，可一併補上：
+
+```yaml
+SHOPLINE_API_BASE_URL: https://open.shopline.io/v1
+SHOPLINE_ACCESS_TOKEN: replace-me
+SHOPLINE_HANDLE: replace-me
+SHOPLINE_STORE_NAME: replace-me
+SHOPLINE_MERCHANT_ID: replace-me
+SHOPLINE_DEFAULT_ENTITY_ID: tw-entity-001
+SHOPLINE_SYNC_ENABLED: "true"
+SHOPLINE_SYNC_LOOKBACK_MINUTES: "180"
+SHOPLINE_SYNC_PER_PAGE: "50"
+SHOPLINE_SYNC_JOB_TOKEN: replace-me
+```
+
+如果是多店，建議改用：
+
+```yaml
+SHOPLINE_STORES_JSON: >-
+  [{"token":"replace-me","handle":"replace-me","storeName":"SHOPLINE 主店","merchantId":"replace-me"}]
+```
+
 ## 建議遷移順序
 1. 先部署後端到 Cloud Run
 2. 驗證 `/health`、`/api-docs`、登入 API

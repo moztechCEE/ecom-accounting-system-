@@ -22,6 +22,7 @@ import PageSkeleton from "../components/PageSkeleton";
 import AIInsightsWidget from "../components/AIInsightsWidget";
 import { shopifyService } from "../services/shopify.service";
 import { oneShopService } from "../services/oneshop.service";
+import { shoplineService } from "../services/shopline.service";
 import {
   dashboardService,
   DashboardExecutiveOverview,
@@ -285,6 +286,9 @@ const DashboardPage: React.FC = () => {
         shopifyTransactionsResult,
         oneShopOrdersResult,
         oneShopTransactionsResult,
+        shoplineOrdersResult,
+        shoplineCustomersResult,
+        shoplineTransactionsResult,
       ] = await Promise.all([
         shopifyService.syncOrders({ entityId: storedEntityId, since, until }),
         shopifyService.syncTransactions({
@@ -294,6 +298,21 @@ const DashboardPage: React.FC = () => {
         }),
         oneShopService.syncOrders({ entityId: storedEntityId, since, until }),
         oneShopService.syncTransactions({
+          entityId: storedEntityId,
+          since,
+          until,
+        }),
+        shoplineService.syncOrders({
+          entityId: storedEntityId,
+          since,
+          until,
+        }),
+        shoplineService.syncCustomers({
+          entityId: storedEntityId,
+          since,
+          until,
+        }),
+        shoplineService.syncTransactions({
           entityId: storedEntityId,
           since,
           until,
@@ -309,6 +328,12 @@ const DashboardPage: React.FC = () => {
           shopifyTransactionsResult.created + shopifyTransactionsResult.updated
         } 筆、1Shop 金流 ${
           oneShopTransactionsResult.created + oneShopTransactionsResult.updated
+        } 筆、Shopline 訂單 ${
+          shoplineOrdersResult.created + shoplineOrdersResult.updated
+        } 筆、Shopline 顧客 ${
+          shoplineCustomersResult.created + shoplineCustomersResult.updated
+        } 筆、Shopline 金流 ${
+          shoplineTransactionsResult.created + shoplineTransactionsResult.updated
         } 筆`,
       );
       setRefreshToken((prev) => prev + 1);
