@@ -8,7 +8,9 @@ import {
   DeleteOutlined,
   EditOutlined,
   FileAddOutlined,
+  FileTextOutlined,
   PlusOutlined,
+  PaperClipOutlined,
   ReloadOutlined,
   SettingOutlined,
   TeamOutlined,
@@ -28,6 +30,7 @@ import { GlassCard } from "../../components/ui/GlassCard";
 import { GlassInput } from "../../components/ui/GlassInput";
 import { GlassModal } from "../../components/ui/GlassModal";
 import { GlassSelect } from "../../components/ui/GlassSelect";
+import { GlassTextarea } from "../../components/ui/GlassTextarea";
 
 type AdminTab = "attendance" | "requests" | "types" | "balances";
 
@@ -84,6 +87,20 @@ const formatSeniorityTier = (tier: SeniorityTier) =>
     ? `${tier.minYears} - ${tier.maxYears} 年：${tier.days} 天`
     : `${tier.minYears} 年以上：${tier.days} 天`;
 
+const formatHistoryAction = (action: string) => {
+  const map: Record<string, string> = {
+    SUBMIT: "送出申請",
+    APPROVE: "核准假單",
+    REJECT: "駁回假單",
+    MOVE_TO_REVIEW: "移至審核中",
+  };
+
+  return map[action] || action;
+};
+
+const isExternalDocumentUrl = (value?: string | null) =>
+  Boolean(value && /^https?:\/\//i.test(value));
+
 const AttendanceAdminPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>("requests");
   const [loading, setLoading] = useState(false);
@@ -103,6 +120,10 @@ const AttendanceAdminPage: React.FC = () => {
   const [balanceModalOpen, setBalanceModalOpen] = useState(false);
   const [editingBalance, setEditingBalance] =
     useState<AdminLeaveBalance | null>(null);
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] =
+    useState<AdminLeaveRequest | null>(null);
+  const [reviewNote, setReviewNote] = useState("");
   const [balanceForm, setBalanceForm] = useState({
     accruedHours: "",
     carryOverHours: "",
@@ -245,17 +266,27 @@ const AttendanceAdminPage: React.FC = () => {
   const handleApproveRequest = async (
     requestId: string,
     status: LeaveStatus,
+    note?: string,
   ) => {
     try {
-      await attendanceService.updateLeaveStatus(requestId, status);
+      await attendanceService.updateLeaveStatus(requestId, status, note);
       message.success(
         `假單已${status === LeaveStatus.APPROVED ? "核准" : "駁回"}`,
       );
+      setRequestModalOpen(false);
+      setSelectedRequest(null);
+      setReviewNote("");
       await loadManagementData();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      message.error("更新假單狀態失敗");
+      message.error(error?.response?.data?.message || "更新假單狀態失敗");
     }
+  };
+
+  const openRequestModal = (request: AdminLeaveRequest) => {
+    setSelectedRequest(request);
+    setReviewNote("");
+    setRequestModalOpen(true);
   };
 
   const openCreateLeaveType = () => {
@@ -656,40 +687,35 @@ const AttendanceAdminPage: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-5 py-4 font-mono">{request.hours}</td>
-                      <td className="px-5 py-4 max-w-[240px] truncate">
-                        {request.reason || "—"}
+                      <td className="px-5 py-4 max-w-[280px]">
+                        <div className="truncate">{request.reason || "—"}</div>
+                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-400">
+                          {request.documents?.length ? (
+                            <span>附件 {request.documents.length} 筆</span>
+                          ) : null}
+                          {request.location ? <span>地點：{request.location}</span> : null}
+                          {request.requiredDocsMet === false ? (
+                            <span className="text-rose-500">附件未補齊</span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-5 py-4">
                         {requestStatusBadge(request.status)}
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex flex-wrap gap-2">
+                          <GlassButton
+                            variant="secondary"
+                            className="gap-2 px-4 py-2 text-sm"
+                            onClick={() => openRequestModal(request)}
+                          >
+                            <FileTextOutlined />
+                            {request.status === LeaveStatus.SUBMITTED ? "審核" : "詳情"}
+                          </GlassButton>
                           {request.status === LeaveStatus.SUBMITTED && (
-                            <>
-                              <GlassButton
-                                className="px-4 py-2 text-sm"
-                                onClick={() =>
-                                  void handleApproveRequest(
-                                    request.id,
-                                    LeaveStatus.APPROVED,
-                                  )
-                                }
-                              >
-                                核准
-                              </GlassButton>
-                              <GlassButton
-                                variant="danger"
-                                className="px-4 py-2 text-sm"
-                                onClick={() =>
-                                  void handleApproveRequest(
-                                    request.id,
-                                    LeaveStatus.REJECTED,
-                                  )
-                                }
-                              >
-                                駁回
-                              </GlassButton>
-                            </>
+                            <span className="text-xs text-slate-400">
+                              待主管處理
+                            </span>
                           )}
                           {request.status !== LeaveStatus.SUBMITTED && (
                             <span className="text-xs text-slate-400">
@@ -857,6 +883,215 @@ const AttendanceAdminPage: React.FC = () => {
           )}
         </div>
       </GlassCard>
+
+      <GlassModal
+        isOpen={requestModalOpen}
+        onClose={() => {
+          setRequestModalOpen(false);
+          setSelectedRequest(null);
+          setReviewNote("");
+        }}
+        title={selectedRequest?.status === LeaveStatus.SUBMITTED ? "審核假單" : "假單詳情"}
+        maxWidth="max-w-[880px]"
+        footer={
+          selectedRequest ? (
+            selectedRequest.status === LeaveStatus.SUBMITTED ? (
+              <>
+                <GlassButton
+                  variant="secondary"
+                  onClick={() => {
+                    setRequestModalOpen(false);
+                    setSelectedRequest(null);
+                    setReviewNote("");
+                  }}
+                >
+                  取消
+                </GlassButton>
+                <GlassButton
+                  variant="danger"
+                  onClick={() =>
+                    void handleApproveRequest(
+                      selectedRequest.id,
+                      LeaveStatus.REJECTED,
+                      reviewNote,
+                    )
+                  }
+                >
+                  駁回假單
+                </GlassButton>
+                <GlassButton
+                  onClick={() =>
+                    void handleApproveRequest(
+                      selectedRequest.id,
+                      LeaveStatus.APPROVED,
+                      reviewNote,
+                    )
+                  }
+                >
+                  核准假單
+                </GlassButton>
+              </>
+            ) : (
+              <GlassButton
+                variant="secondary"
+                onClick={() => {
+                  setRequestModalOpen(false);
+                  setSelectedRequest(null);
+                  setReviewNote("");
+                }}
+              >
+                關閉
+              </GlassButton>
+            )
+          ) : null
+        }
+      >
+        {selectedRequest ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-white/20 bg-white/20 p-4">
+                <div className="text-xs font-semibold tracking-[0.2em] text-slate-400 uppercase">
+                  申請人
+                </div>
+                <div className="mt-2 text-lg font-semibold text-slate-900">
+                  {selectedRequest.employee.name}
+                </div>
+                <div className="mt-1 text-sm text-slate-500">
+                  {selectedRequest.employee.department?.name || "未分配部門"}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/20 bg-white/20 p-4">
+                <div className="text-xs font-semibold tracking-[0.2em] text-slate-400 uppercase">
+                  假別與狀態
+                </div>
+                <div className="mt-2 text-lg font-semibold text-slate-900">
+                  {selectedRequest.leaveType?.name}
+                </div>
+                <div className="mt-2">{requestStatusBadge(selectedRequest.status)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/20 bg-white/20 p-4">
+                <div className="text-xs font-semibold tracking-[0.2em] text-slate-400 uppercase">
+                  請假期間
+                </div>
+                <div className="mt-2 text-sm text-slate-700">
+                  {dayjs(selectedRequest.startAt).format("YYYY/MM/DD HH:mm")}
+                </div>
+                <div className="text-sm text-slate-500">
+                  至 {dayjs(selectedRequest.endAt).format("YYYY/MM/DD HH:mm")}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/20 bg-white/20 p-4">
+                <div className="text-xs font-semibold tracking-[0.2em] text-slate-400 uppercase">
+                  時數與地點
+                </div>
+                <div className="mt-2 text-sm text-slate-700">
+                  {selectedRequest.hours} 小時
+                </div>
+                <div className="text-sm text-slate-500">
+                  {selectedRequest.location || "未填寫地點"}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/20 bg-white/20 p-4">
+              <div className="text-sm font-semibold text-slate-900">請假原因</div>
+              <div className="mt-2 text-sm leading-6 text-slate-600">
+                {selectedRequest.reason || "未填寫原因"}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/20 bg-white/20 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <PaperClipOutlined />
+                附件資料
+              </div>
+              <div className="mt-3 space-y-3">
+                {selectedRequest.documents?.length ? (
+                  selectedRequest.documents.map((document) => (
+                    <div
+                      key={document.id}
+                      className="rounded-2xl border border-white/20 bg-white/30 p-4"
+                    >
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <div className="font-medium text-slate-900">
+                            {document.fileName}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            類型：{document.docType || "未指定"} ·
+                            上傳時間：{dayjs(document.uploadedAt).format("YYYY/MM/DD HH:mm")}
+                          </div>
+                        </div>
+                        {isExternalDocumentUrl(document.fileUrl) ? (
+                          <a
+                            href={document.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm font-medium text-sky-600 hover:text-sky-700"
+                          >
+                            開啟附件
+                          </a>
+                        ) : (
+                          <span className="text-xs text-slate-400">尚未附上外部連結</span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/30 px-4 py-6 text-sm text-slate-400">
+                    這張假單目前沒有附件。
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/20 bg-white/20 p-4">
+              <div className="text-sm font-semibold text-slate-900">審核歷程</div>
+              <div className="mt-3 space-y-3">
+                {selectedRequest.histories?.length ? (
+                  selectedRequest.histories.map((history) => (
+                    <div
+                      key={history.id}
+                      className="rounded-2xl border border-white/20 bg-white/30 p-4"
+                    >
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="font-medium text-slate-900">
+                            {formatHistoryAction(history.action)}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {history.actor?.name || "系統"} ·{" "}
+                            {dayjs(history.createdAt).format("YYYY/MM/DD HH:mm")}
+                          </div>
+                        </div>
+                        {history.toStatus ? requestStatusBadge(history.toStatus) : null}
+                      </div>
+                      {history.note ? (
+                        <div className="mt-3 text-sm leading-6 text-slate-600">
+                          {history.note}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/30 px-4 py-6 text-sm text-slate-400">
+                    目前尚無審核歷程。
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {selectedRequest.status === LeaveStatus.SUBMITTED ? (
+              <GlassTextarea
+                label="審核備註"
+                value={reviewNote}
+                onChange={(event) => setReviewNote(event.target.value)}
+                placeholder="例如：請補正式證明、已與主管確認班表調整。"
+              />
+            ) : null}
+          </div>
+        ) : null}
+      </GlassModal>
 
       <GlassModal
         isOpen={typeModalOpen}

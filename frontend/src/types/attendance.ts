@@ -52,7 +52,38 @@ export interface CreateLeaveRequestDto {
   hours: number;
   reason?: string;
   location?: string;
-  documents?: any[];
+  documents?: LeaveRequestDocumentInput[];
+}
+
+export interface LeaveRequestDocumentInput {
+  fileName: string;
+  fileUrl?: string;
+  mimeType?: string;
+  docType?: string;
+  checksum?: string;
+}
+
+export interface LeaveRequestDocument {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  mimeType: string;
+  checksum?: string | null;
+  docType?: string | null;
+  uploadedAt: string;
+}
+
+export interface LeaveRequestHistory {
+  id: string;
+  action: string;
+  fromStatus?: LeaveStatus;
+  toStatus?: LeaveStatus;
+  note?: string | null;
+  createdAt: string;
+  actor?: {
+    id: string;
+    name: string;
+  } | null;
 }
 
 export interface SeniorityTier {
@@ -69,6 +100,7 @@ export interface LeaveType {
   isActive?: boolean;
   balanceResetPolicy?: "CALENDAR_YEAR" | "HIRE_ANNIVERSARY" | "NONE";
   requiresDocument: boolean;
+  documentExamples?: string;
   maxDaysPerYear?: number;
   paidPercentage?: number;
   minNoticeHours?: number;
@@ -104,6 +136,11 @@ export interface LeaveRequest {
   hours: number;
   status: LeaveStatus;
   reason?: string;
+  location?: string;
+  requiredDocsMet?: boolean;
+  metadata?: Record<string, unknown>;
+  documents?: LeaveRequestDocument[];
+  histories?: LeaveRequestHistory[];
   createdAt: string;
 }
 

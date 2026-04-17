@@ -138,10 +138,11 @@ export const attendanceService = {
   updateLeaveStatus: async (
     id: string,
     status: LeaveStatus,
+    note?: string,
   ): Promise<LeaveRequest> => {
     const response = await api.patch<LeaveRequest>(
       `/attendance/leaves/${id}/status`,
-      { status },
+      { status, note },
     );
     return response.data;
   },

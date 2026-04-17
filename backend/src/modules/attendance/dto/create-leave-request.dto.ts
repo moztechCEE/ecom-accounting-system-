@@ -1,4 +1,35 @@
-import { IsNotEmpty, IsString, IsDateString, IsNumber, IsOptional, IsArray } from 'class-validator';
+import {
+  IsArray,
+  IsDateString,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+class LeaveRequestDocumentDto {
+  @IsNotEmpty()
+  @IsString()
+  fileName: string;
+
+  @IsOptional()
+  @IsString()
+  fileUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  mimeType?: string;
+
+  @IsOptional()
+  @IsString()
+  docType?: string;
+
+  @IsOptional()
+  @IsString()
+  checksum?: string;
+}
 
 export class CreateLeaveRequestDto {
   @IsNotEmpty()
@@ -14,6 +45,7 @@ export class CreateLeaveRequestDto {
   endAt: string;
 
   @IsNotEmpty()
+  @Type(() => Number)
   @IsNumber()
   hours: number;
 
@@ -27,5 +59,7 @@ export class CreateLeaveRequestDto {
 
   @IsOptional()
   @IsArray()
-  documents?: any[];
+  @ValidateNested({ each: true })
+  @Type(() => LeaveRequestDocumentDto)
+  documents?: LeaveRequestDocumentDto[];
 }

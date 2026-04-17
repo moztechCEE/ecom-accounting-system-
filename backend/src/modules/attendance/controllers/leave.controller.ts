@@ -57,7 +57,12 @@ export class LeaveController {
     @Param('id') id: string,
     @Body() dto: UpdateLeaveStatusDto,
   ) {
-    return this.leaveService.updateLeaveStatus(id, dto.status, req.user.id);
+    return this.leaveService.updateLeaveStatus(
+      id,
+      dto.status,
+      req.user.id,
+      dto.note,
+    );
   }
 
   @Get('admin/requests')

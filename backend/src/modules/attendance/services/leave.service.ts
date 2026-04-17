@@ -96,6 +96,14 @@ const DEFAULT_TW_LEAVE_TYPES: DefaultLeaveTypeTemplate[] = [
   },
 ];
 
+type LeaveRequestDocumentInput = {
+  fileName?: string;
+  fileUrl?: string;
+  mimeType?: string;
+  docType?: string;
+  checksum?: string;
+};
+
 @Injectable()
 export class LeaveService {
   constructor(
@@ -156,9 +164,22 @@ export class LeaveService {
       throw new BadRequestException('Leave type not found');
     }
 
-    // TODO: Validate balance
-    // TODO: Validate notice period
-    // TODO: Validate documents
+    const startAt = new Date(dto.startAt);
+    const endAt = new Date(dto.endAt);
+    const documents = this.normalizeLeaveRequestDocuments(dto.documents);
+
+    await this.validateLeaveRequestPayload({
+      employee: {
+        id: employee.id,
+        entityId: employee.entityId,
+        hireDate: employee.hireDate,
+      },
+      leaveType,
+      startAt,
+      endAt,
+      hours: dto.hours,
+      documents,
+    });
 
     await this.balanceService.reserveLeaveHours({
       employee: {
@@ -167,7 +188,7 @@ export class LeaveService {
         hireDate: employee.hireDate,
       },
       leaveType,
-      referenceDate: new Date(dto.startAt),
+      referenceDate: startAt,
       hours: dto.hours,
     });
 
@@ -176,12 +197,49 @@ export class LeaveService {
         entityId: employee.entityId,
         employeeId: employee.id,
         leaveTypeId: dto.leaveTypeId,
-        startAt: new Date(dto.startAt),
-        endAt: new Date(dto.endAt),
+        startAt,
+        endAt,
         hours: dto.hours,
         reason: dto.reason,
         location: dto.location,
         status: LeaveStatus.SUBMITTED,
+        requiredDocsMet: !leaveType.requiresDocument || documents.length > 0,
+        metadata:
+          documents.length > 0
+            ? {
+                documentCount: documents.length,
+              }
+            : undefined,
+        documents:
+          documents.length > 0
+            ? {
+                create: documents.map((document) => ({
+                  fileName: document.fileName,
+                  fileUrl:
+                    document.fileUrl ||
+                    `manual://${encodeURIComponent(document.fileName)}`,
+                  mimeType: document.mimeType || 'application/octet-stream',
+                  checksum: document.checksum || null,
+                  docType: document.docType || null,
+                  uploadedBy: userId,
+                })),
+              }
+            : undefined,
+        histories: {
+          create: {
+            action: 'SUBMIT',
+            fromStatus: LeaveStatus.DRAFT,
+            toStatus: LeaveStatus.SUBMITTED,
+            actorId: userId,
+            note: dto.reason || null,
+            metadata:
+              documents.length > 0
+                ? {
+                    documentCount: documents.length,
+                  }
+                : undefined,
+          },
+        },
       },
     });
 
@@ -203,7 +261,16 @@ export class LeaveService {
       data: { entityId: employee.entityId },
     });
 
-    // TODO: Notify Manager (Need hierarchy logic)
+    await this.notifyLeaveApprovers({
+      requesterUserId: userId,
+      entityId: employee.entityId,
+      employeeName: employee.name,
+      leaveTypeName: leaveType.name,
+      leaveRequestId: leaveRequest.id,
+      hours: dto.hours,
+      startAt,
+      endAt,
+    });
 
     return leaveRequest;
   }
@@ -212,6 +279,7 @@ export class LeaveService {
     requestId: string,
     status: LeaveStatus,
     reviewerId: string,
+    note?: string,
   ) {
     const existingRequest = await this.prisma.leaveRequest.findUnique({
       where: { id: requestId },
@@ -223,6 +291,22 @@ export class LeaveService {
 
     if (!existingRequest) {
       throw new BadRequestException('Leave request not found');
+    }
+
+    if (
+      existingRequest.status === LeaveStatus.APPROVED ||
+      existingRequest.status === LeaveStatus.REJECTED ||
+      existingRequest.status === LeaveStatus.CANCELLED
+    ) {
+      throw new BadRequestException('此假單已結案，無法再次變更狀態');
+    }
+
+    if (
+      status !== LeaveStatus.APPROVED &&
+      status !== LeaveStatus.REJECTED &&
+      status !== LeaveStatus.UNDER_REVIEW
+    ) {
+      throw new BadRequestException('審核流程僅支援處理為審核中、核准或駁回');
     }
 
     await this.balanceService.reconcileLeaveRequestStatus({
@@ -243,8 +327,25 @@ export class LeaveService {
       data: {
         status,
         reviewerId,
+        histories: {
+          create: {
+            action:
+              status === LeaveStatus.APPROVED
+                ? 'APPROVE'
+                : status === LeaveStatus.REJECTED
+                  ? 'REJECT'
+                  : 'MOVE_TO_REVIEW',
+            fromStatus: existingRequest.status,
+            toStatus: status,
+            actorId: reviewerId,
+            note: note?.trim() || null,
+          },
+        },
       },
-      include: { employee: true, leaveType: true },
+      include: {
+        employee: true,
+        leaveType: true,
+      },
     });
 
     await this.auditLogService.record({
@@ -259,6 +360,7 @@ export class LeaveService {
       newData: {
         status: request.status,
         reviewerId: request.reviewerId,
+        note: note?.trim() || null,
       },
     });
 
@@ -266,10 +368,16 @@ export class LeaveService {
       await this.notificationService.create({
         userId: request.employee.userId,
         title: `Leave Request ${status}`,
-        message: `Your leave request has been ${status.toLowerCase()}.`,
+        message:
+          note && note.trim().length > 0
+            ? `Your leave request has been ${status.toLowerCase()}. Note: ${note.trim()}`
+            : `Your leave request has been ${status.toLowerCase()}.`,
         type: 'LEAVE_STATUS_UPDATE',
         category: 'ATTENDANCE',
-        data: { entityId: request.entityId },
+        data: {
+          entityId: request.entityId,
+          note: note?.trim() || null,
+        },
       });
     }
 
@@ -338,6 +446,15 @@ export class LeaveService {
         },
         leaveType: true,
         reviewer: true,
+        documents: {
+          orderBy: [{ uploadedAt: 'desc' }],
+        },
+        histories: {
+          include: {
+            actor: true,
+          },
+          orderBy: [{ createdAt: 'desc' }],
+        },
       },
       orderBy: [{ createdAt: 'desc' }],
     });
@@ -582,6 +699,160 @@ export class LeaveService {
     });
 
     return updated;
+  }
+
+  private normalizeLeaveRequestDocuments(
+    documents?: LeaveRequestDocumentInput[],
+  ) {
+    return (documents || [])
+      .map((document) => ({
+        fileName: document?.fileName?.trim(),
+        fileUrl: document?.fileUrl?.trim(),
+        mimeType: document?.mimeType?.trim(),
+        docType: document?.docType?.trim(),
+        checksum: document?.checksum?.trim(),
+      }))
+      .filter((document) => Boolean(document.fileName));
+  }
+
+  private async validateLeaveRequestPayload(params: {
+    employee: {
+      id: string;
+      entityId: string;
+      hireDate: Date;
+    };
+    leaveType: LeaveType;
+    startAt: Date;
+    endAt: Date;
+    hours: number;
+    documents: Array<{
+      fileName?: string;
+      fileUrl?: string;
+      mimeType?: string;
+      docType?: string;
+      checksum?: string;
+    }>;
+  }) {
+    if (Number.isNaN(params.startAt.getTime()) || Number.isNaN(params.endAt.getTime())) {
+      throw new BadRequestException('請假日期格式不正確');
+    }
+
+    if (params.endAt <= params.startAt) {
+      throw new BadRequestException('請假結束時間必須晚於開始時間');
+    }
+
+    if (!Number.isFinite(params.hours) || Number(params.hours) <= 0) {
+      throw new BadRequestException('請假時數必須大於 0');
+    }
+
+    if (
+      params.leaveType.minNoticeHours &&
+      params.leaveType.minNoticeHours > 0
+    ) {
+      const noticeHours =
+        (params.startAt.getTime() - Date.now()) / (60 * 60 * 1000);
+
+      if (noticeHours < params.leaveType.minNoticeHours) {
+        throw new BadRequestException(
+          `${params.leaveType.name} 需至少提前 ${params.leaveType.minNoticeHours} 小時申請`,
+        );
+      }
+    }
+
+    if (params.leaveType.requiresDocument && params.documents.length === 0) {
+      throw new BadRequestException(
+        params.leaveType.documentExamples
+          ? `此假別需提供附件，可參考：${params.leaveType.documentExamples}`
+          : '此假別需提供附件後才能送出',
+      );
+    }
+
+    const overlappingRequest = await this.prisma.leaveRequest.findFirst({
+      where: {
+        employeeId: params.employee.id,
+        status: {
+          in: [
+            LeaveStatus.SUBMITTED,
+            LeaveStatus.UNDER_REVIEW,
+            LeaveStatus.APPROVED,
+          ],
+        },
+        startAt: {
+          lte: params.endAt,
+        },
+        endAt: {
+          gte: params.startAt,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (overlappingRequest) {
+      throw new BadRequestException('此時段已有請假單正在審核或已核准');
+    }
+  }
+
+  private async notifyLeaveApprovers(params: {
+    requesterUserId: string;
+    entityId: string;
+    employeeName: string;
+    leaveTypeName: string;
+    leaveRequestId: string;
+    hours: number;
+    startAt: Date;
+    endAt: Date;
+  }) {
+    const approvers = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        id: { not: params.requesterUserId },
+        roles: {
+          some: {
+            role: {
+              OR: [
+                { code: { in: ['SUPER_ADMIN', 'ADMIN'] } },
+                { name: { in: ['SUPER_ADMIN', 'ADMIN'] } },
+              ],
+            },
+          },
+        },
+        OR: [
+          {
+            employee: {
+              is: {
+                entityId: params.entityId,
+              },
+            },
+          },
+          {
+            employee: {
+              is: null,
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    for (const approver of approvers) {
+      await this.notificationService.create({
+        userId: approver.id,
+        title: '有新的請假單待審核',
+        message: `${params.employeeName} 提交了 ${params.leaveTypeName}，共 ${params.hours} 小時，請前往考勤後台審核。`,
+        type: 'LEAVE_APPROVAL_REQUIRED',
+        category: 'ATTENDANCE',
+        data: {
+          entityId: params.entityId,
+          leaveRequestId: params.leaveRequestId,
+          startAt: params.startAt.toISOString(),
+          endAt: params.endAt.toISOString(),
+        },
+      });
+    }
   }
 
   private mergeLeaveTypeMetadata(

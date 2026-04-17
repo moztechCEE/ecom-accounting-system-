@@ -1,9 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Alert, message } from 'antd';
 import { motion } from 'framer-motion';
-import { PlusOutlined, CalendarOutlined, ClockCircleOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined,
+  CalendarOutlined,
+  ClockCircleOutlined,
+  CheckCircleOutlined,
+  DeleteOutlined,
+  PaperClipOutlined,
+} from '@ant-design/icons';
 import { attendanceService } from '../../services/attendance.service';
-import { LeaveBalance, LeaveRequest, LeaveStatus, LeaveType } from '../../types/attendance';
+import {
+  LeaveBalance,
+  LeaveRequest,
+  LeaveStatus,
+  LeaveType,
+  LeaveRequestDocumentInput,
+} from '../../types/attendance';
 import dayjs from 'dayjs';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { GlassButton } from '../../components/ui/GlassButton';
@@ -11,6 +24,12 @@ import { GlassModal } from '../../components/ui/GlassModal';
 import { GlassInput } from '../../components/ui/GlassInput';
 import { GlassSelect } from '../../components/ui/GlassSelect';
 import { GlassTextarea } from '../../components/ui/GlassTextarea';
+
+const emptyDocument = (): LeaveRequestDocumentInput => ({
+  fileName: '',
+  fileUrl: '',
+  docType: '',
+});
 
 const LeaveRequestPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -29,8 +48,22 @@ const LeaveRequestPage: React.FC = () => {
     endTime: '',
     hours: 0,
     reason: '',
-    location: ''
+    location: '',
+    documents: [] as LeaveRequestDocumentInput[],
   });
+
+  const resetForm = () =>
+    setFormData({
+      leaveTypeId: '',
+      startDate: '',
+      startTime: '',
+      endDate: '',
+      endTime: '',
+      hours: 0,
+      reason: '',
+      location: '',
+      documents: [],
+    });
 
   useEffect(() => {
     loadData();
@@ -74,6 +107,33 @@ const LeaveRequestPage: React.FC = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleDocumentChange = (
+    index: number,
+    field: keyof LeaveRequestDocumentInput,
+    value: string,
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      documents: prev.documents.map((document, documentIndex) =>
+        documentIndex === index ? { ...document, [field]: value } : document,
+      ),
+    }));
+  };
+
+  const addDocument = () => {
+    setFormData((prev) => ({
+      ...prev,
+      documents: [...prev.documents, emptyDocument()],
+    }));
+  };
+
+  const removeDocument = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      documents: prev.documents.filter((_, documentIndex) => documentIndex !== index),
+    }));
+  };
+
   const handleSubmit = async () => {
     try {
       setLoading(true);
@@ -89,24 +149,22 @@ const LeaveRequestPage: React.FC = () => {
         hours: Number(formData.hours),
         reason: formData.reason,
         location: formData.location,
+        documents: formData.documents
+          .map((document) => ({
+            fileName: document.fileName?.trim() || '',
+            fileUrl: document.fileUrl?.trim() || undefined,
+            docType: document.docType?.trim() || undefined,
+          }))
+          .filter((document) => document.fileName),
       });
       
       message.success('請假申請已送出');
       setIsModalVisible(false);
-      setFormData({
-        leaveTypeId: '',
-        startDate: '',
-        startTime: '',
-        endDate: '',
-        endTime: '',
-        hours: 0,
-        reason: '',
-        location: ''
-      });
+      resetForm();
       void loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      message.error('申請失敗');
+      message.error(error?.response?.data?.message || '申請失敗');
     } finally {
       setLoading(false);
     }
@@ -302,6 +360,15 @@ const LeaveRequestPage: React.FC = () => {
                 支薪比例：{selectedLeaveType.paidPercentage ?? 100}%
                 {selectedLeaveBalance ? `，剩餘額度：${formatHours(selectedLeaveBalance.remainingHours)}` : '，此假別不追蹤年度額度'}
               </div>
+              <div className="mt-2 text-xs text-slate-500">
+                最低提前時數：{selectedLeaveType.minNoticeHours ?? 0} 小時
+                {selectedLeaveType.requiresDocument ? '，此假別需附件' : '，此假別免附件'}
+              </div>
+              {selectedLeaveType.documentExamples ? (
+                <div className="mt-1 text-xs text-slate-500">
+                  附件參考：{selectedLeaveType.documentExamples}
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -367,6 +434,86 @@ const LeaveRequestPage: React.FC = () => {
             placeholder="請說明請假原因..."
             rows={4}
           />
+
+          <div className="space-y-3 rounded-2xl border border-white/20 bg-white/10 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-slate-800">附件資料</div>
+                <div className="text-xs text-slate-500">
+                  若假別需要附件，至少新增一筆附件名稱；若已有雲端檔案連結，也可以一併填入。
+                </div>
+              </div>
+              <GlassButton
+                variant="secondary"
+                className="flex items-center gap-2 px-4 py-2 text-sm"
+                onClick={addDocument}
+              >
+                <PaperClipOutlined />
+                新增附件
+              </GlassButton>
+            </div>
+
+            {selectedLeaveType?.requiresDocument && formData.documents.length === 0 ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="此假別送出前需要附件"
+                description="至少新增一筆附件名稱；若尚未上傳正式檔案，可先填附件名稱與說明連結。"
+              />
+            ) : null}
+
+            {formData.documents.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-white/30 px-4 py-6 text-center text-sm text-slate-400">
+                尚未新增附件
+              </div>
+            ) : null}
+
+            {formData.documents.map((document, index) => (
+              <div
+                key={`${document.fileName}-${index}`}
+                className="grid grid-cols-1 gap-3 rounded-xl border border-white/20 bg-white/20 p-4"
+              >
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <GlassInput
+                    label="附件名稱"
+                    value={document.fileName || ''}
+                    onChange={(event) =>
+                      handleDocumentChange(index, 'fileName', event.target.value)
+                    }
+                    placeholder="例如：診斷證明、婚假證明"
+                  />
+                  <GlassInput
+                    label="附件類型"
+                    value={document.docType || ''}
+                    onChange={(event) =>
+                      handleDocumentChange(index, 'docType', event.target.value)
+                    }
+                    placeholder="例如：medical_note"
+                  />
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+                  <GlassInput
+                    label="附件連結（選填）"
+                    value={document.fileUrl || ''}
+                    onChange={(event) =>
+                      handleDocumentChange(index, 'fileUrl', event.target.value)
+                    }
+                    placeholder="例如：https://drive.google.com/..."
+                  />
+                  <div className="flex items-end">
+                    <GlassButton
+                      variant="danger"
+                      className="flex items-center gap-2 px-4 py-3 text-sm"
+                      onClick={() => removeDocument(index)}
+                    >
+                      <DeleteOutlined />
+                      刪除
+                    </GlassButton>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </GlassModal>
     </motion.div>
