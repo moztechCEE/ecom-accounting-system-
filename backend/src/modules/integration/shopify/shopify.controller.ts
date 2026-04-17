@@ -31,6 +31,17 @@ class SummaryQueryDto {
   until?: string;
 }
 
+class BackfillHistoryDto {
+  @IsString()
+  entityId!: string;
+
+  @IsDateString()
+  beginDate!: string;
+
+  @IsDateString()
+  endDate!: string;
+}
+
 @Controller('integrations/shopify')
 export class ShopifyController {
   constructor(
@@ -58,6 +69,15 @@ export class ShopifyController {
       entityId: body.entityId,
       since: body.since ? new Date(body.since) : undefined,
       until: body.until ? new Date(body.until) : undefined,
+    });
+  }
+
+  @Post('sync/backfill')
+  async backfillHistory(@Body() body: BackfillHistoryDto) {
+    return this.shopifyService.backfillHistory({
+      entityId: body.entityId,
+      beginDate: new Date(body.beginDate),
+      endDate: new Date(body.endDate),
     });
   }
 

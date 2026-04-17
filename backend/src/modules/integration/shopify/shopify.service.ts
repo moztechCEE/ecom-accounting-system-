@@ -85,6 +85,98 @@ export class ShopifyService {
     return result;
   }
 
+  async backfillHistory(params: {
+    entityId: string;
+    beginDate: Date;
+    endDate: Date;
+  }) {
+    await this.assertEntityExists(params.entityId);
+
+    const begin = new Date(params.beginDate);
+    const end = new Date(params.endDate);
+
+    if (Number.isNaN(begin.getTime()) || Number.isNaN(end.getTime())) {
+      throw new BadRequestException('beginDate / endDate must be valid dates');
+    }
+
+    if (begin > end) {
+      throw new BadRequestException('beginDate cannot be later than endDate');
+    }
+
+    const windows: Array<{
+      index: number;
+      since: string;
+      until: string;
+      orders: Awaited<ReturnType<ShopifyService['syncOrders']>>;
+      transactions: Awaited<ReturnType<ShopifyService['syncTransactions']>>;
+    }> = [];
+
+    const totals = {
+      orderFetched: 0,
+      orderCreated: 0,
+      orderUpdated: 0,
+      transactionFetched: 0,
+      transactionCreated: 0,
+      transactionUpdated: 0,
+    };
+
+    let cursor = new Date(begin);
+    let windowIndex = 1;
+
+    while (cursor <= end) {
+      const windowStart = new Date(cursor);
+      const windowEnd = new Date(cursor);
+      windowEnd.setMonth(windowEnd.getMonth() + 1);
+      windowEnd.setDate(0);
+      windowEnd.setHours(23, 59, 59, 999);
+      if (windowEnd > end) {
+        windowEnd.setTime(end.getTime());
+      }
+
+      const [orders, transactions] = await Promise.all([
+        this.syncOrders({
+          entityId: params.entityId,
+          since: windowStart,
+          until: windowEnd,
+        }),
+        this.syncTransactions({
+          entityId: params.entityId,
+          since: windowStart,
+          until: windowEnd,
+        }),
+      ]);
+
+      totals.orderFetched += orders.fetched;
+      totals.orderCreated += orders.created;
+      totals.orderUpdated += orders.updated;
+      totals.transactionFetched += transactions.fetched;
+      totals.transactionCreated += transactions.created;
+      totals.transactionUpdated += transactions.updated;
+
+      windows.push({
+        index: windowIndex,
+        since: windowStart.toISOString(),
+        until: windowEnd.toISOString(),
+        orders,
+        transactions,
+      });
+
+      cursor = new Date(windowEnd);
+      cursor.setMilliseconds(cursor.getMilliseconds() + 1);
+      windowIndex += 1;
+    }
+
+    return {
+      success: true,
+      entityId: params.entityId,
+      beginDate: begin.toISOString(),
+      endDate: end.toISOString(),
+      windowCount: windows.length,
+      totals,
+      windows,
+    };
+  }
+
   assertSchedulerToken(providedToken?: string | null) {
     const expected =
       this.config.get<string>('SHOPIFY_SYNC_JOB_TOKEN', '') || '';

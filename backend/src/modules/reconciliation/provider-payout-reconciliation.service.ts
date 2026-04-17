@@ -53,6 +53,13 @@ type MatchResult = {
   message: string;
 };
 
+type PayoutJournalContext = {
+  bankDepositAccountId: string;
+  clearingAccountId: string;
+  platformFeeAccountId: string;
+  gatewayFeeAccountId: string;
+};
+
 const COMMON_ALIASES: Record<string, string[]> = {
   externalOrderId: [
     'externalOrderId',
@@ -231,6 +238,8 @@ export class ProviderPayoutReconciliationService {
         dto.entityId,
         normalizedRows,
       );
+      const journalContextCache = new Map<string, PayoutJournalContext>();
+      const openPeriodCache = new Map<string, string | null>();
       const reservedPaymentIds = new Set<string>();
       const lineWrites: Prisma.PayoutImportLineCreateManyInput[] = [];
       let matchedCount = 0;
@@ -277,6 +286,8 @@ export class ProviderPayoutReconciliationService {
           line,
           match.candidate,
           userId,
+          journalContextCache,
+          openPeriodCache,
         );
         matchedCount += 1;
 
@@ -315,6 +326,9 @@ export class ProviderPayoutReconciliationService {
         unmatchedCount,
         invalidCount,
       };
+    }, {
+      maxWait: 20_000,
+      timeout: 120_000,
     });
   }
 
@@ -704,6 +718,8 @@ export class ProviderPayoutReconciliationService {
     line: NormalizedPayoutLine,
     payment: MatchCandidate,
     userId: string,
+    journalContextCache: Map<string, PayoutJournalContext>,
+    openPeriodCache: Map<string, string | null>,
   ) {
     const currency = payment.amountGrossCurrency || line.currency || 'TWD';
     const fxRate = new Decimal(payment.amountGrossFxRate || 1);
@@ -747,6 +763,8 @@ export class ProviderPayoutReconciliationService {
         fxRate,
       },
       userId,
+      journalContextCache,
+      openPeriodCache,
     );
     const notes = this.buildProviderPayoutNote(payment.notes, {
       provider: line.provider,
@@ -866,67 +884,20 @@ export class ProviderPayoutReconciliationService {
       fxRate: Decimal;
     },
     userId: string,
+    journalContextCache: Map<string, PayoutJournalContext>,
+    openPeriodCache: Map<string, string | null>,
   ) {
-    const [bankDepositAccount, clearingAccount, platformFeeAccount, gatewayFeeAccount] =
-      await Promise.all([
-        tx.account.findUnique({
-          where: {
-            entityId_code: {
-              entityId: payment.entityId,
-              code: '1113',
-            },
-          },
-          select: { id: true },
-        }),
-        tx.account.findUnique({
-          where: {
-            entityId_code: {
-              entityId: payment.entityId,
-              code: '1191',
-            },
-          },
-          select: { id: true },
-        }),
-        tx.account.findUnique({
-          where: {
-            entityId_code: {
-              entityId: payment.entityId,
-              code: '6131',
-            },
-          },
-          select: { id: true },
-        }),
-        tx.account.findUnique({
-          where: {
-            entityId_code: {
-              entityId: payment.entityId,
-              code: '6134',
-            },
-          },
-          select: { id: true },
-        }),
-      ]);
-
-    if (
-      !bankDepositAccount ||
-      !clearingAccount ||
-      !platformFeeAccount ||
-      !gatewayFeeAccount
-    ) {
-      throw new NotFoundException(
-        '缺少撥款自動對帳所需會計科目（1113 / 1191 / 6131 / 6134）',
-      );
-    }
-
-    const openPeriod = await tx.period.findFirst({
-      where: {
-        entityId: payment.entityId,
-        status: 'open',
-        startDate: { lte: line.payoutDate || payment.payoutDate },
-        endDate: { gte: line.payoutDate || payment.payoutDate },
-      },
-      select: { id: true },
-    });
+    const journalContext = await this.resolvePayoutJournalContext(
+      tx,
+      payment.entityId,
+      journalContextCache,
+    );
+    const openPeriodId = await this.resolveOpenPeriodId(
+      tx,
+      payment.entityId,
+      line.payoutDate || payment.payoutDate,
+      openPeriodCache,
+    );
 
     const sourceModule = 'reconciliation_payout';
     const sourceId = payment.id;
@@ -935,7 +906,7 @@ export class ProviderPayoutReconciliationService {
       value.mul(amounts.fxRate).toDecimalPlaces(2);
     const journalLines: Prisma.JournalLineCreateManyJournalEntryInput[] = [
       {
-        accountId: bankDepositAccount.id,
+        accountId: journalContext.bankDepositAccountId,
         debit: amounts.netAmount,
         credit: new Decimal(0),
         currency: amounts.currency,
@@ -946,7 +917,7 @@ export class ProviderPayoutReconciliationService {
       ...(amounts.platformFeeAmount.greaterThan(0)
         ? [
             {
-              accountId: platformFeeAccount.id,
+              accountId: journalContext.platformFeeAccountId,
               debit: amounts.platformFeeAmount,
               credit: new Decimal(0),
               currency: amounts.currency,
@@ -959,7 +930,7 @@ export class ProviderPayoutReconciliationService {
       ...(amounts.gatewayFeeAmount.greaterThan(0)
         ? [
             {
-              accountId: gatewayFeeAccount.id,
+              accountId: journalContext.gatewayFeeAccountId,
               debit: amounts.gatewayFeeAmount,
               credit: new Decimal(0),
               currency: amounts.currency,
@@ -970,7 +941,7 @@ export class ProviderPayoutReconciliationService {
           ]
         : []),
       {
-        accountId: clearingAccount.id,
+        accountId: journalContext.clearingAccountId,
         debit: new Decimal(0),
         credit: amounts.grossAmount,
         currency: amounts.currency,
@@ -1002,7 +973,7 @@ export class ProviderPayoutReconciliationService {
         data: {
           date: line.payoutDate || payment.payoutDate,
           description,
-          periodId: openPeriod?.id || null,
+          periodId: openPeriodId,
           approvedBy: userId,
           approvedAt: new Date(),
         },
@@ -1025,7 +996,7 @@ export class ProviderPayoutReconciliationService {
         description,
         sourceModule,
         sourceId,
-        periodId: openPeriod?.id,
+        periodId: openPeriodId,
         createdBy: userId,
         approvedBy: userId,
         approvedAt: new Date(),
@@ -1039,6 +1010,107 @@ export class ProviderPayoutReconciliationService {
     });
 
     return createdJournal.id;
+  }
+
+  private async resolvePayoutJournalContext(
+    tx: Prisma.TransactionClient,
+    entityId: string,
+    cache: Map<string, PayoutJournalContext>,
+  ) {
+    const cached = cache.get(entityId);
+    if (cached) {
+      return cached;
+    }
+
+    const [
+      bankDepositAccount,
+      clearingAccount,
+      platformFeeAccount,
+      gatewayFeeAccount,
+    ] = await Promise.all([
+      tx.account.findUnique({
+        where: {
+          entityId_code: {
+            entityId,
+            code: '1113',
+          },
+        },
+        select: { id: true },
+      }),
+      tx.account.findUnique({
+        where: {
+          entityId_code: {
+            entityId,
+            code: '1191',
+          },
+        },
+        select: { id: true },
+      }),
+      tx.account.findUnique({
+        where: {
+          entityId_code: {
+            entityId,
+            code: '6131',
+          },
+        },
+        select: { id: true },
+      }),
+      tx.account.findUnique({
+        where: {
+          entityId_code: {
+            entityId,
+            code: '6134',
+          },
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    if (
+      !bankDepositAccount ||
+      !clearingAccount ||
+      !platformFeeAccount ||
+      !gatewayFeeAccount
+    ) {
+      throw new NotFoundException(
+        '缺少撥款自動對帳所需會計科目（1113 / 1191 / 6131 / 6134）',
+      );
+    }
+
+    const context = {
+      bankDepositAccountId: bankDepositAccount.id,
+      clearingAccountId: clearingAccount.id,
+      platformFeeAccountId: platformFeeAccount.id,
+      gatewayFeeAccountId: gatewayFeeAccount.id,
+    };
+    cache.set(entityId, context);
+    return context;
+  }
+
+  private async resolveOpenPeriodId(
+    tx: Prisma.TransactionClient,
+    entityId: string,
+    targetDate: Date,
+    cache: Map<string, string | null>,
+  ) {
+    const cacheKey = `${entityId}:${targetDate.toISOString().slice(0, 10)}`;
+    if (cache.has(cacheKey)) {
+      return cache.get(cacheKey) || null;
+    }
+
+    const openPeriod = await tx.period.findFirst({
+      where: {
+        entityId,
+        status: 'open',
+        startDate: { lte: targetDate },
+        endDate: { gte: targetDate },
+      },
+      select: { id: true },
+    });
+
+    const periodId = openPeriod?.id || null;
+    cache.set(cacheKey, periodId);
+    return periodId;
   }
 
   private toLineWrite(
