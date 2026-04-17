@@ -92,6 +92,7 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
                 <Descriptions.Item label="電話">{order.customerPhone || '未填寫'}</Descriptions.Item>
                 <Descriptions.Item label="來源">{order.sourceLabel || order.channelName || '未歸戶來源'}</Descriptions.Item>
                 <Descriptions.Item label="品牌">{order.sourceBrand || '未設定'}</Descriptions.Item>
+                <Descriptions.Item label="發票號碼">{order.invoiceNumber || '尚未開立'}</Descriptions.Item>
               </Descriptions>
             </GlassDrawerSection>
 
@@ -108,9 +109,27 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
                 </div>
                 <div className="flex justify-between items-center mb-4">
                   <Text type="secondary">付款狀態</Text>
-                  <Tag color={order.status === 'completed' ? 'success' : 'processing'} className="rounded-full px-2 border-none">
-                    {order.status === 'completed' ? '已完成' : '處理中'}
+                  <Tag color={order.accountingPosted ? 'success' : 'processing'} className="rounded-full px-2 border-none">
+                    {order.accountingPosted ? '已入帳' : '待入帳'}
                   </Tag>
+                </div>
+                <div className="flex justify-between items-center mb-3">
+                  <Text type="secondary">已收 / 應收</Text>
+                  <Text strong>
+                    NT$ {Number(order.paidAmountOriginal || 0).toLocaleString()} / NT$ {Number(order.outstandingAmountOriginal || 0).toLocaleString()}
+                  </Text>
+                </div>
+                <div className="flex justify-between items-center mb-3">
+                  <Text type="secondary">金流 / 平台手續費</Text>
+                  <Text>
+                    NT$ {Number(order.feeGatewayOriginal || 0).toLocaleString()} / NT$ {Number(order.feePlatformOriginal || 0).toLocaleString()}
+                  </Text>
+                </div>
+                <div className="flex justify-between items-center mb-3">
+                  <Text type="secondary">實收淨額</Text>
+                  <Text strong className="text-emerald-600">
+                    NT$ {Number(order.amountNetOriginal || 0).toLocaleString()}
+                  </Text>
                 </div>
                 <Divider className="my-4" />
                 <div className="flex justify-between items-center">
@@ -149,6 +168,12 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
                 <div className="flex justify-between mb-2">
                   <Text>稅額 (5%)</Text>
                   <Text>NT$ {(Number(order.totalAmount || 0) - Number(order.totalAmount || 0) / 1.05).toFixed(0)}</Text>
+                </div>
+                <div className="flex justify-between mb-2">
+                  <Text>發票 / 會計</Text>
+                  <Text>
+                    {order.invoiceNumber || '待開票'} · {order.accountingPosted ? '已入帳' : '待入帳'}
+                  </Text>
                 </div>
                 <Divider className="my-2" />
                 <div className="flex justify-between">

@@ -151,7 +151,14 @@ const SalesPage: React.FC = () => {
       title: '金額',
       dataIndex: 'totalAmount',
       key: 'totalAmount',
-      render: (amount: number) => <span className="font-mono">NT$ {Number(amount).toLocaleString()}</span>,
+      render: (_: number, record: SalesOrder) => (
+        <div>
+          <div className="font-mono font-medium">NT$ {Number(record.totalAmount).toLocaleString()}</div>
+          <div className="text-xs text-slate-400">
+            應收 NT$ {Number(record.outstandingAmountOriginal || 0).toLocaleString()}
+          </div>
+        </div>
+      ),
     },
     {
       title: '狀態',
@@ -180,6 +187,37 @@ const SalesPage: React.FC = () => {
       dataIndex: 'paymentStatus',
       key: 'paymentStatus',
       render: (status: string) => <Tag>{status}</Tag>
+    },
+    {
+      title: '手續費 / 淨額',
+      key: 'fees',
+      render: (_: unknown, record: SalesOrder) => (
+        <div>
+          <div className="font-medium text-rose-600">
+            NT$ {Number((record.feeGatewayOriginal || 0) + (record.feePlatformOriginal || 0)).toLocaleString()}
+          </div>
+          <div className="text-xs text-slate-400">
+            淨額 NT$ {Number(record.amountNetOriginal || 0).toLocaleString()}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '發票 / 入帳',
+      key: 'accounting',
+      render: (_: unknown, record: SalesOrder) => (
+        <div>
+          <div className="font-medium text-slate-900">{record.invoiceNumber || '待開票'}</div>
+          <div className="flex flex-wrap gap-1 pt-1">
+            <Tag color={record.invoiceNumber ? 'green' : 'orange'}>
+              {record.invoiceStatus || 'pending'}
+            </Tag>
+            <Tag color={record.accountingPosted ? 'green' : 'default'}>
+              {record.accountingPosted ? '已入帳' : '待入帳'}
+            </Tag>
+          </div>
+        </div>
+      ),
     },
     {
       title: '通路',

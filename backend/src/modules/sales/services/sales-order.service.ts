@@ -287,7 +287,7 @@ export class SalesOrderService {
       endDate?: Date;
     },
   ) {
-    return this.prisma.salesOrder.findMany({
+    const orders = await this.prisma.salesOrder.findMany({
       where: {
         entityId,
         ...(filters?.channelId && { channelId: filters.channelId }),
@@ -312,6 +312,9 @@ export class SalesOrderService {
             payoutDate: 'desc',
           },
         },
+        invoices: {
+          orderBy: [{ issuedAt: 'desc' }, { createdAt: 'desc' }],
+        },
         shipments: {
           orderBy: {
             shipDate: 'desc',
@@ -319,6 +322,82 @@ export class SalesOrderService {
         },
       },
       orderBy: { orderDate: 'desc' },
+    });
+
+    const orderIds = orders.map((order) => order.id);
+    const [journals, arInvoices] = await Promise.all([
+      this.prisma.journalEntry.findMany({
+        where: {
+          entityId,
+          sourceModule: 'sales',
+          sourceId: {
+            in: orderIds.length ? orderIds : ['__none__'],
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.arInvoice.findMany({
+        where: {
+          entityId,
+          sourceId: {
+            in: orderIds.length ? orderIds : ['__none__'],
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const journalMap = new Map<string, (typeof journals)[number]>();
+    for (const journal of journals) {
+      if (journal.sourceId && !journalMap.has(journal.sourceId)) {
+        journalMap.set(journal.sourceId, journal);
+      }
+    }
+
+    const arMap = new Map<string, (typeof arInvoices)[number]>();
+    for (const invoice of arInvoices) {
+      if (invoice.sourceId && !arMap.has(invoice.sourceId)) {
+        arMap.set(invoice.sourceId, invoice);
+      }
+    }
+
+    return orders.map((order) => {
+      const latestInvoice = order.invoices[0] || null;
+      const arInvoice = arMap.get(order.id) || null;
+      const journal = journalMap.get(order.id) || null;
+      const grossAmount = Number(order.totalGrossOriginal || 0);
+      const paidAmount = order.payments.reduce(
+        (sum, payment) => sum + Number(payment.amountGrossOriginal || 0),
+        0,
+      );
+      const gatewayFeeAmount = order.payments.reduce(
+        (sum, payment) => sum + Number(payment.feeGatewayOriginal || 0),
+        0,
+      );
+      const platformFeeAmount = order.payments.reduce(
+        (sum, payment) => sum + Number(payment.feePlatformOriginal || 0),
+        0,
+      );
+      const netAmount = order.payments.reduce(
+        (sum, payment) => sum + Number(payment.amountNetOriginal || 0),
+        0,
+      );
+
+      return {
+        ...order,
+        paidAmountOriginal: paidAmount,
+        outstandingAmountOriginal: Math.max(grossAmount - paidAmount, 0),
+        feeGatewayOriginal: gatewayFeeAmount,
+        feePlatformOriginal: platformFeeAmount,
+        amountNetOriginal: netAmount,
+        invoiceNumber: latestInvoice?.invoiceNumber || null,
+        invoiceStatus: latestInvoice?.status || (order.hasInvoice ? 'issued' : 'pending'),
+        arStatus: arInvoice?.status || null,
+        arDueDate: arInvoice?.dueDate || null,
+        journalEntryId: journal?.id || null,
+        journalApprovedAt: journal?.approvedAt || null,
+        accountingPosted: Boolean(journal),
+      };
     });
   }
 

@@ -1,189 +1,272 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
+  Alert,
   Button,
-  DatePicker,
-  Form,
+  Card,
   Input,
-  InputNumber,
-  Drawer,
-  Select,
   Space,
+  Statistic,
   Table,
   Tag,
   Typography,
   message,
-  Card,
-  Row,
-  Col,
-  Statistic,
-  Popconfirm
 } from 'antd'
-import { 
-  PlusOutlined, 
-  SearchOutlined, 
-  DeleteOutlined,
-  EditOutlined,
+import {
+  AuditOutlined,
   DollarCircleOutlined,
-  ClockCircleOutlined,
-  CheckCircleOutlined
+  FileTextOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+  SyncOutlined,
+  WarningOutlined,
 } from '@ant-design/icons'
-import { GlassDrawer, GlassDrawerSection } from '../components/ui/GlassDrawer'
 import { motion } from 'framer-motion'
 import dayjs from 'dayjs'
-import { arService } from '../services/ar.service'
-import { ArInvoice } from '../types'
+import {
+  arService,
+  ReceivableMonitorItem,
+  ReceivableMonitorSummary,
+} from '../services/ar.service'
 
 const { Title, Text } = Typography
-const { RangePicker } = DatePicker
+
+const currency = (value: number) => `NT$ ${Number(value || 0).toLocaleString()}`
+
+const statusColorMap: Record<string, string> = {
+  paid: 'green',
+  partial: 'gold',
+  unpaid: 'blue',
+  overdue: 'red',
+  written_off: 'default',
+  issued: 'green',
+  pending: 'orange',
+  draft: 'default',
+}
+
+const warningLabelMap: Record<string, string> = {
+  missing_fee: '手續費待補',
+  missing_journal: '尚未入帳',
+  missing_ar: '未建立應收',
+  invoice_pending: '待補發票',
+  missing_invoice_record: '發票主檔缺漏',
+}
+
+const EmptySummary: ReceivableMonitorSummary = {
+  grossAmount: 0,
+  paidAmount: 0,
+  outstandingAmount: 0,
+  gatewayFeeAmount: 0,
+  platformFeeAmount: 0,
+  netAmount: 0,
+  invoiceIssuedCount: 0,
+  journalPostedCount: 0,
+  missingFeeCount: 0,
+  missingJournalCount: 0,
+  missingInvoiceCount: 0,
+}
 
 const ArInvoicesPage: React.FC = () => {
-  const [invoices, setInvoices] = useState<ArInvoice[]>([])
   const [loading, setLoading] = useState(false)
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [form] = Form.useForm()
+  const [syncing, setSyncing] = useState(false)
+  const [searchText, setSearchText] = useState('')
+  const [items, setItems] = useState<ReceivableMonitorItem[]>([])
+  const [summary, setSummary] = useState<ReceivableMonitorSummary>(EmptySummary)
 
-  const fetchInvoices = async () => {
+  const fetchMonitor = async () => {
     setLoading(true)
     try {
-      const result = await arService.getInvoices()
-      setInvoices(Array.isArray(result?.items) ? result.items : [])
+      const result = await arService.getReceivableMonitor()
+      setItems(result.items || [])
+      setSummary(result.summary || EmptySummary)
     } catch (error) {
-      message.error('載入發票失敗')
-      setInvoices([])
+      message.error('載入應收帳款追蹤失敗')
+      setItems([])
+      setSummary(EmptySummary)
     } finally {
       setLoading(false)
     }
   }
 
+  const handleSync = async () => {
+    setSyncing(true)
+    try {
+      const result = await arService.syncSalesOrders()
+      message.success(
+        `已同步 ${result.orderCount || 0} 筆銷售單，補齊 ${result.arUpserted || 0} 筆應收與 ${result.journalsCreated || 0} 筆分錄`,
+      )
+      await fetchMonitor()
+    } catch (error) {
+      message.error('同步銷售入帳失敗')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   useEffect(() => {
-    fetchInvoices()
+    fetchMonitor()
   }, [])
 
-  // Calculate statistics from loaded invoices
-  const stats = useMemo(() => {
-    const totalReceivable = invoices
-      .filter(i => i.status !== 'PAID')
-      .reduce((sum, i) => sum + (i.amountOriginal || 0), 0)
-    
-    const overdueAmount = invoices
-      .filter(i => i.status === 'OVERDUE')
-      .reduce((sum, i) => sum + (i.amountOriginal || 0), 0)
+  const filteredItems = useMemo(() => {
+    const keyword = searchText.trim().toLowerCase()
+    if (!keyword) return items
 
-    const collectedThisMonth = invoices
-      .filter(i => i.status === 'PAID' && dayjs(i.issueDate).isSame(dayjs(), 'month')) // Approximation
-      .reduce((sum, i) => sum + (i.paidAmountOriginal || i.amountOriginal || 0), 0)
-
-    return { totalReceivable, overdueAmount, collectedThisMonth }
-  }, [invoices])
-
-  const handleOpenDrawer = (invoice?: ArInvoice) => {
-    if (invoice) {
-      setEditingId(invoice.id)
-      form.setFieldsValue({
-        ...invoice,
-        issueDate: dayjs(invoice.issueDate),
-        dueDate: dayjs(invoice.dueDate),
-      })
-    } else {
-      setEditingId(null)
-      form.resetFields()
-      form.setFieldsValue({
-        issueDate: dayjs(),
-        dueDate: dayjs().add(30, 'day')
-      })
-    }
-    setDrawerOpen(true)
-  }
-
-  const handleSubmit = async () => {
-    try {
-      const values = await form.validateFields()
-      const payload = {
-        ...values,
-        issueDate: values.issueDate.toISOString(),
-        dueDate: values.dueDate.toISOString(),
-        items: values.items || [],
-        amountOriginal: values.items?.reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice), 0) || 0,
-        amountCurrency: 'TWD',
-      }
-      
-      if (editingId) {
-        await arService.updateInvoice(editingId, payload)
-        message.success('發票更新成功')
-      } else {
-        await arService.createInvoice(payload)
-        message.success('發票建立成功')
-      }
-      
-      setDrawerOpen(false)
-      form.resetFields()
-      fetchInvoices()
-    } catch (error) {
-      console.error(error)
-      message.error('儲存失敗')
-    }
-  }
-
-  const handleDelete = async (id: string) => {
-    try {
-      await arService.deleteInvoice(id)
-      message.success('發票已刪除')
-      fetchInvoices()
-    } catch (error) {
-      message.error('刪除失敗')
-    }
-  }
+    return items.filter((item) =>
+      [
+        item.orderNumber,
+        item.customerName,
+        item.customerEmail,
+        item.sourceLabel,
+        item.sourceBrand,
+        item.channelName,
+        item.invoiceNumber,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(keyword)),
+    )
+  }, [items, searchText])
 
   const columns = [
-    { title: '發票號碼', dataIndex: 'invoiceNo', key: 'invoiceNo' },
-    { title: '客戶', dataIndex: 'customerId', key: 'customerId' },
-    { 
-      title: '開立日期', 
-      dataIndex: 'issueDate', 
-      key: 'issueDate',
-      render: (date: string) => dayjs(date).format('YYYY-MM-DD')
-    },
-    { 
-      title: '到期日', 
-      dataIndex: 'dueDate', 
-      key: 'dueDate',
-      render: (date: string) => dayjs(date).format('YYYY-MM-DD')
-    },
-    { 
-      title: '金額', 
-      dataIndex: 'amountOriginal', 
-      key: 'amountOriginal',
-      render: (val: number) => `$${(val || 0).toLocaleString()}`
+    {
+      title: '訂單 / 來源',
+      key: 'order',
+      width: 260,
+      render: (_: unknown, record: ReceivableMonitorItem) => (
+        <div>
+          <div className="font-semibold text-slate-900">{record.orderNumber}</div>
+          <div className="text-xs text-slate-400">
+            {record.sourceLabel} · {record.sourceBrand}
+          </div>
+        </div>
+      ),
     },
     {
-      title: '狀態',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: string) => {
-        let color = 'default'
-        if (status === 'PAID') color = 'green'
-        if (status === 'OVERDUE') color = 'red'
-        if (status === 'SENT') color = 'blue'
-        return <Tag color={color}>{status}</Tag>
-      }
+      title: '客戶',
+      key: 'customer',
+      width: 220,
+      render: (_: unknown, record: ReceivableMonitorItem) => (
+        <div>
+          <div className="font-medium text-slate-900">{record.customerName}</div>
+          <div className="text-xs text-slate-400">
+            {record.customerEmail || '未填 Email'}
+          </div>
+        </div>
+      ),
     },
     {
-      title: '操作',
-      key: 'action',
-      render: (_: any, record: ArInvoice) => (
-        <Space>
-          <Button 
-            type="text" 
-            icon={<EditOutlined />} 
-            onClick={() => handleOpenDrawer(record)}
-          />
-          <Popconfirm title="確定要刪除嗎？" onConfirm={() => handleDelete(record.id)}>
-            <Button type="text" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+      title: '收入 / 稅額',
+      key: 'gross',
+      width: 180,
+      render: (_: unknown, record: ReceivableMonitorItem) => (
+        <div>
+          <div className="font-medium text-slate-900">{currency(record.grossAmount)}</div>
+          <div className="text-xs text-slate-400">
+            收入 {currency(record.revenueAmount)} · 稅 {currency(record.taxAmount)}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '應收 / 已收',
+      key: 'receivable',
+      width: 180,
+      render: (_: unknown, record: ReceivableMonitorItem) => (
+        <div>
+          <div className="font-medium text-slate-900">{currency(record.outstandingAmount)}</div>
+          <div className="text-xs text-slate-400">
+            已收 {currency(record.paidAmount)}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '被抽成費用',
+      key: 'fees',
+      width: 200,
+      render: (_: unknown, record: ReceivableMonitorItem) => (
+        <div>
+          <div className="font-medium text-rose-600">{currency(record.feeTotal)}</div>
+          <div className="text-xs text-slate-400">
+            金流 {currency(record.gatewayFeeAmount)} · 平台 {currency(record.platformFeeAmount)}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '淨額 / 對帳',
+      key: 'net',
+      width: 180,
+      render: (_: unknown, record: ReceivableMonitorItem) => (
+        <div>
+          <div className="font-medium text-emerald-600">{currency(record.netAmount)}</div>
+          <div className="text-xs text-slate-400">
+            {record.reconciledFlag ? '已完成對帳' : '待對帳'} · {record.payoutCount} 筆收款
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '發票',
+      key: 'invoice',
+      width: 180,
+      render: (_: unknown, record: ReceivableMonitorItem) => (
+        <div>
+          <div className="font-medium text-slate-900">
+            {record.invoiceNumber || '尚未開立'}
+          </div>
+          <Tag color={statusColorMap[record.invoiceStatus] || 'default'}>
+            {record.invoiceStatus}
+          </Tag>
+        </div>
+      ),
+    },
+    {
+      title: '會計入帳',
+      key: 'accounting',
+      width: 180,
+      render: (_: unknown, record: ReceivableMonitorItem) => (
+        <div>
+          <Tag color={record.accountingPosted ? 'green' : 'orange'}>
+            {record.accountingPosted ? '已建立分錄' : '待建立分錄'}
+          </Tag>
+          <div className="text-xs text-slate-400 mt-1">
+            {record.journalEntryId
+              ? `分錄 ${record.journalApprovedAt ? '已審核' : '待審核'}`
+              : '尚未過帳'}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '異常提醒',
+      key: 'warnings',
+      width: 220,
+      render: (_: unknown, record: ReceivableMonitorItem) => (
+        <Space size={[4, 4]} wrap>
+          {record.warningCodes.length ? (
+            record.warningCodes.map((code) => (
+              <Tag key={code} color="red">
+                {warningLabelMap[code] || code}
+              </Tag>
+            ))
+          ) : (
+            <Tag color="green">正常</Tag>
+          )}
         </Space>
-      )
-    }
+      ),
+    },
+    {
+      title: '日期',
+      key: 'dates',
+      width: 160,
+      render: (_: unknown, record: ReceivableMonitorItem) => (
+        <div className="text-sm">
+          <div>{dayjs(record.orderDate).format('YYYY-MM-DD')}</div>
+          <div className="text-xs text-slate-400">
+            到期 {dayjs(record.dueDate).format('YYYY-MM-DD')}
+          </div>
+        </div>
+      ),
+    },
   ]
 
   return (
@@ -193,175 +276,131 @@ const ArInvoicesPage: React.FC = () => {
       transition={{ duration: 0.5 }}
       className="space-y-6"
     >
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <Title level={2} className="!mb-1 !font-light">應收帳款 (AR)</Title>
-          <Text className="text-gray-500">管理客戶發票與收款</Text>
+          <Title level={2} className="!mb-1 !font-light">
+            應收帳款與入帳追蹤
+          </Title>
+          <Text className="text-gray-500">
+            直接檢查每筆訂單的收入、應收、手續費、淨額、發票與會計分錄是否都已落下來。
+          </Text>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenDrawer()}>
-          建立發票
-        </Button>
+        <Space wrap>
+          <Button icon={<ReloadOutlined />} onClick={fetchMonitor}>
+            重新整理
+          </Button>
+          <Button
+            type="primary"
+            icon={<SyncOutlined spin={syncing} />}
+            loading={syncing}
+            onClick={handleSync}
+          >
+            同步銷售入帳
+          </Button>
+        </Space>
       </div>
 
-      <Row gutter={16}>
-        <Col span={8}>
-          <Card bordered={false} className="glass-card">
-            <Statistic
-              title="總應收金額"
-              value={stats.totalReceivable}
-              precision={0}
-              prefix={<DollarCircleOutlined />}
-              suffix="TWD"
-              valueStyle={{ color: '#1890ff' }}
-            />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card bordered={false} className="glass-card">
-            <Statistic
-              title="逾期金額"
-              value={stats.overdueAmount}
-              precision={0}
-              prefix={<ClockCircleOutlined />}
-              suffix="TWD"
-              valueStyle={{ color: '#cf1322' }}
-            />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card bordered={false} className="glass-card">
-            <Statistic
-              title="本月已收款 (預估)"
-              value={stats.collectedThisMonth}
-              precision={0}
-              prefix={<CheckCircleOutlined />}
-              suffix="TWD"
-              valueStyle={{ color: '#3f8600' }}
-            />
-          </Card>
-        </Col>
-      </Row>
+      <Alert
+        showIcon
+        type="info"
+        icon={<AuditOutlined />}
+        message="這個頁面現在會把銷售訂單、收款、綠界/平台手續費、發票號碼與會計分錄狀態放在同一張表追蹤。"
+      />
 
-      <Card className="glass-card" bordered={false}>
-        <Form layout="inline" className="mb-6">
-          <Form.Item name="search">
-            <Input prefix={<SearchOutlined />} placeholder="搜尋發票號碼/客戶" />
-          </Form.Item>
-          <Form.Item name="dateRange">
-            <RangePicker />
-          </Form.Item>
-          <Form.Item>
-            <Button>篩選</Button>
-          </Form.Item>
-        </Form>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+        <Card bordered={false} className="glass-card">
+          <Statistic
+            title="總收入"
+            value={summary.grossAmount}
+            precision={0}
+            prefix={<DollarCircleOutlined />}
+            formatter={(value) => currency(Number(value || 0))}
+          />
+        </Card>
+        <Card bordered={false} className="glass-card">
+          <Statistic
+            title="未收應收"
+            value={summary.outstandingAmount}
+            precision={0}
+            prefix={<WarningOutlined />}
+            valueStyle={{ color: '#cf1322' }}
+            formatter={(value) => currency(Number(value || 0))}
+          />
+        </Card>
+        <Card bordered={false} className="glass-card">
+          <Statistic
+            title="金流手續費"
+            value={summary.gatewayFeeAmount}
+            precision={0}
+            prefix={<DollarCircleOutlined />}
+            valueStyle={{ color: '#fa8c16' }}
+            formatter={(value) => currency(Number(value || 0))}
+          />
+        </Card>
+        <Card bordered={false} className="glass-card">
+          <Statistic
+            title="平台手續費"
+            value={summary.platformFeeAmount}
+            precision={0}
+            prefix={<DollarCircleOutlined />}
+            valueStyle={{ color: '#722ed1' }}
+            formatter={(value) => currency(Number(value || 0))}
+          />
+        </Card>
+        <Card bordered={false} className="glass-card">
+          <Statistic
+            title="已開立發票 / 已過帳"
+            value={`${summary.invoiceIssuedCount} / ${summary.journalPostedCount}`}
+            prefix={<FileTextOutlined />}
+          />
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card bordered={false} className="glass-card">
+          <div className="text-sm text-slate-500">手續費欄待補</div>
+          <div className="mt-2 text-3xl font-semibold text-rose-600">
+            {summary.missingFeeCount}
+          </div>
+        </Card>
+        <Card bordered={false} className="glass-card">
+          <div className="text-sm text-slate-500">尚未建立分錄</div>
+          <div className="mt-2 text-3xl font-semibold text-amber-600">
+            {summary.missingJournalCount}
+          </div>
+        </Card>
+        <Card bordered={false} className="glass-card">
+          <div className="text-sm text-slate-500">待補發票</div>
+          <div className="mt-2 text-3xl font-semibold text-blue-600">
+            {summary.missingInvoiceCount}
+          </div>
+        </Card>
+      </div>
+
+      <Card bordered={false} className="glass-card">
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <Input
+            allowClear
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            prefix={<SearchOutlined />}
+            placeholder="搜尋訂單編號、顧客、來源、品牌或發票號碼"
+            className="max-w-xl"
+          />
+          <Text className="text-xs text-slate-400">
+            共 {filteredItems.length} 筆，這裡是你要看的真正入帳追蹤，不是單純資料匯入列表。
+          </Text>
+        </div>
 
         <Table
-          rowKey="id"
+          rowKey="orderId"
           loading={loading}
           columns={columns}
-          dataSource={invoices}
-          scroll={{ x: 1000 }}
+          dataSource={filteredItems}
+          scroll={{ x: 1800 }}
+          pagination={{ pageSize: 10, showSizeChanger: true }}
         />
       </Card>
-
-      <GlassDrawer
-        title={editingId ? "編輯發票" : "建立新發票"}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        width={720}
-      >
-        <Form form={form} layout="vertical" className="h-full flex flex-col">
-          <div className="flex-1 space-y-4">
-            <GlassDrawerSection>
-              <div className="mb-4 font-semibold text-slate-800">基本資訊</div>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item name="customerId" label="客戶" rules={[{ required: true }]}>
-                    <Select placeholder="選擇客戶">
-                      <Select.Option value="CUST001">範例客戶 A</Select.Option>
-                      <Select.Option value="CUST002">範例客戶 B</Select.Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="invoiceNo" label="發票號碼" rules={[{ required: true }]}>
-                    <Input />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item name="issueDate" label="開立日期" rules={[{ required: true }]}>
-                    <DatePicker className="w-full" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="dueDate" label="到期日" rules={[{ required: true }]}>
-                    <DatePicker className="w-full" />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </GlassDrawerSection>
-
-            <GlassDrawerSection>
-              <div className="mb-4 font-semibold text-slate-800">發票項目</div>
-              <Form.List name="items">
-                {(fields, { add, remove }) => (
-                  <>
-                    {fields.map(({ key, name, ...restField }) => (
-                      <Space key={key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
-                        <Form.Item
-                          {...restField}
-                          name={[name, 'description']}
-                          rules={[{ required: true, message: 'Missing description' }]}
-                        >
-                          <Input placeholder="項目說明" style={{ width: 240 }} />
-                        </Form.Item>
-                        <Form.Item
-                          {...restField}
-                          name={[name, 'quantity']}
-                          rules={[{ required: true, message: 'Missing quantity' }]}
-                        >
-                          <InputNumber placeholder="數量" min={1} />
-                        </Form.Item>
-                        <Form.Item
-                          {...restField}
-                          name={[name, 'unitPrice']}
-                          rules={[{ required: true, message: 'Missing price' }]}
-                        >
-                          <InputNumber placeholder="單價" min={0} />
-                        </Form.Item>
-                        <DeleteOutlined onClick={() => remove(name)} />
-                      </Space>
-                    ))}
-                    <Form.Item>
-                      <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-                        新增項目
-                      </Button>
-                    </Form.Item>
-                  </>
-                )}
-              </Form.List>
-            </GlassDrawerSection>
-
-            <GlassDrawerSection>
-              <div className="mb-4 font-semibold text-slate-800">其他</div>
-              <Form.Item name="notes" label="備註">
-                <Input.TextArea rows={3} />
-              </Form.Item>
-            </GlassDrawerSection>
-          </div>
-
-          <GlassDrawerSection>
-            <div className="flex justify-end gap-2">
-              <Button onClick={() => setDrawerOpen(false)} className="rounded-full">取消</Button>
-              <Button type="primary" onClick={handleSubmit} className="rounded-full bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-200">
-                {editingId ? "更新" : "建立"}
-              </Button>
-            </div>
-          </GlassDrawerSection>
-        </Form>
-      </GlassDrawer>
     </motion.div>
   )
 }

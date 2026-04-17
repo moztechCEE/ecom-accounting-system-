@@ -16,6 +16,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ArService } from './ar.service';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 /**
  * 應收帳款控制器
@@ -36,6 +37,24 @@ export class ArController {
     @Query('status') status?: string,
   ) {
     return this.arService.getInvoices(entityId, status);
+  }
+
+  @Get('monitor')
+  @ApiOperation({ summary: '查詢銷售應收與入帳追蹤' })
+  async getReceivableMonitor(
+    @Query('entityId') entityId: string,
+    @Query('status') status?: string,
+  ) {
+    return this.arService.getReceivableMonitor(entityId, status);
+  }
+
+  @Post('sync/sales-orders')
+  @ApiOperation({ summary: '將銷售訂單同步為應收帳款與收入分錄' })
+  async syncSalesOrders(
+    @Query('entityId') entityId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.arService.syncSalesReceivables(entityId, userId);
   }
 
   @Get('invoices/:id')

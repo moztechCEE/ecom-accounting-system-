@@ -21,7 +21,29 @@ export interface SalesOrder {
   items?: any[]
   channelName?: string
   notes?: string
-  payments?: Array<{ id: string; status: string; payoutDate?: string; notes?: string }>
+  paidAmountOriginal?: number
+  outstandingAmountOriginal?: number
+  feeGatewayOriginal?: number
+  feePlatformOriginal?: number
+  amountNetOriginal?: number
+  invoiceNumber?: string | null
+  invoiceStatus?: string | null
+  arStatus?: string | null
+  arDueDate?: string | null
+  journalEntryId?: string | null
+  journalApprovedAt?: string | null
+  accountingPosted?: boolean
+  payments?: Array<{
+    id: string
+    status: string
+    payoutDate?: string
+    notes?: string
+    amountGrossOriginal?: number
+    amountNetOriginal?: number
+    feeGatewayOriginal?: number
+    feePlatformOriginal?: number
+    reconciledFlag?: boolean
+  }>
   shipments?: Array<{ id: string; status: string; shipDate?: string }>
 }
 
@@ -33,6 +55,18 @@ type SalesOrderApiResponse = {
   totalGrossCurrency?: string | null
   status: string
   notes?: string | null
+  paidAmountOriginal?: number | string
+  outstandingAmountOriginal?: number | string
+  feeGatewayOriginal?: number | string
+  feePlatformOriginal?: number | string
+  amountNetOriginal?: number | string
+  invoiceNumber?: string | null
+  invoiceStatus?: string | null
+  arStatus?: string | null
+  arDueDate?: string | null
+  journalEntryId?: string | null
+  journalApprovedAt?: string | null
+  accountingPosted?: boolean
   customer?: {
     name?: string | null
     email?: string | null
@@ -44,7 +78,17 @@ type SalesOrderApiResponse = {
     name?: string | null
   } | null
   items?: any[]
-  payments?: Array<{ id: string; status: string; payoutDate?: string | null; notes?: string | null }>
+  payments?: Array<{
+    id: string
+    status: string
+    payoutDate?: string | null
+    notes?: string | null
+    amountGrossOriginal?: number | string
+    amountNetOriginal?: number | string
+    feeGatewayOriginal?: number | string
+    feePlatformOriginal?: number | string
+    reconciledFlag?: boolean
+  }>
   shipments?: Array<{ id: string; status: string; shipDate?: string | null }>
 }
 
@@ -119,11 +163,28 @@ const mapSalesOrder = (order: SalesOrderApiResponse): SalesOrder => ({
   items: order.items || [],
   channelName: order.channel?.name?.trim() || '',
   notes: order.notes || undefined,
+  paidAmountOriginal: Number(order.paidAmountOriginal || 0),
+  outstandingAmountOriginal: Number(order.outstandingAmountOriginal || 0),
+  feeGatewayOriginal: Number(order.feeGatewayOriginal || 0),
+  feePlatformOriginal: Number(order.feePlatformOriginal || 0),
+  amountNetOriginal: Number(order.amountNetOriginal || 0),
+  invoiceNumber: order.invoiceNumber || undefined,
+  invoiceStatus: order.invoiceStatus || undefined,
+  arStatus: order.arStatus || undefined,
+  arDueDate: order.arDueDate || undefined,
+  journalEntryId: order.journalEntryId || undefined,
+  journalApprovedAt: order.journalApprovedAt || undefined,
+  accountingPosted: Boolean(order.accountingPosted),
   payments: order.payments?.map((payment) => ({
     id: payment.id,
     status: payment.status,
     payoutDate: payment.payoutDate || undefined,
     notes: payment.notes || undefined,
+    amountGrossOriginal: Number(payment.amountGrossOriginal || 0),
+    amountNetOriginal: Number(payment.amountNetOriginal || 0),
+    feeGatewayOriginal: Number(payment.feeGatewayOriginal || 0),
+    feePlatformOriginal: Number(payment.feePlatformOriginal || 0),
+    reconciledFlag: Boolean(payment.reconciledFlag),
   })) || [],
   shipments: order.shipments?.map((shipment) => ({
     id: shipment.id,
