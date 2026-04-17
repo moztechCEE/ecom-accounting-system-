@@ -8,6 +8,7 @@ import {
   BankAccount,
   PayrollSettings,
 } from "../types";
+import { resolveEntityId } from "./entities.service";
 
 const triggerFileDownload = (blob: Blob, fallbackFilename: string) => {
   const objectUrl = window.URL.createObjectURL(blob);
@@ -59,13 +60,28 @@ export const payrollService = {
   // Departments (Assuming they are managed under payroll or entities)
   // If there is no specific controller, we might need to use a generic one or add it.
   // Based on schema, Department is a model. I'll assume an endpoint exists or I'll mock it for now.
-  getDepartments: async () => {
-    const response = await api.get<Department[]>("/payroll/departments");
+  getDepartments: async (entityId?: string) => {
+    const effectiveEntityId = await resolveEntityId(entityId);
+    const response = await api.get<Department[]>("/payroll/departments", {
+      params: { entityId: effectiveEntityId },
+    });
     return response.data;
   },
 
-  createDepartment: async (data: Partial<Department>) => {
-    const response = await api.post<Department>("/payroll/departments", data);
+  createDepartment: async (data: Partial<Department> & { entityId?: string }) => {
+    const effectiveEntityId = await resolveEntityId(data.entityId);
+    const response = await api.post<Department>("/payroll/departments", {
+      ...data,
+      entityId: effectiveEntityId,
+    });
+    return response.data;
+  },
+
+  updateDepartment: async (id: string, data: Partial<Department>) => {
+    const response = await api.patch<Department>(
+      `/payroll/departments/${id}`,
+      data,
+    );
     return response.data;
   },
 
