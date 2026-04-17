@@ -16,6 +16,7 @@ import {
 } from '@ant-design/icons'
 import { motion } from 'framer-motion'
 import * as XLSX from 'xlsx'
+import dayjs, { Dayjs } from 'dayjs'
 import OrderDetailsDrawer from '../components/OrderDetailsDrawer'
 import SalesAnalytics from '../components/SalesAnalytics'
 import BulkActionBar from '../components/BulkActionBar'
@@ -23,6 +24,8 @@ import { salesService, SalesOrder } from '../services/sales.service'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
+
+type QuickRange = 'today' | 'last7Days' | 'lastMonth' | 'lastYear' | 'custom'
 
 const KanbanColumn: React.FC<{ title: string; status: string; orders: SalesOrder[]; color: string; onClick: (order: SalesOrder) => void }> = ({ title, status, orders, color, onClick }) => (
   <div className="flex-1 min-w-[300px] glass-panel p-4">
@@ -63,6 +66,8 @@ const SalesPage: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [viewMode, setViewMode] = useState<'list' | 'board'>('list')
+  const [quickRange, setQuickRange] = useState<QuickRange>('last7Days')
+  const [customRange, setCustomRange] = useState<[Dayjs | null, Dayjs | null] | null>(null)
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null)
@@ -103,32 +108,32 @@ const SalesPage: React.FC = () => {
 
   const columns = [
     {
-      title: '訂單編號',
-      dataIndex: 'orderNumber',
-      key: 'orderNumber',
-      render: (text: string) => <a className="font-medium text-blue-600">{text}</a>,
-    },
-    {
-      title: '客戶',
-      dataIndex: 'customerName',
-      key: 'customerName',
+      title: '訂單 / 日期',
+      key: 'order',
+      width: 180,
       render: (_: string, record: SalesOrder) => (
         <div>
-          <div className="font-medium text-slate-900">{record.customerName || 'Guest'}</div>
+          <a className="font-medium text-blue-600">{record.orderNumber}</a>
           <div className="text-xs text-slate-400">
-            {record.customerEmail || '未填 Email'}
-            {record.customerPhone ? ` · ${record.customerPhone}` : ''}
+            {dayjs(record.createdAt).format('YYYY/MM/DD HH:mm')}
           </div>
         </div>
       ),
     },
     {
-      title: '來源 / 品牌',
-      key: 'source',
-      render: (_: unknown, record: SalesOrder) => (
+      title: '客戶 / 來源',
+      key: 'customer',
+      width: 260,
+      render: (_: string, record: SalesOrder) => (
         <div>
-          <div className="font-medium text-slate-900">{record.sourceLabel || '未歸戶來源'}</div>
-          <div className="text-xs text-slate-400">{record.sourceBrand || record.channelName || '其他來源'}</div>
+          <div className="font-medium text-slate-900 leading-5">{record.customerName || 'Guest'}</div>
+          <div className="text-xs text-slate-400">
+            {record.customerEmail || '未填 Email'}
+            {record.customerPhone ? ` · ${record.customerPhone}` : ''}
+          </div>
+          <div className="pt-1 text-xs text-slate-500">
+            {record.sourceLabel || '未歸戶來源'} · {record.sourceBrand || record.channelName || '其他來源'}
+          </div>
         </div>
       ),
     },
@@ -142,15 +147,10 @@ const SalesPage: React.FC = () => {
       ),
     },
     {
-      title: '日期',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      render: (date: string) => new Date(date).toLocaleDateString(),
-    },
-    {
-      title: '金額',
+      title: '金額 / 應收',
       dataIndex: 'totalAmount',
-      key: 'totalAmount',
+      key: 'amount',
+      width: 170,
       render: (_: number, record: SalesOrder) => (
         <div>
           <div className="font-mono font-medium">NT$ {Number(record.totalAmount).toLocaleString()}</div>
@@ -161,9 +161,10 @@ const SalesPage: React.FC = () => {
       ),
     },
     {
-      title: '狀態',
+      title: '訂單狀態',
       dataIndex: 'status',
       key: 'status',
+      width: 110,
       render: (status: string) => {
         const colors: Record<string, string> = {
           completed: 'success',
@@ -183,14 +184,22 @@ const SalesPage: React.FC = () => {
       },
     },
     {
-      title: '付款方式',
-      dataIndex: 'paymentStatus',
-      key: 'paymentStatus',
-      render: (status: string) => <Tag>{status}</Tag>
+      title: '付款 / 對帳',
+      key: 'payment',
+      width: 200,
+      render: (_: unknown, record: SalesOrder) => (
+        <div>
+          <Tag>{record.paymentStatus}</Tag>
+          <div className="pt-1 text-xs text-slate-400">
+            {record.payments?.some((payment) => payment.reconciledFlag) ? '已對帳' : '待對帳'}
+          </div>
+        </div>
+      )
     },
     {
       title: '手續費 / 淨額',
       key: 'fees',
+      width: 160,
       render: (_: unknown, record: SalesOrder) => (
         <div>
           <div className="font-medium text-rose-600">
@@ -205,6 +214,7 @@ const SalesPage: React.FC = () => {
     {
       title: '發票 / 入帳',
       key: 'accounting',
+      width: 180,
       render: (_: unknown, record: SalesOrder) => (
         <div>
           <div className="font-medium text-slate-900">{record.invoiceNumber || '待開票'}</div>
@@ -222,6 +232,7 @@ const SalesPage: React.FC = () => {
     {
       title: '通路',
       key: 'channel',
+      width: 110,
       render: (_: unknown, record: SalesOrder) => (
         <Tag color="blue">{record.channelName || record.channelCode || '未知通路'}</Tag>
       ),
@@ -229,16 +240,55 @@ const SalesPage: React.FC = () => {
     {
       title: '操作',
       key: 'action',
+      width: 80,
       render: () => (
         <Button type="text" icon={<MoreOutlined />} />
       ),
     },
   ]
 
+  const now = dayjs()
+  const rangeLabelMap: Record<QuickRange, string> = {
+    today: '今天',
+    last7Days: '過去 7 天',
+    lastMonth: '過去一個月',
+    lastYear: '過去一年',
+    custom: customRange?.[0] && customRange?.[1]
+      ? `${customRange[0].format('YYYY/MM/DD')} - ${customRange[1].format('YYYY/MM/DD')}`
+      : '自定義區間',
+  }
+
+  const isWithinQuickRange = (createdAt: string) => {
+    const orderDate = dayjs(createdAt)
+
+    if (quickRange === 'today') {
+      return orderDate.isSame(now, 'day')
+    }
+
+    if (quickRange === 'last7Days') {
+      return orderDate.isAfter(now.subtract(6, 'day').startOf('day')) || orderDate.isSame(now.subtract(6, 'day').startOf('day'))
+    }
+
+    if (quickRange === 'lastMonth') {
+      return orderDate.isAfter(now.subtract(1, 'month').startOf('day')) || orderDate.isSame(now.subtract(1, 'month').startOf('day'))
+    }
+
+    if (quickRange === 'lastYear') {
+      return orderDate.isAfter(now.subtract(1, 'year').startOf('day')) || orderDate.isSame(now.subtract(1, 'year').startOf('day'))
+    }
+
+    if (customRange?.[0] && customRange?.[1]) {
+      const start = customRange[0].startOf('day')
+      const end = customRange[1].endOf('day')
+      return (orderDate.isAfter(start) || orderDate.isSame(start)) && (orderDate.isBefore(end) || orderDate.isSame(end))
+    }
+
+    return true
+  }
+
   const filteredOrders = orders.filter(order => {
     const keyword = searchText.trim().toLowerCase()
-    if (!keyword) return true
-    return (
+    const matchesKeyword = !keyword || (
       (order.orderNumber || '').toLowerCase().includes(keyword) ||
       (order.customerName || '').toLowerCase().includes(keyword) ||
       (order.channelName || '').toLowerCase().includes(keyword) ||
@@ -246,6 +296,8 @@ const SalesPage: React.FC = () => {
       (order.sourceBrand || '').toLowerCase().includes(keyword) ||
       (order.customerEmail || '').toLowerCase().includes(keyword)
     )
+
+    return matchesKeyword && isWithinQuickRange(order.createdAt)
   })
 
   return (
@@ -269,20 +321,46 @@ const SalesPage: React.FC = () => {
       </div>
 
       {/* Analytics Cards */}
-      <SalesAnalytics orders={filteredOrders} />
+      <SalesAnalytics orders={filteredOrders} rangeLabel={rangeLabelMap[quickRange]} />
 
       {/* Filters & Actions */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 glass-panel p-4">
-        <Space size="large">
+        <Space size="middle" wrap>
           <Input 
             placeholder="搜尋訂單編號、客戶、來源或品牌..." 
             prefix={<SearchOutlined className="text-gray-400" />} 
-            className="w-64"
+            className="w-72"
             value={searchText}
             onChange={e => setSearchText(e.target.value)}
           />
-          <RangePicker />
-          <Button icon={<FilterOutlined />}>篩選</Button>
+          <Segmented
+            options={[
+              { label: '今天', value: 'today' },
+              { label: '過去 7 天', value: 'last7Days' },
+              { label: '過去一個月', value: 'lastMonth' },
+              { label: '過去一年', value: 'lastYear' },
+              { label: '自定義區間', value: 'custom' },
+            ]}
+            value={quickRange}
+            onChange={(value) => setQuickRange(value as QuickRange)}
+          />
+          {quickRange === 'custom' ? (
+            <RangePicker
+              value={customRange}
+              onChange={(value) => setCustomRange((value || null) as [Dayjs | null, Dayjs | null] | null)}
+            />
+          ) : null}
+          <Button
+            icon={<FilterOutlined />}
+            onClick={() => {
+              setSearchText('')
+              if (quickRange === 'custom') {
+                setCustomRange(null)
+              }
+            }}
+          >
+            清除條件
+          </Button>
         </Space>
         <Segmented
           options={[
@@ -306,15 +384,17 @@ const SalesPage: React.FC = () => {
             dataSource={filteredOrders}
             rowKey="id"
             loading={loading}
+            size="small"
+            tableLayout="fixed"
             onRow={(record) => ({
               onClick: () => handleRowClick(record),
               className: 'cursor-pointer hover:bg-gray-50 transition-colors'
             })}
-            pagination={{ pageSize: 10 }}
+            pagination={{ pageSize: 12, showSizeChanger: false }}
           />
         </Card>
       ) : (
-        <div className="flex gap-6 overflow-x-auto pb-4">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <KanbanColumn 
             title="待處理 (Pending)" 
             status="pending" 

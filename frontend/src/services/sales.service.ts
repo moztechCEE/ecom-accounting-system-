@@ -28,6 +28,7 @@ export interface SalesOrder {
   amountNetOriginal?: number
   invoiceNumber?: string | null
   invoiceStatus?: string | null
+  invoiceDate?: string | null
   arStatus?: string | null
   arDueDate?: string | null
   journalEntryId?: string | null
@@ -146,8 +147,22 @@ const resolvePaymentStatus = (order: SalesOrderApiResponse) => {
   return meta.gateway || meta.paymentType || latestPayment?.status || 'pending'
 }
 
+const resolveInvoiceMetadata = (order: SalesOrderApiResponse) => {
+  const meta = extractMetadata(order.notes)
+
+  return {
+    invoiceNumber: order.invoiceNumber || meta.invoiceNumber || undefined,
+    invoiceStatus:
+      order.invoiceStatus ||
+      meta.invoiceStatus ||
+      (meta.invoiceNumber ? 'issued' : undefined),
+    invoiceDate: meta.invoiceDate || undefined,
+  }
+}
+
 const mapSalesOrder = (order: SalesOrderApiResponse): SalesOrder => ({
   ...resolveOrderSource(order),
+  ...resolveInvoiceMetadata(order),
   id: order.id,
   orderNumber: order.externalOrderId?.trim() || order.id,
   customerName: order.customer?.name?.trim() || 'Guest',
@@ -168,8 +183,6 @@ const mapSalesOrder = (order: SalesOrderApiResponse): SalesOrder => ({
   feeGatewayOriginal: Number(order.feeGatewayOriginal || 0),
   feePlatformOriginal: Number(order.feePlatformOriginal || 0),
   amountNetOriginal: Number(order.amountNetOriginal || 0),
-  invoiceNumber: order.invoiceNumber || undefined,
-  invoiceStatus: order.invoiceStatus || undefined,
   arStatus: order.arStatus || undefined,
   arDueDate: order.arDueDate || undefined,
   journalEntryId: order.journalEntryId || undefined,

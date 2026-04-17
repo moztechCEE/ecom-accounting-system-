@@ -615,6 +615,26 @@ export class OneShopService implements OnModuleInit {
       notes.push(`originalOrderNumber=${originalOrderNumber}`);
     }
 
+    const receipt = Array.isArray(order.raw?.receipt) ? order.raw.receipt[0] : null;
+    const invoiceNumber =
+      receipt && typeof receipt.invoice_number === 'string'
+        ? receipt.invoice_number.trim()
+        : '';
+    const invoiceDate =
+      receipt && typeof receipt.invoice_date === 'string'
+        ? receipt.invoice_date.trim()
+        : '';
+    const invoiceStatus = invoiceNumber ? 'issued' : 'pending';
+
+    if (invoiceNumber) {
+      notes.push(`invoiceNumber=${invoiceNumber}`);
+      notes.push(`invoiceStatus=${invoiceStatus}`);
+    }
+
+    if (invoiceDate) {
+      notes.push(`invoiceDate=${invoiceDate}`);
+    }
+
     const rawNote =
       typeof order.raw?.note === 'string' ? order.raw.note.trim() : '';
     const rawShopNote =

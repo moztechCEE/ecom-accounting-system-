@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react'
-import { Card, Statistic, Row, Col, Segmented, Typography, Space, Empty } from 'antd'
+import React, { useMemo } from 'react'
+import { Card, Statistic, Row, Col, Typography, Space, Empty } from 'antd'
 import {
   ThunderboltFilled,
   PieChartOutlined,
@@ -20,51 +20,40 @@ import {
   XAxis,
 } from 'recharts'
 import { motion } from 'framer-motion'
-import dayjs from 'dayjs'
 import { SalesOrder } from '../services/sales.service'
 
 const { Text, Title } = Typography
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d']
 
-type RangeValue = 'Today' | 'Week' | 'Month' | 'Year'
-
-const SalesAnalytics: React.FC<{ orders: SalesOrder[] }> = ({ orders }) => {
-  const [timeRange, setTimeRange] = useState<RangeValue>('Week')
-
-  const filteredOrders = useMemo(() => {
-    const now = dayjs()
-    return orders.filter((order) => {
-      const orderDate = dayjs(order.createdAt)
-      if (timeRange === 'Today') {
-        return orderDate.isSame(now, 'day')
-      }
-      if (timeRange === 'Week') {
-        return orderDate.isAfter(now.subtract(6, 'day').startOf('day'))
-      }
-      if (timeRange === 'Month') {
-        return orderDate.isAfter(now.subtract(29, 'day').startOf('day'))
-      }
-      return orderDate.isAfter(now.subtract(11, 'month').startOf('month'))
-    })
-  }, [orders, timeRange])
-
+const SalesAnalytics: React.FC<{
+  orders: SalesOrder[]
+  rangeLabel: string
+}> = ({ orders, rangeLabel }) => {
+  const filteredOrders = orders
   const revenueTotal = filteredOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0)
   const completedOrders = filteredOrders.filter((order) => order.status === 'completed').length
-  const paidLikeOrders = filteredOrders.filter((order) =>
-    ['completed', 'success', 'paid', 'cod'].includes((order.paymentStatus || '').toLowerCase()),
-  ).length
+  const paidLikeOrders = filteredOrders.filter((order) => {
+    const totalAmount = Number(order.totalAmount || 0)
+    const paidAmount = Number(order.paidAmountOriginal || 0)
+    return totalAmount > 0 && paidAmount >= totalAmount
+  }).length
   const averageOrderValue = filteredOrders.length ? revenueTotal / filteredOrders.length : 0
   const paidRate = filteredOrders.length ? (paidLikeOrders / filteredOrders.length) * 100 : 0
+  const feeTotal = filteredOrders.reduce(
+    (sum, order) => sum + Number(order.feeGatewayOriginal || 0) + Number(order.feePlatformOriginal || 0),
+    0,
+  )
+  const netRevenue = filteredOrders.reduce((sum, order) => sum + Number(order.amountNetOriginal || 0), 0)
 
   const trendData = useMemo(() => {
     const buckets = new Map<string, { name: string; revenue: number; orders: number }>()
 
     filteredOrders.forEach((order) => {
       const bucketKey =
-        timeRange === 'Year'
-          ? dayjs(order.createdAt).format('YYYY-MM')
-          : dayjs(order.createdAt).format('MM/DD')
+        rangeLabel.includes('一年')
+          ? `${new Date(order.createdAt).getFullYear()}-${String(new Date(order.createdAt).getMonth() + 1).padStart(2, '0')}`
+          : `${String(new Date(order.createdAt).getMonth() + 1).padStart(2, '0')}/${String(new Date(order.createdAt).getDate()).padStart(2, '0')}`
       const current = buckets.get(bucketKey) || { name: bucketKey, revenue: 0, orders: 0 }
       current.revenue += Number(order.totalAmount || 0)
       current.orders += 1
@@ -75,7 +64,7 @@ const SalesAnalytics: React.FC<{ orders: SalesOrder[] }> = ({ orders }) => {
       ...item,
       average: item.orders ? Number((item.revenue / item.orders).toFixed(0)) : 0,
     }))
-  }, [filteredOrders, timeRange])
+  }, [filteredOrders, rangeLabel])
 
   const pieData = useMemo(() => {
     const bucket = new Map<string, number>()
@@ -105,12 +94,9 @@ const SalesAnalytics: React.FC<{ orders: SalesOrder[] }> = ({ orders }) => {
             </Text>
           </div>
         </div>
-        <Segmented
-          options={['Today', 'Week', 'Month', 'Year']}
-          value={timeRange}
-          onChange={(value) => setTimeRange(value as RangeValue)}
-          className="glass-segment"
-        />
+        <div className="rounded-full bg-white/70 px-3 py-2 text-xs text-slate-500 shadow-sm">
+          統計區間：{rangeLabel}
+        </div>
       </div>
 
       <Row gutter={[16, 16]}>
@@ -142,7 +128,7 @@ const SalesAnalytics: React.FC<{ orders: SalesOrder[] }> = ({ orders }) => {
                 valueStyle={{ fontWeight: 600 }}
               />
               <div className="mt-1 text-xs text-slate-500">
-                已付款 / 已完成 {paidLikeOrders} 筆
+                已付款 {paidLikeOrders} 筆 / 已完成 {completedOrders} 筆
               </div>
             </Card>
           </motion.div>
@@ -159,7 +145,7 @@ const SalesAnalytics: React.FC<{ orders: SalesOrder[] }> = ({ orders }) => {
                 valueStyle={{ fontWeight: 600 }}
               />
               <div className="mt-1 text-xs text-slate-500">
-                已完成 {completedOrders} 筆
+                手續費 NT$ {feeTotal.toLocaleString()} · 淨額 NT$ {netRevenue.toLocaleString()}
               </div>
             </Card>
           </motion.div>
