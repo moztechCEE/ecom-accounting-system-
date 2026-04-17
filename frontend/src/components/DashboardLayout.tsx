@@ -58,8 +58,8 @@ const DashboardLayout: React.FC = () => {
       label: '會計管理',
       children: [
         { key: '/accounting/accounts', label: '會計科目', onClick: () => navigate('/accounting/accounts') },
-        { key: '/accounting/journals', label: '會計分錄' },
-        { key: '/accounting/periods', label: '會計期間' },
+        { key: '/accounting/journals', label: '會計分錄', onClick: () => navigate('/accounting/journals') },
+        { key: '/accounting/periods', label: '會計期間', onClick: () => navigate('/accounting/periods') },
       ],
     },
     {

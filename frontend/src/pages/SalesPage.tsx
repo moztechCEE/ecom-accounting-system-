@@ -162,10 +162,15 @@ const SalesPage: React.FC = () => {
     },
   ]
 
-  const filteredOrders = orders.filter(order => 
-    order.orderNumber.toLowerCase().includes(searchText.toLowerCase()) ||
-    (order.customerName && order.customerName.toLowerCase().includes(searchText.toLowerCase()))
-  )
+  const filteredOrders = orders.filter(order => {
+    const keyword = searchText.trim().toLowerCase()
+    if (!keyword) return true
+    return (
+      (order.orderNumber || '').toLowerCase().includes(keyword) ||
+      (order.customerName || '').toLowerCase().includes(keyword) ||
+      (order.channelName || '').toLowerCase().includes(keyword)
+    )
+  })
 
   return (
     <motion.div

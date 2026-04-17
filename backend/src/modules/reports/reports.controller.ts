@@ -243,6 +243,24 @@ export class ReportsController {
     );
   }
 
+  @Get('dashboard-operations-hub')
+  @ApiOperation({ summary: '儀錶板營運總控台摘要' })
+  @ApiResponse({ status: 200, description: '成功取得營運、人事、薪資與發票總覽' })
+  @ApiQuery({ name: 'entityId', required: true })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  async getDashboardOperationsHub(
+    @Query('entityId') entityId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getDashboardOperationsHub(
+      entityId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
   @Get(':id/export')
   @ApiOperation({ summary: '匯出報表 (Excel/PDF)' })
   @ApiResponse({ status: 200, description: '成功匯出報表' })

@@ -17,6 +17,22 @@ export const accountingService = {
     return response.data
   },
 
+  async getPeriods(entityId?: string, status?: string): Promise<AccountingPeriod[]> {
+    const effectiveEntityId = entityId?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.get<AccountingPeriod[]>('/accounting/periods', {
+      params: { entityId: effectiveEntityId, status },
+    })
+    return response.data
+  },
+
+  async getJournals(entityId?: string, periodId?: string): Promise<JournalEntry[]> {
+    const effectiveEntityId = entityId?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.get<JournalEntry[]>('/accounting/journals', {
+      params: { entityId: effectiveEntityId, periodId },
+    })
+    return response.data
+  },
+
   async getIncomeStatement(startDate: string, endDate: string, entityId?: string): Promise<IncomeStatement> {
     const effectiveEntityId = entityId?.trim() || DEFAULT_ENTITY_ID
     const response = await api.get<IncomeStatement>('/accounting/reports/income-statement', {
@@ -38,6 +54,44 @@ export const accountingService = {
     return response.data
   },
 
+}
+
+export interface AccountingPeriod {
+  id: string
+  entityId: string
+  name: string
+  startDate: string
+  endDate: string
+  status: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface JournalLine {
+  id: string
+  debit: number | string
+  credit: number | string
+  currency: string
+  amountBase: number | string
+  memo?: string | null
+  account: {
+    id: string
+    code: string
+    name: string
+    type: string
+  }
+}
+
+export interface JournalEntry {
+  id: string
+  entityId: string
+  date: string
+  description: string
+  sourceModule?: string | null
+  sourceId?: string | null
+  periodId?: string | null
+  approvedAt?: string | null
+  journalLines: JournalLine[]
 }
 
 export interface ReportItem {

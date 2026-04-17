@@ -83,12 +83,12 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
               <div className="flex items-center gap-4 mb-6">
                 <Avatar size={64} icon={<UserOutlined />} className="bg-blue-100 text-blue-600" />
                 <div>
-                  <Title level={4} className="!mb-0">{order.customer}</Title>
+                  <Title level={4} className="!mb-0">{order.customerName || 'Guest'}</Title>
                   <Text type="secondary">VIP 會員</Text>
                 </div>
               </div>
               <Descriptions column={1} size="small" labelStyle={{ background: 'transparent' }} contentStyle={{ background: 'transparent' }}>
-                <Descriptions.Item label="Email">contact@{order.customer.toLowerCase().replace(/\s/g, '')}.com</Descriptions.Item>
+                <Descriptions.Item label="Email">contact@{(order.customerName || 'guest').toLowerCase().replace(/\s/g, '')}.com</Descriptions.Item>
                 <Descriptions.Item label="電話">+886 912 345 678</Descriptions.Item>
                 <Descriptions.Item label="地址">台北市信義區信義路五段7號</Descriptions.Item>
               </Descriptions>
@@ -102,7 +102,7 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
                   <Text type="secondary">付款方式</Text>
                   <div className="flex items-center gap-2">
                     <CreditCardOutlined className="text-xl" />
-                    <Text strong>{order.paymentMethod}</Text>
+                    <Text strong>{order.paymentStatus || 'pending'}</Text>
                   </div>
                 </div>
                 <div className="flex justify-between items-center mb-4">
@@ -112,7 +112,7 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
                 <Divider className="my-4" />
                 <div className="flex justify-between items-center">
                   <Text type="secondary">總金額</Text>
-                  <Title level={3} className="!mb-0 !text-blue-600">NT$ {order.amount.toLocaleString()}</Title>
+                  <Title level={3} className="!mb-0 !text-blue-600">NT$ {Number(order.totalAmount || 0).toLocaleString()}</Title>
                 </div>
               </div>
             </GlassDrawerSection>
@@ -124,8 +124,7 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
             <List
               itemLayout="horizontal"
               dataSource={[
-                { title: 'Premium Software License', price: order.amount * 0.6, qty: 1 },
-                { title: 'Maintenance Support (1 Year)', price: order.amount * 0.4, qty: 1 },
+                { title: 'Order Items', price: Number(order.totalAmount || 0), qty: order.items?.length || 1 },
               ]}
               renderItem={(item) => (
                 <List.Item className="border-b border-slate-100 last:border-0">
@@ -142,16 +141,16 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
               <div className="w-64">
                 <div className="flex justify-between mb-2">
                   <Text>小計</Text>
-                  <Text>NT$ {order.amount.toLocaleString()}</Text>
+                  <Text>NT$ {Number(order.totalAmount || 0).toLocaleString()}</Text>
                 </div>
                 <div className="flex justify-between mb-2">
                   <Text>稅額 (5%)</Text>
-                  <Text>NT$ {(order.amount * 0.05).toLocaleString()}</Text>
+                  <Text>NT$ {(Number(order.totalAmount || 0) * 0.05).toLocaleString()}</Text>
                 </div>
                 <Divider className="my-2" />
                 <div className="flex justify-between">
                   <Text strong>總計</Text>
-                  <Text strong className="text-lg">NT$ {(order.amount * 1.05).toLocaleString()}</Text>
+                  <Text strong className="text-lg">NT$ {(Number(order.totalAmount || 0) * 1.05).toLocaleString()}</Text>
                 </div>
               </div>
             </div>

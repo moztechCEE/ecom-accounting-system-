@@ -31,6 +31,7 @@ import {
 import {
   dashboardService,
   DashboardExecutiveOverview,
+  DashboardOperationsHub,
   DashboardReconciliationBatch,
   DashboardReconciliationFeed,
   DashboardReconciliationItem,
@@ -238,6 +239,7 @@ const DashboardPage: React.FC = () => {
   const [overview, setOverview] = useState<DashboardSalesOverview | null>(null);
   const [feed, setFeed] = useState<DashboardReconciliationFeed | null>(null);
   const [executive, setExecutive] = useState<DashboardExecutiveOverview | null>(null);
+  const [operationsHub, setOperationsHub] = useState<DashboardOperationsHub | null>(null);
   const [invoiceQueue, setInvoiceQueue] = useState<InvoiceQueueResponse | null>(null);
 
   useEffect(() => {
@@ -254,7 +256,7 @@ const DashboardPage: React.FC = () => {
     const fetchSummary = async () => {
       setLoading(true);
       try {
-        const [summary, reconciliationFeed, executiveOverview, invoiceQueueData] = await Promise.all([
+        const [summary, reconciliationFeed, executiveOverview, operationsHubData, invoiceQueueData] = await Promise.all([
           dashboardService.getSalesOverview({
             entityId: storedEntityId,
             startDate: since,
@@ -267,6 +269,11 @@ const DashboardPage: React.FC = () => {
             limit: 10,
           }),
           dashboardService.getExecutiveOverview({
+            entityId: storedEntityId,
+            startDate: since,
+            endDate: until,
+          }),
+          dashboardService.getOperationsHub({
             entityId: storedEntityId,
             startDate: since,
             endDate: until,
@@ -284,6 +291,7 @@ const DashboardPage: React.FC = () => {
         setOverview(summary);
         setFeed(reconciliationFeed);
         setExecutive(executiveOverview);
+        setOperationsHub(operationsHubData);
         setInvoiceQueue(invoiceQueueData);
       } catch (error: any) {
         if (!ignore) {
@@ -415,6 +423,7 @@ const DashboardPage: React.FC = () => {
   const reconciliationRules = executive?.reconciliationRules || [];
   const invoiceSummary = invoiceQueue?.summary;
   const invoiceItems = invoiceQueue?.items || [];
+  const operationsHighlights = operationsHub?.highlights || [];
 
   return (
     <div className="space-y-8">
@@ -947,6 +956,67 @@ const DashboardPage: React.FC = () => {
           </div>
         </motion.div>
       </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-card p-6"
+      >
+        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+              Operations Hub
+            </div>
+            <div className="mt-2 text-xl font-semibold text-slate-900">
+              人事、薪資與出勤總覽
+            </div>
+            <div className="mt-1 text-sm text-slate-500">
+              把員工、假單、出勤異常、薪資批次與待審事項集中在同一個營運總控台。
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
+          <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
+            <div className="text-xs text-slate-400">在職員工</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-900">
+              {operationsHub?.people.activeEmployees || 0}
+            </div>
+          </div>
+          <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
+            <div className="text-xs text-slate-400">待審假單</div>
+            <div className="mt-2 text-2xl font-semibold text-amber-600">
+              {operationsHub?.people.pendingLeaveRequests || 0}
+            </div>
+          </div>
+          <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
+            <div className="text-xs text-slate-400">出勤異常</div>
+            <div className="mt-2 text-2xl font-semibold text-rose-600">
+              {operationsHub?.people.openAttendanceAnomalies || 0}
+            </div>
+          </div>
+          <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
+            <div className="text-xs text-slate-400">待審薪資批次</div>
+            <div className="mt-2 text-2xl font-semibold text-sky-600">
+              {operationsHub?.payroll.pendingApprovalRuns || 0}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
+          {operationsHighlights.map((item) => (
+            <div
+              key={item.key}
+              className="rounded-2xl border border-white/30 bg-white/45 px-4 py-4"
+            >
+              <div className="text-xs text-slate-400">{item.label}</div>
+              <div className="mt-2 text-xl font-semibold text-slate-900">
+                {item.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      </motion.div>
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}

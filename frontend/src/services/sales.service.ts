@@ -13,21 +13,66 @@ export interface SalesOrder {
   fulfillmentStatus: string
   createdAt: string
   items?: any[]
+  channelName?: string
+  payments?: Array<{ id: string; status: string; payoutDate?: string }>
+  shipments?: Array<{ id: string; status: string; shipDate?: string }>
 }
+
+type SalesOrderApiResponse = {
+  id: string
+  externalOrderId?: string | null
+  orderDate: string
+  totalGrossOriginal: number | string
+  totalGrossCurrency?: string | null
+  status: string
+  customer?: {
+    name?: string | null
+  } | null
+  channel?: {
+    name?: string | null
+  } | null
+  items?: any[]
+  payments?: Array<{ id: string; status: string; payoutDate?: string | null }>
+  shipments?: Array<{ id: string; status: string; shipDate?: string | null }>
+}
+
+const mapSalesOrder = (order: SalesOrderApiResponse): SalesOrder => ({
+  id: order.id,
+  orderNumber: order.externalOrderId?.trim() || order.id,
+  customerName: order.customer?.name?.trim() || 'Guest',
+  totalAmount: Number(order.totalGrossOriginal || 0),
+  currency: order.totalGrossCurrency?.trim() || 'TWD',
+  status: (order.status as SalesOrder['status']) || 'pending',
+  paymentStatus: order.payments?.[0]?.status || 'pending',
+  fulfillmentStatus: order.shipments?.[0]?.status || 'pending',
+  createdAt: order.orderDate,
+  items: order.items || [],
+  channelName: order.channel?.name?.trim() || '',
+  payments: order.payments?.map((payment) => ({
+    id: payment.id,
+    status: payment.status,
+    payoutDate: payment.payoutDate || undefined,
+  })) || [],
+  shipments: order.shipments?.map((shipment) => ({
+    id: shipment.id,
+    status: shipment.status,
+    shipDate: shipment.shipDate || undefined,
+  })) || [],
+})
 
 export const salesService = {
   async findAll(params?: { status?: string; channelId?: string; entityId?: string }) {
     const entityId =
       params?.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
 
-    const response = await api.get<SalesOrder[]>('/sales/orders', {
+    const response = await api.get<SalesOrderApiResponse[]>('/sales/orders', {
       params: {
         entityId,
         status: params?.status,
         channelId: params?.channelId,
       },
     })
-    return response.data
+    return response.data.map(mapSalesOrder)
   },
 
   async findOne(id: string) {

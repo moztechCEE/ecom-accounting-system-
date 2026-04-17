@@ -47,6 +47,8 @@ import {
 import { motion } from 'framer-motion'
 import dayjs from 'dayjs'
 import { accountingService, IncomeStatement, BalanceSheet, ReportItem } from '../services/accounting.service'
+import { dashboardService, DashboardOperationsHub } from '../services/dashboard.service'
+import { invoicingService, InvoiceQueueResponse } from '../services/invoicing.service'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -70,6 +72,8 @@ const ReportsPage: React.FC = () => {
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs().startOf('year'), dayjs()])
   const [incomeStatement, setIncomeStatement] = useState<IncomeStatement | null>(null)
   const [balanceSheet, setBalanceSheet] = useState<BalanceSheet | null>(null)
+  const [operationsHub, setOperationsHub] = useState<DashboardOperationsHub | null>(null)
+  const [invoiceQueue, setInvoiceQueue] = useState<InvoiceQueueResponse | null>(null)
 
   // AI State
   const [aiModalVisible, setAiModalVisible] = useState(false)
@@ -81,12 +85,23 @@ const ReportsPage: React.FC = () => {
     setLoading(true)
     try {
       const [start, end] = dateRange
-      const [isData, bsData] = await Promise.all([
+      const [isData, bsData, opsData, invoiceData] = await Promise.all([
         accountingService.getIncomeStatement(start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')),
-        accountingService.getBalanceSheet(end.format('YYYY-MM-DD'))
+        accountingService.getBalanceSheet(end.format('YYYY-MM-DD')),
+        dashboardService.getOperationsHub({
+          startDate: start.format('YYYY-MM-DD'),
+          endDate: end.format('YYYY-MM-DD'),
+        }),
+        invoicingService.getQueue({
+          startDate: start.format('YYYY-MM-DD'),
+          endDate: end.format('YYYY-MM-DD'),
+          limit: 6,
+        }),
       ])
       setIncomeStatement(isData)
       setBalanceSheet(bsData)
+      setOperationsHub(opsData)
+      setInvoiceQueue(invoiceData)
     } catch (error) {
       console.error(error)
       message.error('無法載入報表數據')
@@ -272,6 +287,80 @@ const ReportsPage: React.FC = () => {
       <div className="glass-card p-6 min-h-[600px]">
         <Spin spinning={loading}>
           <Tabs defaultActiveKey="1" type="card" size="large" className="custom-tabs">
+            <TabPane
+              tab={
+                <span className="flex items-center gap-2">
+                  <BarChartOutlined />
+                  營運總控台
+                </span>
+              }
+              key="0"
+            >
+              <Row gutter={[16, 16]}>
+                <Col xs={24} md={6}>
+                  <Card bordered={false} className="shadow-sm">
+                    <Statistic title="在職員工" value={operationsHub?.people.activeEmployees || 0} />
+                  </Card>
+                </Col>
+                <Col xs={24} md={6}>
+                  <Card bordered={false} className="shadow-sm">
+                    <Statistic title="待審假單" value={operationsHub?.people.pendingLeaveRequests || 0} />
+                  </Card>
+                </Col>
+                <Col xs={24} md={6}>
+                  <Card bordered={false} className="shadow-sm">
+                    <Statistic title="出勤異常" value={operationsHub?.people.openAttendanceAnomalies || 0} />
+                  </Card>
+                </Col>
+                <Col xs={24} md={6}>
+                  <Card bordered={false} className="shadow-sm">
+                    <Statistic title="待開票訂單" value={operationsHub?.invoicing.pendingInvoiceCount || 0} />
+                  </Card>
+                </Col>
+              </Row>
+
+              <Row gutter={[16, 16]} className="mt-4">
+                <Col xs={24} lg={12}>
+                  <Card title="薪資與審批" bordered={false} className="shadow-sm h-full">
+                    <Descriptions column={1} size="small">
+                      <Descriptions.Item label="待審薪資批次">
+                        {operationsHub?.payroll.pendingApprovalRuns || 0}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="已核准薪資批次">
+                        {operationsHub?.payroll.approvedRuns || 0}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="已過帳薪資批次">
+                        {operationsHub?.payroll.postedRuns || 0}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="待審費用">
+                        {operationsHub?.approvals.expenseRequests || 0}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="待審分錄">
+                        {operationsHub?.approvals.journalEntries || 0}
+                      </Descriptions.Item>
+                    </Descriptions>
+                  </Card>
+                </Col>
+                <Col xs={24} lg={12}>
+                  <Card title="發票閉環" bordered={false} className="shadow-sm h-full">
+                    <Descriptions column={1} size="small">
+                      <Descriptions.Item label="已開票數">
+                        {invoiceQueue?.summary.issuedCount || 0}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="可批次開票">
+                        {invoiceQueue?.summary.eligibleCount || 0}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="待付款後開票">
+                        {invoiceQueue?.summary.waitingPaymentCount || 0}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="已作廢發票">
+                        {invoiceQueue?.summary.voidCount || 0}
+                      </Descriptions.Item>
+                    </Descriptions>
+                  </Card>
+                </Col>
+              </Row>
+            </TabPane>
             
             {/* Tab 1: Financial Statements */}
             <TabPane 

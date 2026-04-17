@@ -307,6 +307,16 @@ export class SalesOrderService {
             product: true,
           },
         },
+        payments: {
+          orderBy: {
+            payoutDate: 'desc',
+          },
+        },
+        shipments: {
+          orderBy: {
+            shipDate: 'desc',
+          },
+        },
       },
       orderBy: { orderDate: 'desc' },
     });

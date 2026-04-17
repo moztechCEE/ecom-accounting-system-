@@ -14,6 +14,7 @@ import {
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AccountingService } from './accounting.service';
 import { ReportService } from './services/report.service';
+import { JournalService } from './services/journal.service';
 
 /**
  * AccountingController
@@ -27,6 +28,7 @@ export class AccountingController {
   constructor(
     private readonly accountingService: AccountingService,
     private readonly reportService: ReportService,
+    private readonly journalService: JournalService,
   ) {}
 
   private ensureEntityId(entityId?: string) {
@@ -73,6 +75,18 @@ export class AccountingController {
   ) {
     const safeEntityId = this.ensureEntityId(entityId);
     return this.accountingService.getPeriods(safeEntityId, status);
+  }
+
+  @Get('journals')
+  @ApiOperation({ summary: '查詢會計分錄' })
+  @ApiQuery({ name: 'entityId', required: true, description: '公司實體 ID' })
+  @ApiQuery({ name: 'periodId', required: false, description: '會計期間 ID' })
+  async getJournalEntries(
+    @Query('entityId') entityId: string,
+    @Query('periodId') periodId?: string,
+  ) {
+    const safeEntityId = this.ensureEntityId(entityId);
+    return this.journalService.getJournalEntriesByPeriod(safeEntityId, periodId);
   }
 
   /**

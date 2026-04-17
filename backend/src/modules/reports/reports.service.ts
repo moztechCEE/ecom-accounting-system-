@@ -826,6 +826,171 @@ export class ReportsService {
     };
   }
 
+  async getDashboardOperationsHub(
+    entityId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ) {
+    const orderDateFilter = this.buildDateFilter(startDate, endDate);
+    const createdAtFilter = this.buildDateFilter(startDate, endDate);
+
+    const [
+      employeeAgg,
+      payrollAgg,
+      pendingLeaveAgg,
+      openAnomalyAgg,
+      invoiceAgg,
+      pendingInvoiceAgg,
+      approvalAgg,
+    ] = await Promise.all([
+      this.prisma.employee.aggregate({
+        where: {
+          entityId,
+          isActive: true,
+        },
+        _count: {
+          id: true,
+        },
+      }),
+      this.prisma.payrollRun.groupBy({
+        by: ['status'],
+        where: {
+          entityId,
+          ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
+        },
+        _count: {
+          _all: true,
+        },
+      }),
+      this.prisma.leaveRequest.aggregate({
+        where: {
+          entityId,
+          status: {
+            in: ['SUBMITTED', 'UNDER_REVIEW'],
+          },
+          ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
+        },
+        _count: {
+          _all: true,
+        },
+      }),
+      this.prisma.attendanceAnomaly.aggregate({
+        where: {
+          entityId,
+          resolvedStatus: 'open',
+          ...(createdAtFilter ? { detectedAt: createdAtFilter } : {}),
+        },
+        _count: {
+          id: true,
+        },
+      }),
+      this.prisma.invoice.aggregate({
+        where: {
+          entityId,
+          ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
+        },
+        _count: {
+          id: true,
+        },
+        _sum: {
+          totalAmountOriginal: true,
+        },
+      }),
+      this.prisma.salesOrder.aggregate({
+        where: {
+          entityId,
+          hasInvoice: false,
+          status: {
+            notIn: ['cancelled', 'refunded'],
+          },
+          ...(orderDateFilter ? { orderDate: orderDateFilter } : {}),
+        },
+        _count: {
+          id: true,
+        },
+        _sum: {
+          totalGrossOriginal: true,
+        },
+      }),
+      this.prisma.approvalRequest.groupBy({
+        by: ['type'],
+        where: {
+          entityId,
+          status: 'pending',
+          ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
+        },
+        _count: {
+          _all: true,
+        },
+      }),
+    ]);
+
+    const payrollByStatus = payrollAgg.reduce<Record<string, number>>((acc, item) => {
+      acc[item.status] = item._count._all
+      return acc
+    }, {})
+    const approvalsByType = approvalAgg.reduce<Record<string, number>>((acc, item) => {
+      acc[item.type] = item._count._all
+      return acc
+    }, {})
+
+    return {
+      entityId,
+      range: {
+        startDate: startDate?.toISOString() || null,
+        endDate: endDate?.toISOString() || null,
+      },
+      people: {
+        activeEmployees: Number(employeeAgg._count.id || 0),
+        pendingLeaveRequests: Number(pendingLeaveAgg._count._all || 0),
+        openAttendanceAnomalies: Number(openAnomalyAgg._count.id || 0),
+      },
+      payroll: {
+        draftRuns: payrollByStatus.draft || 0,
+        pendingApprovalRuns: payrollByStatus.pending_approval || 0,
+        approvedRuns: payrollByStatus.approved || 0,
+        postedRuns: payrollByStatus.posted || 0,
+        paidRuns: payrollByStatus.paid || 0,
+      },
+      invoicing: {
+        issuedInvoiceCount: Number(invoiceAgg._count.id || 0),
+        issuedInvoiceAmount: Number(invoiceAgg._sum.totalAmountOriginal || 0),
+        pendingInvoiceCount: Number(pendingInvoiceAgg._count.id || 0),
+        pendingInvoiceAmount: Number(
+          pendingInvoiceAgg._sum.totalGrossOriginal || 0,
+        ),
+      },
+      approvals: {
+        expenseRequests: approvalsByType.expense_request || 0,
+        payrollRuns: approvalsByType.payroll_run || 0,
+        journalEntries: approvalsByType.journal_entry || 0,
+        payments: approvalsByType.payment || 0,
+      },
+      highlights: [
+        {
+          key: 'leave',
+          label: '待審假單',
+          value: Number(pendingLeaveAgg._count._all || 0),
+        },
+        {
+          key: 'anomaly',
+          label: '出勤異常',
+          value: Number(openAnomalyAgg._count.id || 0),
+        },
+        {
+          key: 'payroll',
+          label: '待審薪資批次',
+          value: payrollByStatus.pending_approval || 0,
+        },
+        {
+          key: 'invoice',
+          label: '待開票訂單',
+          value: Number(pendingInvoiceAgg._count.id || 0),
+        },
+      ],
+    }
+  }
+
   /**
    * 損益表 (Income Statement / P&L)
    * 已在 AccountingModule 實作，這裡提供增強版

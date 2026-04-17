@@ -8,6 +8,8 @@ import ProtectedRoute from './components/ProtectedRoute'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import AccountsPage from './pages/AccountsPage'
+import JournalEntriesPage from './pages/JournalEntriesPage'
+import AccountingPeriodsPage from './pages/AccountingPeriodsPage'
 import SalesPage from './pages/SalesPage'
 import ReportsPage from './pages/ReportsPage'
 import VendorsPage from './pages/VendorsPage'
@@ -46,6 +48,8 @@ const App: React.FC = () => {
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="accounting/accounts" element={<AccountsPage />} />
+                <Route path="accounting/journals" element={<JournalEntriesPage />} />
+                <Route path="accounting/periods" element={<AccountingPeriodsPage />} />
                 <Route path="sales/orders" element={<SalesPage />} />
                 <Route path="reports" element={<ReportsPage />} />
                 <Route path="vendors" element={<VendorsPage />} />

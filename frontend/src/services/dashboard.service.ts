@@ -148,6 +148,43 @@ export type DashboardExecutiveOverview = {
   tasks: DashboardExecutiveTask[];
 };
 
+export type DashboardOperationsHub = {
+  entityId: string;
+  range: {
+    startDate: string | null;
+    endDate: string | null;
+  };
+  people: {
+    activeEmployees: number;
+    pendingLeaveRequests: number;
+    openAttendanceAnomalies: number;
+  };
+  payroll: {
+    draftRuns: number;
+    pendingApprovalRuns: number;
+    approvedRuns: number;
+    postedRuns: number;
+    paidRuns: number;
+  };
+  invoicing: {
+    issuedInvoiceCount: number;
+    issuedInvoiceAmount: number;
+    pendingInvoiceCount: number;
+    pendingInvoiceAmount: number;
+  };
+  approvals: {
+    expenseRequests: number;
+    payrollRuns: number;
+    journalEntries: number;
+    payments: number;
+  };
+  highlights: Array<{
+    key: string;
+    label: string;
+    value: number;
+  }>;
+};
+
 export const dashboardService = {
   async getSalesOverview(params?: {
     entityId?: string;
@@ -212,6 +249,27 @@ export const dashboardService = {
 
     const response = await api.get<DashboardExecutiveOverview>(
       `/reports/dashboard-executive-overview?${query.toString()}`,
+    );
+    return response.data;
+  },
+
+  async getOperationsHub(params?: {
+    entityId?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<DashboardOperationsHub> {
+    const query = new URLSearchParams();
+    query.set("entityId", params?.entityId?.trim() || DEFAULT_ENTITY_ID);
+    if (params?.startDate) {
+      query.set("startDate", params.startDate);
+    }
+    if (params?.endDate) {
+      query.set("endDate", params.endDate);
+    }
+    query.set("_ts", String(Date.now()));
+
+    const response = await api.get<DashboardOperationsHub>(
+      `/reports/dashboard-operations-hub?${query.toString()}`,
     );
     return response.data;
   },
