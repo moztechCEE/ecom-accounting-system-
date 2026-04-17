@@ -10,6 +10,7 @@ import {
   AdminLeaveRequest,
   AdminLeaveBalance,
   LeaveStatus,
+  AttendancePolicy,
 } from "../types/attendance";
 
 export const attendanceService = {
@@ -44,6 +45,39 @@ export const attendanceService = {
   getDailySummary: async (date: string): Promise<any[]> => {
     const response = await api.get<any[]>(
       `/attendance/admin/daily-summary?date=${date}`,
+    );
+    return response.data;
+  },
+
+  getAdminPolicies: async (): Promise<AttendancePolicy[]> => {
+    const response = await api.get<AttendancePolicy[]>("/attendance/admin/policies");
+    return response.data;
+  },
+
+  createAdminPolicy: async (
+    data: Record<string, unknown>,
+  ): Promise<AttendancePolicy> => {
+    const response = await api.post<AttendancePolicy>(
+      "/attendance/admin/policies",
+      data,
+    );
+    return response.data;
+  },
+
+  updateAdminPolicy: async (
+    id: string,
+    data: Record<string, unknown>,
+  ): Promise<AttendancePolicy> => {
+    const response = await api.patch<AttendancePolicy>(
+      `/attendance/admin/policies/${id}`,
+      data,
+    );
+    return response.data;
+  },
+
+  deleteAdminPolicy: async (id: string): Promise<{ success: boolean }> => {
+    const response = await api.delete<{ success: boolean }>(
+      `/attendance/admin/policies/${id}`,
     );
     return response.data;
   },

@@ -18,13 +18,16 @@ import {
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { attendanceService } from "../../services/attendance.service";
+import { payrollService } from "../../services/payroll.service";
 import {
   AdminLeaveBalance,
   AdminLeaveRequest,
+  AttendancePolicy,
   LeaveStatus,
   LeaveType,
   SeniorityTier,
 } from "../../types/attendance";
+import { Department, Employee } from "../../types";
 import { GlassButton } from "../../components/ui/GlassButton";
 import { GlassCard } from "../../components/ui/GlassCard";
 import { GlassInput } from "../../components/ui/GlassInput";
@@ -32,7 +35,7 @@ import { GlassModal } from "../../components/ui/GlassModal";
 import { GlassSelect } from "../../components/ui/GlassSelect";
 import { GlassTextarea } from "../../components/ui/GlassTextarea";
 
-type AdminTab = "attendance" | "requests" | "types" | "balances";
+type AdminTab = "attendance" | "requests" | "policies" | "types" | "balances";
 
 const emptyLeaveTypeForm = {
   code: "",
@@ -46,6 +49,47 @@ const emptyLeaveTypeForm = {
   carryOverLimitHours: "0",
   seniorityTiers: [] as SeniorityTier[],
 };
+
+type PolicyScheduleForm = {
+  assignmentScope: "department" | "employee";
+  assignmentId: string;
+  weekday: string;
+  shiftStart: string;
+  shiftEnd: string;
+  breakMinutes: string;
+  allowRemote: string;
+};
+
+const emptyPolicySchedule = (): PolicyScheduleForm => ({
+  assignmentScope: "department",
+  assignmentId: "",
+  weekday: "1",
+  shiftStart: "09:00",
+  shiftEnd: "18:00",
+  breakMinutes: "60",
+  allowRemote: "false",
+});
+
+const emptyPolicyForm = {
+  name: "",
+  type: "office",
+  requiresPhoto: "false",
+  maxEarlyClock: "15",
+  maxLateClock: "5",
+  ipAllowList: "",
+  geofence: "",
+  schedules: [emptyPolicySchedule()],
+};
+
+const weekdayOptions = [
+  { value: "0", label: "週日" },
+  { value: "1", label: "週一" },
+  { value: "2", label: "週二" },
+  { value: "3", label: "週三" },
+  { value: "4", label: "週四" },
+  { value: "5", label: "週五" },
+  { value: "6", label: "週六" },
+];
 
 const getSeniorityTiers = (leaveType?: LeaveType): SeniorityTier[] =>
   Array.isArray(leaveType?.metadata?.seniorityTiers)
@@ -101,6 +145,10 @@ const formatHistoryAction = (action: string) => {
 const isExternalDocumentUrl = (value?: string | null) =>
   Boolean(value && /^https?:\/\//i.test(value));
 
+const formatWeekday = (weekday: number) =>
+  weekdayOptions.find((item) => Number(item.value) === weekday)?.label ||
+  `週${weekday}`;
+
 const AttendanceAdminPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>("requests");
   const [loading, setLoading] = useState(false);
@@ -110,6 +158,9 @@ const AttendanceAdminPage: React.FC = () => {
   const [leaveRequests, setLeaveRequests] = useState<AdminLeaveRequest[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [leaveBalances, setLeaveBalances] = useState<AdminLeaveBalance[]>([]);
+  const [policies, setPolicies] = useState<AttendancePolicy[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [requestStatusFilter, setRequestStatusFilter] = useState<string>("");
   const [employeeFilter, setEmployeeFilter] = useState<string>("");
   const [typeModalOpen, setTypeModalOpen] = useState(false);
@@ -117,6 +168,11 @@ const AttendanceAdminPage: React.FC = () => {
     null,
   );
   const [typeForm, setTypeForm] = useState(emptyLeaveTypeForm);
+  const [policyModalOpen, setPolicyModalOpen] = useState(false);
+  const [editingPolicy, setEditingPolicy] = useState<AttendancePolicy | null>(
+    null,
+  );
+  const [policyForm, setPolicyForm] = useState(emptyPolicyForm);
   const [balanceModalOpen, setBalanceModalOpen] = useState(false);
   const [editingBalance, setEditingBalance] =
     useState<AdminLeaveBalance | null>(null);
@@ -138,6 +194,10 @@ const AttendanceAdminPage: React.FC = () => {
     void loadManagementData();
   }, [selectedYear, requestStatusFilter, employeeFilter]);
 
+  useEffect(() => {
+    void loadReferenceData();
+  }, []);
+
   const loadAttendance = async () => {
     try {
       setLoading(true);
@@ -156,7 +216,7 @@ const AttendanceAdminPage: React.FC = () => {
   const loadManagementData = async () => {
     try {
       setLoading(true);
-      const [requests, types, balances] = await Promise.all([
+      const [requests, types, balances, policies] = await Promise.all([
         attendanceService.getAdminLeaveRequests({
           year: selectedYear,
           status: (requestStatusFilter as LeaveStatus | "") || "",
@@ -167,15 +227,31 @@ const AttendanceAdminPage: React.FC = () => {
           year: selectedYear,
           employeeId: employeeFilter || undefined,
         }),
+        attendanceService.getAdminPolicies(),
       ]);
       setLeaveRequests(requests);
       setLeaveTypes(types);
       setLeaveBalances(balances);
+      setPolicies(policies);
     } catch (error) {
       console.error(error);
       message.error("無法載入請假與額度管理資料");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadReferenceData = async () => {
+    try {
+      const [employeeResult, departmentResult] = await Promise.all([
+        payrollService.getEmployees(1, 200),
+        payrollService.getDepartments(),
+      ]);
+      setEmployees(employeeResult.items);
+      setDepartments(departmentResult);
+    } catch (error) {
+      console.error(error);
+      message.error("無法載入班表設定參考資料");
     }
   };
 
@@ -295,6 +371,126 @@ const AttendanceAdminPage: React.FC = () => {
     setTypeModalOpen(true);
   };
 
+  const openCreatePolicy = () => {
+    setEditingPolicy(null);
+    setPolicyForm({
+      ...emptyPolicyForm,
+      schedules: [emptyPolicySchedule()],
+    });
+    setPolicyModalOpen(true);
+  };
+
+  const openEditPolicy = (policy: AttendancePolicy) => {
+    setEditingPolicy(policy);
+    setPolicyForm({
+      name: policy.name,
+      type: policy.type,
+      requiresPhoto: String(Boolean(policy.requiresPhoto)),
+      maxEarlyClock: String(policy.maxEarlyClock ?? 15),
+      maxLateClock: String(policy.maxLateClock ?? 5),
+      ipAllowList: Array.isArray(policy.ipAllowList)
+        ? policy.ipAllowList.join("\n")
+        : "",
+      geofence: policy.geofence
+        ? JSON.stringify(policy.geofence, null, 2)
+        : "",
+      schedules:
+        policy.schedules.length > 0
+          ? policy.schedules.map((schedule) => ({
+              assignmentScope: schedule.employeeId ? "employee" : "department",
+              assignmentId:
+                schedule.employeeId || schedule.departmentId || "",
+              weekday: String(schedule.weekday),
+              shiftStart: schedule.shiftStart,
+              shiftEnd: schedule.shiftEnd,
+              breakMinutes: String(schedule.breakMinutes ?? 60),
+              allowRemote: String(Boolean(schedule.allowRemote)),
+            }))
+          : [emptyPolicySchedule()],
+    });
+    setPolicyModalOpen(true);
+  };
+
+  const savePolicy = async () => {
+    try {
+      const ipAllowList = policyForm.ipAllowList
+        .split(/\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const geofence =
+        policyForm.geofence.trim().length > 0
+          ? JSON.parse(policyForm.geofence)
+          : undefined;
+      const schedules = policyForm.schedules
+        .filter((schedule) => schedule.assignmentId)
+        .map((schedule) => ({
+          weekday: Number(schedule.weekday),
+          shiftStart: schedule.shiftStart,
+          shiftEnd: schedule.shiftEnd,
+          breakMinutes: Number(schedule.breakMinutes || 60),
+          allowRemote: schedule.allowRemote === "true",
+          employeeId:
+            schedule.assignmentScope === "employee"
+              ? schedule.assignmentId
+              : undefined,
+          departmentId:
+            schedule.assignmentScope === "department"
+              ? schedule.assignmentId
+              : undefined,
+        }));
+
+      const payload = {
+        name: policyForm.name.trim(),
+        type: policyForm.type as "office" | "remote" | "hybrid",
+        requiresPhoto: policyForm.requiresPhoto === "true",
+        maxEarlyClock: Number(policyForm.maxEarlyClock || 15),
+        maxLateClock: Number(policyForm.maxLateClock || 5),
+        ipAllowList,
+        geofence,
+        schedules,
+      };
+
+      if (!payload.name) {
+        message.error("請先輸入政策名稱");
+        return;
+      }
+
+      if (editingPolicy) {
+        await attendanceService.updateAdminPolicy(editingPolicy.id, payload);
+        message.success("班表政策已更新");
+      } else {
+        await attendanceService.createAdminPolicy(payload);
+        message.success("班表政策已建立");
+      }
+
+      setPolicyModalOpen(false);
+      setEditingPolicy(null);
+      setPolicyForm({
+        ...emptyPolicyForm,
+        schedules: [emptyPolicySchedule()],
+      });
+      await loadManagementData();
+    } catch (error: any) {
+      console.error(error);
+      message.error(error?.response?.data?.message || "儲存班表政策失敗");
+    }
+  };
+
+  const deletePolicy = async (policy: AttendancePolicy) => {
+    if (!window.confirm(`確認刪除政策「${policy.name}」？這會一起移除旗下班表。`)) {
+      return;
+    }
+
+    try {
+      await attendanceService.deleteAdminPolicy(policy.id);
+      message.success("班表政策已刪除");
+      await loadManagementData();
+    } catch (error: any) {
+      console.error(error);
+      message.error(error?.response?.data?.message || "刪除班表政策失敗");
+    }
+  };
+
   const openEditLeaveType = (leaveType: LeaveType) => {
     setEditingLeaveType(leaveType);
     setTypeForm({
@@ -406,9 +602,23 @@ const AttendanceAdminPage: React.FC = () => {
   const tabs: { key: AdminTab; label: string; icon: React.ReactNode }[] = [
     { key: "attendance", label: "每日出勤", icon: <DashboardOutlined /> },
     { key: "requests", label: "假單審核", icon: <CheckCircleOutlined /> },
+    { key: "policies", label: "班表政策", icon: <ClockCircleOutlined /> },
     { key: "types", label: "假別規則", icon: <SettingOutlined /> },
     { key: "balances", label: "年度額度", icon: <CalendarOutlined /> },
   ];
+
+  const primaryAction =
+    activeTab === "policies"
+      ? {
+          label: "新增班表政策",
+          icon: <ClockCircleOutlined />,
+          onClick: openCreatePolicy,
+        }
+      : {
+          label: "新增假別規則",
+          icon: <FileAddOutlined />,
+          onClick: openCreateLeaveType,
+        };
 
   return (
     <div className="space-y-6 animate-[fadeInUp_0.4s_ease-out]">
@@ -459,10 +669,10 @@ const AttendanceAdminPage: React.FC = () => {
             </GlassButton>
             <GlassButton
               className="h-12 gap-2 text-sm"
-              onClick={openCreateLeaveType}
+              onClick={primaryAction.onClick}
             >
-              <FileAddOutlined />
-              新增假別規則
+              {primaryAction.icon}
+              {primaryAction.label}
             </GlassButton>
           </div>
         </GlassCard>
@@ -818,6 +1028,101 @@ const AttendanceAdminPage: React.FC = () => {
             </div>
           )}
 
+          {activeTab === "policies" && (
+            <div className="space-y-5">
+              <GlassCard className="border border-sky-100/70 bg-sky-50/70">
+                <div className="text-sm font-semibold text-sky-900">班表與打卡政策</div>
+                <div className="mt-2 text-sm leading-6 text-sky-800">
+                  在這裡設定打卡照片要求、最早可打卡時間、遲到寬限，以及員工或部門的每週班表。打卡驗證與異常檢查會直接使用這裡的設定。
+                </div>
+              </GlassCard>
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                {policies.map((policy) => (
+                  <GlassCard key={policy.id} className="relative overflow-hidden">
+                    <div className="absolute right-4 top-4 rounded-full bg-white/30 px-3 py-1 text-[11px] font-semibold tracking-[0.2em] text-slate-500 uppercase">
+                      {policy.type}
+                    </div>
+                    <div className="pr-20">
+                      <div className="text-xl font-semibold text-slate-900">
+                        {policy.name}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                        <span className="rounded-full bg-white/30 px-3 py-1">
+                          最早打卡：前 {policy.maxEarlyClock} 分鐘
+                        </span>
+                        <span className="rounded-full bg-white/30 px-3 py-1">
+                          遲到寬限：{policy.maxLateClock} 分鐘
+                        </span>
+                        <span className="rounded-full bg-white/30 px-3 py-1">
+                          班表：{policy.schedules.length} 筆
+                        </span>
+                        <span className="rounded-full bg-white/30 px-3 py-1">
+                          {policy.requiresPhoto ? "需拍照" : "免拍照"}
+                        </span>
+                      </div>
+                      <div className="mt-4 space-y-2">
+                        {policy.schedules.slice(0, 4).map((schedule) => (
+                          <div
+                            key={schedule.id}
+                            className="rounded-2xl border border-white/20 bg-white/25 px-4 py-3 text-sm text-slate-600"
+                          >
+                            <div className="font-medium text-slate-800">
+                              {formatWeekday(schedule.weekday)} · {schedule.shiftStart} - {schedule.shiftEnd}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {schedule.department?.name
+                                ? `部門：${schedule.department.name}`
+                                : schedule.employee?.name
+                                  ? `員工：${schedule.employee.name}`
+                                  : "未指定對象"}
+                              {" · "}休息 {schedule.breakMinutes} 分鐘
+                              {schedule.allowRemote ? " · 允許遠端" : ""}
+                            </div>
+                          </div>
+                        ))}
+                        {policy.schedules.length > 4 ? (
+                          <div className="text-xs text-slate-400">
+                            另外還有 {policy.schedules.length - 4} 筆班表設定。
+                          </div>
+                        ) : null}
+                        {policy.schedules.length === 0 ? (
+                          <div className="rounded-2xl border border-dashed border-white/30 px-4 py-5 text-sm text-slate-400">
+                            目前尚未設定班表。
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="mt-5 flex flex-wrap justify-end gap-2">
+                      <GlassButton
+                        variant="secondary"
+                        className="gap-2 px-4 py-2 text-sm"
+                        onClick={() => openEditPolicy(policy)}
+                      >
+                        <EditOutlined />
+                        編輯政策
+                      </GlassButton>
+                      <GlassButton
+                        variant="danger"
+                        className="gap-2 px-4 py-2 text-sm"
+                        onClick={() => void deletePolicy(policy)}
+                      >
+                        <DeleteOutlined />
+                        刪除
+                      </GlassButton>
+                    </div>
+                  </GlassCard>
+                ))}
+              </div>
+
+              {policies.length === 0 ? (
+                <GlassCard className="border border-dashed border-white/35 bg-white/20 text-center text-sm text-slate-400">
+                  目前還沒有班表政策，建立後就能讓打卡驗證與異常檢查套用正式規則。
+                </GlassCard>
+              ) : null}
+            </div>
+          )}
+
           {activeTab === "balances" && (
             <div className="overflow-x-auto rounded-3xl border border-white/20 bg-white/20">
               <table className="w-full text-left">
@@ -892,6 +1197,322 @@ const AttendanceAdminPage: React.FC = () => {
           )}
         </div>
       </GlassCard>
+
+      <GlassModal
+        isOpen={policyModalOpen}
+        onClose={() => {
+          setPolicyModalOpen(false);
+          setEditingPolicy(null);
+          setPolicyForm({
+            ...emptyPolicyForm,
+            schedules: [emptyPolicySchedule()],
+          });
+        }}
+        title={editingPolicy ? "編輯班表政策" : "新增班表政策"}
+        maxWidth="max-w-[960px]"
+        footer={
+          <>
+            <GlassButton
+              variant="secondary"
+              onClick={() => {
+                setPolicyModalOpen(false);
+                setEditingPolicy(null);
+                setPolicyForm({
+                  ...emptyPolicyForm,
+                  schedules: [emptyPolicySchedule()],
+                });
+              }}
+            >
+              取消
+            </GlassButton>
+            <GlassButton onClick={() => void savePolicy()}>
+              {editingPolicy ? "儲存更新" : "建立政策"}
+            </GlassButton>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <GlassInput
+              label="政策名稱"
+              value={policyForm.name}
+              onChange={(event) =>
+                setPolicyForm((prev) => ({ ...prev, name: event.target.value }))
+              }
+              placeholder="例如：總部辦公室平日班"
+            />
+            <GlassSelect
+              label="政策類型"
+              value={policyForm.type}
+              onChange={(event) =>
+                setPolicyForm((prev) => ({ ...prev, type: event.target.value }))
+              }
+              options={[
+                { value: "office", label: "Office" },
+                { value: "hybrid", label: "Hybrid" },
+                { value: "remote", label: "Remote" },
+              ]}
+            />
+            <GlassInput
+              label="最早可打卡（分鐘）"
+              type="number"
+              value={policyForm.maxEarlyClock}
+              onChange={(event) =>
+                setPolicyForm((prev) => ({
+                  ...prev,
+                  maxEarlyClock: event.target.value,
+                }))
+              }
+            />
+            <GlassInput
+              label="遲到寬限（分鐘）"
+              type="number"
+              value={policyForm.maxLateClock}
+              onChange={(event) =>
+                setPolicyForm((prev) => ({
+                  ...prev,
+                  maxLateClock: event.target.value,
+                }))
+              }
+            />
+            <GlassSelect
+              label="是否要求打卡照片"
+              value={policyForm.requiresPhoto}
+              onChange={(event) =>
+                setPolicyForm((prev) => ({
+                  ...prev,
+                  requiresPhoto: event.target.value,
+                }))
+              }
+              options={[
+                { value: "false", label: "不需要" },
+                { value: "true", label: "需要" },
+              ]}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <GlassTextarea
+              label="IP 白名單"
+              value={policyForm.ipAllowList}
+              onChange={(event) =>
+                setPolicyForm((prev) => ({
+                  ...prev,
+                  ipAllowList: event.target.value,
+                }))
+              }
+              placeholder={"一行一筆，例如：\n203.0.113.0/24\n10.0.0.5"}
+            />
+            <GlassTextarea
+              label="Geofence JSON（選填）"
+              value={policyForm.geofence}
+              onChange={(event) =>
+                setPolicyForm((prev) => ({
+                  ...prev,
+                  geofence: event.target.value,
+                }))
+              }
+              placeholder='例如：{"type":"circle","center":[121.56,25.04],"radius":120}'
+            />
+          </div>
+
+          <div className="rounded-3xl border border-white/20 bg-white/15 p-4">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">班表設定</div>
+                <div className="text-xs text-slate-500">
+                  每一筆班表都要指定到部門或員工。員工班表會優先覆蓋部門班表。
+                </div>
+              </div>
+              <GlassButton
+                variant="secondary"
+                className="gap-2 px-4 py-2 text-sm"
+                onClick={() =>
+                  setPolicyForm((prev) => ({
+                    ...prev,
+                    schedules: [...prev.schedules, emptyPolicySchedule()],
+                  }))
+                }
+              >
+                <PlusOutlined />
+                新增班表
+              </GlassButton>
+            </div>
+
+            <div className="space-y-3">
+              {policyForm.schedules.map((schedule, index) => {
+                const assignmentOptions =
+                  schedule.assignmentScope === "employee"
+                    ? [
+                        { value: "", label: "請選擇員工" },
+                        ...employees.map((employee) => ({
+                          value: employee.id,
+                          label: `${employee.name} (${employee.employeeNo})`,
+                        })),
+                      ]
+                    : [
+                        { value: "", label: "請選擇部門" },
+                        ...departments.map((department) => ({
+                          value: department.id,
+                          label: department.name,
+                        })),
+                      ];
+
+                return (
+                  <div
+                    key={`${schedule.assignmentScope}-${index}`}
+                    className="rounded-2xl border border-white/20 bg-white/25 p-4"
+                  >
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                      <GlassSelect
+                        label="適用對象"
+                        value={schedule.assignmentScope}
+                        onChange={(event) =>
+                          setPolicyForm((prev) => ({
+                            ...prev,
+                            schedules: prev.schedules.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    assignmentScope: event.target.value as
+                                      | "department"
+                                      | "employee",
+                                    assignmentId: "",
+                                  }
+                                : item,
+                            ),
+                          }))
+                        }
+                        options={[
+                          { value: "department", label: "部門" },
+                          { value: "employee", label: "員工" },
+                        ]}
+                      />
+                      <GlassSelect
+                        label={schedule.assignmentScope === "employee" ? "員工" : "部門"}
+                        value={schedule.assignmentId}
+                        onChange={(event) =>
+                          setPolicyForm((prev) => ({
+                            ...prev,
+                            schedules: prev.schedules.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, assignmentId: event.target.value }
+                                : item,
+                            ),
+                          }))
+                        }
+                        options={assignmentOptions}
+                      />
+                      <GlassSelect
+                        label="星期"
+                        value={schedule.weekday}
+                        onChange={(event) =>
+                          setPolicyForm((prev) => ({
+                            ...prev,
+                            schedules: prev.schedules.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, weekday: event.target.value }
+                                : item,
+                            ),
+                          }))
+                        }
+                        options={weekdayOptions}
+                      />
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-4">
+                      <GlassInput
+                        label="上班時間"
+                        type="time"
+                        value={schedule.shiftStart}
+                        onChange={(event) =>
+                          setPolicyForm((prev) => ({
+                            ...prev,
+                            schedules: prev.schedules.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, shiftStart: event.target.value }
+                                : item,
+                            ),
+                          }))
+                        }
+                      />
+                      <GlassInput
+                        label="下班時間"
+                        type="time"
+                        value={schedule.shiftEnd}
+                        onChange={(event) =>
+                          setPolicyForm((prev) => ({
+                            ...prev,
+                            schedules: prev.schedules.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, shiftEnd: event.target.value }
+                                : item,
+                            ),
+                          }))
+                        }
+                      />
+                      <GlassInput
+                        label="休息分鐘"
+                        type="number"
+                        value={schedule.breakMinutes}
+                        onChange={(event) =>
+                          setPolicyForm((prev) => ({
+                            ...prev,
+                            schedules: prev.schedules.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, breakMinutes: event.target.value }
+                                : item,
+                            ),
+                          }))
+                        }
+                      />
+                      <GlassSelect
+                        label="遠端打卡"
+                        value={schedule.allowRemote}
+                        onChange={(event) =>
+                          setPolicyForm((prev) => ({
+                            ...prev,
+                            schedules: prev.schedules.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, allowRemote: event.target.value }
+                                : item,
+                            ),
+                          }))
+                        }
+                        options={[
+                          { value: "false", label: "不允許" },
+                          { value: "true", label: "允許" },
+                        ]}
+                      />
+                    </div>
+
+                    <div className="mt-3 flex justify-end">
+                      <GlassButton
+                        variant="danger"
+                        className="gap-2 px-4 py-2 text-sm"
+                        onClick={() =>
+                          setPolicyForm((prev) => ({
+                            ...prev,
+                            schedules:
+                              prev.schedules.length === 1
+                                ? [emptyPolicySchedule()]
+                                : prev.schedules.filter(
+                                    (_, itemIndex) => itemIndex !== index,
+                                  ),
+                          }))
+                        }
+                      >
+                        <DeleteOutlined />
+                        刪除班表
+                      </GlassButton>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </GlassModal>
 
       <GlassModal
         isOpen={requestModalOpen}

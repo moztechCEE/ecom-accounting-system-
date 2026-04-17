@@ -86,6 +86,42 @@ export interface LeaveRequestHistory {
   } | null;
 }
 
+export interface AttendanceSchedule {
+  id: string;
+  policyId: string;
+  departmentId?: string | null;
+  employeeId?: string | null;
+  weekday: number;
+  shiftStart: string;
+  shiftEnd: string;
+  breakMinutes: number;
+  allowRemote: boolean;
+  department?: {
+    id: string;
+    name: string;
+  } | null;
+  employee?: {
+    id: string;
+    name: string;
+    employeeNo?: string;
+  } | null;
+}
+
+export interface AttendancePolicy {
+  id: string;
+  entityId?: string;
+  name: string;
+  type: "office" | "remote" | "hybrid";
+  ipAllowList?: string[] | null;
+  geofence?: unknown;
+  requiresPhoto: boolean;
+  maxEarlyClock: number;
+  maxLateClock: number;
+  schedules: AttendanceSchedule[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface SeniorityTier {
   minYears: number;
   maxYears?: number;
