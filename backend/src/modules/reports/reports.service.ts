@@ -1222,6 +1222,356 @@ export class ReportsService {
     };
   }
 
+  async getOrderReconciliationAudit(
+    entityId: string,
+    startDate?: Date,
+    endDate?: Date,
+    limit?: number,
+  ) {
+    const stores = this.getOneShopStores();
+    const orderDateFilter = this.buildDateFilter(startDate, endDate);
+    const normalizedLimit = Math.min(
+      Math.max(Math.floor(limit || 120), 20),
+      500,
+    );
+    const taxRate = 0.05;
+    const tolerance = 1;
+
+    const orders = await this.prisma.salesOrder.findMany({
+      where: {
+        entityId,
+        ...(orderDateFilter ? { orderDate: orderDateFilter } : {}),
+        status: {
+          notIn: ['cancelled'],
+        },
+      },
+      orderBy: {
+        orderDate: 'desc',
+      },
+      take: normalizedLimit,
+      select: {
+        id: true,
+        externalOrderId: true,
+        orderDate: true,
+        status: true,
+        hasInvoice: true,
+        notes: true,
+        totalGrossOriginal: true,
+        taxAmountOriginal: true,
+        channel: {
+          select: {
+            code: true,
+            name: true,
+          },
+        },
+        payments: {
+          orderBy: {
+            payoutDate: 'desc',
+          },
+          select: {
+            id: true,
+            channel: true,
+            payoutDate: true,
+            status: true,
+            reconciledFlag: true,
+            notes: true,
+            amountGrossOriginal: true,
+            amountNetOriginal: true,
+            feePlatformOriginal: true,
+            feeGatewayOriginal: true,
+            shippingFeePaidOriginal: true,
+          },
+        },
+        invoices: {
+          orderBy: {
+            issuedAt: 'desc',
+          },
+          select: {
+            id: true,
+            invoiceNumber: true,
+            status: true,
+            invoiceType: true,
+            issuedAt: true,
+            amountOriginal: true,
+            taxAmountOriginal: true,
+            totalAmountOriginal: true,
+          },
+        },
+      },
+    });
+
+    const items = orders.map((order) => {
+      const issuedInvoices = order.invoices.filter(
+        (invoice) => invoice.status !== 'void',
+      );
+      const latestInvoice = issuedInvoices[0] || order.invoices[0] || null;
+      const latestPayment = order.payments[0] || null;
+      const paymentMeta = {
+        ...this.extractMetadata(latestPayment?.notes),
+        ...this.extractMetadata(order.notes),
+      };
+      const bucketKey = this.resolvePerformanceBucket({
+        channelCode: order.channel?.code,
+        notes: order.notes,
+        fallbackNotes: latestPayment?.notes,
+        stores,
+      });
+      const bucket = this.buildDashboardBuckets(stores).find(
+        (item) => item.key === bucketKey,
+      );
+
+      const orderGross = Number(order.totalGrossOriginal || 0);
+      const orderTax = Number(order.taxAmountOriginal || 0);
+      const expectedOrderTax = this.calculateIncludedTax(orderGross, taxRate);
+      const paymentGross = order.payments.reduce(
+        (sum, payment) => sum + Number(payment.amountGrossOriginal || 0),
+        0,
+      );
+      const paymentNet = order.payments.reduce(
+        (sum, payment) => sum + Number(payment.amountNetOriginal || 0),
+        0,
+      );
+      const gatewayFee = order.payments.reduce(
+        (sum, payment) => sum + Number(payment.feeGatewayOriginal || 0),
+        0,
+      );
+      const platformFee = order.payments.reduce(
+        (sum, payment) => sum + Number(payment.feePlatformOriginal || 0),
+        0,
+      );
+      const shippingPaid = order.payments.reduce(
+        (sum, payment) => sum + Number(payment.shippingFeePaidOriginal || 0),
+        0,
+      );
+      const feeTotal = gatewayFee + platformFee;
+      const expectedNet = Number((paymentGross - feeTotal).toFixed(2));
+      const invoiceGross = issuedInvoices.reduce(
+        (sum, invoice) => sum + Number(invoice.totalAmountOriginal || 0),
+        0,
+      );
+      const invoiceTax = issuedInvoices.reduce(
+        (sum, invoice) => sum + Number(invoice.taxAmountOriginal || 0),
+        0,
+      );
+      const expectedInvoiceTax = this.calculateIncludedTax(invoiceGross, taxRate);
+      const paymentCompleted = order.payments.some((payment) =>
+        ['completed', 'success', 'paid', 'cod'].includes(
+          (payment.status || '').toLowerCase(),
+        ),
+      );
+      const reconciled = order.payments.some((payment) => payment.reconciledFlag);
+      const anomalyCodes: string[] = [];
+      const anomalyMessages: string[] = [];
+
+      if ((paymentCompleted || reconciled) && issuedInvoices.length === 0) {
+        anomalyCodes.push('missing_invoice_after_payment');
+        anomalyMessages.push('訂單已付款或已對帳，但尚未找到正式發票。');
+      }
+
+      if (order.hasInvoice !== (issuedInvoices.length > 0)) {
+        anomalyCodes.push('invoice_flag_mismatch');
+        anomalyMessages.push('訂單發票旗標與實際發票紀錄不一致。');
+      }
+
+      if (
+        issuedInvoices.length > 0 &&
+        this.hasMaterialDiff(invoiceGross, orderGross, tolerance)
+      ) {
+        anomalyCodes.push('invoice_total_mismatch');
+        anomalyMessages.push(
+          `發票總額與訂單總額差 ${this.toCurrency(invoiceGross - orderGross)}。`,
+        );
+      }
+
+      if (this.hasMaterialDiff(orderTax, expectedOrderTax, tolerance)) {
+        anomalyCodes.push('order_tax_mismatch');
+        anomalyMessages.push(
+          `訂單稅額與 5% 內含稅推估差 ${this.toCurrency(orderTax - expectedOrderTax)}。`,
+        );
+      }
+
+      if (
+        issuedInvoices.length > 0 &&
+        this.hasMaterialDiff(invoiceTax, expectedInvoiceTax, tolerance)
+      ) {
+        anomalyCodes.push('invoice_tax_mismatch');
+        anomalyMessages.push(
+          `發票稅額與發票總額推估差 ${this.toCurrency(invoiceTax - expectedInvoiceTax)}。`,
+        );
+      }
+
+      if (
+        paymentGross > 0 &&
+        this.hasMaterialDiff(expectedNet, paymentNet, tolerance)
+      ) {
+        anomalyCodes.push('fee_mismatch');
+        anomalyMessages.push(
+          `金流手續費拆分後的淨額與實際淨額差 ${this.toCurrency(paymentNet - expectedNet)}。`,
+        );
+      }
+
+      if (
+        paymentGross > 0 &&
+        feeTotal === 0 &&
+        paymentNet < paymentGross - tolerance
+      ) {
+        anomalyCodes.push('fee_backfill_needed');
+        anomalyMessages.push('付款紀錄顯示有被抽成，但手續費欄位尚未回填。');
+      }
+
+      if (
+        paymentGross > 0 &&
+        this.hasMaterialDiff(orderGross, paymentGross, tolerance)
+      ) {
+        anomalyCodes.push('order_payment_mismatch');
+        anomalyMessages.push(
+          `訂單金額與收款總額差 ${this.toCurrency(paymentGross - orderGross)}。`,
+        );
+      }
+
+      if (reconciled && issuedInvoices.length === 0) {
+        anomalyCodes.push('reconciled_without_invoice');
+        anomalyMessages.push('款項已完成對帳，但發票仍未建立。');
+      }
+
+      const feeRatePct =
+        paymentGross > 0 ? Number(((feeTotal / paymentGross) * 100).toFixed(2)) : 0;
+      const severity = this.resolveAuditSeverity(anomalyCodes);
+      const recommendation = this.buildAuditRecommendation(anomalyCodes);
+
+      return {
+        orderId: order.id,
+        externalOrderId: order.externalOrderId || null,
+        orderDate: order.orderDate.toISOString(),
+        orderStatus: order.status,
+        channelCode: order.channel?.code || null,
+        channelName: order.channel?.name || bucket?.label || '未知通路',
+        bucketKey,
+        bucketLabel: bucket?.label || '其他業績',
+        hasInvoice: order.hasInvoice,
+        invoiceNumber: latestInvoice?.invoiceNumber || null,
+        invoiceStatus: latestInvoice?.status || null,
+        invoiceIssuedAt: latestInvoice?.issuedAt?.toISOString() || null,
+        paymentStatus: latestPayment?.status || null,
+        reconciledFlag: reconciled,
+        grossAmount: orderGross,
+        orderTaxAmount: orderTax,
+        expectedOrderTaxAmount: expectedOrderTax,
+        paymentGrossAmount: paymentGross,
+        paymentNetAmount: paymentNet,
+        gatewayFeeAmount: gatewayFee,
+        platformFeeAmount: platformFee,
+        shippingPaidAmount: shippingPaid,
+        feeTotalAmount: feeTotal,
+        feeRatePct,
+        invoiceGrossAmount: invoiceGross,
+        invoiceTaxAmount: invoiceTax,
+        expectedInvoiceTaxAmount: expectedInvoiceTax,
+        providerTradeNo: paymentMeta.providerTradeNo || null,
+        providerPaymentId: paymentMeta.providerPaymentId || null,
+        anomalyCodes,
+        anomalyMessages,
+        severity,
+        recommendation,
+      };
+    });
+
+    const summary = items.reduce(
+      (acc, item) => {
+        const hasFeeIssue = item.anomalyCodes.some((code) =>
+          ['fee_mismatch', 'fee_backfill_needed'].includes(code),
+        );
+        const hasInvoiceIssue = item.anomalyCodes.some((code) =>
+          [
+            'missing_invoice_after_payment',
+            'invoice_flag_mismatch',
+            'invoice_total_mismatch',
+            'reconciled_without_invoice',
+          ].includes(code),
+        );
+        const hasTaxIssue = item.anomalyCodes.some((code) =>
+          ['order_tax_mismatch', 'invoice_tax_mismatch'].includes(code),
+        );
+        const hasOrderPaymentIssue = item.anomalyCodes.includes(
+          'order_payment_mismatch',
+        );
+
+        acc.auditedOrderCount += 1;
+        acc.anomalousOrderCount += item.anomalyCodes.length ? 1 : 0;
+        acc.paidOrderCount += item.paymentGrossAmount > 0 ? 1 : 0;
+        acc.invoicedOrderCount += item.invoiceGrossAmount > 0 ? 1 : 0;
+        acc.reconciledOrderCount += item.reconciledFlag ? 1 : 0;
+        acc.totalGrossAmount += item.grossAmount;
+        acc.totalPaymentGrossAmount += item.paymentGrossAmount;
+        acc.totalPaymentNetAmount += item.paymentNetAmount;
+        acc.totalGatewayFeeAmount += item.gatewayFeeAmount;
+        acc.totalPlatformFeeAmount += item.platformFeeAmount;
+        acc.totalFeeAmount += item.feeTotalAmount;
+        acc.flaggedGrossAmount += item.anomalyCodes.length ? item.grossAmount : 0;
+        acc.flaggedFeeAmount += hasFeeIssue ? item.feeTotalAmount : 0;
+        acc.invoiceIssueCount += hasInvoiceIssue ? 1 : 0;
+        acc.taxIssueCount += hasTaxIssue ? 1 : 0;
+        acc.feeIssueCount += hasFeeIssue ? 1 : 0;
+        acc.orderPaymentIssueCount += hasOrderPaymentIssue ? 1 : 0;
+        return acc;
+      },
+      {
+        auditedOrderCount: 0,
+        anomalousOrderCount: 0,
+        paidOrderCount: 0,
+        invoicedOrderCount: 0,
+        reconciledOrderCount: 0,
+        invoiceIssueCount: 0,
+        taxIssueCount: 0,
+        feeIssueCount: 0,
+        orderPaymentIssueCount: 0,
+        totalGrossAmount: 0,
+        totalPaymentGrossAmount: 0,
+        totalPaymentNetAmount: 0,
+        totalGatewayFeeAmount: 0,
+        totalPlatformFeeAmount: 0,
+        totalFeeAmount: 0,
+        flaggedGrossAmount: 0,
+        flaggedFeeAmount: 0,
+      },
+    );
+
+    const anomalyItems = items
+      .filter((item) => item.anomalyCodes.length > 0)
+      .sort((left, right) => {
+        const severityRank = { critical: 0, warning: 1, healthy: 2 };
+        const severityDiff =
+          severityRank[left.severity] - severityRank[right.severity];
+        if (severityDiff !== 0) {
+          return severityDiff;
+        }
+        return (
+          new Date(right.orderDate).getTime() - new Date(left.orderDate).getTime()
+        );
+      });
+
+    return {
+      entityId,
+      range: {
+        startDate: startDate?.toISOString() || null,
+        endDate: endDate?.toISOString() || null,
+      },
+      summary: {
+        ...summary,
+        feeTakeRatePct:
+          summary.totalPaymentGrossAmount > 0
+            ? Number(
+                (
+                  (summary.totalFeeAmount / summary.totalPaymentGrossAmount) *
+                  100
+                ).toFixed(2),
+              )
+            : 0,
+      },
+      items: anomalyItems,
+    };
+  }
+
   /**
    * 損益表 (Income Statement / P&L)
    * 已在 AccountingModule 實作，這裡提供增強版
@@ -1480,5 +1830,76 @@ export class ReportsService {
   private toMonthKey(date: Date | string) {
     const value = date instanceof Date ? date : new Date(date);
     return value.toISOString().slice(0, 7);
+  }
+
+  private calculateIncludedTax(grossAmount: number, taxRate: number) {
+    if (!grossAmount) {
+      return 0;
+    }
+    return Number((grossAmount - grossAmount / (1 + taxRate)).toFixed(2));
+  }
+
+  private hasMaterialDiff(left: number, right: number, tolerance: number) {
+    return Math.abs(Number(left || 0) - Number(right || 0)) > tolerance;
+  }
+
+  private toCurrency(amount: number) {
+    const normalized = Number(amount || 0);
+    return `NT$ ${normalized.toFixed(2)}`;
+  }
+
+  private resolveAuditSeverity(anomalyCodes: string[]) {
+    if (
+      anomalyCodes.some((code) =>
+        [
+          'missing_invoice_after_payment',
+          'invoice_total_mismatch',
+          'invoice_tax_mismatch',
+          'order_payment_mismatch',
+        ].includes(code),
+      )
+    ) {
+      return 'critical' as const;
+    }
+
+    if (anomalyCodes.length > 0) {
+      return 'warning' as const;
+    }
+
+    return 'healthy' as const;
+  }
+
+  private buildAuditRecommendation(anomalyCodes: string[]) {
+    if (
+      anomalyCodes.some((code) =>
+        ['missing_invoice_after_payment', 'reconciled_without_invoice'].includes(
+          code,
+        ),
+      )
+    ) {
+      return '先補發票，再確認會計分錄與稅務申報是否應同步回寫。';
+    }
+
+    if (anomalyCodes.includes('order_payment_mismatch')) {
+      return '優先核對平台訂單金額、綠界撥款與退款/折讓是否一致。';
+    }
+
+    if (
+      anomalyCodes.some((code) =>
+        ['fee_mismatch', 'fee_backfill_needed'].includes(code),
+      )
+    ) {
+      return '請補回金流手續費欄位，並確認綠界匯入的淨額是否為最終值。';
+    }
+
+    if (
+      anomalyCodes.some((code) =>
+        ['order_tax_mismatch', 'invoice_tax_mismatch'].includes(code),
+      )
+    ) {
+      return '請先檢查稅別設定，再確認發票稅額與平台含稅金額是否採同一口徑。';
+    }
+
+    return '這筆資料目前沒有明顯異常，可繼續觀察撥款與入帳狀態。';
   }
 }

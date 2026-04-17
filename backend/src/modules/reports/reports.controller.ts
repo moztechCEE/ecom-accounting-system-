@@ -279,6 +279,27 @@ export class ReportsController {
     );
   }
 
+  @Get('order-reconciliation-audit')
+  @ApiOperation({ summary: '逐筆訂單對帳稽核' })
+  @ApiResponse({ status: 200, description: '成功取得訂單、帳款、發票與稅額逐筆稽核結果' })
+  @ApiQuery({ name: 'entityId', required: true })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  async getOrderReconciliationAudit(
+    @Query('entityId') entityId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.reportsService.getOrderReconciliationAudit(
+      entityId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+      limit ? Number(limit) : undefined,
+    );
+  }
+
   @Get(':id/export')
   @ApiOperation({ summary: '匯出報表 (Excel/PDF)' })
   @ApiResponse({ status: 200, description: '成功匯出報表' })

@@ -57,6 +57,7 @@ import {
   dashboardService,
   DashboardOperationsHub,
   MonthlyChannelReconciliation,
+  OrderReconciliationAudit,
 } from '../services/dashboard.service'
 import { invoicingService, InvoiceQueueResponse } from '../services/invoicing.service'
 
@@ -87,6 +88,7 @@ const ReportsPage: React.FC = () => {
   const [operationsHub, setOperationsHub] = useState<DashboardOperationsHub | null>(null)
   const [monthlyReconciliation, setMonthlyReconciliation] = useState<MonthlyChannelReconciliation | null>(null)
   const [invoiceQueue, setInvoiceQueue] = useState<InvoiceQueueResponse | null>(null)
+  const [reconciliationAudit, setReconciliationAudit] = useState<OrderReconciliationAudit | null>(null)
 
   // AI State
   const [aiModalVisible, setAiModalVisible] = useState(false)
@@ -98,7 +100,7 @@ const ReportsPage: React.FC = () => {
     setLoading(true)
     try {
       const [start, end] = dateRange
-      const [isData, bsData, tbData, glData, opsData, monthlyData, invoiceData] = await Promise.all([
+      const [isData, bsData, tbData, glData, opsData, monthlyData, invoiceData, auditData] = await Promise.all([
         accountingService.getIncomeStatement(start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')),
         accountingService.getBalanceSheet(end.format('YYYY-MM-DD')),
         accountingService.getTrialBalance(end.format('YYYY-MM-DD')),
@@ -116,6 +118,11 @@ const ReportsPage: React.FC = () => {
           endDate: end.format('YYYY-MM-DD'),
           limit: 6,
         }),
+        dashboardService.getOrderReconciliationAudit({
+          startDate: start.format('YYYY-MM-DD'),
+          endDate: end.format('YYYY-MM-DD'),
+          limit: 50,
+        }),
       ])
       setIncomeStatement(isData)
       setBalanceSheet(bsData)
@@ -124,6 +131,7 @@ const ReportsPage: React.FC = () => {
       setOperationsHub(opsData)
       setMonthlyReconciliation(monthlyData)
       setInvoiceQueue(invoiceData)
+      setReconciliationAudit(auditData)
     } catch (error) {
       console.error(error)
       message.error('無法載入報表數據')
@@ -684,6 +692,151 @@ const ReportsPage: React.FC = () => {
                     ]}
                   />
                 ) : <Empty description="無月度對帳資料" />}
+              </Card>
+            </TabPane>
+
+            <TabPane
+              tab={
+                <span className="flex items-center gap-2">
+                  <PieChartOutlined />
+                  逐筆對帳稽核
+                </span>
+              }
+              key="1.8"
+            >
+              <Card
+                title="手續費、發票、稅務與帳款逐筆稽核"
+                bordered={false}
+                className="shadow-sm"
+              >
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} md={6}>
+                    <Card bordered={false} className="bg-slate-50">
+                      <Statistic title="已稽核訂單" value={reconciliationAudit?.summary.auditedOrderCount || 0} />
+                    </Card>
+                  </Col>
+                  <Col xs={24} md={6}>
+                    <Card bordered={false} className="bg-slate-50">
+                      <Statistic title="發票異常" value={reconciliationAudit?.summary.invoiceIssueCount || 0} />
+                    </Card>
+                  </Col>
+                  <Col xs={24} md={6}>
+                    <Card bordered={false} className="bg-slate-50">
+                      <Statistic title="稅務異常" value={reconciliationAudit?.summary.taxIssueCount || 0} />
+                    </Card>
+                  </Col>
+                  <Col xs={24} md={6}>
+                    <Card bordered={false} className="bg-slate-50">
+                      <Statistic title="帳款不一致" value={reconciliationAudit?.summary.orderPaymentIssueCount || 0} />
+                    </Card>
+                  </Col>
+                </Row>
+
+                <Row gutter={[16, 16]} className="mt-4">
+                  <Col xs={24} md={8}>
+                    <Card bordered={false} className="bg-slate-50">
+                      <Statistic
+                        title="總手續費"
+                        value={reconciliationAudit?.summary.totalFeeAmount || 0}
+                        precision={0}
+                        prefix="NT$"
+                      />
+                    </Card>
+                  </Col>
+                  <Col xs={24} md={8}>
+                    <Card bordered={false} className="bg-slate-50">
+                      <Statistic
+                        title="金流手續費"
+                        value={reconciliationAudit?.summary.totalGatewayFeeAmount || 0}
+                        precision={0}
+                        prefix="NT$"
+                      />
+                    </Card>
+                  </Col>
+                  <Col xs={24} md={8}>
+                    <Card bordered={false} className="bg-slate-50">
+                      <Statistic
+                        title="平台手續費"
+                        value={reconciliationAudit?.summary.totalPlatformFeeAmount || 0}
+                        precision={0}
+                        prefix="NT$"
+                        suffix={` / ${reconciliationAudit?.summary.feeTakeRatePct.toFixed(2) || '0.00'}%`}
+                      />
+                    </Card>
+                  </Col>
+                </Row>
+
+                <div className="mt-4">
+                  <Table
+                    rowKey="orderId"
+                    dataSource={reconciliationAudit?.items || []}
+                    size="small"
+                    scroll={{ x: 1480 }}
+                    pagination={{ pageSize: 10 }}
+                    columns={[
+                      {
+                        title: '訂單',
+                        key: 'order',
+                        width: 220,
+                        render: (_, record) => (
+                          <div>
+                            <div className="font-medium text-slate-800">
+                              {record.externalOrderId || record.orderId}
+                            </div>
+                            <div className="text-xs text-slate-400">
+                              {record.channelName} · {dayjs(record.orderDate).format('YYYY/MM/DD')}
+                            </div>
+                          </div>
+                        ),
+                      },
+                      {
+                        title: '異常',
+                        key: 'anomalies',
+                        width: 320,
+                        render: (_, record) => (
+                          <div className="flex flex-wrap gap-1">
+                            {record.anomalyMessages.map((item: string) => (
+                              <Tag key={`${record.orderId}-${item}`} color={record.severity === 'critical' ? 'red' : 'gold'}>
+                                {item}
+                              </Tag>
+                            ))}
+                          </div>
+                        ),
+                      },
+                      {
+                        title: '訂單 / 收款',
+                        key: 'gross',
+                        align: 'right',
+                        render: (_, record) => `${record.grossAmount.toFixed(0)} / ${record.paymentGrossAmount.toFixed(0)}`,
+                      },
+                      {
+                        title: '手續費',
+                        key: 'fees',
+                        align: 'right',
+                        render: (_, record) => `${record.feeTotalAmount.toFixed(0)} (${record.feeRatePct.toFixed(2)}%)`,
+                      },
+                      {
+                        title: '發票',
+                        key: 'invoice',
+                        render: (_, record) => (
+                          <div>
+                            <div>{record.invoiceNumber || '待補發票'}</div>
+                            <div className="text-xs text-slate-400">
+                              {record.invoiceGrossAmount.toFixed(0)} / 稅 {record.invoiceTaxAmount.toFixed(0)}
+                            </div>
+                          </div>
+                        ),
+                      },
+                      {
+                        title: '建議',
+                        dataIndex: 'recommendation',
+                        key: 'recommendation',
+                        width: 280,
+                      },
+                    ]}
+                    locale={{ emptyText: <Empty description="目前沒有逐筆對帳異常" /> }}
+                  />
+                </div>
               </Card>
             </TabPane>
 

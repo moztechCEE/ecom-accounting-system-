@@ -37,6 +37,8 @@ import {
   DashboardReconciliationItem,
   DashboardPerformanceBucket,
   DashboardSalesOverview,
+  OrderReconciliationAudit,
+  OrderReconciliationAuditItem,
 } from "../services/dashboard.service";
 import dayjs, { Dayjs } from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -219,6 +221,18 @@ function getRuleStatusMeta(status: "active" | "monitoring" | "pending") {
   }
 }
 
+function getAuditSeverityMeta(
+  severity: OrderReconciliationAuditItem["severity"],
+) {
+  if (severity === "critical") {
+    return { color: "red" as const, label: "高風險" };
+  }
+  if (severity === "warning") {
+    return { color: "gold" as const, label: "需追蹤" };
+  }
+  return { color: "green" as const, label: "正常" };
+}
+
 function getInvoiceQueueMeta(item: InvoiceQueueItem) {
   if (item.invoiceStatus === "completed") {
     return { color: "green" as const, label: "已開票" };
@@ -241,6 +255,7 @@ const DashboardPage: React.FC = () => {
   const [executive, setExecutive] = useState<DashboardExecutiveOverview | null>(null);
   const [operationsHub, setOperationsHub] = useState<DashboardOperationsHub | null>(null);
   const [invoiceQueue, setInvoiceQueue] = useState<InvoiceQueueResponse | null>(null);
+  const [audit, setAudit] = useState<OrderReconciliationAudit | null>(null);
 
   useEffect(() => {
     if (rangeMode === "custom" && (!customRange?.[0] || !customRange?.[1])) {
@@ -256,7 +271,7 @@ const DashboardPage: React.FC = () => {
     const fetchSummary = async () => {
       setLoading(true);
       try {
-        const [summary, reconciliationFeed, executiveOverview, operationsHubData, invoiceQueueData] = await Promise.all([
+        const [summary, reconciliationFeed, executiveOverview, operationsHubData, invoiceQueueData, auditData] = await Promise.all([
           dashboardService.getSalesOverview({
             entityId: storedEntityId,
             startDate: since,
@@ -284,6 +299,12 @@ const DashboardPage: React.FC = () => {
             endDate: until,
             limit: 8,
           }),
+          dashboardService.getOrderReconciliationAudit({
+            entityId: storedEntityId,
+            startDate: since,
+            endDate: until,
+            limit: 16,
+          }),
         ]);
 
         if (ignore) return;
@@ -293,6 +314,7 @@ const DashboardPage: React.FC = () => {
         setExecutive(executiveOverview);
         setOperationsHub(operationsHubData);
         setInvoiceQueue(invoiceQueueData);
+        setAudit(auditData);
       } catch (error: any) {
         if (!ignore) {
           message.error(error?.response?.data?.message || "讀取儀表板資料失敗");
@@ -424,6 +446,8 @@ const DashboardPage: React.FC = () => {
   const invoiceSummary = invoiceQueue?.summary;
   const invoiceItems = invoiceQueue?.items || [];
   const operationsHighlights = operationsHub?.highlights || [];
+  const auditSummary = audit?.summary;
+  const auditItems = audit?.items || [];
 
   return (
     <div className="space-y-8">
@@ -1135,6 +1159,162 @@ const DashboardPage: React.FC = () => {
           {!invoiceItems.length ? (
             <div className="rounded-3xl border border-dashed border-slate-200 bg-white/30 px-5 py-6 text-sm text-slate-500">
               目前沒有待追發票隊列。這裡會集中顯示可批次開票與仍待付款的訂單。
+            </div>
+          ) : null}
+        </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-card p-6"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+              AI Reconciliation Audit
+            </div>
+            <div className="mt-2 text-xl font-semibold text-slate-900">
+              逐筆對帳稽核與會計提醒
+            </div>
+            <div className="mt-1 text-sm text-slate-500">
+              系統會逐筆檢查手續費、發票、稅額與訂單收款是否一致，方便你像輔助會計一樣從高處看整體營運。
+            </div>
+          </div>
+          <div className="rounded-3xl border border-white/30 bg-white/45 px-4 py-4 text-right">
+            <div className="text-xs text-slate-400">抽成率</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">
+              {auditSummary?.feeTakeRatePct.toFixed(2) || "0.00"}%
+            </div>
+            <div className="mt-1 text-[11px] text-slate-400">
+              總手續費 NT$ {auditSummary?.totalFeeAmount.toFixed(0) || "0"}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
+          <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
+            <div className="text-xs text-slate-400">已稽核訂單</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-900">
+              {auditSummary?.auditedOrderCount || 0}
+            </div>
+          </div>
+          <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
+            <div className="text-xs text-slate-400">手續費 / 發票異常</div>
+            <div className="mt-2 text-2xl font-semibold text-amber-600">
+              {(auditSummary?.feeIssueCount || 0) + (auditSummary?.invoiceIssueCount || 0)}
+            </div>
+          </div>
+          <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
+            <div className="text-xs text-slate-400">稅務異常</div>
+            <div className="mt-2 text-2xl font-semibold text-rose-600">
+              {auditSummary?.taxIssueCount || 0}
+            </div>
+          </div>
+          <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
+            <div className="text-xs text-slate-400">帳款 / 訂單不一致</div>
+            <div className="mt-2 text-2xl font-semibold text-sky-600">
+              {auditSummary?.orderPaymentIssueCount || 0}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-white/30 bg-white/45 px-4 py-4">
+            <div className="text-xs text-slate-400">金流手續費</div>
+            <div className="mt-2 text-xl font-semibold text-slate-900">
+              NT$ {auditSummary?.totalGatewayFeeAmount.toFixed(0) || "0"}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/30 bg-white/45 px-4 py-4">
+            <div className="text-xs text-slate-400">平台手續費</div>
+            <div className="mt-2 text-xl font-semibold text-slate-900">
+              NT$ {auditSummary?.totalPlatformFeeAmount.toFixed(0) || "0"}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/30 bg-white/45 px-4 py-4">
+            <div className="text-xs text-slate-400">異常涉及業績</div>
+            <div className="mt-2 text-xl font-semibold text-slate-900">
+              NT$ {auditSummary?.flaggedGrossAmount.toFixed(0) || "0"}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {auditItems.map((item) => {
+            const severity = getAuditSeverityMeta(item.severity);
+            return (
+              <div
+                key={item.orderId}
+                className="rounded-3xl border border-white/30 bg-white/45 px-4 py-4"
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-semibold text-slate-900">
+                        {item.externalOrderId || item.orderId}
+                      </div>
+                      <Tag color={severity.color}>{severity.label}</Tag>
+                      <Tag color={item.reconciledFlag ? "green" : "blue"}>
+                        {item.reconciledFlag ? "已對帳" : "待對帳"}
+                      </Tag>
+                      {item.invoiceNumber ? (
+                        <Tag color="purple">發票 {item.invoiceNumber}</Tag>
+                      ) : (
+                        <Tag color="gold">待補發票</Tag>
+                      )}
+                    </div>
+                    <div className="mt-2 text-xs leading-5 text-slate-500">
+                      {item.channelName} · 下單{" "}
+                      {dayjs(item.orderDate).tz(DASHBOARD_TZ).format("YYYY/MM/DD")}
+                      {item.providerTradeNo ? ` · 金流單號 ${item.providerTradeNo}` : ""}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {item.anomalyMessages.map((messageText, index) => (
+                        <Tag key={`${item.orderId}-${index}`} color="red">
+                          {messageText}
+                        </Tag>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-xs leading-5 text-slate-400">
+                      {item.recommendation}
+                    </div>
+                  </div>
+
+                  <div className="grid min-w-[320px] grid-cols-2 gap-3 text-right text-sm lg:grid-cols-4">
+                    <div className="rounded-2xl bg-slate-900/5 px-3 py-3">
+                      <div className="text-[11px] text-slate-400">訂單 / 收款</div>
+                      <div className="mt-1 font-semibold text-slate-900">
+                        {item.grossAmount.toFixed(0)} / {item.paymentGrossAmount.toFixed(0)}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-slate-900/5 px-3 py-3">
+                      <div className="text-[11px] text-slate-400">手續費</div>
+                      <div className="mt-1 font-semibold text-slate-900">
+                        {item.feeTotalAmount.toFixed(0)}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-slate-900/5 px-3 py-3">
+                      <div className="text-[11px] text-slate-400">稅額</div>
+                      <div className="mt-1 font-semibold text-slate-900">
+                        {item.orderTaxAmount.toFixed(0)} / {item.invoiceTaxAmount.toFixed(0)}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-slate-900/5 px-3 py-3">
+                      <div className="text-[11px] text-slate-400">抽成率</div>
+                      <div className="mt-1 font-semibold text-slate-900">
+                        {item.feeRatePct.toFixed(2)}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {!auditItems.length ? (
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-white/30 px-5 py-6 text-sm text-slate-500">
+              目前這個區間沒有抓到需要優先處理的逐筆對帳異常。系統仍會持續監測手續費、發票與稅務一致性。
             </div>
           ) : null}
         </div>

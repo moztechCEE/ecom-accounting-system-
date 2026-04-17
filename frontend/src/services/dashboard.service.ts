@@ -185,6 +185,71 @@ export type DashboardOperationsHub = {
   }>;
 };
 
+export type OrderReconciliationAuditItem = {
+  orderId: string;
+  externalOrderId: string | null;
+  orderDate: string;
+  orderStatus: string;
+  channelCode: string | null;
+  channelName: string;
+  bucketKey: string;
+  bucketLabel: string;
+  hasInvoice: boolean;
+  invoiceNumber: string | null;
+  invoiceStatus: string | null;
+  invoiceIssuedAt: string | null;
+  paymentStatus: string | null;
+  reconciledFlag: boolean;
+  grossAmount: number;
+  orderTaxAmount: number;
+  expectedOrderTaxAmount: number;
+  paymentGrossAmount: number;
+  paymentNetAmount: number;
+  gatewayFeeAmount: number;
+  platformFeeAmount: number;
+  shippingPaidAmount: number;
+  feeTotalAmount: number;
+  feeRatePct: number;
+  invoiceGrossAmount: number;
+  invoiceTaxAmount: number;
+  expectedInvoiceTaxAmount: number;
+  providerTradeNo: string | null;
+  providerPaymentId: string | null;
+  anomalyCodes: string[];
+  anomalyMessages: string[];
+  severity: "healthy" | "warning" | "critical";
+  recommendation: string;
+};
+
+export type OrderReconciliationAudit = {
+  entityId: string;
+  range: {
+    startDate: string | null;
+    endDate: string | null;
+  };
+  summary: {
+    auditedOrderCount: number;
+    anomalousOrderCount: number;
+    paidOrderCount: number;
+    invoicedOrderCount: number;
+    reconciledOrderCount: number;
+    invoiceIssueCount: number;
+    taxIssueCount: number;
+    feeIssueCount: number;
+    orderPaymentIssueCount: number;
+    totalGrossAmount: number;
+    totalPaymentGrossAmount: number;
+    totalPaymentNetAmount: number;
+    totalGatewayFeeAmount: number;
+    totalPlatformFeeAmount: number;
+    totalFeeAmount: number;
+    flaggedGrossAmount: number;
+    flaggedFeeAmount: number;
+    feeTakeRatePct: number;
+  };
+  items: OrderReconciliationAuditItem[];
+};
+
 export type MonthlyChannelReconciliationItem = {
   month: string;
   bucketKey: string;
@@ -320,6 +385,31 @@ export const dashboardService = {
 
     const response = await api.get<MonthlyChannelReconciliation>(
       `/reports/monthly-channel-reconciliation?${query.toString()}`,
+    );
+    return response.data;
+  },
+
+  async getOrderReconciliationAudit(params?: {
+    entityId?: string;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+  }): Promise<OrderReconciliationAudit> {
+    const query = new URLSearchParams();
+    query.set("entityId", params?.entityId?.trim() || DEFAULT_ENTITY_ID);
+    if (params?.startDate) {
+      query.set("startDate", params.startDate);
+    }
+    if (params?.endDate) {
+      query.set("endDate", params.endDate);
+    }
+    if (params?.limit) {
+      query.set("limit", String(params.limit));
+    }
+    query.set("_ts", String(Date.now()));
+
+    const response = await api.get<OrderReconciliationAudit>(
+      `/reports/order-reconciliation-audit?${query.toString()}`,
     );
     return response.data;
   },
