@@ -468,12 +468,10 @@ export class PayrollService {
   }
 
   async getDepartments(userId: string, entityId?: string) {
-    const resolvedEntityId = entityId
-      ? await this.resolveEntityId(userId, entityId)
-      : undefined;
+    const resolvedEntityId = await this.resolveEntityId(userId, entityId);
 
     return this.prisma.department.findMany({
-      where: resolvedEntityId ? { entityId: resolvedEntityId } : undefined,
+      where: { entityId: resolvedEntityId },
       orderBy: { name: 'asc' },
     });
   }
@@ -524,6 +522,80 @@ export class PayrollService {
     });
 
     return department;
+  }
+
+  async updateDepartment(
+    id: string,
+    userId: string,
+    data: {
+      name?: string;
+      costCenterId?: string | null;
+      isActive?: boolean;
+    },
+  ) {
+    const department = await this.prisma.department.findUnique({
+      where: { id },
+    });
+
+    if (!department) {
+      throw new NotFoundException('Department not found');
+    }
+
+    const resolvedEntityId = await this.resolveEntityId(
+      userId,
+      department.entityId,
+    );
+    if (resolvedEntityId !== department.entityId) {
+      throw new NotFoundException('Department not found');
+    }
+
+    const updateData: Record<string, any> = {};
+
+    if (data.name !== undefined) {
+      const name = data.name.trim();
+      if (!name) {
+        throw new BadRequestException('Department name is required');
+      }
+
+      const existingDepartment = await this.prisma.department.findFirst({
+        where: {
+          entityId: department.entityId,
+          name,
+          NOT: { id },
+        },
+        select: { id: true },
+      });
+
+      if (existingDepartment) {
+        throw new ConflictException('Department already exists');
+      }
+
+      updateData.name = name;
+    }
+
+    if (data.costCenterId !== undefined) {
+      updateData.costCenterId = data.costCenterId?.trim() || null;
+    }
+
+    if (data.isActive !== undefined) {
+      updateData.isActive = data.isActive;
+    }
+
+    const updatedDepartment = await this.prisma.department.update({
+      where: { id },
+      data: updateData,
+    });
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'departments',
+      recordId: id,
+      action: 'UPDATE',
+      oldData: department,
+      newData: updatedDepartment,
+    });
+
+    return updatedDepartment;
   }
 
   async createEmployee(
