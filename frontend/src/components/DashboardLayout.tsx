@@ -23,6 +23,7 @@ import {
 import { AnimatePresence, motion } from 'framer-motion'
 import { GlassDrawer } from './ui/GlassDrawer'
 import { useAuth } from '../contexts/AuthContext'
+import BrandMark from './BrandMark'
 import CommandPalette from './CommandPalette'
 import AICopilotWidget from './AICopilotWidget'
 import NotificationCenter from './NotificationCenter'
@@ -246,7 +247,7 @@ const DashboardLayout: React.FC = () => {
             <div className="shrink-0 h-16 flex items-center justify-center m-4 mb-8">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/30 shadow-lg">
-                  <span className="text-xl">💎</span>
+                  <BrandMark className="w-7 h-7" alt="System logo" />
                 </div>
                 {!collapsed && (
                   <span className="text-lg font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>
@@ -287,7 +288,7 @@ const DashboardLayout: React.FC = () => {
           <div className="h-16 flex items-center justify-center m-4 mb-8">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/30 shadow-lg">
-                <span className="text-xl">💎</span>
+                <BrandMark className="w-7 h-7" alt="System logo" />
               </div>
               <span className="text-lg font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>
                 E-Accounting

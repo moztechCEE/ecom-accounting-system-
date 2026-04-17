@@ -19,6 +19,7 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom'
 import { GlassDrawer } from '../ui/GlassDrawer'
 import { useAuth } from '../../contexts/AuthContext'
+import BrandMark from '../BrandMark'
 
 const { Sider, Content } = Layout
 
@@ -120,14 +121,14 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className={`h-16 flex items-center justify-center border-b border-gray-200/50 transition-all duration-300 ${collapsed ? 'px-2' : 'px-6'}`}>
         {!collapsed ? (
           <div className="flex items-center gap-2 animate-fade-in">
-            <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-white font-bold shadow-lg">
-              E
+            <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center shadow-lg">
+              <BrandMark className="w-5 h-5" alt="System logo" />
             </div>
             <span className="text-gray-800 font-medium text-lg tracking-wide">Ecom System</span>
           </div>
         ) : (
-          <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-white font-bold shadow-lg">
-            E
+          <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center shadow-lg">
+            <BrandMark className="w-5 h-5" alt="System logo" />
           </div>
         )}
       </div>

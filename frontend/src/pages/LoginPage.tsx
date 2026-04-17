@@ -5,6 +5,7 @@ import { UserOutlined, LockOutlined, GoogleOutlined, GithubOutlined, WindowsOutl
 import { motion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
 import { LoginRequest } from '../types'
+import BrandMark from '../components/BrandMark'
 
 const { Title, Text } = Typography
 
@@ -92,7 +93,7 @@ const LoginPage: React.FC = () => {
             whileHover={{ rotate: 10, scale: 1.05 }}
             className="w-20 h-20 bg-white/50 rounded-3xl flex items-center justify-center mx-auto mb-6 backdrop-blur-xl border border-white/60 shadow-lg cursor-pointer transition-all"
           >
-            <span className="text-4xl filter drop-shadow-sm">💎</span>
+            <BrandMark className="w-12 h-12 drop-shadow-sm" alt="System logo" />
           </motion.div>
           <Title level={2} className="!text-gray-800 !mb-2 !font-light tracking-tight">電商會計系統</Title>
           <Text className="text-gray-500 font-light">E-Commerce Accounting System</Text>
