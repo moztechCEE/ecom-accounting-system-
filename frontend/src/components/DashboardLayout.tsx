@@ -129,7 +129,6 @@ const DashboardLayout: React.FC = () => {
       children: [
         { key: '/attendance/dashboard', label: '打卡儀表板', onClick: () => navigate('/attendance/dashboard') },
         { key: '/attendance/leaves', label: '請假申請', onClick: () => navigate('/attendance/leaves') },
-        { key: '/attendance/admin', label: '考勤管理後台', onClick: () => navigate('/attendance/admin') },
       ],
     },
     {
@@ -139,6 +138,7 @@ const DashboardLayout: React.FC = () => {
       children: [
         { key: '/payroll/runs', label: '薪資計算', onClick: () => navigate('/payroll/runs') },
         { key: '/payroll/employees', label: '員工與部門', onClick: () => navigate('/payroll/employees') },
+        { key: '/attendance/admin', label: '完整考勤後台', onClick: () => navigate('/attendance/admin') },
       ],
     },
     {

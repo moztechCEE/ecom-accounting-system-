@@ -84,13 +84,17 @@ const Sidebar: React.FC<SidebarProps> = ({
       children: [
         { key: '/attendance/dashboard', label: '打卡儀表板' },
         { key: '/attendance/leaves', label: '請假申請' },
-        { key: '/attendance/admin', label: '考勤管理後台' },
       ],
     },
     {
       key: '/payroll',
       icon: <DollarOutlined />,
       label: '薪資管理',
+      children: [
+        { key: '/payroll/runs', label: '薪資計算' },
+        { key: '/payroll/employees', label: '員工與部門' },
+        { key: '/attendance/admin', label: '完整考勤後台' },
+      ],
     },
     {
       key: '/banking',
