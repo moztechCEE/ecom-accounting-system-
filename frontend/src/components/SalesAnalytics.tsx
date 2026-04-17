@@ -1,46 +1,98 @@
-import React, { useState } from 'react'
-import { Card, Statistic, Row, Col, Segmented, Tag, Typography, Space, Button } from 'antd'
-import { 
-  ArrowUpOutlined, 
-  ArrowDownOutlined, 
+import React, { useMemo, useState } from 'react'
+import { Card, Statistic, Row, Col, Segmented, Typography, Space, Empty } from 'antd'
+import {
   ThunderboltFilled,
   PieChartOutlined,
   LineChartOutlined,
-  CloseCircleOutlined
 } from '@ant-design/icons'
-import { 
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  BarChart, Bar, ComposedChart, Line, CartesianGrid, Legend, PieChart, Pie, Cell 
+import {
+  BarChart,
+  Bar,
+  ComposedChart,
+  Line,
+  CartesianGrid,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
 } from 'recharts'
 import { motion } from 'framer-motion'
+import dayjs from 'dayjs'
+import { SalesOrder } from '../services/sales.service'
 
 const { Text, Title } = Typography
 
-const data = [
-  { name: 'Mon', revenue: 4000, profit: 2400, orders: 24 },
-  { name: 'Tue', revenue: 3000, profit: 1398, orders: 18 },
-  { name: 'Wed', revenue: 2000, profit: 980, orders: 12 },
-  { name: 'Thu', revenue: 2780, profit: 1908, orders: 20 },
-  { name: 'Fri', revenue: 1890, profit: 1100, orders: 15 },
-  { name: 'Sat', revenue: 2390, profit: 1500, orders: 19 },
-  { name: 'Sun', revenue: 3490, profit: 2100, orders: 28 },
-]
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d']
 
-const pieData = [
-  { name: 'Electronics', value: 400 },
-  { name: 'Clothing', value: 300 },
-  { name: 'Home', value: 300 },
-  { name: 'Books', value: 200 },
-]
+type RangeValue = 'Today' | 'Week' | 'Month' | 'Year'
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042']
+const SalesAnalytics: React.FC<{ orders: SalesOrder[] }> = ({ orders }) => {
+  const [timeRange, setTimeRange] = useState<RangeValue>('Week')
 
-const SalesAnalytics: React.FC = () => {
-  const [timeRange, setTimeRange] = useState<string>('Week')
+  const filteredOrders = useMemo(() => {
+    const now = dayjs()
+    return orders.filter((order) => {
+      const orderDate = dayjs(order.createdAt)
+      if (timeRange === 'Today') {
+        return orderDate.isSame(now, 'day')
+      }
+      if (timeRange === 'Week') {
+        return orderDate.isAfter(now.subtract(6, 'day').startOf('day'))
+      }
+      if (timeRange === 'Month') {
+        return orderDate.isAfter(now.subtract(29, 'day').startOf('day'))
+      }
+      return orderDate.isAfter(now.subtract(11, 'month').startOf('month'))
+    })
+  }, [orders, timeRange])
+
+  const revenueTotal = filteredOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0)
+  const completedOrders = filteredOrders.filter((order) => order.status === 'completed').length
+  const paidLikeOrders = filteredOrders.filter((order) =>
+    ['completed', 'success', 'paid', 'cod'].includes((order.paymentStatus || '').toLowerCase()),
+  ).length
+  const averageOrderValue = filteredOrders.length ? revenueTotal / filteredOrders.length : 0
+  const paidRate = filteredOrders.length ? (paidLikeOrders / filteredOrders.length) * 100 : 0
+
+  const trendData = useMemo(() => {
+    const buckets = new Map<string, { name: string; revenue: number; orders: number }>()
+
+    filteredOrders.forEach((order) => {
+      const bucketKey =
+        timeRange === 'Year'
+          ? dayjs(order.createdAt).format('YYYY-MM')
+          : dayjs(order.createdAt).format('MM/DD')
+      const current = buckets.get(bucketKey) || { name: bucketKey, revenue: 0, orders: 0 }
+      current.revenue += Number(order.totalAmount || 0)
+      current.orders += 1
+      buckets.set(bucketKey, current)
+    })
+
+    return Array.from(buckets.values()).map((item) => ({
+      ...item,
+      average: item.orders ? Number((item.revenue / item.orders).toFixed(0)) : 0,
+    }))
+  }, [filteredOrders, timeRange])
+
+  const pieData = useMemo(() => {
+    const bucket = new Map<string, number>()
+    filteredOrders.forEach((order) => {
+      const key = order.sourceBrand || order.sourceLabel || order.channelName || '其他來源'
+      bucket.set(key, (bucket.get(key) || 0) + Number(order.totalAmount || 0))
+    })
+    return Array.from(bucket.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((left, right) => right.value - left.value)
+      .slice(0, 6)
+  }, [filteredOrders])
+
+  const topSource = pieData[0]
 
   return (
     <div className="mb-8 space-y-6">
-      {/* Header & Controls */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-blue-50 rounded-lg text-blue-500">
@@ -48,202 +100,138 @@ const SalesAnalytics: React.FC = () => {
           </div>
           <div>
             <Title level={4} className="!mb-0">智慧銷售儀表板</Title>
-            <Text type="secondary" className="text-xs">AI 驅動的即時數據分析</Text>
+            <Text type="secondary" className="text-xs">
+              以真實訂單資料整理目前的營收、客群與來源分布
+            </Text>
           </div>
         </div>
-        <Segmented 
-          options={['Today', 'Week', 'Month', 'Year']} 
+        <Segmented
+          options={['Today', 'Week', 'Month', 'Year']}
           value={timeRange}
-          onChange={setTimeRange}
+          onChange={(value) => setTimeRange(value as RangeValue)}
           className="glass-segment"
         />
       </div>
 
-      {/* KPI Cards */}
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <Card className="glass-card !border-0 overflow-hidden relative h-32 flex flex-col justify-center">
-              <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-30">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data}>
-                    <defs>
-                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#1890ff" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#1890ff" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="revenue" stroke="#1890ff" fillOpacity={1} fill="url(#colorRevenue)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="relative z-10">
-                <Statistic 
-                  title={<span className="text-gray-500 font-medium">總營收 (Revenue)</span>}
-                  value={158900} 
-                  prefix="NT$" 
-                  precision={0}
-                  valueStyle={{ fontWeight: 600 }}
-                />
-                <div className="flex items-center gap-1 text-green-500 text-xs mt-1 font-medium">
-                  <ArrowUpOutlined /> <span>12.5% 較上週</span>
-                </div>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <Card className="glass-card !border-0 h-32 flex flex-col justify-center">
+              <Statistic
+                title={<span className="text-gray-500 font-medium">總營收</span>}
+                value={revenueTotal}
+                prefix="NT$"
+                precision={0}
+                valueStyle={{ fontWeight: 600 }}
+              />
+              <div className="mt-1 text-xs text-slate-500">
+                {filteredOrders.length} 筆訂單
               </div>
             </Card>
           </motion.div>
         </Col>
 
         <Col xs={24} md={8}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Card className="glass-card !border-0 overflow-hidden relative h-32 flex flex-col justify-center">
-              <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-30">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data}>
-                    <Bar dataKey="orders" fill="#52c41a" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="relative z-10">
-                <Statistic 
-                  title={<span className="text-gray-500 font-medium">訂單轉換率 (Conversion)</span>}
-                  value={88.5} 
-                  suffix="%" 
-                  precision={1}
-                  valueStyle={{ fontWeight: 600 }}
-                />
-                <div className="flex items-center gap-1 text-green-500 text-xs mt-1 font-medium">
-                  <ArrowUpOutlined /> <span>5.2% 較上週</span>
-                </div>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <Card className="glass-card !border-0 h-32 flex flex-col justify-center">
+              <Statistic
+                title={<span className="text-gray-500 font-medium">已付款率</span>}
+                value={paidRate}
+                suffix="%"
+                precision={1}
+                valueStyle={{ fontWeight: 600 }}
+              />
+              <div className="mt-1 text-xs text-slate-500">
+                已付款 / 已完成 {paidLikeOrders} 筆
               </div>
             </Card>
           </motion.div>
         </Col>
 
         <Col xs={24} md={8}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <Card className="glass-card !border-0 overflow-hidden relative h-32 flex flex-col justify-center">
-               <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-10">
-                 <div className="absolute -right-10 -top-10 w-40 h-40 bg-purple-500 rounded-full blur-3xl"></div>
-              </div>
-              <div className="relative z-10">
-                <Statistic 
-                  title={<span className="text-gray-500 font-medium">平均客單價 (AOV)</span>}
-                  value={3250} 
-                  prefix="NT$" 
-                  precision={0}
-                  valueStyle={{ fontWeight: 600 }}
-                />
-                <div className="flex items-center gap-1 text-red-500 text-xs mt-1 font-medium">
-                  <ArrowDownOutlined /> <span>2.1% 較上週</span>
-                </div>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <Card className="glass-card !border-0 h-32 flex flex-col justify-center">
+              <Statistic
+                title={<span className="text-gray-500 font-medium">平均客單價</span>}
+                value={averageOrderValue}
+                prefix="NT$"
+                precision={0}
+                valueStyle={{ fontWeight: 600 }}
+              />
+              <div className="mt-1 text-xs text-slate-500">
+                已完成 {completedOrders} 筆
               </div>
             </Card>
           </motion.div>
         </Col>
       </Row>
 
-      {/* Advanced Charts Row */}
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={16}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="h-full"
-          >
-            <Card className="glass-card !border-0 h-full" title={<Space><LineChartOutlined /> <span className="text-sm font-medium">營收與獲利趨勢分析</span></Space>}>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="h-full">
+            <Card className="glass-card !border-0 h-full" title={<Space><LineChartOutlined /> <span className="text-sm font-medium">營收與訂單趨勢</span></Space>}>
               <div className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="left" axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} />
-                    <Tooltip 
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                    />
-                    <Legend />
-                    <Bar yAxisId="left" dataKey="revenue" name="營收" fill="#1890ff" radius={[4, 4, 0, 0]} barSize={20} />
-                    <Line yAxisId="right" type="monotone" dataKey="profit" name="淨利" stroke="#52c41a" strokeWidth={3} dot={{ r: 4 }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
+                {trendData.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={trendData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                      <Tooltip />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                      <Legend />
+                      <Bar dataKey="revenue" name="營收" fill="#1890ff" radius={[4, 4, 0, 0]} barSize={24} />
+                      <Line type="monotone" dataKey="orders" name="訂單數" stroke="#52c41a" strokeWidth={3} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <Empty description="這個區間目前沒有真實訂單資料" />
+                )}
               </div>
             </Card>
           </motion.div>
         </Col>
-        
+
         <Col xs={24} lg={8}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="h-full"
-          >
-            <Card className="glass-card !border-0 h-full" title={<Space><PieChartOutlined /> <span className="text-sm font-medium">銷售類別占比</span></Space>}>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="h-full">
+            <Card className="glass-card !border-0 h-full" title={<Space><PieChartOutlined /> <span className="text-sm font-medium">來源品牌占比</span></Space>}>
               <div className="h-[300px] w-full relative">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend verticalAlign="bottom" height={36}/>
-                  </PieChart>
-                </ResponsiveContainer>
-                {/* Center Text */}
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-                  <div className="text-2xl font-bold text-gray-700">1,200</div>
-                  <div className="text-xs text-gray-400">Total Items</div>
-                </div>
+                {pieData.length ? (
+                  <>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                          {pieData.map((entry, index) => (
+                            <Cell key={`${entry.name}-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+                      <div className="text-xl font-bold text-gray-700">
+                        {topSource?.name || '—'}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {topSource ? `NT$ ${topSource.value.toLocaleString()}` : '無資料'}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <Empty description="來源占比尚無資料" />
+                )}
               </div>
             </Card>
           </motion.div>
         </Col>
       </Row>
 
-      {/* AI Insight Banner */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.6 }}
-      >
-        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-4 text-white shadow-lg flex items-start gap-4 relative overflow-hidden">
-          <div className="absolute -right-10 -top-10 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl"></div>
-          <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-            <ThunderboltFilled className="text-xl text-yellow-300" />
-          </div>
-          <div>
-            <h4 className="text-white font-bold text-lg mb-1">AI 智慧洞察</h4>
-            <p className="text-white/90 text-sm leading-relaxed">
-              根據本週數據分析，您的 <span className="font-bold text-yellow-300">Electronics</span> 類別銷售額成長了 15%，主要受惠於週末的促銷活動。
-              建議下週可針對 <span className="font-bold text-yellow-300">Home</span> 類別進行類似的搭售策略以提升客單價。
-            </p>
-          </div>
-          <Button type="text" className="text-white/70 hover:text-white absolute top-2 right-2" icon={<CloseCircleOutlined />} />
+      <div className="rounded-3xl bg-[linear-gradient(90deg,#1d4ed8,#6d28d9,#7c3aed)] px-6 py-5 text-white shadow-lg">
+        <div className="text-sm font-semibold">AI 智慧洞察</div>
+        <div className="mt-2 text-sm leading-7 text-white/90">
+          {topSource
+            ? `目前 ${topSource.name} 是主要來源，這個區間貢獻 NT$ ${topSource.value.toLocaleString()}。建議搭配訂單列表的來源與客群欄位，優先檢查該來源的高價值客戶與待對帳訂單。`
+            : '目前還沒有足夠的真實訂單資料可供 AI 洞察，先同步 Shopify / 團購 / Shopline 訂單後，這裡就會開始變成真實營運面板。'}
         </div>
-      </motion.div>
+      </div>
     </div>
   )
 }

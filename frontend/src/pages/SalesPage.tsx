@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Table, Tag, Button, Space, Input, DatePicker, Card, Typography, Dropdown, Segmented, message } from 'antd'
+import { Table, Tag, Button, Space, Input, DatePicker, Card, Typography, Segmented, message } from 'antd'
 import { 
   PlusOutlined, 
   SearchOutlined, 
@@ -47,6 +47,7 @@ const KanbanColumn: React.FC<{ title: string; status: string; orders: SalesOrder
             <span className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString()}</span>
           </div>
           <div className="font-medium text-gray-800 dark:text-gray-200 mb-1">{order.customerName || 'Guest'}</div>
+          <div className="text-xs text-gray-400">{order.sourceLabel || order.channelName || '未歸戶來源'}</div>
           <div className="flex justify-between items-center mt-3">
             <span className="text-gray-500 text-sm">{order.items?.length || 0} items</span>
             <span className="font-mono font-medium dark:text-gray-300">NT$ {Number(order.totalAmount).toLocaleString()}</span>
@@ -111,7 +112,34 @@ const SalesPage: React.FC = () => {
       title: '客戶',
       dataIndex: 'customerName',
       key: 'customerName',
-      render: (text: string) => text || 'Guest',
+      render: (_: string, record: SalesOrder) => (
+        <div>
+          <div className="font-medium text-slate-900">{record.customerName || 'Guest'}</div>
+          <div className="text-xs text-slate-400">
+            {record.customerEmail || '未填 Email'}
+            {record.customerPhone ? ` · ${record.customerPhone}` : ''}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '來源 / 品牌',
+      key: 'source',
+      render: (_: unknown, record: SalesOrder) => (
+        <div>
+          <div className="font-medium text-slate-900">{record.sourceLabel || '未歸戶來源'}</div>
+          <div className="text-xs text-slate-400">{record.sourceBrand || record.channelName || '其他來源'}</div>
+        </div>
+      ),
+    },
+    {
+      title: '客群',
+      key: 'segment',
+      render: (_: unknown, record: SalesOrder) => (
+        <Tag color={record.customerType === 'company' ? 'purple' : 'green'}>
+          {record.customerType === 'company' ? 'B2B' : 'B2C'}
+        </Tag>
+      ),
     },
     {
       title: '日期',
@@ -154,6 +182,13 @@ const SalesPage: React.FC = () => {
       render: (status: string) => <Tag>{status}</Tag>
     },
     {
+      title: '通路',
+      key: 'channel',
+      render: (_: unknown, record: SalesOrder) => (
+        <Tag color="blue">{record.channelName || record.channelCode || '未知通路'}</Tag>
+      ),
+    },
+    {
       title: '操作',
       key: 'action',
       render: () => (
@@ -168,7 +203,10 @@ const SalesPage: React.FC = () => {
     return (
       (order.orderNumber || '').toLowerCase().includes(keyword) ||
       (order.customerName || '').toLowerCase().includes(keyword) ||
-      (order.channelName || '').toLowerCase().includes(keyword)
+      (order.channelName || '').toLowerCase().includes(keyword) ||
+      (order.sourceLabel || '').toLowerCase().includes(keyword) ||
+      (order.sourceBrand || '').toLowerCase().includes(keyword) ||
+      (order.customerEmail || '').toLowerCase().includes(keyword)
     )
   })
 
@@ -193,13 +231,13 @@ const SalesPage: React.FC = () => {
       </div>
 
       {/* Analytics Cards */}
-      <SalesAnalytics />
+      <SalesAnalytics orders={filteredOrders} />
 
       {/* Filters & Actions */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 glass-panel p-4">
         <Space size="large">
           <Input 
-            placeholder="搜尋訂單編號或客戶..." 
+            placeholder="搜尋訂單編號、客戶、來源或品牌..." 
             prefix={<SearchOutlined className="text-gray-400" />} 
             className="w-64"
             value={searchText}

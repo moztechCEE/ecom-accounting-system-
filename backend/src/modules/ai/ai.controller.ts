@@ -33,11 +33,11 @@ export class AiController {
   @Post('insights/daily-briefing')
   @ApiOperation({ summary: '取得每日財務 AI 簡報' })
   async getDailyBriefing(@Body() body: { entityId: string; modelId?: string }) {
-    const insight = await this.insightsService.getDailyBriefing(
+    const briefing = await this.insightsService.getDailyBriefing(
       body.entityId,
       body.modelId,
     );
-    return { insight };
+    return briefing;
   }
 
   @Post('copilot/chat')

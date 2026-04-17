@@ -88,9 +88,10 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
                 </div>
               </div>
               <Descriptions column={1} size="small" labelStyle={{ background: 'transparent' }} contentStyle={{ background: 'transparent' }}>
-                <Descriptions.Item label="Email">contact@{(order.customerName || 'guest').toLowerCase().replace(/\s/g, '')}.com</Descriptions.Item>
-                <Descriptions.Item label="電話">+886 912 345 678</Descriptions.Item>
-                <Descriptions.Item label="地址">台北市信義區信義路五段7號</Descriptions.Item>
+                <Descriptions.Item label="Email">{order.customerEmail || '未填寫'}</Descriptions.Item>
+                <Descriptions.Item label="電話">{order.customerPhone || '未填寫'}</Descriptions.Item>
+                <Descriptions.Item label="來源">{order.sourceLabel || order.channelName || '未歸戶來源'}</Descriptions.Item>
+                <Descriptions.Item label="品牌">{order.sourceBrand || '未設定'}</Descriptions.Item>
               </Descriptions>
             </GlassDrawerSection>
 
@@ -107,7 +108,9 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
                 </div>
                 <div className="flex justify-between items-center mb-4">
                   <Text type="secondary">付款狀態</Text>
-                  <Tag color="success" className="rounded-full px-2 border-none">已付款</Tag>
+                  <Tag color={order.status === 'completed' ? 'success' : 'processing'} className="rounded-full px-2 border-none">
+                    {order.status === 'completed' ? '已完成' : '處理中'}
+                  </Tag>
                 </div>
                 <Divider className="my-4" />
                 <div className="flex justify-between items-center">
@@ -145,12 +148,12 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
                 </div>
                 <div className="flex justify-between mb-2">
                   <Text>稅額 (5%)</Text>
-                  <Text>NT$ {(Number(order.totalAmount || 0) * 0.05).toLocaleString()}</Text>
+                  <Text>NT$ {(Number(order.totalAmount || 0) - Number(order.totalAmount || 0) / 1.05).toFixed(0)}</Text>
                 </div>
                 <Divider className="my-2" />
                 <div className="flex justify-between">
                   <Text strong>總計</Text>
-                  <Text strong className="text-lg">NT$ {(Number(order.totalAmount || 0) * 1.05).toLocaleString()}</Text>
+                  <Text strong className="text-lg">NT$ {Number(order.totalAmount || 0).toLocaleString()}</Text>
                 </div>
               </div>
             </div>

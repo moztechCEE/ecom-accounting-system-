@@ -9,6 +9,12 @@ export interface Customer {
   type: 'individual' | 'company'
   address?: string
   isActive: boolean
+  totalOrders?: number
+  lastOrderDate?: string | null
+  sourceLabels?: string[]
+  sourceBrands?: string[]
+  primarySourceLabel?: string
+  primarySourceBrand?: string
 }
 
 export const customerService = {

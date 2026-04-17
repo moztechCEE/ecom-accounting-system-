@@ -5,10 +5,11 @@ import { AiCopilotService } from './ai-copilot.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
 import { AiController } from './ai.controller';
 import { PrismaModule } from '../../common/prisma/prisma.module';
+import { ReportsModule } from '../reports/reports.module';
 
 @Global()
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, ReportsModule],
   controllers: [AiController],
   providers: [
     AiService,

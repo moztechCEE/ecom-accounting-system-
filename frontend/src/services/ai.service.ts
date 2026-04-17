@@ -14,6 +14,14 @@ export interface AiCopilotSource {
   path?: string;
 }
 
+export interface DailyBriefingAlert {
+  key: string;
+  title: string;
+  count: number;
+  tone: "healthy" | "warning" | "critical";
+  helper: string;
+}
+
 export const aiService = {
   async getAvailableModels() {
     const response = await api.get<AiModel[]>("/ai/models");
@@ -21,7 +29,7 @@ export const aiService = {
   },
 
   async getDailyBriefing(entityId: string, modelId?: string) {
-    const response = await api.post<{ insight: string }>(
+    const response = await api.post<{ insight: string; alerts: DailyBriefingAlert[] }>(
       "/ai/insights/daily-briefing",
       {
         entityId,

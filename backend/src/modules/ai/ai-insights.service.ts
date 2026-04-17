@@ -6,6 +6,15 @@ import {
   AI_AGENT_RESPONSE_STYLE,
 } from './ai-principles';
 import dayjs from 'dayjs';
+import { ReportsService } from '../reports/reports.service';
+
+export type DailyBriefingAlert = {
+  key: string;
+  title: string;
+  count: number;
+  tone: 'healthy' | 'warning' | 'critical';
+  helper: string;
+};
 
 @Injectable()
 export class AiInsightsService {
@@ -14,14 +23,19 @@ export class AiInsightsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiService: AiService,
+    private readonly reportsService: ReportsService,
   ) {}
 
-  async getDailyBriefing(entityId: string, modelId?: string): Promise<string> {
+  async getDailyBriefing(
+    entityId: string,
+    modelId?: string,
+  ): Promise<{ insight: string; alerts: DailyBriefingAlert[] }> {
     const yesterday = dayjs().subtract(1, 'day').startOf('day').toDate();
     const today = dayjs().startOf('day').toDate();
+    const auditWindowStart = dayjs().subtract(14, 'day').startOf('day').toDate();
 
     // 1. Gather Data (Direct Prisma for performance/avoiding circular deps)
-    const [salesData, expenseData] = await Promise.all([
+    const [salesData, expenseData, audit, executive] = await Promise.all([
       this.prisma.salesOrder.aggregate({
         where: {
           entityId,
@@ -38,6 +52,17 @@ export class AiInsightsService {
         _sum: { amountOriginal: true },
         _count: { id: true },
       }),
+      this.reportsService.getOrderReconciliationAudit(
+        entityId,
+        auditWindowStart,
+        today,
+        80,
+      ),
+      this.reportsService.getDashboardExecutiveOverview(
+        entityId,
+        auditWindowStart,
+        today,
+      ),
     ]);
 
     const salesTotal = salesData._sum.totalGrossBase || 0;
@@ -69,13 +94,19 @@ Max length: 50 words.
     // 3. Call AI
     try {
       const insight = await this.aiService.generateContent(prompt, modelId);
-      return insight?.trim() || '昨日財務數據處理中，請稍後再試。';
+      return {
+        insight: insight?.trim() || '昨日財務數據處理中，請稍後再試。',
+        alerts: this.buildProactiveAlerts(audit, executive),
+      };
     } catch (error) {
       this.logger.error(
         `Failed to generate daily briefing for entity ${entityId}`,
         error,
       );
-      return '暫時無法整理昨日重點，請稍後再試。';
+      return {
+        insight: '暫時無法整理昨日重點，請稍後再試。',
+        alerts: this.buildProactiveAlerts(audit, executive),
+      };
     }
   }
 
@@ -115,5 +146,69 @@ Max length: 50 words.
     // AI Check for context (optional, if description provided)
     // For now, rule-based is faster and cheaper for "Anomaly"
     return { isAnomaly: false };
+  }
+
+  private buildProactiveAlerts(audit: any, executive: any): DailyBriefingAlert[] {
+    const items = Array.isArray(audit?.items) ? audit.items : [];
+    const missingInvoice = items.filter((item) =>
+      item.anomalyCodes?.includes('missing_invoice_after_payment') ||
+      item.anomalyCodes?.includes('reconciled_without_invoice'),
+    );
+    const taxAnomalies = items.filter((item) =>
+      item.anomalyCodes?.includes('order_tax_mismatch') ||
+      item.anomalyCodes?.includes('invoice_tax_mismatch'),
+    );
+    const feeAnomalies = items.filter((item) =>
+      item.anomalyCodes?.includes('fee_mismatch') ||
+      item.anomalyCodes?.includes('fee_backfill_needed'),
+    );
+    const paymentMismatch = items.filter((item) =>
+      item.anomalyCodes?.includes('order_payment_mismatch'),
+    );
+
+    const alerts: DailyBriefingAlert[] = [
+      {
+        key: 'high-risk',
+        title: '高風險對帳單',
+        count: items.filter((item) => item.severity === 'critical').length,
+        tone: items.some((item) => item.severity === 'critical')
+          ? 'critical'
+          : 'healthy',
+        helper: '優先追有金額差、稅額差或已付款未開票的訂單。',
+      },
+      {
+        key: 'invoice',
+        title: '待補發票',
+        count: missingInvoice.length,
+        tone: missingInvoice.length ? 'warning' : 'healthy',
+        helper: '已付款或已對帳卻還沒有正式發票的訂單，需要先補發票。',
+      },
+      {
+        key: 'tax',
+        title: '疑似稅額異常',
+        count: taxAnomalies.length,
+        tone: taxAnomalies.length ? 'critical' : 'healthy',
+        helper: '系統抓到訂單稅額或發票稅額與 5% 口徑不一致。',
+      },
+      {
+        key: 'fees',
+        title: '手續費待補 / 待追',
+        count: feeAnomalies.length + Number(executive?.operations?.feeBackfillCount || 0),
+        tone:
+          feeAnomalies.length || Number(executive?.operations?.feeBackfillCount || 0)
+            ? 'warning'
+            : 'healthy',
+        helper: '確認綠界與平台抽成是否已回填到淨額，避免帳款看起來對、實際費率卻不對。',
+      },
+      {
+        key: 'order-payment',
+        title: '訂單與帳款不一致',
+        count: paymentMismatch.length,
+        tone: paymentMismatch.length ? 'critical' : 'healthy',
+        helper: '優先檢查退款、折讓、超商未取與貨到付款造成的差額。',
+      },
+    ];
+
+    return alerts.filter((alert) => alert.count > 0).slice(0, 4);
   }
 }

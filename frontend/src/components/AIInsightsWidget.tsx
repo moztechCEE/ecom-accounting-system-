@@ -2,13 +2,14 @@ import React, { useEffect, useState } from "react";
 import { Button, Card, Skeleton, Typography } from "antd";
 import { ReloadOutlined, RobotOutlined } from "@ant-design/icons";
 import { motion } from "framer-motion";
-import { aiService } from "../services/ai.service";
+import { aiService, DailyBriefingAlert } from "../services/ai.service";
 import { useAI } from "../contexts/AIContext";
 
 const { Text } = Typography;
 
 const AIInsightsWidget: React.FC = () => {
   const [insight, setInsight] = useState("");
+  const [alerts, setAlerts] = useState<DailyBriefingAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const { selectedModelId } = useAI();
   const entityId = import.meta.env.VITE_DEFAULT_ENTITY_ID || "tw-entity-001";
@@ -18,10 +19,12 @@ const AIInsightsWidget: React.FC = () => {
     try {
       const data = await aiService.getDailyBriefing(entityId, selectedModelId);
       setInsight(data.insight);
+      setAlerts(data.alerts || []);
     } catch (error: any) {
       if (error.response?.status !== 401) {
         console.error("Failed to fetch AI insight", error);
         setInsight("暫時無法整理昨日重點，請稍後再試。");
+        setAlerts([]);
       }
     } finally {
       setLoading(false);
@@ -78,6 +81,25 @@ const AIInsightsWidget: React.FC = () => {
               {insight}
             </Text>
           </Skeleton>
+
+          {!loading && alerts.length ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {alerts.map((alert) => (
+                <div
+                  key={alert.key}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                >
+                  <div className="text-xs text-slate-400">{alert.title}</div>
+                  <div className="mt-2 text-2xl font-semibold text-slate-900">
+                    {alert.count}
+                  </div>
+                  <div className="mt-2 text-xs leading-5 text-slate-500">
+                    {alert.helper}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </Card>
     </motion.div>
