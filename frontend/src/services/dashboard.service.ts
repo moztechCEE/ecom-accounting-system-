@@ -95,6 +95,28 @@ export type DashboardInventoryAlert = {
   severity: "critical" | "warning";
 };
 
+export type DashboardExecutiveAnomaly = {
+  key: string;
+  title: string;
+  count: number;
+  amount: number | null;
+  tone: "healthy" | "warning" | "attention" | "critical";
+  helper: string;
+  accountCode: string | null;
+  accountName: string | null;
+  statusLabel: string;
+};
+
+export type DashboardReconciliationRule = {
+  key: string;
+  title: string;
+  status: "active" | "monitoring" | "pending";
+  metric: number;
+  description: string;
+  accountingEntry: string;
+  helper: string;
+};
+
 export type DashboardExecutiveOverview = {
   entityId: string;
   range: {
@@ -111,11 +133,17 @@ export type DashboardExecutiveOverview = {
   };
   operations: {
     pendingPayoutCount: number;
+    overduePendingPayoutCount: number;
+    feeBackfillCount: number;
+    unmatchedPayoutLineCount: number;
     uninvoicedOrdersCount: number;
     inventoryAlertCount: number;
     outOfStockCount: number;
+    openAnomalyCount: number;
   };
   inventoryAlerts: DashboardInventoryAlert[];
+  anomalies: DashboardExecutiveAnomaly[];
+  reconciliationRules: DashboardReconciliationRule[];
   tasks: DashboardExecutiveTask[];
 };
 

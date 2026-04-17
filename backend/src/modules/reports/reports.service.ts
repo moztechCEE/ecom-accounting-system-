@@ -180,6 +180,13 @@ export class ReportsService {
     const inventoryAlertThreshold = Number(
       this.configService.get<string>('DASHBOARD_INVENTORY_ALERT_THRESHOLD', '5'),
     );
+    const payoutOverdueDays = Number(
+      this.configService.get<string>('DASHBOARD_PAYOUT_OVERDUE_DAYS', '3'),
+    );
+    const anomalyWindowStart = new Date();
+    anomalyWindowStart.setDate(anomalyWindowStart.getDate() - 14);
+    const overduePayoutDate = new Date();
+    overduePayoutDate.setDate(overduePayoutDate.getDate() - payoutOverdueDays);
 
     const [
       expenseAgg,
@@ -187,6 +194,10 @@ export class ReportsService {
       pendingExpenseAgg,
       approvedExpenseAgg,
       pendingPayoutCount,
+      overduePendingPayoutAgg,
+      feeBackfillAgg,
+      unmatchedPayoutLineAgg,
+      uninvoicedOrdersAgg,
       uninvoicedOrdersCount,
       inventorySnapshots,
     ] = await Promise.all([
@@ -253,6 +264,85 @@ export class ReportsService {
           },
         },
       }),
+      this.prisma.payment.aggregate({
+        where: {
+          entityId,
+          reconciledFlag: false,
+          status: {
+            in: ['completed', 'success'],
+          },
+          payoutDate: {
+            lte: overduePayoutDate,
+          },
+        },
+        _count: {
+          id: true,
+        },
+        _sum: {
+          amountNetOriginal: true,
+        },
+      }),
+      this.prisma.payment.aggregate({
+        where: {
+          entityId,
+          status: {
+            in: ['completed', 'success'],
+          },
+          OR: [
+            {
+              notes: null,
+            },
+            {
+              notes: {
+                not: {
+                  contains: 'feeStatus=actual',
+                },
+              },
+            },
+          ],
+        },
+        _count: {
+          id: true,
+        },
+        _sum: {
+          amountGrossOriginal: true,
+        },
+      }),
+      this.prisma.payoutImportLine.aggregate({
+        where: {
+          batch: {
+            entityId,
+          },
+          status: {
+            in: ['unmatched', 'invalid'],
+          },
+          createdAt: {
+            gte: anomalyWindowStart,
+          },
+        },
+        _count: {
+          id: true,
+        },
+        _sum: {
+          netAmountOriginal: true,
+        },
+      }),
+      this.prisma.salesOrder.aggregate({
+        where: {
+          entityId,
+          hasInvoice: false,
+          status: {
+            notIn: ['cancelled', 'refunded'],
+          },
+          ...(orderDateFilter ? { orderDate: orderDateFilter } : {}),
+        },
+        _count: {
+          id: true,
+        },
+        _sum: {
+          totalGrossOriginal: true,
+        },
+      }),
       this.prisma.salesOrder.count({
         where: {
           entityId,
@@ -293,6 +383,23 @@ export class ReportsService {
       approvedExpenseAgg._sum.amountOriginal || 0,
     );
     const approvedExpenseCount = Number(approvedExpenseAgg._count.id || 0);
+    const overduePendingPayoutCount = Number(
+      overduePendingPayoutAgg._count.id || 0,
+    );
+    const overduePendingPayoutAmount = Number(
+      overduePendingPayoutAgg._sum.amountNetOriginal || 0,
+    );
+    const feeBackfillCount = Number(feeBackfillAgg._count.id || 0);
+    const feeBackfillAmount = Number(feeBackfillAgg._sum.amountGrossOriginal || 0);
+    const unmatchedPayoutLineCount = Number(
+      unmatchedPayoutLineAgg._count.id || 0,
+    );
+    const unmatchedPayoutLineAmount = Number(
+      unmatchedPayoutLineAgg._sum.netAmountOriginal || 0,
+    );
+    const uninvoicedOrdersAmount = Number(
+      uninvoicedOrdersAgg._sum.totalGrossOriginal || 0,
+    );
 
     const inventoryByProduct = new Map<
       string,
@@ -322,6 +429,124 @@ export class ReportsService {
       .sort((a, b) => a.qtyAvailable - b.qtyAvailable);
 
     const topAlerts = [...outOfStockItems, ...lowStockItems].slice(0, 6);
+    const anomalies = [
+      {
+        key: 'overdue-payouts',
+        title: '已付款但超過時限仍未撥款',
+        count: overduePendingPayoutCount,
+        amount: overduePendingPayoutAmount,
+        tone: overduePendingPayoutCount > 0 ? 'critical' : 'healthy',
+        helper: `消費者已付款，但超過 ${payoutOverdueDays} 天仍未看到綠界或平台撥款，先檢查 1191 應收帳款是否應轉入 1113 銀行存款。`,
+        accountCode: '1191 / 1113',
+        accountName: '應收帳款 / 銀行存款',
+        statusLabel: '待追撥款',
+      },
+      {
+        key: 'pending-fee-backfill',
+        title: '待補實際手續費與處理費',
+        count: feeBackfillCount,
+        amount: feeBackfillAmount,
+        tone: feeBackfillCount > 0 ? 'warning' : 'healthy',
+        helper:
+          '這些收款還在用預估或空白費率，請匯入綠界報表回填 6131 佣金支出與 6134 其他營業費用。',
+        accountCode: '6131 / 6134',
+        accountName: '佣金支出 / 其他營業費用',
+        statusLabel: '待補費率',
+      },
+      {
+        key: 'unmatched-provider-lines',
+        title: '綠界匯入列未自動匹配',
+        count: unmatchedPayoutLineCount,
+        amount: unmatchedPayoutLineAmount,
+        tone: unmatchedPayoutLineCount > 0 ? 'attention' : 'healthy',
+        helper:
+          '最近 14 天的撥款匯入仍有未匹配或格式異常列，代表入帳金額尚未完整回到收款與對帳鏈。',
+        accountCode: '1113 / 1191',
+        accountName: '銀行存款 / 應收帳款',
+        statusLabel: '待人工核對',
+      },
+      {
+        key: 'uninvoiced-orders',
+        title: '成交訂單尚未開立發票',
+        count: uninvoicedOrdersCount,
+        amount: uninvoicedOrdersAmount,
+        tone: uninvoicedOrdersCount > 0 ? 'attention' : 'healthy',
+        helper:
+          '這些訂單已成交但還沒完成發票流程，需同步確認 4111 銷貨收入與 2194 應付營業稅。',
+        accountCode: '4111 / 2194',
+        accountName: '銷貨收入 / 應付營業稅',
+        statusLabel: '待開票',
+      },
+      {
+        key: 'inventory-alerts',
+        title: '低庫存或缺貨商品',
+        count: topAlerts.length,
+        amount: null,
+        tone: topAlerts.length > 0 ? 'critical' : 'healthy',
+        helper:
+          '庫存不足會直接影響成交與交付，先處理缺貨品項與安全庫存調整。',
+        accountCode: null,
+        accountName: null,
+        statusLabel: '待補貨',
+      },
+    ].filter((item) => item.count > 0);
+    const reconciliationRules = [
+      {
+        key: 'order-revenue-recognition',
+        title: '訂單成立與發票檢核',
+        status: uninvoicedOrdersCount > 0 ? 'monitoring' : 'active',
+        metric: uninvoicedOrdersCount,
+        description:
+          '所有 Shopify、1Shop、Shopline 訂單先統一映射為同一筆營收事件，並檢查是否已開立發票。',
+        accountingEntry:
+          '借：1191 應收帳款；貸：4111 銷貨收入、2194 應付營業稅',
+        helper:
+          '先確認訂單主檔、付款方式與開票狀態一致，避免業績已入帳但稅務與發票未閉環。',
+      },
+      {
+        key: 'provider-payout-reconciliation',
+        title: '綠界撥款與應收帳款沖銷',
+        status:
+          overduePendingPayoutCount > 0 || unmatchedPayoutLineCount > 0
+            ? 'monitoring'
+            : 'active',
+        metric: overduePendingPayoutCount + unmatchedPayoutLineCount,
+        description:
+          '用綠界匯出 Excel 的撥款狀態、每筆手續費、處理費與平台費，自動回填 Payment 並核對是否真的入帳。',
+        accountingEntry:
+          '借：1113 銀行存款、6131 佣金支出、6134 其他營業費用；貸：1191 應收帳款',
+        helper:
+          '只要匯入列匹配成功，就把實際淨額與費用拆分寫回，取代原本預估手續費。',
+      },
+      {
+        key: 'fee-backfill-governance',
+        title: '實際費率回填與差額監控',
+        status: feeBackfillCount > 0 ? 'monitoring' : 'active',
+        metric: feeBackfillCount,
+        description:
+          '若交易已完成但尚未回填 provider payout，系統會將其列入待補費率名單，避免毛利與淨額失真。',
+        accountingEntry:
+          '借：6131 / 6134；貸：1191',
+        helper:
+          '綠界匯出中的交易手續費、處理費與平台手續費會個別保存，讓管理層可追蹤真實抽成結構。',
+      },
+      {
+        key: 'payment-to-payout-lifecycle',
+        title: '付款、物流、撥款三段式狀態機',
+        status: pendingPayoutCount > 0 ? 'monitoring' : 'active',
+        metric: pendingPayoutCount,
+        description:
+          '系統把待付款、已付款、待撥款、已撥款、已對帳拆開來看，方便辨識貨到付款或超商未取造成的落差。',
+        accountingEntry:
+          '先留在 1191 應收帳款，實際撥款後才轉入 1113 銀行存款',
+        helper:
+          '這條規則會持續用在 1Shop、Shopify、Shopline 與綠界串接，確保不同通路可用同一套標準追帳。',
+      },
+    ];
+    const openAnomalyCount = anomalies.reduce(
+      (sum, item) => sum + item.count,
+      0,
+    );
 
     return {
       entityId,
@@ -339,9 +564,13 @@ export class ReportsService {
       },
       operations: {
         pendingPayoutCount,
+        overduePendingPayoutCount,
+        feeBackfillCount,
+        unmatchedPayoutLineCount,
         uninvoicedOrdersCount,
         inventoryAlertCount: topAlerts.length,
         outOfStockCount: outOfStockItems.length,
+        openAnomalyCount,
       },
       inventoryAlerts: topAlerts.map((item) => ({
         sku: item.sku,
@@ -350,6 +579,8 @@ export class ReportsService {
         qtyOnHand: item.qtyOnHand,
         severity: item.qtyAvailable <= 0 ? 'critical' : 'warning',
       })),
+      anomalies,
+      reconciliationRules,
       tasks: [
         {
           key: 'pending-payout',

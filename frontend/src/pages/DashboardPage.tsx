@@ -202,6 +202,17 @@ function getTaskToneMeta(tone: DashboardExecutiveOverview["tasks"][number]["tone
   }
 }
 
+function getRuleStatusMeta(status: "active" | "monitoring" | "pending") {
+  switch (status) {
+    case "monitoring":
+      return { color: "gold" as const, badge: "持續監控" };
+    case "pending":
+      return { color: "blue" as const, badge: "待補齊" };
+    default:
+      return { color: "green" as const, badge: "已啟用" };
+  }
+}
+
 const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [rangeMode, setRangeMode] = useState<RangeMode>("today");
@@ -353,6 +364,8 @@ const DashboardPage: React.FC = () => {
   const recentBatches = feed?.recentBatches || [];
   const tasks = executive?.tasks || [];
   const inventoryAlerts = executive?.inventoryAlerts || [];
+  const anomalies = executive?.anomalies || [];
+  const reconciliationRules = executive?.reconciliationRules || [];
 
   return (
     <div className="space-y-8">
@@ -447,7 +460,7 @@ const DashboardPage: React.FC = () => {
             <div className="text-xs font-semibold uppercase tracking-[0.28em] text-white/55">
               CEO Overview
             </div>
-            <div className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
+            <div className="mt-3 text-5xl font-semibold tracking-tight sm:text-6xl xl:text-7xl">
               ${total?.gross.toFixed(2) || "0.00"}
             </div>
             <div className="mt-2 text-sm text-white/72">
@@ -479,9 +492,7 @@ const DashboardPage: React.FC = () => {
                   關鍵待辦
                 </div>
                 <div className="mt-3 text-2xl font-semibold">
-                  {(executive?.operations.pendingPayoutCount || 0) +
-                    (executive?.operations.inventoryAlertCount || 0) +
-                    (executive?.expenses.pendingApprovalCount || 0)}
+                  {executive?.operations.openAnomalyCount || 0}
                 </div>
               </div>
             </div>
@@ -503,15 +514,15 @@ const DashboardPage: React.FC = () => {
               </div>
             </div>
             <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
-              <div className="text-xs text-slate-400">待審費用</div>
+              <div className="text-xs text-slate-400">待補實際費率</div>
               <div className="mt-2 text-2xl font-semibold text-slate-900">
-                {executive?.expenses.pendingApprovalCount || 0}
+                {executive?.operations.feeBackfillCount || 0}
               </div>
             </div>
             <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
-              <div className="text-xs text-slate-400">已核准待付款</div>
+              <div className="text-xs text-slate-400">未匹配撥款列</div>
               <div className="mt-2 text-2xl font-semibold text-sky-600">
-                {executive?.expenses.approvedUnpaidCount || 0}
+                {executive?.operations.unmatchedPayoutLineCount || 0}
               </div>
             </div>
             <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
@@ -887,6 +898,124 @@ const DashboardPage: React.FC = () => {
           </div>
         </motion.div>
       </div>
+
+      <Row
+        gutter={[
+          { xs: 16, sm: 24 },
+          { xs: 16, sm: 24 },
+        ]}
+      >
+        <Col xs={24} lg={12}>
+          <div
+            className="h-full animate-slide-up"
+            style={{ animationDelay: "480ms" }}
+          >
+            <Card
+              title="異常待辦清單 (Exception Inbox)"
+              className="glass-card !border-0 h-full"
+            >
+              <div className="space-y-4">
+                {anomalies.map((item) => {
+                  const tone = getTaskToneMeta(item.tone);
+                  return (
+                    <div
+                      key={item.key}
+                      className="rounded-2xl bg-slate-50 px-4 py-4 transition-colors hover:bg-slate-100"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="font-medium text-slate-900">
+                              {item.title}
+                            </div>
+                            <Tag color={tone.color}>{item.statusLabel}</Tag>
+                          </div>
+                          <div className="mt-2 text-xs leading-5 text-slate-500">
+                            {item.helper}
+                          </div>
+                          {item.accountCode ? (
+                            <div className="mt-2 text-[11px] text-slate-400">
+                              會計科目：{item.accountCode}
+                              {item.accountName ? ` · ${item.accountName}` : ""}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-semibold text-slate-900">
+                            {item.count}
+                          </div>
+                          <div className="text-[11px] text-slate-400">
+                            {item.amount !== null
+                              ? `NT$ ${item.amount.toFixed(0)}`
+                              : "待處理"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {!anomalies.length ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
+                    目前沒有高風險異常。這裡會集中顯示未撥款、未開票、待補費率與未匹配撥款匯入。
+                  </div>
+                ) : null}
+              </div>
+            </Card>
+          </div>
+        </Col>
+        <Col xs={24} lg={12}>
+          <div
+            className="h-full animate-slide-up"
+            style={{ animationDelay: "520ms" }}
+          >
+            <Card
+              title="自動對帳規則 (Auto Reconciliation Rules)"
+              className="glass-card !border-0 h-full"
+            >
+              <div className="space-y-4">
+                {reconciliationRules.map((rule) => {
+                  const status = getRuleStatusMeta(rule.status);
+                  return (
+                    <div
+                      key={rule.key}
+                      className="rounded-2xl bg-slate-50 px-4 py-4 transition-colors hover:bg-slate-100"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="font-medium text-slate-900">
+                              {rule.title}
+                            </div>
+                            <Tag color={status.color}>{status.badge}</Tag>
+                          </div>
+                          <div className="mt-2 text-xs leading-5 text-slate-500">
+                            {rule.description}
+                          </div>
+                          <div className="mt-3 rounded-xl bg-white px-3 py-3 text-xs text-slate-600">
+                            <div className="font-medium text-slate-900">
+                              會計分錄建議
+                            </div>
+                            <div className="mt-1">{rule.accountingEntry}</div>
+                          </div>
+                          <div className="mt-2 text-[11px] leading-5 text-slate-400">
+                            {rule.helper}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-semibold text-slate-900">
+                            {rule.metric}
+                          </div>
+                          <div className="text-[11px] text-slate-400">影響筆數</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
+        </Col>
+      </Row>
 
       <Row
         gutter={[

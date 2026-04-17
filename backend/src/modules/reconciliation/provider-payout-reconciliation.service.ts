@@ -30,12 +30,16 @@ type NormalizedPayoutLine = {
   statementDate: Date | null;
   currency: string;
   gateway: string | null;
+  payoutStatus: string | null;
   externalOrderId: string | null;
   providerPaymentId: string | null;
   providerTradeNo: string | null;
   authorizationCode: string | null;
   grossAmount: Decimal | null;
   feeAmount: Decimal | null;
+  gatewayFeeAmount: Decimal | null;
+  processingFeeAmount: Decimal | null;
+  platformFeeAmount: Decimal | null;
   netAmount: Decimal | null;
   rawData: ImportRow;
 };
@@ -103,6 +107,30 @@ const COMMON_ALIASES: Record<string, string[]> = {
     '金額',
   ],
   feeAmount: ['feeAmount', 'fee', '手續費', '交易手續費', '服務費', '處理費'],
+  gatewayFeeAmount: [
+    'gatewayFeeAmount',
+    'gatewayFee',
+    '金流手續費',
+    '刷卡手續費',
+    '信用卡手續費',
+    '交易手續費',
+    '手續費',
+  ],
+  processingFeeAmount: [
+    'processingFeeAmount',
+    'processingFee',
+    '處理費',
+    '處理手續費',
+    '服務費',
+  ],
+  platformFeeAmount: [
+    'platformFeeAmount',
+    'platformFee',
+    '平台手續費',
+    '平台費',
+    '通路手續費',
+    '商城手續費',
+  ],
   netAmount: [
     'netAmount',
     'net',
@@ -126,6 +154,7 @@ const COMMON_ALIASES: Record<string, string[]> = {
   statementDate: ['statementDate', '對帳日期', '報表日期', '匯出日期'],
   currency: ['currency', '幣別', 'Currency'],
   gateway: ['gateway', '付款方式', '支付方式', '收款方式', '交易方式'],
+  payoutStatus: ['payoutStatus', '撥款狀態', '結算狀態', '入帳狀態', 'status'],
 };
 
 const PROVIDER_ALIASES: Record<
@@ -141,6 +170,10 @@ const PROVIDER_ALIASES: Record<
     ],
     providerTradeNo: ['TradeNo', '綠界交易編號', '交易單號'],
     providerPaymentId: ['payment_id', 'PaymentID', '交易序號'],
+    gatewayFeeAmount: ['交易手續費', '金流手續費', '手續費'],
+    processingFeeAmount: ['處理費', '服務費'],
+    platformFeeAmount: ['平台手續費', '平台費'],
+    payoutStatus: ['撥款狀態', '結算狀態', '入帳狀態'],
   },
   hitrust: {
     externalOrderId: ['訂單編號', 'OrderNo', '商店訂單編號'],
@@ -313,12 +346,33 @@ export class ProviderPayoutReconciliationService {
     const grossAmount = this.parseDecimal(
       this.pickFieldValue(provider, row, 'grossAmount', mapping),
     );
+    const gatewayFeeAmount = this.parseDecimal(
+      this.pickFieldValue(provider, row, 'gatewayFeeAmount', mapping),
+    );
+    const processingFeeAmount = this.parseDecimal(
+      this.pickFieldValue(provider, row, 'processingFeeAmount', mapping),
+    );
+    const platformFeeAmount = this.parseDecimal(
+      this.pickFieldValue(provider, row, 'platformFeeAmount', mapping),
+    );
     let feeAmount = this.parseDecimal(
       this.pickFieldValue(provider, row, 'feeAmount', mapping),
     );
     let netAmount = this.parseDecimal(
       this.pickFieldValue(provider, row, 'netAmount', mapping),
     );
+
+    const splitFeeTotal = [
+      gatewayFeeAmount,
+      processingFeeAmount,
+      platformFeeAmount,
+    ]
+      .filter((value): value is Decimal => Boolean(value))
+      .reduce((sum, value) => sum.add(value), new Decimal(0));
+
+    if (!feeAmount && splitFeeTotal.greaterThan(0)) {
+      feeAmount = splitFeeTotal.toDecimalPlaces(2);
+    }
 
     if (!feeAmount && grossAmount && netAmount) {
       feeAmount = grossAmount.sub(netAmount).toDecimalPlaces(2);
@@ -344,6 +398,9 @@ export class ProviderPayoutReconciliationService {
       gateway: this.toCleanString(
         this.pickFieldValue(provider, row, 'gateway', mapping),
       ),
+      payoutStatus: this.toCleanString(
+        this.pickFieldValue(provider, row, 'payoutStatus', mapping),
+      ),
       externalOrderId: this.toCleanString(
         this.pickFieldValue(provider, row, 'externalOrderId', mapping),
       ),
@@ -358,6 +415,9 @@ export class ProviderPayoutReconciliationService {
       ),
       grossAmount,
       feeAmount,
+      gatewayFeeAmount,
+      processingFeeAmount,
+      platformFeeAmount,
       netAmount,
       rawData: row,
     };
@@ -403,7 +463,7 @@ export class ProviderPayoutReconciliationService {
       where: {
         entityId,
         channel: {
-          in: ['SHOPIFY', '1SHOP'],
+          in: ['SHOPIFY', '1SHOP', 'SHOPLINE'],
         },
         payoutDate:
           minDate && maxDate
@@ -575,36 +635,54 @@ export class ProviderPayoutReconciliationService {
   ) {
     const currency = payment.amountGrossCurrency || line.currency || 'TWD';
     const fxRate = new Decimal(payment.amountGrossFxRate || 1);
-    const actualFee = line.feeAmount || new Decimal(0);
-    const actualNet = line.netAmount || payment.amountNetOriginal;
     const zero = new Decimal(0);
     const keepShopifyPlatformFee = (payment.notes || '').includes(
       'feeSource=shopify.transaction.fee',
     );
+    const hasSplitFee =
+      Boolean(line.gatewayFeeAmount) ||
+      Boolean(line.processingFeeAmount) ||
+      Boolean(line.platformFeeAmount);
+    const actualPlatformFee = line.platformFeeAmount
+      ? line.platformFeeAmount.toDecimalPlaces(2)
+      : keepShopifyPlatformFee
+        ? payment.feePlatformOriginal
+        : zero;
+    const actualGatewayFee = hasSplitFee
+      ? (line.gatewayFeeAmount || zero)
+          .add(line.processingFeeAmount || zero)
+          .toDecimalPlaces(2)
+      : (line.feeAmount || zero).toDecimalPlaces(2);
+    const actualNet = line.netAmount
+      ? line.netAmount.toDecimalPlaces(2)
+      : (line.grossAmount || payment.amountGrossOriginal)
+          .sub(actualPlatformFee)
+          .sub(actualGatewayFee)
+          .toDecimalPlaces(2);
     const notes = this.buildProviderPayoutNote(payment.notes, {
       provider: line.provider,
       batchId,
       rowIndex: line.rowIndex,
       gateway: line.gateway,
+      payoutStatus: line.payoutStatus,
       externalOrderId: line.externalOrderId,
       providerPaymentId: line.providerPaymentId,
       providerTradeNo: line.providerTradeNo,
       authorizationCode: line.authorizationCode,
+      gatewayFeeAmount: line.gatewayFeeAmount,
+      processingFeeAmount: line.processingFeeAmount,
+      platformFeeAmount: line.platformFeeAmount,
     });
 
     await tx.payment.update({
       where: { id: payment.id },
       data: {
-        feePlatformOriginal: keepShopifyPlatformFee
-          ? payment.feePlatformOriginal
-          : zero,
-        feePlatformBase: keepShopifyPlatformFee
-          ? payment.feePlatformOriginal.mul(fxRate)
-          : zero,
-        feeGatewayOriginal: actualFee,
+        feePlatformOriginal: actualPlatformFee,
+        feePlatformBase: actualPlatformFee.mul(fxRate),
+        feeGatewayOriginal: actualGatewayFee,
         feeGatewayCurrency: currency,
         feeGatewayFxRate: fxRate,
-        feeGatewayBase: actualFee.mul(fxRate),
+        feeGatewayBase: actualGatewayFee.mul(fxRate),
         amountNetOriginal: actualNet,
         amountNetCurrency: currency,
         amountNetFxRate: fxRate,
@@ -622,10 +700,14 @@ export class ProviderPayoutReconciliationService {
       batchId: string;
       rowIndex: number;
       gateway: string | null;
+      payoutStatus: string | null;
       externalOrderId: string | null;
       providerPaymentId: string | null;
       providerTradeNo: string | null;
       authorizationCode: string | null;
+      gatewayFeeAmount: Decimal | null;
+      processingFeeAmount: Decimal | null;
+      platformFeeAmount: Decimal | null;
     },
   ) {
     const parts = [
@@ -636,6 +718,7 @@ export class ProviderPayoutReconciliationService {
     ];
 
     if (params.gateway) parts.push(`gateway=${params.gateway}`);
+    if (params.payoutStatus) parts.push(`payoutStatus=${params.payoutStatus}`);
     if (params.externalOrderId)
       parts.push(`externalOrderId=${params.externalOrderId}`);
     if (params.providerPaymentId) {
@@ -647,6 +730,19 @@ export class ProviderPayoutReconciliationService {
     if (params.authorizationCode) {
       parts.push(`authorization=${params.authorizationCode}`);
     }
+    if (params.gatewayFeeAmount) {
+      parts.push(`gatewayFee=${params.gatewayFeeAmount.toFixed(2)}`);
+    }
+    if (params.processingFeeAmount) {
+      parts.push(`processingFee=${params.processingFeeAmount.toFixed(2)}`);
+    }
+    if (params.platformFeeAmount) {
+      parts.push(`platformFee=${params.platformFeeAmount.toFixed(2)}`);
+    }
+    parts.push(`drBank=1113`);
+    parts.push(`drPlatformFee=6131`);
+    parts.push(`drGatewayFee=6134`);
+    parts.push(`crClearing=1191`);
 
     const payoutNote = `[provider-payout] ${parts.join('; ')}`;
     const preservedNotes = (existingNotes || '')
