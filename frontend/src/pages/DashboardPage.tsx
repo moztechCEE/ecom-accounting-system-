@@ -608,6 +608,15 @@ const DashboardPage: React.FC = () => {
               </div>
             </div>
             <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
+              <div className="text-xs text-slate-400">綠界服務費發票</div>
+              <div className="mt-2 text-2xl font-semibold text-violet-600">
+                {executive?.operations.ecpayServiceFeeInvoiceCount || 0}
+              </div>
+              <div className="mt-1 text-[11px] text-slate-400">
+                待核對 {executive?.operations.ecpayServiceFeeInvoicePendingCount || 0}
+              </div>
+            </div>
+            <div className="rounded-3xl bg-slate-900/5 px-4 py-4">
               <div className="text-xs text-slate-400">庫存警示</div>
               <div className="mt-2 text-2xl font-semibold text-rose-600">
                 {executive?.operations.inventoryAlertCount || 0}
@@ -618,6 +627,10 @@ const DashboardPage: React.FC = () => {
             本期經費支出
             <span className="ml-2 font-semibold text-slate-900">
               ${executive?.expenses.actualSpend.toFixed(2) || "0.00"}
+            </span>
+            ，綠界服務費發票差額
+            <span className="ml-2 font-semibold text-slate-900">
+              ${Math.abs(executive?.operations.ecpayServiceFeeInvoiceGapAmount || 0).toFixed(2)}
             </span>
             ，待開立發票訂單
             <span className="ml-2 font-semibold text-slate-900">

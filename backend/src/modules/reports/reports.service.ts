@@ -201,6 +201,10 @@ export class ReportsService {
       uninvoicedOrdersAgg,
       uninvoicedOrdersCount,
       inventorySnapshots,
+      ecpayGatewayFeeAgg,
+      ecpayFeeInvoiceAgg,
+      ecpayFeeInvoicePendingAgg,
+      ecpayFeeInvoiceMatchedAgg,
     ] = await Promise.all([
       this.prisma.expense.aggregate({
         where: {
@@ -394,6 +398,88 @@ export class ReportsService {
           },
         },
       }),
+      this.prisma.payment.aggregate({
+        where: {
+          entityId,
+          ...(orderDateFilter
+            ? {
+                payoutDate: orderDateFilter,
+              }
+            : {}),
+          notes: {
+            contains: 'feeSource=provider-payout:ecpay',
+          },
+        },
+        _sum: {
+          feeGatewayOriginal: true,
+        },
+        _count: {
+          id: true,
+        },
+      }),
+      this.prisma.apInvoice.aggregate({
+        where: {
+          entityId,
+          sourceModule: 'ecpay_service_fee_invoice',
+          ...(orderDateFilter
+            ? {
+                invoiceDate: orderDateFilter,
+              }
+            : {}),
+        },
+        _sum: {
+          amountOriginal: true,
+        },
+        _count: {
+          id: true,
+        },
+      }),
+      this.prisma.apInvoice.aggregate({
+        where: {
+          entityId,
+          sourceModule: 'ecpay_service_fee_invoice',
+          ...(orderDateFilter
+            ? {
+                invoiceDate: orderDateFilter,
+              }
+            : {}),
+          OR: [
+            {
+              notes: null,
+            },
+            {
+              notes: {
+                not: {
+                  contains: 'invoiceIssuedStatus=issued',
+                },
+              },
+            },
+          ],
+        },
+        _count: {
+          id: true,
+        },
+      }),
+      this.prisma.apInvoice.aggregate({
+        where: {
+          entityId,
+          sourceModule: 'ecpay_service_fee_invoice',
+          ...(orderDateFilter
+            ? {
+                invoiceDate: orderDateFilter,
+              }
+            : {}),
+          notes: {
+            contains: 'coverageStatus=matched',
+          },
+        },
+        _count: {
+          id: true,
+        },
+        _sum: {
+          amountOriginal: true,
+        },
+      }),
     ]);
 
     const actualSpend =
@@ -430,6 +516,27 @@ export class ReportsService {
     );
     const uninvoicedOrdersAmount = Number(
       uninvoicedOrdersAgg._sum.totalGrossOriginal || 0,
+    );
+    const ecpayGatewayFeeAmount = Number(
+      ecpayGatewayFeeAgg._sum.feeGatewayOriginal || 0,
+    );
+    const ecpayServiceFeeInvoiceCount = Number(
+      ecpayFeeInvoiceAgg._count.id || 0,
+    );
+    const ecpayServiceFeeInvoiceAmount = Number(
+      ecpayFeeInvoiceAgg._sum.amountOriginal || 0,
+    );
+    const ecpayServiceFeeInvoicePendingCount = Number(
+      ecpayFeeInvoicePendingAgg._count.id || 0,
+    );
+    const ecpayServiceFeeInvoiceMatchedCount = Number(
+      ecpayFeeInvoiceMatchedAgg._count.id || 0,
+    );
+    const ecpayServiceFeeInvoiceMatchedAmount = Number(
+      ecpayFeeInvoiceMatchedAgg._sum.amountOriginal || 0,
+    );
+    const ecpayServiceFeeInvoiceGapAmount = Number(
+      (ecpayGatewayFeeAmount - ecpayServiceFeeInvoiceAmount).toFixed(2),
     );
 
     const inventoryByProduct = new Map<
@@ -507,6 +614,31 @@ export class ReportsService {
         accountCode: '1113 / 1191',
         accountName: '銀行存款 / 應收帳款',
         statusLabel: '待人工核對',
+      },
+      {
+        key: 'ecpay-fee-invoices',
+        title: '綠界服務費發票待匯入 / 待核對',
+        count:
+          ecpayServiceFeeInvoicePendingCount ||
+          (ecpayGatewayFeeAmount > 0 &&
+          Math.abs(ecpayServiceFeeInvoiceGapAmount) > 1
+            ? 1
+            : 0),
+        amount:
+          Math.abs(ecpayServiceFeeInvoiceGapAmount) > 1
+            ? Math.abs(ecpayServiceFeeInvoiceGapAmount)
+            : ecpayServiceFeeInvoiceAmount,
+        tone:
+          ecpayServiceFeeInvoicePendingCount > 0 ||
+          (ecpayGatewayFeeAmount > 0 &&
+            Math.abs(ecpayServiceFeeInvoiceGapAmount) > 1)
+            ? 'warning'
+            : 'healthy',
+        helper:
+          '綠界商家後台的服務費發票屬於供應商發票，需匯入 AP 並核對是否與已回填的金流手續費一致。',
+        accountCode: '6134 / 2203',
+        accountName: '其他營業費用 / 應付費用',
+        statusLabel: '待匯入或待核對',
       },
       {
         key: 'uninvoiced-orders',
@@ -611,6 +743,9 @@ export class ReportsService {
         feeBackfillCount,
         missingPayoutJournalCount,
         unmatchedPayoutLineCount,
+        ecpayServiceFeeInvoiceCount,
+        ecpayServiceFeeInvoicePendingCount,
+        ecpayServiceFeeInvoiceGapAmount,
         uninvoicedOrdersCount,
         inventoryAlertCount: topAlerts.length,
         outOfStockCount: outOfStockItems.length,
@@ -641,6 +776,25 @@ export class ReportsService {
           amount: missingPayoutJournalAmount,
           tone: missingPayoutJournalCount > 0 ? 'attention' : 'healthy',
           helper: '對帳完成後應自動建立撥款分錄，這裡追蹤仍待補落帳的資料。',
+        },
+        {
+          key: 'ecpay-fee-invoices',
+          title: '綠界服務費發票',
+          value: ecpayServiceFeeInvoiceCount,
+          amount:
+            ecpayServiceFeeInvoiceAmount > 0
+              ? ecpayServiceFeeInvoiceAmount
+              : null,
+          tone:
+            ecpayServiceFeeInvoicePendingCount > 0 ||
+            (ecpayGatewayFeeAmount > 0 &&
+              Math.abs(ecpayServiceFeeInvoiceGapAmount) > 1)
+              ? 'warning'
+              : 'healthy',
+          helper:
+            ecpayServiceFeeInvoicePendingCount > 0
+              ? '已有手續費發票進來，但仍有未確認是否已開立或未完成 AP 核對的紀錄。'
+              : '這裡會追綠界服務費發票與金流手續費是否一致。',
         },
         {
           key: 'pending-expense-approval',

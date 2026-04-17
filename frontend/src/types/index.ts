@@ -155,6 +155,13 @@ export interface ApInvoice {
   nextDueDate?: string | null;
   notes?: string | null;
   source?: "payment_task" | "ap_invoice";
+  sourceModule?: string | null;
+  serviceType?: string | null;
+  merchantKey?: string | null;
+  merchantId?: string | null;
+  invoiceIssuedStatus?: string | null;
+  matchedFeeAmount?: number;
+  coverageStatus?: string | null;
   isUrgent?: boolean;
   vendor?: {
     id: string;
@@ -166,6 +173,40 @@ export interface ApInvoiceAlerts {
   unpaid: number;
   overdue: number;
   upcoming: number;
+}
+
+export interface EcpayServiceFeeInvoiceSummaryItem {
+  id: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  amountOriginal: number;
+  paidAmountOriginal: number;
+  status: string;
+  vendorName: string | null;
+  merchantKey: string | null;
+  merchantId: string | null;
+  serviceType: string | null;
+  invoiceIssuedStatus: string | null;
+  matchedGatewayFeeAmount: number;
+  coverageStatus: string | null;
+}
+
+export interface EcpayServiceFeeInvoiceSummary {
+  entityId: string;
+  range: {
+    startDate: string | null;
+    endDate: string | null;
+  };
+  summary: {
+    invoiceCount: number;
+    invoiceAmount: number;
+    paidOffsetAmount: number;
+    issuedCount: number;
+    paidOffsetCount: number;
+    matchedCount: number;
+    unmatchedCount: number;
+  };
+  items: EcpayServiceFeeInvoiceSummaryItem[];
 }
 
 export interface ExpenseRequest {

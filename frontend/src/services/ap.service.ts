@@ -1,5 +1,11 @@
 import api from './api'
-import { ApInvoice, ApInvoiceAlerts, ExpenseRequest, PaginatedResult } from '../types'
+import {
+  ApInvoice,
+  ApInvoiceAlerts,
+  EcpayServiceFeeInvoiceSummary,
+  ExpenseRequest,
+  PaginatedResult,
+} from '../types'
 
 const DEFAULT_ENTITY_ID = import.meta.env.VITE_DEFAULT_ENTITY_ID?.trim() || 'tw-entity-001'
 
@@ -12,6 +18,18 @@ export interface BatchApInvoicePayload {
   dueDate: string
   paymentFrequency?: 'one_time' | 'monthly'
   notes?: string
+}
+
+export interface ImportEcpayServiceFeeInvoicePayload {
+  invoiceNo: string
+  invoiceDate: string
+  amountOriginal: number
+  amountCurrency?: string
+  serviceType?: string
+  invoiceStatus?: string
+  taxAmount?: number
+  note?: string
+  relateNumber?: string
 }
 
 export const apService = {
@@ -68,5 +86,54 @@ export const apService = {
       params: { entityId: entityId?.trim() || DEFAULT_ENTITY_ID },
     })
     return response.data
+  },
+
+  getEcpayServiceFeeInvoiceSummary: async (params?: {
+    entityId?: string
+    startDate?: string
+    endDate?: string
+  }) => {
+    const response = await api.get<EcpayServiceFeeInvoiceSummary>(
+      '/ap/ecpay/service-fee-invoices/summary',
+      {
+        params: {
+          entityId: params?.entityId?.trim() || DEFAULT_ENTITY_ID,
+          startDate: params?.startDate,
+          endDate: params?.endDate,
+        },
+      },
+    )
+    return response.data
+  },
+
+  importEcpayServiceFeeInvoices: async (payload: {
+    entityId?: string
+    merchantKey?: string
+    merchantId?: string
+    vendorName?: string
+    autoOffsetByMatchedFees?: boolean
+    verifyIssuedStatus?: boolean
+    records: ImportEcpayServiceFeeInvoicePayload[]
+  }) => {
+    const response = await api.post('/ap/ecpay/service-fee-invoices/import', {
+      ...payload,
+      entityId: payload.entityId?.trim() || DEFAULT_ENTITY_ID,
+    })
+    return response.data
+  },
+
+  queryEcpayServiceFeeInvoiceStatus: async (payload: {
+    merchantKey?: string
+    merchantId?: string
+    invoiceNo: string
+    invoiceDate: string
+  }) => {
+    const response = await api.post('/ap/ecpay/service-fee-invoices/query-status', payload)
+    return response.data as {
+      success: boolean
+      invoiceIssuedStatus: string | null
+      rawMessage: string | null
+      raw: Record<string, unknown>
+    }
   },
 }

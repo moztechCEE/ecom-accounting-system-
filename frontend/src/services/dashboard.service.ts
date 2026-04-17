@@ -137,6 +137,9 @@ export type DashboardExecutiveOverview = {
     feeBackfillCount: number;
     missingPayoutJournalCount: number;
     unmatchedPayoutLineCount: number;
+    ecpayServiceFeeInvoiceCount: number;
+    ecpayServiceFeeInvoicePendingCount: number;
+    ecpayServiceFeeInvoiceGapAmount: number;
     uninvoicedOrdersCount: number;
     inventoryAlertCount: number;
     outOfStockCount: number;

@@ -37,7 +37,11 @@ import { useAuth } from '../contexts/AuthContext'
 import { expenseService, type ExpenseRequest } from '../services/expense.service'
 import { apService } from '../services/ap.service'
 import { bankingService } from '../services/banking.service'
-import type { BankAccount, ApInvoice } from '../types'
+import type {
+  BankAccount,
+  ApInvoice,
+  EcpayServiceFeeInvoiceSummary,
+} from '../types'
 import { Link, useSearchParams } from 'react-router-dom'
 
 const { Title, Text } = Typography
@@ -55,6 +59,8 @@ const AccountsPayablePage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'expenses')
   const [expenseRequests, setExpenseRequests] = useState<ExpenseRequest[]>([])
   const [invoices, setInvoices] = useState<ApInvoice[]>([])
+  const [ecpayFeeSummary, setEcpayFeeSummary] =
+    useState<EcpayServiceFeeInvoiceSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [banks, setBanks] = useState<BankAccount[]>([])
   
@@ -70,10 +76,11 @@ const AccountsPayablePage: React.FC = () => {
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [expensesData, invoicesData, banksData] = await Promise.all([
+      const [expensesData, invoicesData, banksData, feeSummaryData] = await Promise.all([
         expenseService.getExpenseRequests({ entityId, status: 'approved' }),
         apService.getInvoices(entityId),
-        bankingService.getAccounts()
+        bankingService.getAccounts(),
+        apService.getEcpayServiceFeeInvoiceSummary({ entityId }),
       ])
 
       setExpenseRequests(Array.isArray(expensesData) ? expensesData : [])
@@ -84,6 +91,7 @@ const AccountsPayablePage: React.FC = () => {
       setInvoices(pendingInvoices)
 
       setBanks(Array.isArray(banksData) ? banksData : [])
+      setEcpayFeeSummary(feeSummaryData || null)
     } catch (error) {
       console.error(error)
       message.error('無法載入資料')
@@ -369,6 +377,20 @@ const AccountsPayablePage: React.FC = () => {
             />
           </GlassCard>
         </Col>
+        <Col span={8}>
+          <GlassCard className="h-full flex flex-col justify-center">
+            <Statistic
+              title="綠界服務費發票"
+              value={ecpayFeeSummary?.summary.invoiceCount || 0}
+              prefix={<BankOutlined />}
+              suffix="筆"
+            />
+            <div className="mt-2 text-xs text-slate-500">
+              已匯入 NT$ {(ecpayFeeSummary?.summary.invoiceAmount || 0).toLocaleString()}，
+              待核對 {ecpayFeeSummary?.summary.unmatchedCount || 0} 筆
+            </div>
+          </GlassCard>
+        </Col>
       </Row>
 
       <GlassCard className="p-0 overflow-hidden min-h-[600px]">
@@ -412,6 +434,89 @@ const AccountsPayablePage: React.FC = () => {
                   loading={loading}
                   pagination={{ pageSize: 10 }}
                   className="w-full mt-2"
+                />
+              )
+            },
+            {
+              key: 'ecpay-fees',
+              label: (
+                <span className="flex items-center gap-2">
+                  <BankOutlined /> 綠界服務費發票
+                  <Tag className="ml-1 rounded-full bg-violet-100 text-violet-600 border-none">
+                    {ecpayFeeSummary?.summary.invoiceCount || 0}
+                  </Tag>
+                </span>
+              ),
+              children: (
+                <Table
+                  rowKey="id"
+                  loading={loading}
+                  dataSource={ecpayFeeSummary?.items || []}
+                  pagination={{ pageSize: 10 }}
+                  className="w-full mt-2"
+                  columns={[
+                    {
+                      title: '發票資訊',
+                      key: 'invoice',
+                      render: (_, record) => (
+                        <div className="flex flex-col gap-1">
+                          <span className="font-medium text-slate-800">{record.invoiceNo}</span>
+                          <div className="text-xs text-slate-500">
+                            {dayjs(record.invoiceDate).format('YYYY-MM-DD')} · {record.vendorName || '綠界科技'}
+                          </div>
+                        </div>
+                      ),
+                    },
+                    {
+                      title: '類型 / Merchant',
+                      key: 'meta',
+                      render: (_, record) => (
+                        <div className="flex flex-col gap-1">
+                          <Tag color="blue">{record.serviceType || 'gateway_fee'}</Tag>
+                          <span className="text-xs text-slate-500">
+                            {record.merchantKey || record.merchantId || '--'}
+                          </span>
+                        </div>
+                      ),
+                    },
+                    {
+                      title: '發票狀態',
+                      key: 'issued',
+                      render: (_, record) => (
+                        <Tag color={record.invoiceIssuedStatus === 'issued' ? 'green' : 'gold'}>
+                          {record.invoiceIssuedStatus === 'issued' ? '已確認開立' : '待確認'}
+                        </Tag>
+                      ),
+                    },
+                    {
+                      title: '金額 / 已核對',
+                      key: 'amount',
+                      render: (_, record) => (
+                        <div className="text-right">
+                          <div className="font-medium text-slate-800">
+                            NT$ {Number(record.amountOriginal).toLocaleString()}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            已比對 NT$ {Number(record.matchedGatewayFeeAmount || 0).toLocaleString()}
+                          </div>
+                        </div>
+                      ),
+                    },
+                    {
+                      title: 'AP 狀態',
+                      key: 'status',
+                      render: (_, record) => (
+                        <div className="flex flex-col gap-1">
+                          <Tag color={record.status === 'paid' ? 'green' : 'gold'}>
+                            {record.status === 'paid' ? '已沖抵' : '待處理'}
+                          </Tag>
+                          <span className="text-xs text-slate-500">
+                            {record.coverageStatus === 'matched' ? '已對上手續費' : '尚未完整對上'}
+                          </span>
+                        </div>
+                      ),
+                    },
+                  ]}
                 />
               )
             }
