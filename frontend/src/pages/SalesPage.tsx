@@ -12,7 +12,8 @@ import {
   CloseCircleOutlined,
   AppstoreOutlined,
   BarsOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  SyncOutlined
 } from '@ant-design/icons'
 import { motion } from 'framer-motion'
 import * as XLSX from 'xlsx'
@@ -71,6 +72,7 @@ const SalesPage: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null)
+  const [syncingInvoiceBatch, setSyncingInvoiceBatch] = useState(false)
 
   const fetchOrders = async () => {
     setLoading(true)
@@ -104,6 +106,63 @@ const SalesPage: React.FC = () => {
   const handleBulkComplete = () => {
     message.success(`已完成 ${selectedRowKeys.length} 筆訂單`)
     setSelectedRowKeys([])
+  }
+
+  const resolveRangePayload = () => {
+    if (quickRange === 'today') {
+      return {
+        startDate: now.startOf('day').toISOString(),
+        endDate: now.endOf('day').toISOString(),
+      }
+    }
+
+    if (quickRange === 'last7Days') {
+      return {
+        startDate: now.subtract(6, 'day').startOf('day').toISOString(),
+        endDate: now.endOf('day').toISOString(),
+      }
+    }
+
+    if (quickRange === 'lastMonth') {
+      return {
+        startDate: now.subtract(1, 'month').startOf('day').toISOString(),
+        endDate: now.endOf('day').toISOString(),
+      }
+    }
+
+    if (quickRange === 'lastYear') {
+      return {
+        startDate: now.subtract(1, 'year').startOf('day').toISOString(),
+        endDate: now.endOf('day').toISOString(),
+      }
+    }
+
+    if (customRange?.[0] && customRange?.[1]) {
+      return {
+        startDate: customRange[0].startOf('day').toISOString(),
+        endDate: customRange[1].endOf('day').toISOString(),
+      }
+    }
+
+    return {}
+  }
+
+  const handleBatchSyncInvoiceStatus = async () => {
+    setSyncingInvoiceBatch(true)
+    try {
+      const entityId = localStorage.getItem('entityId')?.trim() || 'tw-entity-001'
+      const result = await salesService.syncInvoiceStatusBatch({
+        entityId,
+        ...resolveRangePayload(),
+        limit: 80,
+      })
+      message.success(`已同步 ${result.synced || 0} 筆，略過 ${result.skipped || 0} 筆`)
+      await fetchOrders()
+    } catch (error) {
+      message.error('批次同步發票狀態失敗')
+    } finally {
+      setSyncingInvoiceBatch(false)
+    }
   }
 
   const columns = [
@@ -315,6 +374,13 @@ const SalesPage: React.FC = () => {
         </div>
         <Space wrap>
           <Button icon={<ReloadOutlined />} onClick={fetchOrders}>重新整理</Button>
+          <Button
+            icon={<SyncOutlined spin={syncingInvoiceBatch} />}
+            loading={syncingInvoiceBatch}
+            onClick={handleBatchSyncInvoiceStatus}
+          >
+            同步發票狀態
+          </Button>
           <Button icon={<DownloadOutlined />} onClick={handleExport}>匯出報表</Button>
           <Button type="primary" icon={<PlusOutlined />} size="large">新增訂單</Button>
         </Space>
