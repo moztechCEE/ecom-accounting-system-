@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Descriptions, Steps, Button, Tag, Divider, List, Avatar, Typography, Space } from 'antd'
+import { Descriptions, Steps, Button, Tag, Divider, List, Avatar, Typography, Space, message } from 'antd'
 import { GlassDrawer, GlassDrawerSection } from './ui/GlassDrawer'
 import { 
   PrinterOutlined, 
@@ -10,9 +10,11 @@ import {
   CarOutlined,
   CheckCircleOutlined,
   FileTextOutlined,
-  SendOutlined
+  SendOutlined,
+  SyncOutlined
 } from '@ant-design/icons'
 import FulfillOrderModal from './FulfillOrderModal'
+import { salesService } from '../services/sales.service'
 
 const { Title, Text } = Typography
 
@@ -25,8 +27,26 @@ interface OrderDetailsDrawerProps {
 
 const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, order, onUpdate }) => {
   const [fulfillModalOpen, setFulfillModalOpen] = useState(false)
+  const [syncingInvoice, setSyncingInvoice] = useState(false)
 
   if (!order) return null
+
+  const handleSyncInvoiceStatus = async () => {
+    setSyncingInvoice(true)
+    try {
+      const result = await salesService.syncInvoiceStatus(order.id)
+      if (result?.success) {
+        message.success(`已同步發票狀態：${result.invoiceStatus || 'issued'}`)
+      } else {
+        message.warning(result?.message || '目前找不到可查詢的發票資料')
+      }
+      onUpdate?.()
+    } catch (error) {
+      message.error('同步綠界發票狀態失敗')
+    } finally {
+      setSyncingInvoice(false)
+    }
+  }
 
   return (
     <>
@@ -40,6 +60,14 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
             <Space>
               <Button icon={<PrinterOutlined />} className="rounded-full">列印</Button>
               <Button icon={<MailOutlined />} className="rounded-full">寄送發票</Button>
+              <Button
+                icon={<SyncOutlined spin={syncingInvoice} />}
+                className="rounded-full"
+                loading={syncingInvoice}
+                onClick={handleSyncInvoiceStatus}
+              >
+                同步發票狀態
+              </Button>
               {order.status !== 'completed' && (
                 <Button 
                   type="primary" 

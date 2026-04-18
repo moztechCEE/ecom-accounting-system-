@@ -236,6 +236,23 @@ export const salesService = {
     return response.data
   },
 
+  async syncInvoiceStatus(id: string) {
+    const response = await api.post(`/sales/orders/${id}/invoice-status-sync`)
+    return response.data
+  },
+
+  async syncInvoiceStatusBatch(payload: {
+    entityId: string
+    channelId?: string
+    status?: string
+    startDate?: string
+    endDate?: string
+    limit?: number
+  }) {
+    const response = await api.post('/sales/orders/invoice-status-sync', payload)
+    return response.data
+  },
+
   async fulfill(id: string, data: { warehouseId: string; itemSerialNumbers?: Record<string, string[]> }, entityId: string) {
     const response = await api.post(`/sales/orders/${id}/fulfill`, data, {
       params: { entityId }

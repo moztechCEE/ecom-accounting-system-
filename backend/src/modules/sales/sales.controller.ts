@@ -21,6 +21,7 @@ import { SalesService } from './sales.service';
 import { SalesOrderService } from './services/sales-order.service';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
 import { FulfillSalesOrderDto } from './dto/fulfill-sales-order.dto';
+import { SyncSalesOrderInvoiceStatusDto } from './dto/sync-sales-order-invoice-status.dto';
 /**
  * SalesController 銷售控制器
  */
@@ -104,6 +105,29 @@ export class SalesController {
     @CurrentUser('id') userId: string,
   ) {
     return this.salesOrderService.completeSalesOrder(orderId, userId);
+  }
+
+  @Post('orders/:id/invoice-status-sync')
+  @ApiOperation({ summary: '同步單筆訂單的綠界電子發票狀態' })
+  async syncSalesOrderInvoiceStatus(
+    @Param('id', ParseUUIDPipe) orderId: string,
+  ) {
+    return this.salesOrderService.syncOrderInvoiceStatus(orderId);
+  }
+
+  @Post('orders/invoice-status-sync')
+  @ApiOperation({ summary: '批次同步銷售訂單的綠界電子發票狀態' })
+  async syncSalesOrderInvoiceStatusBatch(
+    @Body() dto: SyncSalesOrderInvoiceStatusDto,
+  ) {
+    return this.salesOrderService.syncInvoiceStatusForOrders({
+      entityId: this.requireEntityId(dto.entityId),
+      channelId: dto.channelId,
+      status: dto.status,
+      startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+      endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+      limit: dto.limit,
+    });
   }
 
   /**

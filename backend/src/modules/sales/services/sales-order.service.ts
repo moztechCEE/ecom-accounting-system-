@@ -1,9 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { JournalService } from '../../accounting/services/journal.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import { InventoryService } from '../../inventory/inventory.service';
 import { ProductType } from '@prisma/client';
+import { ApService } from '../../ap/ap.service';
 
 /**
  * SalesOrderService
@@ -36,6 +37,7 @@ export class SalesOrderService {
     private readonly prisma: PrismaService,
     private readonly journalService: JournalService,
     private readonly inventoryService: InventoryService,
+    private readonly apService: ApService,
   ) {}
 
   /**
@@ -401,6 +403,151 @@ export class SalesOrderService {
     });
   }
 
+  async syncOrderInvoiceStatus(orderId: string) {
+    const order = await this.prisma.salesOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        channel: true,
+        invoices: {
+          orderBy: [{ issuedAt: 'desc' }, { createdAt: 'desc' }],
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Sales order ${orderId} not found`);
+    }
+
+    const invoiceCandidate = this.resolveInvoiceCandidate(order.notes, order.invoices?.[0]);
+    if (!invoiceCandidate.invoiceNumber || !invoiceCandidate.invoiceDate) {
+      return {
+        success: false,
+        orderId: order.id,
+        orderNumber: order.externalOrderId || order.id,
+        invoiceNumber: invoiceCandidate.invoiceNumber || null,
+        invoiceDate: invoiceCandidate.invoiceDate || null,
+        invoiceStatus: invoiceCandidate.invoiceNumber ? 'unknown' : 'pending',
+        message: '找不到可查詢的發票號碼或發票日期',
+      };
+    }
+
+    const merchantProfile = this.resolveEcpayMerchantProfile(order.channel?.code || '');
+    const result = await this.apService.queryEcpayServiceFeeInvoiceStatus({
+      merchantKey: merchantProfile.merchantKey,
+      merchantId: merchantProfile.merchantId,
+      invoiceNo: invoiceCandidate.invoiceNumber,
+      invoiceDate: invoiceCandidate.invoiceDate,
+    });
+
+    const mergedNotes = this.mergeInvoiceMetadataIntoNotes(order.notes, {
+      invoiceNumber: invoiceCandidate.invoiceNumber,
+      invoiceDate: invoiceCandidate.invoiceDate,
+      invoiceStatus: result.invoiceIssuedStatus || (result.success ? 'issued' : 'unknown'),
+      merchantKey: merchantProfile.merchantKey,
+      merchantId: merchantProfile.merchantId,
+      verificationMessage: result.rawMessage || null,
+      verifiedAt: new Date().toISOString(),
+    });
+
+    await this.prisma.salesOrder.update({
+      where: { id: order.id },
+      data: {
+        hasInvoice: result.success || order.hasInvoice,
+        notes: mergedNotes,
+      },
+    });
+
+    return {
+      success: true,
+      orderId: order.id,
+      orderNumber: order.externalOrderId || order.id,
+      invoiceNumber: invoiceCandidate.invoiceNumber,
+      invoiceDate: invoiceCandidate.invoiceDate,
+      invoiceStatus: result.invoiceIssuedStatus || 'unknown',
+      merchantKey: merchantProfile.merchantKey,
+      merchantId: merchantProfile.merchantId,
+      rawMessage: result.rawMessage || null,
+      raw: result.raw,
+    };
+  }
+
+  async syncInvoiceStatusForOrders(params: {
+    entityId: string;
+    channelId?: string;
+    status?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+  }) {
+    const limit = Math.max(1, Math.min(params.limit || 50, 200));
+    const orders = await this.prisma.salesOrder.findMany({
+      where: {
+        entityId: params.entityId,
+        ...(params.channelId && { channelId: params.channelId }),
+        ...(params.status && { status: params.status }),
+        ...(params.startDate && {
+          orderDate: {
+            gte: params.startDate,
+            ...(params.endDate && { lte: params.endDate }),
+          },
+        }),
+      },
+      include: {
+        channel: true,
+        invoices: {
+          orderBy: [{ issuedAt: 'desc' }, { createdAt: 'desc' }],
+        },
+      },
+      orderBy: { orderDate: 'desc' },
+      take: limit,
+    });
+
+    const results = [];
+    let synced = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const order of orders) {
+      try {
+        const invoiceCandidate = this.resolveInvoiceCandidate(order.notes, order.invoices?.[0]);
+        if (!invoiceCandidate.invoiceNumber || !invoiceCandidate.invoiceDate) {
+          skipped += 1;
+          results.push({
+            orderId: order.id,
+            orderNumber: order.externalOrderId || order.id,
+            success: false,
+            skipped: true,
+            reason: 'missing_invoice_candidate',
+          });
+          continue;
+        }
+
+        const result = await this.syncOrderInvoiceStatus(order.id);
+        synced += result.success ? 1 : 0;
+        results.push(result);
+      } catch (error) {
+        failed += 1;
+        results.push({
+          orderId: order.id,
+          orderNumber: order.externalOrderId || order.id,
+          success: false,
+          skipped: false,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return {
+      success: true,
+      entityId: params.entityId,
+      requested: orders.length,
+      synced,
+      skipped,
+      failed,
+      results,
+    };
+  }
+
   /**
    * 處理退款
    * @param orderId - 訂單 ID
@@ -450,5 +597,94 @@ export class SalesOrderService {
     // 3. 用於驗證系統流程
     this.logger.log(`Creating mock order for entity ${entityId}...`);
     throw new Error('Not implemented: createMockOrder');
+  }
+
+  private resolveInvoiceCandidate(
+    existingNotes?: string | null,
+    invoice?: { invoiceNumber?: string | null; issuedAt?: Date | null } | null,
+  ) {
+    const metadata = this.extractMetadata(existingNotes);
+    const invoiceNumber =
+      invoice?.invoiceNumber?.trim() ||
+      metadata.invoiceNumber ||
+      null;
+    const invoiceDate =
+      (invoice?.issuedAt ? invoice.issuedAt.toISOString().slice(0, 10) : null) ||
+      metadata.invoiceDate ||
+      null;
+
+    return {
+      invoiceNumber,
+      invoiceDate,
+    };
+  }
+
+  private resolveEcpayMerchantProfile(channelCode: string) {
+    const normalized = channelCode.trim().toUpperCase();
+    if (normalized === 'SHOPIFY') {
+      return {
+        merchantKey: 'shopify-main',
+        merchantId: '3290494',
+      };
+    }
+
+    if (normalized === '1SHOP' || normalized === 'SHOPLINE') {
+      return {
+        merchantKey: 'groupbuy-main',
+        merchantId: '3150241',
+      };
+    }
+
+    throw new BadRequestException(`Unsupported channel for ECPay invoice sync: ${channelCode}`);
+  }
+
+  private extractMetadata(notes?: string | null) {
+    const metadata: Record<string, string> = {};
+
+    for (const line of (notes || '').split('\n')) {
+      const rawLine = line.replace(/^\[[^\]]+\]\s*/, '').trim();
+      for (const pair of rawLine.split(';')) {
+        const [key, ...rest] = pair.split('=');
+        if (!key || !rest.length) continue;
+        metadata[key.trim()] = rest.join('=').trim();
+      }
+    }
+
+    return metadata;
+  }
+
+  private mergeInvoiceMetadataIntoNotes(
+    existingNotes: string | null | undefined,
+    payload: {
+      invoiceNumber: string;
+      invoiceDate: string;
+      invoiceStatus: string;
+      merchantKey: string;
+      merchantId: string;
+      verificationMessage?: string | null;
+      verifiedAt: string;
+    },
+  ) {
+    const preserved = (existingNotes || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('[ecpay-invoice-sync]'));
+
+    const metadata = [
+      `invoiceNumber=${payload.invoiceNumber}`,
+      `invoiceDate=${payload.invoiceDate}`,
+      `invoiceStatus=${payload.invoiceStatus}`,
+      `merchantKey=${payload.merchantKey}`,
+      `merchantId=${payload.merchantId}`,
+      `verifiedAt=${payload.verifiedAt}`,
+      payload.verificationMessage
+        ? `verificationMessage=${payload.verificationMessage.replace(/;/g, ',')}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join('; ');
+
+    preserved.push(`[ecpay-invoice-sync] ${metadata}`);
+    return preserved.join('\n');
   }
 }
