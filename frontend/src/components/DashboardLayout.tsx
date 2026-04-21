@@ -7,6 +7,7 @@ import {
   ShoppingOutlined,
   DollarOutlined,
   BankOutlined,
+  AuditOutlined,
   TeamOutlined,
   SettingOutlined,
   LogoutOutlined,
@@ -52,6 +53,12 @@ const DashboardLayout: React.FC = () => {
       icon: <DashboardOutlined />,
       label: '儀表板',
       onClick: () => navigate('/dashboard'),
+    },
+    {
+      key: '/reconciliation',
+      icon: <AuditOutlined />,
+      label: '對帳中心',
+      onClick: () => navigate('/reconciliation'),
     },
     {
       key: 'accounting',

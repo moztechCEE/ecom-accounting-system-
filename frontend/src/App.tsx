@@ -11,6 +11,7 @@ import AccountsPage from './pages/AccountsPage'
 import JournalEntriesPage from './pages/JournalEntriesPage'
 import AccountingPeriodsPage from './pages/AccountingPeriodsPage'
 import AccountingWorkbenchPage from './pages/AccountingWorkbenchPage'
+import ReconciliationCenterPage from './pages/ReconciliationCenterPage'
 import SalesPage from './pages/SalesPage'
 import ReportsPage from './pages/ReportsPage'
 import VendorsPage from './pages/VendorsPage'
@@ -48,6 +49,7 @@ const App: React.FC = () => {
               <Route element={<DashboardLayout />}>
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="reconciliation" element={<ReconciliationCenterPage />} />
                 <Route path="accounting/workbench" element={<AccountingWorkbenchPage />} />
                 <Route path="accounting/accounts" element={<AccountsPage />} />
                 <Route path="accounting/journals" element={<JournalEntriesPage />} />
