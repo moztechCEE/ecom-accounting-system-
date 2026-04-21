@@ -84,4 +84,67 @@ export class BankingController {
   async getAccountBalance(@Param('id') id: string) {
     return this.bankingService.getAccountBalance(id);
   }
+
+  @Post('accounts/:id/import-statement')
+  @ApiOperation({ summary: '匯入銀行對帳單' })
+  @ApiResponse({ status: 201, description: '成功匯入對帳單並執行初步對帳' })
+  async importStatement(@Param('id') id: string, @Body() data: any) {
+    return this.bankingService.importBankStatement(
+      id,
+      Buffer.from(data.csvContent || '', 'utf8'),
+    );
+  }
+
+  @Post('accounts/:id/auto-reconcile')
+  @ApiOperation({ summary: '執行銀行自動對帳' })
+  @ApiResponse({ status: 200, description: '成功執行自動對帳' })
+  async autoReconcile(
+    @Param('id') id: string,
+    @Body() data: { transactionDate?: string },
+  ) {
+    return this.bankingService.autoReconcile(
+      id,
+      data?.transactionDate ? new Date(data.transactionDate) : undefined,
+    );
+  }
+
+  @Post('transactions/:id/manual-reconcile')
+  @ApiOperation({ summary: '手動對帳指定銀行交易' })
+  @ApiResponse({ status: 200, description: '成功手動對帳' })
+  async manualReconcile(
+    @Param('id') id: string,
+    @Body() data: { paymentId: string },
+  ) {
+    return this.bankingService.manualReconcile(id, data.paymentId);
+  }
+
+  @Get('accounts/:id/reconciliation-report')
+  @ApiOperation({ summary: '查詢銀行對帳報表' })
+  @ApiResponse({ status: 200, description: '成功取得對帳報表' })
+  async getReconciliationReport(
+    @Param('id') id: string,
+    @Query('asOfDate') asOfDate?: string,
+  ) {
+    return this.bankingService.getReconciliationReport(
+      id,
+      asOfDate ? new Date(asOfDate) : new Date(),
+    );
+  }
+
+  @Post('virtual-accounts')
+  @ApiOperation({ summary: '建立虛擬帳號' })
+  @ApiResponse({ status: 201, description: '成功建立虛擬帳號' })
+  async createVirtualAccount(@Body() data: any) {
+    return this.bankingService.createVirtualAccount(data);
+  }
+
+  @Post('virtual-accounts/match')
+  @ApiOperation({ summary: '依虛擬帳號自動配對收款' })
+  @ApiResponse({ status: 200, description: '成功執行虛擬帳號配對' })
+  async matchVirtualAccount(@Body() data: any) {
+    return this.bankingService.matchVirtualAccountPayment(
+      data.virtualAccountNumber,
+      Number(data.amount),
+    );
+  }
 }
