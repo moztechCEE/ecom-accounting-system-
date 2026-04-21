@@ -190,6 +190,15 @@ export class ArService {
           customerEmail: order.customer?.email || null,
           customerPhone: order.customer?.phone || null,
           customerType: order.customer?.type || 'individual',
+          paymentTerms: order.customer?.paymentTerms || null,
+          paymentTermDays: order.customer?.paymentTermDays || 0,
+          isMonthlyBilling: order.customer?.isMonthlyBilling || false,
+          billingCycle: order.customer?.billingCycle || null,
+          statementEmail:
+            order.customer?.statementEmail || order.customer?.email || null,
+          collectionOwnerName: order.customer?.collectionOwner || null,
+          collectionNote: order.customer?.collectionNote || null,
+          creditLimit: Number(order.customer?.creditLimit || 0),
           channelCode: order.channel?.code || null,
           channelName: order.channel?.name || null,
           sourceLabel: source.label,
@@ -372,6 +381,176 @@ export class ArService {
       summary,
       classificationGroups,
       items,
+    };
+  }
+
+  async getB2BStatements(entityId: string, asOfDate = new Date()) {
+    const monitor = await this.getReceivableMonitor(
+      entityId,
+      undefined,
+      undefined,
+      asOfDate,
+    );
+    const b2bItems = monitor.items.filter(
+      (item: any) =>
+        item.collectionType === 'b2b_monthly' ||
+        item.customerType === 'company' ||
+        item.isMonthlyBilling ||
+        Number(item.paymentTermDays || 0) > 0,
+    );
+
+    const customerGroups = Array.from(
+      b2bItems
+        .reduce((map, item: any) => {
+          const key = item.customerId || item.customerName || 'unknown';
+          const current =
+            map.get(key) ||
+            {
+              customerId: item.customerId || null,
+              customerName: item.customerName || '未命名客戶',
+              customerEmail: item.customerEmail || null,
+              statementEmail: item.statementEmail || item.customerEmail || null,
+              customerPhone: item.customerPhone || null,
+              paymentTerms: item.paymentTerms || null,
+              paymentTermDays: item.paymentTermDays || item.termDays || 30,
+              isMonthlyBilling: Boolean(item.isMonthlyBilling),
+              billingCycle: item.billingCycle || 'monthly',
+              collectionOwner: item.collectionOwnerName || null,
+              collectionNote: item.collectionNote || null,
+              creditLimit: Number(item.creditLimit || 0),
+              orderCount: 0,
+              openOrderCount: 0,
+              grossAmount: 0,
+              paidAmount: 0,
+              outstandingAmount: 0,
+              overdueAmount: 0,
+              overdueCount: 0,
+              currentAmount: 0,
+              due1To30Amount: 0,
+              due31To60Amount: 0,
+              due61To90Amount: 0,
+              dueOver90Amount: 0,
+              missingInvoiceCount: 0,
+              missingJournalCount: 0,
+              missingFeeCount: 0,
+              lastOrderDate: null as string | null,
+              nextStatementDate: this.buildNextStatementDate(asOfDate),
+              riskLevel: 'normal',
+              recommendedAction: '可於月底產生對帳單。',
+              orders: [] as any[],
+            };
+
+          const outstandingAmount = Number(item.outstandingAmount || 0);
+          const daysPastDue = this.daysPastDue(item.dueDate, asOfDate);
+
+          current.orderCount += 1;
+          current.openOrderCount += outstandingAmount > 0 ? 1 : 0;
+          current.grossAmount += Number(item.grossAmount || 0);
+          current.paidAmount += Number(item.paidAmount || 0);
+          current.outstandingAmount += outstandingAmount;
+          current.missingInvoiceCount += item.warningCodes?.includes('invoice_pending')
+            ? 1
+            : 0;
+          current.missingJournalCount += item.warningCodes?.includes('missing_journal')
+            ? 1
+            : 0;
+          current.missingFeeCount += item.warningCodes?.includes('missing_fee') ? 1 : 0;
+          current.lastOrderDate =
+            !current.lastOrderDate || item.orderDate > current.lastOrderDate
+              ? item.orderDate
+              : current.lastOrderDate;
+
+          if (outstandingAmount > 0) {
+            if (daysPastDue <= 0) {
+              current.currentAmount += outstandingAmount;
+            } else if (daysPastDue <= 30) {
+              current.due1To30Amount += outstandingAmount;
+            } else if (daysPastDue <= 60) {
+              current.due31To60Amount += outstandingAmount;
+            } else if (daysPastDue <= 90) {
+              current.due61To90Amount += outstandingAmount;
+            } else {
+              current.dueOver90Amount += outstandingAmount;
+            }
+            if (daysPastDue > 0) {
+              current.overdueAmount += outstandingAmount;
+              current.overdueCount += 1;
+            }
+          }
+
+          current.orders.push({
+            orderId: item.orderId,
+            orderNumber: item.orderNumber,
+            orderDate: item.orderDate,
+            dueDate: item.dueDate,
+            sourceLabel: item.sourceLabel,
+            grossAmount: item.grossAmount,
+            paidAmount: item.paidAmount,
+            outstandingAmount,
+            invoiceNumber: item.invoiceNumber,
+            invoiceStatus: item.invoiceStatus,
+            accountingPosted: item.accountingPosted,
+            daysPastDue,
+          });
+
+          map.set(key, current);
+          return map;
+        }, new Map<string, any>())
+        .values(),
+    )
+      .map((customer: any) => {
+        const overCredit =
+          customer.creditLimit > 0 && customer.outstandingAmount > customer.creditLimit;
+        if (customer.dueOver90Amount > 0 || overCredit) {
+          customer.riskLevel = 'critical';
+          customer.recommendedAction = overCredit
+            ? '已超過信用額度，建議暫停放帳並優先聯繫收款。'
+            : '逾期超過 90 天，建議升級催收或管理層追蹤。';
+        } else if (customer.overdueAmount > 0) {
+          customer.riskLevel = 'warning';
+          customer.recommendedAction = '已有逾期應收，建議本週寄送催收提醒。';
+        } else if (customer.outstandingAmount > 0) {
+          customer.riskLevel = 'attention';
+          customer.recommendedAction = '月底可產生月結對帳單。';
+        }
+        return customer;
+      })
+      .sort((a: any, b: any) => b.outstandingAmount - a.outstandingAmount);
+
+    const summary = customerGroups.reduce(
+      (acc: any, customer: any) => {
+        acc.customerCount += 1;
+        acc.openCustomerCount += customer.outstandingAmount > 0 ? 1 : 0;
+        acc.grossAmount += customer.grossAmount;
+        acc.paidAmount += customer.paidAmount;
+        acc.outstandingAmount += customer.outstandingAmount;
+        acc.overdueAmount += customer.overdueAmount;
+        acc.overdueCustomerCount += customer.overdueAmount > 0 ? 1 : 0;
+        acc.overCreditCount +=
+          customer.creditLimit > 0 && customer.outstandingAmount > customer.creditLimit
+            ? 1
+            : 0;
+        acc.missingStatementEmailCount += customer.statementEmail ? 0 : 1;
+        return acc;
+      },
+      {
+        customerCount: 0,
+        openCustomerCount: 0,
+        grossAmount: 0,
+        paidAmount: 0,
+        outstandingAmount: 0,
+        overdueAmount: 0,
+        overdueCustomerCount: 0,
+        overCreditCount: 0,
+        missingStatementEmailCount: 0,
+      },
+    );
+
+    return {
+      entityId,
+      asOfDate: asOfDate.toISOString(),
+      summary,
+      customers: customerGroups,
     };
   }
 
@@ -983,6 +1162,19 @@ export class ArService {
     const dueDate = new Date(orderDate);
     dueDate.setDate(dueDate.getDate() + (outstandingAmount > 0 ? termDays : 0));
     return dueDate;
+  }
+
+  private buildNextStatementDate(asOfDate: Date) {
+    const statementDate = new Date(asOfDate);
+    statementDate.setMonth(statementDate.getMonth() + 1, 5);
+    statementDate.setHours(0, 0, 0, 0);
+    return statementDate.toISOString();
+  }
+
+  private daysPastDue(dueDate: string | Date, asOfDate: Date) {
+    const due = new Date(dueDate);
+    const msPerDay = 24 * 60 * 60 * 1000;
+    return Math.floor((asOfDate.getTime() - due.getTime()) / msPerDay);
   }
 
   private resolvePaymentTermDays(

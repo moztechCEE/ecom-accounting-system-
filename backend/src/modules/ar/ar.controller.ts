@@ -93,6 +93,18 @@ export class ArController {
     return this.arService.getAgingReport(entityId, new Date());
   }
 
+  @Get('b2b-statements')
+  @ApiOperation({ summary: '查詢 B2B 月結客戶應收對帳總覽' })
+  async getB2BStatements(
+    @Query('entityId') entityId: string,
+    @Query('asOfDate') asOfDate?: string,
+  ) {
+    return this.arService.getB2BStatements(
+      entityId,
+      asOfDate ? new Date(asOfDate) : new Date(),
+    );
+  }
+
   @Put('invoices/:id/write-off')
   @ApiOperation({ summary: '呆帳沖銷' })
   async writeOff(@Param('id') id: string, @Body() data: any) {

@@ -12,6 +12,14 @@ export interface ReceivableMonitorItem {
   customerEmail?: string | null
   customerPhone?: string | null
   customerType?: 'individual' | 'company'
+  paymentTerms?: string | null
+  paymentTermDays?: number
+  isMonthlyBilling?: boolean
+  billingCycle?: string | null
+  statementEmail?: string | null
+  collectionOwnerName?: string | null
+  collectionNote?: string | null
+  creditLimit?: number
   channelCode?: string | null
   channelName?: string | null
   sourceLabel: string
@@ -108,6 +116,73 @@ export interface ReceivableMonitorResponse {
   items: ReceivableMonitorItem[]
 }
 
+export interface B2BStatementOrder {
+  orderId: string
+  orderNumber: string
+  orderDate: string
+  dueDate: string
+  sourceLabel: string
+  grossAmount: number
+  paidAmount: number
+  outstandingAmount: number
+  invoiceNumber?: string | null
+  invoiceStatus: string
+  accountingPosted: boolean
+  daysPastDue: number
+}
+
+export interface B2BStatementCustomer {
+  customerId?: string | null
+  customerName: string
+  customerEmail?: string | null
+  statementEmail?: string | null
+  customerPhone?: string | null
+  paymentTerms?: string | null
+  paymentTermDays: number
+  isMonthlyBilling: boolean
+  billingCycle?: string | null
+  collectionOwner?: string | null
+  collectionNote?: string | null
+  creditLimit: number
+  orderCount: number
+  openOrderCount: number
+  grossAmount: number
+  paidAmount: number
+  outstandingAmount: number
+  overdueAmount: number
+  overdueCount: number
+  currentAmount: number
+  due1To30Amount: number
+  due31To60Amount: number
+  due61To90Amount: number
+  dueOver90Amount: number
+  missingInvoiceCount: number
+  missingJournalCount: number
+  missingFeeCount: number
+  lastOrderDate?: string | null
+  nextStatementDate: string
+  riskLevel: 'normal' | 'attention' | 'warning' | 'critical' | string
+  recommendedAction: string
+  orders: B2BStatementOrder[]
+}
+
+export interface B2BStatementResponse {
+  entityId: string
+  asOfDate: string
+  summary: {
+    customerCount: number
+    openCustomerCount: number
+    grossAmount: number
+    paidAmount: number
+    outstandingAmount: number
+    overdueAmount: number
+    overdueCustomerCount: number
+    overCreditCount: number
+    missingStatementEmailCount: number
+  }
+  customers: B2BStatementCustomer[]
+}
+
 export const arService = {
   getInvoices: async (page = 1, limit = 20) => {
     const response = await api.get<PaginatedResult<ArInvoice>>('/ar/invoices', {
@@ -162,6 +237,19 @@ export const arService = {
     const response = await api.post('/ar/sync/sales-orders', null, {
       params: {
         entityId: resolvedEntityId,
+      },
+    })
+    return response.data
+  },
+
+  getB2BStatements: async (params?: { entityId?: string; asOfDate?: string }) => {
+    const entityId =
+      params?.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+
+    const response = await api.get<B2BStatementResponse>('/ar/b2b-statements', {
+      params: {
+        entityId,
+        asOfDate: params?.asOfDate,
       },
     })
     return response.data

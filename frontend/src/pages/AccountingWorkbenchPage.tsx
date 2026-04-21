@@ -48,6 +48,8 @@ import {
 } from '../services/dashboard.service'
 import {
   arService,
+  B2BStatementCustomer,
+  B2BStatementResponse,
   ReceivableClassificationGroup,
   ReceivableMonitorResponse,
   ReceivableMonitorItem,
@@ -97,6 +99,13 @@ const auditMeta = (severity: OrderReconciliationAuditItem['severity']) => {
   return { color: 'green' as const, label: '正常' }
 }
 
+const riskMeta = (risk?: string) => {
+  if (risk === 'critical') return { color: 'red' as const, label: '高風險' }
+  if (risk === 'warning') return { color: 'gold' as const, label: '逾期追蹤' }
+  if (risk === 'attention') return { color: 'blue' as const, label: '待出帳' }
+  return { color: 'green' as const, label: '正常' }
+}
+
 const AccountingWorkbenchPage: React.FC = () => {
   const navigate = useNavigate()
   const [feeImportForm] = Form.useForm()
@@ -113,6 +122,7 @@ const AccountingWorkbenchPage: React.FC = () => {
   const [feed, setFeed] = useState<DashboardReconciliationFeed | null>(null)
   const [audit, setAudit] = useState<OrderReconciliationAudit | null>(null)
   const [receivables, setReceivables] = useState<ReceivableMonitorResponse | null>(null)
+  const [b2bStatements, setB2BStatements] = useState<B2BStatementResponse | null>(null)
 
   const entityId = localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
   const startDate = dateRange[0].startOf('day').toISOString()
@@ -121,16 +131,18 @@ const AccountingWorkbenchPage: React.FC = () => {
   const fetchWorkbench = async () => {
     setLoading(true)
     try {
-      const [executiveData, feedData, auditData, receivableData] = await Promise.all([
+      const [executiveData, feedData, auditData, receivableData, b2bStatementData] = await Promise.all([
         dashboardService.getExecutiveOverview({ entityId, startDate, endDate }),
         dashboardService.getReconciliationFeed({ entityId, startDate, endDate, limit: 24 }),
         dashboardService.getOrderReconciliationAudit({ entityId, startDate, endDate, limit: 80 }),
         arService.getReceivableMonitor({ entityId, startDate, endDate }),
+        arService.getB2BStatements({ entityId, asOfDate: endDate }),
       ])
       setExecutive(executiveData)
       setFeed(feedData)
       setAudit(auditData)
       setReceivables(receivableData)
+      setB2BStatements(b2bStatementData)
     } catch (error: any) {
       message.error(error?.response?.data?.message || '讀取會計工作台失敗')
     } finally {
@@ -236,6 +248,8 @@ const AccountingWorkbenchPage: React.FC = () => {
   const arItems = receivables?.items || []
   const arGroups = receivables?.classificationGroups || []
   const arSummary = receivables?.summary
+  const b2bSummary = b2bStatements?.summary
+  const b2bCustomers = b2bStatements?.customers || []
   const auditSummary = audit?.summary
   const automationCompletion = auditSummary?.auditedOrderCount
     ? Math.round((auditSummary.reconciledOrderCount / auditSummary.auditedOrderCount) * 100)
@@ -510,6 +524,78 @@ const AccountingWorkbenchPage: React.FC = () => {
     },
   ]
 
+  const b2bColumns: ColumnsType<B2BStatementCustomer> = [
+    {
+      title: '客戶 / 對帳單',
+      render: (_, record) => {
+        const risk = riskMeta(record.riskLevel)
+        return (
+          <div>
+            <div className="font-semibold text-slate-900">{record.customerName}</div>
+            <div className="text-xs text-slate-400">
+              {record.statementEmail || '未設定對帳單 Email'} · Net {record.paymentTermDays || 30}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              <Tag color={risk.color}>{risk.label}</Tag>
+              <Tag>{record.billingCycle === 'monthly' ? '每月出帳' : record.billingCycle || '月結'}</Tag>
+              {record.collectionOwner ? <Tag color="blue">{record.collectionOwner}</Tag> : null}
+            </div>
+          </div>
+        )
+      },
+    },
+    {
+      title: '應收狀態',
+      width: 210,
+      render: (_, record) => (
+        <div className="text-sm">
+          <div className="font-semibold text-rose-600">未收 {money(record.outstandingAmount)}</div>
+          <div className="text-amber-600">逾期 {money(record.overdueAmount)}</div>
+          <div className="text-slate-400">開放 {record.openOrderCount} / 全部 {record.orderCount} 筆</div>
+        </div>
+      ),
+    },
+    {
+      title: '帳齡',
+      width: 260,
+      render: (_, record) => (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-500">
+          <span>未到期 {money(record.currentAmount)}</span>
+          <span>1-30 {money(record.due1To30Amount)}</span>
+          <span>31-60 {money(record.due31To60Amount)}</span>
+          <span>61-90 {money(record.due61To90Amount)}</span>
+          <span className="text-rose-500">90+ {money(record.dueOver90Amount)}</span>
+          <span>額度 {money(record.creditLimit)}</span>
+        </div>
+      ),
+    },
+    {
+      title: '待補',
+      width: 180,
+      render: (_, record) => (
+        <Space size={[4, 4]} wrap>
+          {record.missingInvoiceCount ? <Tag color="blue">發票 {record.missingInvoiceCount}</Tag> : null}
+          {record.missingJournalCount ? <Tag>分錄 {record.missingJournalCount}</Tag> : null}
+          {record.missingFeeCount ? <Tag color="red">費用 {record.missingFeeCount}</Tag> : null}
+          {!record.missingInvoiceCount && !record.missingJournalCount && !record.missingFeeCount ? (
+            <Tag color="green">完整</Tag>
+          ) : null}
+        </Space>
+      ),
+    },
+    {
+      title: '建議動作',
+      render: (_, record) => (
+        <div>
+          <div className="text-sm text-slate-700">{record.recommendedAction}</div>
+          <div className="mt-1 text-xs text-slate-400">
+            下次出帳 {dayjs(record.nextStatementDate).format('YYYY/MM/DD')}
+          </div>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -750,6 +836,42 @@ const AccountingWorkbenchPage: React.FC = () => {
                     loading={loading}
                     columns={arColumns}
                     dataSource={arItems}
+                    pagination={{ pageSize: 10 }}
+                    className="rounded-3xl bg-white/60"
+                  />
+                </Col>
+              </Row>
+            ),
+          },
+          {
+            key: 'b2b-statements',
+            label: (
+              <span><BankOutlined /> B2B 月結</span>
+            ),
+            children: (
+              <Row gutter={[16, 16]}>
+                <Col span={24}>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <Card><Statistic title="月結客戶" value={b2bSummary?.customerCount || 0} /></Card>
+                    <Card><Statistic title="開放應收" value={b2bSummary?.outstandingAmount || 0} prefix="NT$" precision={0} /></Card>
+                    <Card><Statistic title="逾期金額" value={b2bSummary?.overdueAmount || 0} prefix="NT$" precision={0} /></Card>
+                    <Card><Statistic title="超額 / 缺 Email" value={`${b2bSummary?.overCreditCount || 0} / ${b2bSummary?.missingStatementEmailCount || 0}`} /></Card>
+                  </div>
+                </Col>
+                <Col span={24}>
+                  <Alert
+                    showIcon
+                    type="info"
+                    message="B2B 月結追帳邏輯"
+                    description="公司客戶或已設定月結條件的客戶會集中在這裡。系統會按帳期與到期日自動拆帳齡，月底可用這份資料產生對帳單，收款後再回寫核銷 AR。"
+                  />
+                </Col>
+                <Col span={24}>
+                  <Table
+                    rowKey={(record) => record.customerId || record.customerName}
+                    loading={loading}
+                    columns={b2bColumns}
+                    dataSource={b2bCustomers}
                     pagination={{ pageSize: 10 }}
                     className="rounded-3xl bg-white/60"
                   />
