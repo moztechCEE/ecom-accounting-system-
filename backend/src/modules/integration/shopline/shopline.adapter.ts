@@ -391,7 +391,7 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     };
   }
 
-  private mapOrderToUnifiedTransaction(
+  mapOrderToUnifiedTransaction(
     order: UnifiedOrder,
   ): UnifiedTransaction | null {
     const raw = order.raw || {};
@@ -549,7 +549,7 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
       };
     }
 
-    if (fee.greaterThanOrEqualTo(0)) {
+    if (fee.greaterThan(0)) {
       return {
         status: 'actual',
         source: 'shopline.order_payment.fee',

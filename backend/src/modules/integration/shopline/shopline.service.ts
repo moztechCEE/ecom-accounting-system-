@@ -85,6 +85,8 @@ export class ShoplineService {
     const channel = await this.ensureSalesChannel(params.entityId);
     let created = 0;
     let updated = 0;
+    let paymentDraftCreated = 0;
+    let paymentDraftUpdated = 0;
 
     for (const order of orders) {
       try {
@@ -95,6 +97,17 @@ export class ShoplineService {
         );
         if (result === 'created') created++;
         if (result === 'updated') updated++;
+
+        const transaction = this.adapter.mapOrderToUnifiedTransaction(order);
+        if (transaction) {
+          const paymentResult = await this.upsertPayment(
+            params.entityId,
+            channel.id,
+            transaction,
+          );
+          if (paymentResult === 'created') paymentDraftCreated++;
+          if (paymentResult === 'updated') paymentDraftUpdated++;
+        }
       } catch (error: any) {
         this.logger.error(
           `Failed to sync SHOPLINE order ${order.externalId}: ${error.message}`,
@@ -107,6 +120,8 @@ export class ShoplineService {
       fetched: orders.length,
       created,
       updated,
+      paymentDraftCreated,
+      paymentDraftUpdated,
     };
   }
 
@@ -519,6 +534,10 @@ export class ShoplineService {
     const fxRate = new Decimal(await this.getFxRate(currency));
     const zero = new Decimal(0);
     const hasLockedProviderPayout = this.hasLockedProviderPayout(existing?.notes);
+    const isPaymentCaptured = tx.status === 'success';
+    const capturedAmount = isPaymentCaptured ? tx.amount : zero;
+    const capturedFee = isPaymentCaptured ? tx.fee : zero;
+    const capturedNet = isPaymentCaptured ? tx.net : zero;
     const paymentNotes = this.buildPaymentNotes(existing?.notes, tx);
 
     const data = {
@@ -528,18 +547,22 @@ export class ShoplineService {
       payoutBatchId: tx.externalId,
       channel: SHOPLINE_CHANNEL_CODE,
       payoutDate: tx.date,
-      amountGrossOriginal: tx.amount,
+      amountGrossOriginal: hasLockedProviderPayout
+        ? existing?.amountGrossOriginal || capturedAmount
+        : capturedAmount,
       amountGrossCurrency: currency,
       amountGrossFxRate: fxRate,
-      amountGrossBase: tx.amount.mul(fxRate),
+      amountGrossBase: hasLockedProviderPayout
+        ? existing?.amountGrossBase || capturedAmount.mul(fxRate)
+        : capturedAmount.mul(fxRate),
       feePlatformOriginal: hasLockedProviderPayout
         ? existing?.feePlatformOriginal || zero
-        : tx.fee,
+        : capturedFee,
       feePlatformCurrency: currency,
       feePlatformFxRate: fxRate,
       feePlatformBase: hasLockedProviderPayout
         ? existing?.feePlatformBase || zero
-        : tx.fee.mul(fxRate),
+        : capturedFee.mul(fxRate),
       feeGatewayOriginal: hasLockedProviderPayout
         ? existing?.feeGatewayOriginal || zero
         : zero,
@@ -553,13 +576,13 @@ export class ShoplineService {
       shippingFeePaidFxRate: fxRate,
       shippingFeePaidBase: zero,
       amountNetOriginal: hasLockedProviderPayout
-        ? existing?.amountNetOriginal || tx.net
-        : tx.net,
+        ? existing?.amountNetOriginal || capturedNet
+        : capturedNet,
       amountNetCurrency: currency,
       amountNetFxRate: fxRate,
       amountNetBase: hasLockedProviderPayout
-        ? existing?.amountNetBase || tx.net.mul(fxRate)
-        : tx.net.mul(fxRate),
+        ? existing?.amountNetBase || capturedNet.mul(fxRate)
+        : capturedNet.mul(fxRate),
       reconciledFlag: hasLockedProviderPayout
         ? existing?.reconciledFlag || false
         : false,
@@ -653,6 +676,8 @@ export class ShoplineService {
     const parts = [
       `feeStatus=${tx.feeStatus || 'unavailable'}`,
       `feeSource=${tx.feeSource || 'unknown'}`,
+      `settlementStatus=${this.resolveSettlementStatus(tx)}`,
+      `expectedGross=${tx.amount.toFixed(2)}`,
       `gateway=${tx.gateway || payment.payment_type || ''}`,
       `storeHandle=${raw.sourceStoreHandle || ''}`,
       `storeName=${raw.sourceStoreName || ''}`,
@@ -686,6 +711,18 @@ export class ShoplineService {
       .trim();
 
     return preservedNotes ? `${preservedNotes}\n${syncNote}` : syncNote;
+  }
+
+  private resolveSettlementStatus(tx: UnifiedTransaction) {
+    if (tx.status === 'success') {
+      return 'pending_payout';
+    }
+
+    if (tx.status === 'failed') {
+      return 'failed';
+    }
+
+    return 'pending_payment';
   }
 
   private hasLockedProviderPayout(notes: string | null | undefined) {

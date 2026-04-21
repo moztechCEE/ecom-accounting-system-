@@ -250,7 +250,11 @@ Shopline 提到的「顧客資料授權登入」是另一個功能：
 
 實作項目：
 
-- 先把 Shopline order 的 payment / delivery 狀態映射成 `Payment` 草稿紀錄
+- 已完成：先把 Shopline order 的 payment / delivery 狀態映射成 `Payment` 草稿紀錄
+  - `syncOrders()` 現在會同步建立 / 更新 Payment 草稿，不必等獨立 transaction sync。
+  - `settlementStatus=pending_payment / pending_payout / failed` 會寫入 Payment notes，供 Dashboard / 對帳中心判斷。
+  - 未付款訂單只建立 0 元 Payment 草稿並保留 `expectedGross`，避免把待付款誤算成已收款；付款成功後才回填收款金額與淨額。
+  - Shopline `payment_fee=0` 不再直接視為實際手續費；只有大於 0 才標記 `feeStatus=actual`，避免把缺漏手續費誤判為 0 元。
 - 若 Shopline 有外部金流報表或 API，再接 provider payout import
 - 將 `已付款 / 待撥款 / 已撥款 / 已對帳` 進 Dashboard
 
@@ -412,12 +416,18 @@ B2B 月結下一步：
    - 因電子發票透過綠界開立，需用綠界發票資料與 1Shop 訂單對應。
 
 7. `Shopline 正式同步`
-   - 狀態：等待憑證
+   - 狀態：部分完成 / 等待正式憑證驗證
    - 缺：
      - `access_token`
      - `User-Agent / handle code`
      - 多店資訊
      - webhook 是否可用
+   - 已完成：
+     - 訂單同步會建立 / 更新 `SalesOrder`。
+     - 顧客同步會建立 / 更新 `Customer`。
+     - 訂單同步同時建立 / 更新 `Payment` 草稿，讓 Shopline 訂單可進入待付款、待撥款、異常與核銷流程。
+     - 未付款 Shopline 訂單不會灌入收款金額，仍會保留原訂單金額作為待收追蹤依據。
+     - 手續費欄位只在 Shopline 明確回傳大於 0 時標記為實際值，否則保留待補，等平台金流報表或綠界撥款資料回填。
 
 8. `B2B 月結對帳單`
    - 狀態：部分完成
