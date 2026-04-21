@@ -287,8 +287,11 @@ export class SalesOrderService {
       status?: string;
       startDate?: Date;
       endDate?: Date;
+      limit?: number;
     },
   ) {
+    const limit = Math.max(1, Math.min(filters?.limit || 300, 500));
+
     const orders = await this.prisma.salesOrder.findMany({
       where: {
         entityId,
@@ -324,6 +327,7 @@ export class SalesOrderService {
         },
       },
       orderBy: { orderDate: 'desc' },
+      take: limit,
     });
 
     const orderIds = orders.map((order) => order.id);

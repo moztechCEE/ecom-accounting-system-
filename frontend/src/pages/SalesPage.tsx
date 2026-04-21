@@ -73,11 +73,15 @@ const SalesPage: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null)
   const [syncingInvoiceBatch, setSyncingInvoiceBatch] = useState(false)
+  const now = dayjs()
 
   const fetchOrders = async () => {
     setLoading(true)
     try {
-      const data = await salesService.findAll()
+      const data = await salesService.findAll({
+        ...resolveRangePayload(),
+        limit: 300,
+      })
       setOrders(data)
     } catch (error) {
       message.error('無法載入訂單')
@@ -88,7 +92,7 @@ const SalesPage: React.FC = () => {
 
   useEffect(() => {
     fetchOrders()
-  }, [])
+  }, [quickRange, customRange])
 
   const handleExport = () => {
     const ws = XLSX.utils.json_to_sheet(orders)
@@ -306,7 +310,6 @@ const SalesPage: React.FC = () => {
     },
   ]
 
-  const now = dayjs()
   const rangeLabelMap: Record<QuickRange, string> = {
     today: '今天',
     last7Days: '過去 7 天',

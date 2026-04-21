@@ -53,14 +53,26 @@ export class SalesController {
   @ApiQuery({ name: 'entityId', required: true })
   @ApiQuery({ name: 'channelId', required: false })
   @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  @ApiQuery({ name: 'limit', required: false })
   async getSalesOrders(
     @Query('entityId') entityId: string,
     @Query('channelId') channelId?: string,
     @Query('status') status?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
   ) {
+    const parsedStartDate = this.parseOptionalDate(startDate, 'startDate');
+    const parsedEndDate = this.parseOptionalDate(endDate, 'endDate');
+
     return this.salesOrderService.getSalesOrders(this.requireEntityId(entityId), {
       channelId,
       status,
+      startDate: parsedStartDate,
+      endDate: parsedEndDate,
+      limit: this.parseOptionalLimit(limit),
     });
   }
 
@@ -149,5 +161,31 @@ export class SalesController {
       throw new BadRequestException('entityId is required');
     }
     return trimmed;
+  }
+
+  private parseOptionalDate(value: string | undefined, fieldName: string) {
+    if (!value?.trim()) {
+      return undefined;
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new BadRequestException(`${fieldName} must be a valid ISO date`);
+    }
+
+    return parsed;
+  }
+
+  private parseOptionalLimit(value: string | undefined) {
+    if (!value?.trim()) {
+      return undefined;
+    }
+
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      throw new BadRequestException('limit must be a positive integer');
+    }
+
+    return parsed;
   }
 }

@@ -64,6 +64,33 @@
 - `SalesOrder` / `Payment` / `Customer` / `SalesChannel` 既有 schema
 - `ReportsService` 的 dashboard bucket / reconciliation feed / executive overview
 
+## 2026-04-21 進度更新
+
+### 已完成
+
+- Cloud Run backend 已升級至 `1Gi` 記憶體，避免歷史匯入與大型訂單查詢時被 512MiB 限制殺掉。
+- 銷售訂單 API 已補上 `startDate` / `endDate` / `limit`，預設最多回傳 300 筆、硬上限 500 筆，避免前端一次載入所有歷史訂單與 payments / invoices / shipments 關聯資料。
+- 銷售訂單前端已把「今天 / 過去 7 天 / 過去一個月 / 過去一年 / 自定義區間」真正傳給 API，不再只做前端篩選。
+- backend 已部署至 Cloud Run revision `ecom-accounting-backend-00162-5br`。
+- frontend 已部署至 Cloud Run revision `ecom-accounting-frontend-00022-bqx`。
+- 1Shop 2025 歷史訂單 / 交易已用 14 天安全窗格補到 `2025-12-31`。
+
+### 1Shop 2025 回補結果
+
+- `2025-01-01` 到 `2025-01-30`：4,875 筆訂單 / 4,875 筆交易。
+- `2025-01-31` 到 `2025-04-30`：9,491 筆訂單 / 9,491 筆交易。
+- `2025-05-01` 到 `2025-05-14`：329 筆訂單 / 329 筆交易。
+- `2025-05-15` 到 `2025-12-31`：10,953 筆訂單 / 10,953 筆交易。
+- 2025 年目前合計：25,648 筆訂單 / 25,648 筆交易。
+
+### 仍需接續
+
+- 1Shop 2024 年以前歷史資料回補，需用同樣的 14 天窗格或更小窗格，避免單次資料量過大。
+- 綠界 `3150241` / `3290494` 的服務費發票匯入、AP 入帳、Dashboard 警示需要正式串到前端與報表。
+- 綠界金流手續費目前需確認來源：若 API 回傳不可得，需以綠界匯出 Excel / 服務費發票作為正式 fee import source，再與 `Payment` 逐筆對帳。
+- 發票狀態需從 `SalesOrder` / `Invoice` 接進 AR、報表中心與 AI 待辦，讓未開票、待補發票、稅額異常能形成可追蹤任務。
+- 銀行入帳與 AR 核銷已有 service/controller 骨架，下一步要補前端頁面與自動匹配結果呈現。
+
 ## 這次從 Shopline 官方文件確認到的事情
 
 ### 1. OpenAPI 訂單與顧客同步可直接做

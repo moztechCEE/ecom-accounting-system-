@@ -207,7 +207,14 @@ const mapSalesOrder = (order: SalesOrderApiResponse): SalesOrder => ({
 })
 
 export const salesService = {
-  async findAll(params?: { status?: string; channelId?: string; entityId?: string }) {
+  async findAll(params?: {
+    status?: string
+    channelId?: string
+    entityId?: string
+    startDate?: string
+    endDate?: string
+    limit?: number
+  }) {
     const entityId =
       params?.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
 
@@ -216,6 +223,9 @@ export const salesService = {
         entityId,
         status: params?.status,
         channelId: params?.channelId,
+        startDate: params?.startDate,
+        endDate: params?.endDate,
+        limit: params?.limit,
       },
     })
     return response.data.map(mapSalesOrder)
