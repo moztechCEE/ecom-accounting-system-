@@ -52,17 +52,17 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
     <>
       <GlassDrawer
         title={
-          <div className="flex items-center justify-between w-full pr-8">
-            <Space>
+          <div className="flex w-full min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="text-lg font-semibold">訂單詳情</span>
-              <Tag color="blue">{order.id}</Tag>
-            </Space>
-            <Space>
-              <Button icon={<PrinterOutlined />} className="rounded-full">列印</Button>
-              <Button icon={<MailOutlined />} className="rounded-full">寄送發票</Button>
+              <Tag color="blue" className="max-w-full truncate">{order.id}</Tag>
+            </div>
+            <div className="flex max-w-full flex-wrap items-center justify-start gap-2 lg:justify-end">
+              <Button icon={<PrinterOutlined />} className="rounded-full whitespace-nowrap">列印</Button>
+              <Button icon={<MailOutlined />} className="rounded-full whitespace-nowrap">寄送發票</Button>
               <Button
                 icon={<SyncOutlined spin={syncingInvoice} />}
-                className="rounded-full"
+                className="rounded-full whitespace-nowrap"
                 loading={syncingInvoice}
                 onClick={handleSyncInvoiceStatus}
               >
@@ -72,18 +72,18 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
                 <Button 
                   type="primary" 
                   icon={<SendOutlined />}
-                  className="rounded-full bg-green-600 hover:bg-green-500 border-none shadow-lg shadow-green-200"
+                  className="rounded-full bg-green-600 hover:bg-green-500 border-none shadow-lg shadow-green-200 whitespace-nowrap"
                   onClick={() => setFulfillModalOpen(true)}
                 >
                   出貨
                 </Button>
               )}
-              <Button type="primary" className="rounded-full bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-200">退款/售後</Button>
-            </Space>
+              <Button type="primary" className="rounded-full bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-200 whitespace-nowrap">退款/售後</Button>
+            </div>
           </div>
         }
         placement="right"
-        width={800}
+        width="min(960px, calc(100vw - 24px))"
         onClose={onClose}
         open={open}
       >

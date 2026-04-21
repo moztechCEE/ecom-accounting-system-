@@ -59,11 +59,11 @@ export const GlassDrawer: React.FC<GlassDrawerProps> = ({
     >
       <div className="h-full flex flex-col bg-white/40 backdrop-blur-2xl border-l border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.08)] rounded-l-3xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-white/20 shrink-0">
-          <div className="text-lg font-semibold text-slate-800">{title}</div>
+        <div className="flex items-start justify-between gap-3 p-6 border-b border-white/20 shrink-0">
+          <div className="min-w-0 flex-1 text-lg font-semibold text-slate-800">{title}</div>
           <GlassButton 
             onClick={onClose as any}
-            className="!p-2 !h-8 !w-8 flex items-center justify-center rounded-full border-none bg-white/20 hover:bg-white/40"
+            className="!p-2 !h-8 !w-8 shrink-0 flex items-center justify-center rounded-full border-none bg-white/20 hover:bg-white/40"
           >
             <CloseOutlined className="text-slate-600" />
           </GlassButton>
