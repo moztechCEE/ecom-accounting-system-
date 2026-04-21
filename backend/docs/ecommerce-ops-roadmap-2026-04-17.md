@@ -342,6 +342,129 @@ B2B 月結下一步：
 
 ## 2026-04-21 最新 Hand-off：收斂後的唯一待辦清單
 
+## 2026-04-22 歷史資料與逐筆核對確認
+
+### 歷史資料 API 限制判斷
+
+- Shopify：
+  - Shopify Admin API 預設只能讀取最近 60 天訂單；若要拉更舊訂單，需要 app 具備 `read_all_orders`，並與 `read_orders` / `write_orders` 搭配。
+  - 系統已有 `sync/backfill` 分窗格回補骨架；若 Shopify 舊資料拉不到，第一優先不是 Excel，而是先確認 Shopify app 是否已有 `read_all_orders`。
+- 1Shop：
+  - 目前沒有在程式或供應商回覆中看到「一年以上不可 API 拉取」的硬限制。
+  - 系統已用 14 天安全窗格完成 2025 年回補；2024 年以前應先繼續用小窗格回補，若 API 回傳空窗或錯誤，再改採 Excel 匯入補洞。
+- Shopline：
+  - 一般 `GET /orders` 可處理近期 / 一般訂單。
+  - Shopline 官方文件說明，已封存訂單或超過兩年以上訂單需使用 `POST /v1/orders/archived_orders`，該流程是非同步匯出，完成後用 webhook 提供下載連結。
+  - 目前系統尚未實作 Shopline archived orders 匯入，所以若要補兩年以上 Shopline 歷史資料，需新增 archived export job + callback + CSV import。
+
+### LINE Pay / 行動支付對帳判斷
+
+- 目前系統沒有獨立的 `LINE Pay` provider import / payout reconciliation。
+- 綠界公開收款工具列出信用卡、Apple Pay、TWQR、超商代碼 / 條碼、ATM、無卡分期、微信支付等；Shopify 綠界安裝文件列出的 Shopify 付款方式也沒有 LINE Pay。
+- 綠界 TWQR 由歐付寶 O'Pay 提供，訂單查詢與退款也需依歐付寶平台作業；這與 LINE Pay 直連不是同一條對帳鏈。
+- 若綠界後台顯示 LINE Pay / 行動支付選項，需先確認它最後是否出現在綠界撥款對帳報表：
+  - 有出現在綠界撥款 / 對帳報表：可先視為 `provider=ecpay`，付款方式標記 `gateway=line_pay` 或 `gateway=twqr_line_pay`。
+  - 沒有出現在綠界撥款 / 對帳報表，而是 LINE Pay 後台獨立撥款：需新增 `provider=linepay`，不可混入綠界。
+- 若公司未來直接開通 LINE Pay Merchant，LINE Pay 應視為獨立金流來源：
+  - 訂單來源仍可來自 Shopify / 1Shop / Shopline。
+  - Payment gateway 應標記為 `line_pay`。
+  - 撥款、手續費、退款應從 LINE Pay 後台報表或 LINE Pay API 匯入。
+  - 對帳中心需新增 `provider=linepay`，不可混入 `provider=ecpay`。
+- 現在要向綠界 / LINE Pay 確認的資料：
+  - LINE Pay 交易是否會出現在綠界「撥款對帳系統」或「金流對帳報表」。
+  - 報表欄位是否有交易序號、商店訂單編號、付款方式、撥款日期、手續費、實收金額。
+  - 若是 TWQR / O'Pay，是否能匯出逐筆撥款明細與服務費發票。
+  - 若是 LINE Pay 直連，需提供 LINE Pay Merchant ID、報表格式、API 文件與手續費 / 撥款週期。
+
+### 2026-04-22 正式資料快照
+
+- `reports/ecommerce-history` 全期間有效訂單：
+  - 總營收：`38,508,500.13`
+  - 訂單數：`27,133`
+  - 已連結顧客數：`25,564`
+  - 2024：`213` 筆 / `344,055.50`
+  - 2025：`26,223` 筆 / `37,058,792.63`
+  - 2026：`697` 筆 / `1,105,652`
+- `dashboard-sales-overview` 2020-2026：
+  - 總訂單數：`29,761`
+  - 總收款紀錄：`28,640`
+  - 已對帳 payment：`273`
+  - 待撥款 / 未核銷 payment：`28,367`
+  - Shopify 已對帳：`273 / 2,575`
+  - 1Shop 兩帳號已對帳：`0 / 26,065`
+- 最新 500 筆 `order-reconciliation-audit`：
+  - 稽核 500 筆，異常 500 筆。
+  - 已付款 497 筆，已對帳 2 筆。
+  - 已開票 0 筆。
+  - 發票問題 153 筆，稅額問題 500 筆。
+- 最新訂單樣本顧客覆蓋：
+  - 2024 樣本 163 筆：缺顧客 0，缺 email 0，缺 payment 0，缺發票號碼 163。
+  - 2025 樣本 500 筆：缺顧客 0，缺 email 0，缺 payment 0，缺發票號碼 500。
+  - 2026 樣本 500 筆：缺顧客 0，缺 email 0，缺 payment 2，缺發票號碼 500。
+
+### 判斷
+
+- 目前不能說「每一筆都有完成核對」；實際狀態是訂單與付款資料已大量進來，但大多仍停在待撥款 / 待核銷，尚未完成綠界撥款、手續費、發票、分錄閉環。
+- 顧客資料在最新樣本中看起來有成功建立並連到訂單，但仍需新增全量 customer coverage API，才能百分之百確認所有歷史訂單都無缺顧客。
+- 發票與稅額是目前最大缺口：發票號碼沒有落進 `Invoice` / `SalesOrder`，稅額欄位也尚未依內含稅規則正規化。
+
+### 2026-04-22 已開始補上的系統能力
+
+- 新增 `GET /api/v1/reports/data-completeness-audit`
+  - 用途：一次檢查指定期間的訂單、顧客、Payment、發票、撥款匯入、銀行入帳與手續費缺口。
+  - 可回答：
+    - 全期間有幾筆訂單缺顧客。
+    - 有幾筆訂單缺 Payment。
+    - 有幾筆訂單缺發票。
+    - Payment 有幾筆未核銷。
+    - 綠界 / provider payout 匯入列 matched rate。
+    - 手續費實際值覆蓋率。
+    - 是否有 LINE Pay / TWQR LINE Pay 候選交易需要另開對帳來源。
+  - 已接到會計工作台「資料完整度」雷達與分頁，會顯示阻塞自動對帳的缺口、各通路覆蓋率與下一步順序。
+- 對帳中心「跑核心同步」已改為呼叫 `POST /api/v1/reconciliation/run`
+  - 不再只跑 AR 與發票，而是走後端核心 Job：平台訂單、綠界撥款、AR、發票狀態、對帳中心重算。
+  - 前端單次 Job timeout 已放寬到 180 秒，避免同步時間較長時被 10 秒預設 timeout 誤判失敗。
+- 新增 Cloud Scheduler 專用入口 `POST /api/v1/reconciliation/run/auto`
+  - 需帶 `x-sync-token`，由 `RECONCILIATION_SYNC_JOB_TOKEN` 驗證。
+  - 與手動核心 Job 共用同一套 `runCoreReconciliationJob()`，避免手動與自動流程分岔。
+  - Cloud Run / Cloud Scheduler 設定範例已補到 `docs/cloud-run-migration.md`。
+- 新增 `POST /api/v1/reconciliation/clear-ready`
+  - 保守自動核銷：只處理已收款、已有實際手續費、訂單與 Payment 金額一致、已有發票、尚未有 `reconciliation_payout` 分錄的 Payment。
+  - 已支援多筆 Payment 判斷：同一訂單若拆成多筆付款，需確認所有成功 Payment 合計等於訂單金額，且每筆都有實際手續費來源，才允許逐筆核銷。
+  - 部分收款會標記 `partial_payment_waiting_remaining`，不會提前沖銷整筆應收。
+  - 若付款日期落在已關帳 / 鎖帳會計期間，會標記 `period_closed` / `period_locked` 並跳過，不會自動入帳。
+  - 退款 / 取消訂單不會走一般自動核銷，會標記 `refund_or_cancelled_order_requires_reversal`。
+  - 逐筆稽核已新增退款高風險訊號：
+    - `refund_without_allowance_or_void_invoice`
+    - `refund_after_reconciliation_needs_reversal`
+    - `cancelled_order_has_payment`
+  - 自動產生核銷分錄：
+    - 借：銀行存款 `1113`
+    - 借：平台手續費 `6131`
+    - 借：金流手續費 `6134`
+    - 貸：應收帳款 / 撥款清算 `1191`
+  - 對帳中心已新增「核銷可核銷」按鈕。
+  - 核心 Job 已預設帶 `autoClear=true`，同步後會自動嘗試核銷符合條件的款項。
+
+### 使用者目前要做的外部確認清單
+
+1. 綠界 / LINE Pay：
+   - 匯出最近 1-3 個月綠界撥款或金流對帳報表。
+   - 確認 LINE Pay / TWQR / 行動支付是否出現在綠界撥款報表內。
+   - 若沒有出現在綠界報表，請提供 LINE Pay Merchant 後台報表或 API 文件。
+2. Shopify：
+   - 確認目前 Shopify app 是否具備 `read_all_orders`。
+   - 若沒有，要申請 / 開通，否則 60 天以前訂單可能無法完整 API 回補。
+3. 1Shop：
+   - 確認 2024 年以前是否允許 API 匯出。
+   - 若某段回補 API 回空，改提供平台匯出 Excel 作為補洞來源。
+4. Shopline：
+   - 提供正式 `access_token`、`User-Agent / handle code`、店鋪數量與 webhook 可用性。
+   - 若要補兩年以上資料，要確認 archived orders 匯出流程可用。
+5. 會計 / 發票：
+   - 匯出綠界電子發票開立狀態與服務費發票。
+   - 確認發票號碼、發票日期、發票金額、稅額是否能逐筆對回訂單。
+
 ### 目前已完成
 
 - `對帳中心入口`：已新增 `/reconciliation`，側邊欄可直接進入。
@@ -360,28 +483,45 @@ B2B 月結下一步：
 ### P0：現在最該完成的核心
 
 1. `對帳 Job / Reconciliation Run`
-   - 狀態：未完成
+   - 狀態：部分完成
    - 目標：一鍵或每日自動跑完整對帳流程。
+   - 已完成：
+     - `POST /api/v1/reconciliation/run`
+     - `POST /api/v1/reconciliation/run/auto`
+     - 對帳中心按鈕已呼叫核心 Job。
+     - 回傳本次處理結果與異常摘要。
+     - 已補 `RECONCILIATION_SYNC_JOB_TOKEN` 設定範例與 Cloud Scheduler 指令。
    - 內容：
      - 同步 Shopify / 1Shop / Shopline 訂單。
      - 同步綠界撥款資料。
      - 同步電子發票狀態。
      - 回填手續費與淨入帳。
      - 重算 `/reconciliation/center` 四個隊列。
-   - 交付：
-     - `POST /api/v1/reconciliation/run`
-     - 回傳本次處理結果與異常摘要。
+   - 未完成：
+     - Shopline 正式憑證進來後納入核心 Job。
+     - 多商店綠界撥款同步的完整 merchant profile 巡檢。
+     - 實際在 GCP 建立 Cloud Scheduler job 並綁 Cloud Run URL / token。
 
 2. `可核銷 -> 自動分錄 / 核銷`
-   - 狀態：未完成
+   - 狀態：部分完成
    - 目標：當訂單、撥款、手續費、發票都對上時，自動產生或確認會計分錄。
+   - 已完成：
+     - `POST /api/v1/reconciliation/clear-ready`
+     - 對帳中心「核銷可核銷」按鈕
+     - 核心 Job 自動執行保守核銷
+     - 多筆 Payment 合計核對
+     - 部分收款保留在待補 / 待收
+     - 已關帳 / 鎖帳期間阻擋自動入帳
+     - 退款 / 取消訂單阻擋一般核銷
+     - 退款 / 折讓 / 作廢發票缺口進逐筆稽核異常
    - 分錄原則：
      - 借：銀行存款
      - 借：金流手續費 / 平台佣金 / 物流費
      - 貸：應收帳款
-   - 交付：
-     - 可核銷批次處理 API
-     - 對帳中心顯示核銷結果
+   - 未完成：
+     - 針對退款情境建立實際反向核銷分錄 / 折讓批次規則。
+     - 將核銷結果做成更完整的批次歷史頁。
+     - 補上會計期間阻擋原因的前端細節呈現。
 
 3. `綠界多商店撥款自動同步`
    - 狀態：部分完成

@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -73,6 +74,62 @@ class BackfillEcpayShopifyHistoryDto {
   maxWindows?: number;
 }
 
+class AutoRunCoreReconciliationDto {
+  @IsString()
+  entityId!: string;
+
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  syncShopify?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  syncOneShop?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  syncEcpayPayouts?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  syncInvoices?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  autoClear?: boolean;
+}
+
+class ClearReadyPaymentsDto {
+  @IsString()
+  entityId!: string;
+
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  limit?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+}
+
 @ApiTags('Reconciliation')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -122,6 +179,7 @@ export class ReconciliationController {
       syncOneShop?: boolean;
       syncEcpayPayouts?: boolean;
       syncInvoices?: boolean;
+      autoClear?: boolean;
     },
     @CurrentUser('id') userId: string,
   ) {
@@ -134,6 +192,52 @@ export class ReconciliationController {
       syncOneShop: body.syncOneShop,
       syncEcpayPayouts: body.syncEcpayPayouts,
       syncInvoices: body.syncInvoices,
+      autoClear: body.autoClear,
+    });
+  }
+
+  @Post('clear-ready')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @ApiOperation({
+    summary: '批次核銷可核銷款項',
+    description:
+      '保守模式：只處理已收款、實際手續費、發票與金額皆完整，且尚未有 reconciliation_payout 分錄的 Payment。',
+  })
+  async clearReadyPayments(
+    @Body() body: ClearReadyPaymentsDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.reconciliationService.clearReadyPayments({
+      entityId: body.entityId,
+      startDate: body.startDate ? new Date(body.startDate) : undefined,
+      endDate: body.endDate ? new Date(body.endDate) : undefined,
+      limit: body.limit,
+      dryRun: body.dryRun,
+      userId,
+    });
+  }
+
+  @Public()
+  @Post('run/auto')
+  @ApiOperation({
+    summary: '排程執行核心對帳 Job',
+    description:
+      '提供 Cloud Scheduler 使用。需帶 x-sync-token，流程與手動核心對帳相同。',
+  })
+  async autoRunCoreReconciliation(
+    @Headers('x-sync-token') syncToken: string | undefined,
+    @Body() body: AutoRunCoreReconciliationDto,
+  ) {
+    this.reconciliationService.assertSchedulerToken(syncToken);
+    return this.reconciliationService.runCoreReconciliationJob({
+      entityId: body.entityId,
+      startDate: body.startDate ? new Date(body.startDate) : undefined,
+      endDate: body.endDate ? new Date(body.endDate) : undefined,
+      syncShopify: body.syncShopify,
+      syncOneShop: body.syncOneShop,
+      syncEcpayPayouts: body.syncEcpayPayouts,
+      syncInvoices: body.syncInvoices,
+      autoClear: body.autoClear,
     });
   }
 

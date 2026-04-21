@@ -382,6 +382,89 @@ export type EcommerceHistory = {
   products: EcommerceHistoryProduct[];
 };
 
+export type DataCompletenessAuditBlocker = {
+  key: string;
+  label: string;
+  count: number;
+  severity: "healthy" | "warning" | "critical";
+  nextAction: string;
+};
+
+export type DataCompletenessChannelBreakdown = {
+  channelCode: string;
+  channelName: string;
+  orders: number;
+  grossAmount: number;
+  missingCustomers: number;
+  missingPayments: number;
+  missingInvoices: number;
+  payments: number;
+  reconciledPayments: number;
+  unreconciledPayments: number;
+  feeMissingPayments: number;
+  firstOrder: {
+    orderNumber: string | null;
+    orderDate: string;
+  } | null;
+  lastOrder: {
+    orderNumber: string | null;
+    orderDate: string;
+  } | null;
+};
+
+export type DataCompletenessAudit = {
+  entityId: string;
+  generatedAt: string;
+  range: {
+    startDate: string | null;
+    endDate: string | null;
+  };
+  historicalData: {
+    olderThanOneYearOrders: number;
+    needsShopifyReadAllOrdersCheck: boolean;
+    needsShoplineArchivedOrdersFlow: boolean;
+    needsOneShopPre2025Backfill: boolean;
+  };
+  totals: {
+    orders: number;
+    grossAmount: number;
+    customers: number;
+    customersWithOrders: number;
+    payments: number;
+    invoices: number;
+    payoutImportLines: number;
+    bankTransactions: number;
+  };
+  coverage: {
+    customerLinkedRate: number;
+    paymentLinkedRate: number;
+    invoiceLinkedRate: number;
+    paymentReconciledRate: number;
+    payoutLineMatchedRate: number;
+    bankTransactionMatchedRate: number;
+    feeActualRate: number;
+  };
+  gaps: {
+    missingCustomerOrders: number;
+    missingPaymentOrders: number;
+    missingInvoiceOrders: number;
+    pendingPayments: number;
+    completedPayments: number;
+    reconciledPayments: number;
+    feeActualPayments: number;
+    feeMissingPayments: number;
+    ecpayProviderPayments: number;
+    linePayCandidatePayments: number;
+    matchedPayoutLines: number;
+    unmatchedPayoutLines: number;
+    invalidPayoutLines: number;
+    matchedBankTransactions: number;
+  };
+  channelBreakdown: DataCompletenessChannelBreakdown[];
+  blockers: DataCompletenessAuditBlocker[];
+  recommendedNextSteps: string[];
+};
+
 export const dashboardService = {
   async getSalesOverview(params?: {
     entityId?: string;
@@ -559,6 +642,27 @@ export const dashboardService = {
 
     const response = await api.get<EcommerceHistory>(
       `/reports/ecommerce-history?${query.toString()}`,
+    );
+    return response.data;
+  },
+
+  async getDataCompletenessAudit(params?: {
+    entityId?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<DataCompletenessAudit> {
+    const query = new URLSearchParams();
+    query.set("entityId", params?.entityId?.trim() || DEFAULT_ENTITY_ID);
+    if (params?.startDate) {
+      query.set("startDate", params.startDate);
+    }
+    if (params?.endDate) {
+      query.set("endDate", params.endDate);
+    }
+    query.set("_ts", String(Date.now()));
+
+    const response = await api.get<DataCompletenessAudit>(
+      `/reports/data-completeness-audit?${query.toString()}`,
     );
     return response.data;
   },

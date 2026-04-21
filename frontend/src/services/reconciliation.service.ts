@@ -88,6 +88,45 @@ export type ReconciliationCenterResponse = {
   }>
 }
 
+export type ReconciliationRunStep = {
+  key: string
+  label: string
+  status: 'success' | 'skipped' | 'failed'
+  result?: any
+  error?: string
+}
+
+export type ReconciliationRunResponse = {
+  success: boolean
+  entityId: string
+  range: {
+    startDate: string
+    endDate: string
+  }
+  steps: ReconciliationRunStep[]
+  failedCount: number
+  summary: ReconciliationCenterResponse['summary']
+  priorityItems: ReconciliationCenterItem[]
+}
+
+export type ClearReadyPaymentsResponse = {
+  entityId: string
+  dryRun: boolean
+  scanned: number
+  cleared: number
+  skipped: number
+  failed: number
+  ready: number
+  results: Array<{
+    paymentId: string
+    orderId: string | null
+    externalOrderId: string | null
+    status: 'cleared' | 'skipped' | 'failed' | 'dry_run'
+    reason?: string
+    journalEntryId?: string | null
+  }>
+}
+
 export const reconciliationService = {
   getCenter: async (params?: {
     entityId?: string
@@ -106,6 +145,64 @@ export const reconciliationService = {
         limit: params?.limit,
       },
     })
+    return response.data
+  },
+
+  runCore: async (params: {
+    entityId?: string
+    startDate?: string
+    endDate?: string
+    syncShopify?: boolean
+    syncOneShop?: boolean
+    syncEcpayPayouts?: boolean
+    syncInvoices?: boolean
+    autoClear?: boolean
+  }) => {
+    const entityId =
+      params.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+
+    const response = await api.post<ReconciliationRunResponse>(
+      '/reconciliation/run',
+      {
+        entityId,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        syncShopify: params.syncShopify,
+        syncOneShop: params.syncOneShop,
+        syncEcpayPayouts: params.syncEcpayPayouts,
+        syncInvoices: params.syncInvoices,
+        autoClear: params.autoClear,
+      },
+      {
+        timeout: 180000,
+      },
+    )
+    return response.data
+  },
+
+  clearReady: async (params: {
+    entityId?: string
+    startDate?: string
+    endDate?: string
+    limit?: number
+    dryRun?: boolean
+  }) => {
+    const entityId =
+      params.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+
+    const response = await api.post<ClearReadyPaymentsResponse>(
+      '/reconciliation/clear-ready',
+      {
+        entityId,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        limit: params.limit,
+        dryRun: params.dryRun,
+      },
+      {
+        timeout: 120000,
+      },
+    )
     return response.data
   },
 }

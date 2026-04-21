@@ -66,6 +66,7 @@ SHOPLINE_SYNC_ENABLED: "true"
 SHOPLINE_SYNC_LOOKBACK_MINUTES: "180"
 SHOPLINE_SYNC_PER_PAGE: "50"
 SHOPLINE_SYNC_JOB_TOKEN: replace-me
+RECONCILIATION_SYNC_JOB_TOKEN: replace-me
 ```
 
 如果是多店，建議改用：
@@ -83,6 +84,21 @@ ECPAY_MERCHANTS_JSON: >-
 ```
 
 建議把 `hashKey / hashIv` 放進 `GCP Secret Manager` 後，再在 Cloud Run 用 secret 或 env file 注入，不要直接寫進 repo。
+
+核心對帳排程可用 Cloud Scheduler 呼叫：
+
+```bash
+gcloud scheduler jobs create http ecom-reconciliation-daily \
+  --location=asia-east1 \
+  --schedule="20 7 * * *" \
+  --time-zone="Asia/Taipei" \
+  --uri="https://YOUR_BACKEND_CLOUD_RUN_URL/api/v1/reconciliation/run/auto" \
+  --http-method=POST \
+  --headers="Content-Type=application/json,x-sync-token=YOUR_RECONCILIATION_SYNC_JOB_TOKEN" \
+  --message-body='{"entityId":"tw-entity-001","syncShopify":true,"syncOneShop":true,"syncEcpayPayouts":true,"syncInvoices":true}'
+```
+
+這個 Job 會跑同一套核心流程：平台訂單、綠界撥款、AR、發票狀態、對帳中心重算。
 
 ## 建議遷移順序
 1. 先部署後端到 Cloud Run

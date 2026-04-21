@@ -261,6 +261,24 @@ export class ReportsController {
     );
   }
 
+  @Get('data-completeness-audit')
+  @ApiOperation({ summary: '資料完整度稽核：訂單、顧客、付款、發票與對帳缺口' })
+  @ApiResponse({ status: 200, description: '成功取得資料完整度稽核結果' })
+  @ApiQuery({ name: 'entityId', required: true })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  async getDataCompletenessAudit(
+    @Query('entityId') entityId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getDataCompletenessAudit(
+      entityId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
   @Get('monthly-channel-reconciliation')
   @ApiOperation({ summary: '按月份查看平台營收與綠界對帳矩陣' })
   @ApiResponse({ status: 200, description: '成功取得月度對帳矩陣' })

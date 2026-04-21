@@ -1,5 +1,14 @@
 // @ts-nocheck
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ImportBankTransactionsDto } from './dto/import-bank-transactions.dto';
 import { AutoMatchDto } from './dto/auto-match.dto';
@@ -21,6 +30,7 @@ export class ReconciliationService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
     private readonly arService: ArService,
     private readonly reportsService: ReportsService,
     private readonly shopifyService: ShopifyService,
@@ -28,6 +38,24 @@ export class ReconciliationService {
     private readonly ecpayShopifyPayoutService: EcpayShopifyPayoutService,
     private readonly salesOrderService: SalesOrderService,
   ) {}
+
+  assertSchedulerToken(providedToken?: string | null) {
+    const expected =
+      this.configService.get<string>('RECONCILIATION_SYNC_JOB_TOKEN', '') ||
+      this.configService.get<string>('ECPAY_SYNC_JOB_TOKEN', '') ||
+      this.configService.get<string>('SHOPIFY_SYNC_JOB_TOKEN', '') ||
+      '';
+
+    if (!expected) {
+      throw new UnauthorizedException(
+        'RECONCILIATION_SYNC_JOB_TOKEN is not configured',
+      );
+    }
+
+    if (!providedToken || providedToken !== expected) {
+      throw new UnauthorizedException('Invalid scheduler token');
+    }
+  }
 
   async runCoreReconciliationJob(params: {
     entityId: string;
@@ -38,6 +66,7 @@ export class ReconciliationService {
     syncOneShop?: boolean;
     syncEcpayPayouts?: boolean;
     syncInvoices?: boolean;
+    autoClear?: boolean;
   }) {
     const entityId = params.entityId;
     const until = params.endDate || new Date();
@@ -126,6 +155,20 @@ export class ReconciliationService {
         }),
     );
 
+    await runStep(
+      'auto-clear-ready-payments',
+      '自動核銷可核銷款項',
+      params.autoClear !== false,
+      () =>
+        this.clearReadyPayments({
+          entityId,
+          startDate: since,
+          endDate: until,
+          userId: params.userId,
+          limit: 300,
+        }),
+    );
+
     const center = await this.getReconciliationCenter(entityId, since, until, 500);
     const failedCount = steps.filter((step) => step.status === 'failed').length;
 
@@ -140,6 +183,280 @@ export class ReconciliationService {
       failedCount,
       summary: center.summary,
       priorityItems: center.priorityItems,
+    };
+  }
+
+  async clearReadyPayments(params: {
+    entityId: string;
+    startDate?: Date;
+    endDate?: Date;
+    userId?: string;
+    limit?: number;
+    dryRun?: boolean;
+  }) {
+    const entityId = params.entityId;
+    if (!entityId) {
+      throw new BadRequestException('entityId is required');
+    }
+
+    const limit = Math.min(Math.max(Number(params.limit || 100), 1), 500);
+    const payoutDateFilter = this.buildDateFilter(params.startDate, params.endDate);
+    const userId = params.dryRun
+      ? params.userId || 'dry-run'
+      : await this.resolveSyncUserId(params.userId);
+
+    const payments = await this.prisma.payment.findMany({
+      where: {
+        entityId,
+        ...(payoutDateFilter ? { payoutDate: payoutDateFilter } : {}),
+        status: { in: ['completed', 'success'] },
+        amountGrossOriginal: { gt: 0 },
+        OR: [
+          { reconciledFlag: true },
+          { notes: { contains: 'feeStatus=actual' } },
+          { notes: { contains: 'feeSource=provider-payout' } },
+        ],
+      },
+      orderBy: { payoutDate: 'asc' },
+      take: limit,
+      include: {
+        salesOrder: {
+          include: {
+            payments: {
+              select: {
+                id: true,
+                status: true,
+                amountGrossOriginal: true,
+                feeGatewayOriginal: true,
+                feePlatformOriginal: true,
+                amountNetOriginal: true,
+                reconciledFlag: true,
+                notes: true,
+              },
+            },
+            invoices: {
+              orderBy: [{ issuedAt: 'desc' }, { createdAt: 'desc' }],
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    const results: Array<{
+      paymentId: string;
+      orderId: string | null;
+      externalOrderId: string | null;
+      status: 'cleared' | 'skipped' | 'failed' | 'dry_run';
+      reason?: string;
+      journalEntryId?: string | null;
+    }> = [];
+    const journalContextCache = new Map<string, any>();
+    const openPeriodCache = new Map<string, { periodId: string | null; blockedReason: string | null }>();
+
+    for (const payment of payments) {
+      const order = payment.salesOrder;
+      const existingJournal = await this.prisma.journalEntry.findFirst({
+        where: {
+          sourceModule: 'reconciliation_payout',
+          sourceId: payment.id,
+        },
+        select: { id: true },
+      });
+
+      const grossAmount = new Decimal(payment.amountGrossOriginal || 0);
+      const orderGross = new Decimal(order?.totalGrossOriginal || 0);
+      const gatewayFee = new Decimal(payment.feeGatewayOriginal || 0);
+      const platformFee = new Decimal(payment.feePlatformOriginal || 0);
+      const totalFee = gatewayFee.plus(platformFee);
+      const netAmount = new Decimal(payment.amountNetOriginal || 0);
+      const hasActualFee =
+        payment.reconciledFlag ||
+        (payment.notes || '').includes('feeStatus=actual') ||
+        (payment.notes || '').includes('feeSource=provider-payout');
+      const hasInvoice =
+        Boolean(order?.hasInvoice) ||
+        Boolean(order?.invoiceId) ||
+        Boolean(order?.invoices?.[0]?.invoiceNumber);
+      const orderPayments = (order?.payments || []).filter((item) =>
+        ['completed', 'success'].includes(item.status),
+      );
+      const orderPaymentGross = orderPayments.reduce(
+        (sum, item) => sum.plus(new Decimal(item.amountGrossOriginal || 0)),
+        new Decimal(0),
+      );
+      const orderPaymentCount = orderPayments.length;
+      const orderFullyPaidByPayments =
+        order && orderPaymentGross.minus(orderGross).abs().lessThanOrEqualTo(1);
+      const allOrderPaymentsHaveActualFees =
+        orderPaymentCount > 0 &&
+        orderPayments.every((item) =>
+          this.paymentHasActualFeeTelemetry({
+            reconciledFlag: item.reconciledFlag,
+            notes: item.notes,
+          }),
+        );
+      const singlePaymentMatches =
+        order && grossAmount.minus(orderGross).abs().lessThanOrEqualTo(1);
+      const amountMatches =
+        singlePaymentMatches ||
+        (orderPaymentCount > 1 &&
+          orderFullyPaidByPayments &&
+          allOrderPaymentsHaveActualFees);
+
+      const baseResult = {
+        paymentId: payment.id,
+        orderId: order?.id || null,
+        externalOrderId: order?.externalOrderId || null,
+      };
+
+      if (existingJournal) {
+        results.push({
+          ...baseResult,
+          status: 'skipped',
+          reason: 'already_has_reconciliation_journal',
+          journalEntryId: existingJournal.id,
+        });
+        continue;
+      }
+      if (!order) {
+        results.push({ ...baseResult, status: 'skipped', reason: 'missing_order' });
+        continue;
+      }
+      if (['cancelled', 'refunded'].includes((order.status || '').toLowerCase())) {
+        results.push({
+          ...baseResult,
+          status: 'skipped',
+          reason: 'refund_or_cancelled_order_requires_reversal',
+        });
+        continue;
+      }
+      if (!hasInvoice) {
+        results.push({ ...baseResult, status: 'skipped', reason: 'missing_invoice' });
+        continue;
+      }
+      if (!amountMatches) {
+        const reason =
+          orderPaymentCount > 1 && orderPaymentGross.lessThan(orderGross)
+            ? 'partial_payment_waiting_remaining'
+            : 'amount_mismatch';
+        results.push({ ...baseResult, status: 'skipped', reason });
+        continue;
+      }
+      if (!hasActualFee || (orderPaymentCount > 1 && !allOrderPaymentsHaveActualFees)) {
+        results.push({ ...baseResult, status: 'skipped', reason: 'missing_actual_fee' });
+        continue;
+      }
+      if (netAmount.lessThan(0) || grossAmount.lessThanOrEqualTo(0)) {
+        results.push({ ...baseResult, status: 'skipped', reason: 'invalid_amount' });
+        continue;
+      }
+      if (netAmount.plus(gatewayFee).plus(platformFee).minus(grossAmount).abs().greaterThan(1)) {
+        results.push({
+          ...baseResult,
+          status: 'skipped',
+          reason: 'net_fee_gross_mismatch',
+        });
+        continue;
+      }
+      const periodProbe = await this.resolveEditablePeriod(
+        this.prisma as any,
+        entityId,
+        payment.payoutDate,
+        openPeriodCache,
+      );
+      if (periodProbe.blockedReason) {
+        results.push({
+          ...baseResult,
+          status: 'skipped',
+          reason: periodProbe.blockedReason,
+        });
+        continue;
+      }
+
+      if (params.dryRun) {
+        results.push({ ...baseResult, status: 'dry_run', reason: 'ready_to_clear' });
+        continue;
+      }
+
+      try {
+        const journalEntryId = await this.prisma.$transaction(async (tx) => {
+          const journalContext = await this.resolvePayoutJournalContext(
+            tx,
+            entityId,
+            journalContextCache,
+          );
+          const period = await this.resolveEditablePeriod(
+            tx,
+            entityId,
+            payment.payoutDate,
+            openPeriodCache,
+          );
+          if (period.blockedReason) {
+            throw new BadRequestException(period.blockedReason);
+          }
+          const journalId = await this.upsertAutoClearingJournalEntry(tx, {
+            payment,
+            order,
+            userId,
+            periodId: period.periodId,
+            journalContext,
+            grossAmount,
+            netAmount,
+            gatewayFee,
+            platformFee,
+          });
+
+          await tx.payment.update({
+            where: { id: payment.id },
+            data: {
+              reconciledFlag: true,
+              notes: this.buildAutoClearNote(payment.notes, {
+                journalEntryId: journalId,
+                gatewayFee,
+                platformFee,
+                totalFee,
+              }),
+            },
+          });
+
+          return journalId;
+        });
+
+        results.push({
+          ...baseResult,
+          status: 'cleared',
+          journalEntryId,
+        });
+      } catch (error: any) {
+        this.logger.warn(
+          `Auto clear failed for payment ${payment.id}: ${error?.message || error}`,
+        );
+        results.push({
+          ...baseResult,
+          status: 'failed',
+          reason: error?.message || String(error),
+        });
+      }
+    }
+
+    const countByStatus = results.reduce(
+      (acc, result) => {
+        acc[result.status] = (acc[result.status] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    return {
+      entityId,
+      dryRun: Boolean(params.dryRun),
+      scanned: payments.length,
+      cleared: countByStatus.cleared || 0,
+      skipped: countByStatus.skipped || 0,
+      failed: countByStatus.failed || 0,
+      ready: countByStatus.dry_run || 0,
+      results,
     };
   }
 
@@ -591,6 +908,280 @@ export class ReconciliationService {
     });
 
     return { success: true };
+  }
+
+  private buildDateFilter(startDate?: Date, endDate?: Date) {
+    if (!startDate && !endDate) {
+      return null;
+    }
+    return {
+      ...(startDate ? { gte: startDate } : {}),
+      ...(endDate ? { lte: endDate } : {}),
+    };
+  }
+
+  private async resolveSyncUserId(preferredUserId?: string | null) {
+    if (preferredUserId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: preferredUserId },
+        select: { id: true },
+      });
+      if (user) {
+        return user.id;
+      }
+    }
+
+    const preferredEmail =
+      this.configService.get<string>('SUPER_ADMIN_EMAIL', '') || '';
+    if (preferredEmail.trim()) {
+      const user = await this.prisma.user.findUnique({
+        where: { email: preferredEmail.trim() },
+        select: { id: true },
+      });
+      if (user) {
+        return user.id;
+      }
+    }
+
+    const fallbackUser = await this.prisma.user.findFirst({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    if (!fallbackUser) {
+      throw new InternalServerErrorException(
+        '找不到可用來建立自動核銷分錄的系統使用者。',
+      );
+    }
+
+    return fallbackUser.id;
+  }
+
+  private async resolvePayoutJournalContext(
+    tx: Prisma.TransactionClient,
+    entityId: string,
+    cache: Map<string, any>,
+  ) {
+    const cached = cache.get(entityId);
+    if (cached) {
+      return cached;
+    }
+
+    const [bankDepositAccount, clearingAccount, platformFeeAccount, gatewayFeeAccount] =
+      await Promise.all([
+        tx.account.findUnique({
+          where: { entityId_code: { entityId, code: '1113' } },
+          select: { id: true },
+        }),
+        tx.account.findUnique({
+          where: { entityId_code: { entityId, code: '1191' } },
+          select: { id: true },
+        }),
+        tx.account.findUnique({
+          where: { entityId_code: { entityId, code: '6131' } },
+          select: { id: true },
+        }),
+        tx.account.findUnique({
+          where: { entityId_code: { entityId, code: '6134' } },
+          select: { id: true },
+        }),
+      ]);
+
+    if (!bankDepositAccount || !clearingAccount || !platformFeeAccount || !gatewayFeeAccount) {
+      throw new NotFoundException(
+        '缺少自動核銷所需會計科目（1113 / 1191 / 6131 / 6134）',
+      );
+    }
+
+    const context = {
+      bankDepositAccountId: bankDepositAccount.id,
+      clearingAccountId: clearingAccount.id,
+      platformFeeAccountId: platformFeeAccount.id,
+      gatewayFeeAccountId: gatewayFeeAccount.id,
+    };
+    cache.set(entityId, context);
+    return context;
+  }
+
+  private paymentHasActualFeeTelemetry(payment: {
+    reconciledFlag?: boolean | null;
+    notes?: string | null;
+  }) {
+    const notes = payment.notes || '';
+    return (
+      Boolean(payment.reconciledFlag) ||
+      notes.includes('feeStatus=actual') ||
+      notes.includes('feeSource=provider-payout') ||
+      notes.includes('[auto-clear]')
+    );
+  }
+
+  private async resolveEditablePeriod(
+    tx: Prisma.TransactionClient,
+    entityId: string,
+    targetDate: Date,
+    cache: Map<string, { periodId: string | null; blockedReason: string | null }>,
+  ) {
+    const cacheKey = `${entityId}:${targetDate.toISOString().slice(0, 10)}`;
+    if (cache.has(cacheKey)) {
+      return cache.get(cacheKey)!;
+    }
+
+    const period = await tx.period.findFirst({
+      where: {
+        entityId,
+        startDate: { lte: targetDate },
+        endDate: { gte: targetDate },
+      },
+      orderBy: { startDate: 'desc' },
+      select: { id: true, status: true, name: true },
+    });
+
+    const result = !period
+      ? {
+          periodId: null,
+          blockedReason: null,
+        }
+      : period.status === 'open'
+        ? {
+            periodId: period.id,
+            blockedReason: null,
+          }
+        : {
+            periodId: period.id,
+            blockedReason: `period_${period.status}:${period.name}`,
+          };
+
+    cache.set(cacheKey, result);
+    return result;
+  }
+
+  private async upsertAutoClearingJournalEntry(
+    tx: Prisma.TransactionClient,
+    params: {
+      payment: any;
+      order: any;
+      userId: string;
+      periodId: string | null;
+      journalContext: any;
+      grossAmount: Decimal;
+      netAmount: Decimal;
+      gatewayFee: Decimal;
+      platformFee: Decimal;
+    },
+  ) {
+    const sourceModule = 'reconciliation_payout';
+    const sourceId = params.payment.id;
+    const currency = params.payment.amountGrossCurrency || 'TWD';
+    const fxRate = new Decimal(params.payment.amountGrossFxRate || 1);
+    const amountBase = (value: Decimal) =>
+      value.mul(fxRate).toDecimalPlaces(2);
+    const description = `自動核銷撥款 ${params.order.externalOrderId || params.order.id}`;
+    const journalLines = [
+      {
+        accountId: params.journalContext.bankDepositAccountId,
+        debit: params.netAmount,
+        credit: new Decimal(0),
+        currency,
+        fxRate,
+        amountBase: amountBase(params.netAmount),
+        memo: '實際撥款淨額',
+      },
+      ...(params.platformFee.greaterThan(0)
+        ? [
+            {
+              accountId: params.journalContext.platformFeeAccountId,
+              debit: params.platformFee,
+              credit: new Decimal(0),
+              currency,
+              fxRate,
+              amountBase: amountBase(params.platformFee),
+              memo: '平台手續費',
+            },
+          ]
+        : []),
+      ...(params.gatewayFee.greaterThan(0)
+        ? [
+            {
+              accountId: params.journalContext.gatewayFeeAccountId,
+              debit: params.gatewayFee,
+              credit: new Decimal(0),
+              currency,
+              fxRate,
+              amountBase: amountBase(params.gatewayFee),
+              memo: '金流手續費 / 處理費',
+            },
+          ]
+        : []),
+      {
+        accountId: params.journalContext.clearingAccountId,
+        debit: new Decimal(0),
+        credit: params.grossAmount,
+        currency,
+        fxRate,
+        amountBase: amountBase(params.grossAmount),
+        memo: `沖銷應收帳款 ${params.order.externalOrderId || params.order.id}`,
+      },
+    ];
+
+    const existingJournal = await tx.journalEntry.findFirst({
+      where: { sourceModule, sourceId },
+      select: { id: true },
+    });
+
+    if (existingJournal) {
+      return existingJournal.id;
+    }
+
+    const createdJournal = await tx.journalEntry.create({
+      data: {
+        entityId: params.payment.entityId,
+        date: params.payment.payoutDate,
+        description,
+        sourceModule,
+        sourceId,
+        periodId: params.periodId,
+        createdBy: params.userId,
+        approvedBy: params.userId,
+        approvedAt: new Date(),
+        journalLines: {
+          create: journalLines,
+        },
+      },
+      select: { id: true },
+    });
+
+    return createdJournal.id;
+  }
+
+  private buildAutoClearNote(
+    existingNotes: string | null | undefined,
+    params: {
+      journalEntryId: string;
+      gatewayFee: Decimal;
+      platformFee: Decimal;
+      totalFee: Decimal;
+    },
+  ) {
+    const autoClearNote = [
+      '[auto-clear]',
+      'status=cleared',
+      `journalEntryId=${params.journalEntryId}`,
+      `gatewayFee=${params.gatewayFee.toFixed(2)}`,
+      `platformFee=${params.platformFee.toFixed(2)}`,
+      `totalFee=${params.totalFee.toFixed(2)}`,
+      'drBank=1113',
+      'drPlatformFee=6131',
+      'drGatewayFee=6134',
+      'crClearing=1191',
+    ].join(' ');
+    const preservedNotes = (existingNotes || '')
+      .split('\n')
+      .filter((line) => !line.startsWith('[auto-clear]'))
+      .join('\n')
+      .trim();
+
+    return preservedNotes ? `${preservedNotes}\n${autoClearNote}` : autoClearNote;
   }
 
   /**

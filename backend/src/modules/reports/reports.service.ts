@@ -832,6 +832,375 @@ export class ReportsService {
     };
   }
 
+  async getDataCompletenessAudit(
+    entityId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ) {
+    const orderDateFilter = this.buildDateFilter(startDate, endDate);
+    const paymentDateFilter = this.buildDateFilter(startDate, endDate);
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    const channels = await this.prisma.salesChannel.findMany({
+      where: { entityId, isActive: true },
+      orderBy: { code: 'asc' },
+      select: { id: true, code: true, name: true },
+    });
+
+    const orderWhere = {
+      entityId,
+      ...(orderDateFilter ? { orderDate: orderDateFilter } : {}),
+      status: { notIn: ['cancelled', 'refunded'] },
+    };
+    const paymentWhere = {
+      entityId,
+      ...(paymentDateFilter ? { payoutDate: paymentDateFilter } : {}),
+    };
+
+    const [
+      totalOrders,
+      missingCustomerOrders,
+      missingPaymentOrders,
+      missingInvoiceOrders,
+      olderThanOneYearOrders,
+      ordersGrossAgg,
+      totalCustomers,
+      customersWithOrders,
+      totalPayments,
+      reconciledPayments,
+      pendingPayments,
+      completedPayments,
+      feeActualPayments,
+      feeMissingPayments,
+      ecpayProviderPayments,
+      linePayCandidatePayments,
+      payoutLines,
+      matchedPayoutLines,
+      unmatchedPayoutLines,
+      invalidPayoutLines,
+      bankTransactions,
+      matchedBankTransactions,
+      invoiceCount,
+    ] = await Promise.all([
+      this.prisma.salesOrder.count({ where: orderWhere }),
+      this.prisma.salesOrder.count({ where: { ...orderWhere, customerId: null } }),
+      this.prisma.salesOrder.count({
+        where: { ...orderWhere, payments: { none: {} } },
+      }),
+      this.prisma.salesOrder.count({
+        where: { ...orderWhere, hasInvoice: false, invoices: { none: {} } },
+      }),
+      this.prisma.salesOrder.count({
+        where: {
+          ...orderWhere,
+          orderDate: orderDateFilter
+            ? { ...orderDateFilter, lt: oneYearAgo }
+            : { lt: oneYearAgo },
+        },
+      }),
+      this.prisma.salesOrder.aggregate({
+        where: orderWhere,
+        _sum: { totalGrossOriginal: true },
+      }),
+      this.prisma.customer.count({ where: { entityId, isActive: true } }),
+      this.prisma.customer.count({
+        where: {
+          entityId,
+          isActive: true,
+          salesOrders: { some: orderDateFilter ? { orderDate: orderDateFilter } : {} },
+        },
+      }),
+      this.prisma.payment.count({ where: paymentWhere }),
+      this.prisma.payment.count({
+        where: { ...paymentWhere, reconciledFlag: true },
+      }),
+      this.prisma.payment.count({
+        where: { ...paymentWhere, reconciledFlag: false },
+      }),
+      this.prisma.payment.count({
+        where: { ...paymentWhere, status: { in: ['completed', 'success'] } },
+      }),
+      this.prisma.payment.count({
+        where: { ...paymentWhere, notes: { contains: 'feeStatus=actual' } },
+      }),
+      this.prisma.payment.count({
+        where: {
+          ...paymentWhere,
+          status: { in: ['completed', 'success'] },
+          OR: [
+            { notes: null },
+            { notes: { not: { contains: 'feeStatus=actual' } } },
+          ],
+        },
+      }),
+      this.prisma.payment.count({
+        where: {
+          ...paymentWhere,
+          notes: { contains: 'feeSource=provider-payout:ecpay' },
+        },
+      }),
+      this.prisma.payment.count({
+        where: {
+          ...paymentWhere,
+          OR: [
+            { notes: { contains: 'LINE Pay' } },
+            { notes: { contains: 'line_pay' } },
+            { notes: { contains: 'linepay' } },
+            { notes: { contains: 'twqr_line_pay' } },
+          ],
+        },
+      }),
+      this.prisma.payoutImportLine.count({
+        where: {
+          batch: { entityId },
+          ...(paymentDateFilter ? { payoutDate: paymentDateFilter } : {}),
+        },
+      }),
+      this.prisma.payoutImportLine.count({
+        where: {
+          batch: { entityId },
+          status: 'matched',
+          ...(paymentDateFilter ? { payoutDate: paymentDateFilter } : {}),
+        },
+      }),
+      this.prisma.payoutImportLine.count({
+        where: {
+          batch: { entityId },
+          status: 'unmatched',
+          ...(paymentDateFilter ? { payoutDate: paymentDateFilter } : {}),
+        },
+      }),
+      this.prisma.payoutImportLine.count({
+        where: {
+          batch: { entityId },
+          status: 'invalid',
+          ...(paymentDateFilter ? { payoutDate: paymentDateFilter } : {}),
+        },
+      }),
+      this.prisma.bankTransaction.count({
+        where: {
+          bankAccount: { entityId },
+          ...(paymentDateFilter ? { txnDate: paymentDateFilter } : {}),
+        },
+      }),
+      this.prisma.bankTransaction.count({
+        where: {
+          bankAccount: { entityId },
+          reconcileStatus: { in: ['matched', 'partial'] },
+          ...(paymentDateFilter ? { txnDate: paymentDateFilter } : {}),
+        },
+      }),
+      this.prisma.invoice.count({
+        where: {
+          entityId,
+          ...(orderDateFilter ? { issuedAt: orderDateFilter } : {}),
+        },
+      }),
+    ]);
+
+    const channelBreakdown = await Promise.all(
+      channels.map(async (channel) => {
+        const channelOrderWhere = { ...orderWhere, channelId: channel.id };
+        const paymentChannelSelector = {
+          OR: [
+            { channelId: channel.id },
+            { salesOrder: { channelId: channel.id } },
+          ],
+        };
+        const [
+          orders,
+          missingCustomers,
+          missingPayments,
+          missingInvoices,
+          grossAgg,
+          firstOrder,
+          lastOrder,
+          payments,
+          reconciled,
+          feeMissing,
+        ] = await Promise.all([
+          this.prisma.salesOrder.count({ where: channelOrderWhere }),
+          this.prisma.salesOrder.count({
+            where: { ...channelOrderWhere, customerId: null },
+          }),
+          this.prisma.salesOrder.count({
+            where: { ...channelOrderWhere, payments: { none: {} } },
+          }),
+          this.prisma.salesOrder.count({
+            where: {
+              ...channelOrderWhere,
+              hasInvoice: false,
+              invoices: { none: {} },
+            },
+          }),
+          this.prisma.salesOrder.aggregate({
+            where: channelOrderWhere,
+            _sum: { totalGrossOriginal: true },
+          }),
+          this.prisma.salesOrder.findFirst({
+            where: channelOrderWhere,
+            orderBy: { orderDate: 'asc' },
+            select: { externalOrderId: true, orderDate: true },
+          }),
+          this.prisma.salesOrder.findFirst({
+            where: channelOrderWhere,
+            orderBy: { orderDate: 'desc' },
+            select: { externalOrderId: true, orderDate: true },
+          }),
+          this.prisma.payment.count({
+            where: { ...paymentWhere, ...paymentChannelSelector },
+          }),
+          this.prisma.payment.count({
+            where: {
+              ...paymentWhere,
+              reconciledFlag: true,
+              ...paymentChannelSelector,
+            },
+          }),
+          this.prisma.payment.count({
+            where: {
+              ...paymentWhere,
+              status: { in: ['completed', 'success'] },
+              AND: [
+                paymentChannelSelector,
+                {
+                  OR: [
+                    { notes: null },
+                    { notes: { not: { contains: 'feeStatus=actual' } } },
+                  ],
+                },
+              ],
+            },
+          }),
+        ]);
+
+        return {
+          channelCode: channel.code,
+          channelName: channel.name,
+          orders,
+          grossAmount: Number(grossAgg._sum.totalGrossOriginal || 0),
+          missingCustomers,
+          missingPayments,
+          missingInvoices,
+          payments,
+          reconciledPayments: reconciled,
+          unreconciledPayments: Math.max(payments - reconciled, 0),
+          feeMissingPayments: feeMissing,
+          firstOrder: firstOrder
+            ? {
+                orderNumber: firstOrder.externalOrderId,
+                orderDate: firstOrder.orderDate.toISOString(),
+              }
+            : null,
+          lastOrder: lastOrder
+            ? {
+                orderNumber: lastOrder.externalOrderId,
+                orderDate: lastOrder.orderDate.toISOString(),
+              }
+            : null,
+        };
+      }),
+    );
+
+    const ratio = (part: number, total: number) =>
+      total ? Number(((part / total) * 100).toFixed(2)) : 0;
+
+    return {
+      entityId,
+      generatedAt: new Date().toISOString(),
+      range: {
+        startDate: startDate?.toISOString() || null,
+        endDate: endDate?.toISOString() || null,
+      },
+      historicalData: {
+        olderThanOneYearOrders,
+        needsShopifyReadAllOrdersCheck: true,
+        needsShoplineArchivedOrdersFlow: true,
+        needsOneShopPre2025Backfill: true,
+      },
+      totals: {
+        orders: totalOrders,
+        grossAmount: Number(ordersGrossAgg._sum.totalGrossOriginal || 0),
+        customers: totalCustomers,
+        customersWithOrders,
+        payments: totalPayments,
+        invoices: invoiceCount,
+        payoutImportLines: payoutLines,
+        bankTransactions,
+      },
+      coverage: {
+        customerLinkedRate: ratio(totalOrders - missingCustomerOrders, totalOrders),
+        paymentLinkedRate: ratio(totalOrders - missingPaymentOrders, totalOrders),
+        invoiceLinkedRate: ratio(totalOrders - missingInvoiceOrders, totalOrders),
+        paymentReconciledRate: ratio(reconciledPayments, totalPayments),
+        payoutLineMatchedRate: ratio(matchedPayoutLines, payoutLines),
+        bankTransactionMatchedRate: ratio(matchedBankTransactions, bankTransactions),
+        feeActualRate: ratio(feeActualPayments, completedPayments),
+      },
+      gaps: {
+        missingCustomerOrders,
+        missingPaymentOrders,
+        missingInvoiceOrders,
+        pendingPayments,
+        completedPayments,
+        reconciledPayments,
+        feeActualPayments,
+        feeMissingPayments,
+        ecpayProviderPayments,
+        linePayCandidatePayments,
+        matchedPayoutLines,
+        unmatchedPayoutLines,
+        invalidPayoutLines,
+        matchedBankTransactions,
+      },
+      channelBreakdown,
+      blockers: [
+        {
+          key: 'missing-invoices',
+          label: '缺發票資料',
+          count: missingInvoiceOrders,
+          severity: missingInvoiceOrders ? 'critical' : 'healthy',
+          nextAction: '同步綠界電子發票狀態，或匯入發票明細後回填 SalesOrder / Invoice。',
+        },
+        {
+          key: 'unreconciled-payments',
+          label: 'Payment 尚未核銷',
+          count: pendingPayments,
+          severity: pendingPayments ? 'critical' : 'healthy',
+          nextAction: '匯入 / 同步綠界與其他金流撥款明細，回填實際手續費與實收淨額。',
+        },
+        {
+          key: 'fee-backfill',
+          label: '手續費待補',
+          count: feeMissingPayments,
+          severity: feeMissingPayments ? 'warning' : 'healthy',
+          nextAction: '以綠界撥款列、服務費發票、LINE Pay 或平台報表作為最終費用來源。',
+        },
+        {
+          key: 'missing-payments',
+          label: '訂單缺 Payment',
+          count: missingPaymentOrders,
+          severity: missingPaymentOrders ? 'warning' : 'healthy',
+          nextAction: '重新同步平台 transactions，或為待付款訂單建立 0 元 Payment 草稿。',
+        },
+        {
+          key: 'missing-customers',
+          label: '訂單缺顧客',
+          count: missingCustomerOrders,
+          severity: missingCustomerOrders ? 'warning' : 'healthy',
+          nextAction: '重新同步顧客主檔，並用 email / phone / 外部 customer id 回填訂單。',
+        },
+      ],
+      recommendedNextSteps: [
+        '先補綠界 / LINE Pay / 平台撥款匯入，讓 Payment.reconciledFlag 與手續費回填。',
+        '再補發票狀態同步，把發票號碼、開立狀態、稅額落進 Invoice / SalesOrder。',
+        '針對 1Shop 2024 年以前、Shopline archived orders、Shopify read_all_orders 做歷史回補。',
+        '最後跑可核銷批次，把已對上的款項產生分錄並關閉異常。',
+      ],
+    };
+  }
+
   async getDashboardReconciliationFeed(
     entityId: string,
     startDate?: Date,
@@ -1449,6 +1818,7 @@ export class ReportsService {
             amountOriginal: true,
             taxAmountOriginal: true,
             totalAmountOriginal: true,
+            notes: true,
           },
         },
       },
@@ -1457,6 +1827,14 @@ export class ReportsService {
     const items = orders.map((order) => {
       const issuedInvoices = order.invoices.filter(
         (invoice) => invoice.status !== 'void',
+      );
+      const voidInvoices = order.invoices.filter(
+        (invoice) => invoice.status === 'void',
+      );
+      const allowanceInvoices = order.invoices.filter(
+        (invoice) =>
+          Number(invoice.totalAmountOriginal || 0) < 0 ||
+          (invoice.notes || '').includes('折讓'),
       );
       const latestInvoice = issuedInvoices[0] || order.invoices[0] || null;
       const latestPayment = order.payments[0] || null;
@@ -1513,9 +1891,38 @@ export class ReportsService {
           (payment.status || '').toLowerCase(),
         ),
       );
+      const refundPayments = order.payments.filter((payment) => {
+        const status = (payment.status || '').toLowerCase();
+        const notes = (payment.notes || '').toLowerCase();
+        return (
+          ['refunded', 'refund', 'failed', 'cancelled'].includes(status) ||
+          notes.includes('refund') ||
+          notes.includes('refunded') ||
+          notes.includes('退款') ||
+          notes.includes('折讓')
+        );
+      });
+      const isRefundedOrder = (order.status || '').toLowerCase() === 'refunded';
+      const isCancelledOrder = (order.status || '').toLowerCase() === 'cancelled';
+      const hasRefundSignal = isRefundedOrder || refundPayments.length > 0;
       const reconciled = order.payments.some((payment) => payment.reconciledFlag);
       const anomalyCodes: string[] = [];
       const anomalyMessages: string[] = [];
+
+      if (hasRefundSignal && allowanceInvoices.length === 0 && voidInvoices.length === 0) {
+        anomalyCodes.push('refund_without_allowance_or_void_invoice');
+        anomalyMessages.push('訂單或付款出現退款訊號，但尚未找到折讓單或作廢發票。');
+      }
+
+      if (hasRefundSignal && reconciled) {
+        anomalyCodes.push('refund_after_reconciliation_needs_reversal');
+        anomalyMessages.push('退款訂單已有核銷紀錄，需確認是否已建立反向分錄或折讓。');
+      }
+
+      if (isCancelledOrder && paymentGross > 0) {
+        anomalyCodes.push('cancelled_order_has_payment');
+        anomalyMessages.push('訂單已取消但仍有收款紀錄，需確認是否退款或保留款項。');
+      }
 
       if ((paymentCompleted || reconciled) && issuedInvoices.length === 0) {
         anomalyCodes.push('missing_invoice_after_payment');
@@ -2565,6 +2972,9 @@ export class ReportsService {
     if (
       anomalyCodes.some((code) =>
         [
+          'refund_without_allowance_or_void_invoice',
+          'refund_after_reconciliation_needs_reversal',
+          'cancelled_order_has_payment',
           'missing_invoice_after_payment',
           'invoice_total_mismatch',
           'invoice_tax_mismatch',
@@ -2583,6 +2993,18 @@ export class ReportsService {
   }
 
   private buildAuditRecommendation(anomalyCodes: string[]) {
+    if (
+      anomalyCodes.some((code) =>
+        [
+          'refund_without_allowance_or_void_invoice',
+          'refund_after_reconciliation_needs_reversal',
+          'cancelled_order_has_payment',
+        ].includes(code),
+      )
+    ) {
+      return '先核對平台退款、綠界扣回/退款明細與發票作廢或折讓，再建立反向核銷分錄。';
+    }
+
     if (
       anomalyCodes.some((code) =>
         ['missing_invoice_after_payment', 'reconciled_without_invoice'].includes(

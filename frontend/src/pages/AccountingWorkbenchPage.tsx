@@ -38,6 +38,9 @@ import dayjs, { Dayjs } from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import {
   dashboardService,
+  DataCompletenessAudit,
+  DataCompletenessAuditBlocker,
+  DataCompletenessChannelBreakdown,
   DashboardExecutiveAnomaly,
   DashboardExecutiveOverview,
   DashboardReconciliationBatch,
@@ -71,6 +74,8 @@ const ECPAY_MERCHANT_OPTIONS = [
 
 const money = (value?: number | null) =>
   `NT$ ${Number(value || 0).toLocaleString('zh-TW', { maximumFractionDigits: 0 })}`
+
+const pct = (value?: number | null) => `${Number(value || 0).toFixed(1)}%`
 
 const statusTone = (tone?: string) => {
   if (tone === 'critical') return 'red'
@@ -123,6 +128,7 @@ const AccountingWorkbenchPage: React.FC = () => {
   const [audit, setAudit] = useState<OrderReconciliationAudit | null>(null)
   const [receivables, setReceivables] = useState<ReceivableMonitorResponse | null>(null)
   const [b2bStatements, setB2BStatements] = useState<B2BStatementResponse | null>(null)
+  const [dataCompleteness, setDataCompleteness] = useState<DataCompletenessAudit | null>(null)
 
   const entityId = localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
   const startDate = dateRange[0].startOf('day').toISOString()
@@ -131,18 +137,20 @@ const AccountingWorkbenchPage: React.FC = () => {
   const fetchWorkbench = async () => {
     setLoading(true)
     try {
-      const [executiveData, feedData, auditData, receivableData, b2bStatementData] = await Promise.all([
+      const [executiveData, feedData, auditData, receivableData, b2bStatementData, completenessData] = await Promise.all([
         dashboardService.getExecutiveOverview({ entityId, startDate, endDate }),
         dashboardService.getReconciliationFeed({ entityId, startDate, endDate, limit: 24 }),
         dashboardService.getOrderReconciliationAudit({ entityId, startDate, endDate, limit: 80 }),
         arService.getReceivableMonitor({ entityId, startDate, endDate }),
         arService.getB2BStatements({ entityId, asOfDate: endDate }),
+        dashboardService.getDataCompletenessAudit({ entityId, startDate, endDate }),
       ])
       setExecutive(executiveData)
       setFeed(feedData)
       setAudit(auditData)
       setReceivables(receivableData)
       setB2BStatements(b2bStatementData)
+      setDataCompleteness(completenessData)
     } catch (error: any) {
       message.error(error?.response?.data?.message || '讀取會計工作台失敗')
     } finally {
@@ -251,6 +259,9 @@ const AccountingWorkbenchPage: React.FC = () => {
   const b2bSummary = b2bStatements?.summary
   const b2bCustomers = b2bStatements?.customers || []
   const auditSummary = audit?.summary
+  const completenessBlockers = dataCompleteness?.blockers || []
+  const channelCompleteness = dataCompleteness?.channelBreakdown || []
+  const completenessCoverage = dataCompleteness?.coverage
   const automationCompletion = auditSummary?.auditedOrderCount
     ? Math.round((auditSummary.reconciledOrderCount / auditSummary.auditedOrderCount) * 100)
     : 0
@@ -596,6 +607,90 @@ const AccountingWorkbenchPage: React.FC = () => {
     },
   ]
 
+  const blockerColumns: ColumnsType<DataCompletenessAuditBlocker> = [
+    {
+      title: '缺口',
+      render: (_, record) => (
+        <div>
+          <div className="font-semibold text-slate-900">{record.label}</div>
+          <div className="mt-1 text-xs leading-5 text-slate-500">{record.nextAction}</div>
+        </div>
+      ),
+    },
+    {
+      title: '狀態',
+      width: 110,
+      render: (_, record) => <Tag color={statusTone(record.severity)}>{record.severity === 'healthy' ? '正常' : '需處理'}</Tag>,
+    },
+    {
+      title: '筆數',
+      dataIndex: 'count',
+      width: 100,
+      align: 'right',
+      render: (value: number) => (
+        <span className={value > 0 ? 'font-semibold text-rose-600' : 'text-emerald-600'}>{value}</span>
+      ),
+    },
+  ]
+
+  const channelCompletenessColumns: ColumnsType<DataCompletenessChannelBreakdown> = [
+    {
+      title: '通路',
+      render: (_, record) => (
+        <div>
+          <div className="font-semibold text-slate-900">{record.channelName}</div>
+          <div className="text-xs text-slate-400">{record.channelCode}</div>
+          <div className="mt-1 text-[11px] text-slate-400">
+            {record.firstOrder?.orderDate ? dayjs(record.firstOrder.orderDate).format('YYYY/MM/DD') : '無資料'}
+            {' - '}
+            {record.lastOrder?.orderDate ? dayjs(record.lastOrder.orderDate).format('YYYY/MM/DD') : '無資料'}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '訂單 / 營收',
+      width: 160,
+      align: 'right',
+      render: (_, record) => (
+        <div>
+          <div className="font-semibold text-slate-900">{record.orders.toLocaleString('zh-TW')} 筆</div>
+          <div className="text-xs text-slate-400">{money(record.grossAmount)}</div>
+        </div>
+      ),
+    },
+    {
+      title: '資料缺口',
+      width: 260,
+      render: (_, record) => (
+        <Space size={[4, 4]} wrap>
+          {record.missingCustomers ? <Tag color="gold">缺顧客 {record.missingCustomers}</Tag> : null}
+          {record.missingPayments ? <Tag color="gold">缺 Payment {record.missingPayments}</Tag> : null}
+          {record.missingInvoices ? <Tag color="blue">缺發票 {record.missingInvoices}</Tag> : null}
+          {record.feeMissingPayments ? <Tag color="red">缺手續費 {record.feeMissingPayments}</Tag> : null}
+          {!record.missingCustomers && !record.missingPayments && !record.missingInvoices && !record.feeMissingPayments ? (
+            <Tag color="green">主資料完整</Tag>
+          ) : null}
+        </Space>
+      ),
+    },
+    {
+      title: '核銷進度',
+      width: 190,
+      render: (_, record) => {
+        const percent = record.payments ? Math.round((record.reconciledPayments / record.payments) * 100) : 0
+        return (
+          <div>
+            <Progress percent={percent} size="small" strokeColor="#0f766e" />
+            <div className="text-xs text-slate-400">
+              已核銷 {record.reconciledPayments} / 未核銷 {record.unreconciledPayments}
+            </div>
+          </div>
+        )
+      },
+    },
+  ]
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -681,6 +776,52 @@ const AccountingWorkbenchPage: React.FC = () => {
         description="平台手續費優先吃平台 API；金流手續費以綠界撥款/對帳資料為最終依據。抓不到時不亂估，而是標記待補並進入會計工作台。"
       />
 
+      <Card className="rounded-3xl border-0 bg-white/75 shadow-sm">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="max-w-2xl">
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+              Data Completeness Radar
+            </div>
+            <div className="mt-2 text-xl font-semibold text-slate-900">資料完整度稽核</div>
+            <div className="mt-1 text-sm leading-6 text-slate-500">
+              這裡回答「到底缺什麼才不能自動對帳」：顧客、Payment、發票、撥款列、銀行入帳與實際手續費會集中檢查。
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {dataCompleteness?.historicalData.needsShopifyReadAllOrdersCheck ? (
+                <Tag color="gold">Shopify 舊單需確認 read_all_orders</Tag>
+              ) : null}
+              {dataCompleteness?.historicalData.needsOneShopPre2025Backfill ? (
+                <Tag color="blue">1Shop 2024 以前需回補</Tag>
+              ) : null}
+              {dataCompleteness?.historicalData.needsShoplineArchivedOrdersFlow ? (
+                <Tag color="purple">Shopline 兩年以上需 archived export</Tag>
+              ) : null}
+              {dataCompleteness?.gaps.linePayCandidatePayments ? (
+                <Tag color="orange">LINE Pay 候選 {dataCompleteness.gaps.linePayCandidatePayments} 筆</Tag>
+              ) : null}
+            </div>
+          </div>
+          <div className="grid min-w-[min(100%,720px)] gap-3 md:grid-cols-4">
+            <Card size="small" className="rounded-2xl bg-slate-50">
+              <Statistic title="顧客連結率" value={completenessCoverage?.customerLinkedRate || 0} suffix="%" precision={1} />
+              <Progress percent={completenessCoverage?.customerLinkedRate || 0} size="small" showInfo={false} strokeColor="#10b981" />
+            </Card>
+            <Card size="small" className="rounded-2xl bg-slate-50">
+              <Statistic title="Payment 連結率" value={completenessCoverage?.paymentLinkedRate || 0} suffix="%" precision={1} />
+              <Progress percent={completenessCoverage?.paymentLinkedRate || 0} size="small" showInfo={false} strokeColor="#2563eb" />
+            </Card>
+            <Card size="small" className="rounded-2xl bg-slate-50">
+              <Statistic title="發票覆蓋率" value={completenessCoverage?.invoiceLinkedRate || 0} suffix="%" precision={1} />
+              <Progress percent={completenessCoverage?.invoiceLinkedRate || 0} size="small" showInfo={false} strokeColor="#f59e0b" />
+            </Card>
+            <Card size="small" className="rounded-2xl bg-slate-50">
+              <Statistic title="實際手續費率" value={completenessCoverage?.feeActualRate || 0} suffix="%" precision={1} />
+              <Progress percent={completenessCoverage?.feeActualRate || 0} size="small" showInfo={false} strokeColor="#e11d48" />
+            </Card>
+          </div>
+        </div>
+      </Card>
+
       <Card className="rounded-3xl border-0 bg-white/65 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
@@ -735,6 +876,82 @@ const AccountingWorkbenchPage: React.FC = () => {
 
       <Tabs
         items={[
+          {
+            key: 'data-completeness',
+            label: (
+              <span><SafetyCertificateOutlined /> 資料完整度</span>
+            ),
+            children: (
+              <Row gutter={[16, 16]}>
+                <Col span={24}>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <Card><Statistic title="全區間訂單" value={dataCompleteness?.totals.orders || 0} /></Card>
+                    <Card><Statistic title="缺發票訂單" value={dataCompleteness?.gaps.missingInvoiceOrders || 0} /></Card>
+                    <Card><Statistic title="未核銷 Payment" value={dataCompleteness?.gaps.pendingPayments || 0} /></Card>
+                    <Card><Statistic title="撥款列匹配率" value={pct(dataCompleteness?.coverage.payoutLineMatchedRate)} /></Card>
+                  </div>
+                </Col>
+                <Col span={24}>
+                  <Alert
+                    showIcon
+                    type={dataCompleteness?.blockers.some((item) => item.severity === 'critical' && item.count > 0) ? 'warning' : 'success'}
+                    message="目前核對結論"
+                    description={
+                      dataCompleteness
+                        ? `顧客連結 ${pct(dataCompleteness.coverage.customerLinkedRate)}，Payment 連結 ${pct(dataCompleteness.coverage.paymentLinkedRate)}，發票覆蓋 ${pct(dataCompleteness.coverage.invoiceLinkedRate)}，實際手續費覆蓋 ${pct(dataCompleteness.coverage.feeActualRate)}。`
+                        : '尚未取得資料完整度稽核。'
+                    }
+                  />
+                </Col>
+                <Col xs={24} xl={10}>
+                  <Card
+                    title="阻塞自動對帳的缺口"
+                    className="h-full rounded-3xl border-0 bg-white/70 shadow-sm"
+                  >
+                    <Table
+                      rowKey="key"
+                      loading={loading}
+                      columns={blockerColumns}
+                      dataSource={completenessBlockers}
+                      pagination={false}
+                      size="small"
+                    />
+                  </Card>
+                </Col>
+                <Col xs={24} xl={14}>
+                  <Card
+                    title="各通路資料覆蓋"
+                    className="h-full rounded-3xl border-0 bg-white/70 shadow-sm"
+                    extra={<Text type="secondary">缺口越少，越能自動核銷與產生分錄</Text>}
+                  >
+                    <Table
+                      rowKey="channelCode"
+                      loading={loading}
+                      columns={channelCompletenessColumns}
+                      dataSource={channelCompleteness}
+                      pagination={{ pageSize: 6 }}
+                      size="small"
+                    />
+                  </Card>
+                </Col>
+                <Col span={24}>
+                  <Card
+                    title="下一步順序"
+                    className="rounded-3xl border-0 bg-white/70 shadow-sm"
+                  >
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      {(dataCompleteness?.recommendedNextSteps || []).map((step, index) => (
+                        <div key={step} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                          <div className="text-xs font-semibold text-slate-400">Step {index + 1}</div>
+                          <div className="mt-1 text-sm leading-6 text-slate-700">{step}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                </Col>
+              </Row>
+            ),
+          },
           {
             key: 'exceptions',
             label: (

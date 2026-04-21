@@ -26,8 +26,6 @@ import {
 import { motion } from 'framer-motion'
 import dayjs, { Dayjs } from 'dayjs'
 import { useNavigate } from 'react-router-dom'
-import { arService } from '../services/ar.service'
-import { salesService } from '../services/sales.service'
 import {
   reconciliationService,
   ReconciliationBucketKey,
@@ -88,6 +86,7 @@ const ReconciliationCenterPage: React.FC = () => {
   const [activeBucket, setActiveBucket] = useState<ReconciliationBucketKey>('exceptions')
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const [center, setCenter] = useState<ReconciliationCenterResponse | null>(null)
 
   const entityId = localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
@@ -129,14 +128,49 @@ const ReconciliationCenterPage: React.FC = () => {
   const handleSyncCore = async () => {
     setSyncing(true)
     try {
-      await arService.syncSalesOrders(entityId)
-      await salesService.syncInvoiceStatusBatch({ entityId, startDate, endDate, limit: 200 })
-      message.success('核心同步完成：已同步 AR 與發票狀態')
+      const result = await reconciliationService.runCore({
+        entityId,
+        startDate,
+        endDate,
+        syncShopify: true,
+        syncOneShop: true,
+        syncEcpayPayouts: true,
+        syncInvoices: true,
+        autoClear: true,
+      })
+      const successSteps = result.steps.filter((step) => step.status === 'success').length
+      if (result.success) {
+        message.success(`核心對帳完成：${successSteps} 個步驟成功，已重算對帳中心`)
+      } else {
+        message.warning(`核心對帳完成但有 ${result.failedCount} 個步驟失敗，請查看異常隊列`)
+      }
       await fetchData()
     } catch (error: any) {
-      message.error(error?.response?.data?.message || '核心同步失敗')
+      message.error(error?.response?.data?.message || '核心對帳 Job 執行失敗')
     } finally {
       setSyncing(false)
+    }
+  }
+
+  const handleClearReady = async () => {
+    setClearing(true)
+    try {
+      const result = await reconciliationService.clearReady({
+        entityId,
+        startDate,
+        endDate,
+        limit: 200,
+      })
+      if (result.failed > 0) {
+        message.warning(`核銷完成：成功 ${result.cleared} 筆，失敗 ${result.failed} 筆，略過 ${result.skipped} 筆`)
+      } else {
+        message.success(`核銷完成：成功 ${result.cleared} 筆，略過 ${result.skipped} 筆`)
+      }
+      await fetchData()
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '核銷可核銷款項失敗')
+    } finally {
+      setClearing(false)
     }
   }
 
@@ -224,6 +258,13 @@ const ReconciliationCenterPage: React.FC = () => {
             className="bg-slate-950 hover:!bg-slate-800"
           >
             跑核心同步
+          </Button>
+          <Button
+            icon={<CheckCircleOutlined />}
+            loading={clearing}
+            onClick={handleClearReady}
+          >
+            核銷可核銷
           </Button>
         </Space>
       </div>
