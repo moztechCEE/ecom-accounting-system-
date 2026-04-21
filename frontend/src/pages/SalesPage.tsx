@@ -367,7 +367,7 @@ const SalesPage: React.FC = () => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="p-6 space-y-6"
+      className="p-6 space-y-7"
     >
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -393,7 +393,7 @@ const SalesPage: React.FC = () => {
       <SalesAnalytics orders={filteredOrders} rangeLabel={rangeLabelMap[quickRange]} />
 
       {/* Filters & Actions */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 glass-panel p-4">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-5 glass-panel p-5">
         <Space size="middle" wrap>
           <Input 
             placeholder="搜尋訂單編號、客戶、來源或品牌..." 
@@ -443,7 +443,7 @@ const SalesPage: React.FC = () => {
 
       {/* Content */}
       {viewMode === 'list' ? (
-        <Card className="shadow-sm rounded-xl border-0 overflow-hidden" bodyStyle={{ padding: 0 }}>
+        <Card className="shadow-sm rounded-3xl border-0 overflow-hidden" bodyStyle={{ padding: 0 }}>
           <Table
             rowSelection={{
               selectedRowKeys,
@@ -463,7 +463,7 @@ const SalesPage: React.FC = () => {
           />
         </Card>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-7">
           <KanbanColumn 
             title="待處理 (Pending)" 
             status="pending" 

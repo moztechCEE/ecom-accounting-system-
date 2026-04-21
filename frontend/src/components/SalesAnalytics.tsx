@@ -81,7 +81,7 @@ const SalesAnalytics: React.FC<{
   const topSource = pieData[0]
 
   return (
-    <div className="mb-8 space-y-6">
+    <div className="space-y-7">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-blue-50 rounded-lg text-blue-500">
@@ -99,7 +99,7 @@ const SalesAnalytics: React.FC<{
         </div>
       </div>
 
-      <Row gutter={[16, 16]}>
+      <Row gutter={[20, 20]}>
         <Col xs={24} md={8}>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="glass-card !border-0 h-32 flex flex-col justify-center">
@@ -152,7 +152,7 @@ const SalesAnalytics: React.FC<{
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]}>
+      <Row gutter={[20, 20]}>
         <Col xs={24} lg={16}>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="h-full">
             <Card className="glass-card !border-0 h-full" title={<Space><LineChartOutlined /> <span className="text-sm font-medium">營收與訂單趨勢</span></Space>}>

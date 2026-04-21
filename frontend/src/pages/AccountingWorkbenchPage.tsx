@@ -696,7 +696,7 @@ const AccountingWorkbenchPage: React.FC = () => {
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45 }}
-      className="space-y-6 p-6"
+      className="space-y-8 p-6"
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -772,12 +772,13 @@ const AccountingWorkbenchPage: React.FC = () => {
       <Alert
         showIcon
         type="info"
+        className="rounded-3xl !px-6 !py-4 shadow-sm"
         message="自動判斷規則"
         description="平台手續費優先吃平台 API；金流手續費以綠界撥款/對帳資料為最終依據。抓不到時不亂估，而是標記待補並進入會計工作台。"
       />
 
       <Card className="rounded-3xl border-0 bg-white/75 shadow-sm">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-2xl">
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
               Data Completeness Radar
@@ -801,7 +802,7 @@ const AccountingWorkbenchPage: React.FC = () => {
               ) : null}
             </div>
           </div>
-          <div className="grid min-w-[min(100%,720px)] gap-3 md:grid-cols-4">
+          <div className="grid min-w-[min(100%,720px)] gap-4 md:grid-cols-4">
             <Card size="small" className="rounded-2xl bg-slate-50">
               <Statistic title="顧客連結率" value={completenessCoverage?.customerLinkedRate || 0} suffix="%" precision={1} />
               <Progress percent={completenessCoverage?.customerLinkedRate || 0} size="small" showInfo={false} strokeColor="#10b981" />
@@ -823,7 +824,7 @@ const AccountingWorkbenchPage: React.FC = () => {
       </Card>
 
       <Card className="rounded-3xl border-0 bg-white/65 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
               Action Rail

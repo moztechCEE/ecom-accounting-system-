@@ -227,7 +227,7 @@ const ReconciliationCenterPage: React.FC = () => {
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45 }}
-      className="space-y-6 p-6"
+      className="space-y-7 p-6"
     >
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
@@ -336,7 +336,7 @@ const ReconciliationCenterPage: React.FC = () => {
         </div>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-5 md:grid-cols-4">
         {(Object.keys(bucketMeta) as ReconciliationBucketKey[]).map((key) => (
           <Card
             key={key}
@@ -355,6 +355,7 @@ const ReconciliationCenterPage: React.FC = () => {
       <Alert
         showIcon
         type={activeBucket === 'exceptions' ? 'warning' : 'info'}
+        className="rounded-3xl !px-6 !py-4 shadow-sm"
         message={`${bucketMeta[activeBucket].title}處理原則`}
         description={
           activeBucket === 'pending_payout'
@@ -367,7 +368,7 @@ const ReconciliationCenterPage: React.FC = () => {
         }
       />
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <Segmented
           value={activeBucket}
           onChange={(value) => setActiveBucket(value as ReconciliationBucketKey)}
