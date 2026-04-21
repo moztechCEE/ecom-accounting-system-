@@ -300,6 +300,42 @@ Shopline 提到的「顧客資料授權登入」是另一個功能：
 3. 自動比對手續費與淨額
 4. 未撥款 / 差額 / 異常工作台
 
+### Sprint D：應收分類與追帳模型
+
+目標：
+
+- 讓系統不只是「看到訂單」，而是能把訂單自動放進可追帳、可核銷、可出報表的應收分類。
+
+已落地的分類：
+
+- `B2C 平台應收`：Shopify、Shopline、其他電商平台的一般消費者訂單。
+- `B2C 貨到付款應收`：貨到付款、超商取貨付款，先列為在途應收，等綠界物流代收款或撥款資料回填後核銷。
+- `團購 / 1Shop 應收`：萬魔未來工學院、團購案、1Shop 帳號分開追蹤。
+- `Shopline 應收`：先按 Shopline + 付款方式分類，後續再依店鋪 token 拆多店。
+- `B2B 月結應收`：公司客戶、`paymentTerm=net30`、`monthlyBilling=true` 這類資料會按客戶拆帳追收。
+
+付款方式分組：
+
+- 信用卡：等綠界金流撥款明細確認實際手續費與淨入帳。
+- 超商取貨付款 / 貨到付款：等綠界物流代收與撥款資料回填。
+- 銀行匯款 / 月結：按客戶應收與到期日追蹤。
+- ATM / 其他金流：先進待確認，再靠撥款或銀行流水核銷。
+
+會計處理原則：
+
+- 訂單成立且應收可認列：借記應收帳款，貸記銷貨收入與銷項稅額。
+- 消費者付款但尚未撥款：仍視為在途應收，不直接認列銀行存款。
+- 綠界撥款或平台結算入帳：借記銀行存款與手續費，貸記應收帳款。
+- 發票已開但未入帳：留在異常待辦，提醒補分錄或確認收款狀態。
+- 手續費待補：不亂估為實際成本，標記待補，等綠界/平台撥款或服務費發票回填。
+
+B2B 月結下一步：
+
+1. 在 `Customer` 補正式欄位：付款條件、月結天數、對帳窗口、主要收款窗口。
+2. 產生客戶月結對帳單。
+3. 按客戶聚合未收款、逾期款、部分收款。
+4. 收款後自動核銷 AR，差額進異常待辦。
+
 ## 目前已知 blocker
 
 要正式開始做 Shopline，我們還缺這些資料：
@@ -347,3 +383,9 @@ Shopline 提到的「顧客資料授權登入」是另一個功能：
   - https://open-api.docs.shoplineapp.com/docs/webhook-topic-and-payload-examples
 - SHOPLINE Help Center - Customer Login Authorization:
   - https://support.shoplineapp.com/hc/en-us/articles/4472120733337-Customer-Login-Authorization
+- 綠界 Support - 金物流代收結算及撥款:
+  - https://support.ecpay.com.tw/4809/
+- 綠界 Support - 綠界開立請款發票 / 手續費發票:
+  - https://support.ecpay.com.tw/8753/
+- 綠界 Support - 申請綠界物流及金流:
+  - https://support.ecpay.com.tw/26036/

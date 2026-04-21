@@ -16,6 +16,18 @@ export interface ReceivableMonitorItem {
   channelName?: string | null
   sourceLabel: string
   sourceBrand: string
+  collectionType?: string
+  collectionTypeLabel?: string
+  paymentMethodGroup?: string
+  paymentMethodLabel?: string
+  settlementPhase?: string
+  settlementPhaseLabel?: string
+  receivableGroupKey?: string
+  receivableGroupLabel?: string
+  collectionOwner?: string
+  collectionOwnerLabel?: string
+  termDays?: number
+  settlementDiagnostic?: string
   grossAmount: number
   revenueAmount: number
   taxAmount: number
@@ -63,9 +75,36 @@ export interface ReceivableMonitorSummary {
   issuedUnpaidCount: number
 }
 
+export interface ReceivableClassificationGroup {
+  key: string
+  label: string
+  collectionType: string
+  collectionTypeLabel: string
+  paymentMethodGroup: string
+  paymentMethodLabel: string
+  settlementPhase: string
+  settlementPhaseLabel: string
+  collectionOwner: string
+  collectionOwnerLabel: string
+  orderCount: number
+  grossAmount: number
+  paidAmount: number
+  outstandingAmount: number
+  gatewayFeeAmount: number
+  platformFeeAmount: number
+  feeTotal: number
+  netAmount: number
+  overdueCount: number
+  overdueAmount: number
+  missingFeeCount: number
+  missingInvoiceCount: number
+  missingJournalCount: number
+}
+
 export interface ReceivableMonitorResponse {
   entityId: string
   summary: ReceivableMonitorSummary
+  classificationGroups?: ReceivableClassificationGroup[]
   items: ReceivableMonitorItem[]
 }
 

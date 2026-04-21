@@ -46,7 +46,12 @@ import {
   OrderReconciliationAudit,
   OrderReconciliationAuditItem,
 } from '../services/dashboard.service'
-import { arService, ReceivableMonitorResponse, ReceivableMonitorItem } from '../services/ar.service'
+import {
+  arService,
+  ReceivableClassificationGroup,
+  ReceivableMonitorResponse,
+  ReceivableMonitorItem,
+} from '../services/ar.service'
 import { salesService } from '../services/sales.service'
 import { apService } from '../services/ap.service'
 
@@ -229,6 +234,7 @@ const AccountingWorkbenchPage: React.FC = () => {
   const recentBatches = feed?.recentBatches || []
   const auditItems = audit?.items || []
   const arItems = receivables?.items || []
+  const arGroups = receivables?.classificationGroups || []
   const arSummary = receivables?.summary
   const auditSummary = audit?.summary
   const automationCompletion = auditSummary?.auditedOrderCount
@@ -384,16 +390,35 @@ const AccountingWorkbenchPage: React.FC = () => {
 
   const arColumns: ColumnsType<ReceivableMonitorItem> = [
     {
-      title: '訂單 / 客戶',
+      title: '訂單 / 客戶 / 分類',
       render: (_, record) => (
         <div>
           <div className="font-semibold text-blue-600">{record.orderNumber}</div>
           <div className="text-xs text-slate-400">{record.customerName} · {record.sourceLabel}</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            <Tag color="blue">{record.receivableGroupLabel || '未分類應收'}</Tag>
+            <Tag>{record.collectionOwnerLabel || '待確認'}</Tag>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '追帳階段',
+      width: 180,
+      render: (_, record) => (
+        <div>
+          <Tag color={record.settlementPhase === 'overdue' ? 'red' : record.settlementPhase === 'settled' ? 'green' : 'gold'}>
+            {record.settlementPhaseLabel || record.arStatus}
+          </Tag>
+          <div className="mt-2 text-xs leading-5 text-slate-500">
+            {record.settlementDiagnostic || record.feeDiagnostic}
+          </div>
         </div>
       ),
     },
     {
       title: '缺口',
+      width: 210,
       render: (_, record) => (
         <Space size={[4, 4]} wrap>
           {!record.reconciledFlag ? <Tag color="gold">待對帳</Tag> : <Tag color="green">已對帳</Tag>}
@@ -412,6 +437,75 @@ const AccountingWorkbenchPage: React.FC = () => {
           <div className="font-semibold text-slate-900">{money(record.outstandingAmount)}</div>
           <div className="text-xs text-slate-400">淨額 {money(record.netAmount)}</div>
         </div>
+      ),
+    },
+  ]
+
+  const arGroupColumns: ColumnsType<ReceivableClassificationGroup> = [
+    {
+      title: '應收分類',
+      render: (_, record) => (
+        <div>
+          <div className="font-semibold text-slate-900">{record.label}</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            <Tag color="blue">{record.collectionTypeLabel}</Tag>
+            <Tag>{record.paymentMethodLabel}</Tag>
+            <Tag>{record.collectionOwnerLabel}</Tag>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '階段',
+      width: 150,
+      render: (_, record) => (
+        <Tag color={record.settlementPhase === 'overdue' ? 'red' : record.settlementPhase === 'settled' ? 'green' : 'gold'}>
+          {record.settlementPhaseLabel}
+        </Tag>
+      ),
+    },
+    {
+      title: '筆數',
+      dataIndex: 'orderCount',
+      width: 90,
+      align: 'right',
+    },
+    {
+      title: '應收未收',
+      width: 150,
+      align: 'right',
+      render: (_, record) => (
+        <div>
+          <div className="font-semibold text-rose-600">{money(record.outstandingAmount)}</div>
+          {record.overdueAmount > 0 ? (
+            <div className="text-xs text-rose-400">逾期 {money(record.overdueAmount)}</div>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      title: '已收 / 淨額',
+      width: 170,
+      align: 'right',
+      render: (_, record) => (
+        <div className="text-sm">
+          <div>{money(record.paidAmount)}</div>
+          <div className="font-semibold text-emerald-600">{money(record.netAmount)}</div>
+        </div>
+      ),
+    },
+    {
+      title: '待補',
+      width: 180,
+      render: (_, record) => (
+        <Space size={[4, 4]} wrap>
+          {record.missingFeeCount ? <Tag color="red">費用 {record.missingFeeCount}</Tag> : null}
+          {record.missingInvoiceCount ? <Tag color="blue">發票 {record.missingInvoiceCount}</Tag> : null}
+          {record.missingJournalCount ? <Tag>分錄 {record.missingJournalCount}</Tag> : null}
+          {!record.missingFeeCount && !record.missingInvoiceCount && !record.missingJournalCount ? (
+            <Tag color="green">完整</Tag>
+          ) : null}
+        </Space>
       ),
     },
   ]
@@ -633,6 +727,22 @@ const AccountingWorkbenchPage: React.FC = () => {
                     <Card><Statistic title="待補發票" value={arSummary?.missingInvoiceCount || 0} /></Card>
                     <Card><Statistic title="尚未分錄" value={arSummary?.missingJournalCount || 0} /></Card>
                   </div>
+                </Col>
+                <Col span={24}>
+                  <Card
+                    title="應收分類總覽"
+                    className="rounded-3xl border-0 bg-white/70 shadow-sm"
+                    extra={<Text type="secondary">按平台、付款方式、B2B 月結與團購拆分追帳</Text>}
+                  >
+                    <Table
+                      rowKey="key"
+                      loading={loading}
+                      columns={arGroupColumns}
+                      dataSource={arGroups}
+                      pagination={false}
+                      className="rounded-2xl bg-white/60"
+                    />
+                  </Card>
                 </Col>
                 <Col span={24}>
                   <Table

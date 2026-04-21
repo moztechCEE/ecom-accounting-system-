@@ -122,14 +122,36 @@ export class ArService {
         const taxAmount = this.resolveTaxAmount(order);
         const revenueAmount = Math.max(grossAmount - taxAmount, 0);
         const outstandingAmount = Math.max(grossAmount - paidAmount, 0);
+        const orderMeta = this.extractMetadata(order.notes);
+        const termDays = this.resolvePaymentTermDays(
+          order.customer?.type || 'individual',
+          orderMeta,
+          outstandingAmount,
+        );
         const dueDate =
-          arInvoice?.dueDate || this.buildDueDate(order.orderDate, outstandingAmount);
+          arInvoice?.dueDate ||
+          this.buildDueDate(order.orderDate, outstandingAmount, termDays);
         const computedStatus = this.resolveReceivableStatus({
           grossAmount,
           paidAmount,
           dueDate,
         });
         const source = this.resolveOrderSource(order.channel?.code, order.notes);
+        const classification = this.classifyReceivable({
+          customerId: order.customerId || null,
+          customerName: order.customer?.name || '散客',
+          customerType: order.customer?.type || 'individual',
+          channelCode: order.channel?.code || null,
+          channelName: order.channel?.name || null,
+          source,
+          notes: order.notes,
+          payments: order.payments,
+          outstandingAmount,
+          paidAmount,
+          reconciledFlag: order.payments.some((payment) => payment.reconciledFlag),
+          dueDate,
+          termDays,
+        });
         const invoiceStatus = latestInvoice?.status
           ? latestInvoice.status
           : order.hasInvoice
@@ -175,6 +197,18 @@ export class ArService {
           channelName: order.channel?.name || null,
           sourceLabel: source.label,
           sourceBrand: source.brand,
+          collectionType: classification.collectionType,
+          collectionTypeLabel: classification.collectionTypeLabel,
+          paymentMethodGroup: classification.paymentMethodGroup,
+          paymentMethodLabel: classification.paymentMethodLabel,
+          settlementPhase: classification.settlementPhase,
+          settlementPhaseLabel: classification.settlementPhaseLabel,
+          receivableGroupKey: classification.receivableGroupKey,
+          receivableGroupLabel: classification.receivableGroupLabel,
+          collectionOwner: classification.collectionOwner,
+          collectionOwnerLabel: classification.collectionOwnerLabel,
+          termDays: classification.termDays,
+          settlementDiagnostic: classification.settlementDiagnostic,
           grossAmount,
           revenueAmount,
           taxAmount,
@@ -259,9 +293,87 @@ export class ArService {
       },
     );
 
+    const classificationGroups = Array.from(
+      items
+        .reduce((map, item) => {
+          const key = item.receivableGroupKey || 'unclassified';
+          const current =
+            map.get(key) ||
+            {
+              key,
+              label: item.receivableGroupLabel || '未分類應收',
+              collectionType: item.collectionType || 'unclassified',
+              collectionTypeLabel: item.collectionTypeLabel || '未分類',
+              paymentMethodGroup: item.paymentMethodGroup || 'other',
+              paymentMethodLabel: item.paymentMethodLabel || '其他應收',
+              settlementPhase: item.settlementPhase || 'unpaid',
+              settlementPhaseLabel: item.settlementPhaseLabel || '待收款',
+              collectionOwner: item.collectionOwner || 'unknown',
+              collectionOwnerLabel: item.collectionOwnerLabel || '待確認',
+              orderCount: 0,
+              grossAmount: 0,
+              paidAmount: 0,
+              outstandingAmount: 0,
+              gatewayFeeAmount: 0,
+              platformFeeAmount: 0,
+              feeTotal: 0,
+              netAmount: 0,
+              overdueCount: 0,
+              overdueAmount: 0,
+              missingFeeCount: 0,
+              missingInvoiceCount: 0,
+              missingJournalCount: 0,
+            };
+
+          current.orderCount += 1;
+          current.grossAmount += item.grossAmount;
+          current.paidAmount += item.paidAmount;
+          current.outstandingAmount += item.outstandingAmount;
+          current.gatewayFeeAmount += item.gatewayFeeAmount;
+          current.platformFeeAmount += item.platformFeeAmount;
+          current.feeTotal += item.feeTotal;
+          current.netAmount += item.netAmount;
+          current.overdueCount += item.warningCodes.includes('overdue_receivable')
+            ? 1
+            : 0;
+          current.overdueAmount += item.warningCodes.includes('overdue_receivable')
+            ? item.outstandingAmount
+            : 0;
+          current.missingFeeCount += item.warningCodes.includes('missing_fee') ? 1 : 0;
+          current.missingInvoiceCount += item.warningCodes.includes('invoice_pending')
+            ? 1
+            : 0;
+          current.missingJournalCount += item.warningCodes.includes('missing_journal')
+            ? 1
+            : 0;
+
+          if (item.settlementPhase === 'overdue') {
+            current.settlementPhase = 'overdue';
+            current.settlementPhaseLabel = '逾期應收';
+          } else if (
+            current.settlementPhase !== 'overdue' &&
+            item.settlementPhase === 'in_transit'
+          ) {
+            current.settlementPhase = 'in_transit';
+            current.settlementPhaseLabel = '在途待撥款';
+          } else if (
+            !['overdue', 'in_transit'].includes(current.settlementPhase) &&
+            item.settlementPhase === 'pending_payout'
+          ) {
+            current.settlementPhase = 'pending_payout';
+            current.settlementPhaseLabel = '待撥款';
+          }
+
+          map.set(key, current);
+          return map;
+        }, new Map<string, any>())
+        .values(),
+    ).sort((a, b) => b.outstandingAmount - a.outstandingAmount);
+
     return {
       entityId,
       summary,
+      classificationGroups,
       items,
     };
   }
@@ -870,10 +982,49 @@ export class ArService {
     return items.reduce((sum, item) => sum + Number(item[field] || 0), 0);
   }
 
-  private buildDueDate(orderDate: Date, outstandingAmount: number) {
+  private buildDueDate(orderDate: Date, outstandingAmount: number, termDays = 30) {
     const dueDate = new Date(orderDate);
-    dueDate.setDate(dueDate.getDate() + (outstandingAmount > 0 ? 30 : 0));
+    dueDate.setDate(dueDate.getDate() + (outstandingAmount > 0 ? termDays : 0));
     return dueDate;
+  }
+
+  private resolvePaymentTermDays(
+    customerType: string,
+    meta: Record<string, string>,
+    outstandingAmount: number,
+  ) {
+    if (outstandingAmount <= 0) {
+      return 0;
+    }
+
+    const explicitTerm = Number(meta.termDays || meta.paymentTermDays || 0);
+    if (Number.isFinite(explicitTerm) && explicitTerm > 0) {
+      return explicitTerm;
+    }
+
+    const paymentTerm = (
+      meta.paymentTerm ||
+      meta.creditTerm ||
+      meta.billingTerm ||
+      ''
+    ).toLowerCase();
+    const netMatch = paymentTerm.match(/net\s*([0-9]+)/);
+    if (netMatch?.[1]) {
+      return Number(netMatch[1]);
+    }
+
+    if (
+      customerType === 'company' ||
+      ['true', '1', 'yes'].includes(
+        (meta.monthlyBilling || meta.isMonthlyBilling || '').toLowerCase(),
+      ) ||
+      paymentTerm.includes('month') ||
+      paymentTerm.includes('月結')
+    ) {
+      return 30;
+    }
+
+    return 30;
   }
 
   private resolveReceivableStatus(params: {
@@ -941,6 +1092,353 @@ export class ArService {
       label: meta.storeName || meta.storeHandle || '其他來源',
       brand: meta.storeName || meta.storeHandle || '其他來源',
     };
+  }
+
+  private classifyReceivable(params: {
+    customerId?: string | null;
+    customerName: string;
+    customerType: string;
+    channelCode?: string | null;
+    channelName?: string | null;
+    source: { label: string; brand: string };
+    notes?: string | null;
+    payments: Array<{
+      channel: string;
+      status: string;
+      notes: string | null;
+      reconciledFlag: boolean;
+      payoutDate: Date | null;
+    }>;
+    outstandingAmount: number;
+    paidAmount: number;
+    reconciledFlag: boolean;
+    dueDate: Date;
+    termDays: number;
+  }) {
+    const channelCode = (params.channelCode || '').trim().toUpperCase();
+    const meta = this.extractMetadata(params.notes);
+    const paymentMethodGroup = this.resolvePaymentMethodGroup(params.payments, meta);
+    const paymentMethodLabel = this.paymentMethodLabel(paymentMethodGroup);
+    const isB2B = this.isB2BReceivable(params.customerType, meta);
+    const isGroupBuy =
+      channelCode === '1SHOP' ||
+      params.source.brand.includes('萬魔') ||
+      params.source.brand.includes('萬物') ||
+      params.source.label.includes('團購');
+    const isShopline = channelCode === 'SHOPLINE';
+    const isCod = ['cod', 'cvs_pickup_pay'].includes(paymentMethodGroup);
+
+    let collectionType = 'b2c_platform';
+    let collectionTypeLabel = 'B2C 平台應收';
+    if (isB2B) {
+      collectionType = 'b2b_monthly';
+      collectionTypeLabel = 'B2B 月結應收';
+    } else if (isGroupBuy) {
+      collectionType = 'groupbuy';
+      collectionTypeLabel = '團購 / 1Shop 應收';
+    } else if (isShopline) {
+      collectionType = 'shopline';
+      collectionTypeLabel = 'Shopline 應收';
+    } else if (isCod) {
+      collectionType = 'b2c_cod';
+      collectionTypeLabel = 'B2C 貨到付款應收';
+    }
+
+    const settlementPhase = this.resolveSettlementPhase({
+      outstandingAmount: params.outstandingAmount,
+      paidAmount: params.paidAmount,
+      reconciledFlag: params.reconciledFlag,
+      dueDate: params.dueDate,
+      paymentMethodGroup,
+    });
+    const collectionOwner = this.resolveCollectionOwner({
+      isB2B,
+      paymentMethodGroup,
+      channelCode,
+    });
+    const receivableGroupKey = this.buildReceivableGroupKey({
+      collectionType,
+      paymentMethodGroup,
+      customerId: params.customerId,
+      customerName: params.customerName,
+      channelCode,
+      sourceBrand: params.source.brand,
+      termDays: params.termDays,
+    });
+    const receivableGroupLabel = this.buildReceivableGroupLabel({
+      collectionType,
+      paymentMethodLabel,
+      customerName: params.customerName,
+      channelName: params.channelName,
+      sourceLabel: params.source.label,
+      sourceBrand: params.source.brand,
+      termDays: params.termDays,
+    });
+
+    return {
+      collectionType,
+      collectionTypeLabel,
+      paymentMethodGroup,
+      paymentMethodLabel,
+      settlementPhase,
+      settlementPhaseLabel: this.settlementPhaseLabel(settlementPhase),
+      receivableGroupKey,
+      receivableGroupLabel,
+      collectionOwner,
+      collectionOwnerLabel: this.collectionOwnerLabel(collectionOwner),
+      termDays: params.termDays,
+      settlementDiagnostic: this.settlementDiagnostic({
+        settlementPhase,
+        paymentMethodGroup,
+        collectionOwner,
+      }),
+    };
+  }
+
+  private resolvePaymentMethodGroup(
+    payments: Array<{
+      channel: string;
+      status: string;
+      notes: string | null;
+    }>,
+    orderMeta: Record<string, string>,
+  ) {
+    const paymentMetaText = payments
+      .map((payment) => {
+        const meta = this.extractMetadata(payment.notes);
+        return [
+          payment.channel,
+          payment.status,
+          payment.notes,
+          meta.paymentMethod,
+          meta.paymentType,
+          meta.gateway,
+          meta.logisticsType,
+          meta.logisticType,
+          meta.shippingType,
+          meta.paymentName,
+        ]
+          .filter(Boolean)
+          .join(' ');
+      })
+      .join(' ');
+    const text = [
+      paymentMetaText,
+      orderMeta.paymentMethod,
+      orderMeta.paymentType,
+      orderMeta.gateway,
+      orderMeta.logisticsType,
+      orderMeta.logisticType,
+      orderMeta.shippingType,
+      orderMeta.paymentName,
+      orderMeta.orderPaymentType,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    if (
+      text.includes('credit') ||
+      text.includes('card') ||
+      text.includes('信用卡') ||
+      text.includes('刷卡')
+    ) {
+      return 'credit_card';
+    }
+    if (
+      text.includes('取貨付款') ||
+      text.includes('超商貨到付款') ||
+      text.includes('cvs') ||
+      text.includes('pickup')
+    ) {
+      return 'cvs_pickup_pay';
+    }
+    if (
+      text.includes('cod') ||
+      text.includes('cash on delivery') ||
+      text.includes('貨到付款')
+    ) {
+      return 'cod';
+    }
+    if (
+      text.includes('bank') ||
+      text.includes('transfer') ||
+      text.includes('銀行') ||
+      text.includes('匯款')
+    ) {
+      return 'bank_transfer';
+    }
+    if (text.includes('atm')) {
+      return 'atm';
+    }
+
+    return payments.length ? 'gateway_other' : 'unpaid_or_unknown';
+  }
+
+  private paymentMethodLabel(paymentMethodGroup: string) {
+    const labels: Record<string, string> = {
+      credit_card: '信用卡',
+      cvs_pickup_pay: '超商取貨付款',
+      cod: '貨到付款',
+      bank_transfer: '銀行匯款 / 月結',
+      atm: 'ATM',
+      gateway_other: '其他金流',
+      unpaid_or_unknown: '未付款 / 待確認',
+    };
+    return labels[paymentMethodGroup] || '其他應收';
+  }
+
+  private isB2BReceivable(customerType: string, meta: Record<string, string>) {
+    const paymentTerm = (
+      meta.paymentTerm ||
+      meta.creditTerm ||
+      meta.billingTerm ||
+      ''
+    ).toLowerCase();
+    return (
+      customerType === 'company' ||
+      paymentTerm.includes('net') ||
+      paymentTerm.includes('月結') ||
+      ['true', '1', 'yes'].includes(
+        (meta.monthlyBilling || meta.isMonthlyBilling || '').toLowerCase(),
+      )
+    );
+  }
+
+  private resolveSettlementPhase(params: {
+    outstandingAmount: number;
+    paidAmount: number;
+    reconciledFlag: boolean;
+    dueDate: Date;
+    paymentMethodGroup: string;
+  }) {
+    if (params.outstandingAmount <= 0 && params.reconciledFlag) {
+      return 'settled';
+    }
+    if (params.outstandingAmount > 0 && params.dueDate.getTime() < Date.now()) {
+      return 'overdue';
+    }
+    if (params.paidAmount <= 0) {
+      return 'unpaid';
+    }
+    if (!params.reconciledFlag) {
+      return ['cod', 'cvs_pickup_pay'].includes(params.paymentMethodGroup)
+        ? 'in_transit'
+        : 'pending_payout';
+    }
+    if (params.outstandingAmount > 0) {
+      return 'partial';
+    }
+    return 'reconciled';
+  }
+
+  private settlementPhaseLabel(phase: string) {
+    const labels: Record<string, string> = {
+      unpaid: '待收款',
+      in_transit: '在途待撥款',
+      pending_payout: '待撥款',
+      partial: '部分收款',
+      reconciled: '已對帳',
+      settled: '已核銷',
+      overdue: '逾期應收',
+    };
+    return labels[phase] || '待確認';
+  }
+
+  private resolveCollectionOwner(params: {
+    isB2B: boolean;
+    paymentMethodGroup: string;
+    channelCode: string;
+  }) {
+    if (params.isB2B) {
+      return 'customer_ar';
+    }
+    if (['cod', 'cvs_pickup_pay'].includes(params.paymentMethodGroup)) {
+      return 'ecpay_logistics';
+    }
+    if (['credit_card', 'atm', 'gateway_other'].includes(params.paymentMethodGroup)) {
+      return 'ecpay_gateway';
+    }
+    if (params.channelCode === 'SHOPIFY' || params.channelCode === 'SHOPLINE') {
+      return 'platform';
+    }
+    return 'manual_review';
+  }
+
+  private collectionOwnerLabel(owner: string) {
+    const labels: Record<string, string> = {
+      customer_ar: '客戶月結應收',
+      ecpay_logistics: '綠界物流代收',
+      ecpay_gateway: '綠界金流撥款',
+      platform: '平台結算',
+      manual_review: '人工確認',
+    };
+    return labels[owner] || '待確認';
+  }
+
+  private buildReceivableGroupKey(params: {
+    collectionType: string;
+    paymentMethodGroup: string;
+    customerId?: string | null;
+    customerName: string;
+    channelCode: string;
+    sourceBrand: string;
+    termDays: number;
+  }) {
+    if (params.collectionType === 'b2b_monthly') {
+      return `b2b:${params.customerId || params.customerName}:net${params.termDays}`;
+    }
+    if (params.collectionType === 'groupbuy') {
+      return `groupbuy:${params.sourceBrand}:${params.paymentMethodGroup}`;
+    }
+    return `${params.collectionType}:${params.channelCode || 'OTHER'}:${params.paymentMethodGroup}`;
+  }
+
+  private buildReceivableGroupLabel(params: {
+    collectionType: string;
+    paymentMethodLabel: string;
+    customerName: string;
+    channelName?: string | null;
+    sourceLabel: string;
+    sourceBrand: string;
+    termDays: number;
+  }) {
+    if (params.collectionType === 'b2b_monthly') {
+      return `B2B 月結 · ${params.customerName} · Net ${params.termDays}`;
+    }
+    if (params.collectionType === 'groupbuy') {
+      return `${params.sourceBrand || params.sourceLabel} · ${params.paymentMethodLabel}`;
+    }
+    if (params.collectionType === 'shopline') {
+      return `Shopline · ${params.paymentMethodLabel}`;
+    }
+    if (params.collectionType === 'b2c_cod') {
+      return `${params.sourceLabel || params.channelName || 'B2C'} · ${params.paymentMethodLabel}`;
+    }
+    return `${params.sourceLabel || params.channelName || '其他平台'} · ${params.paymentMethodLabel}`;
+  }
+
+  private settlementDiagnostic(params: {
+    settlementPhase: string;
+    paymentMethodGroup: string;
+    collectionOwner: string;
+  }) {
+    if (params.settlementPhase === 'settled') {
+      return '訂單、收款、撥款與核銷已完成。';
+    }
+    if (params.settlementPhase === 'overdue') {
+      return '已超過應收期限，需優先追蹤未收款或未撥款原因。';
+    }
+    if (params.collectionOwner === 'ecpay_logistics') {
+      return '貨到付款需等消費者取貨付款後，由綠界物流代收款撥款資料回填。';
+    }
+    if (params.collectionOwner === 'ecpay_gateway') {
+      return '需等待綠界金流撥款明細回填，才能確認實際手續費與淨入帳。';
+    }
+    if (params.collectionOwner === 'customer_ar') {
+      return 'B2B 月結應按客戶出帳與收款，逾期後進入催收清單。';
+    }
+    return '需補足付款方式或平台撥款資料後才能自動核銷。';
   }
 
   private extractMetadata(notes?: string | null) {
