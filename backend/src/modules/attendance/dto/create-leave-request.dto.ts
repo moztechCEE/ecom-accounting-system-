@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsDateString,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -56,6 +57,26 @@ export class CreateLeaveRequestDto {
   @IsOptional()
   @IsString()
   location?: string;
+
+  @IsOptional()
+  @IsIn([
+    'PARENT_OR_SPOUSE',
+    'GRANDPARENT_CHILD_OR_SPOUSE_PARENT',
+    'GREAT_GRANDPARENT_SIBLING_OR_SPOUSE_GRANDPARENT',
+  ])
+  funeralRelationship?: string;
+
+  @IsOptional()
+  @IsString()
+  deceasedName?: string;
+
+  @IsOptional()
+  @IsDateString()
+  deceasedDate?: string;
+
+  @IsOptional()
+  @IsString()
+  funeralEventKey?: string;
 
   @IsOptional()
   @IsArray()

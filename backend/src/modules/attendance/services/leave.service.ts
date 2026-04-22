@@ -13,6 +13,7 @@ type DefaultLeaveTypeTemplate = {
   name: string;
   balanceResetPolicy: 'CALENDAR_YEAR' | 'HIRE_ANNIVERSARY' | 'NONE';
   requiresDocument: boolean;
+  documentExamples?: string;
   maxDaysPerYear?: number;
   paidPercentage?: number;
   minNoticeHours?: number;
@@ -71,6 +72,7 @@ const DEFAULT_TW_LEAVE_TYPES: DefaultLeaveTypeTemplate[] = [
     name: '喪假',
     balanceResetPolicy: 'NONE',
     requiresDocument: true,
+    documentExamples: '訃聞、死亡證明或其他可佐證親屬喪亡事實之文件',
     paidPercentage: 100,
     minNoticeHours: 0,
   },
@@ -102,6 +104,39 @@ type LeaveRequestDocumentInput = {
   mimeType?: string;
   docType?: string;
   checksum?: string;
+};
+
+type FuneralLeaveRelationship =
+  | 'PARENT_OR_SPOUSE'
+  | 'GRANDPARENT_CHILD_OR_SPOUSE_PARENT'
+  | 'GREAT_GRANDPARENT_SIBLING_OR_SPOUSE_GRANDPARENT';
+
+type FuneralLeaveDetails = {
+  relationship: FuneralLeaveRelationship;
+  relationshipLabel: string;
+  maxDays: number;
+  maxHours: number;
+  deceasedName: string;
+  deceasedDate: string;
+  eventKey: string;
+};
+
+const FUNERAL_LEAVE_RELATIONSHIP_RULES: Record<
+  FuneralLeaveRelationship,
+  { label: string; days: number }
+> = {
+  PARENT_OR_SPOUSE: {
+    label: '父母、養父母、繼父母、配偶',
+    days: 8,
+  },
+  GRANDPARENT_CHILD_OR_SPOUSE_PARENT: {
+    label: '祖父母/外祖父母、子女、配偶之父母',
+    days: 6,
+  },
+  GREAT_GRANDPARENT_SIBLING_OR_SPOUSE_GRANDPARENT: {
+    label: '曾祖父母、兄弟姊妹、配偶之祖父母',
+    days: 3,
+  },
 };
 
 @Injectable()
@@ -170,6 +205,7 @@ export class LeaveService {
     const startAt = new Date(dto.startAt);
     const endAt = new Date(dto.endAt);
     const documents = this.normalizeLeaveRequestDocuments(dto.documents);
+    const funeralDetails = this.resolveFuneralLeaveDetails(leaveType, dto);
 
     await this.validateLeaveRequestPayload({
       employee: {
@@ -182,6 +218,7 @@ export class LeaveService {
       endAt,
       hours: dto.hours,
       documents,
+      funeralDetails,
     });
 
     await this.balanceService.reserveLeaveHours({
@@ -207,12 +244,10 @@ export class LeaveService {
         location: dto.location,
         status: LeaveStatus.SUBMITTED,
         requiredDocsMet: !leaveType.requiresDocument || documents.length > 0,
-        metadata:
-          documents.length > 0
-            ? {
-                documentCount: documents.length,
-              }
-            : undefined,
+        metadata: this.buildLeaveRequestMetadata(
+          documents.length,
+          funeralDetails,
+        ),
         documents:
           documents.length > 0
             ? {
@@ -235,12 +270,10 @@ export class LeaveService {
             toStatus: LeaveStatus.SUBMITTED,
             actorId: userId,
             note: dto.reason || null,
-            metadata:
-              documents.length > 0
-                ? {
-                    documentCount: documents.length,
-                  }
-                : undefined,
+            metadata: this.buildLeaveRequestMetadata(
+              documents.length,
+              funeralDetails,
+            ),
           },
         },
       },
@@ -494,12 +527,11 @@ export class LeaveService {
           dto.balanceResetPolicy,
         ),
         requiresDocument: dto.requiresDocument ?? false,
-        maxDaysPerYear:
-          isAnnualLeaveType
-            ? null
-            : dto.maxDaysPerYear !== undefined
-              ? new Prisma.Decimal(dto.maxDaysPerYear)
-              : undefined,
+        maxDaysPerYear: isAnnualLeaveType
+          ? null
+          : dto.maxDaysPerYear !== undefined
+            ? new Prisma.Decimal(dto.maxDaysPerYear)
+            : undefined,
         paidPercentage:
           dto.paidPercentage !== undefined
             ? new Prisma.Decimal(dto.paidPercentage)
@@ -556,12 +588,11 @@ export class LeaveService {
           dto.balanceResetPolicy || existing.balanceResetPolicy,
         ),
         requiresDocument: dto.requiresDocument ?? existing.requiresDocument,
-        maxDaysPerYear:
-          isAnnualLeaveType
-            ? null
-            : dto.maxDaysPerYear !== undefined
-              ? new Prisma.Decimal(dto.maxDaysPerYear)
-              : existing.maxDaysPerYear,
+        maxDaysPerYear: isAnnualLeaveType
+          ? null
+          : dto.maxDaysPerYear !== undefined
+            ? new Prisma.Decimal(dto.maxDaysPerYear)
+            : existing.maxDaysPerYear,
         paidPercentage:
           dto.paidPercentage !== undefined
             ? new Prisma.Decimal(dto.paidPercentage)
@@ -761,6 +792,7 @@ export class LeaveService {
       docType?: string;
       checksum?: string;
     }>;
+    funeralDetails?: FuneralLeaveDetails | null;
   }) {
     if (
       Number.isNaN(params.startAt.getTime()) ||
@@ -799,6 +831,10 @@ export class LeaveService {
       );
     }
 
+    if (params.funeralDetails) {
+      await this.validateFuneralLeaveLimit(params);
+    }
+
     const overlappingRequest = await this.prisma.leaveRequest.findFirst({
       where: {
         employeeId: params.employee.id,
@@ -824,6 +860,159 @@ export class LeaveService {
     if (overlappingRequest) {
       throw new BadRequestException('此時段已有請假單正在審核或已核准');
     }
+  }
+
+  private resolveFuneralLeaveDetails(
+    leaveType: LeaveType,
+    dto: CreateLeaveRequestDto,
+  ): FuneralLeaveDetails | null {
+    if (!this.isFuneralLeaveType(leaveType)) {
+      return null;
+    }
+
+    const relationship = dto.funeralRelationship as
+      | FuneralLeaveRelationship
+      | undefined;
+    const rule = relationship
+      ? FUNERAL_LEAVE_RELATIONSHIP_RULES[relationship]
+      : undefined;
+
+    if (!relationship || !rule) {
+      throw new BadRequestException('請選擇喪假與亡者的親屬關係');
+    }
+
+    const deceasedName = dto.deceasedName?.trim();
+    if (!deceasedName) {
+      throw new BadRequestException('請填寫亡者姓名');
+    }
+
+    if (
+      !dto.deceasedDate ||
+      Number.isNaN(new Date(dto.deceasedDate).getTime())
+    ) {
+      throw new BadRequestException('請填寫正確的死亡日期');
+    }
+
+    const deceasedDate = new Date(dto.deceasedDate).toISOString().slice(0, 10);
+    const eventKey =
+      dto.funeralEventKey?.trim() ||
+      `${relationship}:${deceasedName}:${deceasedDate}`;
+
+    return {
+      relationship,
+      relationshipLabel: rule.label,
+      maxDays: rule.days,
+      maxHours: rule.days * 8,
+      deceasedName,
+      deceasedDate,
+      eventKey,
+    };
+  }
+
+  private async validateFuneralLeaveLimit(params: {
+    employee: { id: string };
+    leaveType: LeaveType;
+    hours: number;
+    funeralDetails?: FuneralLeaveDetails | null;
+  }) {
+    if (!params.funeralDetails) {
+      return;
+    }
+
+    const existingRequests = await this.prisma.leaveRequest.findMany({
+      where: {
+        employeeId: params.employee.id,
+        leaveTypeId: params.leaveType.id,
+        status: {
+          in: [
+            LeaveStatus.SUBMITTED,
+            LeaveStatus.UNDER_REVIEW,
+            LeaveStatus.APPROVED,
+          ],
+        },
+      },
+      select: {
+        hours: true,
+        metadata: true,
+      },
+    });
+    const usedHours = existingRequests
+      .filter(
+        (request) =>
+          this.getFuneralEventKey(request.metadata) ===
+          params.funeralDetails?.eventKey,
+      )
+      .reduce((sum, request) => sum + Number(request.hours), 0);
+    const requestedHours = Number(params.hours);
+
+    if (usedHours + requestedHours > params.funeralDetails.maxHours) {
+      const remainingHours = Math.max(
+        0,
+        params.funeralDetails.maxHours - usedHours,
+      );
+      throw new BadRequestException(
+        `此喪假事件上限為 ${params.funeralDetails.maxDays} 天，已申請 ${this.formatHoursAsDays(usedHours)}，剩餘 ${this.formatHoursAsDays(remainingHours)}。`,
+      );
+    }
+  }
+
+  private buildLeaveRequestMetadata(
+    documentCount: number,
+    funeralDetails?: FuneralLeaveDetails | null,
+  ): Prisma.InputJsonValue | undefined {
+    const metadata: Record<string, unknown> = {};
+
+    if (documentCount > 0) {
+      metadata.documentCount = documentCount;
+    }
+
+    if (funeralDetails) {
+      metadata.funeral = {
+        eventKey: funeralDetails.eventKey,
+        relationship: funeralDetails.relationship,
+        relationshipLabel: funeralDetails.relationshipLabel,
+        maxDays: funeralDetails.maxDays,
+        maxHours: funeralDetails.maxHours,
+        deceasedName: funeralDetails.deceasedName,
+        deceasedDate: funeralDetails.deceasedDate,
+      };
+    }
+
+    return Object.keys(metadata).length > 0
+      ? (metadata as Prisma.InputJsonObject)
+      : undefined;
+  }
+
+  private getFuneralEventKey(metadata: Prisma.JsonValue | null) {
+    if (
+      typeof metadata !== 'object' ||
+      metadata === null ||
+      Array.isArray(metadata)
+    ) {
+      return undefined;
+    }
+
+    const funeral = (metadata as { funeral?: unknown }).funeral;
+    if (
+      typeof funeral !== 'object' ||
+      funeral === null ||
+      Array.isArray(funeral)
+    ) {
+      return undefined;
+    }
+
+    return (funeral as { eventKey?: unknown }).eventKey;
+  }
+
+  private isFuneralLeaveType(leaveType: LeaveType) {
+    return (
+      leaveType.code.trim().toUpperCase() === 'FUNERAL' ||
+      leaveType.name.trim() === '喪假'
+    );
+  }
+
+  private formatHoursAsDays(hours: number) {
+    return hours % 8 === 0 ? `${hours / 8} 天` : `${hours} 小時`;
   }
 
   private async notifyLeaveApprovers(params: {
@@ -987,6 +1176,7 @@ export class LeaveService {
           name: template.name,
           balanceResetPolicy: template.balanceResetPolicy,
           requiresDocument: template.requiresDocument,
+          documentExamples: template.documentExamples,
           maxDaysPerYear:
             template.maxDaysPerYear !== undefined
               ? new Prisma.Decimal(template.maxDaysPerYear)

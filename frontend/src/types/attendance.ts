@@ -52,6 +52,10 @@ export interface CreateLeaveRequestDto {
   hours: number;
   reason?: string;
   location?: string;
+  funeralRelationship?: string;
+  deceasedName?: string;
+  deceasedDate?: string;
+  funeralEventKey?: string;
   documents?: LeaveRequestDocumentInput[];
 }
 
