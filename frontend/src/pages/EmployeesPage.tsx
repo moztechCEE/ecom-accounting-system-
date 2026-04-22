@@ -111,6 +111,10 @@ const formatSeniorityTier = (tier: SeniorityTier) =>
     ? `${tier.minYears} - ${tier.maxYears} 年：${tier.days} 天`
     : `${tier.minYears} 年以上：${tier.days} 天`;
 
+const isAnnualLeaveType = (leaveType: Pick<LeaveType, "code" | "name">) =>
+  String(leaveType.code || "").trim().toUpperCase() === "ANNUAL" ||
+  ["特休", "特別休假"].includes(String(leaveType.name || "").trim());
+
 const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const { user } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -631,16 +635,20 @@ const LeaveTypesTab = () => {
   );
   const [form] = Form.useForm();
   const leaveTypeCode = String(Form.useWatch("code", form) || "").toUpperCase();
-  const isAnnualLeaveType = leaveTypeCode === "ANNUAL";
+  const leaveTypeName = String(Form.useWatch("name", form) || "");
+  const isAnnualLeaveRule = isAnnualLeaveType({
+    code: leaveTypeCode,
+    name: leaveTypeName,
+  });
 
   useEffect(() => {
     if (
-      isAnnualLeaveType &&
+      isAnnualLeaveRule &&
       form.getFieldValue("balanceResetPolicy") === "NONE"
     ) {
       form.setFieldValue("balanceResetPolicy", "CALENDAR_YEAR");
     }
-  }, [form, isAnnualLeaveType]);
+  }, [form, isAnnualLeaveRule]);
 
   const fetchLeaveTypes = async () => {
     setLoading(true);
@@ -692,15 +700,19 @@ const LeaveTypesTab = () => {
     try {
       const values = await form.validateFields();
       const normalizedCode = String(values.code || "").toUpperCase();
+      const annualLeaveRule = isAnnualLeaveType({
+        code: normalizedCode,
+        name: values.name,
+      });
       const payload = {
         code: values.code,
         name: values.name,
         balanceResetPolicy:
-          normalizedCode === "ANNUAL" && values.balanceResetPolicy === "NONE"
+          annualLeaveRule && values.balanceResetPolicy === "NONE"
             ? "CALENDAR_YEAR"
             : values.balanceResetPolicy,
         maxDaysPerYear:
-          normalizedCode === "ANNUAL" ||
+          annualLeaveRule ||
           values.maxDaysPerYear === null ||
           values.maxDaysPerYear === undefined
             ? undefined
@@ -721,7 +733,7 @@ const LeaveTypesTab = () => {
             ? undefined
             : Number(values.carryOverLimitHours),
         seniorityTiers:
-          normalizedCode === "ANNUAL"
+          annualLeaveRule
             ? normalizeSeniorityTiers(values.seniorityTiers)
             : [],
       };
@@ -775,7 +787,7 @@ const LeaveTypesTab = () => {
       dataIndex: "maxDaysPerYear",
       key: "maxDaysPerYear",
       render: (value?: number | null, record?: LeaveType) =>
-        record?.code === "ANNUAL" ? (
+        record && isAnnualLeaveType(record) ? (
           <Tag color="processing">依法自動計算</Tag>
         ) : value !== undefined && value !== null ? (
           `${value} 天`
@@ -859,7 +871,7 @@ const LeaveTypesTab = () => {
         onOk={() => void handleSave()}
       >
         <Form form={form} layout="vertical">
-          {isAnnualLeaveType ? (
+          {isAnnualLeaveRule ? (
             <Alert
               type="info"
               showIcon
@@ -891,13 +903,13 @@ const LeaveTypesTab = () => {
               options={[
                 { label: "曆年制", value: "CALENDAR_YEAR" },
                 { label: "到職週年制", value: "HIRE_ANNIVERSARY" },
-                ...(isAnnualLeaveType
+                ...(isAnnualLeaveRule
                   ? []
                   : [{ label: "不建年度額度", value: "NONE" }]),
               ]}
             />
           </Form.Item>
-          {isAnnualLeaveType ? (
+          {isAnnualLeaveRule ? (
             <Alert
               type="success"
               showIcon
@@ -933,7 +945,7 @@ const LeaveTypesTab = () => {
           >
             <Switch checkedChildren="可結轉" unCheckedChildren="不可結轉" />
           </Form.Item>
-          {isAnnualLeaveType ? (
+          {isAnnualLeaveRule ? (
             <Form.List name="seniorityTiers">
               {(fields, { add, remove }) => (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">

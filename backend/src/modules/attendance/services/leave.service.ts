@@ -476,20 +476,26 @@ export class LeaveService {
   async createLeaveType(userId: string, dto: UpsertLeaveTypeDto) {
     const entityId = await this.resolveEntityId(userId, dto.entityId);
     const normalizedCode = dto.code.trim().toUpperCase();
+    const normalizedName = dto.name.trim();
+    const isAnnualLeaveType = this.isAnnualLeaveType(
+      normalizedCode,
+      normalizedName,
+    );
     const metadata = this.mergeLeaveTypeMetadata(undefined, dto.seniorityTiers);
 
     const leaveType = await this.prisma.leaveType.create({
       data: {
         entityId,
         code: normalizedCode,
-        name: dto.name.trim(),
+        name: normalizedName,
         balanceResetPolicy: this.resolveLeaveTypeResetPolicy(
           normalizedCode,
+          normalizedName,
           dto.balanceResetPolicy,
         ),
         requiresDocument: dto.requiresDocument ?? false,
         maxDaysPerYear:
-          normalizedCode === 'ANNUAL'
+          isAnnualLeaveType
             ? null
             : dto.maxDaysPerYear !== undefined
               ? new Prisma.Decimal(dto.maxDaysPerYear)
@@ -533,19 +539,25 @@ export class LeaveService {
     const normalizedCode = dto.code
       ? dto.code.trim().toUpperCase()
       : existing.code;
+    const normalizedName = dto.name ? dto.name.trim() : existing.name;
+    const isAnnualLeaveType = this.isAnnualLeaveType(
+      normalizedCode,
+      normalizedName,
+    );
 
     const leaveType = await this.prisma.leaveType.update({
       where: { id },
       data: {
         code: normalizedCode,
-        name: dto.name ? dto.name.trim() : existing.name,
+        name: normalizedName,
         balanceResetPolicy: this.resolveLeaveTypeResetPolicy(
           normalizedCode,
+          normalizedName,
           dto.balanceResetPolicy || existing.balanceResetPolicy,
         ),
         requiresDocument: dto.requiresDocument ?? existing.requiresDocument,
         maxDaysPerYear:
-          normalizedCode === 'ANNUAL'
+          isAnnualLeaveType
             ? null
             : dto.maxDaysPerYear !== undefined
               ? new Prisma.Decimal(dto.maxDaysPerYear)
@@ -1027,13 +1039,21 @@ export class LeaveService {
 
   private resolveLeaveTypeResetPolicy(
     code: string,
+    name: string,
     requestedPolicy?: string | null,
   ) {
-    if (code === 'ANNUAL' && requestedPolicy === 'NONE') {
+    if (this.isAnnualLeaveType(code, name) && requestedPolicy === 'NONE') {
       return 'CALENDAR_YEAR';
     }
 
     return requestedPolicy || 'CALENDAR_YEAR';
+  }
+
+  private isAnnualLeaveType(code: string, name: string) {
+    return (
+      code.trim().toUpperCase() === 'ANNUAL' ||
+      ['特休', '特別休假'].includes(name.trim())
+    );
   }
 
   private isSystemDefaultLeaveType(metadata: Prisma.JsonValue | null) {

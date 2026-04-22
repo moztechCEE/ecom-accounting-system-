@@ -291,8 +291,12 @@ export class BalanceService {
     const annualLeaveType = await this.prisma.leaveType.findFirst({
       where: {
         entityId: employee.entityId,
-        code: 'ANNUAL',
         isActive: true,
+        OR: [
+          { code: 'ANNUAL' },
+          { name: '特休' },
+          { name: '特別休假' },
+        ],
       },
     });
 
@@ -342,7 +346,7 @@ export class BalanceService {
     return (
       leaveType.balanceResetPolicy !== 'NONE' &&
       (leaveType.maxDaysPerYear !== null ||
-        leaveType.code === 'ANNUAL' ||
+        this.isAnnualLeaveType(leaveType) ||
         this.getSeniorityTiers(leaveType).length > 0)
     );
   }
@@ -575,11 +579,18 @@ export class BalanceService {
       return configuredTiers.sort((a, b) => a.minYears - b.minYears);
     }
 
-    if (leaveType.code === 'ANNUAL') {
+    if (this.isAnnualLeaveType(leaveType)) {
       return DEFAULT_TW_ANNUAL_LEAVE_TIERS;
     }
 
     return [];
+  }
+
+  private isAnnualLeaveType(leaveType: LeaveType) {
+    const code = leaveType.code.trim().toUpperCase();
+    const name = leaveType.name.trim();
+
+    return code === 'ANNUAL' || ['特休', '特別休假'].includes(name);
   }
 
   private resolveReferenceDateForYear(
