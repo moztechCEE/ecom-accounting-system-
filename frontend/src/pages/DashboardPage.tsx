@@ -1,4 +1,7 @@
-<<<<<<< HEAD
+/**
+ * DashboardPage.tsx
+ * 修改（2026-04）：新增財務即時快覽、本週損益快覽、各平台貢獻度橫條圖
+ */
 import React, { useState, useEffect } from "react";
 import {
   Row,
@@ -11,16 +14,21 @@ import {
   Statistic,
   Tag,
   Typography,
+  Progress,
 } from "antd";
 import {
   BankOutlined,
+  ClockCircleOutlined,
   DollarOutlined,
+  FallOutlined,
+  RiseOutlined,
   ShoppingOutlined,
   SyncOutlined,
 } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import PageSkeleton from "../components/PageSkeleton";
 import AIInsightsWidget from "../components/AIInsightsWidget";
+import { GlassCard } from "../components/ui/GlassCard";
 import { shopifyService } from "../services/shopify.service";
 import { oneShopService } from "../services/oneshop.service";
 import { shoplineService } from "../services/shopline.service";
@@ -46,35 +54,6 @@ import {
 import dayjs, { Dayjs } from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
-=======
-/**
- * DashboardPage.tsx
- * 修改（2026-04）：新增財務即時快覽、本週損益快覽、各平台貢獻度橫條圖
- */
-import React, { useState, useEffect } from 'react'
-import { Row, Col, Statistic, Typography, Tag, Button, Timeline, Card, Avatar, message, Radio, DatePicker, Progress } from 'antd'
-import {
-  DollarOutlined,
-  ShoppingOutlined,
-  BankOutlined,
-  FileTextOutlined,
-  ClockCircleOutlined,
-  UserOutlined,
-  CheckCircleOutlined,
-  SyncOutlined,
-  RiseOutlined,
-  FallOutlined,
-} from '@ant-design/icons'
-import { motion } from 'framer-motion'
-import FinancialHealthWidget from '../components/FinancialHealthWidget'
-import PageSkeleton from '../components/PageSkeleton'
-import AIInsightsWidget from '../components/AIInsightsWidget'
-import { GlassCard } from '../components/ui/GlassCard'
-import { shopifyService } from '../services/shopify.service'
-import dayjs, { Dayjs } from 'dayjs'
-import utc from 'dayjs/plugin/utc'
-import timezone from 'dayjs/plugin/timezone'
->>>>>>> a309c4d4 (feat(ai): Claude 自動更新 — 2026-04-22 16:40:40)
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -89,7 +68,34 @@ type RangeMode = "all" | "today" | "yesterday" | "last7d" | "custom";
 type CustomRange = [Dayjs, Dayjs] | null;
 type RangeValue = [Dayjs | null, Dayjs | null] | null;
 
-<<<<<<< HEAD
+// ─── 財務快覽型別 ────────────────────────────────────────
+
+interface FinanceSummary {
+  arOutstanding: number;
+  apOutstanding: number;
+  inTransit: number;
+  bankBalance: number;
+}
+
+interface WeeklyPnl {
+  revenue: number;
+  cost: number;
+  grossProfit: number;
+  grossMargin: number;
+  monthlyEarned: number;
+}
+
+interface PlatformContribution {
+  platform: string;
+  net: number;
+  color: string;
+}
+
+// ─── 金額格式化 ──────────────────────────────────────────
+
+const fmtMoney = (n: number) =>
+  n.toLocaleString("zh-TW", { minimumFractionDigits: 0 }) + " 元";
+
 function resolveRange(
   mode: RangeMode,
   timezone: string,
@@ -99,41 +105,6 @@ function resolveRange(
     const start = dayjs().tz(timezone).startOf("day");
     const end = dayjs().tz(timezone).endOf("day");
     return { since: start.toISOString(), until: end.toISOString() };
-=======
-// ─── 財務快覽型別 ────────────────────────────────────────
-
-interface FinanceSummary {
-  arOutstanding: number
-  apOutstanding: number
-  inTransit: number
-  bankBalance: number
-}
-
-interface WeeklyPnl {
-  revenue: number
-  cost: number
-  grossProfit: number
-  grossMargin: number
-  monthlyEarned: number
-}
-
-interface PlatformContribution {
-  platform: string
-  net: number
-  color: string
-}
-
-// ─── 金額格式化 ──────────────────────────────────────────
-
-const fmtMoney = (n: number) =>
-  n.toLocaleString('zh-TW', { minimumFractionDigits: 0 }) + ' 元'
-
-function resolveRange(mode: RangeMode, timezone: string, customRange: CustomRange) {
-  if (mode === 'today') {
-    const start = dayjs().tz(timezone).startOf('day')
-    const end = dayjs().tz(timezone).endOf('day')
-    return { since: start.toISOString(), until: end.toISOString() }
->>>>>>> a309c4d4 (feat(ai): Claude 自動更新 — 2026-04-22 16:40:40)
   }
 
   if (mode === "yesterday") {
@@ -970,7 +941,6 @@ const DashboardPage: React.FC = () => {
         </motion.div>
       </div>
 
-<<<<<<< HEAD
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.9fr)]">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -1465,7 +1435,6 @@ const DashboardPage: React.FC = () => {
           { xs: 16, sm: 24 },
         ]}
       >
-=======
       {/* ── 財務即時快覽（4 大卡片）── */}
       <div className="animate-slide-up" style={{ animationDelay: '420ms' }}>
         <div className="flex items-center gap-3 mb-4">
@@ -1632,9 +1601,6 @@ const DashboardPage: React.FC = () => {
         </Row>
       </div>
 
-      {/* Recent Activity & Tasks */}
-      <Row gutter={[{ xs: 16, sm: 24 }, { xs: 16, sm: 24 }]}>
->>>>>>> a309c4d4 (feat(ai): Claude 自動更新 — 2026-04-22 16:40:40)
         <Col xs={24} lg={12}>
           <div
             className="h-full animate-slide-up"
