@@ -54,6 +54,15 @@ import {
 import dayjs, { Dayjs } from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -91,6 +100,12 @@ interface PlatformContribution {
   color: string;
 }
 
+
+interface RevenueTrendPoint {
+  date: string;
+  revenue: number;
+  profit: number;
+}
 // ─── 金額格式化 ──────────────────────────────────────────
 
 const fmtMoney = (n: number) =>
@@ -253,6 +268,24 @@ const DashboardPage: React.FC = () => {
     { platform: '1Shop', net: 400_100, color: '#4361ee' },
     { platform: 'ECPay', net: 1_761_800, color: '#7209b7' },
   ])
+
+
+  const [revenueTrend, setRevenueTrend] = useState<RevenueTrendPoint[]>([])
+
+  // 產生 30 天 mock 趨勢（API 尚未就緒時 fallback）
+  useEffect(() => {
+    const today = dayjs().tz(DASHBOARD_TZ)
+    const mock: RevenueTrendPoint[] = Array.from({ length: 30 }).map((_, i) => {
+      const d = today.subtract(29 - i, 'day')
+      const base = 80_000 + Math.sin(i / 4) * 30_000 + Math.random() * 20_000
+      return {
+        date: d.format('MM/DD'),
+        revenue: Math.round(base),
+        profit: Math.round(base * (0.25 + Math.random() * 0.1)),
+      }
+    })
+    setRevenueTrend(mock)
+  }, [])
 
   useEffect(() => {
     if (rangeMode === "custom" && (!customRange?.[0] || !customRange?.[1])) {
