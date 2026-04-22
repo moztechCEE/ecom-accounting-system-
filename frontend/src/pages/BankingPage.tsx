@@ -4,7 +4,9 @@ import {
   Card,
   Form,
   Input,
+  InputNumber,
   Drawer,
+  Modal,
   Select,
   Table,
   Tabs,
@@ -29,15 +31,24 @@ import { GlassDrawer, GlassDrawerSection } from '../components/ui/GlassDrawer'
 import { motion } from 'framer-motion'
 import dayjs from 'dayjs'
 import { bankingService } from '../services/banking.service'
-import { BankAccount, BankTransaction } from '../types'
+import { BankAccount, BankTransaction, ManagedUser } from '../types'
+import { usersService } from '../services/users.service'
+import { useAuth } from '../contexts/AuthContext'
 
 const { Title, Text } = Typography
+const DEFAULT_ENTITY_ID = import.meta.env.VITE_DEFAULT_ENTITY_ID?.trim() || 'tw-entity-001'
 
 const AccountsTab = () => {
+  const { user } = useAuth()
   const [accounts, setAccounts] = useState<BankAccount[]>([])
+  const [users, setUsers] = useState<ManagedUser[]>([])
   const [loading, setLoading] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [accessModalOpen, setAccessModalOpen] = useState(false)
+  const [accessTarget, setAccessTarget] = useState<BankAccount | null>(null)
   const [form] = Form.useForm()
+  const [accessForm] = Form.useForm()
+  const canManageBankAccess = (user?.roles ?? []).some((role) => role === 'SUPER_ADMIN' || role === 'ADMIN')
 
   const fetchAccounts = async () => {
     setLoading(true)
@@ -52,9 +63,20 @@ const AccountsTab = () => {
     }
   }
 
+  const fetchUsers = async () => {
+    if (!canManageBankAccess) return
+    try {
+      const result = await usersService.list(1, 100)
+      setUsers(result.items || [])
+    } catch {
+      setUsers([])
+    }
+  }
+
   useEffect(() => {
     fetchAccounts()
-  }, [])
+    fetchUsers()
+  }, [canManageBankAccess])
 
   const stats = useMemo(() => {
     const totalBalance = accounts.reduce((sum, acc) => sum + (acc.balance || 0), 0)
@@ -65,13 +87,39 @@ const AccountsTab = () => {
   const handleCreate = async () => {
     try {
       const values = await form.validateFields()
-      await bankingService.createAccount(values)
+      await bankingService.createAccount({
+        ...values,
+        entityId: values.entityId || localStorage.getItem('entityId') || DEFAULT_ENTITY_ID,
+      })
       message.success('帳戶建立成功')
       setDrawerOpen(false)
       form.resetFields()
       fetchAccounts()
     } catch (error) {
       // Error
+    }
+  }
+
+  const openAccessModal = (account: BankAccount) => {
+    setAccessTarget(account)
+    accessForm.setFieldsValue({
+      allowedUserIds: account.allowedUserIds || [],
+    })
+    setAccessModalOpen(true)
+  }
+
+  const handleUpdateAccess = async () => {
+    if (!accessTarget) return
+    try {
+      const values = await accessForm.validateFields()
+      await bankingService.updateAccountAccess(accessTarget.id, values.allowedUserIds || [])
+      message.success('可檢視人員已更新')
+      setAccessModalOpen(false)
+      setAccessTarget(null)
+      fetchAccounts()
+    } catch (error: any) {
+      if (error?.errorFields) return
+      message.error(error?.response?.data?.message || '更新銀行權限失敗')
     }
   }
 
@@ -86,6 +134,17 @@ const AccountsTab = () => {
       render: (val?: number) => <Text strong>${(val ?? 0).toLocaleString()}</Text>,
     },
     {
+      title: '可檢視',
+      key: 'visibility',
+      render: (_: unknown, record: BankAccount) => (
+        <Tag color={record.accessScope === 'all' ? 'blue' : 'gold'}>
+          {record.accessScope === 'all'
+            ? '超級管理員'
+            : `${record.allowedUserIds?.length || 0} 人`}
+        </Tag>
+      ),
+    },
+    {
       title: '狀態',
       dataIndex: 'isActive',
       key: 'isActive',
@@ -93,6 +152,19 @@ const AccountsTab = () => {
         <Tag color={isActive ? 'green' : 'red'}>{isActive ? '啟用' : '停用'}</Tag>
       ),
     },
+    ...(canManageBankAccess
+      ? [
+          {
+            title: '操作',
+            key: 'actions',
+            render: (_: unknown, record: BankAccount) => (
+              <Button size="small" onClick={() => openAccessModal(record)}>
+                權限
+              </Button>
+            ),
+          },
+        ]
+      : []),
   ]
 
   return (
@@ -122,11 +194,13 @@ const AccountsTab = () => {
         </Col>
       </Row>
 
-      <div className="flex justify-end">
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
-          新增帳戶
-        </Button>
-      </div>
+      {canManageBankAccess && (
+        <div className="flex justify-end">
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
+            新增帳戶
+          </Button>
+        </div>
+      )}
 
       <Table
         rowKey="id"
@@ -145,11 +219,14 @@ const AccountsTab = () => {
           <div className="flex-1 space-y-4">
             <GlassDrawerSection>
               <div className="mb-4 font-semibold text-slate-800">帳戶資訊</div>
-              <Form.Item name="bankName" label="銀行名稱" rules={[{ required: true }]}>
-                <Input placeholder="例如：玉山銀行" />
+              <Form.Item name="bankName" label="銀行名稱" rules={[{ required: true, message: '請輸入銀行名稱' }]}>
+                <Input placeholder="例如：玉山銀行 / 中國信託 / 台灣銀行 / 華南銀行" />
               </Form.Item>
-              <Form.Item name="accountNumber" label="帳號" rules={[{ required: true }]}>
+              <Form.Item name="accountNo" label="帳號" rules={[{ required: true, message: '請輸入帳號' }]}>
                 <Input placeholder="例如：123-456-789" />
+              </Form.Item>
+              <Form.Item name="branch" label="分行">
+                <Input placeholder="例如：台北分行" />
               </Form.Item>
             </GlassDrawerSection>
             
@@ -165,6 +242,19 @@ const AccountsTab = () => {
               <Form.Item name="glAccountId" label="對應會計科目">
                 <Input placeholder="例如: 1101" />
               </Form.Item>
+              <Form.Item name="openingBalance" label="期初資金 / 目前餘額">
+                <InputNumber min={0} precision={0} className="w-full" prefix="NT$" />
+              </Form.Item>
+              <Form.Item name="allowedUserIds" label="允許檢視人員">
+                <Select
+                  mode="multiple"
+                  placeholder="未選擇時，只有超級管理員與建立者可見"
+                  options={users.map((item) => ({
+                    label: `${item.name} (${item.email})`,
+                    value: item.id,
+                  }))}
+                />
+              </Form.Item>
             </GlassDrawerSection>
           </div>
 
@@ -178,6 +268,31 @@ const AccountsTab = () => {
           </GlassDrawerSection>
         </Form>
       </GlassDrawer>
+
+      <Modal
+        title={`設定銀行權限${accessTarget ? `：${accessTarget.bankName}` : ''}`}
+        open={accessModalOpen}
+        onCancel={() => setAccessModalOpen(false)}
+        onOk={handleUpdateAccess}
+        okText="儲存"
+        cancelText="取消"
+      >
+        <Form form={accessForm} layout="vertical">
+          <Form.Item name="allowedUserIds" label="允許檢視人員">
+            <Select
+              mode="multiple"
+              placeholder="選擇可以看到這個銀行帳戶的人"
+              options={users.map((item) => ({
+                label: `${item.name} (${item.email})`,
+                value: item.id,
+              }))}
+            />
+          </Form.Item>
+          <Text type="secondary">
+            超級管理員永遠可以看到全部銀行資產；一般管理員只看得到被授權的銀行。
+          </Text>
+        </Form>
+      </Modal>
     </div>
   )
 }

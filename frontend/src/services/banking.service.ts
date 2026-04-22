@@ -12,20 +12,44 @@ export const bankingService = {
     return response.data
   },
 
-  createAccount: async (data: Partial<BankAccount>) => {
+  createAccount: async (
+    data: Partial<BankAccount> & {
+      openingBalance?: number
+      openingBalanceDate?: string
+      allowedUserIds?: string[]
+    },
+  ) => {
     const response = await api.post<BankAccount>('/banking/accounts', data)
+    return response.data
+  },
+
+  updateAccountAccess: async (id: string, allowedUserIds: string[]) => {
+    const response = await api.put<BankAccount>(`/banking/accounts/${id}/access`, {
+      allowedUserIds,
+    })
     return response.data
   },
 
   getTransactions: async (options: { accountId?: string; page?: number; limit?: number } = {}) => {
     const { accountId, page = 1, limit = 20 } = options
-    const response = await api.get<PaginatedResult<BankTransaction>>('/banking/transactions', {
+    const response = await api.get<PaginatedResult<BankTransaction> | BankTransaction[]>('/banking/transactions', {
       params: {
         bankAccountId: accountId,
         page,
         limit,
       },
     })
+    if (Array.isArray(response.data)) {
+      return {
+        items: response.data,
+        meta: {
+          total: response.data.length,
+          page,
+          limit,
+          totalPages: 1,
+        },
+      }
+    }
     return response.data
   },
 

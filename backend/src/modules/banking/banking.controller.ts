@@ -15,6 +15,9 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { BankingService } from './banking.service';
 
 /**
@@ -31,33 +34,57 @@ export class BankingController {
   @Get('accounts')
   @ApiOperation({ summary: '查詢銀行帳戶列表' })
   @ApiResponse({ status: 200, description: '成功取得銀行帳戶列表' })
-  async getBankAccounts(@Query('entityId') entityId?: string) {
-    return this.bankingService.getBankAccounts(entityId || '');
+  async getBankAccounts(
+    @CurrentUser() user: any,
+    @Query('entityId') entityId?: string,
+  ) {
+    return this.bankingService.getBankAccounts(entityId || '', user);
   }
 
   @Get('accounts/:id')
   @ApiOperation({ summary: '查詢單一銀行帳戶' })
   @ApiResponse({ status: 200, description: '成功取得銀行帳戶詳情' })
-  async getBankAccount(@Param('id') id: string) {
-    return this.bankingService.getBankAccount(id);
+  async getBankAccount(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.bankingService.getBankAccount(id, user);
   }
 
   @Post('accounts')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '建立銀行帳戶' })
   @ApiResponse({ status: 201, description: '成功建立銀行帳戶' })
-  async createBankAccount(@Body() data: any) {
-    return this.bankingService.createBankAccount(data);
+  async createBankAccount(@CurrentUser() user: any, @Body() data: any) {
+    return this.bankingService.createBankAccount(data, user);
+  }
+
+  @Put('accounts/:id/access')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '設定銀行帳戶可檢視人員' })
+  @ApiResponse({ status: 200, description: '成功更新銀行帳戶可檢視人員' })
+  async updateBankAccountAccess(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() data: { allowedUserIds?: string[] },
+  ) {
+    return this.bankingService.updateBankAccountAccess(
+      id,
+      data.allowedUserIds || [],
+      user,
+    );
   }
 
   @Get('transactions')
   @ApiOperation({ summary: '查詢銀行交易記錄' })
   @ApiResponse({ status: 200, description: '成功取得交易記錄' })
   async getTransactions(
+    @CurrentUser() user: any,
     @Query('bankAccountId') bankAccountId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
     return this.bankingService.getBankTransactions(
+      user,
       bankAccountId || '',
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
@@ -65,10 +92,12 @@ export class BankingController {
   }
 
   @Post('transactions')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '建立銀行交易' })
   @ApiResponse({ status: 201, description: '成功建立交易記錄' })
-  async createTransaction(@Body() data: any) {
-    return this.bankingService.createBankTransaction(data);
+  async createTransaction(@CurrentUser() user: any, @Body() data: any) {
+    return this.bankingService.createBankTransaction(data, user);
   }
 
   @Put('transactions/:id/reconcile')
@@ -81,15 +110,22 @@ export class BankingController {
   @Get('accounts/:id/balance')
   @ApiOperation({ summary: '查詢帳戶餘額' })
   @ApiResponse({ status: 200, description: '成功取得帳戶餘額' })
-  async getAccountBalance(@Param('id') id: string) {
-    return this.bankingService.getAccountBalance(id);
+  async getAccountBalance(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.bankingService.getAccountBalance(id, user);
   }
 
   @Post('accounts/:id/import-statement')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '匯入銀行對帳單' })
   @ApiResponse({ status: 201, description: '成功匯入對帳單並執行初步對帳' })
-  async importStatement(@Param('id') id: string, @Body() data: any) {
+  async importStatement(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() data: any,
+  ) {
     return this.bankingService.importBankStatement(
+      user,
       id,
       Buffer.from(data.csvContent || '', 'utf8'),
     );
@@ -99,10 +135,12 @@ export class BankingController {
   @ApiOperation({ summary: '執行銀行自動對帳' })
   @ApiResponse({ status: 200, description: '成功執行自動對帳' })
   async autoReconcile(
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Body() data: { transactionDate?: string },
   ) {
     return this.bankingService.autoReconcile(
+      user,
       id,
       data?.transactionDate ? new Date(data.transactionDate) : undefined,
     );
@@ -112,39 +150,47 @@ export class BankingController {
   @ApiOperation({ summary: '手動對帳指定銀行交易' })
   @ApiResponse({ status: 200, description: '成功手動對帳' })
   async manualReconcile(
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Body() data: { paymentId: string },
   ) {
-    return this.bankingService.manualReconcile(id, data.paymentId);
+    return this.bankingService.manualReconcile(user, id, data.paymentId);
   }
 
   @Get('accounts/:id/reconciliation-report')
   @ApiOperation({ summary: '查詢銀行對帳報表' })
   @ApiResponse({ status: 200, description: '成功取得對帳報表' })
   async getReconciliationReport(
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Query('asOfDate') asOfDate?: string,
   ) {
     return this.bankingService.getReconciliationReport(
+      user,
       id,
       asOfDate ? new Date(asOfDate) : new Date(),
     );
   }
 
   @Post('virtual-accounts')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '建立虛擬帳號' })
   @ApiResponse({ status: 201, description: '成功建立虛擬帳號' })
-  async createVirtualAccount(@Body() data: any) {
-    return this.bankingService.createVirtualAccount(data);
+  async createVirtualAccount(@CurrentUser() user: any, @Body() data: any) {
+    return this.bankingService.createVirtualAccount(user, data);
   }
 
   @Post('virtual-accounts/match')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '依虛擬帳號自動配對收款' })
   @ApiResponse({ status: 200, description: '成功執行虛擬帳號配對' })
-  async matchVirtualAccount(@Body() data: any) {
+  async matchVirtualAccount(@CurrentUser() user: any, @Body() data: any) {
     return this.bankingService.matchVirtualAccountPayment(
       data.virtualAccountNumber,
       Number(data.amount),
+      user,
     );
   }
 }

@@ -224,11 +224,15 @@ export interface ExpenseRequest {
 
 export interface BankAccount {
   id: string;
+  entityId?: string;
   bankName: string;
+  branch?: string | null;
   accountNo: string;
   currency: string;
   balance?: number;
   isActive: boolean;
+  allowedUserIds?: string[];
+  accessScope?: "all" | "restricted";
 }
 
 export interface BankTransaction {

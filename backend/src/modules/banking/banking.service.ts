@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -30,11 +31,22 @@ export class BankingService {
   /**
    * 查詢銀行帳戶列表
    */
-  async getBankAccounts(entityId: string) {
-    return this.bankingRepository.findBankAccounts(entityId);
+  async getBankAccounts(entityId: string, user?: any) {
+    const accounts = await this.bankingRepository.findBankAccounts(entityId);
+    const visibleAccounts = accounts.filter((account) =>
+      this.canViewBankAccount(account, user),
+    );
+
+    const balances = await this.getAccountBalances(
+      visibleAccounts.map((account) => account.id),
+    );
+
+    return visibleAccounts.map((account) =>
+      this.serializeBankAccount(account, balances.get(account.id) || 0, user),
+    );
   }
 
-  async getBankAccount(id: string) {
+  async getBankAccount(id: string, user?: any) {
     const account = await this.prisma.bankAccount.findUnique({
       where: { id },
       include: {
@@ -52,36 +64,95 @@ export class BankingService {
       throw new NotFoundException(`Bank account ${id} not found`);
     }
 
-    return account;
+    this.assertCanViewBankAccount(account, user);
+
+    const balance = await this.calculateAccountBalance(id);
+    return this.serializeBankAccount(account, balance, user);
   }
 
   /**
    * 建立銀行帳戶
    */
-  async createBankAccount(data: any) {
-    return this.bankingRepository.createBankAccount({
+  async createBankAccount(data: any, user?: any) {
+    const allowedUserIds = this.normalizeAllowedUserIds(data.allowedUserIds, user);
+    const accountNo = data.accountNo || data.accountNumber;
+    if (!accountNo) {
+      throw new BadRequestException('accountNo is required');
+    }
+
+    const account = await this.bankingRepository.createBankAccount({
       entityId: data.entityId,
       bankName: data.bankName,
       branch: data.branch || null,
-      accountNo: data.accountNo,
+      accountNo,
       currency: data.currency || 'TWD',
       isVirtualSupport: Boolean(data.isVirtualSupport),
-      metaJson: data.metaJson || null,
+      metaJson: this.buildBankVisibilityMeta(data.metaJson, allowedUserIds),
       isActive: data.isActive ?? true,
     });
+
+    const openingBalance = Number(data.openingBalance || 0);
+    if (openingBalance !== 0) {
+      await this.createBankTransaction(
+        {
+          bankAccountId: account.id,
+          txnDate: data.openingBalanceDate || new Date(),
+          valueDate: data.openingBalanceDate || new Date(),
+          amountOriginal: openingBalance,
+          amountCurrency: account.currency,
+          descriptionRaw: data.openingBalanceDescription || '期初資金匯入',
+          referenceNo: 'OPENING-BALANCE',
+          reconcileStatus: 'matched',
+        },
+        user,
+      );
+    }
+
+    return this.serializeBankAccount(account, openingBalance, user);
+  }
+
+  async updateBankAccountAccess(
+    id: string,
+    allowedUserIds: string[],
+    user?: any,
+  ) {
+    const account = await this.prisma.bankAccount.findUnique({ where: { id } });
+    if (!account) {
+      throw new NotFoundException(`Bank account ${id} not found`);
+    }
+    this.assertCanManageBankAccount(account, user);
+
+    const normalizedUserIds = this.normalizeAllowedUserIds(allowedUserIds, user);
+    const updated = await this.prisma.bankAccount.update({
+      where: { id },
+      data: {
+        metaJson: this.buildBankVisibilityMeta(
+          account.metaJson,
+          normalizedUserIds,
+        ),
+      },
+    });
+    const balance = await this.calculateAccountBalance(updated.id);
+    return this.serializeBankAccount(updated, balance, user);
   }
 
   /**
    * 查詢銀行交易
    */
   async getBankTransactions(
+    user: any,
     bankAccountId: string,
     startDate?: Date,
     endDate?: Date,
   ) {
+    const visibleAccountIds = await this.resolveVisibleBankAccountIds(user, bankAccountId);
+    if (!visibleAccountIds.length) {
+      return [];
+    }
+
     return this.prisma.bankTransaction.findMany({
       where: {
-        ...(bankAccountId && { bankAccountId }),
+        bankAccountId: { in: visibleAccountIds },
         ...(startDate || endDate
           ? {
               txnDate: {
@@ -98,7 +169,15 @@ export class BankingService {
     });
   }
 
-  async createBankTransaction(data: any) {
+  async createBankTransaction(data: any, user?: any) {
+    const account = await this.prisma.bankAccount.findUnique({
+      where: { id: data.bankAccountId },
+    });
+    if (!account) {
+      throw new NotFoundException(`Bank account ${data.bankAccountId} not found`);
+    }
+    this.assertCanManageBankAccount(account, user);
+
     const amountOriginal = Number(data.amountOriginal || 0);
     const amountFxRate = Number(data.amountFxRate || 1);
 
@@ -133,8 +212,8 @@ export class BankingService {
     });
   }
 
-  async getAccountBalance(id: string) {
-    const account = await this.getBankAccount(id);
+  async getAccountBalance(id: string, user?: any) {
+    const account = await this.getBankAccount(id, user);
     const aggregate = await this.prisma.bankTransaction.aggregate({
       where: { bankAccountId: id },
       _sum: { amountOriginal: true, amountBase: true },
@@ -143,6 +222,9 @@ export class BankingService {
     const reconciled = await this.prisma.bankTransaction.aggregate({
       where: { bankAccountId: id, reconcileStatus: 'matched' },
       _sum: { amountOriginal: true, amountBase: true },
+    });
+    const unreconciledCount = await this.prisma.bankTransaction.count({
+      where: { bankAccountId: id, reconcileStatus: { not: 'matched' } },
     });
 
     return {
@@ -157,17 +239,15 @@ export class BankingService {
       balanceBase: Number(aggregate._sum.amountBase || 0),
       reconciledOriginal: Number(reconciled._sum.amountOriginal || 0),
       reconciledBase: Number(reconciled._sum.amountBase || 0),
-      unreconciledCount: account.bankTransactions.filter(
-        (txn) => txn.reconcileStatus !== 'matched',
-      ).length,
+      unreconciledCount,
     };
   }
 
   /**
    * 匯入銀行對帳單（CSV）
    */
-  async importBankStatement(bankAccountId: string, csvFile: Buffer) {
-    await this.getBankAccount(bankAccountId);
+  async importBankStatement(user: any, bankAccountId: string, csvFile: Buffer) {
+    await this.getBankAccount(bankAccountId, user);
 
     const rows = this.parseDelimitedRows(csvFile);
     if (!rows.length) {
@@ -216,21 +296,24 @@ export class BankingService {
         continue;
       }
 
-      await this.createBankTransaction({
-        bankAccountId,
-        txnDate,
-        valueDate,
-        amountOriginal: amount,
-        amountCurrency: this.pickField(row, ['currency', '幣別']) || 'TWD',
-        descriptionRaw,
-        referenceNo:
-          this.pickField(row, ['reference_no', 'reference', '參考號碼']) ||
-          null,
-        virtualAccountNo:
-          this.pickField(row, ['virtual_account_no', 'virtual account', '虛擬帳號']) ||
-          null,
-        batchId,
-      });
+      await this.createBankTransaction(
+        {
+          bankAccountId,
+          txnDate,
+          valueDate,
+          amountOriginal: amount,
+          amountCurrency: this.pickField(row, ['currency', '幣別']) || 'TWD',
+          descriptionRaw,
+          referenceNo:
+            this.pickField(row, ['reference_no', 'reference', '參考號碼']) ||
+            null,
+          virtualAccountNo:
+            this.pickField(row, ['virtual_account_no', 'virtual account', '虛擬帳號']) ||
+            null,
+          batchId,
+        },
+        user,
+      );
       imported += 1;
     }
 
@@ -253,14 +336,15 @@ export class BankingService {
    * 自動對帳匹配
    * 將銀行交易與系統內的 Payment/Receipt 自動配對
    */
-  async autoReconcile(bankAccountId: string, transactionDate: Date) {
+  async autoReconcile(user: any, bankAccountId: string, transactionDate: Date) {
+    await this.getBankAccount(bankAccountId, user);
     return this.runAutoReconcile(bankAccountId, transactionDate, undefined);
   }
 
   /**
    * 手動對帳
    */
-  async manualReconcile(bankTransactionId: string, paymentId: string) {
+  async manualReconcile(user: any, bankTransactionId: string, paymentId: string) {
     const [transaction, payment] = await Promise.all([
       this.prisma.bankTransaction.findUnique({ where: { id: bankTransactionId } }),
       this.prisma.payment.findUnique({ where: { id: paymentId } }),
@@ -269,6 +353,7 @@ export class BankingService {
     if (!transaction) {
       throw new NotFoundException(`Bank transaction ${bankTransactionId} not found`);
     }
+    await this.getBankAccount(transaction.bankAccountId, user);
     if (!payment) {
       throw new NotFoundException(`Payment ${paymentId} not found`);
     }
@@ -302,8 +387,8 @@ export class BankingService {
   /**
    * 產生對帳報表
    */
-  async getReconciliationReport(bankAccountId: string, asOfDate: Date) {
-    const account = await this.getBankAccount(bankAccountId);
+  async getReconciliationReport(user: any, bankAccountId: string, asOfDate: Date) {
+    const account = await this.getBankAccount(bankAccountId, user);
     const transactions = await this.prisma.bankTransaction.findMany({
       where: {
         bankAccountId,
@@ -352,14 +437,14 @@ export class BankingService {
   /**
    * 虛擬帳號管理
    */
-  async createVirtualAccount(data: {
+  async createVirtualAccount(user: any, data: {
     bankAccountId: string;
     customerId: string;
     virtualAccountNumber: string;
     assignedToType?: string;
     assignedToId?: string;
   }) {
-    await this.getBankAccount(data.bankAccountId);
+    await this.getBankAccount(data.bankAccountId, user);
 
     return this.prisma.virtualAccount.create({
       data: {
@@ -378,6 +463,7 @@ export class BankingService {
   async matchVirtualAccountPayment(
     virtualAccountNumber: string,
     amount: number,
+    user?: any,
   ) {
     const virtualAccount = await this.prisma.virtualAccount.findFirst({
       where: {
@@ -393,6 +479,9 @@ export class BankingService {
       throw new NotFoundException(
         `Virtual account ${virtualAccountNumber} not found`,
       );
+    }
+    if (user) {
+      this.assertCanViewBankAccount(virtualAccount.bankAccount, user);
     }
 
     const candidateTransactions = await this.prisma.bankTransaction.findMany({
@@ -529,7 +618,12 @@ export class BankingService {
     transactionDate?: Date,
     batchId?: string,
   ) {
-    const account = await this.getBankAccount(bankAccountId);
+    const account = await this.prisma.bankAccount.findUnique({
+      where: { id: bankAccountId },
+    });
+    if (!account) {
+      throw new NotFoundException(`Bank account ${bankAccountId} not found`);
+    }
     const transactions = await this.prisma.bankTransaction.findMany({
       where: {
         bankAccountId,
@@ -697,6 +791,130 @@ export class BankingService {
     }
 
     return 'unmatched' as const;
+  }
+
+  private getRoleCodes(user?: any) {
+    return (
+      user?.roles
+        ?.map((userRole: any) => userRole?.role?.code || userRole?.role?.name)
+        .filter(Boolean) || []
+    );
+  }
+
+  private isSuperAdmin(user?: any) {
+    return this.getRoleCodes(user).includes('SUPER_ADMIN');
+  }
+
+  private isBankAdmin(user?: any) {
+    const roles = this.getRoleCodes(user);
+    return roles.includes('SUPER_ADMIN') || roles.includes('ADMIN');
+  }
+
+  private getAllowedUserIds(account: { metaJson?: any }) {
+    const meta = this.asPlainObject(account.metaJson);
+    const ids = Array.isArray(meta.bankVisibleUserIds)
+      ? meta.bankVisibleUserIds
+      : Array.isArray(meta.allowedUserIds)
+        ? meta.allowedUserIds
+        : [];
+    return ids.map((id) => String(id)).filter(Boolean);
+  }
+
+  private canViewBankAccount(account: { metaJson?: any }, user?: any) {
+    if (this.isSuperAdmin(user)) return true;
+    const allowedUserIds = this.getAllowedUserIds(account);
+    return Boolean(user?.id && allowedUserIds.includes(user.id));
+  }
+
+  private assertCanViewBankAccount(account: { metaJson?: any }, user?: any) {
+    if (!this.canViewBankAccount(account, user)) {
+      throw new ForbiddenException('You do not have access to this bank account');
+    }
+  }
+
+  private assertCanManageBankAccount(account: { metaJson?: any }, user?: any) {
+    if (this.isSuperAdmin(user)) return;
+    if (this.isBankAdmin(user) && this.canViewBankAccount(account, user)) return;
+    throw new ForbiddenException('You cannot manage this bank account');
+  }
+
+  private normalizeAllowedUserIds(value: unknown, user?: any) {
+    const values = Array.isArray(value) ? value : [];
+    const ids = new Set(values.map((id) => String(id)).filter(Boolean));
+    if (user?.id && !this.isSuperAdmin(user)) {
+      ids.add(user.id);
+    }
+    return Array.from(ids);
+  }
+
+  private buildBankVisibilityMeta(metaJson: unknown, allowedUserIds: string[]) {
+    const meta = this.asPlainObject(metaJson);
+    return {
+      ...meta,
+      bankVisibleUserIds: allowedUserIds,
+    };
+  }
+
+  private serializeBankAccount(account: any, balance: number, user?: any) {
+    return {
+      ...account,
+      balance,
+      allowedUserIds: this.getAllowedUserIds(account),
+      accessScope: this.isSuperAdmin(user) ? 'all' : 'restricted',
+    };
+  }
+
+  private async calculateAccountBalance(bankAccountId: string) {
+    const aggregate = await this.prisma.bankTransaction.aggregate({
+      where: { bankAccountId },
+      _sum: { amountOriginal: true },
+    });
+    return Number(aggregate._sum.amountOriginal || 0);
+  }
+
+  private async getAccountBalances(bankAccountIds: string[]) {
+    const balances = new Map<string, number>();
+    if (!bankAccountIds.length) return balances;
+
+    const grouped = await this.prisma.bankTransaction.groupBy({
+      by: ['bankAccountId'],
+      where: { bankAccountId: { in: bankAccountIds } },
+      _sum: { amountOriginal: true },
+    });
+
+    for (const row of grouped) {
+      balances.set(row.bankAccountId, Number(row._sum.amountOriginal || 0));
+    }
+    return balances;
+  }
+
+  private async resolveVisibleBankAccountIds(user: any, bankAccountId?: string) {
+    if (bankAccountId) {
+      const account = await this.prisma.bankAccount.findUnique({
+        where: { id: bankAccountId },
+      });
+      if (!account) {
+        throw new NotFoundException(`Bank account ${bankAccountId} not found`);
+      }
+      this.assertCanViewBankAccount(account, user);
+      return [bankAccountId];
+    }
+
+    const accounts = await this.prisma.bankAccount.findMany({
+      where: { isActive: true },
+      select: { id: true, metaJson: true },
+    });
+
+    return accounts
+      .filter((account) => this.canViewBankAccount(account, user))
+      .map((account) => account.id);
+  }
+
+  private asPlainObject(value: unknown): Record<string, any> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {};
+    }
+    return value as Record<string, any>;
   }
 
   private parseDelimitedRows(csvFile: Buffer) {

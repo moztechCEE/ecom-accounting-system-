@@ -7,7 +7,10 @@ export class BankingRepository {
 
   async findBankAccounts(entityId: string) {
     return this.prisma.bankAccount.findMany({
-      where: { entityId },
+      where: {
+        ...(entityId ? { entityId } : {}),
+        isActive: true,
+      },
       orderBy: { accountNo: 'asc' },
     });
   }
