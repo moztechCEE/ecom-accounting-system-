@@ -17,6 +17,8 @@ export const bankingService = {
       openingBalance?: number
       openingBalanceDate?: string
       allowedUserIds?: string[]
+      accountName?: string
+      accountAlias?: string
     },
   ) => {
     const response = await api.post<BankAccount>('/banking/accounts', data)

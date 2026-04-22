@@ -124,7 +124,18 @@ const AccountsTab = () => {
   }
 
   const columns = [
-    { title: '銀行名稱', dataIndex: 'bankName', key: 'bankName' },
+    {
+      title: '銀行帳戶',
+      key: 'bank',
+      render: (_: unknown, record: BankAccount) => (
+        <div>
+          <div className="font-medium text-slate-900">{record.bankName}</div>
+          <div className="text-xs text-slate-500">
+            {record.accountName || '未填戶名'}{record.branch ? ` · ${record.branch}` : ''}
+          </div>
+        </div>
+      ),
+    },
     { title: '帳號', dataIndex: 'accountNo', key: 'accountNo' },
     { title: '幣別', dataIndex: 'currency', key: 'currency' },
     {
@@ -220,13 +231,28 @@ const AccountsTab = () => {
             <GlassDrawerSection>
               <div className="mb-4 font-semibold text-slate-800">帳戶資訊</div>
               <Form.Item name="bankName" label="銀行名稱" rules={[{ required: true, message: '請輸入銀行名稱' }]}>
-                <Input placeholder="例如：玉山銀行 / 中國信託 / 台灣銀行 / 華南銀行" />
+                <Select
+                  showSearch
+                  placeholder="選擇或輸入銀行名稱"
+                  options={[
+                    { label: '玉山銀行', value: '玉山銀行' },
+                    { label: '中國信託', value: '中國信託' },
+                    { label: '台灣銀行', value: '台灣銀行' },
+                    { label: '華南銀行', value: '華南銀行' },
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item name="accountName" label="戶名" rules={[{ required: true, message: '請輸入戶名' }]}>
+                <Input placeholder="例如：萬博創意科技有限公司" />
               </Form.Item>
               <Form.Item name="accountNo" label="帳號" rules={[{ required: true, message: '請輸入帳號' }]}>
                 <Input placeholder="例如：123-456-789" />
               </Form.Item>
               <Form.Item name="branch" label="分行">
                 <Input placeholder="例如：台北分行" />
+              </Form.Item>
+              <Form.Item name="accountAlias" label="帳戶暱稱">
+                <Input placeholder="例如：台銀主要收款帳戶" />
               </Form.Item>
             </GlassDrawerSection>
             

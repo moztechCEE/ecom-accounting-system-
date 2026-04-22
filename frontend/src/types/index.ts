@@ -227,6 +227,8 @@ export interface BankAccount {
   entityId?: string;
   bankName: string;
   branch?: string | null;
+  accountName?: string;
+  accountAlias?: string;
   accountNo: string;
   currency: string;
   balance?: number;

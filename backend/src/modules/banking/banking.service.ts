@@ -856,7 +856,7 @@ export class BankingService {
     extra?: { accountName?: string; accountAlias?: string },
   ) {
     const meta = this.asPlainObject(metaJson);
-    const next = {
+    const next: Record<string, any> = {
       ...meta,
       bankVisibleUserIds: allowedUserIds,
     };
