@@ -52,15 +52,16 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
     <>
       <GlassDrawer
         title={
-          <div className="flex w-full min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 pr-2">
               <span className="text-lg font-semibold">訂單詳情</span>
               <Tag color="blue" className="max-w-full truncate">{order.id}</Tag>
             </div>
-            <div className="flex max-w-full flex-wrap items-center justify-start gap-2 lg:justify-end">
-              <Button icon={<PrinterOutlined />} className="rounded-full whitespace-nowrap">列印</Button>
-              <Button icon={<MailOutlined />} className="rounded-full whitespace-nowrap">寄送發票</Button>
+            <div className="flex min-w-0 max-w-full flex-wrap items-center justify-start gap-2 overflow-hidden pr-2 xl:justify-end">
+              <Button size="small" icon={<PrinterOutlined />} className="rounded-full whitespace-nowrap">列印</Button>
+              <Button size="small" icon={<MailOutlined />} className="rounded-full whitespace-nowrap">寄送發票</Button>
               <Button
+                size="small"
                 icon={<SyncOutlined spin={syncingInvoice} />}
                 className="rounded-full whitespace-nowrap"
                 loading={syncingInvoice}
@@ -70,6 +71,7 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
               </Button>
               {order.status !== 'completed' && (
                 <Button 
+                  size="small"
                   type="primary" 
                   icon={<SendOutlined />}
                   className="rounded-full bg-green-600 hover:bg-green-500 border-none shadow-lg shadow-green-200 whitespace-nowrap"
@@ -78,7 +80,7 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
                   出貨
                 </Button>
               )}
-              <Button type="primary" className="rounded-full bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-200 whitespace-nowrap">退款/售後</Button>
+              <Button size="small" type="primary" className="rounded-full bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-200 whitespace-nowrap">退款/售後</Button>
             </div>
           </div>
         }
