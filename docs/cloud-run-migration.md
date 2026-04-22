@@ -47,13 +47,16 @@ BACKEND_ENV_VARS_FILE=backend/.env.cloudrun.yaml \
 GitHub repo 需要設定以下 Secrets：
 
 ```text
-GCP_WIF_PROVIDER
-GCP_WIF_SERVICE_ACCOUNT
+GCP_WIF_PROVIDER=projects/249593319772/locations/global/workloadIdentityPools/github-actions/providers/ecom-accounting-system
+GCP_WIF_SERVICE_ACCOUNT=ecom-accounting-gh-deployer@moztech-main-db.iam.gserviceaccount.com
 GCP_PROJECT_ID=moztech-main-db
 GCP_REGION=asia-east1
 CLOUD_RUN_FRONTEND_SERVICE=ecom-accounting-frontend
 CLOUD_RUN_BACKEND_SERVICE=ecom-accounting-backend
 ```
+
+如果 GitHub Actions 卡在 `Authenticate to Google Cloud`，通常就是 `GCP_WIF_PROVIDER` 或
+`GCP_WIF_SERVICE_ACCOUNT` 沒有設定到目前 repo，或 repo 轉移組織後舊 secrets 沒跟著生效。
 
 如果沿用舊 backend workflow 的 secret，也可以保留：
 
