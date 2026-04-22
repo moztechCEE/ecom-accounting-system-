@@ -527,7 +527,6 @@ const DashboardPage: React.FC = () => {
   const tasks = executive?.tasks || [];
   const inventoryAlerts = executive?.inventoryAlerts || [];
   const anomalies = executive?.anomalies || [];
-  const reconciliationRules = executive?.reconciliationRules || [];
   const invoiceSummary = invoiceQueue?.summary;
   const invoiceItems = invoiceQueue?.items || [];
   const operationsHighlights = operationsHub?.highlights || [];
