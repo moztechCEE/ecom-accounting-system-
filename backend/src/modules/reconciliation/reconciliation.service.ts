@@ -925,6 +925,7 @@ export class ReconciliationService {
     return { success: true };
   }
 
+<<<<<<< HEAD
   private buildDateFilter(startDate?: Date, endDate?: Date) {
     if (!startDate && !endDate) {
       return null;
@@ -1197,6 +1198,133 @@ export class ReconciliationService {
       .trim();
 
     return preservedNotes ? `${preservedNotes}\n${autoClearNote}` : autoClearNote;
+=======
+  // ── 新增 Summary Methods（2026-04）──────────────────────────
+
+  /**
+   * 依平台分組加總 Payment 資料
+   * GET /reconciliation/platform-payouts
+   */
+  async getPlatformPayouts(
+    entityId: string,
+    startDate?: Date,
+    endDate?: Date,
+    platform?: string,
+  ) {
+    const where: any = { entityId };
+    if (startDate || endDate) {
+      where.payoutDate = {};
+      if (startDate) where.payoutDate.gte = startDate;
+      if (endDate) where.payoutDate.lte = endDate;
+    }
+    if (platform) {
+      where.channel = { contains: platform.toUpperCase() };
+    }
+
+    const payments = await this.prisma.payment.findMany({ where });
+
+    // 依 channel 分組
+    const grouped = new Map<
+      string,
+      {
+        count: number;
+        gross: number;
+        platformFee: number;
+        gatewayFee: number;
+        shippingFee: number;
+        net: number;
+        reconciledCount: number;
+      }
+    >();
+
+    for (const p of payments) {
+      const key = p.channel;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          count: 0,
+          gross: 0,
+          platformFee: 0,
+          gatewayFee: 0,
+          shippingFee: 0,
+          net: 0,
+          reconciledCount: 0,
+        });
+      }
+      const g = grouped.get(key)!;
+      g.count += 1;
+      g.gross += Number(p.amountGrossOriginal);
+      g.platformFee += Number(p.feePlatformOriginal);
+      g.gatewayFee += Number(p.feeGatewayOriginal);
+      g.shippingFee += Number(p.shippingFeePaidOriginal);
+      g.net += Number(p.amountNetOriginal);
+      if (p.reconciledFlag) g.reconciledCount += 1;
+    }
+
+    return Array.from(grouped.entries()).map(([channel, stats]) => ({
+      platform: channel,
+      ...stats,
+    }));
+  }
+
+  /**
+   * 查詢有訂單但無發票的 SalesOrder
+   * GET /reconciliation/missing-invoices
+   */
+  async getMissingInvoices(entityId: string) {
+    const orders = await this.prisma.salesOrder.findMany({
+      where: {
+        entityId,
+        hasInvoice: false,
+        status: { in: ['paid', 'fulfilled', 'completed'] },
+      },
+      include: {
+        channel: { select: { name: true, code: true } },
+      },
+      orderBy: { orderDate: 'desc' },
+      take: 200,
+    });
+
+    return orders.map((o) => ({
+      orderId: o.id,
+      externalOrderId: o.externalOrderId,
+      platform: o.channel?.code ?? 'UNKNOWN',
+      orderDate: o.orderDate,
+      amount: Number(o.totalGrossOriginal),
+      status: o.status,
+      remark: '未開發票',
+    }));
+  }
+
+  /**
+   * 查詢 ECPay 通路 Payment 狀態統計
+   * GET /reconciliation/ecpay-payout-status
+   */
+  async getEcpayPayoutStatus(entityId: string) {
+    const payments = await this.prisma.payment.findMany({
+      where: {
+        entityId,
+        channel: { contains: 'ECPAY' },
+      },
+    });
+
+    const pending = payments.filter((p) => p.status === 'pending');
+    const completed = payments.filter((p) => p.status === 'completed');
+
+    const pendingAmount = pending.reduce(
+      (s, p) => s + Number(p.amountNetOriginal),
+      0,
+    );
+    const completedAmount = completed.reduce(
+      (s, p) => s + Number(p.amountNetOriginal),
+      0,
+    );
+
+    return {
+      pending: { count: pending.length, amount: pendingAmount },
+      completed: { count: completed.length, amount: completedAmount },
+      inTransit: pendingAmount,
+    };
+>>>>>>> a309c4d4 (feat(ai): Claude 自動更新 — 2026-04-22 16:40:40)
   }
 
   /**

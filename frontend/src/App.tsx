@@ -35,6 +35,7 @@ import PurchaseOrdersPage from './pages/PurchaseOrdersPage'
 import AssemblyPage from './pages/AssemblyPage'
 import CustomersPage from './pages/CustomersPage'
 import ProfilePage from './pages/ProfilePage'
+import ReconciliationCenterPage from './pages/ReconciliationCenterPage'
 
 const App: React.FC = () => {
   return (
@@ -84,6 +85,9 @@ const App: React.FC = () => {
 
                 {/* User Routes */}
                 <Route path="profile" element={<ProfilePage />} />
+
+                {/* 電商對帳中心路由（2026-04）*/}
+                <Route path="reconciliation" element={<ReconciliationCenterPage />} />
 
                 {/* Placeholder Routes */}
                 <Route path="import" element={<ImportPage />} />

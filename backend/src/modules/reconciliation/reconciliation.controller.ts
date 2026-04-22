@@ -1,3 +1,7 @@
+/**
+ * reconciliation.controller.ts
+ * 修改（2026-04）：新增 platform-payouts、missing-invoices、ecpay-payout-status 三支 summary endpoints
+ */
 import {
   Controller,
   Get,
@@ -314,6 +318,7 @@ export class ReconciliationController {
     );
   }
 
+<<<<<<< HEAD
   @Post('payouts/import')
   @Roles('ADMIN')
   @ApiOperation({
@@ -397,5 +402,62 @@ export class ReconciliationController {
   ) {
     this.ecpayShopifyPayoutService.assertSchedulerToken(syncToken);
     return this.ecpayShopifyPayoutService.backfillHistory(dto);
+=======
+  // ── 新增 Summary Endpoints（2026-04）──────────────────────────
+
+  /**
+   * GET /reconciliation/platform-payouts
+   * 依平台分組加總 Payment 資料，回傳撥款彙總
+   */
+  @Get('platform-payouts')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @ApiOperation({
+    summary: '平台撥款彙總',
+    description: '依 channel 分組加總 amountGross/feePlatform/feeGateway/amountNet',
+  })
+  @ApiResponse({ status: 200, description: '各平台撥款彙總陣列' })
+  async getPlatformPayouts(
+    @Query('entityId') entityId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('platform') platform?: string,
+  ) {
+    return this.reconciliationService.getPlatformPayouts(
+      entityId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+      platform,
+    );
+  }
+
+  /**
+   * GET /reconciliation/missing-invoices
+   * 查詢有訂單但無發票的 SalesOrder
+   */
+  @Get('missing-invoices')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @ApiOperation({
+    summary: '缺發票訂單列表',
+    description: '查詢 hasInvoice = false 且 status in [paid, fulfilled, completed] 的訂單',
+  })
+  @ApiResponse({ status: 200, description: '缺發票訂單列表' })
+  async getMissingInvoices(@Query('entityId') entityId: string) {
+    return this.reconciliationService.getMissingInvoices(entityId);
+  }
+
+  /**
+   * GET /reconciliation/ecpay-payout-status
+   * 查詢 ECPay 通路的 Payment，依 status 分組
+   */
+  @Get('ecpay-payout-status')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @ApiOperation({
+    summary: 'ECPay 撥款狀態統計',
+    description: '查詢 channel LIKE ECPAY 的 Payment，回傳 pending/completed 統計及在途金額',
+  })
+  @ApiResponse({ status: 200, description: 'ECPay 撥款狀態' })
+  async getEcpayPayoutStatus(@Query('entityId') entityId: string) {
+    return this.reconciliationService.getEcpayPayoutStatus(entityId);
+>>>>>>> a309c4d4 (feat(ai): Claude 自動更新 — 2026-04-22 16:40:40)
   }
 }

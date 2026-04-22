@@ -55,4 +55,40 @@ export class ArRepository {
       data: { status: 'WRITTEN_OFF' },
     });
   }
+
+  /**
+   * 應收帳款摘要（2026-04）
+   * 回傳未收總額、逾期筆數、逾期金額
+   */
+  async getSummary(entityId?: string) {
+    const now = new Date();
+
+    const unpaidInvoices = await this.prisma.arInvoice.findMany({
+      where: {
+        ...(entityId && { entityId }),
+        status: { notIn: ['paid', 'written_off'] },
+      },
+      select: {
+        amountOriginal: true,
+        paidAmountOriginal: true,
+        dueDate: true,
+      },
+    });
+
+    let outstanding = 0;
+    let overdueCount = 0;
+    let overdueAmount = 0;
+
+    for (const inv of unpaidInvoices) {
+      const remaining =
+        Number(inv.amountOriginal) - Number(inv.paidAmountOriginal);
+      outstanding += remaining;
+      if (inv.dueDate < now && remaining > 0) {
+        overdueCount += 1;
+        overdueAmount += remaining;
+      }
+    }
+
+    return { outstanding, overdueCount, overdueAmount };
+  }
 }

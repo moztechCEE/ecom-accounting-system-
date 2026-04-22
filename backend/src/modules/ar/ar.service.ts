@@ -1885,4 +1885,12 @@ export class ArService {
 
     return preserved ? `${preserved}\n${autoNote}` : autoNote;
   }
+
+  /**
+   * 應收帳款摘要（2026-04）
+   * 供 Dashboard 財務快覽 GET /ar/summary 使用
+   */
+  async getSummary(entityId?: string) {
+    return this.arRepository.getSummary(entityId);
+  }
 }

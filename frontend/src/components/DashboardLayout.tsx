@@ -19,7 +19,8 @@ import {
   ClockCircleOutlined,
   BoxPlotOutlined,
   ShopOutlined,
-  ToolOutlined
+  ToolOutlined,
+  ReconciliationOutlined,
 } from '@ant-design/icons'
 import { AnimatePresence, motion } from 'framer-motion'
 import { GlassDrawer } from './ui/GlassDrawer'
@@ -130,6 +131,18 @@ const DashboardLayout: React.FC = () => {
       icon: <BankOutlined />,
       label: '銀行管理',
       onClick: () => navigate('/banking'),
+    },
+    // 新增：財務對帳群組（2026-04）
+    {
+      key: 'finance',
+      icon: <ReconciliationOutlined />,
+      label: '財務對帳',
+      children: [
+        { key: '/reconciliation', label: '電商對帳中心', onClick: () => navigate('/reconciliation') },
+        { key: '/reconciliation/ecpay', label: '綠界撥款追蹤', onClick: () => navigate('/reconciliation') },
+        { key: '/ar/invoices', label: '應收帳款', onClick: () => navigate('/sales/invoices') },
+        { key: '/banking', label: '銀行對帳', onClick: () => navigate('/banking') },
+      ],
     },
     {
       key: 'attendance',

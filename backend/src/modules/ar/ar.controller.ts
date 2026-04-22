@@ -1,3 +1,7 @@
+/**
+ * ar.controller.ts
+ * 修改（2026-04）：新增 GET /ar/summary 回傳應收帳款總額摘要
+ */
 import {
   Controller,
   Get,
@@ -113,5 +117,17 @@ export class ArController {
       data.amount || 0,
       data.reason || 'Write off',
     );
+  }
+
+  /**
+   * GET /ar/summary
+   * 回傳應收帳款總額摘要（未收總額、逾期筆數、逾期金額）
+   * 供 Dashboard 財務快覽使用
+   */
+  @Get('summary')
+  @ApiOperation({ summary: '應收帳款摘要', description: '查詢 ArInvoice 未收總額與逾期資訊' })
+  @ApiResponse({ status: 200, description: '{ outstanding, overdueCount, overdueAmount }' })
+  async getSummary(@Query('entityId') entityId?: string) {
+    return this.arService.getSummary(entityId);
   }
 }
