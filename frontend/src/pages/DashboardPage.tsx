@@ -241,42 +241,22 @@ const DashboardPage: React.FC = () => {
 
   // 財務快覽 State
   const [finance, setFinance] = useState<FinanceSummary>({
-    arOutstanding: 2_850_000,
-    apOutstanding: 1_230_000,
-    inTransit: 1_105_000,
-    bankBalance: 8_760_000,
+    arOutstanding: 0,
+    apOutstanding: 0,
+    inTransit: 0,
+    bankBalance: 0,
   })
   const [weeklyPnl, setWeeklyPnl] = useState<WeeklyPnl>({
-    revenue: 4_200_000,
-    cost: 2_940_000,
-    grossProfit: 1_260_000,
-    grossMargin: 0.3,
-    monthlyEarned: 3_840_000,
+    revenue: 0,
+    cost: 0,
+    grossProfit: 0,
+    grossMargin: 0,
+    monthlyEarned: 0,
   })
-  const [platformContribs, setPlatformContribs] = useState<PlatformContribution[]>([
-    { platform: 'Shopify', net: 1_192_000, color: '#96bf48' },
-    { platform: 'Shopline', net: 647_600, color: '#e85d04' },
-    { platform: '1Shop', net: 400_100, color: '#4361ee' },
-    { platform: 'ECPay', net: 1_761_800, color: '#7209b7' },
-  ])
+  const [managementSummary, setManagementSummary] = useState<ManagementSummary | null>(null)
 
 
   const [revenueTrend, setRevenueTrend] = useState<RevenueTrendPoint[]>([])
-
-  // 產生 30 天 mock 趨勢（API 尚未就緒時 fallback）
-  useEffect(() => {
-    const today = dayjs().tz(DASHBOARD_TZ)
-    const mock: RevenueTrendPoint[] = Array.from({ length: 30 }).map((_, i) => {
-      const d = today.subtract(29 - i, 'day')
-      const base = 80_000 + Math.sin(i / 4) * 30_000 + Math.random() * 20_000
-      return {
-        date: d.format('MM/DD'),
-        revenue: Math.round(base),
-        profit: Math.round(base * (0.25 + Math.random() * 0.1)),
-      }
-    })
-    setRevenueTrend(mock)
-  }, [])
 
   useEffect(() => {
     if (rangeMode === "custom" && (!customRange?.[0] || !customRange?.[1])) {
