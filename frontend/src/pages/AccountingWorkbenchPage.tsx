@@ -167,7 +167,8 @@ const AccountingWorkbenchPage: React.FC = () => {
 
   useEffect(() => {
     fetchWorkbench()
-  }, [dateRange[0].valueOf(), dateRange[1].valueOf()])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange?.[0]?.valueOf(), dateRange?.[1]?.valueOf()])
 
   const handleSyncAr = async () => {
     setSyncingAr(true)
@@ -772,7 +773,21 @@ const AccountingWorkbenchPage: React.FC = () => {
               if (value?.[0] && value?.[1]) setDateRange([value[0], value[1]])
             }}
             allowClear={false}
+            presets={[
+              { label: '近 7 天', value: [dayjs().subtract(6, 'day').startOf('day'), dayjs().endOf('day')] },
+              { label: '近 30 天', value: [dayjs().subtract(29, 'day').startOf('day'), dayjs().endOf('day')] },
+              { label: '近 90 天', value: [dayjs().subtract(89, 'day').startOf('day'), dayjs().endOf('day')] },
+              { label: '本月', value: [dayjs().startOf('month'), dayjs().endOf('month')] },
+              { label: '上月', value: [dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')] },
+              { label: '今年', value: [dayjs().startOf('year'), dayjs().endOf('year')] },
+            ]}
           />
+          <Button
+            onClick={() => setDateRange(null)}
+            type={dateRange === null ? 'primary' : 'default'}
+          >
+            全部
+          </Button>
           <Button icon={<ReloadOutlined />} loading={loading} onClick={fetchWorkbench}>
             重新整理
           </Button>
