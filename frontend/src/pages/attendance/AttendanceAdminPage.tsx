@@ -1273,14 +1273,25 @@ const AttendanceAdminPage: React.FC = () => {
             </div>
           )}
 
-          {activeTab === "closures" && (
+          {(activeTab === "closures" || activeTab === "policies") && (
             <div className="space-y-5">
               <GlassCard className="border border-cyan-100/70 bg-cyan-50/70">
-                <div className="text-sm font-semibold text-cyan-900">
-                  災防停班事件
-                </div>
-                <div className="mt-2 text-sm leading-6 text-cyan-800">
-                  颱風、豪雨或其他天然災害停班不建議做成員工逐一申請的假別。請在這裡建立一次事件，系統會依範圍建立出勤摘要，並在薪資計算時套用不扣薪、不支薪或部分支薪政策。
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-cyan-900">
+                      災防停班事件
+                    </div>
+                    <div className="mt-2 text-sm leading-6 text-cyan-800">
+                      颱風、豪雨或其他天然災害停班不建議做成員工逐一申請的假別。請在這裡建立一次事件，系統會依範圍建立出勤摘要，並在薪資計算時套用不扣薪、不支薪或部分支薪政策。
+                    </div>
+                  </div>
+                  <GlassButton
+                    className="shrink-0 gap-2 px-5 py-3 text-sm"
+                    onClick={openCreateClosure}
+                  >
+                    <WarningOutlined />
+                    新增停班事件
+                  </GlassButton>
                 </div>
               </GlassCard>
 
