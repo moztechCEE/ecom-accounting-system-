@@ -279,6 +279,24 @@ export class ReportsController {
     );
   }
 
+  @Get('line-pay-reconciliation-readiness')
+  @ApiOperation({ summary: 'LINE Pay 對帳路徑判斷：綠界或 LINE Pay 直連' })
+  @ApiResponse({ status: 200, description: '成功取得 LINE Pay 對帳準備狀態' })
+  @ApiQuery({ name: 'entityId', required: true })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  async getLinePayReconciliationReadiness(
+    @Query('entityId') entityId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getLinePayReconciliationReadiness(
+      entityId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
   @Get('monthly-channel-reconciliation')
   @ApiOperation({ summary: '按月份查看平台營收與綠界對帳矩陣' })
   @ApiResponse({ status: 200, description: '成功取得月度對帳矩陣' })

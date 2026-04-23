@@ -1203,6 +1203,249 @@ export class ReportsService {
     };
   }
 
+  async getLinePayReconciliationReadiness(
+    entityId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ) {
+    const paymentDateFilter = this.buildDateFilter(startDate, endDate);
+    const linePayNotesWhere = this.linePayNotesWhere();
+
+    const candidatePayments = await this.prisma.payment.findMany({
+      where: {
+        entityId,
+        ...(paymentDateFilter ? { payoutDate: paymentDateFilter } : {}),
+        OR: linePayNotesWhere,
+      },
+      orderBy: { payoutDate: 'desc' },
+      take: 500,
+      select: {
+        id: true,
+        salesOrderId: true,
+        channel: true,
+        payoutDate: true,
+        amountGrossOriginal: true,
+        amountNetOriginal: true,
+        feeGatewayOriginal: true,
+        feePlatformOriginal: true,
+        reconciledFlag: true,
+        status: true,
+        notes: true,
+        salesOrder: {
+          select: {
+            externalOrderId: true,
+            orderDate: true,
+            status: true,
+            notes: true,
+            channel: { select: { code: true, name: true } },
+            customer: { select: { name: true, email: true } },
+          },
+        },
+      },
+    });
+
+    const [ecpayLinePayLines, directLinePayLines] = await Promise.all([
+      this.prisma.payoutImportLine.findMany({
+        where: {
+          provider: 'ecpay',
+          batch: { entityId },
+          ...(paymentDateFilter ? { payoutDate: paymentDateFilter } : {}),
+          OR: [
+            { gateway: { contains: 'LINE' } },
+            { gateway: { contains: 'line' } },
+            { rawData: { path: ['付款方式'], string_contains: 'LINE' } as any },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: {
+          id: true,
+          matchedPaymentId: true,
+          externalOrderId: true,
+          providerPaymentId: true,
+          providerTradeNo: true,
+          gateway: true,
+          status: true,
+          confidence: true,
+          payoutDate: true,
+          grossAmountOriginal: true,
+          feeAmountOriginal: true,
+          netAmountOriginal: true,
+          message: true,
+        },
+      }),
+      this.prisma.payoutImportLine.findMany({
+        where: {
+          provider: 'linepay',
+          batch: { entityId },
+          ...(paymentDateFilter ? { payoutDate: paymentDateFilter } : {}),
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: {
+          id: true,
+          matchedPaymentId: true,
+          externalOrderId: true,
+          providerPaymentId: true,
+          providerTradeNo: true,
+          gateway: true,
+          status: true,
+          confidence: true,
+          payoutDate: true,
+          grossAmountOriginal: true,
+          feeAmountOriginal: true,
+          netAmountOriginal: true,
+          message: true,
+        },
+      }),
+    ]);
+
+    const ecpayByPaymentId = new Map(
+      ecpayLinePayLines
+        .filter((line) => line.matchedPaymentId)
+        .map((line) => [line.matchedPaymentId!, line]),
+    );
+    const directByPaymentId = new Map(
+      directLinePayLines
+        .filter((line) => line.matchedPaymentId)
+        .map((line) => [line.matchedPaymentId!, line]),
+    );
+
+    const items = candidatePayments.map((payment) => {
+      const metadata = {
+        ...this.extractMetadata(payment.notes),
+        ...this.extractMetadata(payment.salesOrder?.notes),
+      };
+      const ecpayLine = ecpayByPaymentId.get(payment.id) || null;
+      const directLine = directByPaymentId.get(payment.id) || null;
+      const hasProviderId = Boolean(
+        metadata.providerPaymentId ||
+          metadata.providerTradeNo ||
+          metadata.authorization,
+      );
+      const feeActual = (payment.notes || '').includes('feeStatus=actual');
+
+      let route = 'needs_decision';
+      let routeLabel = '待判斷來源';
+      let nextAction = '先確認綠界撥款報表是否包含這筆 LINE Pay。';
+
+      if (ecpayLine || metadata.feeSource === 'provider-payout:ecpay') {
+        route = 'ecpay';
+        routeLabel = '走綠界對帳';
+        nextAction = feeActual
+          ? '綠界已回填實際手續費，可進入核銷檢查。'
+          : '已找到綠界撥款線索，等待手續費與淨額回填。';
+      } else if (directLine || metadata.feeSource === 'provider-payout:linepay') {
+        route = 'linepay';
+        routeLabel = '走 LINE Pay 直連對帳';
+        nextAction = feeActual
+          ? 'LINE Pay 結算已回填，可進入核銷檢查。'
+          : '已找到 LINE Pay 結算線索，等待手續費與淨額回填。';
+      } else if (!hasProviderId) {
+        route = 'missing_provider_id';
+        routeLabel = '缺 LINE Pay 交易序號';
+        nextAction =
+          '先重新同步 Shopify transactions，或用訂單編號查 LINE Pay Payment Details。';
+      } else {
+        route = 'needs_statement';
+        routeLabel = '需要撥款報表';
+        nextAction =
+          '匯入綠界 3290494 撥款報表；若查不到，再匯入 LINE Pay 結算報表。';
+      }
+
+      return {
+        paymentId: payment.id,
+        salesOrderId: payment.salesOrderId,
+        externalOrderId: payment.salesOrder?.externalOrderId || null,
+        orderDate: payment.salesOrder?.orderDate?.toISOString() || null,
+        payoutDate: payment.payoutDate?.toISOString() || null,
+        channel: payment.salesOrder?.channel?.code || payment.channel,
+        customerName: payment.salesOrder?.customer?.name || null,
+        customerEmail: payment.salesOrder?.customer?.email || null,
+        status: payment.status,
+        orderStatus: payment.salesOrder?.status || null,
+        gateway: metadata.gateway || 'line_pay',
+        providerPaymentId: metadata.providerPaymentId || null,
+        providerTradeNo: metadata.providerTradeNo || null,
+        authorization: metadata.authorization || null,
+        feeStatus: metadata.feeStatus || 'unavailable',
+        feeSource: metadata.feeSource || null,
+        grossAmount: Number(payment.amountGrossOriginal || 0),
+        netAmount: Number(payment.amountNetOriginal || 0),
+        gatewayFeeAmount: Number(payment.feeGatewayOriginal || 0),
+        platformFeeAmount: Number(payment.feePlatformOriginal || 0),
+        reconciledFlag: payment.reconciledFlag,
+        route,
+        routeLabel,
+        nextAction,
+        matchedPayoutLine: ecpayLine || directLine
+          ? {
+              id: (ecpayLine || directLine)!.id,
+              provider: ecpayLine ? 'ecpay' : 'linepay',
+              status: (ecpayLine || directLine)!.status,
+              confidence: (ecpayLine || directLine)!.confidence,
+              message: (ecpayLine || directLine)!.message,
+            }
+          : null,
+      };
+    });
+
+    const countByRoute = (route: string) =>
+      items.filter((item) => item.route === route).length;
+
+    return {
+      entityId,
+      generatedAt: new Date().toISOString(),
+      range: {
+        startDate: startDate?.toISOString() || null,
+        endDate: endDate?.toISOString() || null,
+      },
+      summary: {
+        candidatePayments: items.length,
+        ecpayMatched: countByRoute('ecpay'),
+        linePayDirectMatched: countByRoute('linepay'),
+        missingProviderId: countByRoute('missing_provider_id'),
+        needsStatement: countByRoute('needs_statement'),
+        needsDecision: countByRoute('needs_decision'),
+        ecpayLinePayPayoutLines: ecpayLinePayLines.length,
+        directLinePayPayoutLines: directLinePayLines.length,
+      },
+      decision: {
+        recommendedFirstStep:
+          ecpayLinePayLines.length > 0
+            ? '目前已有綠界 LINE Pay 撥款線索，優先以 ECPay 3290494 對帳。'
+            : '尚未看到綠界 LINE Pay 撥款線索，先匯入 ECPay 3290494 報表；若仍無資料，再走 LINE Pay 直連結算報表。',
+        rules: [
+          {
+            route: 'ecpay',
+            label: '綠界對帳',
+            condition:
+              'ECPay 3290494 撥款報表中有 LINE Pay 交易或 Payment 已有 provider-payout:ecpay。',
+          },
+          {
+            route: 'linepay',
+            label: 'LINE Pay 直連對帳',
+            condition:
+              'LINE Pay 結算報表已匯入，或 Payment 已有 provider-payout:linepay。',
+          },
+          {
+            route: 'missing_provider_id',
+            label: '缺交易序號',
+            condition:
+              'Payment notes 沒有 providerPaymentId / providerTradeNo / authorization。',
+          },
+          {
+            route: 'needs_statement',
+            label: '需要撥款報表',
+            condition:
+              '交易看起來是 LINE Pay，但尚未找到 ECPay 或 LINE Pay 的實際撥款列。',
+          },
+        ],
+      },
+      items,
+    };
+  }
+
   async getDashboardReconciliationFeed(
     entityId: string,
     startDate?: Date,
@@ -2924,7 +3167,19 @@ export class ReportsService {
     if (value.startsWith('provider-payout:hitrust')) {
       return 'hitrust';
     }
+    if (value.startsWith('provider-payout:linepay')) {
+      return 'linepay';
+    }
     return null;
+  }
+
+  private linePayNotesWhere() {
+    return [
+      { notes: { contains: 'LINE Pay' } },
+      { notes: { contains: 'line_pay' } },
+      { notes: { contains: 'linepay' } },
+      { notes: { contains: 'twqr_line_pay' } },
+    ];
   }
 
   private extractMetadata(notes?: string | null) {
