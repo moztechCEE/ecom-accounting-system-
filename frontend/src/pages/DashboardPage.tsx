@@ -562,15 +562,15 @@ const DashboardPage: React.FC = () => {
 
   // ─── 通路貢獻（從真實 performanceBuckets 計算）──────────────
   const channelColorMap: [RegExp, string][] = [
-    [/shopify/i, '#96bf48'],
-    [/shopline/i, '#e85d04'],
-    [/1shop|oneshop/i, '#4361ee'],
-    [/ecpay/i, '#7209b7'],
-    [/citiesocial/i, '#f72585'],
-    [/pchome/i, '#3a86ff'],
-    [/momo/i, '#ff006e'],
-    [/pinkoi/i, '#fb5607'],
-    [/line/i, '#00b300'],
+    [/shopify/i, '#475569'],
+    [/shopline/i, '#0f766e'],
+    [/1shop|oneshop/i, '#4f46e5'],
+    [/ecpay/i, '#6d28d9'],
+    [/citiesocial/i, '#7e22ce'],
+    [/pchome/i, '#1d4ed8'],
+    [/momo/i, '#9f1239'],
+    [/pinkoi/i, '#b45309'],
+    [/line/i, '#166534'],
   ]
   const getChannelColor = (key: string): string => {
     for (const [re, color] of channelColorMap) {
@@ -707,6 +707,61 @@ const DashboardPage: React.FC = () => {
           </motion.div>
         ))}
       </div>
+
+      {/* ── 💸 Section 1b：費用概況 ── */}
+      {executive?.expenses && (
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400 mb-3">Expense Overview</div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {[
+              {
+                label: '本期實際費用', value: executive.expenses.actualSpend,
+                sub: `${executive.expenses.actualSpendCount} 筆`,
+                color: 'text-slate-800', bg: 'from-slate-500/10 to-slate-100/5',
+              },
+              {
+                label: '待審批金額', value: executive.expenses.pendingApprovalAmount,
+                sub: `${executive.expenses.pendingApprovalCount} 筆待審`,
+                color: executive.expenses.pendingApprovalCount > 0 ? 'text-amber-700' : 'text-slate-800',
+                bg: executive.expenses.pendingApprovalCount > 0 ? 'from-amber-500/10 to-amber-100/5' : 'from-slate-500/10 to-slate-100/5',
+              },
+              {
+                label: '已核准未付', value: executive.expenses.approvedUnpaidAmount,
+                sub: `${executive.expenses.approvedUnpaidCount} 筆應付`,
+                color: executive.expenses.approvedUnpaidAmount > 0 ? 'text-rose-700' : 'text-slate-800',
+                bg: executive.expenses.approvedUnpaidAmount > 0 ? 'from-rose-500/10 to-rose-100/5' : 'from-slate-500/10 to-slate-100/5',
+              },
+              {
+                label: '費用入帳率', value: null,
+                sub: `費控狀態`,
+                color: 'text-slate-500',
+                bg: 'from-slate-500/10 to-slate-100/5',
+                custom: (
+                  <div className="mt-1">
+                    <div className="text-lg font-bold text-slate-800">
+                      {executive.expenses.actualSpendCount > 0
+                        ? `${((executive.expenses.actualSpendCount / (executive.expenses.actualSpendCount + executive.expenses.pendingApprovalCount)) * 100).toFixed(0)}%`
+                        : '—'}
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">已入帳 / 全部費用</div>
+                  </div>
+                ),
+              },
+            ].map((item, idx) => (
+              <motion.div key={idx} whileHover={{ y: -3 }}
+                className={`glass-card bg-gradient-to-br ${item.bg} p-5`}>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{item.label}</div>
+                {item.custom ?? (
+                  <>
+                    <div className={`text-2xl font-bold ${item.color}`}>{fmtMoney(item.value ?? 0)}</div>
+                    <div className="text-xs text-slate-400 mt-1">{item.sub}</div>
+                  </>
+                )}
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── 🏷️ Section 2：品牌業績 ── */}
       <div>
