@@ -36,6 +36,7 @@ type NormalizedPayoutLine = {
   payoutStatus: string | null;
   externalOrderId: string | null;
   providerPaymentId: string | null;
+  originalProviderPaymentId: string | null;
   providerTradeNo: string | null;
   authorizationCode: string | null;
   grossAmount: Decimal | null;
@@ -86,6 +87,15 @@ const COMMON_ALIASES: Record<string, string[]> = {
     '支付單號',
     '交易編號',
     '請款序號',
+  ],
+  originalProviderPaymentId: [
+    'originalProviderPaymentId',
+    'originalTransactionId',
+    'Original Transaction ID',
+    '原始交易號碼',
+    '原始交易序號',
+    '原交易號碼',
+    '原交易序號',
   ],
   providerTradeNo: [
     'providerTradeNo',
@@ -216,6 +226,13 @@ const PROVIDER_ALIASES: Record<
       '交易序號',
       '交易號碼',
     ],
+    originalProviderPaymentId: [
+      'originalTransactionId',
+      'Original Transaction ID',
+      'originalTransactionId',
+      '原始交易號碼',
+      '原始交易序號',
+    ],
     providerTradeNo: [
       'transactionId',
       'Transaction ID',
@@ -305,6 +322,47 @@ export class ProviderPayoutReconciliationService {
       let invalidCount = 0;
 
       for (const line of normalizedRows) {
+        if (this.isRefundOrReversalLine(line)) {
+          const refundMatch = this.findRefundPaymentMatch(
+            line,
+            candidatePayments,
+          );
+
+          if (!refundMatch.candidate) {
+            unmatchedCount += 1;
+            lineWrites.push(
+              this.toLineWrite(batch.id, line, {
+                status: 'refund_unmatched',
+                confidence: refundMatch.confidence,
+                message: refundMatch.message,
+              }),
+            );
+            continue;
+          }
+
+          const reversalJournalId = await this.applyRefundReversalToPayment(
+            tx,
+            batch.id,
+            line,
+            refundMatch.candidate,
+            userId,
+            journalContextCache,
+            openPeriodCache,
+          );
+
+          matchedCount += 1;
+          lineWrites.push(
+            this.toLineWrite(batch.id, line, {
+              status: 'refund_reversed',
+              confidence: refundMatch.confidence,
+              message: `${refundMatch.message}；已建立退款/扣回對帳分錄 ${reversalJournalId}`,
+              matchedPaymentId: refundMatch.candidate.id,
+              matchedSalesOrderId: refundMatch.candidate.salesOrderId || null,
+            }),
+          );
+          continue;
+        }
+
         const validationError = this.validateNormalizedLine(line);
 
         if (validationError) {
@@ -498,6 +556,9 @@ export class ProviderPayoutReconciliationService {
       providerPaymentId: this.toCleanString(
         this.pickFieldValue(provider, row, 'providerPaymentId', mapping),
       ),
+      originalProviderPaymentId: this.toCleanString(
+        this.pickFieldValue(provider, row, 'originalProviderPaymentId', mapping),
+      ),
       providerTradeNo: this.toCleanString(
         this.pickFieldValue(provider, row, 'providerTradeNo', mapping),
       ),
@@ -516,16 +577,12 @@ export class ProviderPayoutReconciliationService {
 
   private validateNormalizedLine(line: NormalizedPayoutLine) {
     const hasMatchKey = Boolean(
-      line.providerPaymentId || line.providerTradeNo || line.externalOrderId,
+      line.providerPaymentId ||
+        line.originalProviderPaymentId ||
+        line.providerTradeNo ||
+        line.externalOrderId,
     );
     const hasAmountContext = Boolean(line.grossAmount || line.netAmount);
-
-    if (
-      line.provider === 'linepay' &&
-      (line.grossAmount?.lessThan(0) || line.netAmount?.lessThan(0))
-    ) {
-      return 'LINE Pay 退款 / 負數請款列需走退款、折讓或反向核銷流程，不可用一般撥款自動核銷。';
-    }
 
     if (!line.feeAmount && !(line.grossAmount && line.netAmount)) {
       return '缺少手續費欄位，且無法由交易金額與撥款金額反推。';
@@ -637,6 +694,117 @@ export class ProviderPayoutReconciliationService {
       confidence: best.confidence,
       message: best.reasons.join('、'),
     };
+  }
+
+  private isRefundOrReversalLine(line: NormalizedPayoutLine) {
+    return (
+      line.provider === 'linepay' &&
+      (line.grossAmount?.lessThan(0) || line.netAmount?.lessThan(0))
+    );
+  }
+
+  private findRefundPaymentMatch(
+    line: NormalizedPayoutLine,
+    candidates: MatchCandidate[],
+  ): MatchResult {
+    const ranked = candidates
+      .map((candidate) => ({
+        candidate,
+        ...this.scoreRefundPaymentMatch(line, candidate),
+      }))
+      .filter((result) => result.confidence > 0)
+      .sort((left, right) => right.confidence - left.confidence);
+
+    if (!ranked.length) {
+      return {
+        candidate: null,
+        confidence: 0,
+        message:
+          'LINE Pay 退款/負數列找不到原始收款，需補原始交易號碼或訂單號碼。',
+      };
+    }
+
+    const best = ranked[0];
+    const runnerUp = ranked[1];
+
+    if (best.confidence < 70) {
+      return {
+        candidate: null,
+        confidence: best.confidence,
+        message:
+          '找到可能的原始收款，但資訊不足以自動建立退款沖銷，保留人工核對。',
+      };
+    }
+
+    if (runnerUp && best.confidence - runnerUp.confidence < 15) {
+      return {
+        candidate: null,
+        confidence: best.confidence,
+        message:
+          '退款列對到多筆相似原始收款，系統暫停自動沖銷以避免錯帳。',
+      };
+    }
+
+    return {
+      candidate: best.candidate,
+      confidence: best.confidence,
+      message: best.reasons.join('、'),
+    };
+  }
+
+  private scoreRefundPaymentMatch(
+    line: NormalizedPayoutLine,
+    candidate: MatchCandidate,
+  ) {
+    let confidence = 0;
+    const reasons: string[] = [];
+    const metadata = this.extractMetadata(candidate.notes);
+    const originalTransactionId = line.originalProviderPaymentId;
+
+    if (
+      originalTransactionId &&
+      (this.sameText(metadata.providerPaymentId, originalTransactionId) ||
+        this.sameText(metadata.providerTradeNo, originalTransactionId))
+    ) {
+      confidence += 160;
+      reasons.push('原始 LINE Pay 交易號碼一致');
+    }
+
+    if (
+      line.externalOrderId &&
+      this.sameText(candidate.salesOrder?.externalOrderId, line.externalOrderId)
+    ) {
+      confidence += 95;
+      reasons.push('退款訂單號碼一致');
+    }
+
+    const refundGross = this.absoluteDecimal(line.grossAmount || line.netAmount);
+    if (refundGross) {
+      const grossDelta = this.decimalDelta(
+        candidate.amountGrossOriginal,
+        refundGross,
+      );
+      if (grossDelta === 0) {
+        confidence += 30;
+        reasons.push('退款金額等於原收款金額');
+      } else if (grossDelta <= 1) {
+        confidence += 20;
+        reasons.push('退款金額接近原收款金額');
+      }
+    }
+
+    if (line.transactionDate && candidate.salesOrder?.orderDate) {
+      const dateDelta = this.dateDistanceInDays(
+        candidate.salesOrder.orderDate,
+        line.transactionDate,
+      );
+      if (dateDelta <= 30) {
+        confidence += 8;
+        reasons.push('退款日期落在合理追蹤期間');
+      }
+    }
+
+    return { confidence, reasons };
   }
 
   private scorePaymentMatch(
@@ -867,6 +1035,80 @@ export class ProviderPayoutReconciliationService {
     });
   }
 
+  private async applyRefundReversalToPayment(
+    tx: Prisma.TransactionClient,
+    batchId: string,
+    line: NormalizedPayoutLine,
+    payment: MatchCandidate,
+    userId: string,
+    journalContextCache: Map<string, PayoutJournalContext>,
+    openPeriodCache: Map<string, string | null>,
+  ) {
+    const currency = payment.amountGrossCurrency || line.currency || 'TWD';
+    const fxRate = new Decimal(payment.amountGrossFxRate || 1);
+    const zero = new Decimal(0);
+    const refundGross = this.absoluteDecimal(
+      line.grossAmount || line.netAmount || payment.amountGrossOriginal,
+    )!.toDecimalPlaces(2);
+    const refundNet = this.absoluteDecimal(
+      line.netAmount || line.grossAmount || payment.amountGrossOriginal,
+    )!.toDecimalPlaces(2);
+    const refundPlatformFee = this.absoluteDecimal(
+      line.platformFeeAmount,
+    )?.toDecimalPlaces(2) || zero;
+    const refundGatewayFee =
+      this.absoluteDecimal(
+        (line.gatewayFeeAmount || zero).add(line.processingFeeAmount || zero),
+      )?.toDecimalPlaces(2) ||
+      this.absoluteDecimal(line.feeAmount)?.toDecimalPlaces(2) ||
+      zero;
+    const refundFeeTotal = refundPlatformFee.add(refundGatewayFee);
+
+    if (refundNet.add(refundFeeTotal).sub(refundGross).abs().greaterThan(1)) {
+      throw new BadRequestException(
+        'LINE Pay 退款列金額不平衡，需人工確認退款淨額與手續費。',
+      );
+    }
+
+    const journalEntryId = await this.upsertRefundReversalJournalEntry(
+      tx,
+      payment,
+      line,
+      {
+        grossAmount: refundGross,
+        platformFeeAmount: refundPlatformFee,
+        gatewayFeeAmount: refundGatewayFee,
+        netAmount: refundNet,
+        currency,
+        fxRate,
+      },
+      userId,
+      journalContextCache,
+      openPeriodCache,
+    );
+
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: {
+        notes: this.buildProviderRefundNote(payment.notes, {
+          provider: line.provider,
+          batchId,
+          rowIndex: line.rowIndex,
+          gateway: line.gateway,
+          externalOrderId: line.externalOrderId,
+          providerPaymentId: line.providerPaymentId,
+          originalProviderPaymentId: line.originalProviderPaymentId,
+          refundGross,
+          refundNet,
+          refundFeeTotal,
+          journalEntryId,
+        }),
+      },
+    });
+
+    return journalEntryId;
+  }
+
   private buildProviderPayoutNote(
     existingNotes: string | null | undefined,
     params: {
@@ -934,6 +1176,67 @@ export class ProviderPayoutReconciliationService {
       .trim();
 
     return preservedNotes ? `${preservedNotes}\n${payoutNote}` : payoutNote;
+  }
+
+  private buildProviderRefundNote(
+    existingNotes: string | null | undefined,
+    params: {
+      provider: SupportedProvider;
+      batchId: string;
+      rowIndex: number;
+      gateway: string | null;
+      externalOrderId: string | null;
+      providerPaymentId: string | null;
+      originalProviderPaymentId: string | null;
+      refundGross: Decimal;
+      refundNet: Decimal;
+      refundFeeTotal: Decimal;
+      journalEntryId: string;
+    },
+  ) {
+    const parts = [
+      `status=refund_reversed`,
+      `provider=${params.provider}`,
+      `batchId=${params.batchId}`,
+      `rowIndex=${params.rowIndex}`,
+      `refundGross=${params.refundGross.toFixed(2)}`,
+      `refundNet=${params.refundNet.toFixed(2)}`,
+      `refundFeeTotal=${params.refundFeeTotal.toFixed(2)}`,
+      `journalEntryId=${params.journalEntryId}`,
+      'drClearing=1191',
+      'crBank=1113',
+    ];
+
+    if (params.gateway) parts.push(`gateway=${params.gateway}`);
+    if (params.externalOrderId)
+      parts.push(`externalOrderId=${params.externalOrderId}`);
+    if (params.providerPaymentId)
+      parts.push(`providerPaymentId=${params.providerPaymentId}`);
+    if (params.originalProviderPaymentId)
+      parts.push(`originalProviderPaymentId=${params.originalProviderPaymentId}`);
+
+    const refundNote = `[provider-refund] ${parts.join('; ')}`;
+    const refundIdentifiers = [
+      params.providerPaymentId
+        ? `providerPaymentId=${params.providerPaymentId}`
+        : null,
+      params.originalProviderPaymentId
+        ? `originalProviderPaymentId=${params.originalProviderPaymentId}`
+        : null,
+      `journalEntryId=${params.journalEntryId}`,
+    ].filter(Boolean) as string[];
+
+    const preservedNotes = (existingNotes || '')
+      .split('\n')
+      .filter(
+        (note) =>
+          !note.startsWith('[provider-refund]') ||
+          !refundIdentifiers.some((identifier) => note.includes(identifier)),
+      )
+      .join('\n')
+      .trim();
+
+    return preservedNotes ? `${preservedNotes}\n${refundNote}` : refundNote;
   }
 
   private async upsertPayoutJournalEntry(
@@ -1058,6 +1361,158 @@ export class ProviderPayoutReconciliationService {
       data: {
         entityId: payment.entityId,
         date: line.payoutDate || payment.payoutDate,
+        description,
+        sourceModule,
+        sourceId,
+        periodId: openPeriodId,
+        createdBy: userId,
+        approvedBy: userId,
+        approvedAt: new Date(),
+        journalLines: {
+          create: journalLines,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return createdJournal.id;
+  }
+
+  private async upsertRefundReversalJournalEntry(
+    tx: Prisma.TransactionClient,
+    payment: MatchCandidate,
+    line: NormalizedPayoutLine,
+    amounts: {
+      grossAmount: Decimal;
+      platformFeeAmount: Decimal;
+      gatewayFeeAmount: Decimal;
+      netAmount: Decimal;
+      currency: string;
+      fxRate: Decimal;
+    },
+    userId: string,
+    journalContextCache: Map<string, PayoutJournalContext>,
+    openPeriodCache: Map<string, string | null>,
+  ) {
+    const journalContext = await this.resolvePayoutJournalContext(
+      tx,
+      payment.entityId,
+      journalContextCache,
+    );
+    const journalDate = line.payoutDate || line.transactionDate || payment.payoutDate;
+    const openPeriodId = await this.resolveOpenPeriodId(
+      tx,
+      payment.entityId,
+      journalDate,
+      openPeriodCache,
+    );
+
+    const sourceModule = 'reconciliation_refund';
+    const sourceId = [
+      line.provider,
+      'refund',
+      line.providerPaymentId ||
+        line.originalProviderPaymentId ||
+        line.externalOrderId ||
+        payment.id,
+      line.providerPaymentId ? null : line.rowIndex,
+    ]
+      .filter(Boolean)
+      .join(':');
+    const description = `金流退款沖銷 ${line.provider.toUpperCase()} ${payment.salesOrder?.externalOrderId || payment.id}`;
+    const amountBase = (value: Decimal) =>
+      value.mul(amounts.fxRate).toDecimalPlaces(2);
+    const journalLines: Prisma.JournalLineCreateManyJournalEntryInput[] = [
+      {
+        accountId: journalContext.clearingAccountId,
+        debit: amounts.grossAmount,
+        credit: new Decimal(0),
+        currency: amounts.currency,
+        fxRate: amounts.fxRate,
+        amountBase: amountBase(amounts.grossAmount),
+        memo: `退款沖回應收帳款 ${payment.salesOrder?.externalOrderId || payment.id}`,
+      },
+      {
+        accountId: journalContext.bankDepositAccountId,
+        debit: new Decimal(0),
+        credit: amounts.netAmount,
+        currency: amounts.currency,
+        fxRate: amounts.fxRate,
+        amountBase: amountBase(amounts.netAmount),
+        memo: `退款扣回淨額 ${line.provider.toUpperCase()}`,
+      },
+      ...(amounts.platformFeeAmount.greaterThan(0)
+        ? [
+            {
+              accountId: journalContext.platformFeeAccountId,
+              debit: new Decimal(0),
+              credit: amounts.platformFeeAmount,
+              currency: amounts.currency,
+              fxRate: amounts.fxRate,
+              amountBase: amountBase(amounts.platformFeeAmount),
+              memo: '退款沖回平台手續費',
+            },
+          ]
+        : []),
+      ...(amounts.gatewayFeeAmount.greaterThan(0)
+        ? [
+            {
+              accountId: journalContext.gatewayFeeAccountId,
+              debit: new Decimal(0),
+              credit: amounts.gatewayFeeAmount,
+              currency: amounts.currency,
+              fxRate: amounts.fxRate,
+              amountBase: amountBase(amounts.gatewayFeeAmount),
+              memo: '退款沖回金流手續費 / 處理費',
+            },
+          ]
+        : []),
+    ];
+
+    const existingJournal = await tx.journalEntry.findFirst({
+      where: {
+        sourceModule,
+        sourceId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (existingJournal) {
+      await tx.journalLine.deleteMany({
+        where: {
+          journalEntryId: existingJournal.id,
+        },
+      });
+
+      await tx.journalEntry.update({
+        where: { id: existingJournal.id },
+        data: {
+          date: journalDate,
+          description,
+          periodId: openPeriodId,
+          approvedBy: userId,
+          approvedAt: new Date(),
+        },
+      });
+
+      await tx.journalLine.createMany({
+        data: journalLines.map((entry) => ({
+          journalEntryId: existingJournal.id,
+          ...entry,
+        })),
+      });
+
+      return existingJournal.id;
+    }
+
+    const createdJournal = await tx.journalEntry.create({
+      data: {
+        entityId: payment.entityId,
+        date: journalDate,
         description,
         sourceModule,
         sourceId,
@@ -1275,6 +1730,14 @@ export class ProviderPayoutReconciliationService {
     }
 
     return new Decimal(parsed).toDecimalPlaces(2);
+  }
+
+  private absoluteDecimal(value?: Decimal | Prisma.Decimal | null) {
+    if (!value) {
+      return null;
+    }
+
+    return new Decimal(value).abs().toDecimalPlaces(2);
   }
 
   private parseDate(value: unknown) {
