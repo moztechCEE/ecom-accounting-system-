@@ -846,15 +846,17 @@ const AccountingWorkbenchPage: React.FC = () => {
         </div>
       </Card>
 
-      <Alert
-        showIcon
-        type="info"
-        className="rounded-3xl !px-6 !py-4 shadow-sm"
-        message="自動判斷規則"
-        description="平台手續費優先吃平台 API；金流手續費以綠界撥款/對帳資料為最終依據。抓不到時不亂估，而是標記待補並進入會計工作台。"
-      />
+      <div className="pt-2">
+        <Alert
+          showIcon
+          type="info"
+          className="rounded-3xl !px-7 !py-5 shadow-sm"
+          message={<span className="text-base font-semibold">自動判斷規則</span>}
+          description="平台手續費優先吃平台 API；金流手續費以綠界撥款/對帳資料為最終依據。抓不到時不亂估，而是標記待補並進入會計工作台。"
+        />
+      </div>
 
-      <Card className="rounded-3xl border-0 bg-white/75 shadow-sm">
+      <Card className="rounded-3xl border-0 bg-white/75 shadow-sm" bodyStyle={{ padding: 28 }}>
         <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-2xl">
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
@@ -900,7 +902,7 @@ const AccountingWorkbenchPage: React.FC = () => {
         </div>
       </Card>
 
-      <Card className="rounded-3xl border-0 bg-white/65 shadow-sm">
+      <Card className="rounded-3xl border-0 bg-white/65 shadow-sm" bodyStyle={{ padding: 28 }}>
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
