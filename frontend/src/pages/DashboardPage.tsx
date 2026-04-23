@@ -960,8 +960,8 @@ const DashboardPage: React.FC = () => {
         <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400 mb-3">Marketing ROI</div>
         <div className="grid gap-4 md:grid-cols-2">
           {[
-            { name: 'Facebook Ads', icon: '📘', color: '#1877f2', colorCls: 'from-blue-500/10 to-blue-100/5' },
-            { name: 'Google Ads', icon: '🔍', color: '#ea4335', colorCls: 'from-red-500/10 to-red-100/5' },
+            { name: 'Facebook Ads', icon: '📘', color: '#1d4ed8', colorCls: 'from-blue-600/8 to-slate-100/5' },
+            { name: 'Google Ads', icon: '🔍', color: '#374151', colorCls: 'from-slate-500/8 to-slate-100/5' },
           ].map((ad) => (
             <div key={ad.name} className={`glass-card bg-gradient-to-br ${ad.colorCls} p-5`}>
               <div className="flex items-center justify-between mb-4">
@@ -1184,6 +1184,71 @@ const DashboardPage: React.FC = () => {
               ))}
             </div>
           )}
+        </motion.div>
+      </div>
+
+      {/* ── 📦 Section 8b：即時庫存概況（預留） ── */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400 mb-3">Inventory Dashboard</div>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+          className="glass-card p-6 border border-dashed border-slate-200">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <div className="text-xl font-semibold text-slate-900">即時庫存概況</div>
+              <div className="text-sm text-slate-400 mt-1">各品牌 SKU 庫存水位、備貨天數、補貨建議</div>
+            </div>
+            <Tag className="rounded-full text-xs bg-slate-100 text-slate-500 border-slate-200">待串接庫存 API</Tag>
+          </div>
+          <div className="grid grid-cols-3 gap-4 md:grid-cols-6 mb-4">
+            {['Moztech', 'Bonson', 'Moritek'].map((brand) => (
+              <div key={brand} className="rounded-2xl bg-slate-50 px-4 py-4 col-span-1 md:col-span-2">
+                <div className="text-xs text-slate-400 mb-2">{brand}</div>
+                <div className="space-y-1">
+                  {['在庫 SKU 數', '備貨天數', '低庫存品項'].map((label) => (
+                    <div key={label} className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500">{label}</span>
+                      <span className="text-slate-300 font-medium">—</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="text-xs text-slate-400 text-center">
+            串接庫存管理 API 後，此區將顯示各品牌 SKU 庫存水位折線圖、備貨天數、系統補貨建議
+          </div>
+        </motion.div>
+      </div>
+
+      {/* ── 🏭 Section 8c：品牌 & 商品銷量分析（預留） ── */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400 mb-3">Brand & Product Analytics</div>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+          className="glass-card p-6 border border-dashed border-slate-200">
+          <div className="flex items-start justify-between mb-5">
+            <div>
+              <div className="text-xl font-semibold text-slate-900">品牌 & 商品銷量分析</div>
+              <div className="text-sm text-slate-400 mt-1">各品牌銷量趨勢、熱銷 SKU、品類貢獻度</div>
+            </div>
+            <Tag className="rounded-full text-xs bg-slate-100 text-slate-500 border-slate-200">待串接商品分類 API</Tag>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {[
+              { brand: 'Moztech 墨子科技', desc: '熱銷 SKU 排行、品類銷量折線圖', gradient: 'from-slate-700 to-slate-900' },
+              { brand: 'Bonson 邦生', desc: '居家 / 清潔 / 戶外各品類佔比', gradient: 'from-teal-700 to-teal-900' },
+              { brand: 'Moritek', desc: '美妝保養品各品項月度趨勢', gradient: 'from-indigo-700 to-violet-800' },
+            ].map((b) => (
+              <div key={b.brand} className="rounded-2xl overflow-hidden">
+                <div className={`bg-gradient-to-r ${b.gradient} px-5 py-3 text-white`}>
+                  <div className="font-semibold text-sm">{b.brand}</div>
+                  <div className="text-xs text-white/60 mt-0.5">{b.desc}</div>
+                </div>
+                <div className="bg-slate-50 px-5 py-10 text-center">
+                  <div className="text-xs text-slate-400">串接商品分類資料後自動顯示銷量圖表</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </motion.div>
       </div>
 
