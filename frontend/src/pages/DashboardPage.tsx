@@ -714,22 +714,22 @@ const DashboardPage: React.FC = () => {
         <div className="grid gap-4 md:grid-cols-3">
           {[
             {
-              brand: 'Moztech 墨子科技', tag: '3C 手機配件', tagColor: '#0ea5e9',
+              brand: 'Moztech 墨子科技', tag: '3C 手機配件', tagColor: '#0284c7',
               gross: mOZtechData.gross, orders: mOZtechData.orderCount, net: mOZtechData.payoutNet,
               channels: 'Shopify 官網', icon: '📱',
-              gradient: 'from-sky-600 to-blue-700',
+              gradient: 'from-slate-700 to-slate-900',
             },
             {
-              brand: 'Bonson 邦生', tag: '居家 / 清潔 / 戶外', tagColor: '#10b981',
+              brand: 'Bonson 邦生', tag: '居家 / 清潔 / 戶外', tagColor: '#0d9488',
               gross: bonsonData.gross, orders: bonsonData.orderCount, net: bonsonData.payoutNet,
               channels: 'Shopline 官網', icon: '🏠',
-              gradient: 'from-emerald-600 to-teal-700',
+              gradient: 'from-teal-700 to-teal-900',
             },
             {
-              brand: 'KOL 團購 (1Shop)', tag: 'Moztech + Bonson', tagColor: '#f59e0b',
+              brand: 'KOL 團購 (1Shop)', tag: 'Moztech + Bonson', tagColor: '#6366f1',
               gross: teamData.gross, orders: teamData.orderCount, net: teamData.payoutNet,
               channels: '網紅 / 團購通路', icon: '🎯',
-              gradient: 'from-amber-500 to-orange-600',
+              gradient: 'from-indigo-700 to-violet-800',
             },
           ].map((b) => (
             <motion.div key={b.brand} whileHover={{ y: -3 }}
@@ -1135,7 +1135,7 @@ const DashboardPage: React.FC = () => {
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold text-white"
-                        style={{ backgroundColor: idx % 3 === 0 ? '#f56a00' : idx % 3 === 1 ? '#1677ff' : '#13c2c2' }}>
+                        style={{ backgroundColor: idx % 3 === 0 ? '#475569' : idx % 3 === 1 ? '#2563eb' : '#0891b2' }}>
                         {task.title.slice(0, 1)}
                       </div>
                       <div>
