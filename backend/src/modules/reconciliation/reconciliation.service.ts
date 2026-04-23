@@ -19,6 +19,7 @@ import { ShopifyService } from '../integration/shopify/shopify.service';
 import { OneShopService } from '../integration/one-shop/one-shop.service';
 import { EcpayShopifyPayoutService } from './ecpay-shopify-payout.service';
 import { SalesOrderService } from '../sales/services/sales-order.service';
+import { LinePayService } from './line-pay.service';
 
 /**
  * ReconciliationService
@@ -37,6 +38,7 @@ export class ReconciliationService {
     private readonly oneShopService: OneShopService,
     private readonly ecpayShopifyPayoutService: EcpayShopifyPayoutService,
     private readonly salesOrderService: SalesOrderService,
+    private readonly linePayService: LinePayService,
   ) {}
 
   assertSchedulerToken(providedToken?: string | null) {
@@ -66,6 +68,7 @@ export class ReconciliationService {
     syncOneShop?: boolean;
     syncEcpayPayouts?: boolean;
     syncInvoices?: boolean;
+    syncLinePayStatuses?: boolean;
     autoClear?: boolean;
   }) {
     const entityId = params.entityId;
@@ -148,6 +151,19 @@ export class ReconciliationService {
       params.syncInvoices !== false,
       () =>
         this.salesOrderService.syncInvoiceStatusForOrders({
+          entityId,
+          startDate: since,
+          endDate: until,
+          limit: 300,
+        }),
+    );
+
+    await runStep(
+      'linepay-status-refresh',
+      '刷新 LINE Pay 交易 / 退款狀態',
+      params.syncLinePayStatuses !== false,
+      () =>
+        this.linePayService.refreshImportedPayoutStatuses({
           entityId,
           startDate: since,
           endDate: until,

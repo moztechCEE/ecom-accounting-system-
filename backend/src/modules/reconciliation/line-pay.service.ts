@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, randomUUID } from 'crypto';
+import { PrismaService } from '../../common/prisma/prisma.service';
 
 type LinePayEnvironment = 'production' | 'sandbox';
 
@@ -28,12 +29,22 @@ type LinePayPaymentQuery = {
   orderId?: string;
 };
 
+type RefreshLinePayStatusParams = {
+  entityId: string;
+  startDate?: Date;
+  endDate?: Date;
+  limit?: number;
+};
+
 @Injectable()
 export class LinePayService {
   private readonly logger = new Logger(LinePayService.name);
   private readonly profiles: LinePayProfile[];
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     this.profiles = this.loadProfiles();
   }
 
@@ -83,6 +94,117 @@ export class LinePayService {
         sourceChannel: profile.sourceChannel,
       },
       raw: response,
+    };
+  }
+
+  async refreshImportedPayoutStatuses(params: RefreshLinePayStatusParams) {
+    const take = Math.min(Math.max(params.limit || 100, 1), 500);
+    const payoutDate =
+      params.startDate || params.endDate
+        ? {
+            ...(params.startDate ? { gte: params.startDate } : {}),
+            ...(params.endDate ? { lte: params.endDate } : {}),
+          }
+        : undefined;
+
+    const lines = await this.prisma.payoutImportLine.findMany({
+      where: {
+        provider: 'linepay',
+        providerPaymentId: { not: null },
+        ...(payoutDate ? { payoutDate } : {}),
+        batch: {
+          entityId: params.entityId,
+        },
+      },
+      orderBy: [{ payoutDate: 'desc' }, { createdAt: 'desc' }],
+      take,
+    });
+
+    let checkedCount = 0;
+    let successCount = 0;
+    let failedCount = 0;
+    let refundCandidateCount = 0;
+    const failures: Array<{ lineId: string; transactionId: string; error: string }> = [];
+
+    for (const line of lines) {
+      checkedCount += 1;
+      const rawData = this.toRecord(line.rawData);
+      const transactionId = line.providerPaymentId || '';
+      const profileKey = this.clean(rawData['商家 ID']) || undefined;
+
+      try {
+        const detail = await this.getPaymentDetails({
+          profileKey,
+          transactionId,
+        });
+        const summary = this.summarizePaymentDetail(detail.raw);
+        const isRefundCandidate =
+          this.toNumber(line.grossAmountOriginal) < 0 ||
+          this.toNumber(line.netAmountOriginal) < 0 ||
+          summary.refundCount > 0 ||
+          /refund|cancel|void|退款|取消/i.test(summary.status || '');
+
+        if (isRefundCandidate) {
+          refundCandidateCount += 1;
+        }
+
+        await this.prisma.payoutImportLine.update({
+          where: { id: line.id },
+          data: {
+            status: isRefundCandidate ? 'refund_pending_reversal' : line.status,
+            message: isRefundCandidate
+              ? 'LINE Pay API 已確認可能涉及退款/取消，需走退款或反向核銷流程。'
+              : line.message || 'LINE Pay API 狀態已刷新。',
+            rawData: {
+              ...rawData,
+              linePayApiRefresh: {
+                checkedAt: new Date().toISOString(),
+                ok: true,
+                transactionId,
+                returnCode: summary.returnCode,
+                returnMessage: summary.returnMessage,
+                status: summary.status,
+                orderId: summary.orderId,
+                refundCount: summary.refundCount,
+                refundAmount: summary.refundAmount,
+              },
+            },
+          },
+        });
+
+        successCount += 1;
+      } catch (error: any) {
+        failedCount += 1;
+        failures.push({
+          lineId: line.id,
+          transactionId,
+          error: error?.message || String(error),
+        });
+
+        await this.prisma.payoutImportLine.update({
+          where: { id: line.id },
+          data: {
+            rawData: {
+              ...rawData,
+              linePayApiRefresh: {
+                checkedAt: new Date().toISOString(),
+                ok: false,
+                transactionId,
+                error: error?.message || String(error),
+              },
+            },
+          },
+        });
+      }
+    }
+
+    return {
+      success: failedCount === 0,
+      checkedCount,
+      successCount,
+      failedCount,
+      refundCandidateCount,
+      failures: failures.slice(0, 20),
     };
   }
 
@@ -272,5 +394,53 @@ export class LinePayService {
     }
 
     return `${value.slice(0, 3)}***${value.slice(-3)}`;
+  }
+
+  private summarizePaymentDetail(raw: unknown) {
+    const record = this.toRecord(raw);
+    const info = this.toRecord(record.info);
+    const refunds = Array.isArray(info.refundList)
+      ? info.refundList
+      : Array.isArray(info.refunds)
+        ? info.refunds
+        : [];
+
+    return {
+      returnCode: this.clean(record.returnCode) || null,
+      returnMessage: this.clean(record.returnMessage) || null,
+      status:
+        this.clean(info.payStatus) ||
+        this.clean(info.status) ||
+        this.clean(info.transactionStatus) ||
+        null,
+      orderId: this.clean(info.orderId) || null,
+      refundCount: refunds.length,
+      refundAmount: refunds.reduce((sum, item) => {
+        const refund = this.toRecord(item);
+        return (
+          sum +
+          this.toNumber(
+            refund.refundAmount ||
+              refund.amount ||
+              refund.refundTransactionAmount,
+          )
+        );
+      }, 0),
+    };
+  }
+
+  private toRecord(value: unknown): Record<string, any> {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, any>)
+      : {};
+  }
+
+  private toNumber(value: unknown) {
+    if (value && typeof value === 'object' && 'toNumber' in value) {
+      return Number((value as any).toNumber());
+    }
+
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
   }
 }

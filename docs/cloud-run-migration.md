@@ -98,6 +98,44 @@ DATABASE_URL: postgresql://USER:PASSWORD@HOST:5432/DB?schema=public
 - `DB_PASSWORD`
 - `DB_NAME`
 
+## 本機連 Cloud SQL
+
+本機 `backend/.env` 建議不要再指向 Render DB。現在本機可透過 Cloud SQL Auth Proxy 連目前正式 Cloud SQL：
+
+```text
+DATABASE_URL="postgresql://erp_user:***@127.0.0.1:5433/erp_db?schema=public"
+```
+
+第一次使用先安裝 proxy：
+
+```bash
+brew install cloud-sql-proxy
+gcloud auth application-default login
+```
+
+啟動本機 proxy：
+
+```bash
+cd backend
+./scripts/start-cloudsql-proxy.sh
+```
+
+另一個 terminal 再啟動後端：
+
+```bash
+cd backend
+npm run start:dev
+```
+
+Cloud SQL 目標：
+
+```text
+instance: moztech-main-db:asia-east1:moztech-main-db
+database: erp_db
+user: erp_user
+local port: 5433
+```
+
 如果後續要把 Shopline 一起部署到 Cloud Run，可一併補上：
 
 ```yaml
@@ -146,6 +184,10 @@ LINE_PAY_ACCOUNTS_JSON: >-
 - 後端可用 `GET /api/v1/reconciliation/line-pay/payments?transactionId=...` 或 `?orderId=...` 測 LINE Pay Get Payment Details API。
 - LINE Pay `TRANSACTION` 檔只用來確認付款/退款狀態；`CAPTURE` 檔才是請款/預計撥款/手續費/淨額的核銷依據。
 - 會計工作台可匯入 `LINE Pay CAPTURE`，系統會以 `訂單號碼` 對銷售訂單，以 `交易號碼` 對 LINE Pay transaction，並回填 `手續費合計`、`預計撥款日`、`預計撥款金額`。
+- 已匯入的 LINE Pay CAPTURE 交易可用 `POST /api/v1/reconciliation/line-pay/refresh-status` 回查 LINE Pay 狀態。
+- 排程版 `POST /api/v1/reconciliation/line-pay/refresh-status/auto` 需帶 `x-sync-token`，適合每小時追蹤近 7 天退款 / 取消。
+- 若 LINE Pay API 或 CAPTURE 負數列顯示退款 / 取消，系統會標記 `refund_pending_reversal`，不會混入一般撥款自動核銷。
+- 現階段 LINE Pay 仍需要先匯入 CAPTURE 報表；若未來取得可自動拉結算報表的 API，才能把 CAPTURE 匯入改成完全自動。
 
 核心對帳排程可用 Cloud Scheduler 呼叫：
 
@@ -157,10 +199,23 @@ gcloud scheduler jobs create http ecom-reconciliation-daily \
   --uri="https://YOUR_BACKEND_CLOUD_RUN_URL/api/v1/reconciliation/run/auto" \
   --http-method=POST \
   --headers="Content-Type=application/json,x-sync-token=YOUR_RECONCILIATION_SYNC_JOB_TOKEN" \
-  --message-body='{"entityId":"tw-entity-001","syncShopify":true,"syncOneShop":true,"syncEcpayPayouts":true,"syncInvoices":true}'
+  --message-body='{"entityId":"tw-entity-001","syncShopify":true,"syncOneShop":true,"syncEcpayPayouts":true,"syncInvoices":true,"syncLinePayStatuses":true}'
 ```
 
-這個 Job 會跑同一套核心流程：平台訂單、綠界撥款、AR、發票狀態、對帳中心重算。
+這個 Job 會跑同一套核心流程：平台訂單、綠界撥款、AR、發票狀態、LINE Pay 狀態刷新、對帳中心重算。
+
+LINE Pay 每小時刷新排程範例：
+
+```bash
+gcloud scheduler jobs create http ecom-linepay-refresh-hourly \
+  --location=asia-east1 \
+  --schedule="0 * * * *" \
+  --time-zone="Asia/Taipei" \
+  --uri="https://YOUR_BACKEND_CLOUD_RUN_URL/api/v1/reconciliation/line-pay/refresh-status/auto" \
+  --http-method=POST \
+  --headers="Content-Type=application/json,x-sync-token=YOUR_RECONCILIATION_SYNC_JOB_TOKEN" \
+  --message-body='{"entityId":"tw-entity-001","limit":300}'
+```
 
 ## 建議遷移順序
 1. 先部署後端到 Cloud Run

@@ -109,7 +109,30 @@ class AutoRunCoreReconciliationDto {
 
   @IsOptional()
   @IsBoolean()
+  syncLinePayStatuses?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   autoClear?: boolean;
+}
+
+class RefreshLinePayStatusesDto {
+  @IsString()
+  entityId!: string;
+
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  limit?: number;
 }
 
 class ClearReadyPaymentsDto {
@@ -185,6 +208,7 @@ export class ReconciliationController {
       syncOneShop?: boolean;
       syncEcpayPayouts?: boolean;
       syncInvoices?: boolean;
+      syncLinePayStatuses?: boolean;
       autoClear?: boolean;
     },
     @CurrentUser('id') userId: string,
@@ -198,6 +222,7 @@ export class ReconciliationController {
       syncOneShop: body.syncOneShop,
       syncEcpayPayouts: body.syncEcpayPayouts,
       syncInvoices: body.syncInvoices,
+      syncLinePayStatuses: body.syncLinePayStatuses,
       autoClear: body.autoClear,
     });
   }
@@ -243,6 +268,7 @@ export class ReconciliationController {
       syncOneShop: body.syncOneShop,
       syncEcpayPayouts: body.syncEcpayPayouts,
       syncInvoices: body.syncInvoices,
+      syncLinePayStatuses: body.syncLinePayStatuses,
       autoClear: body.autoClear,
     });
   }
@@ -362,6 +388,42 @@ export class ReconciliationController {
       profileKey,
       transactionId,
       orderId,
+    });
+  }
+
+  @Post('line-pay/refresh-status')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @ApiOperation({
+    summary: '刷新 LINE Pay 匯入交易狀態',
+    description:
+      '針對已匯入的 LINE Pay CAPTURE 交易，逐筆呼叫 LINE Pay Get Payment Details API，更新退款/取消候選狀態。',
+  })
+  async refreshLinePayStatuses(@Body() body: RefreshLinePayStatusesDto) {
+    return this.linePayService.refreshImportedPayoutStatuses({
+      entityId: body.entityId,
+      startDate: body.startDate ? new Date(body.startDate) : undefined,
+      endDate: body.endDate ? new Date(body.endDate) : undefined,
+      limit: body.limit,
+    });
+  }
+
+  @Public()
+  @Post('line-pay/refresh-status/auto')
+  @ApiOperation({
+    summary: '排程刷新 LINE Pay 匯入交易狀態',
+    description:
+      '提供 Cloud Scheduler 使用。需帶 x-sync-token，用於每小時追蹤最近 LINE Pay 交易與退款狀態。',
+  })
+  async autoRefreshLinePayStatuses(
+    @Headers('x-sync-token') syncToken: string | undefined,
+    @Body() body: RefreshLinePayStatusesDto,
+  ) {
+    this.reconciliationService.assertSchedulerToken(syncToken);
+    return this.linePayService.refreshImportedPayoutStatuses({
+      entityId: body.entityId,
+      startDate: body.startDate ? new Date(body.startDate) : undefined,
+      endDate: body.endDate ? new Date(body.endDate) : undefined,
+      limit: body.limit,
     });
   }
 

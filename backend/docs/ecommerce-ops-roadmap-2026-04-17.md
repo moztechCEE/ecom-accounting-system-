@@ -399,7 +399,7 @@ B2B 月結下一步：
   - `CAPTURE` 檔有 `交易號碼`、`訂單號碼`、`請款日期`、`預計撥款日`、`支付總額`、`手續費`、`營業稅`、`手續費合計`、`預計撥款金額`，可作為 LINE Pay 直連核銷依據。
   - `CAPTURE` 2026-04-01 ~ 2026-04-23：323 筆，支付總額 `463,693`，手續費合計 `10,711.3083`，預計撥款金額 `452,981.6917`。
   - 系統已補 LINE Pay CAPTURE 中文欄位映射；會計工作台可匯入 CAPTURE 檔，逐列留下 matched / unmatched / invalid 結果。
-  - 若 LINE Pay CAPTURE 出現負數列（退款 / 反向請款），系統會先標為 invalid 並保留待退款 / 折讓流程，不會用一般撥款邏輯自動沖銷。
+  - 若 LINE Pay CAPTURE 出現負數列（退款 / 反向請款），系統會標為 `refund_pending_reversal` 並保留待退款 / 折讓流程，不會用一般撥款邏輯自動沖銷。
 
 ### 2026-04-22 正式資料快照
 
@@ -470,6 +470,37 @@ B2B 月結下一步：
     - 貸：應收帳款 / 撥款清算 `1191`
   - 對帳中心已新增「核銷可核銷」按鈕。
   - 核心 Job 已預設帶 `autoClear=true`，同步後會自動嘗試核銷符合條件的款項。
+- 新增 LINE Pay 狀態刷新與退款追蹤
+  - `POST /api/v1/reconciliation/line-pay/refresh-status`
+  - `POST /api/v1/reconciliation/line-pay/refresh-status/auto`
+  - 核心對帳 Job 會一併刷新已匯入的 LINE Pay CAPTURE 交易狀態。
+  - 已匯入 CAPTURE 的正向交易可作為實際手續費、營業稅、預計撥款日與淨入帳來源。
+  - 若 LINE Pay API 或 CAPTURE 負數列顯示退款 / 取消，系統會標記 `refund_pending_reversal`，不會混入一般撥款自動核銷。
+  - 後續退款要走折讓、反向核銷或退款分錄，避免把原收入與退款互相抵掉後失去稽核軌跡。
+
+### LINE Pay 自動對帳目前狀態
+
+- 可做：
+  - 匯入 LINE Pay CAPTURE 報表，取得每筆手續費、營業稅、預計撥款金額與預計撥款日。
+  - 用交易號碼呼叫 LINE Pay Get Payment Details API 回查交易狀態。
+  - 將疑似退款 / 取消交易標成反向核銷待辦。
+  - 由核心對帳 Job 或 Cloud Scheduler 持續刷新近幾天交易狀態。
+- 尚未能完全自動：
+  - LINE Pay 目前沒有由系統主動列出所有結算 CAPTURE 的流程；仍需匯入 CAPTURE 報表，或等後續取得可拉取結算報表的正式 API。
+  - 退款的會計分錄仍需補完整規則：折讓、退款銀行流、原訂單 AR 沖銷、發票作廢 / 折讓單。
+  - 第二個 LINE Pay 帳號仍需補完整 Merchant ID、Channel ID、Channel Secret、品牌 / 通路歸屬。
+
+### 建議排程
+
+- 每小時：
+  - 跑 `POST /api/v1/reconciliation/line-pay/refresh-status/auto`
+  - 範圍抓最近 7 天，追蹤付款後退款、取消與狀態延遲。
+- 每天凌晨：
+  - 跑 `POST /api/v1/reconciliation/run/auto`
+  - 同步 Shopify / 1Shop / Shopline、綠界撥款、LINE Pay 狀態、發票狀態，再嘗試保守核銷。
+- 每月結帳前：
+  - 匯入 LINE Pay CAPTURE / 綠界撥款 / 服務費發票。
+  - 查看對帳中心的未匹配、退款待沖銷、發票缺漏與手續費缺漏。
 
 ### 使用者目前要做的外部確認清單
 

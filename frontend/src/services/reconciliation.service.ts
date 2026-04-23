@@ -171,6 +171,7 @@ export const reconciliationService = {
     syncOneShop?: boolean
     syncEcpayPayouts?: boolean
     syncInvoices?: boolean
+    syncLinePayStatuses?: boolean
     autoClear?: boolean
   }) => {
     const entityId =
@@ -186,6 +187,7 @@ export const reconciliationService = {
         syncOneShop: params.syncOneShop,
         syncEcpayPayouts: params.syncEcpayPayouts,
         syncInvoices: params.syncInvoices,
+        syncLinePayStatuses: params.syncLinePayStatuses,
         autoClear: params.autoClear,
       },
       {
