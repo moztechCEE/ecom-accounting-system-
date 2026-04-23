@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { 
+  Alert,
   Typography, 
   Card, 
   Row, 
@@ -111,6 +112,7 @@ const ReportsPage: React.FC = () => {
   const [monthlyReconciliation, setMonthlyReconciliation] = useState<MonthlyChannelReconciliation | null>(null)
   const [invoiceQueue, setInvoiceQueue] = useState<InvoiceQueueResponse | null>(null)
   const [reconciliationAudit, setReconciliationAudit] = useState<OrderReconciliationAudit | null>(null)
+  const [loadIssues, setLoadIssues] = useState<string[]>([])
 
   // AI State
   const [aiModalVisible, setAiModalVisible] = useState(false)
@@ -122,7 +124,7 @@ const ReportsPage: React.FC = () => {
     setLoading(true)
     try {
       const [start, end] = dateRange
-      const [isData, bsData, tbData, glData, opsData, managementData, ecommerceData, monthlyData, invoiceData, auditData] = await Promise.all([
+      const results = await Promise.allSettled([
         accountingService.getIncomeStatement(start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')),
         accountingService.getBalanceSheet(end.format('YYYY-MM-DD')),
         accountingService.getTrialBalance(end.format('YYYY-MM-DD')),
@@ -156,18 +158,89 @@ const ReportsPage: React.FC = () => {
           limit: 50,
         }),
       ])
-      setIncomeStatement(isData)
-      setBalanceSheet(bsData)
-      setTrialBalance(tbData)
-      setGeneralLedger(glData)
-      setOperationsHub(opsData)
-      setManagementSummary(managementData)
-      setEcommerceHistory(ecommerceData)
-      setMonthlyReconciliation(monthlyData)
-      setInvoiceQueue(invoiceData)
-      setReconciliationAudit(auditData)
+
+      const failedSections: string[] = []
+
+      const [
+        incomeResult,
+        balanceResult,
+        trialResult,
+        ledgerResult,
+        operationsResult,
+        managementResult,
+        ecommerceResult,
+        monthlyResult,
+        invoiceResult,
+        auditResult,
+      ] = results
+
+      if (incomeResult.status === 'fulfilled') {
+        setIncomeStatement(incomeResult.value)
+      } else {
+        failedSections.push('損益表')
+      }
+
+      if (balanceResult.status === 'fulfilled') {
+        setBalanceSheet(balanceResult.value)
+      } else {
+        failedSections.push('資產負債表')
+      }
+
+      if (trialResult.status === 'fulfilled') {
+        setTrialBalance(trialResult.value)
+      } else {
+        failedSections.push('試算表')
+      }
+
+      if (ledgerResult.status === 'fulfilled') {
+        setGeneralLedger(ledgerResult.value)
+      } else {
+        failedSections.push('總分類帳')
+      }
+
+      if (operationsResult.status === 'fulfilled') {
+        setOperationsHub(operationsResult.value)
+      } else {
+        failedSections.push('營運總控台')
+      }
+
+      if (managementResult.status === 'fulfilled') {
+        setManagementSummary(managementResult.value)
+      } else {
+        failedSections.push('營運彙整')
+      }
+
+      if (ecommerceResult.status === 'fulfilled') {
+        setEcommerceHistory(ecommerceResult.value)
+      } else {
+        failedSections.push('電商資料整合')
+      }
+
+      if (monthlyResult.status === 'fulfilled') {
+        setMonthlyReconciliation(monthlyResult.value)
+      } else {
+        failedSections.push('月度對帳矩陣')
+      }
+
+      if (invoiceResult.status === 'fulfilled') {
+        setInvoiceQueue(invoiceResult.value)
+      } else {
+        failedSections.push('發票閉環')
+      }
+
+      if (auditResult.status === 'fulfilled') {
+        setReconciliationAudit(auditResult.value)
+      } else {
+        failedSections.push('逐筆對帳稽核')
+      }
+
+      setLoadIssues(failedSections)
+      if (failedSections.length) {
+        message.warning(`部分報表區塊讀取失敗：${failedSections.join('、')}`)
+      }
     } catch (error) {
       console.error(error)
+      setLoadIssues(['整體讀取'])
       message.error('無法載入報表數據')
     } finally {
       setLoading(false)
@@ -354,6 +427,15 @@ const ReportsPage: React.FC = () => {
       {/* Main Content */}
       <div className="glass-card p-6 min-h-[600px]">
         <Spin spinning={loading}>
+          {loadIssues.length ? (
+            <Alert
+              showIcon
+              type="warning"
+              className="mb-4 rounded-2xl"
+              message="部分報表區塊這次沒有讀取成功"
+              description={`目前失敗區塊：${loadIssues.join('、')}。其餘已成功讀到的區塊仍會先顯示，不會整頁空白。`}
+            />
+          ) : null}
           <Tabs defaultActiveKey="1" type="card" size="large" className="custom-tabs">
             <TabPane
               tab={
@@ -390,10 +472,10 @@ const ReportsPage: React.FC = () => {
               <Row gutter={[16, 16]} className="mt-4">
                 <Col xs={24} lg={10}>
                   <Card title="歷年電商業績趨勢" bordered={false} className="shadow-sm h-full">
-                    {ecommerceHistory?.periods?.length ? (
+                    {safeArray(ecommerceHistory?.periods).length ? (
                       <div className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={ecommerceHistory.periods}>
+                          <BarChart data={safeArray(ecommerceHistory?.periods)}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="label" />
                             <YAxis />
@@ -410,7 +492,7 @@ const ReportsPage: React.FC = () => {
                   <Card title="品牌 / 來源 / 顧客彙整" bordered={false} className="shadow-sm h-full">
                     <Table
                       rowKey={(record) => `${record.brand}-${record.sourceLabel}`}
-                      dataSource={ecommerceHistory?.brands || []}
+                      dataSource={safeArray(ecommerceHistory?.brands)}
                       size="small"
                       scroll={{ x: 980 }}
                       pagination={{ pageSize: 8 }}
@@ -471,7 +553,7 @@ const ReportsPage: React.FC = () => {
                 <Card title="商品與品牌細項" bordered={false} className="shadow-sm">
                   <Table
                     rowKey={(record) => `${record.brand}-${record.sku}`}
-                    dataSource={ecommerceHistory?.products || []}
+                    dataSource={safeArray(ecommerceHistory?.products)}
                     size="small"
                     scroll={{ x: 980 }}
                     pagination={{ pageSize: 10 }}
@@ -587,10 +669,10 @@ const ReportsPage: React.FC = () => {
               <Row gutter={[16, 16]} className="mt-4">
                 <Col xs={24} lg={10}>
                   <Card title="趨勢總覽" bordered={false} className="shadow-sm h-full">
-                    {managementSummary?.periods?.length ? (
+                    {safeArray(managementSummary?.periods).length ? (
                       <div className="h-[320px]">
                         <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={managementSummary.periods}>
+                          <LineChart data={safeArray(managementSummary?.periods)}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="label" />
                             <YAxis />
@@ -609,7 +691,7 @@ const ReportsPage: React.FC = () => {
                   <Card title="管理報表明細" bordered={false} className="shadow-sm h-full">
                     <Table
                       rowKey="key"
-                      dataSource={managementSummary?.periods || []}
+                      dataSource={safeArray(managementSummary?.periods)}
                       size="small"
                       scroll={{ x: 1320 }}
                       pagination={{ pageSize: 8 }}
@@ -1134,7 +1216,7 @@ const ReportsPage: React.FC = () => {
                 <div className="mt-4">
                   <Table
                     rowKey="orderId"
-                    dataSource={reconciliationAudit?.items || []}
+                    dataSource={safeArray(reconciliationAudit?.items)}
                     size="small"
                     scroll={{ x: 1480 }}
                     pagination={{ pageSize: 10 }}
