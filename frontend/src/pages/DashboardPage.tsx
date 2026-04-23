@@ -909,6 +909,52 @@ const DashboardPage: React.FC = () => {
         </div>
       </motion.div>
 
+      {/* ── 🧾 Section 4b：應收帳款健康度 ── */}
+      {arSummary && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">AR Health</div>
+              <div className="mt-1 text-xl font-semibold text-slate-900">應收帳款健康度</div>
+            </div>
+            {arSummary.overdueReceivableCount > 0 && (
+              <Tag color="red" className="rounded-full">逾期 {arSummary.overdueReceivableCount} 筆</Tag>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+            {[
+              { label: '總應收金額', value: fmtMoney(arSummary.outstandingAmount), color: 'text-slate-800', alert: false },
+              { label: '逾期金額', value: fmtMoney(arSummary.overdueReceivableAmount ?? 0), color: arSummary.overdueReceivableCount > 0 ? 'text-rose-600' : 'text-slate-800', alert: arSummary.overdueReceivableCount > 0 },
+              { label: '已收款', value: fmtMoney(arSummary.paidAmount), color: 'text-emerald-600', alert: false },
+              { label: '淨應收', value: fmtMoney(arSummary.netAmount ?? (arSummary.outstandingAmount - (arSummary.overdueReceivableAmount ?? 0))), color: 'text-slate-700', alert: false },
+              { label: '缺少發票', value: `${arSummary.missingInvoiceCount ?? 0} 筆`, color: (arSummary.missingInvoiceCount ?? 0) > 0 ? 'text-amber-600' : 'text-slate-400', alert: (arSummary.missingInvoiceCount ?? 0) > 0 },
+              { label: '缺少日記帳', value: `${arSummary.missingJournalCount ?? 0} 筆`, color: (arSummary.missingJournalCount ?? 0) > 0 ? 'text-amber-600' : 'text-slate-400', alert: (arSummary.missingJournalCount ?? 0) > 0 },
+            ].map((m) => (
+              <div key={m.label}
+                className={`rounded-2xl px-4 py-3 ${m.alert ? 'bg-rose-50 border border-rose-100' : 'bg-slate-50'}`}>
+                <div className="text-xs text-slate-400">{m.label}</div>
+                <div className={`mt-1 text-lg font-bold ${m.color}`}>{m.value}</div>
+              </div>
+            ))}
+          </div>
+          {/* 回收率進度條 */}
+          {arSummary.grossAmount > 0 && (
+            <div className="mt-4 rounded-2xl bg-slate-50 px-5 py-4">
+              <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+                <span>款項回收率</span>
+                <span className="font-semibold text-slate-800">
+                  {((arSummary.paidAmount / arSummary.grossAmount) * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-200">
+                <div className="h-2 rounded-full bg-teal-600 transition-all"
+                  style={{ width: `${Math.min((arSummary.paidAmount / arSummary.grossAmount) * 100, 100)}%` }} />
+              </div>
+            </div>
+          )}
+        </motion.div>
+      )}
+
       {/* ── 📣 Section 5：廣告投放 ROI ── */}
       <div>
         <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400 mb-3">Marketing ROI</div>
