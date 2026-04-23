@@ -595,7 +595,7 @@ const DashboardPage: React.FC = () => {
   const criticalCount = criticalInventory + criticalAnomalies + overdueAR;
 
   return (
-    <div className="space-y-6">
+    <div className="page-section-stack page-section-stack--compact">
       {/* AI Insights Widget */}
       <AIInsightsWidget />
 

@@ -329,7 +329,7 @@ const AccountsPayablePage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8 animate-[fadeInUp_0.4s_ease-out]">
+    <div className="page-section-stack animate-[fadeInUp_0.4s_ease-out]">
       <div className="flex justify-between items-end">
         <div>
           <Title level={2} className="!mb-1 !font-light">應付帳款 (AP)</Title>

@@ -265,7 +265,7 @@ const ReconciliationCenterPage: React.FC = () => {
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45 }}
-      className="space-y-10 p-6"
+      className="page-section-stack page-section-stack--roomy p-6"
     >
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
@@ -374,7 +374,7 @@ const ReconciliationCenterPage: React.FC = () => {
         </div>
       </Card>
 
-      <div className="mt-3 grid gap-6 md:grid-cols-4 xl:mt-4">
+      <div className="section-card-offset grid gap-6 md:grid-cols-4">
         {(Object.keys(bucketMeta) as ReconciliationBucketKey[]).map((key) => (
           <Card
             key={key}

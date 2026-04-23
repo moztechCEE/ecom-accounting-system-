@@ -179,7 +179,7 @@ const AccountsTab = () => {
   ]
 
   return (
-    <div className="space-y-8">
+    <div className="page-section-stack">
       <Row gutter={16}>
         <Col span={12}>
           <Card bordered={false} className="glass-card">
@@ -380,7 +380,7 @@ const TransactionsTab = () => {
   ]
 
   return (
-    <div className="space-y-8">
+    <div className="page-section-stack">
       <div className="flex justify-between items-center">
         <Title level={4} className="!mb-0 !font-light">交易明細</Title>
         <Upload>
@@ -404,7 +404,7 @@ const BankingPage: React.FC = () => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="space-y-8"
+      className="page-section-stack"
     >
       <div>
         <Title level={2} className="!mb-1 !font-light">銀行與資金</Title>

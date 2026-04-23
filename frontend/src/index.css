@@ -108,6 +108,25 @@ body {
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
+/* Page section spacing standard: prevent stacked cards from visually touching */
+.page-section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.page-section-stack--roomy {
+  gap: 2.5rem;
+}
+
+.page-section-stack--compact {
+  gap: 1.75rem;
+}
+
+.section-card-offset {
+  margin-top: 0.75rem;
+}
+
 /* Ambient Background Animation */
 @keyframes float {
   0% { transform: translate(0, 0) rotate(0deg); }
