@@ -374,11 +374,11 @@ const ReconciliationCenterPage: React.FC = () => {
         </div>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-4">
+      <div className="mt-3 grid gap-6 md:grid-cols-4 xl:mt-4">
         {(Object.keys(bucketMeta) as ReconciliationBucketKey[]).map((key) => (
           <Card
             key={key}
-            bodyStyle={{ padding: '24px 24px 20px' }}
+            bodyStyle={{ padding: '26px 24px 24px' }}
             className={`cursor-pointer rounded-3xl border-0 shadow-sm transition hover:-translate-y-1 hover:shadow-md ${
               activeBucket === key ? 'ring-2 ring-slate-900' : ''
             }`}
