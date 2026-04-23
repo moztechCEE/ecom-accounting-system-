@@ -67,7 +67,7 @@ import { reconciliationService } from '../services/reconciliation.service'
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
-type WorkbenchRange = [Dayjs, Dayjs]
+type WorkbenchRange = [Dayjs, Dayjs] | null
 
 const DEFAULT_ENTITY_ID = import.meta.env.VITE_DEFAULT_ENTITY_ID?.trim() || 'tw-entity-001'
 
@@ -118,8 +118,9 @@ const riskMeta = (risk?: string) => {
 const AccountingWorkbenchPage: React.FC = () => {
   const navigate = useNavigate()
   const [feeImportForm] = Form.useForm()
+  // 預設 90 天，確保能看到歷史資料；null = 全部（不過濾日期）
   const [dateRange, setDateRange] = useState<WorkbenchRange>([
-    dayjs().subtract(6, 'day').startOf('day'),
+    dayjs().subtract(89, 'day').startOf('day'),
     dayjs().endOf('day'),
   ])
   const [loading, setLoading] = useState(false)
@@ -136,8 +137,9 @@ const AccountingWorkbenchPage: React.FC = () => {
   const [dataCompleteness, setDataCompleteness] = useState<DataCompletenessAudit | null>(null)
 
   const entityId = localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
-  const startDate = dateRange[0].startOf('day').toISOString()
-  const endDate = dateRange[1].endOf('day').toISOString()
+  // null = 不傳日期給 API → 後端回傳所有資料
+  const startDate = dateRange?.[0]?.startOf('day')?.toISOString()
+  const endDate = dateRange?.[1]?.endOf('day')?.toISOString()
 
   const fetchWorkbench = async () => {
     setLoading(true)
