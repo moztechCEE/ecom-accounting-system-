@@ -9,7 +9,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ImportProviderPayoutsDto } from './dto/import-provider-payouts.dto';
 
-type SupportedProvider = 'ecpay' | 'hitrust';
+type SupportedProvider = 'ecpay' | 'hitrust' | 'linepay';
 type ImportRow = Record<string, string | number | boolean | null>;
 type MappingConfig = Record<string, string | string[]>;
 type MatchCandidate = Prisma.PaymentGetPayload<{
@@ -198,6 +198,34 @@ const PROVIDER_ALIASES: Record<
     externalOrderId: ['訂單編號', 'OrderNo', '商店訂單編號'],
     providerPaymentId: ['交易序號', '交易編號', '支付單號'],
     providerTradeNo: ['TradeNo', '金流交易編號'],
+  },
+  linepay: {
+    externalOrderId: [
+      'orderId',
+      'Order ID',
+      '商家訂單編號',
+      '訂單編號',
+      '訂單號碼',
+    ],
+    providerPaymentId: [
+      'transactionId',
+      'Transaction ID',
+      'LINE Pay 交易序號',
+      'LINE Pay 交易編號',
+      '交易序號',
+    ],
+    providerTradeNo: [
+      'transactionId',
+      'Transaction ID',
+      'LINE Pay 交易序號',
+      'LINE Pay 交易編號',
+    ],
+    grossAmount: ['amount', 'paymentAmount', '交易金額', '付款金額'],
+    gatewayFeeAmount: ['fee', 'paymentFee', 'LINE Pay 手續費', '手續費'],
+    netAmount: ['settlementAmount', 'depositAmount', '撥款金額', '實收金額'],
+    payoutDate: ['settlementDate', 'depositDate', '撥款日期', '結算日期'],
+    transactionDate: ['transactionDate', 'paidAt', '付款時間', '交易時間'],
+    payoutStatus: ['settlementStatus', 'paymentStatus', '結算狀態', '付款狀態'],
   },
 };
 

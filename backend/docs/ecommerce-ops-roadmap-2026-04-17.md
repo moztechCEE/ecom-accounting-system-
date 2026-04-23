@@ -359,7 +359,7 @@ B2B 月結下一步：
 
 ### LINE Pay / 行動支付對帳判斷
 
-- 目前系統沒有獨立的 `LINE Pay` provider import / payout reconciliation。
+- 原本系統沒有獨立的 `LINE Pay` provider import / payout reconciliation；2026-04-23 已開始補上 `provider=linepay` 匯入與交易查詢骨架。
 - 綠界公開收款工具列出信用卡、Apple Pay、TWQR、超商代碼 / 條碼、ATM、無卡分期、微信支付等；Shopify 綠界安裝文件列出的 Shopify 付款方式也沒有 LINE Pay。
 - 綠界 TWQR 由歐付寶 O'Pay 提供，訂單查詢與退款也需依歐付寶平台作業；這與 LINE Pay 直連不是同一條對帳鏈。
 - 若綠界後台顯示 LINE Pay / 行動支付選項，需先確認它最後是否出現在綠界撥款對帳報表：
@@ -375,6 +375,25 @@ B2B 月結下一步：
   - 報表欄位是否有交易序號、商店訂單編號、付款方式、撥款日期、手續費、實收金額。
   - 若是 TWQR / O'Pay，是否能匯出逐筆撥款明細與服務費發票。
   - 若是 LINE Pay 直連，需提供 LINE Pay Merchant ID、報表格式、API 文件與手續費 / 撥款週期。
+
+### 2026-04-23 LINE Pay / MOZTECH Shopify 設定
+
+- 使用者提供的 LINE Pay profile 屬於 `墨子科技 MOZTECH / Shopify`：
+  - 公司：`萬博創意科技有限公司`
+  - 統編：`85030997`
+  - LINE Pay Merchant ID：`TAP-85030997`
+  - Channel ID：`1657050272`
+  - Channel Secret：已由使用者提供，但不得寫入 repo，需放 Secret Manager。
+- 系統分流原則：
+  - 綠界 Shopify 官方站仍是 `shopify-main / 3290494`。
+  - LINE Pay profile key 建議為 `moztech-shopify`，並標記 `sourceChannel=shopify`、`ecpayMerchantKey=shopify-main`。
+  - 若 LINE Pay 交易出現在綠界 3290494 撥款報表，仍走 `provider=ecpay`，付款方式標記 `gateway=line_pay`。
+  - 若 LINE Pay 獨立撥款，才走 `provider=linepay` 匯入 LINE Pay 結算報表。
+- 已補後端能力：
+  - `LINE_PAY_ACCOUNTS_JSON` profile loader。
+  - `GET /api/v1/reconciliation/line-pay/config-status`。
+  - `GET /api/v1/reconciliation/line-pay/payments?transactionId=...` / `?orderId=...`。
+  - `POST /api/v1/reconciliation/payouts/import` 可接受 `provider=linepay`。
 
 ### 2026-04-22 正式資料快照
 

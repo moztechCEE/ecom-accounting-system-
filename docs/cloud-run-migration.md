@@ -130,6 +130,21 @@ ECPAY_MERCHANTS_JSON: >-
 
 建議把 `hashKey / hashIv` 放進 `GCP Secret Manager` 後，再在 Cloud Run 用 secret 或 env file 注入，不要直接寫進 repo。
 
+LINE Pay 若是墨子 Shopify 直連，建議獨立成一組 profile：
+
+```yaml
+LINE_PAY_ACCOUNTS_JSON: >-
+  [{"key":"moztech-shopify","entityId":"tw-entity-001","companyName":"萬博創意科技有限公司","brandName":"墨子科技 MOZTECH","merchantId":"TAP-85030997","channelId":"1657050272","channelSecret":"replace-me","env":"production","sourceChannel":"shopify","ecpayMerchantKey":"shopify-main"}]
+```
+
+注意：
+
+- `channelSecret` 必須放 Secret Manager / Cloud Run secret，不要寫進 repo。
+- 若 LINE Pay 交易最後出現在綠界 `3290494 / shopify-main` 撥款報表，對帳主來源仍是 `provider=ecpay`，付款方式標記 `gateway=line_pay`。
+- 若 LINE Pay 是獨立撥款，才用 `provider=linepay` 匯入 LINE Pay 結算報表。
+- 後端可用 `GET /api/v1/reconciliation/line-pay/config-status` 檢查設定是否載入。
+- 後端可用 `GET /api/v1/reconciliation/line-pay/payments?transactionId=...` 或 `?orderId=...` 測 LINE Pay Get Payment Details API。
+
 核心對帳排程可用 Cloud Scheduler 呼叫：
 
 ```bash

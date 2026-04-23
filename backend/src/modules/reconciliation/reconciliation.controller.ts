@@ -40,6 +40,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { ProviderPayoutReconciliationService } from './provider-payout-reconciliation.service';
 import { EcpayShopifyPayoutService } from './ecpay-shopify-payout.service';
+import { LinePayService } from './line-pay.service';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
 class BackfillEcpayShopifyHistoryDto {
@@ -143,6 +144,7 @@ export class ReconciliationController {
     private readonly reconciliationService: ReconciliationService,
     private readonly providerPayoutService: ProviderPayoutReconciliationService,
     private readonly ecpayShopifyPayoutService: EcpayShopifyPayoutService,
+    private readonly linePayService: LinePayService,
   ) {}
 
   @Get('center')
@@ -331,6 +333,36 @@ export class ReconciliationController {
     @CurrentUser() user: any,
   ) {
     return this.providerPayoutService.importProviderPayouts(dto, user.userId);
+  }
+
+  @Get('line-pay/config-status')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @ApiOperation({
+    summary: 'LINE Pay 設定狀態',
+    description:
+      '檢查 LINE Pay profile 是否已配置。只回傳遮罩後的 Channel ID，不回傳 Channel Secret。',
+  })
+  async getLinePayConfigStatus() {
+    return this.linePayService.getConfigStatus();
+  }
+
+  @Get('line-pay/payments')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @ApiOperation({
+    summary: '查詢 LINE Pay 付款詳情',
+    description:
+      '用 LINE Pay Get Payment Details API 查詢交易。可用 transactionId 或 orderId。',
+  })
+  async getLinePayPaymentDetails(
+    @Query('profileKey') profileKey?: string,
+    @Query('transactionId') transactionId?: string,
+    @Query('orderId') orderId?: string,
+  ) {
+    return this.linePayService.getPaymentDetails({
+      profileKey,
+      transactionId,
+      orderId,
+    });
   }
 
   @Get('payouts/batches')

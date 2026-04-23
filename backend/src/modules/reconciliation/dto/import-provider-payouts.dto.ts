@@ -13,10 +13,10 @@ export class ImportProviderPayoutsDto {
 
   @ApiProperty({
     description: '金流供應商',
-    enum: ['ecpay', 'hitrust'],
+    enum: ['ecpay', 'hitrust', 'linepay'],
   })
-  @IsIn(['ecpay', 'hitrust'])
-  provider!: 'ecpay' | 'hitrust';
+  @IsIn(['ecpay', 'hitrust', 'linepay'])
+  provider!: 'ecpay' | 'hitrust' | 'linepay';
 
   @ApiPropertyOptional({
     description: '匯入來源型態',

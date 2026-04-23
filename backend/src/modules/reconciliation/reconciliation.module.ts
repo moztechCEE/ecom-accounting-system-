@@ -5,6 +5,7 @@ import { ReconciliationService } from './reconciliation.service';
 import { ProviderPayoutReconciliationService } from './provider-payout-reconciliation.service';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { EcpayShopifyPayoutService } from './ecpay-shopify-payout.service';
+import { LinePayService } from './line-pay.service';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ArModule } from '../ar/ar.module';
 import { ReportsModule } from '../reports/reports.module';
@@ -46,12 +47,14 @@ import { SalesModule } from '../sales/sales.module';
     ReconciliationService,
     ProviderPayoutReconciliationService,
     EcpayShopifyPayoutService,
+    LinePayService,
     RolesGuard,
   ],
   exports: [
     ReconciliationService,
     ProviderPayoutReconciliationService,
     EcpayShopifyPayoutService,
+    LinePayService,
   ],
 })
 export class ReconciliationModule {}
