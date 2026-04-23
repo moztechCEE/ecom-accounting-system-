@@ -46,12 +46,12 @@ while true; do
 
 $(echo "$CHANGES" | head -10)" --quiet
 
-    # Push，如果遠端有新 commit 先 rebase
+    # Push，如果遠端有新 commit 先 merge（改用 merge 避免 rebase 卡住）
     if git push origin "$BRANCH" --quiet 2>/dev/null; then
       echo "[$TIMESTAMP] ✅ 推送成功 → GitHub 已更新"
     else
       echo "[$TIMESTAMP] ⚠️  遠端有更新，先拉取再推送..."
-      git pull --rebase origin "$BRANCH" --quiet 2>/dev/null
+      git pull --no-rebase origin "$BRANCH" --quiet -X ours 2>/dev/null
       git push origin "$BRANCH" --quiet 2>/dev/null
       echo "[$TIMESTAMP] ✅ 重新推送成功"
     fi
