@@ -286,7 +286,8 @@ export type ManagementSummaryGroupBy =
   | "year"
   | "quarter"
   | "month"
-  | "week";
+  | "week"
+  | "day";
 
 export type ManagementSummaryPeriod = {
   key: string;

@@ -325,13 +325,13 @@ export class ReportsController {
   @ApiQuery({
     name: 'groupBy',
     required: true,
-    enum: ['year', 'quarter', 'month', 'week'],
+    enum: ['year', 'quarter', 'month', 'week', 'day'],
   })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   async getManagementSummary(
     @Query('entityId') entityId: string,
-    @Query('groupBy') groupBy: 'year' | 'quarter' | 'month' | 'week',
+    @Query('groupBy') groupBy: 'year' | 'quarter' | 'month' | 'week' | 'day',
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
@@ -350,13 +350,13 @@ export class ReportsController {
   @ApiQuery({
     name: 'groupBy',
     required: true,
-    enum: ['year', 'quarter', 'month', 'week'],
+    enum: ['year', 'quarter', 'month', 'week', 'day'],
   })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   async getEcommerceHistory(
     @Query('entityId') entityId: string,
-    @Query('groupBy') groupBy: 'year' | 'quarter' | 'month' | 'week',
+    @Query('groupBy') groupBy: 'year' | 'quarter' | 'month' | 'week' | 'day',
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {

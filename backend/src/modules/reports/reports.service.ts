@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
+type ManagementSummaryGroupBy = 'year' | 'quarter' | 'month' | 'week' | 'day';
+
 /**
  * 報表服務
  *
@@ -2135,7 +2137,7 @@ export class ReportsService {
 
   async getManagementSummary(
     entityId: string,
-    groupBy: 'year' | 'quarter' | 'month' | 'week',
+    groupBy: ManagementSummaryGroupBy,
     startDate?: Date,
     endDate?: Date,
   ) {
@@ -2454,7 +2456,7 @@ export class ReportsService {
 
   async getEcommerceHistory(
     entityId: string,
-    groupBy: 'year' | 'quarter' | 'month' | 'week',
+    groupBy: ManagementSummaryGroupBy,
     startDate?: Date,
     endDate?: Date,
   ) {
@@ -3065,7 +3067,7 @@ export class ReportsService {
 
   private resolvePeriodDescriptor(
     input: Date,
-    groupBy: 'year' | 'quarter' | 'month' | 'week',
+    groupBy: ManagementSummaryGroupBy,
   ) {
     const date = new Date(input);
     const year = date.getUTCFullYear();
@@ -3098,6 +3100,21 @@ export class ReportsService {
         label: `${year}/${monthLabel}`,
         startDate: new Date(Date.UTC(year, month, 1, 0, 0, 0, 0)),
         endDate: new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999)),
+      };
+    }
+
+    if (groupBy === 'day') {
+      const monthLabel = `${month + 1}`.padStart(2, '0');
+      const dayLabel = `${date.getUTCDate()}`.padStart(2, '0');
+      return {
+        key: `${year}-${monthLabel}-${dayLabel}`,
+        label: `${monthLabel}/${dayLabel}`,
+        startDate: new Date(
+          Date.UTC(year, month, date.getUTCDate(), 0, 0, 0, 0),
+        ),
+        endDate: new Date(
+          Date.UTC(year, month, date.getUTCDate(), 23, 59, 59, 999),
+        ),
       };
     }
 
