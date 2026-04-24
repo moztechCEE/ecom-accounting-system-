@@ -60,51 +60,54 @@ export class EcpayShopifyPayoutService {
     timeZone: process.env.TZ || 'Asia/Taipei',
   })
   async handleScheduledSync() {
-    const profile = this.getDefaultScheduledProfile();
+    const profiles = this.merchantProfiles.filter(
+      (profile) => profile.syncEnabled && this.hasApiCredentials(profile),
+    );
 
-    if (!profile?.syncEnabled) {
-      return;
-    }
-
-    if (!this.hasApiCredentials(profile)) {
-      this.logger.warn(
-        'Skipping scheduled ECPay Shopify payout sync because API credentials are missing.',
-      );
-      return;
-    }
-
-    const entityId =
-      profile.entityId ||
-      this.configService.get<string>('SHOPIFY_DEFAULT_ENTITY_ID', '') ||
-      '';
-    if (!entityId) {
-      this.logger.warn(
-        'Skipping scheduled ECPay Shopify payout sync because SHOPIFY_DEFAULT_ENTITY_ID is not configured.',
-      );
+    if (!profiles.length) {
       return;
     }
 
     try {
       const importedBy = await this.resolveSyncUserId();
       const today = new Date();
-      const endDate = this.formatDate(today);
-      const beginDate = this.formatDate(
-        this.addDays(today, -1 * profile.lookbackDays),
-      );
+      const summaries = [];
 
-      const result = await this.syncShopifyPayouts(
-        {
-          merchantKey: profile.key,
-          entityId,
-          beginDate,
-          endDate,
-          dateType: profile.dateType,
-        },
-        importedBy,
-      );
+      for (const profile of profiles) {
+        const entityId =
+          profile.entityId ||
+          this.configService.get<string>('SHOPIFY_DEFAULT_ENTITY_ID', '') ||
+          '';
+        if (!entityId) {
+          this.logger.warn(
+            `Skipping scheduled ECPay payout sync for ${profile.key} because entityId is not configured.`,
+          );
+          continue;
+        }
+
+        const endDate = this.formatDate(today);
+        const beginDate = this.formatDate(
+          this.addDays(today, -1 * profile.lookbackDays),
+        );
+
+        const result = await this.syncShopifyPayouts(
+          {
+            merchantKey: profile.key,
+            entityId,
+            beginDate,
+            endDate,
+            dateType: profile.dateType,
+          },
+          importedBy,
+        );
+
+        summaries.push(
+          `${profile.key}: imported=${result.imported}, recordCount=${result.recordCount}`,
+        );
+      }
 
       this.logger.log(
-        `Scheduled ECPay Shopify payout sync finished: imported=${result.imported}, recordCount=${result.recordCount}`,
+        `Scheduled ECPay payout sync finished: ${summaries.join(' | ')}`,
       );
     } catch (error) {
       this.logger.error(
@@ -335,6 +338,73 @@ export class EcpayShopifyPayoutService {
       remainingWindows,
       nextBeginDate,
       completedAllWindows: remainingWindows === 0,
+      results,
+    };
+  }
+
+  async syncConfiguredMerchantPayouts(
+    params: {
+      entityId: string;
+      beginDate: string;
+      endDate: string;
+      merchantKeys?: string[];
+    },
+    importedBy?: string,
+  ) {
+    const requestedKeys =
+      params.merchantKeys && params.merchantKeys.length
+        ? Array.from(new Set(params.merchantKeys.map((key) => key.trim()).filter(Boolean)))
+        : this.merchantProfiles
+            .filter((profile) => this.hasApiCredentials(profile))
+            .map((profile) => profile.key);
+    const merchantKeys = requestedKeys.filter((merchantKey) =>
+      this.merchantProfiles.some(
+        (profile) =>
+          (profile.key === merchantKey || profile.merchantId === merchantKey) &&
+          this.hasApiCredentials(profile),
+      ),
+    );
+
+    const results = [];
+    let importedCount = 0;
+    let totalRecordCount = 0;
+
+    for (const merchantKey of requestedKeys) {
+      if (!merchantKeys.includes(merchantKey)) {
+        results.push({
+          success: false,
+          imported: false,
+          merchantKey,
+          recordCount: 0,
+          skipped: true,
+          reason: 'missing_profile_or_credentials',
+        });
+      }
+    }
+
+    for (const merchantKey of merchantKeys) {
+      const result = await this.syncShopifyPayouts(
+        {
+          entityId: params.entityId,
+          merchantKey,
+          beginDate: params.beginDate,
+          endDate: params.endDate,
+        },
+        importedBy,
+      );
+      if (result.imported) {
+        importedCount += 1;
+      }
+      totalRecordCount += Number(result.recordCount || 0);
+      results.push(result);
+    }
+
+    return {
+      success: true,
+      entityId: params.entityId,
+      merchantCount: merchantKeys.length,
+      importedMerchantCount: importedCount,
+      totalRecordCount,
       results,
     };
   }

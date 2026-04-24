@@ -711,10 +711,12 @@ export class OneShopService implements OnModuleInit {
         where: { id: existing.id },
         data: {
           ...data,
-          hasInvoice: existing.hasInvoice,
+          hasInvoice: existing.hasInvoice || this.hasEmbeddedInvoice(order),
         },
       });
       await this.syncSalesOrderItems(updated.id, entityId, order, currency, fxRate);
+      await this.syncEmbeddedInvoice(updated.id, entityId, order, currency, fxRate);
+      await this.syncPendingPaymentDraft(updated.id, entityId, channelId, order, currency, fxRate);
       caches?.salesOrdersByExternalId.set(order.externalId, updated);
       return 'updated';
     }
@@ -724,11 +726,13 @@ export class OneShopService implements OnModuleInit {
         entityId,
         channelId,
         externalOrderId: order.externalId,
-        hasInvoice: false,
+        hasInvoice: this.hasEmbeddedInvoice(order),
         ...data,
       },
     });
     await this.syncSalesOrderItems(created.id, entityId, order, currency, fxRate);
+    await this.syncEmbeddedInvoice(created.id, entityId, order, currency, fxRate);
+    await this.syncPendingPaymentDraft(created.id, entityId, channelId, order, currency, fxRate);
     caches?.salesOrdersByExternalId.set(order.externalId, created);
 
     return 'created';
@@ -796,6 +800,225 @@ export class OneShopService implements OnModuleInit {
     return `1SHOP-${orderId}-${index + 1}`.slice(0, 120);
   }
 
+  private hasEmbeddedInvoice(order: UnifiedOrder) {
+    const receipt = Array.isArray(order.raw?.receipt) ? order.raw.receipt[0] : null;
+    return Boolean(
+      receipt &&
+        typeof receipt.invoice_number === 'string' &&
+        receipt.invoice_number.trim(),
+    );
+  }
+
+  private async syncEmbeddedInvoice(
+    salesOrderId: string,
+    entityId: string,
+    order: UnifiedOrder,
+    currency: string,
+    fxRate: Decimal,
+  ) {
+    const receipt = Array.isArray(order.raw?.receipt) ? order.raw.receipt[0] : null;
+    const invoiceNumber =
+      receipt && typeof receipt.invoice_number === 'string'
+        ? receipt.invoice_number.trim()
+        : '';
+    if (!invoiceNumber) {
+      return;
+    }
+
+    const issuedAtRaw =
+      receipt && typeof receipt.invoice_date === 'string'
+        ? receipt.invoice_date.trim()
+        : '';
+    const issuedAt = issuedAtRaw
+      ? new Date(`${issuedAtRaw.replace(' ', 'T')}+08:00`)
+      : order.orderDate;
+    const taxRate = new Decimal(0.05);
+    const totalAmountOriginal = order.totals.gross;
+    const amountOriginal = totalAmountOriginal
+      .div(new Decimal(1).plus(taxRate))
+      .toDecimalPlaces(2);
+    const taxAmountOriginal = totalAmountOriginal
+      .sub(amountOriginal)
+      .toDecimalPlaces(2);
+    const totalAmountBase = totalAmountOriginal.mul(fxRate).toDecimalPlaces(2);
+    const amountBase = amountOriginal.mul(fxRate).toDecimalPlaces(2);
+    const taxAmountBase = taxAmountOriginal.mul(fxRate).toDecimalPlaces(2);
+
+    const buyerName =
+      typeof receipt?.receipt_title === 'string' && receipt.receipt_title.trim()
+        ? receipt.receipt_title.trim()
+        : order.customer?.name?.trim() || null;
+    const buyerTaxId =
+      typeof receipt?.tax_num === 'string' && receipt.tax_num.trim()
+        ? receipt.tax_num.trim()
+        : null;
+    const buyerEmail =
+      typeof receipt?.email === 'string' && receipt.email.trim()
+        ? receipt.email.trim()
+        : order.customer?.email?.trim() || null;
+    const buyerPhone =
+      typeof receipt?.phone === 'string' && receipt.phone.trim()
+        ? receipt.phone.trim()
+        : order.customer?.phone?.trim() || null;
+    const buyerAddress =
+      typeof receipt?.address === 'string' && receipt.address.trim()
+        ? receipt.address.trim()
+        : null;
+
+    const invoice = await this.prisma.invoice.upsert({
+      where: { invoiceNumber },
+      create: {
+        entityId,
+        orderId: salesOrderId,
+        invoiceNumber,
+        status: 'issued',
+        invoiceType: buyerTaxId ? 'B2B' : 'B2C',
+        issuedAt,
+        buyerName,
+        buyerTaxId,
+        buyerEmail,
+        buyerPhone,
+        buyerAddress,
+        amountOriginal,
+        currency,
+        fxRate,
+        amountBase,
+        taxAmountOriginal,
+        taxAmountCurrency: currency,
+        taxAmountFxRate: fxRate,
+        taxAmountBase,
+        totalAmountOriginal,
+        totalAmountCurrency: currency,
+        totalAmountFxRate: fxRate,
+        totalAmountBase,
+        externalInvoiceId: invoiceNumber,
+        externalPlatform: 'ecpay',
+        externalPayload: receipt || undefined,
+        notes: '[1shop-receipt]',
+      },
+      update: {
+        orderId: salesOrderId,
+        status: 'issued',
+        invoiceType: buyerTaxId ? 'B2B' : 'B2C',
+        issuedAt,
+        buyerName,
+        buyerTaxId,
+        buyerEmail,
+        buyerPhone,
+        buyerAddress,
+        amountOriginal,
+        currency,
+        fxRate,
+        amountBase,
+        taxAmountOriginal,
+        taxAmountCurrency: currency,
+        taxAmountFxRate: fxRate,
+        taxAmountBase,
+        totalAmountOriginal,
+        totalAmountCurrency: currency,
+        totalAmountFxRate: fxRate,
+        totalAmountBase,
+        externalInvoiceId: invoiceNumber,
+        externalPlatform: 'ecpay',
+        externalPayload: receipt || undefined,
+        notes: '[1shop-receipt]',
+      },
+    });
+
+    await this.prisma.salesOrder.update({
+      where: { id: salesOrderId },
+      data: {
+        hasInvoice: true,
+        invoiceId: invoice.id,
+      },
+    });
+  }
+
+  private async syncPendingPaymentDraft(
+    salesOrderId: string,
+    entityId: string,
+    channelId: string,
+    order: UnifiedOrder,
+    currency: string,
+    fxRate: Decimal,
+  ) {
+    const paymentStatus =
+      typeof order.raw?.payment_status === 'string'
+        ? order.raw.payment_status.trim().toLowerCase()
+        : '';
+    const providerPaymentId =
+      typeof order.raw?.payment_third_party_no === 'string'
+        ? order.raw.payment_third_party_no.trim()
+        : typeof order.raw?.logistics_third_party_no === 'string'
+          ? order.raw.logistics_third_party_no.trim()
+          : '';
+
+    if (paymentStatus && paymentStatus !== 'pending') {
+      return;
+    }
+
+    if (providerPaymentId) {
+      return;
+    }
+
+    const existing = await this.prisma.payment.findFirst({
+      where: {
+        entityId,
+        salesOrderId,
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      return;
+    }
+
+    const zero = new Decimal(0);
+    const expectedGross = order.totals.gross.toDecimalPlaces(2);
+    const notes = [
+      '[1shop-payment-draft]',
+      `oneShopOrderId=${order.externalId}`,
+      `paymentStatus=${paymentStatus || 'pending'}`,
+      `expectedGross=${expectedGross.toFixed(2)}`,
+      'feeStatus=unavailable',
+      'feeSource=awaiting_payment',
+    ].join('; ');
+
+    await this.prisma.payment.create({
+      data: {
+        entityId,
+        channelId,
+        salesOrderId,
+        payoutBatchId: `draft:${order.externalId}`,
+        channel: ONESHOP_CHANNEL_CODE,
+        payoutDate: order.orderDate,
+        amountGrossOriginal: zero,
+        amountGrossCurrency: currency,
+        amountGrossFxRate: fxRate,
+        amountGrossBase: zero,
+        feePlatformOriginal: zero,
+        feePlatformCurrency: currency,
+        feePlatformFxRate: fxRate,
+        feePlatformBase: zero,
+        feeGatewayOriginal: zero,
+        feeGatewayCurrency: currency,
+        feeGatewayFxRate: fxRate,
+        feeGatewayBase: zero,
+        shippingFeePaidOriginal: zero,
+        shippingFeePaidCurrency: currency,
+        shippingFeePaidFxRate: fxRate,
+        shippingFeePaidBase: zero,
+        amountNetOriginal: zero,
+        amountNetCurrency: currency,
+        amountNetFxRate: fxRate,
+        amountNetBase: zero,
+        reconciledFlag: false,
+        bankAccountId: null,
+        status: 'pending',
+        notes,
+      },
+    });
+  }
+
   private async upsertPayment(
     entityId: string,
     channelId: string,
@@ -826,6 +1049,20 @@ export class OneShopService implements OnModuleInit {
     const currency = tx.currency || 'TWD';
     const fxRate = new Decimal(await this.getFxRate(currency));
     const zero = new Decimal(0);
+    const draftPaymentId = tx.orderId ? `draft:${tx.orderId}` : null;
+
+    if (draftPaymentId && tx.status !== 'pending') {
+      await this.prisma.payment.deleteMany({
+        where: {
+          entityId,
+          channelId,
+          salesOrderId: salesOrder?.id ?? undefined,
+          payoutBatchId: draftPaymentId,
+          status: 'pending',
+        },
+      });
+    }
+
     const hasLockedProviderPayout = this.hasLockedProviderPayout(existing?.notes);
     const paymentNotes = this.buildPaymentNotes(existing?.notes, tx);
 

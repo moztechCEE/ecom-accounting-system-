@@ -412,6 +412,7 @@ export class SalesOrderService {
       where: { id: orderId },
       include: {
         channel: true,
+        customer: true,
         invoices: {
           orderBy: [{ issuedAt: 'desc' }, { createdAt: 'desc' }],
         },
@@ -453,10 +454,18 @@ export class SalesOrderService {
       verifiedAt: new Date().toISOString(),
     });
 
+    const invoiceRecord = await this.materializeInvoiceCandidate(order, invoiceCandidate, {
+      externalPlatform: 'ecpay',
+      externalPayload: result.raw || undefined,
+      verificationMessage: result.rawMessage || null,
+      issued: result.success,
+    });
+
     await this.prisma.salesOrder.update({
       where: { id: order.id },
       data: {
         hasInvoice: result.success || order.hasInvoice,
+        invoiceId: invoiceRecord?.id || order.invoiceId || null,
         notes: mergedNotes,
       },
     });
@@ -640,6 +649,94 @@ export class SalesOrderService {
     }
 
     throw new BadRequestException(`Unsupported channel for ECPay invoice sync: ${channelCode}`);
+  }
+
+  private async materializeInvoiceCandidate(
+    order: {
+      id: string;
+      entityId: string;
+      totalGrossOriginal: Decimal;
+      totalGrossCurrency: string;
+      totalGrossFxRate: Decimal;
+      customer?: {
+        name?: string | null;
+        email?: string | null;
+        phone?: string | null;
+        taxId?: string | null;
+        address?: string | null;
+      } | null;
+    },
+    invoiceCandidate: { invoiceNumber: string | null; invoiceDate: string | null },
+    options?: {
+      externalPlatform?: string | null;
+      externalPayload?: unknown;
+      verificationMessage?: string | null;
+      issued?: boolean;
+    },
+  ) {
+    if (!invoiceCandidate.invoiceNumber) {
+      return null;
+    }
+
+    const issuedAt =
+      invoiceCandidate.invoiceDate &&
+      !Number.isNaN(new Date(invoiceCandidate.invoiceDate).getTime())
+        ? new Date(`${invoiceCandidate.invoiceDate}T00:00:00+08:00`)
+        : null;
+    const taxRate = new Decimal(0.05);
+    const fxRate = new Decimal(order.totalGrossFxRate || 1);
+    const totalAmountOriginal = new Decimal(order.totalGrossOriginal || 0).toDecimalPlaces(2);
+    const amountOriginal = totalAmountOriginal
+      .div(new Decimal(1).plus(taxRate))
+      .toDecimalPlaces(2);
+    const taxAmountOriginal = totalAmountOriginal
+      .sub(amountOriginal)
+      .toDecimalPlaces(2);
+    const amountBase = amountOriginal.mul(fxRate).toDecimalPlaces(2);
+    const taxAmountBase = taxAmountOriginal.mul(fxRate).toDecimalPlaces(2);
+    const totalAmountBase = totalAmountOriginal.mul(fxRate).toDecimalPlaces(2);
+
+    return this.prisma.invoice.upsert({
+      where: { invoiceNumber: invoiceCandidate.invoiceNumber },
+      create: {
+        entityId: order.entityId,
+        orderId: order.id,
+        invoiceNumber: invoiceCandidate.invoiceNumber,
+        status: options?.issued === false ? 'draft' : 'issued',
+        invoiceType: order.customer?.taxId ? 'B2B' : 'B2C',
+        issuedAt,
+        buyerName: order.customer?.name || null,
+        buyerTaxId: order.customer?.taxId || null,
+        buyerEmail: order.customer?.email || null,
+        buyerPhone: order.customer?.phone || null,
+        buyerAddress: order.customer?.address || null,
+        amountOriginal,
+        currency: order.totalGrossCurrency || 'TWD',
+        fxRate,
+        amountBase,
+        taxAmountOriginal,
+        taxAmountCurrency: order.totalGrossCurrency || 'TWD',
+        taxAmountFxRate: fxRate,
+        taxAmountBase,
+        totalAmountOriginal,
+        totalAmountCurrency: order.totalGrossCurrency || 'TWD',
+        totalAmountFxRate: fxRate,
+        totalAmountBase,
+        externalInvoiceId: invoiceCandidate.invoiceNumber,
+        externalPlatform: options?.externalPlatform || null,
+        externalPayload: (options?.externalPayload as any) || undefined,
+        notes: options?.verificationMessage || null,
+      },
+      update: {
+        orderId: order.id,
+        status: options?.issued === false ? 'draft' : 'issued',
+        issuedAt,
+        externalInvoiceId: invoiceCandidate.invoiceNumber,
+        externalPlatform: options?.externalPlatform || null,
+        externalPayload: (options?.externalPayload as any) || undefined,
+        notes: options?.verificationMessage || null,
+      },
+    });
   }
 
   private extractMetadata(notes?: string | null) {

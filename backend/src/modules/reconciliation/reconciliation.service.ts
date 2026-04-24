@@ -125,15 +125,16 @@ export class ReconciliationService {
 
     await runStep(
       'ecpay-payout-sync',
-      '同步綠界 Shopify 撥款',
+      '同步綠界撥款（官網 / 團購）',
       params.syncEcpayPayouts !== false,
       () =>
-        this.ecpayShopifyPayoutService.syncShopifyPayouts(
+        this.ecpayShopifyPayoutService.syncConfiguredMerchantPayouts(
           {
             entityId,
             beginDate: this.formatDate(since),
             endDate: this.formatDate(until),
-          } as any,
+            merchantKeys: ['shopify-main', 'groupbuy-main'],
+          },
           params.userId,
         ),
     );
