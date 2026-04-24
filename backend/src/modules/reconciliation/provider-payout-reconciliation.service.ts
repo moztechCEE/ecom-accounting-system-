@@ -54,6 +54,16 @@ type MatchResult = {
   message: string;
 };
 
+type PendingLinePayRefundLine = Prisma.PayoutImportLineGetPayload<{
+  include: {
+    batch: {
+      select: {
+        entityId: true;
+      };
+    };
+  };
+}>;
+
 type PayoutJournalContext = {
   bankDepositAccountId: string;
   clearingAccountId: string;
@@ -283,6 +293,163 @@ export class ProviderPayoutReconciliationService {
   );
 
   constructor(private readonly prisma: PrismaService) {}
+
+  async processPendingLinePayRefundReversals(params: {
+    entityId: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    userId: string;
+  }) {
+    const take = Math.min(Math.max(params.limit || 100, 1), 500);
+    const payoutDate =
+      params.startDate || params.endDate
+        ? {
+            ...(params.startDate ? { gte: params.startDate } : {}),
+            ...(params.endDate ? { lte: params.endDate } : {}),
+          }
+        : undefined;
+
+    const lines = await this.prisma.payoutImportLine.findMany({
+      where: {
+        provider: 'linepay',
+        status: 'refund_pending_reversal',
+        ...(payoutDate ? { payoutDate } : {}),
+        batch: {
+          entityId: params.entityId,
+        },
+      },
+      include: {
+        batch: {
+          select: {
+            entityId: true,
+          },
+        },
+      },
+      orderBy: [{ payoutDate: 'desc' }, { createdAt: 'desc' }],
+      take,
+    });
+
+    if (!lines.length) {
+      return {
+        success: true,
+        scanned: 0,
+        reversed: 0,
+        unmatched: 0,
+        skipped: 0,
+        results: [],
+      };
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const candidatePayments = await this.loadCandidatePayments(
+        tx,
+        params.entityId,
+        lines.map((line, index) =>
+          this.toSyntheticRefundLine(line, index + 1),
+        ),
+      );
+      const journalContextCache = new Map<string, PayoutJournalContext>();
+      const openPeriodCache = new Map<string, string | null>();
+      const results: Array<{
+        lineId: string;
+        status: 'refund_reversed' | 'refund_unmatched' | 'skipped';
+        matchedPaymentId?: string | null;
+        matchedSalesOrderId?: string | null;
+        journalEntryId?: string | null;
+        message: string;
+      }> = [];
+      let reversed = 0;
+      let unmatched = 0;
+      let skipped = 0;
+
+      for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        const syntheticLine = this.toSyntheticRefundLine(line, index + 1);
+
+        if (!syntheticLine.grossAmount || syntheticLine.grossAmount.lessThanOrEqualTo(0)) {
+          skipped += 1;
+          results.push({
+            lineId: line.id,
+            status: 'skipped',
+            message: 'LINE Pay API 尚未提供有效退款金額，先保留人工核對。',
+          });
+          continue;
+        }
+
+        const refundMatch = this.findRefundPaymentMatch(
+          syntheticLine,
+          candidatePayments,
+        );
+
+        if (!refundMatch.candidate) {
+          unmatched += 1;
+          await tx.payoutImportLine.update({
+            where: { id: line.id },
+            data: {
+              status: 'refund_unmatched',
+              confidence: refundMatch.confidence,
+              message: refundMatch.message,
+            },
+          });
+          results.push({
+            lineId: line.id,
+            status: 'refund_unmatched',
+            message: refundMatch.message,
+          });
+          continue;
+        }
+
+        const reversalJournalId = await this.applyRefundReversalToPayment(
+          tx,
+          line.batchId,
+          syntheticLine,
+          refundMatch.candidate,
+          params.userId,
+          journalContextCache,
+          openPeriodCache,
+        );
+
+        const existingRawData = this.toJsonRecord(line.rawData);
+        reversed += 1;
+        await tx.payoutImportLine.update({
+          where: { id: line.id },
+          data: {
+            status: 'refund_reversed',
+            confidence: refundMatch.confidence,
+            matchedPaymentId: refundMatch.candidate.id,
+            matchedSalesOrderId: refundMatch.candidate.salesOrderId || null,
+            message: `${refundMatch.message}；已建立 LINE Pay 退款沖銷分錄 ${reversalJournalId}`,
+            rawData: {
+              ...existingRawData,
+              linePayRefundReversal: {
+                processedAt: new Date().toISOString(),
+                journalEntryId: reversalJournalId,
+                refundAmount: syntheticLine.grossAmount.toFixed(2),
+              },
+            } as Prisma.InputJsonValue,
+          },
+        });
+        results.push({
+          lineId: line.id,
+          status: 'refund_reversed',
+          matchedPaymentId: refundMatch.candidate.id,
+          matchedSalesOrderId: refundMatch.candidate.salesOrderId || null,
+          journalEntryId: reversalJournalId,
+          message: refundMatch.message,
+        });
+      }
+
+      return {
+        success: unmatched === 0,
+        scanned: lines.length,
+        reversed,
+        unmatched,
+        skipped,
+        results,
+      };
+    });
+  }
 
   async importProviderPayouts(dto: ImportProviderPayoutsDto, userId: string) {
     if (!dto.rows.length) {
@@ -805,6 +972,43 @@ export class ProviderPayoutReconciliationService {
     }
 
     return { confidence, reasons };
+  }
+
+  private toSyntheticRefundLine(
+    line: PendingLinePayRefundLine,
+    rowIndex: number,
+  ): NormalizedPayoutLine {
+    const rawData = this.toJsonRecord(line.rawData);
+    const refresh = this.toJsonRecord(rawData.linePayApiRefresh);
+    const refundAmount = this.toDecimal(refresh.refundAmount || 0);
+    const gateway = this.toCleanString(line.gateway) || 'LINE Pay';
+
+    return {
+      provider: 'linepay',
+      rowIndex,
+      payoutDate: line.payoutDate,
+      statementDate: line.statementDate,
+      transactionDate: line.payoutDate || line.statementDate || null,
+      feeRate: null,
+      currency: line.currency || 'TWD',
+      gateway,
+      payoutStatus: 'refund',
+      externalOrderId: line.externalOrderId || this.toCleanString(refresh.orderId),
+      providerPaymentId: null,
+      originalProviderPaymentId: line.providerPaymentId || line.providerTradeNo,
+      providerTradeNo: line.providerTradeNo,
+      authorizationCode: line.authorizationCode,
+      grossAmount: refundAmount.greaterThan(0) ? refundAmount.negated() : null,
+      feeAmount: new Decimal(0),
+      gatewayFeeAmount: new Decimal(0),
+      processingFeeAmount: new Decimal(0),
+      platformFeeAmount: new Decimal(0),
+      netAmount: refundAmount.greaterThan(0) ? refundAmount.negated() : null,
+      rawData: {
+        ...rawData,
+        syntheticRefund: true,
+      },
+    };
   }
 
   private scorePaymentMatch(
@@ -1738,6 +1942,29 @@ export class ProviderPayoutReconciliationService {
     }
 
     return new Decimal(value).abs().toDecimalPlaces(2);
+  }
+
+  private toDecimal(value: unknown) {
+    if (value instanceof Decimal) {
+      return value.toDecimalPlaces(2);
+    }
+
+    if (value && typeof value === 'object' && 'toNumber' in value) {
+      return new Decimal((value as any).toNumber()).toDecimalPlaces(2);
+    }
+
+    const normalized =
+      typeof value === 'string' ? value.replace(/[,\s$]/g, '').trim() : value;
+    const number = Number(normalized);
+    return Number.isFinite(number)
+      ? new Decimal(number).toDecimalPlaces(2)
+      : new Decimal(0);
+  }
+
+  private toJsonRecord(value: unknown): Record<string, any> {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, any>)
+      : {};
   }
 
   private parseDate(value: unknown) {

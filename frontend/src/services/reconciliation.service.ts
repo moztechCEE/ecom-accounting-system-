@@ -186,6 +186,22 @@ export type RefreshLinePayStatusesResponse = {
   }>
 }
 
+export type ProcessLinePayRefundReversalsResponse = {
+  success: boolean
+  scanned: number
+  reversed: number
+  unmatched: number
+  skipped: number
+  results: Array<{
+    lineId: string
+    status: 'refund_reversed' | 'refund_unmatched' | 'skipped'
+    matchedPaymentId?: string | null
+    matchedSalesOrderId?: string | null
+    journalEntryId?: string | null
+    message: string
+  }>
+}
+
 export const reconciliationService = {
   getCenter: async (params?: {
     entityId?: string
@@ -340,6 +356,30 @@ export const reconciliationService = {
 
     const response = await api.post<RefreshLinePayStatusesResponse>(
       '/reconciliation/line-pay/refresh-status',
+      {
+        entityId,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        limit: params.limit,
+      },
+      {
+        timeout: 180000,
+      },
+    )
+    return response.data
+  },
+
+  processLinePayRefundReversals: async (params: {
+    entityId?: string
+    startDate?: string
+    endDate?: string
+    limit?: number
+  }) => {
+    const entityId =
+      params.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+
+    const response = await api.post<ProcessLinePayRefundReversalsResponse>(
+      '/reconciliation/line-pay/process-refund-reversals',
       {
         entityId,
         startDate: params.startDate,

@@ -131,6 +131,7 @@ const AccountingWorkbenchPage: React.FC = () => {
   const [importingLinePayCapture, setImportingLinePayCapture] = useState(false)
   const [backfillingOneShopClosure, setBackfillingOneShopClosure] = useState(false)
   const [refreshingLinePayStatuses, setRefreshingLinePayStatuses] = useState(false)
+  const [processingLinePayRefunds, setProcessingLinePayRefunds] = useState(false)
   const [executive, setExecutive] = useState<DashboardExecutiveOverview | null>(null)
   const [feed, setFeed] = useState<DashboardReconciliationFeed | null>(null)
   const [audit, setAudit] = useState<OrderReconciliationAudit | null>(null)
@@ -433,6 +434,36 @@ const AccountingWorkbenchPage: React.FC = () => {
       message.error(error?.response?.data?.message || '刷新 LINE Pay 狀態失敗')
     } finally {
       setRefreshingLinePayStatuses(false)
+    }
+  }
+
+  const handleProcessLinePayRefundReversals = async () => {
+    setProcessingLinePayRefunds(true)
+    try {
+      const result = await reconciliationService.processLinePayRefundReversals({
+        entityId,
+        startDate,
+        endDate,
+        limit: 300,
+      })
+
+      if (result.unmatched > 0) {
+        message.warning(
+          `LINE Pay 退款沖銷完成：已沖銷 ${result.reversed} 筆，未匹配 ${result.unmatched} 筆，略過 ${result.skipped} 筆`,
+          6,
+        )
+      } else {
+        message.success(
+          `LINE Pay 退款沖銷完成：已沖銷 ${result.reversed} 筆，略過 ${result.skipped} 筆`,
+          6,
+        )
+      }
+
+      await fetchWorkbench()
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '處理 LINE Pay 退款沖銷失敗')
+    } finally {
+      setProcessingLinePayRefunds(false)
     }
   }
 
@@ -1173,6 +1204,13 @@ const AccountingWorkbenchPage: React.FC = () => {
               onClick={handleRefreshLinePayStatuses}
             >
               刷新 LINE Pay 狀態
+            </Button>
+            <Button
+              icon={<CheckCircleOutlined />}
+              loading={processingLinePayRefunds}
+              onClick={handleProcessLinePayRefundReversals}
+            >
+              處理 LINE Pay 退款沖銷
             </Button>
             <Button
               icon={<CheckCircleOutlined />}

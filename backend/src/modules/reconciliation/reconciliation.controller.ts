@@ -470,6 +470,26 @@ export class ReconciliationController {
     });
   }
 
+  @Post('line-pay/process-refund-reversals')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @ApiOperation({
+    summary: '處理 LINE Pay 退款沖銷',
+    description:
+      '針對已被 LINE Pay API 判定為退款/取消候選的匯入交易，建立反向核銷 / 沖銷分錄。',
+  })
+  async processLinePayRefundReversals(
+    @Body() body: RefreshLinePayStatusesDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.providerPayoutService.processPendingLinePayRefundReversals({
+      entityId: body.entityId,
+      startDate: body.startDate ? new Date(body.startDate) : undefined,
+      endDate: body.endDate ? new Date(body.endDate) : undefined,
+      limit: body.limit,
+      userId,
+    });
+  }
+
   @Public()
   @Post('line-pay/refresh-status/auto')
   @ApiOperation({

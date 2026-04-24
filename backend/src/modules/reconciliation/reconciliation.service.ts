@@ -20,6 +20,7 @@ import { OneShopService } from '../integration/one-shop/one-shop.service';
 import { EcpayShopifyPayoutService } from './ecpay-shopify-payout.service';
 import { SalesOrderService } from '../sales/services/sales-order.service';
 import { LinePayService } from './line-pay.service';
+import { ProviderPayoutReconciliationService } from './provider-payout-reconciliation.service';
 
 /**
  * ReconciliationService
@@ -39,6 +40,7 @@ export class ReconciliationService {
     private readonly ecpayShopifyPayoutService: EcpayShopifyPayoutService,
     private readonly salesOrderService: SalesOrderService,
     private readonly linePayService: LinePayService,
+    private readonly providerPayoutService: ProviderPayoutReconciliationService,
   ) {}
 
   assertSchedulerToken(providedToken?: string | null) {
@@ -169,6 +171,20 @@ export class ReconciliationService {
           startDate: since,
           endDate: until,
           limit: 300,
+        }),
+    );
+
+    await runStep(
+      'linepay-refund-reversal',
+      '處理 LINE Pay 退款沖銷',
+      params.syncLinePayStatuses !== false,
+      () =>
+        this.providerPayoutService.processPendingLinePayRefundReversals({
+          entityId,
+          startDate: since,
+          endDate: until,
+          limit: 300,
+          userId: params.userId || '',
         }),
     );
 
