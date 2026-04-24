@@ -129,6 +129,7 @@ const AccountingWorkbenchPage: React.FC = () => {
   const [feeImportOpen, setFeeImportOpen] = useState(false)
   const [importingFeeInvoices, setImportingFeeInvoices] = useState(false)
   const [importingLinePayCapture, setImportingLinePayCapture] = useState(false)
+  const [backfillingOneShopClosure, setBackfillingOneShopClosure] = useState(false)
   const [executive, setExecutive] = useState<DashboardExecutiveOverview | null>(null)
   const [feed, setFeed] = useState<DashboardReconciliationFeed | null>(null)
   const [audit, setAudit] = useState<OrderReconciliationAudit | null>(null)
@@ -357,6 +358,50 @@ const AccountingWorkbenchPage: React.FC = () => {
       message.error(error?.response?.data?.message || '匯入 LINE Pay CAPTURE 失敗')
     } finally {
       setImportingLinePayCapture(false)
+    }
+  }
+
+  const handleBackfillOneShopClosure = async () => {
+    const beginDate = dateRange?.[0]
+      ? dateRange[0].format('YYYY-MM-DD')
+      : dayjs().subtract(365, 'day').format('YYYY-MM-DD')
+    const endDate = dateRange?.[1]
+      ? dateRange[1].format('YYYY-MM-DD')
+      : dayjs().format('YYYY-MM-DD')
+
+    setBackfillingOneShopClosure(true)
+    try {
+      const result = await reconciliationService.backfillOneShopGroupbuyClosure({
+        entityId,
+        beginDate,
+        endDate,
+        orderWindowDays: 14,
+        payoutWindowDays: 31,
+        maxWindows: 18,
+        invoiceBatchLimit: 200,
+        autoClear: true,
+      })
+
+      const groupbuyChannel = result.postAudit?.groupbuyChannel
+      if (result.failedSteps.length) {
+        message.warning(
+          `1Shop 團購閉環補跑部分完成，失敗步驟：${result.failedSteps.join('、')}`,
+          6,
+        )
+      } else if (groupbuyChannel) {
+        message.success(
+          `1Shop 團購閉環補跑完成：缺 Payment ${groupbuyChannel.missingPayments || 0}、缺發票 ${groupbuyChannel.missingInvoices || 0}、缺手續費 ${groupbuyChannel.feeMissingPayments || 0}`,
+          6,
+        )
+      } else {
+        message.success('1Shop 團購閉環補跑完成')
+      }
+
+      await fetchWorkbench()
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '補跑 1Shop 團購閉環失敗')
+    } finally {
+      setBackfillingOneShopClosure(false)
     }
   }
 
@@ -1096,6 +1141,13 @@ const AccountingWorkbenchPage: React.FC = () => {
               onClick={() => navigate('/ap/payable?tab=ecpay-fees')}
             >
               處理綠界服務費 AP
+            </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              loading={backfillingOneShopClosure}
+              onClick={handleBackfillOneShopClosure}
+            >
+              補跑 1Shop 團購閉環
             </Button>
             <Button
               icon={<AuditOutlined />}

@@ -135,6 +135,45 @@ class RefreshLinePayStatusesDto {
   limit?: number;
 }
 
+class BackfillOneShopGroupbuyClosureDto {
+  @IsString()
+  entityId!: string;
+
+  @IsDateString()
+  beginDate!: string;
+
+  @IsDateString()
+  endDate!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  orderWindowDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  payoutWindowDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  maxWindows?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  invoiceBatchLimit?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  autoClear?: boolean;
+}
+
 class ClearReadyPaymentsDto {
   @IsString()
   entityId!: string;
@@ -270,6 +309,30 @@ export class ReconciliationController {
       syncInvoices: body.syncInvoices,
       syncLinePayStatuses: body.syncLinePayStatuses,
       autoClear: body.autoClear,
+    });
+  }
+
+  @Post('backfill/oneshop-groupbuy-closure')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @ApiOperation({
+    summary: '補跑 1Shop 團購 + 綠界 3150241 閉環',
+    description:
+      '依序補跑 1Shop 歷史訂單、3150241 綠界撥款、電子發票狀態、AR 應收與可核銷款項，用於消除團購通路缺 Payment / 缺發票 / 缺手續費缺口。',
+  })
+  async backfillOneShopGroupbuyClosure(
+    @Body() body: BackfillOneShopGroupbuyClosureDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.reconciliationService.backfillOneShopGroupbuyClosure({
+      entityId: body.entityId,
+      beginDate: new Date(body.beginDate),
+      endDate: new Date(body.endDate),
+      orderWindowDays: body.orderWindowDays,
+      payoutWindowDays: body.payoutWindowDays,
+      maxWindows: body.maxWindows,
+      invoiceBatchLimit: body.invoiceBatchLimit,
+      autoClear: body.autoClear,
+      userId,
     });
   }
 

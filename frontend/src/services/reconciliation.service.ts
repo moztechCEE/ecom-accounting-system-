@@ -142,6 +142,37 @@ export type ImportProviderPayoutsResponse = {
   invalidCount: number
 }
 
+export type BackfillOneShopGroupbuyClosureResponse = {
+  success: boolean
+  entityId: string
+  range: {
+    beginDate: string
+    endDate: string
+  }
+  steps: Array<{
+    key: string
+    label: string
+    status: 'success' | 'failed'
+    result?: any
+    error?: string
+  }>
+  failedSteps: string[]
+  postAudit?: {
+    totals?: {
+      orders?: number
+    }
+    groupbuyChannel?: {
+      channelName?: string
+      orders?: number
+      missingPayments?: number
+      missingInvoices?: number
+      feeMissingPayments?: number
+      reconciledPayments?: number
+      unreconciledPayments?: number
+    } | null
+  }
+}
+
 export const reconciliationService = {
   getCenter: async (params?: {
     entityId?: string
@@ -245,6 +276,38 @@ export const reconciliationService = {
         rows: params.rows,
         mapping: params.mapping,
         notes: params.notes,
+      },
+      {
+        timeout: 180000,
+      },
+    )
+    return response.data
+  },
+
+  backfillOneShopGroupbuyClosure: async (params: {
+    entityId?: string
+    beginDate: string
+    endDate: string
+    orderWindowDays?: number
+    payoutWindowDays?: number
+    maxWindows?: number
+    invoiceBatchLimit?: number
+    autoClear?: boolean
+  }) => {
+    const entityId =
+      params.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+
+    const response = await api.post<BackfillOneShopGroupbuyClosureResponse>(
+      '/reconciliation/backfill/oneshop-groupbuy-closure',
+      {
+        entityId,
+        beginDate: params.beginDate,
+        endDate: params.endDate,
+        orderWindowDays: params.orderWindowDays,
+        payoutWindowDays: params.payoutWindowDays,
+        maxWindows: params.maxWindows,
+        invoiceBatchLimit: params.invoiceBatchLimit,
+        autoClear: params.autoClear,
       },
       {
         timeout: 180000,

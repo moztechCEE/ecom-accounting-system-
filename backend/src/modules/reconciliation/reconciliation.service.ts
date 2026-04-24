@@ -203,6 +203,189 @@ export class ReconciliationService {
     };
   }
 
+  async backfillOneShopGroupbuyClosure(params: {
+    entityId: string;
+    beginDate: Date;
+    endDate: Date;
+    orderWindowDays?: number;
+    payoutWindowDays?: number;
+    maxWindows?: number;
+    invoiceBatchLimit?: number;
+    autoClear?: boolean;
+    userId?: string;
+  }) {
+    const entityId = params.entityId;
+    if (!entityId) {
+      throw new BadRequestException('entityId is required');
+    }
+
+    const beginDate = new Date(params.beginDate);
+    const endDate = new Date(params.endDate);
+
+    if (Number.isNaN(beginDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      throw new BadRequestException('beginDate / endDate must be valid dates');
+    }
+
+    if (beginDate > endDate) {
+      throw new BadRequestException('beginDate cannot be later than endDate');
+    }
+
+    const steps: Array<{
+      key: string;
+      label: string;
+      status: 'success' | 'skipped' | 'failed';
+      result?: any;
+      error?: string;
+    }> = [];
+
+    const runStep = async (
+      key: string,
+      label: string,
+      task: () => Promise<any>,
+    ) => {
+      try {
+        const result = await task();
+        steps.push({ key, label, status: 'success', result });
+        return result;
+      } catch (error: any) {
+        this.logger.warn(`${label} failed: ${error?.message || error}`);
+        steps.push({
+          key,
+          label,
+          status: 'failed',
+          error: error?.message || String(error),
+        });
+        return null;
+      }
+    };
+
+    const oneShopWindowDays = Math.min(
+      Math.max(params.orderWindowDays || 14, 1),
+      31,
+    );
+    const payoutWindowDays = Math.min(
+      Math.max(params.payoutWindowDays || 31, 1),
+      31,
+    );
+    const invoiceWindowDays = Math.min(
+      Math.max(params.orderWindowDays || 14, 1),
+      31,
+    );
+    const invoiceBatchLimit = Math.min(
+      Math.max(params.invoiceBatchLimit || 200, 1),
+      500,
+    );
+    const syncUserId = await this.resolveSyncUserId(params.userId);
+
+    const invoiceWindows = this.buildRollingWindows(
+      beginDate,
+      endDate,
+      invoiceWindowDays,
+    );
+    const selectedInvoiceWindows =
+      params.maxWindows && params.maxWindows > 0
+        ? invoiceWindows.slice(0, params.maxWindows)
+        : invoiceWindows;
+
+    await runStep('oneshop-backfill', '補跑 1Shop 團購歷史訂單', () =>
+      this.oneShopService.backfillHistory({
+        entityId,
+        beginDate,
+        endDate,
+        windowDays: oneShopWindowDays,
+        maxWindows: params.maxWindows,
+      }),
+    );
+
+    await runStep('groupbuy-ecpay-backfill', '補跑綠界 3150241 撥款', () =>
+      this.ecpayShopifyPayoutService.backfillHistory(
+        {
+          entityId,
+          beginDate: this.formatDate(beginDate),
+          endDate: this.formatDate(endDate),
+          merchantKeys: ['groupbuy-main'],
+          windowDays: payoutWindowDays,
+          maxWindows: params.maxWindows,
+        },
+        syncUserId,
+      ),
+    );
+
+    await runStep('groupbuy-invoice-backfill', '補跑 1Shop 團購發票狀態', async () => {
+      const windows: Array<{
+        beginDate: string;
+        endDate: string;
+        result: any;
+      }> = [];
+
+      for (const window of selectedInvoiceWindows) {
+        const result = await this.salesOrderService.syncInvoiceStatusForOrders({
+          entityId,
+          channelId: 'channel-oneshop',
+          startDate: this.parseDate(window.beginDate),
+          endDate: this.parseEndDate(window.endDate),
+          limit: invoiceBatchLimit,
+        });
+
+        windows.push({
+          beginDate: window.beginDate,
+          endDate: window.endDate,
+          result,
+        });
+      }
+
+      return {
+        requestedWindows: selectedInvoiceWindows.length,
+        windows,
+      };
+    });
+
+    await runStep('groupbuy-ar-sync', '同步 1Shop 團購應收 / 分錄', () =>
+      this.arService.syncSalesReceivables(entityId, syncUserId),
+    );
+
+    if (params.autoClear !== false) {
+      await runStep('groupbuy-auto-clear', '核銷可核銷團購款項', () =>
+        this.clearReadyPayments({
+          entityId,
+          startDate: beginDate,
+          endDate,
+          limit: 500,
+          userId: syncUserId,
+        }),
+      );
+    } else {
+      steps.push({
+        key: 'groupbuy-auto-clear',
+        label: '核銷可核銷團購款項',
+        status: 'skipped',
+        result: { skipped: true },
+      });
+    }
+
+    const audit = await this.reportsService.getDataCompletenessAudit(
+      entityId,
+      beginDate,
+      endDate,
+    );
+    const groupbuyChannel =
+      audit.channelBreakdown.find((item) => item.channelCode === '1SHOP') || null;
+
+    return {
+      success: !steps.some((step) => step.status === 'failed'),
+      entityId,
+      range: {
+        beginDate: beginDate.toISOString(),
+        endDate: endDate.toISOString(),
+      },
+      steps,
+      postAudit: {
+        generatedAt: audit.generatedAt,
+        groupbuyChannel,
+      },
+    };
+  }
+
   async clearReadyPayments(params: {
     entityId: string;
     startDate?: Date;
@@ -950,6 +1133,38 @@ export class ReconciliationService {
       ...(startDate ? { gte: startDate } : {}),
       ...(endDate ? { lte: endDate } : {}),
     };
+  }
+
+  private buildRollingWindows(begin: Date, end: Date, windowDays: number) {
+    const windows: Array<{ beginDate: string; endDate: string }> = [];
+    const cursor = new Date(begin);
+
+    while (cursor <= end) {
+      const windowStart = new Date(cursor);
+      const windowEnd = new Date(cursor);
+      windowEnd.setDate(windowEnd.getDate() + windowDays - 1);
+      if (windowEnd > end) {
+        windowEnd.setTime(end.getTime());
+      }
+
+      windows.push({
+        beginDate: this.formatDate(windowStart),
+        endDate: this.formatDate(windowEnd),
+      });
+
+      cursor.setTime(windowEnd.getTime());
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return windows;
+  }
+
+  private parseDate(value: string) {
+    return new Date(`${value}T00:00:00.000Z`);
+  }
+
+  private parseEndDate(value: string) {
+    return new Date(`${value}T23:59:59.999Z`);
   }
 
   private async resolveSyncUserId(preferredUserId?: string | null) {
