@@ -274,7 +274,7 @@ const ReconciliationCenterPage: React.FC = () => {
           </div>
           <Title level={2} className="!mb-1 !font-light">對帳中心</Title>
           <Text type="secondary">
-            不看雜訊，只看每筆訂單是否完成「訂單、綠界/平台撥款、手續費、發票、入帳」閉環。
+            只看核對狀態：每筆訂單是否完成訂單、撥款、手續費與發票的閉環，不在這裡做會計補件。
           </Text>
         </div>
         <Space wrap>
@@ -306,6 +306,19 @@ const ReconciliationCenterPage: React.FC = () => {
           </Button>
         </Space>
       </div>
+
+      <Alert
+        showIcon
+        type="info"
+        className="rounded-3xl !px-6 !py-4 shadow-sm"
+        message="頁面分工"
+        description="對帳中心只負責核對訂單、撥款、手續費與發票是否對上；若需要補分錄、補發票、追應收，請進會計工作台處理。"
+        action={
+          <Button type="link" onClick={() => navigate('/accounting/workbench')}>
+            前往會計工作台
+          </Button>
+        }
+      />
 
       <Card className="overflow-hidden rounded-[32px] border-0 shadow-sm" bodyStyle={{ padding: 0 }}>
         <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_420px]">

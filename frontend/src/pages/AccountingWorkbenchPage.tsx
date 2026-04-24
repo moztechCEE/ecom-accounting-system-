@@ -978,7 +978,7 @@ const AccountingWorkbenchPage: React.FC = () => {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <Title level={2} className="!mb-1 !font-light">會計工作台</Title>
-          <Text type="secondary">這裡只處理待補手續費、發票、應收與分錄核銷；原始訂單與品牌銷售請回銷售訂單頁查看。</Text>
+          <Text type="secondary">這裡只處理會計補件、入帳、核銷與月結追蹤；原始訂單與核對狀態不在這頁處理。</Text>
         </div>
         <Space wrap>
           <RangePicker
@@ -1007,6 +1007,19 @@ const AccountingWorkbenchPage: React.FC = () => {
           </Button>
         </Space>
       </div>
+
+      <Alert
+        showIcon
+        type="info"
+        className="rounded-3xl !px-6 !py-4 shadow-sm"
+        message="頁面分工"
+        description="會計工作台只負責補發票、補手續費、建立應收、落分錄與月結追蹤；待撥款、可核銷、已核銷與異常狀態請到對帳中心查看。"
+        action={
+          <Button type="link" onClick={() => navigate('/reconciliation')}>
+            前往對帳中心
+          </Button>
+        }
+      />
 
       <Card className="overflow-hidden rounded-3xl border-0 shadow-sm" bodyStyle={{ padding: 0 }}>
         <div className="grid gap-0 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
@@ -1157,7 +1170,7 @@ const AccountingWorkbenchPage: React.FC = () => {
               把警示往核銷推進
             </div>
             <div className="mt-1 text-sm text-slate-500">
-              先同步應收與發票狀態；綠界服務費發票與月度稽核則進入 AP / 報表中心處理。
+              這裡只處理會計補件與入帳推進；待撥款、可核銷與異常判斷請回對帳中心查看。
             </div>
           </div>
           <Space wrap>
