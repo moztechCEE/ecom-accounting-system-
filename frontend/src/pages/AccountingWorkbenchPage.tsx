@@ -365,6 +365,42 @@ const AccountingWorkbenchPage: React.FC = () => {
     }
   }
 
+  const runOneShopClosureAfterImport = async () => {
+    const beginDate = dateRange?.[0]
+      ? dateRange[0].format('YYYY-MM-DD')
+      : dayjs().subtract(365, 'day').format('YYYY-MM-DD')
+    const endDate = dateRange?.[1]
+      ? dateRange[1].format('YYYY-MM-DD')
+      : dayjs().format('YYYY-MM-DD')
+
+    const result = await reconciliationService.backfillOneShopGroupbuyClosure({
+      entityId,
+      beginDate,
+      endDate,
+      orderWindowDays: 14,
+      payoutWindowDays: 31,
+      maxWindows: 18,
+      invoiceBatchLimit: 200,
+      autoClear: true,
+    })
+
+    const groupbuyChannel = result.postAudit?.groupbuyChannel
+    if (result.failedSteps.length) {
+      message.warning(
+        `閉環補跑部分完成，失敗步驟：${result.failedSteps.join('、')}`,
+        6,
+      )
+      return
+    }
+
+    if (groupbuyChannel) {
+      message.success(
+        `閉環已更新：缺 Payment ${groupbuyChannel.missingPayments || 0}、缺發票 ${groupbuyChannel.missingInvoices || 0}、缺手續費 ${groupbuyChannel.feeMissingPayments || 0}`,
+        6,
+      )
+    }
+  }
+
   const handleImportEcpayPayout = async (file: File) => {
     setImportingEcpayPayout(true)
     try {
@@ -386,6 +422,7 @@ const AccountingWorkbenchPage: React.FC = () => {
       message.success(
         `綠界撥款匯入完成：${result.recordCount} 筆，已匹配 ${result.matchedCount} 筆，待確認 ${result.unmatchedCount} 筆，無效 ${result.invalidCount} 筆`,
       )
+      await runOneShopClosureAfterImport()
       await fetchWorkbench()
     } catch (error: any) {
       message.error(error?.response?.data?.message || '匯入綠界撥款報表失敗')
@@ -415,6 +452,7 @@ const AccountingWorkbenchPage: React.FC = () => {
         `綠界銷項發票匯入完成：已配對 ${result.matched || 0} 筆，新增 ${result.created || 0} 筆，更新 ${result.updated || 0} 筆，未配對 ${result.unmatched || 0} 筆`,
         6,
       )
+      await runOneShopClosureAfterImport()
       await fetchWorkbench()
     } catch (error: any) {
       message.error(error?.response?.data?.message || '匯入綠界銷項發票失敗')
