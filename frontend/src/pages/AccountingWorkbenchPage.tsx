@@ -134,6 +134,7 @@ const AccountingWorkbenchPage: React.FC = () => {
   const [backfillingOneShopClosure, setBackfillingOneShopClosure] = useState(false)
   const [refreshingLinePayStatuses, setRefreshingLinePayStatuses] = useState(false)
   const [processingLinePayRefunds, setProcessingLinePayRefunds] = useState(false)
+  const [runningLinePayClosurePass, setRunningLinePayClosurePass] = useState(false)
   const [executive, setExecutive] = useState<DashboardExecutiveOverview | null>(null)
   const [feed, setFeed] = useState<DashboardReconciliationFeed | null>(null)
   const [audit, setAudit] = useState<OrderReconciliationAudit | null>(null)
@@ -357,6 +358,7 @@ const AccountingWorkbenchPage: React.FC = () => {
       message.success(
         `LINE Pay CAPTURE 匯入完成：${result.recordCount} 筆，已匹配 ${result.matchedCount} 筆，待確認 ${result.unmatchedCount} 筆，無效 ${result.invalidCount} 筆`,
       )
+      await handleRunLinePayClosurePass()
       await fetchWorkbench()
     } catch (error: any) {
       message.error(error?.response?.data?.message || '匯入 LINE Pay CAPTURE 失敗')
@@ -562,6 +564,40 @@ const AccountingWorkbenchPage: React.FC = () => {
       message.error(error?.response?.data?.message || '處理 LINE Pay 退款沖銷失敗')
     } finally {
       setProcessingLinePayRefunds(false)
+    }
+  }
+
+  const handleRunLinePayClosurePass = async () => {
+    setRunningLinePayClosurePass(true)
+    try {
+      const result = await reconciliationService.runLinePayClosurePass({
+        entityId,
+        startDate,
+        endDate,
+        limit: 300,
+        syncInvoices: true,
+        autoClear: true,
+      })
+
+      if (result.failedCount > 0) {
+        message.warning(
+          `LINE Pay 閉環補跑部分完成：退款候選 ${result.linePay.refundCandidateCount} 筆、已沖銷 ${result.linePay.reversedCount} 筆、未匹配 ${result.linePay.unmatchedRefundCount} 筆，失敗步驟 ${result.failedCount} 個`,
+          6,
+        )
+      } else {
+        message.success(
+          `LINE Pay 閉環補跑完成：檢查 ${result.linePay.checkedCount} 筆、退款候選 ${result.linePay.refundCandidateCount} 筆、已沖銷 ${result.linePay.reversedCount} 筆`,
+          6,
+        )
+      }
+
+      await fetchWorkbench()
+      return result
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '補跑 LINE Pay 閉環失敗')
+      throw error
+    } finally {
+      setRunningLinePayClosurePass(false)
     }
   }
 
@@ -1345,6 +1381,13 @@ const AccountingWorkbenchPage: React.FC = () => {
               onClick={handleRefreshLinePayStatuses}
             >
               刷新 LINE Pay 狀態
+            </Button>
+            <Button
+              icon={<CheckCircleOutlined />}
+              loading={runningLinePayClosurePass}
+              onClick={handleRunLinePayClosurePass}
+            >
+              補跑 LINE Pay 閉環
             </Button>
             <Button
               icon={<CheckCircleOutlined />}

@@ -135,6 +135,16 @@ class RefreshLinePayStatusesDto {
   limit?: number;
 }
 
+class RunLinePayClosurePassDto extends RefreshLinePayStatusesDto {
+  @IsOptional()
+  @IsBoolean()
+  syncInvoices?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  autoClear?: boolean;
+}
+
 class BackfillOneShopGroupbuyClosureDto {
   @IsString()
   entityId!: string;
@@ -486,6 +496,28 @@ export class ReconciliationController {
       startDate: body.startDate ? new Date(body.startDate) : undefined,
       endDate: body.endDate ? new Date(body.endDate) : undefined,
       limit: body.limit,
+      userId,
+    });
+  }
+
+  @Post('line-pay/closure-pass')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @ApiOperation({
+    summary: '執行 LINE Pay 閉環補跑',
+    description:
+      '依序刷新 LINE Pay 狀態、處理退款沖銷、同步 AR / 發票，並嘗試自動核銷可核銷款項。',
+  })
+  async runLinePayClosurePass(
+    @Body() body: RunLinePayClosurePassDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.reconciliationService.runLinePayClosurePass({
+      entityId: body.entityId,
+      startDate: body.startDate ? new Date(body.startDate) : undefined,
+      endDate: body.endDate ? new Date(body.endDate) : undefined,
+      limit: body.limit,
+      syncInvoices: body.syncInvoices,
+      autoClear: body.autoClear,
       userId,
     });
   }

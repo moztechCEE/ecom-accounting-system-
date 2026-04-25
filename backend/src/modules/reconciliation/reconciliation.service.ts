@@ -411,6 +411,149 @@ export class ReconciliationService {
     };
   }
 
+  async runLinePayClosurePass(params: {
+    entityId: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    syncInvoices?: boolean;
+    autoClear?: boolean;
+    userId?: string;
+  }) {
+    const entityId = params.entityId;
+    if (!entityId) {
+      throw new BadRequestException('entityId is required');
+    }
+
+    const until = params.endDate || new Date();
+    const since =
+      params.startDate ||
+      new Date(until.getTime() - 31 * 24 * 60 * 60 * 1000);
+    const limit = Math.min(Math.max(params.limit || 300, 1), 500);
+    const syncUserId = await this.resolveSyncUserId(params.userId);
+    const steps: Array<{
+      key: string;
+      label: string;
+      status: 'success' | 'skipped' | 'failed';
+      result?: any;
+      error?: string;
+    }> = [];
+
+    const runStep = async (
+      key: string,
+      label: string,
+      enabled: boolean,
+      task: () => Promise<any>,
+    ) => {
+      if (!enabled) {
+        steps.push({ key, label, status: 'skipped', result: { skipped: true } });
+        return null;
+      }
+
+      try {
+        const result = await task();
+        steps.push({ key, label, status: 'success', result });
+        return result;
+      } catch (error: any) {
+        this.logger.warn(`${label} failed: ${error?.message || error}`);
+        steps.push({
+          key,
+          label,
+          status: 'failed',
+          error: error?.message || String(error),
+        });
+        return null;
+      }
+    };
+
+    const refreshResult = await runStep(
+      'linepay-status-refresh',
+      '刷新 LINE Pay 交易 / 退款狀態',
+      true,
+      () =>
+        this.linePayService.refreshImportedPayoutStatuses({
+          entityId,
+          startDate: since,
+          endDate: until,
+          limit,
+        }),
+    );
+
+    const reversalResult = await runStep(
+      'linepay-refund-reversal',
+      '處理 LINE Pay 退款沖銷',
+      true,
+      () =>
+        this.providerPayoutService.processPendingLinePayRefundReversals({
+          entityId,
+          startDate: since,
+          endDate: until,
+          limit,
+          userId: syncUserId,
+        }),
+    );
+
+    await runStep(
+      'linepay-ar-sync',
+      '同步 LINE Pay 關聯訂單到 AR / 分錄',
+      true,
+      () =>
+        this.arService.syncSalesReceivables(entityId, syncUserId, {
+          startDate: since,
+          endDate: until,
+          limit: 5000,
+        }),
+    );
+
+    await runStep(
+      'linepay-invoice-sync',
+      '同步 LINE Pay 關聯訂單發票狀態',
+      params.syncInvoices !== false,
+      () =>
+        this.salesOrderService.syncInvoiceStatusForOrders({
+          entityId,
+          startDate: since,
+          endDate: until,
+          limit,
+        }),
+    );
+
+    await runStep(
+      'linepay-auto-clear',
+      '核銷可核銷 LINE Pay 款項',
+      params.autoClear !== false,
+      () =>
+        this.clearReadyPayments({
+          entityId,
+          startDate: since,
+          endDate: until,
+          limit: 300,
+          userId: syncUserId,
+        }),
+    );
+
+    const center = await this.getReconciliationCenter(entityId, since, until, 300);
+
+    return {
+      success: !steps.some((step) => step.status === 'failed'),
+      entityId,
+      range: {
+        startDate: since.toISOString(),
+        endDate: until.toISOString(),
+      },
+      steps,
+      failedCount: steps.filter((step) => step.status === 'failed').length,
+      summary: center.summary,
+      linePay: {
+        checkedCount: refreshResult?.checkedCount || 0,
+        refundCandidateCount: refreshResult?.refundCandidateCount || 0,
+        reversedCount: reversalResult?.reversed || 0,
+        unmatchedRefundCount: reversalResult?.unmatched || 0,
+        skippedRefundCount: reversalResult?.skipped || 0,
+      },
+    };
+  }
+
   async clearReadyPayments(params: {
     entityId: string;
     startDate?: Date;

@@ -202,6 +202,31 @@ export type ProcessLinePayRefundReversalsResponse = {
   }>
 }
 
+export type RunLinePayClosurePassResponse = {
+  success: boolean
+  entityId: string
+  range: {
+    startDate: string
+    endDate: string
+  }
+  steps: Array<{
+    key: string
+    label: string
+    status: 'success' | 'skipped' | 'failed'
+    result?: any
+    error?: string
+  }>
+  failedCount: number
+  summary?: any
+  linePay: {
+    checkedCount: number
+    refundCandidateCount: number
+    reversedCount: number
+    unmatchedRefundCount: number
+    skippedRefundCount: number
+  }
+}
+
 export const reconciliationService = {
   getCenter: async (params?: {
     entityId?: string
@@ -385,6 +410,34 @@ export const reconciliationService = {
         startDate: params.startDate,
         endDate: params.endDate,
         limit: params.limit,
+      },
+      {
+        timeout: 180000,
+      },
+    )
+    return response.data
+  },
+
+  runLinePayClosurePass: async (params: {
+    entityId?: string
+    startDate?: string
+    endDate?: string
+    limit?: number
+    syncInvoices?: boolean
+    autoClear?: boolean
+  }) => {
+    const entityId =
+      params.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+
+    const response = await api.post<RunLinePayClosurePassResponse>(
+      '/reconciliation/line-pay/closure-pass',
+      {
+        entityId,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        limit: params.limit,
+        syncInvoices: params.syncInvoices,
+        autoClear: params.autoClear,
       },
       {
         timeout: 180000,
