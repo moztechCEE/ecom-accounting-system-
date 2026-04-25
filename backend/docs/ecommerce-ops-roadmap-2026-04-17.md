@@ -709,3 +709,229 @@ B2B 月結下一步：
   - https://support.ecpay.com.tw/8753/
 - 綠界 Support - 申請綠界物流及金流:
   - https://support.ecpay.com.tw/26036/
+
+## 2026-04-26 最新 Hand-off：交接給下一個 Context Window
+
+### 本輪已完成的程式變更
+
+最近已 push 到 `main` 的關鍵 commit：
+
+- `5838f84c` `feat(reconciliation): add linepay closure pass`
+- `8c6ea29a` `feat(workbench): auto-run closure after ecpay imports`
+- `e7d08469` `feat(accounting): add ecpay payout and invoice import actions`
+- `f252c02a` `feat(reconciliation): add closure pass script and scoped ar sync`
+- `21478d09` `feat(sales): add refund journal closure flow`
+- `4e534951` `feat(reconciliation): process line pay refund reversals`
+- `eaa1dc59` `feat(workbench): add line pay status refresh action`
+
+### 已落地功能
+
+1. `1Shop + 綠界 3150241` 閉環補跑入口
+   - API：
+     - `POST /reconciliation/backfill/oneshop-groupbuy-closure`
+   - 流程：
+     - 補跑 1Shop 歷史訂單
+     - 補跑綠界 `3150241` 撥款
+     - 補跑 1Shop 團購發票狀態
+     - scoped AR sync
+     - auto clear
+   - 前端：
+     - `補跑 1Shop 團購閉環`
+
+2. `綠界手動匯入` 入口
+   - API：
+     - `POST /reconciliation/payouts/import`
+     - `POST /sales/orders/ecpay-issued-invoices/import`
+   - 前端：
+     - `匯入綠界撥款報表`
+     - `匯入綠界銷項發票`
+   - 補充：
+     - 兩者匯入後會自動再跑一次 `1Shop 團購閉環補跑`
+
+3. `LINE Pay` 狀態刷新 / 退款沖銷 / 閉環補跑
+   - API：
+     - `POST /reconciliation/line-pay/refresh-status`
+     - `POST /reconciliation/line-pay/process-refund-reversals`
+     - `POST /reconciliation/line-pay/closure-pass`
+   - 前端：
+     - `匯入 LINE Pay CAPTURE`
+     - `刷新 LINE Pay 狀態`
+     - `處理 LINE Pay 退款沖銷`
+     - `補跑 LINE Pay 閉環`
+   - 補充：
+     - `匯入 LINE Pay CAPTURE` 後，會自動接著跑 `LINE Pay 閉環`
+
+4. `退款正式分錄`
+   - API：
+     - `POST /sales/orders/:id/refund`
+   - 已做：
+     - 更新 `SalesOrder`
+     - 更新 `Payment`
+     - 更新 `AR Invoice`
+     - 更新 `Invoice / InvoiceLog`
+     - 建立退款分錄
+
+5. `AR scoped sync`
+   - 原本 `AR sync` 會吃整個 entity 歷史，造成 `1Shop 團購閉環` 易 `503`
+   - 現在 `ArService.syncSalesReceivables(...)` 已支援：
+     - `startDate`
+     - `endDate`
+     - `limit`
+   - `1Shop 團購閉環` 會只同步指定期間的 AR
+
+### 已確認的事實
+
+1. `1Shop backfill` 本身可正常工作
+   - 曾直接驗證 `2026-04-18 ~ 2026-04-24`
+   - 成功回來：`fetched 146 / updated 146`
+
+2. `3150241 綠界撥款 backfill` API 可正常工作
+   - 先前測到的結果是指定期間 `0` 筆新撥款
+   - 代表不是程式壞掉，而是該區間沒有新的可補資料
+
+3. `LINE Pay refresh` 與 `LINE Pay refund reversal` 入口都已存在
+   - 但是否真的有資料被成功反向核銷，要看匯入的 LINE Pay CAPTURE / payout line 內容
+
+4. `1SHOP` 缺口曾出現以下狀態
+   - `missingPayments` 已可降到 `0`
+   - `missingInvoices` 曾從 `223` 降到 `152`
+   - `feeMissingPayments` 曾升到 `425`
+   - 這不是退步，而是更多 Payment 被建立後，真實暴露出「仍在等撥款 / 手續費回填」
+
+### 真正還沒完成的部分
+
+#### A. `1Shop + 綠界 3150241` 歷史缺口尚未實際補平
+
+程式入口都已補好，但還沒完成「資料層面的最後驗證」：
+
+1. 需要正式重跑一次：
+   - `1Shop 團購閉環補跑`
+   - 若有綠界撥款報表，再匯入 `綠界撥款報表`
+   - 若有綠界銷項發票報表，再匯入 `綠界銷項發票`
+
+2. 重跑後要驗證這三個數字是否下降：
+   - `缺 Payment`
+   - `缺發票`
+   - `缺手續費`
+
+3. 若 `缺發票` 仍高：
+   - 代表 1Shop receipt 與綠界 issued invoice 報表仍不足以配對全部訂單
+   - 要再查 `relateNumber / originalOrderNumber / oneShopOrderId / externalOrderId` 的實際格式
+
+4. 若 `缺手續費` 仍高：
+   - 代表 `3150241` 撥款資料本身還沒進來
+   - 或匯入列中的對帳關鍵欄位不足以配回 Payment
+
+#### B. `LINE Pay 退款 -> 反向核銷` 還沒做到最後驗證
+
+現在有流程，但還沒完成這兩件事：
+
+1. 用真實 LINE Pay CAPTURE / payout line 測一次：
+   - `refund_pending_reversal`
+   - `refund_reversed`
+   - `refund_unmatched`
+   的實際數量
+
+2. 驗證退款後是否完整同步影響：
+   - `Payment.notes`
+   - `SalesOrder.status`
+   - `AR Invoice`
+   - `Invoice / InvoiceLog`
+   - `JournalEntry`
+   - `對帳中心 summary`
+
+注意：
+- `ProviderPayoutReconciliationService.processPendingLinePayRefundReversals(...)`
+  現在是針對 `payoutImportLine.status = refund_pending_reversal`
+  建立反向核銷分錄
+- 但它不是直接呼叫 `SalesOrderService.applyRefund(...)`
+- 這代表「金流退款反向核銷」與「訂單層退款」目前是兩條相鄰流程，不是完全同一條
+- 下一個 context window 要決定：
+  - 保持分開
+  - 或把兩者再整合成同一個退款閉環
+
+#### C. `發票 + 手續費 + AR` 還沒到最終閉環
+
+目前還差：
+
+1. 發票
+   - 確認所有 1Shop / Shopify / Shopline / LINE Pay 關聯訂單
+   - 都能在 `Invoice / SalesOrder / AR / 會計工作台 / 報表中心`
+     一致看到同一份發票狀態
+
+2. 手續費
+   - 所有 Payment 要能明確落在：
+     - `feeStatus=actual`
+     - `feeStatus=estimated`
+     - `feeStatus=unavailable`
+   - 並且 `平台費` 與 `金流費` 不混用
+
+3. AR
+   - AR 已有骨架與 scoped sync
+   - 但還沒做到「所有 relevant order 都已形成對應應收，且能隨付款 / 退款 / 發票狀態回寫」
+
+#### D. `會計工作台 / 對帳中心` 角色收斂還沒完全做完
+
+現在已經開始拆分，但仍未完全收斂：
+
+- `對帳中心`
+  - 應只看：
+    - 訂單
+    - 撥款
+    - 手續費
+    - 發票
+    是否對上
+
+- `會計工作台`
+  - 應只看：
+    - 缺什麼要補
+    - 哪些待會計分錄
+    - 哪些待月結 / 待追帳
+
+還要繼續清：
+- 重複卡片
+- 重複指標
+- 重複說明文字
+
+### 下一個 Context Window 的建議執行順序
+
+1. 先跑 `1Shop 團購閉環補跑`
+   - 看 `postAudit.groupbuyChannel`
+   - 記錄：
+     - `missingPayments`
+     - `missingInvoices`
+     - `feeMissingPayments`
+
+2. 若仍有大量 `缺發票 / 缺手續費`
+   - 手動匯入：
+     - `綠界撥款報表`
+     - `綠界銷項發票`
+   - 再觀察缺口是否下降
+
+3. 再跑 `LINE Pay 閉環`
+   - 確認：
+     - `refundCandidateCount`
+     - `reversedCount`
+     - `unmatchedRefundCount`
+   - 若有未匹配案例，抽樣查：
+     - `providerPaymentId`
+     - `originalProviderPaymentId`
+     - `externalOrderId`
+
+4. 再驗證 `Invoice + Fee + AR` 是否真正回寫到：
+   - `會計工作台`
+   - `對帳中心`
+   - `報表中心`
+   - `銷售訂單詳情`
+
+5. 最後再繼續做 UI 角色收斂
+
+### 交接注意事項
+
+1. 本地目前是乾淨 worktree
+2. 最新已 push 的 commit 是：
+   - `5838f84c feat(reconciliation): add linepay closure pass`
+3. 下一個 context window 不需要先修程式入口，優先做：
+   - 實際補跑
+   - 驗證缺口是否下降
+   - 抽樣核對資料是否真的對上
