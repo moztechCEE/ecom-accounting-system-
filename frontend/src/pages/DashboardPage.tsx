@@ -21,11 +21,13 @@ import {
   ClockCircleOutlined,
   DollarOutlined,
   FallOutlined,
+  FileTextOutlined,
   RiseOutlined,
   ShoppingOutlined,
   SyncOutlined,
 } from "@ant-design/icons";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import PageSkeleton from "../components/PageSkeleton";
 import AIInsightsWidget from "../components/AIInsightsWidget";
 import { GlassCard } from "../components/ui/GlassCard";
@@ -224,6 +226,7 @@ function getInvoiceQueueMeta(item: InvoiceQueueItem) {
 }
 
 const DashboardPage: React.FC = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [rangeMode, setRangeMode] = useState<RangeMode>("today");
   const [customRange, setCustomRange] = useState<CustomRange>(null);
@@ -540,6 +543,8 @@ const DashboardPage: React.FC = () => {
   const arSummary = receivableMonitor?.summary;
   const auditSummary = audit?.summary;
   const auditItems = audit?.items || [];
+  const missingInvoiceCount =
+    Number(invoiceSummary?.pendingCount || 0) + Number(invoiceSummary?.eligibleCount || 0);
 
   // ─── 品牌業績歸因（從通路 bucket 近似推算）───────────────
   const sumBuckets = (arr: typeof performanceBuckets) => ({
@@ -661,6 +666,35 @@ const DashboardPage: React.FC = () => {
           <Tag color="red" className="shrink-0">共 {criticalCount} 項</Tag>
         </motion.div>
       )}
+
+      <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-5 py-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 shadow-sm">
+              <FileTextOutlined />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-slate-900">缺發票訂單處理入口</span>
+                <Tag color={missingInvoiceCount > 0 ? "gold" : "green"}>
+                  {missingInvoiceCount > 0 ? `${missingInvoiceCount} 筆待處理` : "目前無待處理"}
+                </Tag>
+              </div>
+              <div className="mt-1 text-sm leading-6 text-slate-600">
+                訂單明細仍在銷售訂單頁查看；補發票、同步綠界發票、匯入綠界銷項發票與後續入帳，統一到會計工作台處理。
+              </div>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button onClick={handleSyncInvoiceStatuses} loading={syncingInvoiceStatuses}>
+              同步發票狀態
+            </Button>
+            <Button type="primary" onClick={() => navigate("/accounting/workbench?focus=missing-invoices")}>
+              處理缺發票
+            </Button>
+          </div>
+        </div>
+      </div>
 
       {/* ── 核心 KPI（4 張，全部真實資料）── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

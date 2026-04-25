@@ -67,6 +67,7 @@ const DashboardLayout: React.FC = () => {
       label: '會計管理',
       children: [
         { key: '/accounting/workbench', label: '會計工作台', onClick: () => navigate('/accounting/workbench') },
+        { key: '/accounting/workbench?focus=missing-invoices', label: '缺發票處理', onClick: () => navigate('/accounting/workbench?focus=missing-invoices') },
         { key: '/accounting/accounts', label: '會計科目', onClick: () => navigate('/accounting/accounts') },
         { key: '/accounting/journals', label: '會計分錄', onClick: () => navigate('/accounting/journals') },
         { key: '/accounting/periods', label: '會計期間', onClick: () => navigate('/accounting/periods') },

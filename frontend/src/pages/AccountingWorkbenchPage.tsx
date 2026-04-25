@@ -38,7 +38,7 @@ import {
 import { motion } from 'framer-motion'
 import dayjs, { Dayjs } from 'dayjs'
 import * as XLSX from 'xlsx'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   dashboardService,
   DataCompletenessAudit,
@@ -117,6 +117,7 @@ const riskMeta = (risk?: string) => {
 
 const AccountingWorkbenchPage: React.FC = () => {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [feeImportForm] = Form.useForm()
   // 預設 90 天，確保能看到歷史資料；null = 全部（不過濾日期）
   const [dateRange, setDateRange] = useState<WorkbenchRange>([
@@ -650,6 +651,13 @@ const AccountingWorkbenchPage: React.FC = () => {
     (!receivables ||
       ((receivables.items?.length || 0) === 0 &&
         Number(receivables.summary?.grossAmount || 0) === 0))
+  const invoiceFocusActive = searchParams.get('focus') === 'missing-invoices'
+  const missingInvoiceOrderCount = Number(dataCompleteness?.gaps.missingInvoiceOrders || 0)
+  const invoiceLinkedRate = Number(dataCompleteness?.coverage.invoiceLinkedRate || 0)
+  const oneShopMissingInvoices =
+    channelCompleteness.find((item) => /1shop|oneshop/i.test(`${item.channelCode} ${item.channelName}`))?.missingInvoices || 0
+  const shopifyMissingInvoices =
+    channelCompleteness.find((item) => /shopify/i.test(`${item.channelCode} ${item.channelName}`))?.missingInvoices || 0
 
   const anomalyColumns: ColumnsType<DashboardExecutiveAnomaly> = [
     {
@@ -1154,6 +1162,90 @@ const AccountingWorkbenchPage: React.FC = () => {
           </Button>
         }
       />
+
+      {invoiceFocusActive ? (
+        <Alert
+          showIcon
+          type="warning"
+          className="rounded-3xl !px-6 !py-4 shadow-sm"
+          message="你現在在缺發票訂單處理區"
+          description="先同步發票狀態；若綠界後台已有銷項發票，匯入綠界銷項發票檔；若是 1Shop 團購資料，補跑 1Shop 團購閉環後再回對帳中心確認可核銷狀態。"
+          action={
+            <Space wrap>
+              <Button loading={syncingInvoiceStatus} onClick={handleSyncInvoiceStatuses}>
+                同步發票狀態
+              </Button>
+              <Button type="primary" onClick={() => navigate('/reconciliation')}>
+                回對帳中心
+              </Button>
+            </Space>
+          }
+        />
+      ) : null}
+
+      <Card className="rounded-3xl border-0 bg-white/75 shadow-sm" bodyStyle={{ padding: 28 }}>
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+          <div className="max-w-3xl">
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+              Invoice Handling
+            </div>
+            <div className="mt-2 text-xl font-semibold text-slate-900">缺發票訂單在這裡處理</div>
+            <div className="mt-1 text-sm leading-6 text-slate-500">
+              這裡不是報表頁，也不是只看訂單的銷售頁。發票處理順序是：同步既有發票狀態、匯入綠界銷項發票、補跑團購閉環，最後回到對帳中心看是否可核銷。
+            </div>
+          </div>
+          <div className="grid w-full gap-3 sm:grid-cols-3 xl:max-w-2xl">
+            <Card size="small" className="rounded-2xl bg-amber-50">
+              <Statistic title="缺發票訂單" value={missingInvoiceOrderCount} />
+              <div className="mt-2 text-xs text-slate-500">目前資料完整度稽核</div>
+            </Card>
+            <Card size="small" className="rounded-2xl bg-slate-50">
+              <Statistic title="發票覆蓋率" value={invoiceLinkedRate} suffix="%" precision={1} />
+              <Progress percent={invoiceLinkedRate} size="small" showInfo={false} strokeColor="#f59e0b" />
+            </Card>
+            <Card size="small" className="rounded-2xl bg-slate-50">
+              <Statistic title="1Shop / Shopify 缺口" value={oneShopMissingInvoices + shopifyMissingInvoices} />
+              <div className="mt-2 text-xs text-slate-500">
+                1Shop {oneShopMissingInvoices} · Shopify {shopifyMissingInvoices}
+              </div>
+            </Card>
+          </div>
+        </div>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button
+            icon={<SafetyCertificateOutlined />}
+            loading={syncingInvoiceStatus}
+            onClick={handleSyncInvoiceStatuses}
+          >
+            同步發票狀態
+          </Button>
+          <Upload
+            accept=".xlsx,.xls,.csv"
+            showUploadList={false}
+            beforeUpload={(file) => {
+              void handleImportEcpayIssuedInvoices(file)
+              return false
+            }}
+          >
+            <Button icon={<UploadOutlined />} loading={importingEcpayIssuedInvoices}>
+              匯入綠界銷項發票
+            </Button>
+          </Upload>
+          <Button
+            icon={<ReloadOutlined />}
+            loading={backfillingOneShopClosure}
+            onClick={handleBackfillOneShopClosure}
+          >
+            補跑 1Shop 團購閉環
+          </Button>
+          <Button onClick={() => navigate('/sales/orders')}>
+            查看原始訂單
+          </Button>
+          <Button onClick={() => navigate('/reconciliation')}>
+            查看核銷狀態
+          </Button>
+        </div>
+      </Card>
 
       <Card className="overflow-hidden rounded-3xl border-0 shadow-sm" bodyStyle={{ padding: 0 }}>
         <div className="grid gap-0 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">

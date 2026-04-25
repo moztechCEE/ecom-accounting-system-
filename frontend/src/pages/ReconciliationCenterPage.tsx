@@ -314,8 +314,8 @@ const ReconciliationCenterPage: React.FC = () => {
         message="頁面分工"
         description="對帳中心只負責核對訂單、撥款、手續費與發票是否對上；若需要補分錄、補發票、追應收，請進會計工作台處理。"
         action={
-          <Button type="link" onClick={() => navigate('/accounting/workbench')}>
-            前往會計工作台
+          <Button type="link" onClick={() => navigate('/accounting/workbench?focus=missing-invoices')}>
+            處理缺發票 / 補分錄
           </Button>
         }
       />
@@ -430,8 +430,11 @@ const ReconciliationCenterPage: React.FC = () => {
           }))}
         />
         <Space>
+          <Button onClick={() => navigate('/accounting/workbench?focus=missing-invoices')}>
+            缺發票處理
+          </Button>
           <Button onClick={() => navigate('/accounting/workbench')}>
-            進階會計工作台
+            會計工作台
           </Button>
           <Button onClick={() => navigate('/reports')}>
             報表中心
