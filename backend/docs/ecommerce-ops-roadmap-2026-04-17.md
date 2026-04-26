@@ -109,6 +109,7 @@
 - 已新增 `GET /ar/overpaid` 與應收帳款頁「查看超收明細」，可只讀展開付款列、payout batch、provider payment id、同金額重複群組與診斷文字；真正刪除 / 合併 / 沖銷 Payment 前仍需人工確認。
 - CEO Dashboard 已把超收 / 疑似重複收款納入紅燈警示與 KPI，讓這類財務風險不只停在 AR 頁；Dashboard 未指定日期時，AR 風險監控採最近 90 天，避免無界查詢拖垮或漏報。Dashboard 的「查看超收明細」會導到 `sales/invoices?focus=overpaid`，AR 頁會自動打開超收明細。
 - 超收明細已新增只讀處理分類與候選重複 `Payment` ID，先把重複匯入候選、同金額待審核與人工判斷分開；真正改 Payment 前仍需人工審核流程。
+- 超收明細已支援後端分頁與分類篩選，讓 600+ 筆正式候選可以逐頁處理，不再只顯示第一批資料。
 
 待補：
 

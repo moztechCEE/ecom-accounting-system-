@@ -70,11 +70,15 @@ export class ArController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('resolutionCategory') resolutionCategory?: string,
   ) {
     return this.arService.getOverpaidReceivables(entityId, {
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+      resolutionCategory,
     });
   }
 

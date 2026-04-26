@@ -559,12 +559,16 @@ export class ArService {
       startDate?: Date;
       endDate?: Date;
       limit?: number;
+      offset?: number;
+      resolutionCategory?: string;
     },
   ) {
     const normalizedLimit = Math.min(
       Math.max(Math.floor(options?.limit || 100), 1),
       500,
     );
+    const normalizedOffset = Math.max(Math.floor(options?.offset || 0), 0);
+    const resolutionCategory = options?.resolutionCategory?.trim();
     const orderDate =
       options?.startDate || options?.endDate
         ? {
@@ -709,7 +713,15 @@ export class ArService {
       .filter(Boolean)
       .sort((left: any, right: any) => right.overpaidAmount - left.overpaidAmount);
 
-    const limitedItems = allItems.slice(0, normalizedLimit);
+    const filteredItems = resolutionCategory
+      ? allItems.filter(
+          (item: any) => item.resolutionCategory === resolutionCategory,
+        )
+      : allItems;
+    const limitedItems = filteredItems.slice(
+      normalizedOffset,
+      normalizedOffset + normalizedLimit,
+    );
     const summary = allItems.reduce(
       (acc: any, item: any) => {
         acc.overpaidOrderCount += 1;
@@ -744,6 +756,12 @@ export class ArService {
         endDate: options?.endDate?.toISOString() || null,
       },
       limit: normalizedLimit,
+      offset: normalizedOffset,
+      filter: {
+        resolutionCategory: resolutionCategory || null,
+      },
+      totalCount: allItems.length,
+      filteredCount: filteredItems.length,
       summary,
       items: limitedItems,
     };

@@ -9,6 +9,7 @@ import {
   InputNumber,
   Modal,
   Popover,
+  Segmented,
   Space,
   Statistic,
   Table,
@@ -92,6 +93,12 @@ const overpaidResolutionColorMap: Record<string, string> = {
   manual_review: 'gold',
 }
 
+type OverpaidResolutionFilter =
+  | 'all'
+  | 'duplicate_import_candidate'
+  | 'multi_payment_review'
+  | 'manual_review'
+
 const EmptySummary: ReceivableMonitorSummary = {
   grossAmount: 0,
   paidAmount: 0,
@@ -140,6 +147,10 @@ const ArInvoicesPage: React.FC = () => {
   const [overpaidModalOpen, setOverpaidModalOpen] = useState(false)
   const [overpaidLoading, setOverpaidLoading] = useState(false)
   const [overpaidDetails, setOverpaidDetails] = useState<OverpaidReceivablesResponse | null>(null)
+  const [overpaidPage, setOverpaidPage] = useState(1)
+  const [overpaidPageSize, setOverpaidPageSize] = useState(50)
+  const [overpaidResolutionFilter, setOverpaidResolutionFilter] =
+    useState<OverpaidResolutionFilter>('all')
   const [autoOpenedOverpaid, setAutoOpenedOverpaid] = useState(false)
   const [form] = Form.useForm()
   const [paymentForm] = Form.useForm()
@@ -317,14 +328,20 @@ const ArInvoicesPage: React.FC = () => {
     }
   }
 
-  const handleOpenOverpaidDetails = async () => {
-    setOverpaidModalOpen(true)
+  const fetchOverpaidDetails = async (
+    page = overpaidPage,
+    pageSize = overpaidPageSize,
+    resolutionFilter: OverpaidResolutionFilter = overpaidResolutionFilter,
+  ) => {
     setOverpaidLoading(true)
     try {
       const result = await arService.getOverpaidReceivables({
         startDate: monitorRange[0].toISOString(),
         endDate: monitorRange[1].toISOString(),
-        limit: 100,
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+        resolutionCategory:
+          resolutionFilter === 'all' ? undefined : resolutionFilter,
       })
       setOverpaidDetails(result)
     } catch (error: any) {
@@ -333,6 +350,25 @@ const ArInvoicesPage: React.FC = () => {
     } finally {
       setOverpaidLoading(false)
     }
+  }
+
+  const handleOpenOverpaidDetails = async () => {
+    const initialPage = 1
+    const initialPageSize = 50
+    const initialFilter: OverpaidResolutionFilter = 'all'
+    setOverpaidModalOpen(true)
+    setOverpaidPage(initialPage)
+    setOverpaidPageSize(initialPageSize)
+    setOverpaidResolutionFilter(initialFilter)
+    await fetchOverpaidDetails(initialPage, initialPageSize, initialFilter)
+  }
+
+  const handleOverpaidResolutionFilterChange = async (value: string | number) => {
+    const nextFilter = String(value) as OverpaidResolutionFilter
+    const nextPage = 1
+    setOverpaidResolutionFilter(nextFilter)
+    setOverpaidPage(nextPage)
+    await fetchOverpaidDetails(nextPage, overpaidPageSize, nextFilter)
   }
 
   useEffect(() => {
@@ -645,6 +681,17 @@ const ArInvoicesPage: React.FC = () => {
     },
   ]
 
+  const overpaidFilteredTotal =
+    overpaidDetails?.filteredCount ??
+    overpaidDetails?.summary.overpaidOrderCount ??
+    0
+  const overpaidVisibleStart =
+    overpaidFilteredTotal > 0 ? (overpaidPage - 1) * overpaidPageSize + 1 : 0
+  const overpaidVisibleEnd = Math.min(
+    overpaidPage * overpaidPageSize,
+    overpaidFilteredTotal,
+  )
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -858,17 +905,46 @@ const ArInvoicesPage: React.FC = () => {
           message="這裡只做診斷，不會刪除或沖銷付款"
           description={
             overpaidDetails
-              ? `目前列出前 ${overpaidDetails.items.length} 筆，總共 ${overpaidDetails.summary.overpaidOrderCount} 筆超收訂單，差額 ${currency(overpaidDetails.summary.overpaidAmount)}。其中 ${overpaidDetails.summary.duplicateImportCandidateCount || 0} 筆高度疑似重複匯入、${overpaidDetails.summary.multiPaymentReviewCount || 0} 筆多筆同金額待審核、${overpaidDetails.summary.manualReviewCount || 0} 筆需人工判斷。`
+              ? `目前篩選後 ${overpaidFilteredTotal} 筆，總共 ${overpaidDetails.summary.overpaidOrderCount} 筆超收訂單，差額 ${currency(overpaidDetails.summary.overpaidAmount)}。其中 ${overpaidDetails.summary.duplicateImportCandidateCount || 0} 筆高度疑似重複匯入、${overpaidDetails.summary.multiPaymentReviewCount || 0} 筆多筆同金額待審核、${overpaidDetails.summary.manualReviewCount || 0} 筆需人工判斷。`
               : '請先載入明細後，再依付款批次、金流交易編號與收款狀態比對是否重複匯入。'
           }
         />
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <Segmented
+            value={overpaidResolutionFilter}
+            onChange={handleOverpaidResolutionFilterChange}
+            options={[
+              { label: '全部', value: 'all' },
+              { label: '高度疑似', value: 'duplicate_import_candidate' },
+              { label: '多筆待審', value: 'multi_payment_review' },
+              { label: '人工判斷', value: 'manual_review' },
+            ]}
+          />
+          <Text className="text-xs text-slate-400">
+            第 {overpaidVisibleStart} - {overpaidVisibleEnd} 筆 / 共 {overpaidFilteredTotal} 筆
+          </Text>
+        </div>
         <Table
           rowKey="orderId"
           loading={overpaidLoading}
           columns={overpaidColumns}
           dataSource={overpaidDetails?.items || []}
           scroll={{ x: 960 }}
-          pagination={{ pageSize: 10, showSizeChanger: true }}
+          pagination={{
+            current: overpaidPage,
+            pageSize: overpaidPageSize,
+            total: overpaidFilteredTotal,
+            showSizeChanger: true,
+            pageSizeOptions: [20, 50, 100, 200],
+            showTotal: (total) => `共 ${total} 筆`,
+          }}
+          onChange={async (pagination) => {
+            const nextPage = pagination.current || 1
+            const nextPageSize = pagination.pageSize || overpaidPageSize
+            setOverpaidPage(nextPage)
+            setOverpaidPageSize(nextPageSize)
+            await fetchOverpaidDetails(nextPage, nextPageSize, overpaidResolutionFilter)
+          }}
           expandable={{
             expandedRowRender: (record) => (
               <div className="space-y-2">

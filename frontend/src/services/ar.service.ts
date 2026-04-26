@@ -172,6 +172,12 @@ export interface OverpaidReceivablesResponse {
     endDate?: string | null
   }
   limit: number
+  offset?: number
+  filter?: {
+    resolutionCategory?: string | null
+  }
+  totalCount?: number
+  filteredCount?: number
   summary: {
     overpaidOrderCount: number
     overpaidAmount: number
@@ -332,6 +338,8 @@ export const arService = {
     startDate?: string
     endDate?: string
     limit?: number
+    offset?: number
+    resolutionCategory?: string
   }) => {
     const entityId =
       params?.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
@@ -342,6 +350,8 @@ export const arService = {
         startDate: params?.startDate,
         endDate: params?.endDate,
         limit: params?.limit,
+        offset: params?.offset,
+        resolutionCategory: params?.resolutionCategory,
       },
       timeout: 60000,
     })
