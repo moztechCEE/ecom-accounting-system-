@@ -176,11 +176,11 @@ const ReconciliationCenterPage: React.FC = () => {
         syncOneShop: true,
         syncEcpayPayouts: true,
         syncInvoices: true,
-        autoClear: true,
+        autoClear: false,
       })
       const successSteps = result.steps.filter((step) => step.status === 'success').length
       if (result.success) {
-        message.success(`核心對帳完成：${successSteps} 個步驟成功，已重算對帳中心`)
+        message.success(`核心對帳完成：${successSteps} 個步驟成功，已重算對帳中心；核銷請改用「預覽可核銷」確認`)
       } else {
         message.warning(`核心對帳完成但有 ${result.failedCount} 個步驟失敗，請查看異常隊列`)
       }
