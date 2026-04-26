@@ -573,7 +573,9 @@ const DashboardPage: React.FC = () => {
   const criticalInventory = inventoryAlerts.filter(a => a.severity === 'critical').length;
   const criticalAnomalies = anomalies.filter(a => a.tone === 'critical').length;
   const overdueAR = arSummary?.overdueReceivableCount || 0;
-  const criticalCount = criticalInventory + criticalAnomalies + overdueAR;
+  const overpaidAR = arSummary?.overpaidReceivableCount || 0;
+  const overpaidARAmount = arSummary?.overpaidReceivableAmount || 0;
+  const criticalCount = criticalInventory + criticalAnomalies + overdueAR + overpaidAR;
 
   return (
     <div className="page-section-stack page-section-stack--compact">
@@ -636,11 +638,36 @@ const DashboardPage: React.FC = () => {
             <span className="ml-2 text-red-600">
               {criticalInventory > 0 && `${criticalInventory} 個商品斷貨　`}
               {overdueAR > 0 && `${overdueAR} 筆應收逾期　`}
+              {overpaidAR > 0 && `${overpaidAR} 筆疑似超收 / 重複收款　`}
               {criticalAnomalies > 0 && `${criticalAnomalies} 個財務異常`}
             </span>
           </div>
           <Tag color="red" className="shrink-0">共 {criticalCount} 項</Tag>
         </motion.div>
+      )}
+
+      {overpaidAR > 0 && (
+        <div className="rounded-2xl border border-red-200 bg-red-50/80 px-5 py-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-red-600 shadow-sm">
+                <FallOutlined />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-slate-900">超收 / 疑似重複收款</span>
+                  <Tag color="red">{overpaidAR} 筆待核對</Tag>
+                </div>
+                <div className="mt-1 text-sm leading-6 text-slate-600">
+                  本區間已收金額高於訂單應收，差額合計 {fmtMoney(overpaidARAmount)}。請到應收帳款頁查看付款列、payout batch 與 provider payment id。
+                </div>
+              </div>
+            </div>
+            <Button danger onClick={() => navigate("/sales/invoices")}>
+              查看超收明細
+            </Button>
+          </div>
+        </div>
       )}
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-5 py-4">
@@ -700,12 +727,12 @@ const DashboardPage: React.FC = () => {
             alert: overdueAR > 0,
           },
           {
-            label: '已對帳筆數',
-            value: `${total?.reconciledCount ?? 0} 筆`,
-            sub: `待撥款 ${total?.pendingPayoutCount ?? 0} 筆`,
-            icon: <DollarOutlined className="text-indigo-500 text-lg" />,
-            accent: 'border-l-indigo-400',
-            alert: false,
+            label: '超收 / 重複收款',
+            value: fmtMoney(overpaidARAmount),
+            sub: `${overpaidAR} 筆需核對`,
+            icon: <DollarOutlined className="text-red-500 text-lg" />,
+            accent: overpaidAR > 0 ? 'border-l-red-500' : 'border-l-slate-200',
+            alert: overpaidAR > 0,
           },
         ].map((item, idx) => (
           <div key={idx}
