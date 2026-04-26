@@ -81,6 +81,39 @@ export type InvoiceProviderStatus = {
   raw: Record<string, unknown>;
 };
 
+export type InvoiceProviderStatusReadinessItem = {
+  invoiceId: string;
+  invoiceNumber: string;
+  localStatus: string;
+  issuedAt: string | null;
+  orderId: string | null;
+  externalOrderId: string | null;
+  channelCode: string | null;
+  channelName: string | null;
+  merchantKey: string | null;
+  merchantId: string | null;
+  invoiceDate: string | null;
+  queryReady: boolean;
+  missing: string[];
+};
+
+export type InvoiceProviderStatusReadiness = {
+  entityId: string;
+  limit: number;
+  status: string | null;
+  range: {
+    startDate: string | null;
+    endDate: string | null;
+  };
+  summary: {
+    scannedCount: number;
+    readyCount: number;
+    notReadyCount: number;
+    missingCounts: Record<string, number>;
+  };
+  items: InvoiceProviderStatusReadinessItem[];
+};
+
 export const invoicingService = {
   async getQueue(params?: {
     entityId?: string;
@@ -117,6 +150,36 @@ export const invoicingService = {
   async queryProviderStatus(invoiceId: string): Promise<InvoiceProviderStatus> {
     const response = await api.get<InvoiceProviderStatus>(
       `/invoicing/${invoiceId}/provider-status?_ts=${Date.now()}`,
+      { timeout: 30000 },
+    );
+    return response.data;
+  },
+
+  async getProviderStatusReadiness(params?: {
+    entityId?: string;
+    limit?: number;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<InvoiceProviderStatusReadiness> {
+    const query = new URLSearchParams();
+    query.set("entityId", params?.entityId?.trim() || DEFAULT_ENTITY_ID);
+    if (params?.limit) {
+      query.set("limit", String(params.limit));
+    }
+    if (params?.status) {
+      query.set("status", params.status);
+    }
+    if (params?.startDate) {
+      query.set("startDate", params.startDate);
+    }
+    if (params?.endDate) {
+      query.set("endDate", params.endDate);
+    }
+    query.set("_ts", String(Date.now()));
+
+    const response = await api.get<InvoiceProviderStatusReadiness>(
+      `/invoicing/provider-status/readiness?${query.toString()}`,
       { timeout: 30000 },
     );
     return response.data;

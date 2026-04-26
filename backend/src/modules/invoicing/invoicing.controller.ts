@@ -94,6 +94,28 @@ export class InvoicingController {
     return this.invoicingService.getInvoiceProviderReadiness();
   }
 
+  @Get('provider-status/readiness')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @ApiOperation({
+    summary: '盤點內部發票是否具備綠界狀態查詢條件',
+    description:
+      '只讀取內部 Invoice / SalesOrder metadata，不呼叫綠界；用來找出缺 invoiceDate、merchantKey 或 merchantId 的發票。',
+  })
+  async getProviderStatusReadiness(
+    @Query('entityId') entityId: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.invoicingService.getProviderStatusReadiness(entityId, {
+      limit: limit ? Number(limit) : undefined,
+      status: status || undefined,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+    });
+  }
+
   /**
    * 預覽發票內容
    */

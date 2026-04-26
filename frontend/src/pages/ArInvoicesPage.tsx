@@ -34,7 +34,10 @@ import {
   ReceivableMonitorItem,
   ReceivableMonitorSummary,
 } from '../services/ar.service'
-import { invoicingService } from '../services/invoicing.service'
+import {
+  InvoiceProviderStatusReadiness,
+  invoicingService,
+} from '../services/invoicing.service'
 
 const { Title, Text } = Typography
 
@@ -74,6 +77,12 @@ const feeStatusLabelMap: Record<string, string> = {
   unavailable: '待回填',
 }
 
+const providerMissingLabelMap: Record<string, string> = {
+  invoiceNumber: '缺發票號碼',
+  invoiceDate: '缺發票日期',
+  merchantKeyOrMerchantId: '缺綠界帳號',
+}
+
 const EmptySummary: ReceivableMonitorSummary = {
   grossAmount: 0,
   paidAmount: 0,
@@ -111,17 +120,47 @@ const ArInvoicesPage: React.FC = () => {
   const [summary, setSummary] = useState<ReceivableMonitorSummary>(EmptySummary)
   const [monitorRange, setMonitorRange] = useState<[Dayjs, Dayjs]>(createDefaultMonitorRange)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [providerReadiness, setProviderReadiness] =
+    useState<InvoiceProviderStatusReadiness | null>(null)
+  const [providerReadinessLoading, setProviderReadinessLoading] = useState(false)
+  const [providerReadinessError, setProviderReadinessError] = useState<string | null>(null)
   const [queryingInvoiceId, setQueryingInvoiceId] = useState<string | null>(null)
   const [form] = Form.useForm()
   const [paymentForm] = Form.useForm()
 
-  const fetchMonitor = async (range: [Dayjs, Dayjs] = monitorRange) => {
-    setLoading(true)
+  const fetchProviderStatusReadiness = async (range: [Dayjs, Dayjs] = monitorRange) => {
+    setProviderReadinessLoading(true)
     try {
-      const result = await arService.getReceivableMonitor({
+      const entityId = localStorage.getItem('entityId')?.trim() || 'tw-entity-001'
+      const result = await invoicingService.getProviderStatusReadiness({
+        entityId,
+        limit: 100,
+        status: 'issued',
         startDate: range[0].toISOString(),
         endDate: range[1].toISOString(),
       })
+      setProviderReadiness(result)
+      setProviderReadinessError(null)
+    } catch (error: any) {
+      setProviderReadiness(null)
+      setProviderReadinessError(
+        error?.response?.data?.message || '綠界查詢欄位盤點載入失敗',
+      )
+    } finally {
+      setProviderReadinessLoading(false)
+    }
+  }
+
+  const fetchMonitor = async (range: [Dayjs, Dayjs] = monitorRange) => {
+    setLoading(true)
+    try {
+      const [result] = await Promise.all([
+        arService.getReceivableMonitor({
+          startDate: range[0].toISOString(),
+          endDate: range[1].toISOString(),
+        }),
+        fetchProviderStatusReadiness(range),
+      ])
       setItems(result.items || [])
       setSummary(result.summary || EmptySummary)
       setLoadError(null)
@@ -284,6 +323,20 @@ const ArInvoicesPage: React.FC = () => {
         .some((value) => String(value).toLowerCase().includes(keyword)),
     )
   }, [items, searchText])
+
+  const providerReadinessDescription = useMemo(() => {
+    if (!providerReadiness) return null
+    const missingCounts = providerReadiness.summary.missingCounts || {}
+    const parts = Object.entries(missingCounts)
+      .filter(([, count]) => Number(count || 0) > 0)
+      .map(([field, count]) => `${providerMissingLabelMap[field] || field} ${count} 筆`)
+
+    if (!parts.length) {
+      return `本區間已抽查 ${providerReadiness.summary.scannedCount} 張已開立發票，皆具備綠界只讀查詢欄位。`
+    }
+
+    return `本區間抽查 ${providerReadiness.summary.scannedCount} 張已開立發票，其中 ${providerReadiness.summary.notReadyCount} 張仍需補欄位：${parts.join('、')}。`
+  }, [providerReadiness])
 
   const columns = [
     {
@@ -539,6 +592,44 @@ const ArInvoicesPage: React.FC = () => {
           action={
             <Button size="small" onClick={() => fetchMonitor()}>
               重試
+            </Button>
+          }
+        />
+      ) : null}
+
+      {providerReadinessError ? (
+        <Alert
+          showIcon
+          type="warning"
+          message="綠界發票查詢欄位盤點沒有成功載入"
+          description={providerReadinessError}
+          action={
+            <Button
+              size="small"
+              loading={providerReadinessLoading}
+              onClick={() => fetchProviderStatusReadiness()}
+            >
+              重試
+            </Button>
+          }
+        />
+      ) : providerReadiness ? (
+        <Alert
+          showIcon
+          type={providerReadiness.summary.notReadyCount > 0 ? 'warning' : 'success'}
+          message={
+            providerReadiness.summary.notReadyCount > 0
+              ? '有發票尚未具備綠界狀態查詢欄位'
+              : '綠界發票狀態查詢欄位已就緒'
+          }
+          description={providerReadinessDescription}
+          action={
+            <Button
+              size="small"
+              loading={providerReadinessLoading}
+              onClick={() => fetchProviderStatusReadiness()}
+            >
+              重新盤點
             </Button>
           }
         />

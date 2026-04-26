@@ -18,6 +18,7 @@ describe('InvoicingService', () => {
     invoice: {
       create: jest.fn(),
       findUnique: jest.fn(),
+      findMany: jest.fn(),
       update: jest.fn(),
     },
     invoiceLine: {
@@ -284,6 +285,93 @@ describe('InvoicingService', () => {
       });
       expect(result.providerStatus).toBe('issued');
       expect(mockPrismaService.invoice.update).not.toHaveBeenCalled();
+    });
+
+    it('缺少商店代號時不呼叫綠界並回報原因', async () => {
+      mockPrismaService.invoice.findUnique.mockResolvedValue({
+        id: 'invoice-123',
+        invoiceNumber: 'AA12345678',
+        status: 'issued',
+        issuedAt: new Date('2026-04-01T00:00:00+08:00'),
+        notes: null,
+        externalPayload: null,
+        salesOrder: {
+          notes: null,
+          channel: { code: 'UNKNOWN' },
+        },
+      });
+
+      await expect(service.queryProviderStatus('invoice-123')).rejects.toThrow(
+        '找不到可查詢綠界狀態的商店代號',
+      );
+      expect(mockEcpayEinvoiceAdapter.queryInvoiceStatus).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getProviderStatusReadiness', () => {
+    it('應該盤點可查詢與缺欄位的發票，不呼叫綠界', async () => {
+      mockPrismaService.invoice.findMany.mockResolvedValue([
+        {
+          id: 'invoice-ready',
+          orderId: 'order-1',
+          invoiceNumber: 'AA12345678',
+          status: 'issued',
+          issuedAt: new Date('2026-04-01T00:00:00+08:00'),
+          createdAt: new Date('2026-04-01T00:00:00+08:00'),
+          notes: null,
+          externalPayload: {
+            merchantKey: 'shopify-main',
+            merchantId: '3290494',
+            invoiceDate: '2026-04-01',
+          },
+          salesOrder: {
+            id: 'order-1',
+            externalOrderId: 'S1001',
+            orderDate: new Date('2026-04-01T00:00:00+08:00'),
+            notes: null,
+            channel: { code: 'SHOPIFY', name: 'Shopify' },
+          },
+        },
+        {
+          id: 'invoice-missing',
+          orderId: 'order-2',
+          invoiceNumber: 'BB12345678',
+          status: 'issued',
+          issuedAt: null,
+          createdAt: new Date('2026-04-01T00:00:00+08:00'),
+          notes: null,
+          externalPayload: null,
+          salesOrder: {
+            id: 'order-2',
+            externalOrderId: 'M1001',
+            orderDate: new Date('2026-04-01T00:00:00+08:00'),
+            notes: null,
+            channel: { code: 'UNKNOWN', name: 'Unknown' },
+          },
+        },
+      ]);
+
+      const result = await service.getProviderStatusReadiness('tw-entity-001', {
+        limit: 25,
+        status: 'issued',
+      });
+
+      expect(mockPrismaService.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            entityId: 'tw-entity-001',
+            status: 'issued',
+          },
+          take: 25,
+        }),
+      );
+      expect(result.summary.readyCount).toBe(1);
+      expect(result.summary.notReadyCount).toBe(1);
+      expect(result.summary.missingCounts.invoiceDate).toBe(1);
+      expect(result.summary.missingCounts.merchantKeyOrMerchantId).toBe(1);
+      expect(result.items[0].queryReady).toBe(true);
+      expect(result.items[1].queryReady).toBe(false);
+      expect(mockEcpayEinvoiceAdapter.queryInvoiceStatus).not.toHaveBeenCalled();
     });
   });
 });

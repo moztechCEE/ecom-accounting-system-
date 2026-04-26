@@ -339,38 +339,25 @@ export class InvoicingService {
       throw new NotFoundException(`發票不存在: ${invoiceId}`);
     }
 
-    const invoiceMetadata = this.extractMetadata(invoice.notes);
-    const orderMetadata = this.extractMetadata(invoice.salesOrder?.notes);
-    const externalPayload = (invoice.externalPayload || {}) as any;
-    const merchantKey =
-      this.pickString(
-        externalPayload?.merchantKey,
-        invoiceMetadata.merchantKey,
-        orderMetadata.merchantKey,
-      ) || this.inferEcpayMerchantKey(invoice.salesOrder?.channel?.code);
-    const merchantId = this.pickString(
-      externalPayload?.merchantId,
-      invoiceMetadata.merchantId,
-      orderMetadata.merchantId,
-    );
-    const invoiceDate =
-      this.pickString(
-        externalPayload?.invoiceDate,
-        invoiceMetadata.invoiceDate,
-        orderMetadata.invoiceDate,
-      ) || (invoice.issuedAt ? this.formatInvoiceDate(invoice.issuedAt) : null);
+    const queryContext = this.resolveProviderQueryContext(invoice);
 
-    if (!invoiceDate) {
+    if (!queryContext.invoiceDate) {
       throw new BadRequestException(
         '找不到可查詢綠界狀態的發票日期；請先匯入或同步發票日期。',
       );
     }
 
+    if (!queryContext.merchantKey && !queryContext.merchantId) {
+      throw new BadRequestException(
+        '找不到可查詢綠界狀態的商店代號；請先確認訂單通路或匯入 merchantKey / merchantId。',
+      );
+    }
+
     const providerResult = await this.ecpayEinvoiceAdapter.queryInvoiceStatus({
-      merchantKey,
-      merchantId,
+      merchantKey: queryContext.merchantKey,
+      merchantId: queryContext.merchantId,
       invoiceNumber: invoice.invoiceNumber,
-      invoiceDate,
+      invoiceDate: queryContext.invoiceDate,
     });
 
     return {
@@ -385,6 +372,114 @@ export class InvoicingService {
       merchantId: providerResult.merchantId,
       invoiceDate: providerResult.invoiceDate,
       raw: providerResult.raw,
+    };
+  }
+
+  async getProviderStatusReadiness(
+    entityId: string,
+    options?: {
+      limit?: number;
+      status?: string;
+      startDate?: Date;
+      endDate?: Date;
+    },
+  ) {
+    if (!entityId?.trim()) {
+      throw new BadRequestException('entityId 為必填');
+    }
+
+    const normalizedLimit = Math.min(
+      Math.max(Math.floor(options?.limit || 50), 1),
+      200,
+    );
+    const issuedAt =
+      options?.startDate || options?.endDate
+        ? {
+            ...(options?.startDate ? { gte: options.startDate } : {}),
+            ...(options?.endDate ? { lte: options.endDate } : {}),
+          }
+        : undefined;
+
+    const invoices = await this.prisma.invoice.findMany({
+      where: {
+        entityId,
+        ...(options?.status ? { status: options.status } : {}),
+        ...(issuedAt ? { issuedAt } : {}),
+      },
+      include: {
+        salesOrder: {
+          select: {
+            id: true,
+            externalOrderId: true,
+            orderDate: true,
+            notes: true,
+            channel: {
+              select: {
+                code: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ issuedAt: 'desc' }, { createdAt: 'desc' }],
+      take: normalizedLimit,
+    });
+
+    const items = invoices.map((invoice) => {
+      const queryContext = this.resolveProviderQueryContext(invoice);
+      const missing: string[] = [];
+
+      if (!invoice.invoiceNumber?.trim()) {
+        missing.push('invoiceNumber');
+      }
+      if (!queryContext.invoiceDate) {
+        missing.push('invoiceDate');
+      }
+      if (!queryContext.merchantKey && !queryContext.merchantId) {
+        missing.push('merchantKeyOrMerchantId');
+      }
+
+      return {
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        localStatus: invoice.status,
+        issuedAt: invoice.issuedAt?.toISOString() || null,
+        orderId: invoice.orderId || null,
+        externalOrderId: invoice.salesOrder?.externalOrderId || null,
+        channelCode: invoice.salesOrder?.channel?.code || null,
+        channelName: invoice.salesOrder?.channel?.name || null,
+        merchantKey: queryContext.merchantKey,
+        merchantId: queryContext.merchantId,
+        invoiceDate: queryContext.invoiceDate,
+        queryReady: missing.length === 0,
+        missing,
+      };
+    });
+
+    const readyCount = items.filter((item) => item.queryReady).length;
+    const missingCounts = items.reduce<Record<string, number>>((acc, item) => {
+      for (const field of item.missing) {
+        acc[field] = (acc[field] || 0) + 1;
+      }
+      return acc;
+    }, {});
+
+    return {
+      entityId,
+      limit: normalizedLimit,
+      status: options?.status || null,
+      range: {
+        startDate: options?.startDate?.toISOString() || null,
+        endDate: options?.endDate?.toISOString() || null,
+      },
+      summary: {
+        scannedCount: items.length,
+        readyCount,
+        notReadyCount: items.length - readyCount,
+        missingCounts,
+      },
+      items,
     };
   }
 
@@ -911,6 +1006,35 @@ export class InvoicingService {
       return 'groupbuy-main';
     }
     return null;
+  }
+
+  private resolveProviderQueryContext(invoice: any) {
+    const invoiceMetadata = this.extractMetadata(invoice.notes);
+    const orderMetadata = this.extractMetadata(invoice.salesOrder?.notes);
+    const externalPayload = (invoice.externalPayload || {}) as any;
+    const merchantKey =
+      this.pickString(
+        externalPayload?.merchantKey,
+        invoiceMetadata.merchantKey,
+        orderMetadata.merchantKey,
+      ) || this.inferEcpayMerchantKey(invoice.salesOrder?.channel?.code);
+    const merchantId = this.pickString(
+      externalPayload?.merchantId,
+      invoiceMetadata.merchantId,
+      orderMetadata.merchantId,
+    );
+    const invoiceDate =
+      this.pickString(
+        externalPayload?.invoiceDate,
+        invoiceMetadata.invoiceDate,
+        orderMetadata.invoiceDate,
+      ) || (invoice.issuedAt ? this.formatInvoiceDate(invoice.issuedAt) : null);
+
+    return {
+      merchantKey,
+      merchantId,
+      invoiceDate,
+    };
   }
 
   private extractMetadata(notes?: string | null) {
