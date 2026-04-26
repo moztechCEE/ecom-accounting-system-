@@ -86,6 +86,12 @@ const providerMissingLabelMap: Record<string, string> = {
   merchantKeyOrMerchantId: '缺綠界帳號',
 }
 
+const overpaidResolutionColorMap: Record<string, string> = {
+  duplicate_import_candidate: 'red',
+  multi_payment_review: 'orange',
+  manual_review: 'gold',
+}
+
 const EmptySummary: ReceivableMonitorSummary = {
   grossAmount: 0,
   paidAmount: 0,
@@ -614,6 +620,23 @@ const ArInvoicesPage: React.FC = () => {
       ),
     },
     {
+      title: '處理分類',
+      key: 'resolution',
+      width: 210,
+      render: (_: unknown, record: NonNullable<OverpaidReceivablesResponse['items']>[number]) => (
+        <div>
+          <Tag color={overpaidResolutionColorMap[record.resolutionCategory] || 'default'}>
+            {record.resolutionLabel || record.resolutionCategory}
+          </Tag>
+          <div className="mt-2 text-xs leading-5 text-slate-500">
+            {record.candidateDuplicatePaymentIds?.length
+              ? `${record.candidateDuplicatePaymentIds.length} 筆候選重複付款`
+              : '尚無候選付款列'}
+          </div>
+        </div>
+      ),
+    },
+    {
       title: '診斷',
       dataIndex: 'diagnosis',
       key: 'diagnosis',
@@ -835,7 +858,7 @@ const ArInvoicesPage: React.FC = () => {
           message="這裡只做診斷，不會刪除或沖銷付款"
           description={
             overpaidDetails
-              ? `目前列出前 ${overpaidDetails.items.length} 筆，總共 ${overpaidDetails.summary.overpaidOrderCount} 筆超收訂單，差額 ${currency(overpaidDetails.summary.overpaidAmount)}。其中 ${overpaidDetails.summary.exactDoublePaidCount} 筆接近雙倍付款，${overpaidDetails.summary.duplicateAmountGroupCount} 筆存在相同金額付款列。`
+              ? `目前列出前 ${overpaidDetails.items.length} 筆，總共 ${overpaidDetails.summary.overpaidOrderCount} 筆超收訂單，差額 ${currency(overpaidDetails.summary.overpaidAmount)}。其中 ${overpaidDetails.summary.duplicateImportCandidateCount || 0} 筆高度疑似重複匯入、${overpaidDetails.summary.multiPaymentReviewCount || 0} 筆多筆同金額待審核、${overpaidDetails.summary.manualReviewCount || 0} 筆需人工判斷。`
               : '請先載入明細後，再依付款批次、金流交易編號與收款狀態比對是否重複匯入。'
           }
         />
@@ -849,14 +872,38 @@ const ArInvoicesPage: React.FC = () => {
           expandable={{
             expandedRowRender: (record) => (
               <div className="space-y-2">
+                <Alert
+                  showIcon
+                  type="info"
+                  className="mb-3"
+                  message={record.resolutionAction}
+                  description={
+                    <Space size={[4, 4]} wrap>
+                      {(record.resolutionChecks || []).map((check) => (
+                        <Tag key={check} color="blue">
+                          {check}
+                        </Tag>
+                      ))}
+                    </Space>
+                  }
+                />
                 {record.payments.map((payment) => (
                   <div
                     key={payment.paymentId}
-                    className="grid grid-cols-1 gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 md:grid-cols-5"
+                    className={`grid grid-cols-1 gap-2 rounded-lg px-3 py-2 text-xs md:grid-cols-5 ${
+                      record.candidateDuplicatePaymentIds?.includes(payment.paymentId)
+                        ? 'bg-red-50 text-red-700'
+                        : 'bg-slate-50 text-slate-600'
+                    }`}
                   >
                     <div>
-                      <div className="font-medium text-slate-900">{currency(payment.amountGrossOriginal)}</div>
+                      <div className="font-medium text-slate-900">
+                        {currency(payment.amountGrossOriginal)}
+                      </div>
                       <div>淨額 {currency(payment.amountNetOriginal)}</div>
+                      {record.candidateDuplicatePaymentIds?.includes(payment.paymentId) ? (
+                        <Tag color="red" className="mt-1">候選重複</Tag>
+                      ) : null}
                     </div>
                     <div>
                       <div>{payment.status || '-'}</div>

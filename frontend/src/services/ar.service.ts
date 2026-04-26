@@ -151,7 +151,17 @@ export interface OverpaidReceivableItem {
   duplicateAmountGroups: Array<{ amount: number; count: number }>
   exactDoublePaid: boolean
   allPaymentsUnreconciled: boolean
+  hasDraftOrPendingPayment?: boolean
   diagnosis: string
+  resolutionCategory:
+    | 'duplicate_import_candidate'
+    | 'multi_payment_review'
+    | 'manual_review'
+    | string
+  resolutionLabel: string
+  resolutionAction: string
+  resolutionChecks: string[]
+  candidateDuplicatePaymentIds: string[]
   payments: OverpaidReceivablePayment[]
 }
 
@@ -168,6 +178,9 @@ export interface OverpaidReceivablesResponse {
     exactDoublePaidCount: number
     unreconciledOverpaidCount: number
     duplicateAmountGroupCount: number
+    duplicateImportCandidateCount?: number
+    multiPaymentReviewCount?: number
+    manualReviewCount?: number
   }
   items: OverpaidReceivableItem[]
 }

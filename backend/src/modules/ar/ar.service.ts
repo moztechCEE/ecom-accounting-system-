@@ -642,12 +642,45 @@ export class ArService {
             payment.status === 'pending' ||
             (payment.payoutBatchId || '').startsWith('draft:'),
         );
+        const paymentDetails = order.payments.map((payment) => {
+          const meta = this.extractMetadata(payment.notes);
+          return {
+            paymentId: payment.id,
+            payoutBatchId: payment.payoutBatchId,
+            channel: payment.channel,
+            status: payment.status,
+            payoutDate: payment.payoutDate.toISOString(),
+            createdAt: payment.createdAt.toISOString(),
+            amountGrossOriginal: Number(payment.amountGrossOriginal || 0),
+            amountNetOriginal: Number(payment.amountNetOriginal || 0),
+            feeGatewayOriginal: Number(payment.feeGatewayOriginal || 0),
+            feePlatformOriginal: Number(payment.feePlatformOriginal || 0),
+            reconciledFlag: payment.reconciledFlag,
+            providerPaymentId:
+              meta.providerPaymentId ||
+              meta.oneShopPaymentId ||
+              meta.transactionId ||
+              null,
+            feeStatus: meta.feeStatus || null,
+            feeSource: meta.feeSource || null,
+          };
+        });
         const diagnosis = this.resolveOverpaidDiagnosis({
           paymentCount: order.payments.length,
           duplicateAmountGroups,
           exactDoublePaid,
           allPaymentsUnreconciled,
           hasDraftOrPendingPayment,
+        });
+        const resolution = this.resolveOverpaidResolution({
+          grossAmount,
+          paidAmount,
+          paymentCount: order.payments.length,
+          duplicateAmountGroups,
+          exactDoublePaid,
+          allPaymentsUnreconciled,
+          hasDraftOrPendingPayment,
+          payments: paymentDetails,
         });
 
         return {
@@ -663,30 +696,14 @@ export class ArService {
           duplicateAmountGroups,
           exactDoublePaid,
           allPaymentsUnreconciled,
+          hasDraftOrPendingPayment,
           diagnosis,
-          payments: order.payments.map((payment) => {
-            const meta = this.extractMetadata(payment.notes);
-            return {
-              paymentId: payment.id,
-              payoutBatchId: payment.payoutBatchId,
-              channel: payment.channel,
-              status: payment.status,
-              payoutDate: payment.payoutDate.toISOString(),
-              createdAt: payment.createdAt.toISOString(),
-              amountGrossOriginal: Number(payment.amountGrossOriginal || 0),
-              amountNetOriginal: Number(payment.amountNetOriginal || 0),
-              feeGatewayOriginal: Number(payment.feeGatewayOriginal || 0),
-              feePlatformOriginal: Number(payment.feePlatformOriginal || 0),
-              reconciledFlag: payment.reconciledFlag,
-              providerPaymentId:
-                meta.providerPaymentId ||
-                meta.oneShopPaymentId ||
-                meta.transactionId ||
-                null,
-              feeStatus: meta.feeStatus || null,
-              feeSource: meta.feeSource || null,
-            };
-          }),
+          resolutionCategory: resolution.category,
+          resolutionLabel: resolution.label,
+          resolutionAction: resolution.action,
+          resolutionChecks: resolution.checks,
+          candidateDuplicatePaymentIds: resolution.candidateDuplicatePaymentIds,
+          payments: paymentDetails,
         };
       })
       .filter(Boolean)
@@ -700,6 +717,12 @@ export class ArService {
         acc.exactDoublePaidCount += item.exactDoublePaid ? 1 : 0;
         acc.unreconciledOverpaidCount += item.allPaymentsUnreconciled ? 1 : 0;
         acc.duplicateAmountGroupCount += item.duplicateAmountGroups.length ? 1 : 0;
+        acc.duplicateImportCandidateCount +=
+          item.resolutionCategory === 'duplicate_import_candidate' ? 1 : 0;
+        acc.multiPaymentReviewCount +=
+          item.resolutionCategory === 'multi_payment_review' ? 1 : 0;
+        acc.manualReviewCount +=
+          item.resolutionCategory === 'manual_review' ? 1 : 0;
         return acc;
       },
       {
@@ -708,6 +731,9 @@ export class ArService {
         exactDoublePaidCount: 0,
         unreconciledOverpaidCount: 0,
         duplicateAmountGroupCount: 0,
+        duplicateImportCandidateCount: 0,
+        multiPaymentReviewCount: 0,
+        manualReviewCount: 0,
       },
     );
 
@@ -2050,6 +2076,125 @@ export class ArService {
       return '同一訂單存在多筆付款，需核對是否為分期、合併收款拆帳、退款折讓未回寫或重複匯入。';
     }
     return '單筆付款金額高於訂單金額，需核對外部平台原始收款與訂單金額。';
+  }
+
+  private resolveOverpaidResolution(params: {
+    grossAmount: number;
+    paidAmount: number;
+    paymentCount: number;
+    duplicateAmountGroups: Array<{ amount: number; count: number }>;
+    exactDoublePaid: boolean;
+    allPaymentsUnreconciled: boolean;
+    hasDraftOrPendingPayment: boolean;
+    payments: Array<{
+      paymentId: string;
+      amountGrossOriginal: number;
+      createdAt: string;
+      payoutDate: string;
+      reconciledFlag: boolean;
+      providerPaymentId?: string | null;
+      payoutBatchId?: string | null;
+    }>;
+  }) {
+    const duplicatedFullAmount = params.duplicateAmountGroups.some(
+      (group) => Math.abs(Number(group.amount || 0) - params.grossAmount) <= 1,
+    );
+    const duplicateCandidatePayments = this.findDuplicatePaymentCandidates(
+      params.payments,
+    );
+
+    if (
+      params.paymentCount === 2 &&
+      params.exactDoublePaid &&
+      params.allPaymentsUnreconciled &&
+      duplicatedFullAmount &&
+      duplicateCandidatePayments.length === 1
+    ) {
+      return {
+        category: 'duplicate_import_candidate',
+        label: '高度疑似重複匯入',
+        action:
+          '先核對兩筆付款是否對應同一筆外部收款；若確認重複，保留較早建立的付款列，較晚付款列進人工更正流程。',
+        checks: [
+          '兩筆付款金額皆等於訂單金額',
+          '已收金額接近訂單金額 2 倍',
+          '兩筆付款尚未核銷',
+          '刪除或合併前需核對 providerPaymentId 與 payoutBatchId',
+        ],
+        candidateDuplicatePaymentIds: duplicateCandidatePayments,
+      };
+    }
+
+    if (
+      params.exactDoublePaid &&
+      params.duplicateAmountGroups.length &&
+      params.allPaymentsUnreconciled
+    ) {
+      return {
+        category: 'multi_payment_review',
+        label: '多筆同金額待審核',
+        action:
+          '先確認是否為拆帳、合併收款或重複同步；不可直接刪除，需逐筆對 providerPaymentId / payoutBatchId。',
+        checks: [
+          '存在相同金額付款列',
+          '已收金額接近訂單金額 2 倍或以上',
+          '目前尚未核銷',
+        ],
+        candidateDuplicatePaymentIds: duplicateCandidatePayments,
+      };
+    }
+
+    if (params.hasDraftOrPendingPayment) {
+      return {
+        category: 'manual_review',
+        label: '待付款 / 草稿狀態待查',
+        action:
+          '先確認 pending 或 draft 付款是否應轉成功、作廢或保留，不可用自動規則更正。',
+        checks: ['付款列包含 pending 或 draft 狀態'],
+        candidateDuplicatePaymentIds: duplicateCandidatePayments,
+      };
+    }
+
+    return {
+      category: 'manual_review',
+      label: '人工判斷',
+      action:
+        '需人工核對是否為單筆超額付款、退款折讓未回寫、合併收款拆帳或外部平台金額異常。',
+      checks: ['目前不符合保守重複匯入候選規則'],
+      candidateDuplicatePaymentIds: duplicateCandidatePayments,
+    };
+  }
+
+  private findDuplicatePaymentCandidates(
+    payments: Array<{
+      paymentId: string;
+      amountGrossOriginal: number;
+      createdAt: string;
+      payoutDate: string;
+    }>,
+  ) {
+    const grouped = payments.reduce<Record<string, typeof payments>>(
+      (acc, payment) => {
+        const key = Number(payment.amountGrossOriginal || 0).toFixed(2);
+        acc[key] = acc[key] || [];
+        acc[key].push(payment);
+        return acc;
+      },
+      {},
+    );
+
+    return Object.values(grouped)
+      .filter((group) => group.length > 1)
+      .flatMap((group) =>
+        [...group]
+          .sort((left, right) => {
+            const leftTime = Date.parse(left.createdAt || left.payoutDate || '');
+            const rightTime = Date.parse(right.createdAt || right.payoutDate || '');
+            return leftTime - rightTime;
+          })
+          .slice(1)
+          .map((payment) => payment.paymentId),
+      );
   }
 
   private extractMetadata(notes?: string | null) {
