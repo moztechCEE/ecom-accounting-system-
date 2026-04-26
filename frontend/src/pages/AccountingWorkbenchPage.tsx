@@ -688,6 +688,14 @@ const AccountingWorkbenchPage: React.FC = () => {
       ((receivables.items?.length || 0) === 0 &&
         Number(receivables.summary?.grossAmount || 0) === 0))
   const invoiceFocusActive = searchParams.get('focus') === 'missing-invoices'
+  const initialWorkbenchLoading =
+    loading &&
+    !executive &&
+    !feed &&
+    !audit &&
+    !receivables &&
+    !b2bStatements &&
+    !dataCompleteness
   const missingInvoiceOrderCount = Number(dataCompleteness?.gaps.missingInvoiceOrders || 0)
   const invoiceLinkedRate = Number(dataCompleteness?.coverage.invoiceLinkedRate || 0)
   const oneShopMissingInvoices =
@@ -1219,7 +1227,21 @@ const AccountingWorkbenchPage: React.FC = () => {
         />
       ) : null}
 
-      <Card className="rounded-3xl border-0 bg-white/75 shadow-sm" bodyStyle={{ padding: 28 }}>
+      {initialWorkbenchLoading ? (
+        <Alert
+          showIcon
+          type="info"
+          className="rounded-3xl !px-6 !py-4 shadow-sm"
+          message="會計工作台資料讀取中"
+          description="正式資料量較大，初次載入可能需要十幾秒；讀取完成前先顯示骨架狀態，避免把尚未讀完誤判為 0 筆。"
+        />
+      ) : null}
+
+      <Card
+        className="rounded-3xl border-0 bg-white/75 shadow-sm"
+        bodyStyle={{ padding: 28 }}
+        loading={initialWorkbenchLoading}
+      >
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-3xl">
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
@@ -1278,7 +1300,11 @@ const AccountingWorkbenchPage: React.FC = () => {
         </div>
       </Card>
 
-      <Card className="overflow-hidden rounded-3xl border-0 shadow-sm" bodyStyle={{ padding: 0 }}>
+      <Card
+        className="overflow-hidden rounded-3xl border-0 shadow-sm"
+        bodyStyle={{ padding: 0 }}
+        loading={initialWorkbenchLoading}
+      >
         <div className="grid gap-0 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
           <div className="bg-[linear-gradient(135deg,#0f172a,#1e293b,#0f766e)] px-7 py-7 text-white">
             <div className="text-xs font-semibold uppercase tracking-[0.28em] text-white/55">
@@ -1371,7 +1397,11 @@ const AccountingWorkbenchPage: React.FC = () => {
         />
       ) : null}
 
-      <Card className="rounded-3xl border-0 bg-white/75 shadow-sm" bodyStyle={{ padding: 28 }}>
+      <Card
+        className="rounded-3xl border-0 bg-white/75 shadow-sm"
+        bodyStyle={{ padding: 28 }}
+        loading={initialWorkbenchLoading}
+      >
         <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-2xl">
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
