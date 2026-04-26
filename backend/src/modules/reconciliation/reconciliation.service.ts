@@ -71,6 +71,7 @@ export class ReconciliationService {
     syncEcpayPayouts?: boolean;
     syncInvoices?: boolean;
     syncLinePayStatuses?: boolean;
+    processLinePayRefundReversals?: boolean;
     autoClear?: boolean;
   }) {
     const entityId = params.entityId;
@@ -182,7 +183,7 @@ export class ReconciliationService {
     await runStep(
       'linepay-refund-reversal',
       '處理 LINE Pay 退款沖銷',
-      params.syncLinePayStatuses !== false,
+      params.processLinePayRefundReversals === true,
       () =>
         this.providerPayoutService.processPendingLinePayRefundReversals({
           entityId,
@@ -417,6 +418,7 @@ export class ReconciliationService {
     endDate?: Date;
     limit?: number;
     syncInvoices?: boolean;
+    processRefundReversals?: boolean;
     autoClear?: boolean;
     userId?: string;
   }) {
@@ -482,7 +484,7 @@ export class ReconciliationService {
     const reversalResult = await runStep(
       'linepay-refund-reversal',
       '處理 LINE Pay 退款沖銷',
-      true,
+      params.processRefundReversals === true,
       () =>
         this.providerPayoutService.processPendingLinePayRefundReversals({
           entityId,

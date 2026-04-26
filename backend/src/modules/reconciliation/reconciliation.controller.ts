@@ -113,6 +113,10 @@ class AutoRunCoreReconciliationDto {
 
   @IsOptional()
   @IsBoolean()
+  processLinePayRefundReversals?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   autoClear?: boolean;
 }
 
@@ -139,6 +143,10 @@ class RunLinePayClosurePassDto extends RefreshLinePayStatusesDto {
   @IsOptional()
   @IsBoolean()
   syncInvoices?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  processRefundReversals?: boolean;
 
   @IsOptional()
   @IsBoolean()
@@ -258,6 +266,7 @@ export class ReconciliationController {
       syncEcpayPayouts?: boolean;
       syncInvoices?: boolean;
       syncLinePayStatuses?: boolean;
+      processLinePayRefundReversals?: boolean;
       autoClear?: boolean;
     },
     @CurrentUser('id') userId: string,
@@ -272,6 +281,7 @@ export class ReconciliationController {
       syncEcpayPayouts: body.syncEcpayPayouts,
       syncInvoices: body.syncInvoices,
       syncLinePayStatuses: body.syncLinePayStatuses,
+      processLinePayRefundReversals: body.processLinePayRefundReversals,
       autoClear: body.autoClear,
     });
   }
@@ -318,6 +328,7 @@ export class ReconciliationController {
       syncEcpayPayouts: body.syncEcpayPayouts,
       syncInvoices: body.syncInvoices,
       syncLinePayStatuses: body.syncLinePayStatuses,
+      processLinePayRefundReversals: body.processLinePayRefundReversals,
       autoClear: body.autoClear,
     });
   }
@@ -505,7 +516,7 @@ export class ReconciliationController {
   @ApiOperation({
     summary: '執行 LINE Pay 閉環補跑',
     description:
-      '依序刷新 LINE Pay 狀態、處理退款沖銷、同步 AR / 發票，並嘗試自動核銷可核銷款項。',
+      '依序刷新 LINE Pay 狀態、同步 AR / 發票，並依明確 opt-in 參數處理退款沖銷或自動核銷。',
   })
   async runLinePayClosurePass(
     @Body() body: RunLinePayClosurePassDto,
@@ -517,6 +528,7 @@ export class ReconciliationController {
       endDate: body.endDate ? new Date(body.endDate) : undefined,
       limit: body.limit,
       syncInvoices: body.syncInvoices,
+      processRefundReversals: body.processRefundReversals,
       autoClear: body.autoClear,
       userId,
     });

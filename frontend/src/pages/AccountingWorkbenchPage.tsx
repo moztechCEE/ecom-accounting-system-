@@ -640,6 +640,7 @@ const AccountingWorkbenchPage: React.FC = () => {
         endDate,
         limit: 300,
         syncInvoices: true,
+        processRefundReversals: false,
         autoClear: false,
       })
 
@@ -650,7 +651,7 @@ const AccountingWorkbenchPage: React.FC = () => {
         )
       } else {
         message.success(
-          `LINE Pay 閉環補跑完成：檢查 ${result.linePay.checkedCount} 筆、退款候選 ${result.linePay.refundCandidateCount} 筆、已沖銷 ${result.linePay.reversedCount} 筆。核銷請到對帳中心預覽確認。`,
+          `LINE Pay 閉環補跑完成：檢查 ${result.linePay.checkedCount} 筆、退款候選 ${result.linePay.refundCandidateCount} 筆。退款沖銷與核銷請分別確認後執行。`,
           6,
         )
       }

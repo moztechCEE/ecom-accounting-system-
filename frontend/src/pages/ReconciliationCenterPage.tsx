@@ -176,6 +176,8 @@ const ReconciliationCenterPage: React.FC = () => {
         syncOneShop: true,
         syncEcpayPayouts: true,
         syncInvoices: true,
+        syncLinePayStatuses: true,
+        processLinePayRefundReversals: false,
         autoClear: false,
       })
       const successSteps = result.steps.filter((step) => step.status === 'success').length

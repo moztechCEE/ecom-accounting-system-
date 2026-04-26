@@ -50,7 +50,10 @@ async function main() {
   const payoutWindowDays = Number(getArg('--payoutWindowDays') || 31);
   const linePayLimit = Number(getArg('--linePayLimit') || 300);
   const invoiceBatchLimit = Number(getArg('--invoiceBatchLimit') || 200);
-  const autoClear = !hasFlag('--no-auto-clear');
+  const autoClear = hasFlag('--auto-clear');
+  const processLinePayRefundReversals = hasFlag(
+    '--process-linepay-refund-reversals',
+  );
   const userId = getArg('--userId') || 'system-closure-pass';
 
   // eslint-disable-next-line no-console
@@ -99,16 +102,32 @@ async function main() {
       `[closure-pass] linepay checked=${refreshed.checkedCount} refundCandidates=${refreshed.refundCandidateCount} failures=${refreshed.failedCount}`,
     );
 
-    // eslint-disable-next-line no-console
-    console.log('[closure-pass] step=linepay-refund-reversal');
-    const reversals =
-      await providerPayoutService.processPendingLinePayRefundReversals({
-        entityId,
-        startDate: beginDate,
-        endDate,
-        limit: linePayLimit,
-        userId,
-      });
+    let reversals = {
+      success: true,
+      scanned: 0,
+      reversed: 0,
+      unmatched: 0,
+      skipped: 0,
+      results: [],
+    };
+
+    if (processLinePayRefundReversals) {
+      // eslint-disable-next-line no-console
+      console.log('[closure-pass] step=linepay-refund-reversal');
+      reversals =
+        await providerPayoutService.processPendingLinePayRefundReversals({
+          entityId,
+          startDate: beginDate,
+          endDate,
+          limit: linePayLimit,
+          userId,
+        });
+    } else {
+      // eslint-disable-next-line no-console
+      console.log(
+        '[closure-pass] step=linepay-refund-reversal skipped; pass --process-linepay-refund-reversals to write reversal journals',
+      );
+    }
     // eslint-disable-next-line no-console
     console.log(
       `[closure-pass] reversals reversed=${reversals.reversed} unmatched=${reversals.unmatched} skipped=${reversals.skipped}`,

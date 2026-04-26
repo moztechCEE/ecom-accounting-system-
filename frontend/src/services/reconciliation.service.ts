@@ -258,6 +258,7 @@ export const reconciliationService = {
     syncEcpayPayouts?: boolean
     syncInvoices?: boolean
     syncLinePayStatuses?: boolean
+    processLinePayRefundReversals?: boolean
     autoClear?: boolean
   }) => {
     const entityId =
@@ -274,6 +275,7 @@ export const reconciliationService = {
         syncEcpayPayouts: params.syncEcpayPayouts,
         syncInvoices: params.syncInvoices,
         syncLinePayStatuses: params.syncLinePayStatuses,
+        processLinePayRefundReversals: params.processLinePayRefundReversals,
         autoClear: params.autoClear,
       },
       {
@@ -425,6 +427,7 @@ export const reconciliationService = {
     endDate?: string
     limit?: number
     syncInvoices?: boolean
+    processRefundReversals?: boolean
     autoClear?: boolean
   }) => {
     const entityId =
@@ -438,6 +441,7 @@ export const reconciliationService = {
         endDate: params.endDate,
         limit: params.limit,
         syncInvoices: params.syncInvoices,
+        processRefundReversals: params.processRefundReversals,
         autoClear: params.autoClear,
       },
       {

@@ -501,6 +501,8 @@ B2B 月結下一步：
   - 對帳中心手動「跑核心同步」已改為 `autoClear=false`，只同步與重算四隊列；核銷必須另外走預覽與確認視窗，避免同步按鈕順手寫入正式分錄。
   - 會計工作台的 1Shop 團購閉環與 LINE Pay 閉環補跑也已改為 `autoClear=false`，避免匯入 / 補跑流程順手核銷；核銷入口集中在對帳中心。
   - 後端 `runCoreReconciliationJob`、1Shop 團購閉環與 LINE Pay 閉環的自動核銷預設也已改成保守模式：只有明確傳入 `autoClear=true` 才會寫入核銷分錄，沒有傳值時只同步與重算。
+  - LINE Pay 退款沖銷也已從一般狀態刷新 / 閉環補跑中拆出；只有明確傳入 `processLinePayRefundReversals=true` 或使用專用退款沖銷入口時，才會建立反向分錄。
+  - `backend/src/scripts/run-reconciliation-closure-pass.ts` 也已改成保守預設；需顯式加 `--auto-clear` 才會核銷，需顯式加 `--process-linepay-refund-reversals` 才會建立 LINE Pay 退款反向分錄。
 - 新增 LINE Pay 狀態刷新與退款追蹤
   - `POST /api/v1/reconciliation/line-pay/refresh-status`
   - `POST /api/v1/reconciliation/line-pay/refresh-status/auto`
