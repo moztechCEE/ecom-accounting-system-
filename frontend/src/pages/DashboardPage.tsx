@@ -277,6 +277,12 @@ const DashboardPage: React.FC = () => {
         // 30天趨勢 & 損益：固定取最近30天日報，不跟著 rangeMode 走
         const trend30Start = dayjs().tz(DASHBOARD_TZ).subtract(29, 'day').startOf('day').toISOString()
         const trend30End = dayjs().tz(DASHBOARD_TZ).endOf('day').toISOString()
+        // AR monitor is intentionally bounded. The backend can be slow or fail on
+        // unbounded history, so the dashboard uses the selected range when present,
+        // otherwise the same rolling 90-day window as the AR page.
+        const arMonitorStart =
+          since || dayjs().tz(DASHBOARD_TZ).subtract(90, 'day').startOf('day').toISOString()
+        const arMonitorEnd = until || dayjs().tz(DASHBOARD_TZ).endOf('day').toISOString()
 
         const [
           summary,
@@ -316,8 +322,8 @@ const DashboardPage: React.FC = () => {
           }),
           arService.getReceivableMonitor({
             entityId: storedEntityId,
-            startDate: since,
-            endDate: until,
+            startDate: arMonitorStart,
+            endDate: arMonitorEnd,
           }),
           dashboardService.getManagementSummary({
             entityId: storedEntityId,
