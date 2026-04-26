@@ -31,6 +31,7 @@ import { motion } from 'framer-motion'
 import dayjs, { Dayjs } from 'dayjs'
 import {
   arService,
+  OverpaidReceivablesResponse,
   ReceivableMonitorItem,
   ReceivableMonitorSummary,
 } from '../services/ar.service'
@@ -128,6 +129,9 @@ const ArInvoicesPage: React.FC = () => {
   const [providerReadinessLoading, setProviderReadinessLoading] = useState(false)
   const [providerReadinessError, setProviderReadinessError] = useState<string | null>(null)
   const [queryingInvoiceId, setQueryingInvoiceId] = useState<string | null>(null)
+  const [overpaidModalOpen, setOverpaidModalOpen] = useState(false)
+  const [overpaidLoading, setOverpaidLoading] = useState(false)
+  const [overpaidDetails, setOverpaidDetails] = useState<OverpaidReceivablesResponse | null>(null)
   const [form] = Form.useForm()
   const [paymentForm] = Form.useForm()
 
@@ -301,6 +305,24 @@ const ArInvoicesPage: React.FC = () => {
       message.error(error?.response?.data?.message || '查詢綠界發票狀態失敗')
     } finally {
       setQueryingInvoiceId(null)
+    }
+  }
+
+  const handleOpenOverpaidDetails = async () => {
+    setOverpaidModalOpen(true)
+    setOverpaidLoading(true)
+    try {
+      const result = await arService.getOverpaidReceivables({
+        startDate: monitorRange[0].toISOString(),
+        endDate: monitorRange[1].toISOString(),
+        limit: 100,
+      })
+      setOverpaidDetails(result)
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '載入超收明細失敗')
+      setOverpaidDetails(null)
+    } finally {
+      setOverpaidLoading(false)
     }
   }
 
@@ -529,6 +551,59 @@ const ArInvoicesPage: React.FC = () => {
     },
   ]
 
+  const overpaidColumns = [
+    {
+      title: '訂單',
+      key: 'order',
+      width: 210,
+      render: (_: unknown, record: NonNullable<OverpaidReceivablesResponse['items']>[number]) => (
+        <div>
+          <div className="font-semibold text-slate-900">{record.orderNumber}</div>
+          <div className="text-xs text-slate-400">
+            {dayjs(record.orderDate).format('YYYY-MM-DD')} · {record.channelName || record.channelCode || '未分類通路'}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '訂單 / 已收',
+      key: 'amount',
+      width: 190,
+      render: (_: unknown, record: NonNullable<OverpaidReceivablesResponse['items']>[number]) => (
+        <div>
+          <div className="text-sm text-slate-600">訂單 {currency(record.grossAmount)}</div>
+          <div className="text-sm text-slate-600">已收 {currency(record.paidAmount)}</div>
+          <div className="font-semibold text-rose-600">
+            超收 {currency(record.overpaidAmount)}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '付款列',
+      key: 'payments',
+      width: 140,
+      render: (_: unknown, record: NonNullable<OverpaidReceivablesResponse['items']>[number]) => (
+        <Space direction="vertical" size={4}>
+          <Tag color={record.exactDoublePaid ? 'red' : 'orange'}>
+            {record.paymentCount} 筆付款
+          </Tag>
+          {record.duplicateAmountGroups.length ? (
+            <Tag color="red">同金額重複</Tag>
+          ) : null}
+          {record.allPaymentsUnreconciled ? <Tag color="gold">未核銷</Tag> : null}
+        </Space>
+      ),
+    },
+    {
+      title: '診斷',
+      dataIndex: 'diagnosis',
+      key: 'diagnosis',
+      width: 420,
+      render: (value: string) => <Text className="text-sm text-slate-600">{value}</Text>,
+    },
+  ]
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -606,6 +681,11 @@ const ArInvoicesPage: React.FC = () => {
           type="error"
           message="偵測到超收或重複收款風險"
           description={`本區間有 ${summary.overpaidReceivableCount} 筆訂單的已收金額高於訂單應收，差額合計 ${currency(summary.overpaidReceivableAmount || 0)}。請優先核對 Payment 是否重複匯入或是否為同客戶合併收款。`}
+          action={
+            <Button size="small" danger icon={<SearchOutlined />} onClick={handleOpenOverpaidDetails}>
+              查看超收明細
+            </Button>
+          }
         />
       ) : null}
 
@@ -718,6 +798,71 @@ const ArInvoicesPage: React.FC = () => {
           pagination={{ pageSize: 10, showSizeChanger: true }}
         />
       </Card>
+
+      <Modal
+        title="超收 / 疑似重複收款明細"
+        open={overpaidModalOpen}
+        onCancel={() => setOverpaidModalOpen(false)}
+        footer={[
+          <Button key="close" onClick={() => setOverpaidModalOpen(false)}>
+            關閉
+          </Button>,
+        ]}
+        width={1080}
+      >
+        <Alert
+          showIcon
+          type="warning"
+          className="mb-4"
+          message="這裡只做診斷，不會刪除或沖銷付款"
+          description={
+            overpaidDetails
+              ? `目前列出前 ${overpaidDetails.items.length} 筆，總共 ${overpaidDetails.summary.overpaidOrderCount} 筆超收訂單，差額 ${currency(overpaidDetails.summary.overpaidAmount)}。其中 ${overpaidDetails.summary.exactDoublePaidCount} 筆接近雙倍付款，${overpaidDetails.summary.duplicateAmountGroupCount} 筆存在相同金額付款列。`
+              : '請先載入明細後，再依付款批次、金流交易編號與收款狀態比對是否重複匯入。'
+          }
+        />
+        <Table
+          rowKey="orderId"
+          loading={overpaidLoading}
+          columns={overpaidColumns}
+          dataSource={overpaidDetails?.items || []}
+          scroll={{ x: 960 }}
+          pagination={{ pageSize: 10, showSizeChanger: true }}
+          expandable={{
+            expandedRowRender: (record) => (
+              <div className="space-y-2">
+                {record.payments.map((payment) => (
+                  <div
+                    key={payment.paymentId}
+                    className="grid grid-cols-1 gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 md:grid-cols-5"
+                  >
+                    <div>
+                      <div className="font-medium text-slate-900">{currency(payment.amountGrossOriginal)}</div>
+                      <div>淨額 {currency(payment.amountNetOriginal)}</div>
+                    </div>
+                    <div>
+                      <div>{payment.status || '-'}</div>
+                      <div>{payment.reconciledFlag ? '已核銷' : '未核銷'}</div>
+                    </div>
+                    <div>
+                      <div>{dayjs(payment.payoutDate).format('YYYY-MM-DD')}</div>
+                      <div>{payment.channel || '-'}</div>
+                    </div>
+                    <div className="break-all">
+                      <div>batch: {payment.payoutBatchId || '-'}</div>
+                      <div>provider: {payment.providerPaymentId || '-'}</div>
+                    </div>
+                    <div>
+                      <div>金流費 {currency(payment.feeGatewayOriginal)}</div>
+                      <div>平台費 {currency(payment.feePlatformOriginal)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ),
+          }}
+        />
+      </Modal>
 
       <Modal
         title="新增 B2B 應收"

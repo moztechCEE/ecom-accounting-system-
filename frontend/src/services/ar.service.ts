@@ -121,6 +121,57 @@ export interface ReceivableMonitorResponse {
   items: ReceivableMonitorItem[]
 }
 
+export interface OverpaidReceivablePayment {
+  paymentId: string
+  payoutBatchId?: string | null
+  channel?: string | null
+  status?: string | null
+  payoutDate: string
+  createdAt: string
+  amountGrossOriginal: number
+  amountNetOriginal: number
+  feeGatewayOriginal: number
+  feePlatformOriginal: number
+  reconciledFlag: boolean
+  providerPaymentId?: string | null
+  feeStatus?: string | null
+  feeSource?: string | null
+}
+
+export interface OverpaidReceivableItem {
+  orderId: string
+  orderNumber: string
+  orderDate: string
+  channelCode?: string | null
+  channelName?: string | null
+  grossAmount: number
+  paidAmount: number
+  overpaidAmount: number
+  paymentCount: number
+  duplicateAmountGroups: Array<{ amount: number; count: number }>
+  exactDoublePaid: boolean
+  allPaymentsUnreconciled: boolean
+  diagnosis: string
+  payments: OverpaidReceivablePayment[]
+}
+
+export interface OverpaidReceivablesResponse {
+  entityId: string
+  range: {
+    startDate?: string | null
+    endDate?: string | null
+  }
+  limit: number
+  summary: {
+    overpaidOrderCount: number
+    overpaidAmount: number
+    exactDoublePaidCount: number
+    unreconciledOverpaidCount: number
+    duplicateAmountGroupCount: number
+  }
+  items: OverpaidReceivableItem[]
+}
+
 export interface B2BStatementOrder {
   orderId: string
   orderNumber: string
@@ -257,6 +308,27 @@ export const arService = {
         status: params?.status,
         startDate: params?.startDate,
         endDate: params?.endDate,
+      },
+      timeout: 60000,
+    })
+    return response.data
+  },
+
+  getOverpaidReceivables: async (params?: {
+    entityId?: string
+    startDate?: string
+    endDate?: string
+    limit?: number
+  }) => {
+    const entityId =
+      params?.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+
+    const response = await api.get<OverpaidReceivablesResponse>('/ar/overpaid', {
+      params: {
+        entityId,
+        startDate: params?.startDate,
+        endDate: params?.endDate,
+        limit: params?.limit,
       },
       timeout: 60000,
     })

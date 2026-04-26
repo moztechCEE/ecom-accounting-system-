@@ -59,6 +59,25 @@ export class ArController {
     );
   }
 
+  @Get('overpaid')
+  @ApiOperation({
+    summary: '查詢超收或疑似重複收款明細',
+    description:
+      '只讀診斷 paidAmount > grossAmount 的銷售訂單，列出付款明細與可能原因，不會修改 Payment 或 AR 資料。',
+  })
+  async getOverpaidReceivables(
+    @Query('entityId') entityId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.arService.getOverpaidReceivables(entityId, {
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
   @Post('sync/sales-orders')
   @ApiOperation({ summary: '將銷售訂單同步為應收帳款與收入分錄' })
   async syncSalesOrders(

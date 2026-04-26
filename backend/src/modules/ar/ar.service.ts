@@ -553,6 +553,176 @@ export class ArService {
     };
   }
 
+  async getOverpaidReceivables(
+    entityId: string,
+    options?: {
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+    },
+  ) {
+    const normalizedLimit = Math.min(
+      Math.max(Math.floor(options?.limit || 100), 1),
+      500,
+    );
+    const orderDate =
+      options?.startDate || options?.endDate
+        ? {
+            ...(options?.startDate ? { gte: options.startDate } : {}),
+            ...(options?.endDate ? { lte: options.endDate } : {}),
+          }
+        : undefined;
+
+    const orders = await this.prisma.salesOrder.findMany({
+      where: {
+        entityId,
+        status: {
+          notIn: ['cancelled', 'refunded'],
+        },
+        ...(orderDate ? { orderDate } : {}),
+      },
+      include: {
+        channel: {
+          select: {
+            code: true,
+            name: true,
+          },
+        },
+        payments: {
+          orderBy: [{ payoutDate: 'asc' }, { createdAt: 'asc' }],
+          select: {
+            id: true,
+            payoutBatchId: true,
+            channel: true,
+            payoutDate: true,
+            amountGrossOriginal: true,
+            amountNetOriginal: true,
+            feeGatewayOriginal: true,
+            feePlatformOriginal: true,
+            reconciledFlag: true,
+            status: true,
+            notes: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { orderDate: 'desc' },
+    });
+
+    const allItems = orders
+      .map((order) => {
+        const grossAmount = Number(order.totalGrossOriginal || 0);
+        const paidAmount = this.sumAmount(order.payments, 'amountGrossOriginal');
+        const overpaidAmount = Math.max(paidAmount - grossAmount, 0);
+        if (overpaidAmount <= 0.01) {
+          return null;
+        }
+
+        const paymentAmountCounts = order.payments.reduce<Record<string, number>>(
+          (acc, payment) => {
+            const key = Number(payment.amountGrossOriginal || 0).toFixed(2);
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+          },
+          {},
+        );
+        const duplicateAmountGroups = Object.entries(paymentAmountCounts)
+          .filter(([, count]) => count > 1)
+          .map(([amount, count]) => ({
+            amount: Number(amount),
+            count,
+          }));
+        const exactDoublePaid =
+          grossAmount > 0 && Math.abs(paidAmount - grossAmount * 2) <= 1;
+        const allPaymentsUnreconciled = order.payments.every(
+          (payment) => !payment.reconciledFlag,
+        );
+        const hasDraftOrPendingPayment = order.payments.some(
+          (payment) =>
+            payment.status === 'pending' ||
+            (payment.payoutBatchId || '').startsWith('draft:'),
+        );
+        const diagnosis = this.resolveOverpaidDiagnosis({
+          paymentCount: order.payments.length,
+          duplicateAmountGroups,
+          exactDoublePaid,
+          allPaymentsUnreconciled,
+          hasDraftOrPendingPayment,
+        });
+
+        return {
+          orderId: order.id,
+          orderNumber: order.externalOrderId || order.id,
+          orderDate: order.orderDate.toISOString(),
+          channelCode: order.channel?.code || null,
+          channelName: order.channel?.name || null,
+          grossAmount,
+          paidAmount,
+          overpaidAmount,
+          paymentCount: order.payments.length,
+          duplicateAmountGroups,
+          exactDoublePaid,
+          allPaymentsUnreconciled,
+          diagnosis,
+          payments: order.payments.map((payment) => {
+            const meta = this.extractMetadata(payment.notes);
+            return {
+              paymentId: payment.id,
+              payoutBatchId: payment.payoutBatchId,
+              channel: payment.channel,
+              status: payment.status,
+              payoutDate: payment.payoutDate.toISOString(),
+              createdAt: payment.createdAt.toISOString(),
+              amountGrossOriginal: Number(payment.amountGrossOriginal || 0),
+              amountNetOriginal: Number(payment.amountNetOriginal || 0),
+              feeGatewayOriginal: Number(payment.feeGatewayOriginal || 0),
+              feePlatformOriginal: Number(payment.feePlatformOriginal || 0),
+              reconciledFlag: payment.reconciledFlag,
+              providerPaymentId:
+                meta.providerPaymentId ||
+                meta.oneShopPaymentId ||
+                meta.transactionId ||
+                null,
+              feeStatus: meta.feeStatus || null,
+              feeSource: meta.feeSource || null,
+            };
+          }),
+        };
+      })
+      .filter(Boolean)
+      .sort((left: any, right: any) => right.overpaidAmount - left.overpaidAmount);
+
+    const limitedItems = allItems.slice(0, normalizedLimit);
+    const summary = allItems.reduce(
+      (acc: any, item: any) => {
+        acc.overpaidOrderCount += 1;
+        acc.overpaidAmount += item.overpaidAmount;
+        acc.exactDoublePaidCount += item.exactDoublePaid ? 1 : 0;
+        acc.unreconciledOverpaidCount += item.allPaymentsUnreconciled ? 1 : 0;
+        acc.duplicateAmountGroupCount += item.duplicateAmountGroups.length ? 1 : 0;
+        return acc;
+      },
+      {
+        overpaidOrderCount: 0,
+        overpaidAmount: 0,
+        exactDoublePaidCount: 0,
+        unreconciledOverpaidCount: 0,
+        duplicateAmountGroupCount: 0,
+      },
+    );
+
+    return {
+      entityId,
+      range: {
+        startDate: options?.startDate?.toISOString() || null,
+        endDate: options?.endDate?.toISOString() || null,
+      },
+      limit: normalizedLimit,
+      summary,
+      items: limitedItems,
+    };
+  }
+
   async getB2BStatements(
     entityId: string,
     asOfDate = new Date(),
@@ -1855,6 +2025,31 @@ export class ArService {
       return 'B2B 月結應按客戶出帳與收款，逾期後進入催收清單。';
     }
     return '需補足付款方式或平台撥款資料後才能自動核銷。';
+  }
+
+  private resolveOverpaidDiagnosis(params: {
+    paymentCount: number;
+    duplicateAmountGroups: Array<{ amount: number; count: number }>;
+    exactDoublePaid: boolean;
+    allPaymentsUnreconciled: boolean;
+    hasDraftOrPendingPayment: boolean;
+  }) {
+    if (params.exactDoublePaid && params.duplicateAmountGroups.length) {
+      return '已收金額接近訂單金額 2 倍，且存在相同金額付款列，優先檢查是否重複匯入同一筆收款。';
+    }
+    if (params.duplicateAmountGroups.length) {
+      return '存在相同金額付款列，需核對 payoutBatchId / providerPaymentId 是否為同一筆金流。';
+    }
+    if (params.hasDraftOrPendingPayment) {
+      return '付款列包含 draft 或 pending，可能是待付款草稿未在成功收款後清除。';
+    }
+    if (params.allPaymentsUnreconciled) {
+      return '付款列尚未完成撥款 / 銀行核銷，需先核對是否同客戶合併收款或重複同步。';
+    }
+    if (params.paymentCount > 1) {
+      return '同一訂單存在多筆付款，需核對是否為分期、合併收款拆帳、退款折讓未回寫或重複匯入。';
+    }
+    return '單筆付款金額高於訂單金額，需核對外部平台原始收款與訂單金額。';
   }
 
   private extractMetadata(notes?: string | null) {
