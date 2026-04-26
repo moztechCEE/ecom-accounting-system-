@@ -1,7 +1,24 @@
 import { IsString, IsEnum, IsOptional, IsUUID } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class IssueInvoiceDto {
+  @ApiPropertyOptional({
+    description:
+      '綠界電子發票帳號 key；Shopify 官網用 shopify-main，1Shop / 團購用 groupbuy-main',
+    example: 'shopify-main',
+  })
+  @IsOptional()
+  @IsString()
+  merchantKey?: string;
+
+  @ApiPropertyOptional({
+    description: '綠界商店代號；3290494 或 3150241',
+    example: '3290494',
+  })
+  @IsOptional()
+  @IsString()
+  merchantId?: string;
+
   @ApiProperty({
     description: '交易ID',
     example: 'uuid-of-transaction',

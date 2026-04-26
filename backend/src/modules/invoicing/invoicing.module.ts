@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { InvoicingController } from './invoicing.controller';
 import { InvoicingService } from './invoicing.service';
 import { PrismaModule } from '../../common/prisma/prisma.module';
+import { EcpayEinvoiceAdapter } from './adapters/ecpay-einvoice.adapter';
+import { EcpayEinvoiceConfigService } from './services/ecpay-einvoice-config.service';
 
 /**
  * InvoicingModule
@@ -23,7 +25,11 @@ import { PrismaModule } from '../../common/prisma/prisma.module';
 @Module({
   imports: [PrismaModule],
   controllers: [InvoicingController],
-  providers: [InvoicingService],
+  providers: [
+    InvoicingService,
+    EcpayEinvoiceAdapter,
+    EcpayEinvoiceConfigService,
+  ],
   exports: [InvoicingService],
 })
 export class InvoicingModule {}

@@ -43,6 +43,29 @@ export type InvoiceQueueResponse = {
   items: InvoiceQueueItem[];
 };
 
+export type InvoiceMerchantReadiness = {
+  key: string;
+  merchantId: string | null;
+  entityId: string | null;
+  description: string | null;
+  env: "stage" | "production";
+  issueUrl: string | null;
+  queryUrl: string | null;
+  invalidUrl: string | null;
+  allowanceUrl: string | null;
+  ready: boolean;
+  missing: string[];
+};
+
+export type InvoiceProviderReadiness = {
+  provider: "ecpay";
+  ready: boolean;
+  canIssue: boolean;
+  message: string;
+  requiredEnv: string[];
+  accounts: InvoiceMerchantReadiness[];
+};
+
 export const invoicingService = {
   async getQueue(params?: {
     entityId?: string;
@@ -69,4 +92,10 @@ export const invoicingService = {
     return response.data;
   },
 
+  async getReadiness(): Promise<InvoiceProviderReadiness> {
+    const response = await api.get<InvoiceProviderReadiness>(
+      `/invoicing/readiness?_ts=${Date.now()}`,
+    );
+    return response.data;
+  },
 };

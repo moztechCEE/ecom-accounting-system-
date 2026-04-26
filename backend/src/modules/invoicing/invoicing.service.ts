@@ -11,6 +11,7 @@ import { PreviewInvoiceDto } from './dto/preview-invoice.dto';
 import { IssueInvoiceDto } from './dto/issue-invoice.dto';
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
+import { EcpayEinvoiceAdapter } from './adapters/ecpay-einvoice.adapter';
 
 /**
  * InvoicingService
@@ -28,7 +29,14 @@ import { Decimal } from '@prisma/client/runtime/library';
 export class InvoicingService {
   private readonly logger = new Logger(InvoicingService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ecpayEinvoiceAdapter: EcpayEinvoiceAdapter,
+  ) {}
+
+  getInvoiceProviderReadiness() {
+    return this.ecpayEinvoiceAdapter.getReadiness();
+  }
 
   /**
    * 預覽某訂單的發票內容
@@ -86,7 +94,7 @@ export class InvoicingService {
       return {
         productId: item.productId,
         description: item.product?.name || '商品',
-        qty: item.qty.toNumber(),
+        qty: new Decimal(item.qty).toNumber(),
         unitPriceOriginal: new Decimal(item.unitPriceOriginal).toNumber(),
         currency: item.unitPriceCurrency,
         amountOriginal: itemAmountOriginal.toFixed(2),
@@ -123,7 +131,6 @@ export class InvoicingService {
    */
   async issueInvoice(orderId: string, dto: IssueInvoiceDto, userId: string) {
     this.logger.log(`開立發票 - 訂單ID: ${orderId}, 操作人員: ${userId}`);
-    this.assertInvoiceIssuingAvailable();
 
     // 1. 查詢訂單
     const order = await this.prisma.salesOrder.findUnique({
@@ -134,6 +141,7 @@ export class InvoicingService {
             product: true,
           },
         },
+        channel: true,
       },
     });
 
@@ -159,8 +167,44 @@ export class InvoicingService {
     const taxAmountBase = taxAmountOriginal.mul(fxRate);
     const totalAmountBase = totalAmountOriginal.mul(fxRate);
 
-    // 3. 產生發票號碼
-    const invoiceNumber = this.generateInvoiceNumber();
+    const localStubAllowed = this.isLocalInvoiceStubAllowed();
+    const merchantKey =
+      dto.merchantKey || this.inferEcpayMerchantKey(order.channel?.code);
+    const ecpayResult = localStubAllowed
+      ? null
+      : await this.ecpayEinvoiceAdapter.issueInvoice({
+          merchantKey,
+          merchantId: dto.merchantId,
+          relateNumber: order.externalOrderId || order.id,
+          invoiceType: (dto.invoiceType || 'B2C') as 'B2C' | 'B2B',
+          buyerName: dto.buyerName || null,
+          buyerTaxId: dto.buyerTaxId || null,
+          buyerEmail: dto.buyerEmail || null,
+          buyerPhone: dto.buyerPhone || null,
+          buyerAddress: dto.buyerAddress || null,
+          amount: Number(amountOriginal.toFixed(0)),
+          taxAmount: Number(taxAmountOriginal.toFixed(0)),
+          totalAmount: Number(totalAmountOriginal.toFixed(0)),
+          items: order.items.map((item) => {
+            const qty = new Decimal(item.qty).toNumber();
+            const unitPrice = new Decimal(item.unitPriceOriginal).toNumber();
+            return {
+              name: item.product?.name || '商品',
+              quantity: qty,
+              unitPrice,
+              amount: Number(
+                new Decimal(item.unitPriceOriginal).mul(item.qty).toFixed(0),
+              ),
+              taxAmount: Number(
+                new Decimal(item.taxAmountOriginal || 0).toFixed(0),
+              ),
+            };
+          }),
+        });
+
+    // 3. 取得正式綠界發票號碼，測試環境才允許產生本地 stub 字軌
+    const invoiceNumber =
+      ecpayResult?.invoiceNumber || this.generateInvoiceNumber();
 
     // 4. 使用 Transaction 寫入發票資料
     const invoice = await this.prisma.$transaction(async (tx) => {
@@ -190,9 +234,18 @@ export class InvoicingService {
           totalAmountCurrency: currency,
           totalAmountFxRate: fxRate,
           totalAmountBase,
-          externalInvoiceId: null, // TODO: 外部平台串接
-          externalPlatform: null,
-          externalPayload: null,
+          externalInvoiceId: ecpayResult?.externalInvoiceId || null,
+          externalPlatform: ecpayResult ? 'ecpay' : null,
+          externalPayload: ecpayResult
+            ? {
+                provider: ecpayResult.provider,
+                merchantKey: ecpayResult.merchantKey,
+                merchantId: ecpayResult.merchantId,
+                randomNumber: ecpayResult.randomNumber,
+                invoiceDate: ecpayResult.invoiceDate,
+                raw: ecpayResult.raw,
+              }
+            : null,
           notes: dto.notes || null,
         },
       });
@@ -239,6 +292,7 @@ export class InvoicingService {
             dto,
             invoiceNumber,
             orderId,
+            providerResult: ecpayResult,
           },
         },
       });
@@ -261,6 +315,9 @@ export class InvoicingService {
       success: true,
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
+      provider:
+        ecpayResult?.provider || (localStubAllowed ? 'local-stub' : null),
+      merchantKey: ecpayResult?.merchantKey || merchantKey || null,
       totalAmount: totalAmountOriginal.toFixed(2),
       currency,
     };
@@ -579,9 +636,13 @@ export class InvoicingService {
         const latestPayment = order.payments[0] || null;
         const latestInvoice = order.invoices[0] || null;
         const paymentCompleted = order.payments.some((payment) =>
-          ['completed', 'success'].includes((payment.status || '').toLowerCase()),
+          ['completed', 'success'].includes(
+            (payment.status || '').toLowerCase(),
+          ),
         );
-        const reconciled = order.payments.some((payment) => payment.reconciledFlag);
+        const reconciled = order.payments.some(
+          (payment) => payment.reconciledFlag,
+        );
         const journalLinked = order.payments.some((payment) =>
           (payment.notes || '').includes('journalEntryId='),
         );
@@ -627,7 +688,8 @@ export class InvoicingService {
       .sort((left, right) => {
         const score = (status: string) =>
           status === 'eligible' ? 0 : status === 'waiting_payment' ? 1 : 2;
-        const scoreDiff = score(left.invoiceStatus) - score(right.invoiceStatus);
+        const scoreDiff =
+          score(left.invoiceStatus) - score(right.invoiceStatus);
         if (scoreDiff !== 0) {
           return scoreDiff;
         }
@@ -635,11 +697,15 @@ export class InvoicingService {
       });
 
     const limitedItems = items.slice(0, normalizedLimit);
-    const eligibleItems = items.filter((item) => item.invoiceStatus === 'eligible');
+    const eligibleItems = items.filter(
+      (item) => item.invoiceStatus === 'eligible',
+    );
     const waitingItems = items.filter(
       (item) => item.invoiceStatus === 'waiting_payment',
     );
-    const completedItems = items.filter((item) => item.invoiceStatus === 'completed');
+    const completedItems = items.filter(
+      (item) => item.invoiceStatus === 'completed',
+    );
 
     return {
       entityId,
@@ -669,16 +735,26 @@ export class InvoicingService {
       startDate?: Date;
       endDate?: Date;
       invoiceType?: string;
+      merchantKey?: string;
+      merchantId?: string;
     },
   ) {
-    this.assertInvoiceIssuingAvailable();
+    this.assertInvoiceIssuingAvailable(options?.merchantKey);
 
     const queue = await this.getInvoiceQueue(entityId, options);
-    const targets = queue.items.filter((item) => item.invoiceStatus === 'eligible');
-    const issued: Array<{ orderId: string; invoiceId: string; invoiceNumber: string }> =
-      [];
-    const failed: Array<{ orderId: string; externalOrderId: string | null; reason: string }> =
-      [];
+    const targets = queue.items.filter(
+      (item) => item.invoiceStatus === 'eligible',
+    );
+    const issued: Array<{
+      orderId: string;
+      invoiceId: string;
+      invoiceNumber: string;
+    }> = [];
+    const failed: Array<{
+      orderId: string;
+      externalOrderId: string | null;
+      reason: string;
+    }> = [];
 
     for (const item of targets) {
       try {
@@ -688,6 +764,8 @@ export class InvoicingService {
             invoiceType: options?.invoiceType || 'B2C',
             buyerName: item.customerName || undefined,
             buyerEmail: item.customerEmail || undefined,
+            merchantKey: options?.merchantKey,
+            merchantId: options?.merchantId,
           },
           userId,
         );
@@ -726,16 +804,33 @@ export class InvoicingService {
     return `${prefix}${sequence}`;
   }
 
-  private assertInvoiceIssuingAvailable() {
-    if (
-      process.env.NODE_ENV === 'test' ||
-      process.env.ALLOW_LOCAL_INVOICE_STUB === 'true'
-    ) {
+  private assertInvoiceIssuingAvailable(merchantKey?: string | null) {
+    if (this.isLocalInvoiceStubAllowed()) {
       return;
     }
 
-    throw new BadRequestException(
-      '正式電子發票開立尚未接上綠界電子發票 API；目前只能匯入綠界已開立銷項發票回填訂單，避免系統產生本地假字軌發票號。',
+    this.ecpayEinvoiceAdapter.assertReadyForMerchant(merchantKey);
+  }
+
+  private isLocalInvoiceStubAllowed() {
+    return (
+      process.env.NODE_ENV === 'test' ||
+      process.env.ALLOW_LOCAL_INVOICE_STUB === 'true'
     );
+  }
+
+  private inferEcpayMerchantKey(channelCode?: string | null) {
+    const normalized = (channelCode || '').trim().toUpperCase();
+    if (normalized === 'SHOPIFY') {
+      return 'shopify-main';
+    }
+    if (
+      normalized === '1SHOP' ||
+      normalized === 'ONESHOP' ||
+      normalized === 'SHOPLINE'
+    ) {
+      return 'groupbuy-main';
+    }
+    return null;
   }
 }

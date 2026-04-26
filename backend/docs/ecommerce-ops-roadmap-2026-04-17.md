@@ -16,7 +16,7 @@
 - `3290494`
   - 用途：`MOZTECH 官方網站`
   - 對應通路：`Shopify`
-  - 說明：目前已驗證的綠界匯出檔 [NoEscrowStatistic_20260416182627.xls](</Users/moztecheason/Downloads/NoEscrowStatistic_20260416182627.xls>) 全部來自這個商店代號，且平台名稱皆為 `綠界科技 Shopify`
+  - 說明：目前已驗證的綠界匯出檔 [NoEscrowStatistic_20260416182627.xls](/Users/moztecheason/Downloads/NoEscrowStatistic_20260416182627.xls) 全部來自這個商店代號，且平台名稱皆為 `綠界科技 Shopify`
 - `3150241`
   - 用途：`團購`
   - 對應通路：`1Shop`，以及後續 `Shopline`
@@ -90,6 +90,22 @@
 - 綠界金流手續費目前需確認來源：若 API 回傳不可得，需以綠界匯出 Excel / 服務費發票作為正式 fee import source，再與 `Payment` 逐筆對帳。
 - 發票狀態需從 `SalesOrder` / `Invoice` 接進 AR、報表中心與 AI 待辦，讓未開票、待補發票、稅額異常能形成可追蹤任務。
 - 銀行入帳與 AR 核銷已有 service/controller 骨架，下一步要補前端頁面與自動匹配結果呈現。
+
+### 2026-04-26 綠界電子發票 Adapter 接續
+
+- 已新增 `ECPAY_EINVOICE_ACCOUNTS_JSON` 作為正式銷項電子發票帳號設定來源，明確分流：
+  - `shopify-main` / `3290494`：MOZTECH Shopify 官方站
+  - `groupbuy-main` / `3150241`：1Shop / 團購 / 未來 Shopline
+- 已新增 `GET /invoicing/readiness`，可在不開立真實發票的情況下檢查每個帳號是否缺 `merchantId`、`hashKey`、`hashIv`、`issueUrl`、`queryUrl`、`invalidUrl`、`allowanceUrl`。
+- 會計工作台會顯示綠界正式開票 readiness；若缺正式密鑰，系統仍引導先用「綠界銷項發票匯入」回填訂單，避免本地假字軌污染正式資料。
+- `POST /invoicing/issue/:orderId` 已可依通路推斷 merchant key，Shopify 走 `shopify-main`，1Shop / Shopline 走 `groupbuy-main`；正式呼叫前會先檢查 profile readiness。
+
+待補：
+
+- 將真實 `HashKey` / `HashIV` 放入 Secret Manager / Cloud Run env，不寫入 repo。
+- 用綠界 stage 或正式小額測試單驗證 `B2CInvoice/Issue`、`GetIssue`、`Invalid`、`Allowance`。
+- 補字軌 / 配號查詢與用量警示；目前 readiness 僅確認 API profile，不代表字軌用量充足。
+- 補 B2B 發票專用流程、折讓作廢與 reversing journal。
 
 ### 手續費來源與自動對帳判斷
 
@@ -260,7 +276,7 @@ Shopline 提到的「顧客資料授權登入」是另一個功能：
 
 ### Phase 4：CEO 總控台
 
-目標：   
+目標：
 
 - 把營運指標集中成單一總覽頁
 
@@ -830,7 +846,7 @@ B2B 月結下一步：
    - `refund_pending_reversal`
    - `refund_reversed`
    - `refund_unmatched`
-   的實際數量
+     的實際數量
 
 2. 驗證退款後是否完整同步影響：
    - `Payment.notes`
@@ -841,6 +857,7 @@ B2B 月結下一步：
    - `對帳中心 summary`
 
 注意：
+
 - `ProviderPayoutReconciliationService.processPendingLinePayRefundReversals(...)`
   現在是針對 `payoutImportLine.status = refund_pending_reversal`
   建立反向核銷分錄
@@ -880,7 +897,7 @@ B2B 月結下一步：
     - 撥款
     - 手續費
     - 發票
-    是否對上
+      是否對上
 
 - `會計工作台`
   - 應只看：
@@ -889,6 +906,7 @@ B2B 月結下一步：
     - 哪些待月結 / 待追帳
 
 還要繼續清：
+
 - 重複卡片
 - 重複指標
 - 重複說明文字

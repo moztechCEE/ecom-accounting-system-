@@ -1,11 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { InvoicingService } from '../invoicing.service';
-import { PrismaService } from '../../../common/prisma/prisma.service';
+import { InvoicingService } from './invoicing.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotFoundException, ConflictException } from '@nestjs/common';
+import { EcpayEinvoiceAdapter } from './adapters/ecpay-einvoice.adapter';
 
 describe('InvoicingService', () => {
   let service: InvoicingService;
   let prismaService: PrismaService;
+  let previousAllowLocalInvoiceStub: string | undefined;
 
   const mockPrismaService = {
     salesOrder: {
@@ -27,10 +29,21 @@ describe('InvoicingService', () => {
   };
 
   beforeEach(async () => {
+    previousAllowLocalInvoiceStub = process.env.ALLOW_LOCAL_INVOICE_STUB;
+    process.env.ALLOW_LOCAL_INVOICE_STUB = 'true';
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InvoicingService,
         { provide: PrismaService, useValue: mockPrismaService },
+        {
+          provide: EcpayEinvoiceAdapter,
+          useValue: {
+            getReadiness: jest.fn(),
+            assertReadyForMerchant: jest.fn(),
+            issueInvoice: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -40,6 +53,11 @@ describe('InvoicingService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    if (previousAllowLocalInvoiceStub === undefined) {
+      delete process.env.ALLOW_LOCAL_INVOICE_STUB;
+    } else {
+      process.env.ALLOW_LOCAL_INVOICE_STUB = previousAllowLocalInvoiceStub;
+    }
   });
 
   /**

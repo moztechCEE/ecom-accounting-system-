@@ -63,6 +63,7 @@ import {
 import { salesService } from '../services/sales.service'
 import { apService } from '../services/ap.service'
 import { reconciliationService } from '../services/reconciliation.service'
+import { invoicingService, InvoiceProviderReadiness } from '../services/invoicing.service'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -145,6 +146,7 @@ const AccountingWorkbenchPage: React.FC = () => {
   const [receivables, setReceivables] = useState<ReceivableMonitorResponse | null>(null)
   const [b2bStatements, setB2BStatements] = useState<B2BStatementResponse | null>(null)
   const [dataCompleteness, setDataCompleteness] = useState<DataCompletenessAudit | null>(null)
+  const [invoiceReadiness, setInvoiceReadiness] = useState<InvoiceProviderReadiness | null>(null)
   const [loadIssues, setLoadIssues] = useState<string[]>([])
 
   const entityId = localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
@@ -162,6 +164,7 @@ const AccountingWorkbenchPage: React.FC = () => {
         arService.getReceivableMonitor({ entityId, startDate, endDate }),
         arService.getB2BStatements({ entityId, startDate, asOfDate: endDate }),
         dashboardService.getDataCompletenessAudit({ entityId, startDate, endDate }),
+        invoicingService.getReadiness(),
       ])
 
       const failedSections: string[] = []
@@ -173,6 +176,7 @@ const AccountingWorkbenchPage: React.FC = () => {
         receivableResult,
         b2bResult,
         completenessResult,
+        invoiceReadinessResult,
       ] = sections
 
       if (executiveResult.status === 'fulfilled') {
@@ -209,6 +213,12 @@ const AccountingWorkbenchPage: React.FC = () => {
         setDataCompleteness(completenessResult.value)
       } else {
         failedSections.push('資料完整度')
+      }
+
+      if (invoiceReadinessResult.status === 'fulfilled') {
+        setInvoiceReadiness(invoiceReadinessResult.value)
+      } else {
+        failedSections.push('綠界電子發票設定')
       }
 
       setLoadIssues(failedSections)
@@ -695,13 +705,17 @@ const AccountingWorkbenchPage: React.FC = () => {
     !audit &&
     !receivables &&
     !b2bStatements &&
-    !dataCompleteness
+    !dataCompleteness &&
+    !invoiceReadiness
   const missingInvoiceOrderCount = Number(dataCompleteness?.gaps.missingInvoiceOrders || 0)
   const invoiceLinkedRate = Number(dataCompleteness?.coverage.invoiceLinkedRate || 0)
   const oneShopMissingInvoices =
     channelCompleteness.find((item) => /1shop|oneshop/i.test(`${item.channelCode} ${item.channelName}`))?.missingInvoices || 0
   const shopifyMissingInvoices =
     channelCompleteness.find((item) => /shopify/i.test(`${item.channelCode} ${item.channelName}`))?.missingInvoices || 0
+  const readyInvoiceAccounts = invoiceReadiness?.accounts.filter((account) => account.ready) || []
+  const missingInvoiceAccounts =
+    invoiceReadiness?.accounts.filter((account) => !account.ready) || []
 
   const anomalyColumns: ColumnsType<DashboardExecutiveAnomaly> = [
     {
@@ -1269,6 +1283,25 @@ const AccountingWorkbenchPage: React.FC = () => {
             </Card>
           </div>
         </div>
+        {invoiceReadiness ? (
+          <Alert
+            showIcon
+            className="mt-5 rounded-2xl"
+            type={invoiceReadiness.ready ? 'success' : 'warning'}
+            message={
+              invoiceReadiness.ready
+                ? `綠界正式開票設定已就緒：${readyInvoiceAccounts.map((account) => account.merchantId).join('、')}`
+                : '綠界正式開票尚未就緒'
+            }
+            description={
+              invoiceReadiness.ready
+                ? '系統已找到可用的綠界電子發票帳號；正式開票會依訂單通路使用 3290494 或 3150241。'
+                : `目前缺少 ${missingInvoiceAccounts
+                    .map((account) => `${account.merchantId || account.key}: ${account.missing.join('/')}`)
+                    .join('；')}。先用銷項發票匯入回填訂單，不要用本地假字軌。`
+            }
+          />
+        ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
           <Button
             icon={<SafetyCertificateOutlined />}

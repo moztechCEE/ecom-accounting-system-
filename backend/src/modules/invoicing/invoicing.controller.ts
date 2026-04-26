@@ -83,6 +83,17 @@ export class InvoicingController {
     });
   }
 
+  @Get('readiness')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @ApiOperation({
+    summary: '查詢綠界電子發票開立 readiness',
+    description:
+      '只回傳設定完整度，不會呼叫綠界開立發票；用來確認 3290494 / 3150241 是否已具備正式開票條件。',
+  })
+  async getInvoiceProviderReadiness() {
+    return this.invoicingService.getInvoiceProviderReadiness();
+  }
+
   /**
    * 預覽發票內容
    */
@@ -180,15 +191,23 @@ export class InvoicingController {
       startDate?: string;
       endDate?: string;
       invoiceType?: string;
+      merchantKey?: string;
+      merchantId?: string;
     },
     @CurrentUser() user: any,
   ) {
-    return this.invoicingService.issueEligibleInvoices(body.entityId, user.userId, {
-      limit: body.limit,
-      startDate: body.startDate ? new Date(body.startDate) : undefined,
-      endDate: body.endDate ? new Date(body.endDate) : undefined,
-      invoiceType: body.invoiceType,
-    });
+    return this.invoicingService.issueEligibleInvoices(
+      body.entityId,
+      user.userId,
+      {
+        limit: body.limit,
+        startDate: body.startDate ? new Date(body.startDate) : undefined,
+        endDate: body.endDate ? new Date(body.endDate) : undefined,
+        invoiceType: body.invoiceType,
+        merchantKey: body.merchantKey,
+        merchantId: body.merchantId,
+      },
+    );
   }
 
   /**
