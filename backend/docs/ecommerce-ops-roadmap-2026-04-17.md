@@ -102,6 +102,7 @@
 - `POST /invoicing/:invoiceId/void` 與 `POST /invoicing/:invoiceId/allowance` 已在正式環境擋住本地作廢 / 折讓，避免綠界未同步但內部狀態已變更。
 - `GET /invoicing/:invoiceId/provider-status` 已新增只讀綠界狀態查詢，不會改資料，可用來比對內部 Invoice 與綠界後台狀態。
 - `GET /invoicing/provider-status/readiness` 已新增只讀查詢欄位盤點，可找出缺發票日期或缺商店代號、因此無法向綠界查狀態的內部發票。
+- 綠界狀態查詢會把匯入資料中的發票日期正規化為 `YYYY-MM-DD`，避免正式資料含時間造成 API 查詢不穩。
 - 應收帳款頁已新增「查綠界」操作，讓會計可對單筆已開立發票做只讀狀態確認。
 - 應收帳款頁已新增綠界查詢欄位盤點提示，依目前日期區間顯示哪些已開立發票還缺查詢必要欄位。
 

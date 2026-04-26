@@ -1023,12 +1023,13 @@ export class InvoicingService {
       invoiceMetadata.merchantId,
       orderMetadata.merchantId,
     );
-    const invoiceDate =
+    const invoiceDate = this.normalizeInvoiceDate(
       this.pickString(
         externalPayload?.invoiceDate,
         invoiceMetadata.invoiceDate,
         orderMetadata.invoiceDate,
-      ) || (invoice.issuedAt ? this.formatInvoiceDate(invoice.issuedAt) : null);
+      ) || (invoice.issuedAt ? this.formatInvoiceDate(invoice.issuedAt) : null),
+    );
 
     return {
       merchantKey,
@@ -1059,6 +1060,26 @@ export class InvoicingService {
       }
     }
     return null;
+  }
+
+  private normalizeInvoiceDate(value?: string | null) {
+    const trimmed = value?.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const normalized = trimmed.replace(/\//g, '-');
+    const match = normalized.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) {
+      return match[1];
+    }
+
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return this.formatInvoiceDate(parsed);
+    }
+
+    return trimmed;
   }
 
   private formatInvoiceDate(date: Date) {

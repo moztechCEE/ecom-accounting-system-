@@ -259,7 +259,7 @@ describe('InvoicingService', () => {
         externalPayload: null,
         salesOrder: {
           notes:
-            '[ecpay-invoice-sync] invoiceDate=2026-04-01; merchantKey=groupbuy-main; merchantId=3150241',
+            '[ecpay-invoice-sync] invoiceDate=2026-04-01 09:30:00; merchantKey=groupbuy-main; merchantId=3150241',
           channel: { code: '1SHOP' },
         },
       });
@@ -322,7 +322,7 @@ describe('InvoicingService', () => {
           externalPayload: {
             merchantKey: 'shopify-main',
             merchantId: '3290494',
-            invoiceDate: '2026-04-01',
+            invoiceDate: '2026-04-01 09:30:00',
           },
           salesOrder: {
             id: 'order-1',
@@ -370,6 +370,7 @@ describe('InvoicingService', () => {
       expect(result.summary.missingCounts.invoiceDate).toBe(1);
       expect(result.summary.missingCounts.merchantKeyOrMerchantId).toBe(1);
       expect(result.items[0].queryReady).toBe(true);
+      expect(result.items[0].invoiceDate).toBe('2026-04-01');
       expect(result.items[1].queryReady).toBe(false);
       expect(mockEcpayEinvoiceAdapter.queryInvoiceStatus).not.toHaveBeenCalled();
     });
