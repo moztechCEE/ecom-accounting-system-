@@ -279,6 +279,14 @@ export class ReportsController {
     );
   }
 
+  @Get('connector-readiness')
+  @ApiOperation({ summary: '外部通路 / 金流 / 發票 connector 準備狀態' })
+  @ApiResponse({ status: 200, description: '成功取得 connector 設定與缺口盤點' })
+  @ApiQuery({ name: 'entityId', required: true })
+  async getConnectorReadiness(@Query('entityId') entityId: string) {
+    return this.reportsService.getConnectorReadiness(entityId);
+  }
+
   @Get('line-pay-reconciliation-readiness')
   @ApiOperation({ summary: 'LINE Pay 對帳路徑判斷：綠界或 LINE Pay 直連' })
   @ApiResponse({ status: 200, description: '成功取得 LINE Pay 對帳準備狀態' })

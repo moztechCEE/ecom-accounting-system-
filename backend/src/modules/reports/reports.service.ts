@@ -1258,6 +1258,184 @@ export class ReportsService {
     };
   }
 
+  async getConnectorReadiness(entityId: string) {
+    const connectors = [
+      this.buildConnectorReadiness({
+        key: 'shopify',
+        label: 'Shopify / MOZTECH 官網',
+        category: 'sales_channel',
+        envNames: ['SHOPIFY_SHOP'],
+        credentialGroups: [
+          ['SHOPIFY_TOKEN'],
+          ['SHOPIFY_CLIENT_ID', 'SHOPIFY_CLIENT_SECRET'],
+        ],
+        optionalEnvNames: ['SHOPIFY_API_VERSION', 'SHOPIFY_GATEWAY_FEE_RULES'],
+        externalNeeds: [
+          '確認 Shopify app 是否具備 read_all_orders，否則 60 天以前訂單可能無法完整 API 回補。',
+        ],
+        nextAction:
+          '若 health 成功但舊訂單缺口仍高，先確認 read_all_orders，再跑歷史回補。',
+      }),
+      this.buildConnectorReadiness({
+        key: 'oneshop',
+        label: '1Shop / 團購',
+        category: 'sales_channel',
+        envNames: ['ONESHOP_API_BASE_URL'],
+        credentialGroups: [
+          ['ONESHOP_STORES_JSON'],
+          ['ONESHOP_APP_ID', 'ONESHOP_SECRET'],
+        ],
+        optionalEnvNames: [
+          'ONESHOP_ACCOUNT',
+          'ONESHOP_STORE_NAME',
+          'ONESHOP_SYNC_ENABLED',
+          'ONESHOP_SYNC_JOB_TOKEN',
+        ],
+        jsonEnvName: 'ONESHOP_STORES_JSON',
+        externalNeeds: [
+          '確認 2024 年以前是否允許 API 匯出。',
+          '若 API 回空，提供 1Shop 匯出 Excel 補洞。',
+        ],
+        nextAction:
+          '憑證就緒後可重跑 1Shop 團購閉環，再看 missingPayments / missingInvoices / feeMissingPayments 是否下降。',
+      }),
+      this.buildConnectorReadiness({
+        key: 'shopline',
+        label: 'Shopline',
+        category: 'sales_channel',
+        envNames: [],
+        credentialGroups: [
+          ['SHOPLINE_STORES_JSON'],
+          ['SHOPLINE_ACCESS_TOKEN', 'SHOPLINE_HANDLE'],
+        ],
+        optionalEnvNames: [
+          'SHOPLINE_STORE_NAME',
+          'SHOPLINE_MERCHANT_ID',
+          'SHOPLINE_SYNC_ENABLED',
+          'SHOPLINE_SYNC_JOB_TOKEN',
+        ],
+        jsonEnvName: 'SHOPLINE_STORES_JSON',
+        externalNeeds: [
+          '提供正式 access_token 與 User-Agent / handle code。',
+          '確認單店或多店、webhook 可用性，以及 archived orders 匯出流程。',
+        ],
+        nextAction:
+          '先讓 token-info / orders / customers 同步可跑，再把 Shopline 訂單接進 AR / 發票 / 對帳鏈。',
+      }),
+      this.buildConnectorReadiness({
+        key: 'ecpay-einvoice',
+        label: '綠界電子發票',
+        category: 'invoice',
+        envNames: ['ECPAY_EINVOICE_ACCOUNTS_JSON'],
+        credentialGroups: [['ECPAY_EINVOICE_ACCOUNTS_JSON']],
+        optionalEnvNames: ['ECPAY_EINVOICE_ISSUING_ENABLED'],
+        jsonEnvName: 'ECPAY_EINVOICE_ACCOUNTS_JSON',
+        externalNeeds: [
+          '確認 3290494 / 3150241 的 HashKey / HashIV、B2C / B2B、查詢、作廢、折讓、字軌權限。',
+          '用 stage 或正式小額測試單驗證 Issue / GetIssue / Invalid / Allowance 後，才能啟用正式開票。',
+        ],
+        nextAction:
+          '未啟用正式開票前，繼續用綠界銷項發票匯入回填系統狀態。',
+      }),
+      this.buildConnectorReadiness({
+        key: 'ecpay-payout',
+        label: '綠界撥款 / 金流對帳',
+        category: 'payout',
+        envNames: [],
+        credentialGroups: [
+          ['ECPAY_MERCHANTS_JSON'],
+          ['ECPAY_SHOPIFY_MERCHANT_ID', 'ECPAY_SHOPIFY_HASH_KEY', 'ECPAY_SHOPIFY_HASH_IV'],
+        ],
+        optionalEnvNames: [
+          'ECPAY_SHOPIFY_API_URL',
+          'ECPAY_SHOPIFY_SYNC_ENABLED',
+          'ECPAY_SYNC_JOB_TOKEN',
+        ],
+        jsonEnvName: 'ECPAY_MERCHANTS_JSON',
+        externalNeeds: [
+          '提供 3150241 / 3290494 綠界撥款或金流對帳報表。',
+          '確認 3150241 僅供 1Shop / 團購 / 未來 Shopline 使用，不與 Shopify 3290494 混用。',
+        ],
+        nextAction:
+          '撥款來源就緒後，回填實際手續費與淨額，再跑保守自動核銷。',
+      }),
+      this.buildConnectorReadiness({
+        key: 'linepay',
+        label: 'LINE Pay / TWQR',
+        category: 'payment',
+        envNames: [],
+        credentialGroups: [
+          ['LINE_PAY_ACCOUNTS_JSON'],
+          ['LINE_PAY_MERCHANT_ID', 'LINE_PAY_CHANNEL_ID', 'LINE_PAY_CHANNEL_SECRET'],
+        ],
+        optionalEnvNames: [
+          'LINE_PAY_PROFILE_KEY',
+          'LINE_PAY_ENV',
+          'LINE_PAY_SOURCE_CHANNEL',
+          'LINE_PAY_ECPAY_MERCHANT_KEY',
+        ],
+        jsonEnvName: 'LINE_PAY_ACCOUNTS_JSON',
+        externalNeeds: [
+          '確認 LINE Pay / TWQR 是否出現在綠界撥款報表內。',
+          '若是 LINE Pay 獨立撥款，提供 CAPTURE / 結算報表或可用 API 文件。',
+        ],
+        nextAction:
+          '分流確認後，LINE Pay 直連走 linepay provider；若在綠界報表內，走 ecpay provider 並標記 gateway。',
+      }),
+      this.buildConnectorReadiness({
+        key: 'banking',
+        label: '銀行入帳',
+        category: 'banking',
+        envNames: [],
+        credentialGroups: [],
+        optionalEnvNames: [],
+        externalNeeds: [
+          '提供主要銀行帳戶對帳單 CSV / Excel 範本。',
+          '確認交易日、入帳日、摘要、金額、手續費、餘額、交易序號欄位。',
+        ],
+        nextAction:
+          '先匯入一個小批量銀行流水，再接金流淨額 / 廣告扣款 / AP 付款 matching。',
+      }),
+      this.buildConnectorReadiness({
+        key: 'ad-spend',
+        label: '廣告費 Meta / Google / TikTok',
+        category: 'expense',
+        envNames: [],
+        credentialGroups: [],
+        optionalEnvNames: [],
+        externalNeeds: [
+          '提供 Meta / Google Ads / TikTok Ads API 權限與帳戶對品牌 / 通路 mapping。',
+          '提供廣告發票或收據來源，以及扣款信用卡 / 銀行帳戶。',
+        ],
+        nextAction:
+          '先定義廣告帳戶 mapping 與報表來源，再建立 connector 與 AP / 銀行扣款 matching。',
+      }),
+    ];
+
+    const summary = connectors.reduce(
+      (acc, connector) => {
+        acc.total += 1;
+        acc[connector.status] += 1;
+        return acc;
+      },
+      {
+        total: 0,
+        ready: 0,
+        partial: 0,
+        blocked: 0,
+      },
+    );
+
+    return {
+      entityId,
+      generatedAt: new Date().toISOString(),
+      summary,
+      connectors,
+      inputDocument: 'backend/docs/user-input-needed-2026-04-27.md',
+    };
+  }
+
+
   async getLinePayReconciliationReadiness(
     entityId: string,
     startDate?: Date,
@@ -3550,5 +3728,96 @@ export class ReportsService {
     }
 
     return (fallbackBrand || '未分類品牌').trim();
+  }
+
+  private buildConnectorReadiness(params: {
+    key: string;
+    label: string;
+    category: string;
+    envNames: string[];
+    credentialGroups: string[][];
+    optionalEnvNames: string[];
+    jsonEnvName?: string;
+    externalNeeds: string[];
+    nextAction: string;
+  }) {
+    const requiredConfig = params.envNames.map((name) => ({
+      name,
+      present: this.hasConfig(name),
+    }));
+    const credentialGroups = params.credentialGroups.map((group) => ({
+      names: group,
+      ready: group.every((name) => this.hasConfig(name)),
+    }));
+    const optionalConfig = params.optionalEnvNames.map((name) => ({
+      name,
+      present: this.hasConfig(name),
+    }));
+    const missingRequired = requiredConfig
+      .filter((item) => !item.present)
+      .map((item) => item.name);
+    const hasCredentialGroup =
+      !credentialGroups.length || credentialGroups.some((group) => group.ready);
+    const ready =
+      missingRequired.length === 0 &&
+      hasCredentialGroup &&
+      params.externalNeeds.length === 0;
+    const internallyConfigured =
+      missingRequired.length === 0 && hasCredentialGroup;
+    const status = ready ? 'ready' : internallyConfigured ? 'partial' : 'blocked';
+    const jsonSummary = params.jsonEnvName
+      ? this.summarizeJsonConfig(params.jsonEnvName)
+      : null;
+
+    return {
+      key: params.key,
+      label: params.label,
+      category: params.category,
+      status,
+      internallyConfigured,
+      missingRequired,
+      requiredConfig,
+      credentialGroups,
+      optionalConfig,
+      jsonSummary,
+      externalNeeds: params.externalNeeds,
+      nextAction: params.nextAction,
+    };
+  }
+
+  private hasConfig(name: string) {
+    return Boolean((this.configService.get<string>(name, '') || '').trim());
+  }
+
+  private summarizeJsonConfig(name: string) {
+    const raw = (this.configService.get<string>(name, '') || '').trim();
+    if (!raw) {
+      return {
+        name,
+        present: false,
+        valid: false,
+        count: 0,
+        error: null,
+      };
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        name,
+        present: true,
+        valid: true,
+        count: Array.isArray(parsed) ? parsed.length : 1,
+        error: null,
+      };
+    } catch (error: any) {
+      return {
+        name,
+        present: true,
+        valid: false,
+        count: 0,
+        error: error?.message || 'Invalid JSON',
+      };
+    }
   }
 }

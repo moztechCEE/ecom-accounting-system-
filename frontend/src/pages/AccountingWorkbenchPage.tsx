@@ -41,6 +41,8 @@ import * as XLSX from 'xlsx'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   dashboardService,
+  ConnectorReadiness,
+  ConnectorReadinessItem,
   DataCompletenessAudit,
   DataCompletenessAuditBlocker,
   DataCompletenessChannelBreakdown,
@@ -116,6 +118,12 @@ const riskMeta = (risk?: string) => {
   return { color: 'green' as const, label: '正常' }
 }
 
+const connectorStatusMeta = (status: ConnectorReadinessItem['status']) => {
+  if (status === 'ready') return { color: 'green' as const, label: '可啟用' }
+  if (status === 'partial') return { color: 'gold' as const, label: '等外部資料' }
+  return { color: 'red' as const, label: '缺設定' }
+}
+
 const AccountingWorkbenchPage: React.FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -146,6 +154,7 @@ const AccountingWorkbenchPage: React.FC = () => {
   const [receivables, setReceivables] = useState<ReceivableMonitorResponse | null>(null)
   const [b2bStatements, setB2BStatements] = useState<B2BStatementResponse | null>(null)
   const [dataCompleteness, setDataCompleteness] = useState<DataCompletenessAudit | null>(null)
+  const [connectorReadiness, setConnectorReadiness] = useState<ConnectorReadiness | null>(null)
   const [invoiceReadiness, setInvoiceReadiness] = useState<InvoiceProviderReadiness | null>(null)
   const [loadIssues, setLoadIssues] = useState<string[]>([])
 
@@ -164,6 +173,7 @@ const AccountingWorkbenchPage: React.FC = () => {
         arService.getReceivableMonitor({ entityId, startDate, endDate }),
         arService.getB2BStatements({ entityId, startDate, asOfDate: endDate }),
         dashboardService.getDataCompletenessAudit({ entityId, startDate, endDate }),
+        dashboardService.getConnectorReadiness({ entityId }),
         invoicingService.getReadiness(),
       ])
 
@@ -176,6 +186,7 @@ const AccountingWorkbenchPage: React.FC = () => {
         receivableResult,
         b2bResult,
         completenessResult,
+        connectorReadinessResult,
         invoiceReadinessResult,
       ] = sections
 
@@ -213,6 +224,12 @@ const AccountingWorkbenchPage: React.FC = () => {
         setDataCompleteness(completenessResult.value)
       } else {
         failedSections.push('資料完整度')
+      }
+
+      if (connectorReadinessResult.status === 'fulfilled') {
+        setConnectorReadiness(connectorReadinessResult.value)
+      } else {
+        failedSections.push('外部串接準備狀態')
       }
 
       if (invoiceReadinessResult.status === 'fulfilled') {
@@ -661,6 +678,8 @@ const AccountingWorkbenchPage: React.FC = () => {
   const completenessBlockers = dataCompleteness?.blockers || []
   const channelCompleteness = dataCompleteness?.channelBreakdown || []
   const completenessCoverage = dataCompleteness?.coverage
+  const connectorItems = connectorReadiness?.connectors || []
+  const connectorSummary = connectorReadiness?.summary
   const auditedOrderCount =
     Number(auditSummary?.auditedOrderCount || 0) ||
     Number(dataCompleteness?.totals.orders || 0)
@@ -706,6 +725,7 @@ const AccountingWorkbenchPage: React.FC = () => {
     !receivables &&
     !b2bStatements &&
     !dataCompleteness &&
+    !connectorReadiness &&
     !invoiceReadiness
   const missingInvoiceOrderCount = Number(dataCompleteness?.gaps.missingInvoiceOrders || 0)
   const invoiceLinkedRate = Number(dataCompleteness?.coverage.invoiceLinkedRate || 0)
@@ -1168,6 +1188,76 @@ const AccountingWorkbenchPage: React.FC = () => {
     },
   ]
 
+  const connectorColumns: ColumnsType<ConnectorReadinessItem> = [
+    {
+      title: '串接項目',
+      width: 260,
+      render: (_, record) => {
+        const meta = connectorStatusMeta(record.status)
+        return (
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-slate-900">{record.label}</span>
+              <Tag color={meta.color}>{meta.label}</Tag>
+            </div>
+            <div className="mt-1 text-xs text-slate-400">{record.category}</div>
+            {record.jsonSummary?.present ? (
+              <div className="mt-1 text-xs text-slate-500">
+                {record.jsonSummary.name}：
+                {record.jsonSummary.valid
+                  ? `${record.jsonSummary.count} 組設定`
+                  : `JSON 格式錯誤：${record.jsonSummary.error}`}
+              </div>
+            ) : null}
+          </div>
+        )
+      },
+    },
+    {
+      title: '內部設定缺口',
+      width: 300,
+      render: (_, record) => {
+        const hasReadyCredential =
+          record.credentialGroups.some((group) => group.ready) ||
+          !record.credentialGroups.length
+
+        return (
+          <Space size={[4, 4]} wrap>
+            {record.missingRequired.map((name) => (
+              <Tag key={name} color="red">{name}</Tag>
+            ))}
+            {!hasReadyCredential ? <Tag color="red">缺憑證組</Tag> : null}
+            {record.missingRequired.length === 0 && hasReadyCredential ? (
+              <Tag color="green">內部設定已具備</Tag>
+            ) : null}
+          </Space>
+        )
+      },
+    },
+    {
+      title: '需要你補的資料',
+      render: (_, record) => (
+        <div className="space-y-1">
+          {record.externalNeeds.map((need) => (
+            <div key={need} className="text-sm leading-6 text-slate-600">
+              {need}
+            </div>
+          ))}
+          {!record.externalNeeds.length ? (
+            <Text type="secondary">目前沒有外部資料 blocker。</Text>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      title: '下一步',
+      width: 320,
+      render: (_, record) => (
+        <Text className="text-sm leading-6 text-slate-600">{record.nextAction}</Text>
+      ),
+    },
+  ]
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -1603,6 +1693,43 @@ const AccountingWorkbenchPage: React.FC = () => {
 
       <Tabs
         items={[
+          {
+            key: 'connector-readiness',
+            label: (
+              <span><SafetyCertificateOutlined /> 串接準備</span>
+            ),
+            children: (
+              <Row gutter={[16, 16]}>
+                <Col span={24}>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <Card><Statistic title="串接項目" value={connectorSummary?.total || 0} /></Card>
+                    <Card><Statistic title="可啟用" value={connectorSummary?.ready || 0} /></Card>
+                    <Card><Statistic title="等外部資料" value={connectorSummary?.partial || 0} /></Card>
+                    <Card><Statistic title="缺設定" value={connectorSummary?.blocked || 0} /></Card>
+                  </div>
+                </Col>
+                <Col span={24}>
+                  <Alert
+                    showIcon
+                    type={(connectorSummary?.blocked || 0) > 0 ? 'warning' : 'info'}
+                    message="外部 API / 報表 / 密鑰缺口集中在這裡"
+                    description={`完整補資料清單已寫入 ${connectorReadiness?.inputDocument || 'backend/docs/user-input-needed-2026-04-27.md'}。這裡只顯示設定是否具備與下一步，不會顯示任何密鑰內容。`}
+                  />
+                </Col>
+                <Col span={24}>
+                  <Table
+                    rowKey="key"
+                    loading={loading}
+                    columns={connectorColumns}
+                    dataSource={connectorItems}
+                    pagination={false}
+                    scroll={{ x: 1100 }}
+                    className="rounded-3xl bg-white/60"
+                  />
+                </Col>
+              </Row>
+            ),
+          },
           {
             key: 'data-completeness',
             label: (

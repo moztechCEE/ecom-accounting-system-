@@ -28,6 +28,40 @@ export type DashboardSalesOverview = {
   total: DashboardPerformanceBucket;
 };
 
+export type ConnectorReadinessItem = {
+  key: string;
+  label: string;
+  category: string;
+  status: "ready" | "partial" | "blocked";
+  internallyConfigured: boolean;
+  missingRequired: string[];
+  requiredConfig: Array<{ name: string; present: boolean }>;
+  credentialGroups: Array<{ names: string[]; ready: boolean }>;
+  optionalConfig: Array<{ name: string; present: boolean }>;
+  jsonSummary?: {
+    name: string;
+    present: boolean;
+    valid: boolean;
+    count: number;
+    error?: string | null;
+  } | null;
+  externalNeeds: string[];
+  nextAction: string;
+};
+
+export type ConnectorReadiness = {
+  entityId: string;
+  generatedAt: string;
+  summary: {
+    total: number;
+    ready: number;
+    partial: number;
+    blocked: number;
+  };
+  connectors: ConnectorReadinessItem[];
+  inputDocument: string;
+};
+
 export type DashboardReconciliationItem = {
   paymentId: string;
   salesOrderId: string | null;
@@ -670,6 +704,19 @@ export const dashboardService = {
 
     const response = await api.get<DataCompletenessAudit>(
       `/reports/data-completeness-audit?${query.toString()}`,
+    );
+    return response.data;
+  },
+
+  async getConnectorReadiness(params?: {
+    entityId?: string;
+  }): Promise<ConnectorReadiness> {
+    const query = new URLSearchParams();
+    query.set("entityId", params?.entityId?.trim() || DEFAULT_ENTITY_ID);
+    query.set("_ts", String(Date.now()));
+
+    const response = await api.get<ConnectorReadiness>(
+      `/reports/connector-readiness?${query.toString()}`,
     );
     return response.data;
   },
