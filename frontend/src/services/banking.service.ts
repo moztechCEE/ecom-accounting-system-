@@ -56,10 +56,9 @@ export const bankingService = {
   },
 
   importTransactions: async (accountId: string, file: File) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    const response = await api.post(`/banking/accounts/${accountId}/import-statement`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const csvContent = await file.text()
+    const response = await api.post(`/banking/accounts/${accountId}/import-statement`, {
+      csvContent,
     })
     return response.data
   },

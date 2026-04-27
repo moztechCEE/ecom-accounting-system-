@@ -17,7 +17,8 @@ import {
   Statistic,
   Row,
   Col,
-  Space
+  Space,
+  Alert
 } from 'antd'
 import { 
   BankOutlined, 
@@ -25,7 +26,7 @@ import {
   PlusOutlined, 
   UploadOutlined,
   DollarOutlined,
-  WalletOutlined
+  DownloadOutlined
 } from '@ant-design/icons'
 import { GlassDrawer, GlassDrawerSection } from '../components/ui/GlassDrawer'
 import { motion } from 'framer-motion'
@@ -37,6 +38,30 @@ import { useAuth } from '../contexts/AuthContext'
 
 const { Title, Text } = Typography
 const DEFAULT_ENTITY_ID = import.meta.env.VITE_DEFAULT_ENTITY_ID?.trim() || 'tw-entity-001'
+
+const bankStatementTemplateRows = [
+  ['txn_date', 'value_date', 'description', 'credit', 'debit', 'amount', 'currency', 'reference_no', 'virtual_account_no'],
+  ['2026-04-27', '2026-04-27', '綠界撥款 3150241', '125000', '', '', 'TWD', 'ECPAY-3150241-20260427', ''],
+  ['2026-04-27', '2026-04-27', '廣告信用卡扣款 Google Ads', '', '8800', '', 'TWD', 'GOOGLE-ADS-20260427', ''],
+]
+
+const csvEscape = (value: string | number | null | undefined) => {
+  const text = String(value ?? '')
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
+const downloadCsv = (filename: string, rows: Array<Array<string | number>>) => {
+  const content = rows.map((row) => row.map(csvEscape).join(',')).join('\n')
+  const blob = new Blob([`\uFEFF${content}`], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
 
 const AccountsTab = () => {
   const { user } = useAuth()
@@ -332,7 +357,11 @@ const AccountsTab = () => {
 
 const TransactionsTab = () => {
   const [transactions, setTransactions] = useState<BankTransaction[]>([])
+  const [accounts, setAccounts] = useState<BankAccount[]>([])
   const [loading, setLoading] = useState(false)
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [selectedAccountId, setSelectedAccountId] = useState<string>()
+  const [importing, setImporting] = useState(false)
 
   const fetchTransactions = async () => {
     setLoading(true)
@@ -346,9 +375,55 @@ const TransactionsTab = () => {
     }
   }
 
+  const fetchAccounts = async () => {
+    try {
+      const result = await bankingService.getAccounts()
+      setAccounts(Array.isArray(result) ? result : [])
+      if (!selectedAccountId && Array.isArray(result) && result.length === 1) {
+        setSelectedAccountId(result[0].id)
+      }
+    } catch {
+      setAccounts([])
+    }
+  }
+
   useEffect(() => {
     fetchTransactions()
+    fetchAccounts()
   }, [])
+
+  const handleDownloadTemplate = () => {
+    downloadCsv('bank-statement-import-template.csv', bankStatementTemplateRows)
+  }
+
+  const handleOpenImport = () => {
+    if (!accounts.length) {
+      message.warning('請先建立銀行帳戶，再匯入對帳單')
+      return
+    }
+    setImportModalOpen(true)
+  }
+
+  const handleImportStatement = async (file: File) => {
+    if (!selectedAccountId) {
+      message.warning('請先選擇要匯入的銀行帳戶')
+      return Upload.LIST_IGNORE
+    }
+
+    setImporting(true)
+    try {
+      const result = await bankingService.importTransactions(selectedAccountId, file)
+      message.success(`已匯入 ${result.importedCount ?? 0} 筆銀行交易`)
+      setImportModalOpen(false)
+      await fetchTransactions()
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '匯入銀行對帳單失敗')
+    } finally {
+      setImporting(false)
+    }
+
+    return Upload.LIST_IGNORE
+  }
 
   const columns = [
     {
@@ -383,10 +458,22 @@ const TransactionsTab = () => {
     <div className="page-section-stack">
       <div className="flex justify-between items-center">
         <Title level={4} className="!mb-0 !font-light">交易明細</Title>
-        <Upload>
-          <Button icon={<UploadOutlined />}>匯入對帳單</Button>
-        </Upload>
+        <Space wrap>
+          <Button icon={<DownloadOutlined />} onClick={handleDownloadTemplate}>
+            下載匯入範本
+          </Button>
+          <Button type="primary" icon={<UploadOutlined />} onClick={handleOpenImport}>
+            匯入對帳單
+          </Button>
+        </Space>
       </div>
+
+      <Alert
+        type="info"
+        showIcon
+        message="銀行匯入會建立銀行交易並執行初步自動對帳"
+        description="支援欄位：交易日期 txn_date / date / 交易日期 / 入帳日、帳務日期 value_date、摘要 description / 摘要 / 說明、收入 credit / deposit / 收入 / 存入、支出 debit / withdrawal / 支出 / 提出、或單一金額 amount / 金額 / 交易金額。"
+      />
 
       <Table
         rowKey="id"
@@ -394,6 +481,48 @@ const TransactionsTab = () => {
         columns={columns}
         dataSource={transactions}
       />
+
+      <Modal
+        title="匯入銀行對帳單"
+        open={importModalOpen}
+        onCancel={() => setImportModalOpen(false)}
+        footer={null}
+        destroyOnClose
+      >
+        <div className="space-y-4">
+          <Alert
+            type="warning"
+            showIcon
+            message="匯入前請確認銀行帳戶"
+            description="這會新增銀行交易資料並嘗試與系統付款配對；若銀行格式不同，請先下載範本比對欄位。"
+          />
+
+          <Select
+            className="w-full"
+            placeholder="選擇銀行帳戶"
+            value={selectedAccountId}
+            onChange={setSelectedAccountId}
+            options={accounts.map((account) => ({
+              label: `${account.bankName} · ${account.accountName || account.accountNo}`,
+              value: account.id,
+            }))}
+          />
+
+          <Upload.Dragger
+            accept=".csv,.txt"
+            maxCount={1}
+            showUploadList={false}
+            disabled={importing}
+            beforeUpload={handleImportStatement}
+          >
+            <p className="ant-upload-drag-icon">
+              <UploadOutlined />
+            </p>
+            <p className="ant-upload-text">拖曳 CSV 到這裡，或點擊選擇檔案</p>
+            <p className="ant-upload-hint">系統會讀取文字內容送入銀行匯入端點，不會上傳到外部平台。</p>
+          </Upload.Dragger>
+        </div>
+      </Modal>
     </div>
   )
 }
