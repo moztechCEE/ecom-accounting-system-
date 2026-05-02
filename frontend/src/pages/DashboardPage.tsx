@@ -66,6 +66,11 @@ import timezone from "dayjs/plugin/timezone";
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
+  Cell,
+  PieChart,
+  Pie,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -114,6 +119,9 @@ interface RevenueTrendPoint {
   date: string;
   revenue: number;
   profit: number;
+  netProfit: number;
+  payoutNet: number;
+  adSpend: number;
 }
 // ─── 金額格式化 ──────────────────────────────────────────
 
@@ -123,6 +131,17 @@ const fmtMoney = (n: number) =>
 const fmtSignedMoney = (n: number) => `${n < 0 ? "-" : ""}${fmtMoney(Math.abs(n))}`;
 
 const fmtPct = (n: number | null | undefined) => `${Number(n || 0).toFixed(1)}%`;
+
+const fmtCompact = (n: number) => {
+  const value = Number(n || 0);
+  if (Math.abs(value) >= 100000000) {
+    return `${(value / 100000000).toFixed(1)}億`;
+  }
+  if (Math.abs(value) >= 10000) {
+    return `${(value / 10000).toFixed(0)}萬`;
+  }
+  return value.toLocaleString("zh-TW", { maximumFractionDigits: 0 });
+};
 
 function getRangeModeLabel(mode: RangeMode) {
   switch (mode) {
@@ -346,13 +365,13 @@ const DashboardPage: React.FC = () => {
             entityId: storedEntityId,
             startDate: since,
             endDate: until,
-            limit: 8,
+            limit: 24,
           }),
           dashboardService.getOrderReconciliationAudit({
             entityId: storedEntityId,
             startDate: since,
             endDate: until,
-            limit: 16,
+            limit: 24,
           }),
           arService.getReceivableMonitor({
             entityId: storedEntityId,
@@ -402,6 +421,9 @@ const DashboardPage: React.FC = () => {
               date: dayjs(p.startDate).tz(DASHBOARD_TZ).format('MM/DD'),
               revenue: p.revenue,
               profit: p.grossProfit,
+              netProfit: p.netProfit,
+              payoutNet: p.payoutNet,
+              adSpend: p.adSpendAmount,
             }))
           )
         }
@@ -630,6 +652,21 @@ const DashboardPage: React.FC = () => {
       net: b.payoutNet,
       color: getChannelColor(b.key),
     }))
+  const channelPieData = (() => {
+    const sorted = platformContribs
+      .filter((item) => item.net > 0)
+      .sort((a, b) => b.net - a.net)
+    const top = sorted.slice(0, 5)
+    const other = sorted.slice(5).reduce((sum, item) => sum + item.net, 0)
+    return other > 0
+      ? [...top, { platform: "其他通路", net: other, color: "#94a3b8" }]
+      : top
+  })()
+  const brandPieData = [
+    { name: "MOZTECH", value: mOZtechData.payoutNet, color: "#475569" },
+    { name: "BONSON", value: bonsonData.payoutNet, color: "#0f766e" },
+    { name: "團購", value: teamData.payoutNet, color: "#4f46e5" },
+  ].filter((item) => item.value > 0)
 
   // ─── 紅燈警示計數 ──────────────────────────────────────
   const criticalInventory = inventoryAlerts.filter(a => a.severity === 'critical').length;
@@ -706,6 +743,79 @@ const DashboardPage: React.FC = () => {
       tone: adSpendConnectorIncomplete && !adSpendTracked ? "warning" : "healthy",
     },
   ];
+  const riskPriorityRows = [
+    {
+      label: "待撥款 / 對帳",
+      count: Number(executive?.operations.pendingPayoutCount || 0),
+      color: "#dc2626",
+      helper: "付款已進來但尚未完成撥款或對帳。",
+      path: "/reconciliation/center",
+    },
+    {
+      label: "手續費待補",
+      count: Number(executive?.operations.feeBackfillCount || 0),
+      color: "#ea580c",
+      helper: "費率仍是預估或空白，會影響淨利判斷。",
+      path: "/accounting/workbench",
+    },
+    {
+      label: "缺發票",
+      count: missingInvoiceCount,
+      color: "#d97706",
+      helper: "成交後仍未完成發票流程。",
+      path: "/accounting/workbench?focus=missing-invoices",
+    },
+    {
+      label: "稽核異常",
+      count: financialAuditIssueCount,
+      color: "#be123c",
+      helper: "訂單、付款、發票或稅額有落差。",
+      path: "/reports",
+    },
+    {
+      label: "庫存警示",
+      count: inventoryAlerts.length,
+      color: "#0f766e",
+      helper: "缺貨或低庫存會直接影響銷售。",
+      path: "/inventory/products",
+    },
+    {
+      label: "廣告串接",
+      count: adSpendConnectorIncomplete && !adSpendTracked ? 1 : 0,
+      color: "#4f46e5",
+      helper: "廣告費尚未形成自動對帳鏈。",
+      path: "/accounting/workbench?focus=connector-readiness",
+    },
+  ]
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count)
+  const riskChartRows = riskPriorityRows.slice(0, 6)
+  const topRiskCount = riskChartRows[0]?.count || 0
+  const agingSource = [
+    ...invoiceItems.map((item) => ({
+      days: Number(item.daysSinceOrder || 0),
+      amount: Number(item.totalAmount || 0),
+    })),
+    ...auditItems
+      .filter((item) => item.severity !== "healthy")
+      .map((item) => ({
+        days: Math.max(dayjs().tz(DASHBOARD_TZ).diff(dayjs(item.orderDate).tz(DASHBOARD_TZ), "day"), 0),
+        amount: Number(item.grossAmount || 0),
+      })),
+  ]
+  const agingBuckets = [
+    { label: "0-2 天", min: 0, max: 2, color: "#22c55e" },
+    { label: "3-7 天", min: 3, max: 7, color: "#f59e0b" },
+    { label: "8-14 天", min: 8, max: 14, color: "#f97316" },
+    { label: "15 天+", min: 15, max: Infinity, color: "#dc2626" },
+  ].map((bucket) => {
+    const items = agingSource.filter((item) => item.days >= bucket.min && item.days <= bucket.max)
+    return {
+      ...bucket,
+      count: items.length,
+      amount: items.reduce((sum, item) => sum + item.amount, 0),
+    }
+  })
 
   return (
     <div className="page-section-stack page-section-stack--compact">
@@ -926,6 +1036,220 @@ const DashboardPage: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ── CEO 快速圖表：趨勢、占比、風險 ── */}
+      <div className="grid gap-4 xl:grid-cols-[1.25fr_0.85fr]">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">CEO Trend</div>
+              <div className="mt-1 text-lg font-semibold text-slate-900">30 天關鍵趨勢</div>
+              <div className="mt-1 text-sm text-slate-500">
+                同時看營收、淨利、淨入帳與廣告費，快速判斷成長是否真的變成現金。
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <Tag color="default">營收</Tag>
+              <Tag color="green">淨利</Tag>
+              <Tag color="blue">淨入帳</Tag>
+              <Tag color="gold">廣告費</Tag>
+            </div>
+          </div>
+          {revenueTrend.length > 0 ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={revenueTrend} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="ceoRevenueGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#475569" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#475569" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="ceoProfitGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#16a34a" stopOpacity={0.18} />
+                    <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="ceoCashGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.16} />
+                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#94a3b8" }} tickLine={false} axisLine={false} interval={4} />
+                <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickLine={false} axisLine={false}
+                  tickFormatter={(v) => fmtCompact(Number(v))} />
+                <RechartsTooltip
+                  formatter={(value: number, name: string) => [fmtMoney(Number(value)), name]}
+                  contentStyle={{ borderRadius: "10px", border: "1px solid rgba(0,0,0,0.08)", fontSize: "12px" }} />
+                <Area type="monotone" dataKey="revenue" stroke="#475569" strokeWidth={2} fill="url(#ceoRevenueGrad)" name="營收" />
+                <Area type="monotone" dataKey="netProfit" stroke="#16a34a" strokeWidth={2} fill="url(#ceoProfitGrad)" name="淨利" />
+                <Area type="monotone" dataKey="payoutNet" stroke="#2563eb" strokeWidth={2} fill="url(#ceoCashGrad)" name="淨入帳" />
+                <Area type="monotone" dataKey="adSpend" stroke="#d97706" strokeWidth={2} fill="transparent" name="廣告費" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-[260px] items-center justify-center text-sm text-slate-400">
+              尚無足夠趨勢資料
+            </div>
+          )}
+        </motion.div>
+
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-1">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Revenue Mix</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">錢從哪裡來</div>
+              </div>
+              <Tag className="rounded-full bg-slate-100 text-slate-500 border-slate-200 text-xs">淨入帳占比</Tag>
+            </div>
+            {channelPieData.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-[160px_1fr] xl:grid-cols-[150px_1fr]">
+                <ResponsiveContainer width="100%" height={150}>
+                  <PieChart>
+                    <Pie data={channelPieData as any[]} dataKey="net" nameKey="platform" innerRadius={48} outerRadius={70} paddingAngle={2}>
+                      {channelPieData.map((entry) => (
+                        <Cell key={entry.platform} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip formatter={(value: number) => fmtMoney(Number(value))} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-2">
+                  {channelPieData.map((item) => (
+                    <div key={item.platform} className="flex items-center gap-2 text-sm">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} />
+                      <span className="min-w-0 flex-1 truncate text-slate-600">{item.platform}</span>
+                      <span className="font-semibold text-slate-800">{fmtCompact(item.net)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-[150px] items-center justify-center rounded-2xl border border-dashed border-slate-200 text-sm text-slate-400">
+                尚無通路淨入帳資料
+              </div>
+            )}
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Brand Mix</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">品牌現金貢獻</div>
+              </div>
+            </div>
+            {brandPieData.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-[150px_1fr]">
+                <ResponsiveContainer width="100%" height={140}>
+                  <PieChart>
+                    <Pie data={brandPieData as any[]} dataKey="value" nameKey="name" innerRadius={44} outerRadius={64} paddingAngle={2}>
+                      {brandPieData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip formatter={(value: number) => fmtMoney(Number(value))} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-2">
+                  {brandPieData.map((item) => (
+                    <div key={item.name} className="flex items-center gap-2 text-sm">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} />
+                      <span className="flex-1 text-slate-600">{item.name}</span>
+                      <span className="font-semibold text-slate-800">{fmtCompact(item.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-[140px] items-center justify-center rounded-2xl border border-dashed border-slate-200 text-sm text-slate-400">
+                尚無品牌淨入帳資料
+              </div>
+            )}
+          </motion.div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Risk Priority</div>
+              <div className="mt-1 text-lg font-semibold text-slate-900">現在最需要注意的事</div>
+              <div className="mt-1 text-sm text-slate-500">依數量排序，CEO 先看最大阻塞，再交給財務或營運往下處理。</div>
+            </div>
+            <Button size="small" onClick={() => setFinanceOptionsOpen(true)}>展開財務選項</Button>
+          </div>
+          {riskChartRows.length > 0 ? (
+            <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={riskChartRows} layout="vertical" margin={{ top: 4, right: 20, left: 8, bottom: 4 }}>
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="label" type="category" width={92} tick={{ fontSize: 12, fill: "#64748b" }} tickLine={false} axisLine={false} />
+                  <RechartsTooltip formatter={(value: number) => [`${Number(value).toLocaleString("zh-TW")} 項`, "待處理"]} />
+                  <Bar dataKey="count" radius={[0, 8, 8, 0]}>
+                    {riskChartRows.map((entry) => (
+                      <Cell key={entry.label} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="space-y-3">
+                {riskChartRows.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => navigate(item.path)}
+                    className="w-full rounded-2xl border border-slate-100 bg-white/70 px-4 py-3 text-left transition hover:border-slate-300 hover:bg-white"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-slate-800">{item.label}</span>
+                      <span className="text-sm font-bold" style={{ color: item.color }}>{item.count.toLocaleString("zh-TW")}</span>
+                    </div>
+                    <Progress
+                      percent={topRiskCount ? Math.max(4, Math.round((item.count / topRiskCount) * 100)) : 0}
+                      strokeColor={item.color}
+                      trailColor="rgba(0,0,0,0.06)"
+                      size="small"
+                      showInfo={false}
+                      className="mt-2"
+                    />
+                    <div className="mt-1 text-xs leading-5 text-slate-500">{item.helper}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-[220px] items-center justify-center rounded-2xl border border-dashed border-slate-200 text-sm text-slate-400">
+              目前沒有高優先待處理項目
+            </div>
+          )}
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
+          <div className="mb-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Exception Aging</div>
+            <div className="mt-1 text-lg font-semibold text-slate-900">異常拖多久了</div>
+            <div className="mt-1 text-sm text-slate-500">以缺發票與對帳異常樣本估算，越紅代表越不能再拖。</div>
+          </div>
+          <div className="space-y-3">
+            {agingBuckets.map((bucket) => (
+              <div key={bucket.label} className="rounded-2xl border border-slate-100 bg-white/70 px-4 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-700">{bucket.label}</span>
+                  <span className="text-sm font-bold" style={{ color: bucket.color }}>{bucket.count} 件</span>
+                </div>
+                <Progress
+                  percent={agingSource.length ? Math.round((bucket.count / agingSource.length) * 100) : 0}
+                  strokeColor={bucket.color}
+                  trailColor="rgba(0,0,0,0.06)"
+                  size="small"
+                  showInfo={false}
+                />
+                <div className="mt-1 text-xs text-slate-400">影響金額 {fmtMoney(bucket.amount)}</div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
       </div>
 
       {/* ── 核心 KPI（4 張，全部真實資料）── */}
