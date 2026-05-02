@@ -942,23 +942,25 @@ export class BankingService {
 
     const lines = text
       .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
+      .map((line) => line.replace(/\r$/, ''))
+      .filter((line) => line.trim().length > 0);
 
     if (!lines.length) {
       return [] as Array<Record<string, string>>;
     }
 
-    const delimiter = lines[0].includes('\t')
+    const delimiter = this.countDelimiter(lines[0], '\t') > 0
       ? '\t'
-      : lines[0].includes(';')
+      : this.countDelimiter(lines[0], ';') > this.countDelimiter(lines[0], ',')
         ? ';'
         : ',';
 
-    const headers = lines[0].split(delimiter).map((header) => this.normalizeHeader(header));
+    const headers = this.parseDelimitedLine(lines[0], delimiter).map((header) =>
+      this.normalizeHeader(header),
+    );
 
     return lines.slice(1).map((line) => {
-      const values = line.split(delimiter).map((value) => value.trim());
+      const values = this.parseDelimitedLine(line, delimiter);
       return headers.reduce(
         (acc, header, index) => {
           acc[header] = values[index] || '';
@@ -969,8 +971,67 @@ export class BankingService {
     });
   }
 
+  private countDelimiter(line: string, delimiter: string) {
+    let count = 0;
+    let inQuotes = false;
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      const next = line[index + 1];
+      if (char === '"' && next === '"') {
+        index += 1;
+        continue;
+      }
+      if (char === '"') {
+        inQuotes = !inQuotes;
+        continue;
+      }
+      if (!inQuotes && char === delimiter) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  private parseDelimitedLine(line: string, delimiter: string) {
+    const values: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      const next = line[index + 1];
+
+      if (char === '"' && next === '"') {
+        current += '"';
+        index += 1;
+        continue;
+      }
+
+      if (char === '"') {
+        inQuotes = !inQuotes;
+        continue;
+      }
+
+      if (!inQuotes && char === delimiter) {
+        values.push(current.trim());
+        current = '';
+        continue;
+      }
+
+      current += char;
+    }
+
+    values.push(current.trim());
+    return values;
+  }
+
   private normalizeHeader(value: string) {
-    return value.trim().replace(/^"|"$/g, '').toLowerCase().replace(/\s+/g, '_');
+    return value
+      .trim()
+      .replace(/^\uFEFF/, '')
+      .replace(/^"|"$/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, '_');
   }
 
   private pickField(row: Record<string, string>, candidates: string[]) {
@@ -985,6 +1046,22 @@ export class BankingService {
 
   private parseDateValue(value: string) {
     const normalized = value.trim().replace(/\./g, '-').replace(/\//g, '-');
+    const dateParts = normalized.match(/^(\d{2,4})-(\d{1,2})-(\d{1,2})$/);
+    if (dateParts) {
+      const yearRaw = Number(dateParts[1]);
+      const year = yearRaw < 1911 ? yearRaw + 1911 : yearRaw;
+      const month = Number(dateParts[2]);
+      const day = Number(dateParts[3]);
+      const parsedDate = new Date(year, month - 1, day);
+      if (
+        parsedDate.getFullYear() === year &&
+        parsedDate.getMonth() === month - 1 &&
+        parsedDate.getDate() === day
+      ) {
+        return parsedDate;
+      }
+    }
+
     const parsed = new Date(normalized);
     if (Number.isNaN(parsed.getTime())) {
       throw new BadRequestException(`Invalid date value: ${value}`);
@@ -994,13 +1071,20 @@ export class BankingService {
 
   private parseAmountValue(value?: string) {
     if (!value) return null;
-    const normalized = value.replace(/,/g, '').trim();
+    const raw = value.trim();
+    const isParenthesesNegative = /^\(.*\)$/.test(raw);
+    const isTrailingNegative = /-$/.test(raw);
+    const normalized = raw
+      .replace(/[(),]/g, '')
+      .replace(/(?:nt\$|twd|n\$|\$|元)/gi, '')
+      .replace(/\s+/g, '')
+      .replace(/-$/, '');
     if (!normalized) return null;
     const parsed = Number(normalized);
     if (Number.isNaN(parsed)) {
       throw new BadRequestException(`Invalid amount value: ${value}`);
     }
-    return parsed;
+    return isParenthesesNegative || isTrailingNegative ? -Math.abs(parsed) : parsed;
   }
 
   private startOfDay(date: Date) {
