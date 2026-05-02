@@ -17,14 +17,18 @@ import {
   Progress,
 } from "antd";
 import {
+  AlertOutlined,
   BankOutlined,
+  CreditCardOutlined,
   ClockCircleOutlined,
   DollarOutlined,
   FallOutlined,
   FileTextOutlined,
+  LineChartOutlined,
   RiseOutlined,
   ShoppingOutlined,
   SyncOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -46,6 +50,7 @@ import {
 import { salesService } from "../services/sales.service";
 import {
   dashboardService,
+  ConnectorReadiness,
   DashboardExecutiveOverview,
   DashboardOperationsHub,
   DashboardPerformanceBucket,
@@ -113,6 +118,25 @@ interface RevenueTrendPoint {
 
 const fmtMoney = (n: number) =>
   n.toLocaleString("zh-TW", { minimumFractionDigits: 0 }) + " 元";
+
+const fmtSignedMoney = (n: number) => `${n < 0 ? "-" : ""}${fmtMoney(Math.abs(n))}`;
+
+const fmtPct = (n: number | null | undefined) => `${Number(n || 0).toFixed(1)}%`;
+
+function getRangeModeLabel(mode: RangeMode) {
+  switch (mode) {
+    case "today":
+      return "今日";
+    case "yesterday":
+      return "昨日";
+    case "last7d":
+      return "近 7 天";
+    case "custom":
+      return "自訂區間";
+    default:
+      return "全部期間";
+  }
+}
 
 function resolveRange(
   mode: RangeMode,
@@ -256,6 +280,9 @@ const DashboardPage: React.FC = () => {
     monthlyEarned: 0,
   })
   const [managementSummary, setManagementSummary] = useState<ManagementSummary | null>(null)
+  const [rangeManagementSummary, setRangeManagementSummary] = useState<ManagementSummary | null>(null)
+  const [todayManagementSummary, setTodayManagementSummary] = useState<ManagementSummary | null>(null)
+  const [connectorReadiness, setConnectorReadiness] = useState<ConnectorReadiness | null>(null)
 
 
   const [revenueTrend, setRevenueTrend] = useState<RevenueTrendPoint[]>([])
@@ -277,6 +304,8 @@ const DashboardPage: React.FC = () => {
         // 30天趨勢 & 損益：固定取最近30天日報，不跟著 rangeMode 走
         const trend30Start = dayjs().tz(DASHBOARD_TZ).subtract(29, 'day').startOf('day').toISOString()
         const trend30End = dayjs().tz(DASHBOARD_TZ).endOf('day').toISOString()
+        const todayStart = dayjs().tz(DASHBOARD_TZ).startOf('day').toISOString()
+        const todayEnd = dayjs().tz(DASHBOARD_TZ).endOf('day').toISOString()
         // AR monitor is intentionally bounded. The backend can be slow or fail on
         // unbounded history, so the dashboard uses the selected range when present,
         // otherwise the same rolling 90-day window as the AR page.
@@ -292,6 +321,9 @@ const DashboardPage: React.FC = () => {
           auditData,
           receivableMonitorData,
           mgmtSummaryData,
+          rangeMgmtSummaryData,
+          todayMgmtSummaryData,
+          connectorReadinessData,
         ] = await Promise.all([
           dashboardService.getSalesOverview({
             entityId: storedEntityId,
@@ -331,6 +363,21 @@ const DashboardPage: React.FC = () => {
             startDate: trend30Start,
             endDate: trend30End,
           }),
+          dashboardService.getManagementSummary({
+            entityId: storedEntityId,
+            groupBy: rangeMode === 'all' ? 'month' : 'day',
+            startDate: since,
+            endDate: until,
+          }),
+          dashboardService.getManagementSummary({
+            entityId: storedEntityId,
+            groupBy: 'day',
+            startDate: todayStart,
+            endDate: todayEnd,
+          }),
+          dashboardService.getConnectorReadiness({
+            entityId: storedEntityId,
+          }),
         ]);
 
         if (ignore) return;
@@ -342,6 +389,9 @@ const DashboardPage: React.FC = () => {
         setAudit(auditData);
         setReceivableMonitor(receivableMonitorData);
         setManagementSummary(mgmtSummaryData);
+        setRangeManagementSummary(rangeMgmtSummaryData);
+        setTodayManagementSummary(todayMgmtSummaryData);
+        setConnectorReadiness(connectorReadinessData);
 
         // 30天走勢圖 — 真實日報資料
         if (mgmtSummaryData?.periods?.length) {
@@ -354,9 +404,9 @@ const DashboardPage: React.FC = () => {
           )
         }
 
-        // 本週損益 — 使用本次查詢範圍的彙總
-        if (mgmtSummaryData?.summary) {
-          const s = mgmtSummaryData.summary
+        // 本期損益 — 使用本次查詢範圍的彙總，不再拿 30 天趨勢資料充當今日數字
+        if (rangeMgmtSummaryData?.summary) {
+          const s = rangeMgmtSummaryData.summary
           setWeeklyPnl({
             revenue: s.revenue,
             cost: s.estimatedCogs + s.operatingExpenses,
@@ -525,6 +575,10 @@ const DashboardPage: React.FC = () => {
   const arSummary = receivableMonitor?.summary;
   const auditSummary = audit?.summary;
   const auditItems = audit?.items || [];
+  const rangeLabel = getRangeModeLabel(rangeMode);
+  const todayFinancial = todayManagementSummary?.summary;
+  const rangeFinancial = rangeManagementSummary?.summary;
+  const adConnector = connectorReadiness?.connectors.find((item) => item.key === "ad-spend") || null;
   const missingInvoiceCount =
     Number(invoiceSummary?.pendingCount || 0) + Number(invoiceSummary?.eligibleCount || 0);
 
@@ -581,6 +635,25 @@ const DashboardPage: React.FC = () => {
   const overdueAR = arSummary?.overdueReceivableCount || 0;
   const overpaidAR = arSummary?.overpaidReceivableCount || 0;
   const overpaidARAmount = arSummary?.overpaidReceivableAmount || 0;
+  const financialAuditIssueCount = auditSummary?.anomalousOrderCount || 0;
+  const adSpendAmount = rangeFinancial?.adSpendAmount || 0;
+  const adSpendCount = rangeFinancial?.adSpendCount || 0;
+  const adSpendTracked = adSpendCount > 0;
+  const adSpendConnectorIncomplete = adConnector?.status !== "ready";
+  const payableExposure = Math.max(
+    Number(finance.apOutstanding || 0),
+    Number(executive?.expenses?.approvedUnpaidAmount || 0),
+  );
+  const cashRiskAmount =
+    Number(arSummary?.overdueReceivableAmount || 0) +
+    Number(overpaidARAmount || 0) +
+    payableExposure;
+  const financeWatchCount =
+    missingInvoiceCount +
+    financialAuditIssueCount +
+    overdueAR +
+    overpaidAR +
+    (adSpendConnectorIncomplete && !adSpendTracked ? 1 : 0);
   const criticalCount = criticalInventory + criticalAnomalies + overdueAR + overpaidAR;
 
   return (
@@ -701,6 +774,105 @@ const DashboardPage: React.FC = () => {
             <Button type="primary" onClick={() => navigate("/accounting/workbench?focus=missing-invoices")}>
               處理缺發票
             </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── CEO 財務管制：現金流、淨利、廣告與異常 ── */}
+      <div className="glass-card p-6">
+        <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">CEO Control Tower</div>
+            <div className="mt-1 text-lg font-semibold text-slate-900">財務管制與營運風險</div>
+            <div className="mt-1 text-sm text-slate-500">
+              今日淨利、現金流壓力、廣告花費與需要財務追蹤的異常集中在這裡。
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button icon={<AlertOutlined />} onClick={() => navigate("/accounting/workbench?focus=missing-invoices")}>
+              財務選項
+            </Button>
+            <Button icon={<LineChartOutlined />} onClick={() => navigate("/reconciliation/center")}>
+              對帳中心
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className={`rounded-2xl border px-5 py-4 ${
+            (todayFinancial?.netProfit || 0) < 0 ? "border-red-200 bg-red-50/70" : "border-emerald-100 bg-emerald-50/60"
+          }`}>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm">
+                <DollarOutlined />
+              </div>
+              <Tag color={(todayFinancial?.netProfit || 0) < 0 ? "red" : "green"}>今天</Tag>
+            </div>
+            <div className="text-xs text-slate-500">今天淨利</div>
+            <div className={`mt-1 text-2xl font-bold ${
+              (todayFinancial?.netProfit || 0) < 0 ? "text-red-700" : "text-slate-900"
+            }`}>
+              {fmtSignedMoney(todayFinancial?.netProfit || 0)}
+            </div>
+            <div className="mt-2 text-xs leading-5 text-slate-500">
+              營收 {fmtMoney(todayFinancial?.revenue || 0)} · 淨利率 {fmtPct(todayFinancial?.netMarginPct)}
+            </div>
+          </div>
+
+          <div className={`rounded-2xl border px-5 py-4 ${
+            adSpendConnectorIncomplete && !adSpendTracked ? "border-amber-200 bg-amber-50/70" : "border-slate-100 bg-white/60"
+          }`}>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-indigo-700 shadow-sm">
+                <CreditCardOutlined />
+              </div>
+              <Tag color={adSpendTracked ? "blue" : adSpendConnectorIncomplete ? "gold" : "green"}>
+                {adSpendTracked ? "已入費用" : adSpendConnectorIncomplete ? "待串接" : "已設定"}
+              </Tag>
+            </div>
+            <div className="text-xs text-slate-500">{rangeLabel}廣告花費</div>
+            <div className="mt-1 text-2xl font-bold text-slate-900">
+              {adSpendTracked ? fmtMoney(adSpendAmount) : "待串接"}
+            </div>
+            <div className="mt-2 text-xs leading-5 text-slate-500">
+              {adSpendTracked
+                ? `${adSpendCount} 筆廣告相關費用；Meta / Google / TikTok API 仍可補自動化。`
+                : adConnector?.nextAction || "請提供廣告平台 API、帳戶 mapping 與扣款來源。"}
+            </div>
+          </div>
+
+          <div className={`rounded-2xl border px-5 py-4 ${
+            cashRiskAmount > 0 ? "border-rose-200 bg-rose-50/70" : "border-slate-100 bg-white/60"
+          }`}>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-rose-700 shadow-sm">
+                <BankOutlined />
+              </div>
+              <Tag color={cashRiskAmount > 0 ? "red" : "green"}>現金流</Tag>
+            </div>
+            <div className="text-xs text-slate-500">現金流風險金額</div>
+            <div className="mt-1 text-2xl font-bold text-slate-900">{fmtMoney(cashRiskAmount)}</div>
+            <div className="mt-2 text-xs leading-5 text-slate-500">
+              逾期 AR {overdueAR} 筆 · 超收 {overpaidAR} 筆 · 待付款費用 {fmtMoney(payableExposure)}
+            </div>
+          </div>
+
+          <div className={`rounded-2xl border px-5 py-4 ${
+            financeWatchCount > 0 ? "border-red-200 bg-red-50/70" : "border-slate-100 bg-white/60"
+          }`}>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-red-700 shadow-sm">
+                <WarningOutlined />
+              </div>
+              <Tag color={financeWatchCount > 0 ? "red" : "green"}>
+                {financeWatchCount > 0 ? "需追蹤" : "正常"}
+              </Tag>
+            </div>
+            <div className="text-xs text-slate-500">財務異常追蹤</div>
+            <div className="mt-1 text-2xl font-bold text-slate-900">{financeWatchCount} 項</div>
+            <div className="mt-2 text-xs leading-5 text-slate-500">
+              缺發票 {missingInvoiceCount} · 訂單稽核 {financialAuditIssueCount} · 廣告串接 {adSpendConnectorIncomplete && !adSpendTracked ? "待補" : "可追"}
+            </div>
           </div>
         </div>
       </div>

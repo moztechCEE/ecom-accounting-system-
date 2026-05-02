@@ -348,6 +348,8 @@ export type ManagementSummaryPeriod = {
   reconciledCount: number;
   expenseCount: number;
   fallbackExpenseCount: number;
+  adSpendAmount: number;
+  adSpendCount: number;
   openArAmount: number;
   arInvoiceCount: number;
   collectedRatePct: number;

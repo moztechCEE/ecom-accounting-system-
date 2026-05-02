@@ -2673,6 +2673,14 @@ export class ReportsService {
           select: {
             expenseDate: true,
             totalAmountOriginal: true,
+            description: true,
+            items: {
+              select: {
+                accountCode: true,
+                amountOriginal: true,
+                description: true,
+              },
+            },
           },
         }),
         this.prisma.expenseRequest.findMany({
@@ -2684,6 +2692,39 @@ export class ReportsService {
           select: {
             updatedAt: true,
             amountOriginal: true,
+            description: true,
+            reimbursementItem: {
+              select: {
+                name: true,
+                description: true,
+                keywords: true,
+                account: {
+                  select: {
+                    code: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+            suggestedItem: {
+              select: {
+                name: true,
+                description: true,
+                keywords: true,
+              },
+            },
+            suggestedAccount: {
+              select: {
+                code: true,
+                name: true,
+              },
+            },
+            finalAccount: {
+              select: {
+                code: true,
+                name: true,
+              },
+            },
           },
         }),
         this.prisma.arInvoice.findMany({
@@ -2724,6 +2765,8 @@ export class ReportsService {
       reconciledCount: number;
       expenseCount: number;
       fallbackExpenseCount: number;
+      adSpendAmount: number;
+      adSpendCount: number;
       openArAmount: number;
       arInvoiceCount: number;
       collectedRatePct: number;
@@ -2763,6 +2806,8 @@ export class ReportsService {
         reconciledCount: 0,
         expenseCount: 0,
         fallbackExpenseCount: 0,
+        adSpendAmount: 0,
+        adSpendCount: 0,
         openArAmount: 0,
         arInvoiceCount: 0,
         collectedRatePct: 0,
@@ -2807,12 +2852,49 @@ export class ReportsService {
       const period = ensurePeriod(expense.expenseDate);
       period.actualExpenseAmount += Number(expense.totalAmountOriginal || 0);
       period.expenseCount += 1;
+      const matchingAdItems = expense.items.filter((item) =>
+        this.isAdvertisingSpend([
+          expense.description,
+          item.description,
+          item.accountCode,
+        ]),
+      );
+      if (matchingAdItems.length > 0) {
+        period.adSpendAmount += matchingAdItems.reduce(
+          (sum, item) => sum + Number(item.amountOriginal || 0),
+          0,
+        );
+        period.adSpendCount += matchingAdItems.length;
+      } else if (this.isAdvertisingSpend([expense.description])) {
+        period.adSpendAmount += Number(expense.totalAmountOriginal || 0);
+        period.adSpendCount += 1;
+      }
     }
 
     for (const expenseRequest of expenseRequests) {
       const period = ensurePeriod(expenseRequest.updatedAt);
       period.fallbackExpenseAmount += Number(expenseRequest.amountOriginal || 0);
       period.fallbackExpenseCount += 1;
+      if (
+        this.isAdvertisingSpend([
+          expenseRequest.description,
+          expenseRequest.reimbursementItem?.name,
+          expenseRequest.reimbursementItem?.description,
+          expenseRequest.reimbursementItem?.keywords,
+          expenseRequest.reimbursementItem?.account?.code,
+          expenseRequest.reimbursementItem?.account?.name,
+          expenseRequest.suggestedItem?.name,
+          expenseRequest.suggestedItem?.description,
+          expenseRequest.suggestedItem?.keywords,
+          expenseRequest.suggestedAccount?.code,
+          expenseRequest.suggestedAccount?.name,
+          expenseRequest.finalAccount?.code,
+          expenseRequest.finalAccount?.name,
+        ])
+      ) {
+        period.adSpendAmount += Number(expenseRequest.amountOriginal || 0);
+        period.adSpendCount += 1;
+      }
     }
 
     for (const invoice of arInvoices) {
@@ -2883,6 +2965,8 @@ export class ReportsService {
         expenseCount: acc.expenseCount + period.expenseCount,
         fallbackExpenseCount:
           acc.fallbackExpenseCount + period.fallbackExpenseCount,
+        adSpendAmount: acc.adSpendAmount + period.adSpendAmount,
+        adSpendCount: acc.adSpendCount + period.adSpendCount,
         openArAmount: acc.openArAmount + period.openArAmount,
         arInvoiceCount: acc.arInvoiceCount + period.arInvoiceCount,
       }),
@@ -2905,6 +2989,8 @@ export class ReportsService {
         reconciledCount: 0,
         expenseCount: 0,
         fallbackExpenseCount: 0,
+        adSpendAmount: 0,
+        adSpendCount: 0,
         openArAmount: 0,
         arInvoiceCount: 0,
       },
@@ -3577,6 +3663,30 @@ export class ReportsService {
       return 0;
     }
     return Number(((value / base) * 100).toFixed(2));
+  }
+
+  private isAdvertisingSpend(values: Array<string | null | undefined>) {
+    const text = values.filter(Boolean).join(' ').toLowerCase();
+    if (!text.trim()) {
+      return false;
+    }
+
+    return [
+      /facebook/,
+      /instagram/,
+      /\bmeta\b/,
+      /google\s*ads?/,
+      /adwords/,
+      /youtube/,
+      /tiktok/,
+      /廣告/,
+      /廣告費/,
+      /投放/,
+      /關鍵字/,
+      /行銷/,
+      /marketing/,
+      /\bads?\b/,
+    ].some((pattern) => pattern.test(text));
   }
 
   private resolvePeriodDescriptor(
