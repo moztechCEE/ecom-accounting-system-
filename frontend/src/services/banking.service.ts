@@ -62,4 +62,12 @@ export const bankingService = {
     })
     return response.data
   },
+
+  previewTransactionsImport: async (accountId: string, file: File) => {
+    const csvContent = await file.text()
+    const response = await api.post(`/banking/accounts/${accountId}/import-statement/preview`, {
+      csvContent,
+    })
+    return response.data
+  },
 }

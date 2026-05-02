@@ -10,6 +10,22 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { BankingRepository } from './banking.repository';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
+interface ParsedBankStatementTransaction {
+  rowNumber: number;
+  txnDate: Date;
+  valueDate: Date;
+  amountOriginal: number;
+  amountCurrency: string;
+  descriptionRaw: string;
+  referenceNo: string | null;
+  virtualAccountNo: string | null;
+}
+
+interface SkippedBankStatementRow {
+  rowNumber: number;
+  reason: string;
+}
+
 /**
  * 銀行管理服務
  *
@@ -252,67 +268,22 @@ export class BankingService {
   async importBankStatement(user: any, bankAccountId: string, csvFile: Buffer) {
     await this.getBankAccount(bankAccountId, user);
 
-    const rows = this.parseDelimitedRows(csvFile);
-    if (!rows.length) {
-      throw new BadRequestException('Bank statement is empty');
-    }
+    const parsed = this.parseBankStatementTransactions(csvFile);
 
     const batchId = `BANK-IMPORT-${Date.now()}-${randomUUID().slice(0, 8)}`;
     let imported = 0;
 
-    for (const row of rows) {
-      const txnDateValue = this.pickField(row, [
-        'txn_date',
-        'date',
-        '交易日期',
-        '入帳日',
-      ]);
-      const descriptionRaw =
-        this.pickField(row, ['description', '摘要', '說明', 'memo']) || '';
-
-      if (!txnDateValue || !descriptionRaw.trim()) {
-        continue;
-      }
-
-      const txnDate = this.parseDateValue(txnDateValue);
-      const valueDate = this.parseDateValue(
-        this.pickField(row, ['value_date', '帳務日期', 'value date']) ||
-          txnDateValue,
-      );
-
-      const credit = this.parseAmountValue(
-        this.pickField(row, ['credit', 'deposit', '收入', '存入']),
-      );
-      const debit = this.parseAmountValue(
-        this.pickField(row, ['debit', 'withdrawal', '支出', '提出']),
-      );
-      const amount =
-        credit !== null
-          ? credit
-          : debit !== null
-            ? -Math.abs(debit)
-            : this.parseAmountValue(
-                this.pickField(row, ['amount', '金額', '交易金額']),
-              );
-
-      if (amount === null) {
-        continue;
-      }
-
+    for (const transaction of parsed.transactions) {
       await this.createBankTransaction(
         {
           bankAccountId,
-          txnDate,
-          valueDate,
-          amountOriginal: amount,
-          amountCurrency: this.pickField(row, ['currency', '幣別']) || 'TWD',
-          descriptionRaw,
-          referenceNo:
-            this.pickField(row, ['reference_no', 'reference', '參考號碼']) ||
-            null,
-          virtualAccountNo:
-            this.pickField(row, ['virtual_account_no', 'virtual account', '虛擬帳號']) ||
-            null,
+          txnDate: transaction.txnDate,
+          valueDate: transaction.valueDate,
+          amountOriginal: transaction.amountOriginal,
+          amountCurrency: transaction.amountCurrency,
+          descriptionRaw: transaction.descriptionRaw,
+          referenceNo: transaction.referenceNo,
+          virtualAccountNo: transaction.virtualAccountNo,
           batchId,
         },
         user,
@@ -331,7 +302,33 @@ export class BankingService {
       bankAccountId,
       batchId,
       importedCount: imported,
+      skippedCount: parsed.skippedRows.length,
+      skippedRows: parsed.skippedRows.slice(0, 20),
       reconciliation,
+    };
+  }
+
+  async previewBankStatement(user: any, bankAccountId: string, csvFile: Buffer) {
+    await this.getBankAccount(bankAccountId, user);
+    const parsed = this.parseBankStatementTransactions(csvFile);
+
+    return {
+      success: true,
+      bankAccountId,
+      totalRows: parsed.totalRows,
+      importableCount: parsed.transactions.length,
+      skippedCount: parsed.skippedRows.length,
+      sampleRows: parsed.transactions.slice(0, 10).map((row) => ({
+        rowNumber: row.rowNumber,
+        txnDate: row.txnDate.toISOString(),
+        valueDate: row.valueDate.toISOString(),
+        amountOriginal: row.amountOriginal,
+        amountCurrency: row.amountCurrency,
+        descriptionRaw: row.descriptionRaw,
+        referenceNo: row.referenceNo,
+        virtualAccountNo: row.virtualAccountNo,
+      })),
+      skippedRows: parsed.skippedRows.slice(0, 20),
     };
   }
 
@@ -969,6 +966,107 @@ export class BankingService {
         {} as Record<string, string>,
       );
     });
+  }
+
+  private parseBankStatementTransactions(csvFile: Buffer): {
+    totalRows: number;
+    transactions: ParsedBankStatementTransaction[];
+    skippedRows: SkippedBankStatementRow[];
+  } {
+    const rows = this.parseDelimitedRows(csvFile);
+    if (!rows.length) {
+      throw new BadRequestException('Bank statement is empty');
+    }
+
+    const transactions: ParsedBankStatementTransaction[] = [];
+    const skippedRows: SkippedBankStatementRow[] = [];
+
+    rows.forEach((row, index) => {
+      const rowNumber = index + 2;
+      try {
+        const txnDateValue = this.pickField(row, [
+          'txn_date',
+          'date',
+          '交易日期',
+          '入帳日',
+        ]);
+        const descriptionRaw =
+          this.pickField(row, ['description', '摘要', '說明', 'memo']) || '';
+
+        if (!txnDateValue) {
+          skippedRows.push({ rowNumber, reason: 'missing transaction date' });
+          return;
+        }
+        if (!descriptionRaw.trim()) {
+          skippedRows.push({ rowNumber, reason: 'missing description' });
+          return;
+        }
+
+        const txnDate = this.parseDateValue(txnDateValue);
+        const valueDate = this.parseDateValue(
+          this.pickField(row, ['value_date', '帳務日期', 'value date']) ||
+            txnDateValue,
+        );
+
+        const credit = this.parseAmountValue(
+          this.pickField(row, ['credit', 'deposit', '收入', '存入']),
+        );
+        const debit = this.parseAmountValue(
+          this.pickField(row, ['debit', 'withdrawal', '支出', '提出']),
+        );
+        const amount =
+          credit !== null
+            ? credit
+            : debit !== null
+              ? -Math.abs(debit)
+              : this.parseAmountValue(
+                  this.pickField(row, ['amount', '金額', '交易金額']),
+                );
+
+        if (amount === null) {
+          skippedRows.push({ rowNumber, reason: 'missing amount' });
+          return;
+        }
+
+        transactions.push({
+          rowNumber,
+          txnDate,
+          valueDate,
+          amountOriginal: amount,
+          amountCurrency: this.pickField(row, ['currency', '幣別']) || 'TWD',
+          descriptionRaw,
+          referenceNo:
+            this.pickField(row, ['reference_no', 'reference', '參考號碼']) ||
+            null,
+          virtualAccountNo:
+            this.pickField(row, [
+              'virtual_account_no',
+              'virtual account',
+              '虛擬帳號',
+            ]) || null,
+        });
+      } catch (error) {
+        skippedRows.push({
+          rowNumber,
+          reason: error instanceof Error ? error.message : 'invalid row',
+        });
+      }
+    });
+
+    if (!transactions.length) {
+      const firstReason = skippedRows[0]?.reason;
+      throw new BadRequestException(
+        firstReason
+          ? `No importable bank statement rows found: ${firstReason}`
+          : 'No importable bank statement rows found',
+      );
+    }
+
+    return {
+      totalRows: rows.length,
+      transactions,
+      skippedRows,
+    };
   }
 
   private countDelimiter(line: string, delimiter: string) {

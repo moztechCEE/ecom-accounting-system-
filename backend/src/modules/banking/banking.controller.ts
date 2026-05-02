@@ -123,8 +123,23 @@ export class BankingController {
     @CurrentUser() user: any,
     @Param('id') id: string,
     @Body() data: any,
-  ) {
+  ): Promise<any> {
     return this.bankingService.importBankStatement(
+      user,
+      id,
+      Buffer.from(data.csvContent || '', 'utf8'),
+    );
+  }
+
+  @Post('accounts/:id/import-statement/preview')
+  @ApiOperation({ summary: '預覽銀行對帳單匯入結果，不寫入資料' })
+  @ApiResponse({ status: 201, description: '成功解析對帳單預覽' })
+  async previewStatement(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() data: any,
+  ): Promise<any> {
+    return this.bankingService.previewBankStatement(
       user,
       id,
       Buffer.from(data.csvContent || '', 'utf8'),

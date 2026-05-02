@@ -45,6 +45,24 @@ const bankStatementTemplateRows = [
   ['2026-04-27', '2026-04-27', '廣告信用卡扣款 Google Ads', '', '8800', '', 'TWD', 'GOOGLE-ADS-20260427', ''],
 ]
 
+interface BankStatementPreview {
+  totalRows: number
+  importableCount: number
+  skippedCount: number
+  sampleRows: Array<{
+    rowNumber: number
+    txnDate: string
+    amountOriginal: number
+    amountCurrency: string
+    descriptionRaw: string
+    referenceNo?: string | null
+  }>
+  skippedRows: Array<{
+    rowNumber: number
+    reason: string
+  }>
+}
+
 const csvEscape = (value: string | number | null | undefined) => {
   const text = String(value ?? '')
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
@@ -362,6 +380,9 @@ const TransactionsTab = () => {
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState<string>()
   const [importing, setImporting] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
+  const [importPreview, setImportPreview] = useState<BankStatementPreview | null>(null)
 
   const fetchTransactions = async () => {
     setLoading(true)
@@ -401,28 +422,53 @@ const TransactionsTab = () => {
       message.warning('請先建立銀行帳戶，再匯入對帳單')
       return
     }
+    setPendingImportFile(null)
+    setImportPreview(null)
     setImportModalOpen(true)
   }
 
-  const handleImportStatement = async (file: File) => {
+  const handlePreviewStatement = async (file: File) => {
     if (!selectedAccountId) {
       message.warning('請先選擇要匯入的銀行帳戶')
       return Upload.LIST_IGNORE
     }
 
+    setPreviewing(true)
+    try {
+      const result = await bankingService.previewTransactionsImport(selectedAccountId, file)
+      setPendingImportFile(file)
+      setImportPreview(result)
+      message.success(`已解析 ${result.importableCount ?? 0} 筆可匯入銀行交易`)
+    } catch (error: any) {
+      setPendingImportFile(null)
+      setImportPreview(null)
+      message.error(error?.response?.data?.message || '解析銀行對帳單失敗')
+    } finally {
+      setPreviewing(false)
+    }
+
+    return Upload.LIST_IGNORE
+  }
+
+  const handleConfirmImport = async () => {
+    if (!selectedAccountId || !pendingImportFile || !importPreview) {
+      message.warning('請先選擇並預覽銀行對帳單')
+      return
+    }
+
     setImporting(true)
     try {
-      const result = await bankingService.importTransactions(selectedAccountId, file)
+      const result = await bankingService.importTransactions(selectedAccountId, pendingImportFile)
       message.success(`已匯入 ${result.importedCount ?? 0} 筆銀行交易`)
       setImportModalOpen(false)
+      setPendingImportFile(null)
+      setImportPreview(null)
       await fetchTransactions()
     } catch (error: any) {
       message.error(error?.response?.data?.message || '匯入銀行對帳單失敗')
     } finally {
       setImporting(false)
     }
-
-    return Upload.LIST_IGNORE
   }
 
   const columns = [
@@ -501,7 +547,13 @@ const TransactionsTab = () => {
         title="匯入銀行對帳單"
         open={importModalOpen}
         onCancel={() => setImportModalOpen(false)}
-        footer={null}
+        okText="確認匯入"
+        cancelText="取消"
+        onOk={handleConfirmImport}
+        okButtonProps={{
+          disabled: !importPreview || !pendingImportFile || importing || previewing,
+          loading: importing,
+        }}
         destroyOnClose
       >
         <div className="space-y-4">
@@ -516,7 +568,11 @@ const TransactionsTab = () => {
             className="w-full"
             placeholder="選擇銀行帳戶"
             value={selectedAccountId}
-            onChange={setSelectedAccountId}
+            onChange={(value) => {
+              setSelectedAccountId(value)
+              setPendingImportFile(null)
+              setImportPreview(null)
+            }}
             options={accounts.map((account) => ({
               label: `${account.bankName} · ${account.accountName || account.accountNo}`,
               value: account.id,
@@ -527,15 +583,61 @@ const TransactionsTab = () => {
             accept=".csv,.txt"
             maxCount={1}
             showUploadList={false}
-            disabled={importing}
-            beforeUpload={handleImportStatement}
+            disabled={importing || previewing}
+            beforeUpload={handlePreviewStatement}
           >
             <p className="ant-upload-drag-icon">
               <UploadOutlined />
             </p>
-            <p className="ant-upload-text">拖曳 CSV 到這裡，或點擊選擇檔案</p>
-            <p className="ant-upload-hint">系統會讀取文字內容送入銀行匯入端點，不會上傳到外部平台。</p>
+            <p className="ant-upload-text">拖曳 CSV 到這裡，或點擊選擇檔案先預覽</p>
+            <p className="ant-upload-hint">預覽不會寫入資料；確認匯入後才會建立銀行交易並執行初步對帳。</p>
           </Upload.Dragger>
+
+          {importPreview && (
+            <div className="space-y-3">
+              <Alert
+                type={importPreview.skippedCount > 0 ? 'warning' : 'success'}
+                showIcon
+                message={`可匯入 ${importPreview.importableCount} 筆，略過 ${importPreview.skippedCount} 筆`}
+                description={`原始資料列共 ${importPreview.totalRows} 筆。請確認筆數與金額方向正確後再按「確認匯入」。`}
+              />
+              <Table
+                size="small"
+                rowKey="rowNumber"
+                pagination={false}
+                dataSource={importPreview.sampleRows || []}
+                columns={[
+                  { title: '列', dataIndex: 'rowNumber', width: 64 },
+                  {
+                    title: '日期',
+                    dataIndex: 'txnDate',
+                    render: (value: string) => dayjs(value).format('YYYY-MM-DD'),
+                  },
+                  { title: '摘要', dataIndex: 'descriptionRaw' },
+                  {
+                    title: '金額',
+                    key: 'amount',
+                    render: (_: unknown, row: BankStatementPreview['sampleRows'][number]) => (
+                      <Text type={row.amountOriginal >= 0 ? 'success' : 'danger'}>
+                        {row.amountOriginal.toLocaleString()} {row.amountCurrency}
+                      </Text>
+                    ),
+                  },
+                ]}
+              />
+              {importPreview.skippedRows?.length > 0 && (
+                <Alert
+                  type="info"
+                  showIcon
+                  message="略過資料列"
+                  description={importPreview.skippedRows
+                    .slice(0, 5)
+                    .map((row) => `第 ${row.rowNumber} 列：${row.reason}`)
+                    .join('；')}
+                />
+              )}
+            </div>
+          )}
         </div>
       </Modal>
     </div>
