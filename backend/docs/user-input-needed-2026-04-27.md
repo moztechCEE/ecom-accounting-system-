@@ -8,7 +8,7 @@
 ### 1. 綠界電子發票正式開票與狀態同步
 
 - 需要你提供 / 確認：
-  - `3290494` 的綠界電子發票正式 `HashKey` / `HashIV` 是否已開通。
+  - 2026-05-04 更新：`3290494` 的 MerchantID / 電子發票 HashKey / HashIV 已由使用者提供，已放入 GCP Secret Manager 並掛到 Cloud Run backend；金鑰不可寫入 repo。Cloud Run readiness 已確認 `shopify-main` ready，正式開票開關仍維持 `false`。
   - 2026-05-04 更新：`3150241` 的 MerchantID / HashKey / HashIV 已由使用者確認為 1Shop 綠界「電子發票」介接金鑰；金鑰不可寫入 repo，已放入 GCP Secret Manager 並掛到 Cloud Run backend。正式開票開關仍維持 `false`，只允許 readiness / 只讀查詢。
   - 兩個帳號是否具備 B2C / B2B 開立、查詢、作廢、折讓、折讓作廢 API 權限。
   - 字軌 / 配號查詢 API 是否可用，以及正式字軌是否已配好。
