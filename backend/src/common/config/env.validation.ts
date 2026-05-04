@@ -58,6 +58,26 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   SUPER_ADMIN_NAME?: string;
+
+  @IsOptional()
+  @IsString()
+  OPENAI_API_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  OPENAI_COMPUTER_USE_MODEL?: string;
+
+  @IsOptional()
+  @IsString()
+  OPENAI_COMPUTER_USE_ALLOWED_DOMAINS?: string;
+
+  @IsOptional()
+  @IsString()
+  OPENAI_COMPUTER_USE_MAX_STEPS?: string;
+
+  @IsOptional()
+  @IsString()
+  OPENAI_COMPUTER_USE_HEADLESS?: string;
 }
 
 /**

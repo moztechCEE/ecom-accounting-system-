@@ -1,0 +1,37 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - img "System logo" [ref=e7] [cursor=pointer]
+    - heading "AI 電子商務營運中樞" [level=2] [ref=e8]
+    - text: AI E-Commerce Operations Hub
+  - generic [ref=e9]:
+    - generic [ref=e15]:
+      - img "user" [ref=e17]:
+        - img [ref=e18]
+      - textbox "電子郵件" [ref=e20]
+    - generic [ref=e26]:
+      - img "lock" [ref=e28]:
+        - img [ref=e29]
+      - textbox "密碼" [ref=e31]
+      - img "eye-invisible" [ref=e33] [cursor=pointer]:
+        - img [ref=e34]
+    - generic [ref=e42]:
+      - generic [ref=e43] [cursor=pointer]:
+        - checkbox "記住我" [checked] [ref=e45]
+        - generic [ref=e47]: 記住我
+      - link "忘記密碼？" [ref=e48] [cursor=pointer]:
+        - /url: "#"
+    - button "登入系統" [ref=e54] [cursor=pointer]:
+      - generic [ref=e55]: 登入系統
+    - separator [ref=e56]:
+      - generic [ref=e57]: 或使用其他方式登入
+    - generic [ref=e58]:
+      - button "google" [ref=e59] [cursor=pointer]:
+        - img "google" [ref=e61]:
+          - img [ref=e62]
+      - button "github" [ref=e64] [cursor=pointer]:
+        - img "github" [ref=e66]:
+          - img [ref=e67]
+      - button "windows" [ref=e69] [cursor=pointer]:
+        - img "windows" [ref=e71]:
+          - img [ref=e72]
+    - generic [ref=e74]: © 2025 MOZTECH. All rights reserved.

@@ -1,8 +1,11 @@
 # Production Dockerfile for NestJS E-Commerce Accounting System
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim AS builder
 
-# Install dependencies for Prisma
-RUN apk add --no-cache openssl
+# Install dependencies for Prisma and Playwright browser
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    openssl \
+  && rm -rf /var/lib/apt/lists/*
 
 # Prisma `generate` requires DATABASE_URL to be present at build time.
 # This is a non-secret placeholder and will be overridden by Cloud Run env vars at runtime.
@@ -18,6 +21,9 @@ COPY prisma ./prisma/
 # Install all dependencies (including devDependencies for build)
 RUN npm install --no-audit --no-fund
 
+# Install Chromium for Playwright-based browser automation
+RUN npx playwright install --with-deps chromium
+
 # Copy source code
 COPY . .
 
@@ -31,10 +37,13 @@ RUN npm run build
 RUN npx tsc prisma/seed.ts --outDir dist/prisma --skipLibCheck --module commonjs --target es2019 --esModuleInterop
 
 # Production stage
-FROM node:20-alpine
+FROM node:20-bookworm-slim
 
-# Install dependencies for Prisma
-RUN apk add --no-cache openssl
+# Install dependencies for Prisma and Playwright browser
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    openssl \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -45,6 +54,9 @@ COPY scripts ./scripts/
 
 # Install only production dependencies
 RUN npm install --omit=dev --no-audit --no-fund
+
+# Install Chromium runtime for Playwright-based browser automation
+RUN npx playwright install --with-deps chromium
 
 # Generate Prisma Client
 RUN npx prisma generate
