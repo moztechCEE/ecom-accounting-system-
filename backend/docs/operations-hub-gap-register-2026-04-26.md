@@ -42,6 +42,7 @@
 - `3150241` / `groupbuy-main` 的綠界電子發票金鑰已放入 GCP Secret Manager，並掛到 Cloud Run backend；readiness 已可讓 1Shop / 團購發票 profile 進入 ready 狀態。
 - 正式開票開關仍維持關閉，避免未完成小額測試前發生真實開票。
 - 後端已新增只讀綠界查詢 API：多筆發票清單 `B2CInvoice/GetIssueList` 與財政部字軌配號 `B2CInvoice/GetGovInvoiceWordSetting`。
+- Cloud Run 已驗證 `groupbuy-main` 只讀查詢成功：`2026-05-01` 到 `2026-05-04` 多筆發票查詢總筆數 120、樣本回傳 5 筆；民國 115 年字軌配號查詢回傳 3 組。
 - `3290494` / `shopify-main` 的電子發票金鑰仍需補入 Secret Manager。
 
 必補能力：

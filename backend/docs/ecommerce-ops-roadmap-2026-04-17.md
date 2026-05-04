@@ -124,6 +124,7 @@
 - `3150241` / `groupbuy-main` 的綠界電子發票 `HashKey` / `HashIV` 已放入 Secret Manager / Cloud Run env，不寫入 repo；readiness 已可辨識該帳號 ready，但 `ECPAY_EINVOICE_ISSUING_ENABLED=false` 仍會阻擋正式開票。
 - `3290494` / `shopify-main` 的綠界電子發票 `HashKey` / `HashIV` 仍需補入 Secret Manager。
 - 已補綠界只讀查詢 API：`GET /invoicing/ecpay/invoices` 對應 `B2CInvoice/GetIssueList`，`GET /invoicing/ecpay/word-settings` 對應 `B2CInvoice/GetGovInvoiceWordSetting`。
+- Cloud Run 驗證：`groupbuy-main` 多筆發票查詢成功，`2026-05-01` 到 `2026-05-04` 總筆數 120、樣本回傳 5 筆；民國 115 年字軌配號查詢成功，回傳 3 組。
 - 用綠界 stage 或正式小額測試單驗證 `B2CInvoice/Issue`、`GetIssue`、`Invalid`、`Allowance`。
 - 測試通過後才設定 `ECPAY_EINVOICE_ISSUING_ENABLED=true`。
 - 將字軌 / 配號查詢結果串到會計工作台與 Dashboard 用量警示；目前 API 已可查，但尚未做 UI 風險提示。
