@@ -113,6 +113,8 @@
   - LINE Pay / TWQR / 行動支付是否出現在綠界 `3290494` 撥款報表內。
   - 若沒有出現在綠界報表，需提供 LINE Pay Merchant 後台 CAPTURE / 結算報表或可用 API 文件。
   - 第二個 LINE Pay 帳號若要接入，需提供 Merchant ID、Channel ID、Channel Secret、品牌 / 通路歸屬。
+  - LINE Pay 不需要電子發票 HashKey / HashIV；電子發票仍由綠界電子發票帳號 `3290494` / `3150241` 開立與查詢。
+  - 若是 LINE Pay 直連 API，需提供 LINE Pay Merchant Center 的 Channel ID / Channel Secret；若只是固定付款碼商家，LINE Pay 官方 FAQ 說無法使用 LINE Pay API，也無法查到 Channel ID / Channel Secret。
 - 目前系統狀態：
   - 已支援 LINE Pay profile loader、config status、付款查詢、CAPTURE 匯入、狀態刷新、退款反向核銷骨架。
 - 暫停原因：

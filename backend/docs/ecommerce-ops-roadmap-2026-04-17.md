@@ -432,6 +432,10 @@ B2B 月結下一步：
   - Payment gateway 應標記為 `line_pay`。
   - 撥款、手續費、退款應從 LINE Pay 後台報表或 LINE Pay API 匯入。
   - 對帳中心需新增 `provider=linepay`，不可混入 `provider=ecpay`。
+- LINE Pay 不處理電子發票：
+  - LINE Pay API 憑證是 Channel ID / Channel Secret，不是綠界電子發票 HashKey / HashIV。
+  - 客戶電子發票仍由 `shopify-main / 3290494` 或 `groupbuy-main / 3150241` 的綠界電子發票帳號處理。
+  - 如果 LINE Pay 交易來自 Shopify 官網，發票通常仍歸到 Shopify 對應的 `shopify-main / 3290494`；若是 1Shop / 團購交易，仍歸到 `groupbuy-main / 3150241`。
 - 現在要向綠界 / LINE Pay 確認的資料：
   - LINE Pay 交易是否會出現在綠界「撥款對帳系統」或「金流對帳報表」。
   - 報表欄位是否有交易序號、商店訂單編號、付款方式、撥款日期、手續費、實收金額。
