@@ -95,8 +95,7 @@
 ### 5. Shopline 正式同步
 
 - 需要你提供：
-  - Shopline `User-Agent / handle code`。
-  - 是單店還是多店；若多店，需每店的 token / handle / 名稱 / merchant id。
+  - 若未來增加第二間 Shopline 店，需提供每店的 token / handle / 名稱 / merchant id。
   - webhook 是否已開通；可訂閱哪些 topic。
   - 是否有金流 / 撥款資料來源。
   - 若要補兩年以上資料，需確認 archived orders 匯出流程可用。
@@ -108,10 +107,13 @@
   - 2026-05-05 更新：已確認 Shopline Merchant ID 為 `5e0738e792f5c90009548b54`；Cloud Run 應固定設定 `SHOPLINE_MERCHANT_ID`，避免診斷與後續同步每次都依賴 `token-info` 推導。
   - 2026-05-05 更新：已新增只讀 `agents` 診斷端點，依 Shopline 文件用 `token-info` 取得 `merchant_id` 後呼叫 `GET /v1/agents`；Cloud Run 呼叫成功，目前 Shopline 回傳 agents 0 筆。
   - 2026-05-05 更新：本機直接 curl Shopline 仍會回 IP 白名單錯誤，這是預期狀態；正式驗證要從 Cloud Run backend 走固定出口 IP。
+  - 2026-05-05 更新：已新增 `preview/orders`、`preview/customers` 只讀端點；正式匯入前已用最近 30 天 dry-run 驗證 Shopline 回傳 728 筆訂單、1410 筆顧客事件，mapping 可用。
+  - 2026-05-05 更新：已用一般 OpenAPI 依 30 天區間回補 `2024-05-05` 到 `2026-05-05`。Cloud Run summary 顯示 SHOPLINE 已進 `SalesOrder` 4689 筆，總額 9,250,001；Payment 4687 筆，gross/net 8,488,187。
+  - 2026-05-05 更新：已建立 Cloud Scheduler `ecom-accounting-shopline-auto-sync`，每 20 分鐘呼叫 `POST /integrations/shopline/sync/auto`；`SHOPLINE_SYNC_ENABLED=true`，lookback 240 分鐘。手動驗證 auto sync 成功抓到最近 4 小時 56 筆訂單與 63 筆顧客事件。
   - Shopline Adapter / Service / Controller 已存在。
   - 訂單、顧客、Payment 草稿同步骨架已存在。
 - 暫停原因：
-  - token / handle / 白名單已通過只讀驗證；下一步需做 orders / customers 小批量 dry-run 與正式匯入驗證，確認欄位 mapping、日期區間與是否需要 archived orders 流程。
+  - 一般 orders / customers / Payment 草稿資料已進系統；剩餘缺口是兩年以上 archived orders 匯出、正式 payout / settlement / 手續費來源、webhook topic 與簽章驗證。
 
 ### 6. LINE Pay / TWQR / 行動支付分流
 

@@ -61,6 +61,93 @@ export class ShoplineService {
     return this.adapter.getAgents(params);
   }
 
+  async previewOrders(params: {
+    since?: Date;
+    until?: Date;
+    limit?: string | number;
+  }) {
+    const { since, until } = this.resolvePreviewRange(params.since, params.until);
+    const limit = this.parsePreviewLimit(params.limit);
+    const orders = await this.adapter.fetchOrders({ start: since, end: until });
+
+    return {
+      success: true,
+      range: {
+        since: since.toISOString(),
+        until: until.toISOString(),
+      },
+      fetched: orders.length,
+      sample: orders.slice(0, limit).map((order) => ({
+        externalId: order.externalId,
+        orderDate: order.orderDate.toISOString(),
+        status: order.status,
+        currency: order.totals.currency,
+        gross: Number(order.totals.gross),
+        net: Number(order.totals.net),
+        tax: Number(order.totals.tax),
+        discount: Number(order.totals.discount),
+        shipping: Number(order.totals.shipping),
+        itemCount: order.items.length,
+        customerLinked: Boolean(
+          order.customer?.externalId ||
+            order.customer?.email ||
+            order.customer?.phone,
+        ),
+        paymentStatus: this.pickRawString(order.raw, 'order_payment', 'status'),
+        paymentType:
+          this.pickRawString(order.raw, 'order_payment', 'payment_type') ||
+          this.pickRawString(
+            order.raw,
+            'order_payment',
+            'payment_data',
+            'notify_response',
+            'payment_gateway',
+          ),
+        sourceStoreHandle: this.pickRawString(order.raw, 'sourceStoreHandle'),
+        sourceStoreName: this.pickRawString(order.raw, 'sourceStoreName'),
+      })),
+    };
+  }
+
+  async previewCustomers(params: {
+    since?: Date;
+    until?: Date;
+    limit?: string | number;
+  }) {
+    const { since, until } = this.resolvePreviewRange(params.since, params.until);
+    const limit = this.parsePreviewLimit(params.limit);
+    const customers = await this.adapter.fetchCustomers({
+      start: since,
+      end: until,
+    });
+
+    return {
+      success: true,
+      range: {
+        since: since.toISOString(),
+        until: until.toISOString(),
+      },
+      fetched: customers.length,
+      sample: customers.slice(0, limit).map((customer) => ({
+        id: customer.id || null,
+        namePresent: Boolean(customer.name),
+        emailPresent: Boolean(customer.email),
+        phonePresent: Boolean(
+          customer.mobile_phone ||
+            (Array.isArray(customer.phones) && customer.phones.length),
+        ),
+        orderCount:
+          typeof customer.order_count === 'number'
+            ? customer.order_count
+            : null,
+        createdAt: customer.created_at || null,
+        updatedAt: customer.updated_at || null,
+        sourceStoreHandle: customer.rawStore.handle || null,
+        sourceStoreName: customer.rawStore.storeName || null,
+      })),
+    };
+  }
+
   assertSchedulerToken(providedToken?: string | null) {
     const expected =
       this.config.get<string>('SHOPLINE_SYNC_JOB_TOKEN', '') ||
@@ -829,5 +916,37 @@ export class ShoplineService {
         value === undefined || value === null ? '' : String(value).trim(),
       )
       .find((value) => value);
+  }
+
+  private resolvePreviewRange(since?: Date, until?: Date) {
+    const resolvedUntil = until || new Date();
+    const resolvedSince =
+      since || new Date(resolvedUntil.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    if (resolvedSince.getTime() > resolvedUntil.getTime()) {
+      throw new BadRequestException('since must be before until');
+    }
+
+    return {
+      since: resolvedSince,
+      until: resolvedUntil,
+    };
+  }
+
+  private parsePreviewLimit(value?: string | number) {
+    const parsed = Number(value ?? 10);
+    if (!Number.isFinite(parsed)) return 10;
+    return Math.min(Math.max(Math.trunc(parsed), 1), 50);
+  }
+
+  private pickRawString(raw: unknown, ...path: string[]) {
+    let cursor: any = raw;
+    for (const key of path) {
+      if (!cursor || typeof cursor !== 'object') return null;
+      cursor = cursor[key];
+    }
+    if (cursor === undefined || cursor === null) return null;
+    const value = String(cursor).trim();
+    return value || null;
   }
 }

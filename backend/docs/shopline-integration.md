@@ -1,6 +1,6 @@
 # SHOPLINE OpenAPI 串接說明
 
-最後更新：2026-04-17
+最後更新：2026-05-05
 
 ## 本系統目前已完成
 
@@ -8,6 +8,9 @@
   - `GET /api/v1/integrations/shopline/health`
   - `GET /api/v1/integrations/shopline/connection-info`
   - `GET /api/v1/integrations/shopline/token-info`
+  - `GET /api/v1/integrations/shopline/agents`
+  - `GET /api/v1/integrations/shopline/preview/orders`
+  - `GET /api/v1/integrations/shopline/preview/customers`
   - `POST /api/v1/integrations/shopline/sync/orders`
   - `POST /api/v1/integrations/shopline/sync/customers`
   - `POST /api/v1/integrations/shopline/sync/auto`
@@ -18,12 +21,19 @@
 - 已可從 `order_payment` 產生 `Payment` 草稿資料
 - 已可把 `待付款 / 待撥款 / 待對帳` 狀態送進 Dashboard 對帳視角
 - Dashboard reports bucket 已預留 `Shopline 業績`
+- 2026-05-05 已驗證 BONSON Shopline 店：
+  - `handle`: `onemorefuture`
+  - `merchantId`: `5e0738e792f5c90009548b54`
+  - 一般 OpenAPI 已回補 `2024-05-05` 到 `2026-05-05`
+  - Cloud Run summary：`SalesOrder` 4689 筆、訂單總額 9,250,001；Payment 4687 筆、gross/net 8,488,187
+  - Cloud Scheduler `ecom-accounting-shopline-auto-sync` 已建立，每 20 分鐘增量同步，lookback 240 分鐘
 
 ## 這一版尚未完成
 
 - 尚未接正式 `payout / settlement` API 或報表
 - 尚未把實際撥款淨額與手續費回填成 `reconciled`
 - webhook 目前已可觸發增量同步，但尚未補簽章驗證與 topic 細緻處理
+- 兩年以上或已封存訂單仍需另接 Shopline archived orders 非同步匯出流程
 
 ## 官方條件摘要
 

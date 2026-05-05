@@ -35,6 +35,20 @@ class AgentsQueryDto {
   merchantId?: string;
 }
 
+class PreviewQueryDto {
+  @IsOptional()
+  @IsDateString()
+  since?: string;
+
+  @IsOptional()
+  @IsDateString()
+  until?: string;
+
+  @IsOptional()
+  @IsString()
+  limit?: string;
+}
+
 @Controller('integrations/shopline')
 export class ShoplineController {
   constructor(private readonly shoplineService: ShoplineService) {}
@@ -58,6 +72,24 @@ export class ShoplineController {
   async agents(@Query() query: AgentsQueryDto) {
     return this.shoplineService.getAgents({
       merchantId: query.merchantId,
+    });
+  }
+
+  @Get('preview/orders')
+  async previewOrders(@Query() query: PreviewQueryDto) {
+    return this.shoplineService.previewOrders({
+      since: query.since ? new Date(query.since) : undefined,
+      until: query.until ? new Date(query.until) : undefined,
+      limit: query.limit,
+    });
+  }
+
+  @Get('preview/customers')
+  async previewCustomers(@Query() query: PreviewQueryDto) {
+    return this.shoplineService.previewCustomers({
+      since: query.since ? new Date(query.since) : undefined,
+      until: query.until ? new Date(query.until) : undefined,
+      limit: query.limit,
     });
   }
 
