@@ -602,13 +602,24 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     });
 
     if (!response.ok) {
-      const bodyText = await response.text();
+      const bodyText = this.redactSensitiveText(await response.text(), store);
       throw new Error(
         `SHOPLINE API Error ${response.status}: ${bodyText || response.statusText}`,
       );
     }
 
     return (await response.json()) as T;
+  }
+
+  private redactSensitiveText(value: string, store: ShoplineStoreConfig) {
+    let redacted = value;
+    if (store.token) {
+      redacted = redacted.split(store.token).join('[REDACTED_TOKEN]');
+    }
+    return redacted.replace(
+      /Bearer\s+[A-Za-z0-9._~+/=-]+/gi,
+      'Bearer [REDACTED_TOKEN]',
+    );
   }
 
   private formatUtcDateTime(date: Date) {
