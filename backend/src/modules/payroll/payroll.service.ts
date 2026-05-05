@@ -5,12 +5,15 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { AttendanceIntegrationService } from '../attendance/services/integration.service';
 import { BalanceService } from '../attendance/services/balance.service';
 import { LeaveService } from '../attendance/services/leave.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { JournalService } from '../accounting/services/journal.service';
 import { AuditLogService } from '../../common/audit/audit-log.service';
+import { UsersService } from '../users/users.service';
+import { CreateEmployeeLoginAccountDto } from './dto/create-employee-login-account.dto';
 import PDFDocument = require('pdfkit');
 
 const DEFAULT_PAYROLL_POLICY = {
@@ -42,6 +45,7 @@ export class PayrollService {
     private readonly leaveService: LeaveService,
     private readonly journalService: JournalService,
     private readonly auditLogService: AuditLogService,
+    private readonly usersService: UsersService,
   ) {}
 
   private toNumber(value: unknown): number {
@@ -115,6 +119,10 @@ export class PayrollService {
     suffix = 'payslip',
   ) {
     return `${suffix}-${employeeNo}-${payDate.toISOString().slice(0, 10)}.pdf`;
+  }
+
+  private generateTemporaryPassword() {
+    return `Temp!${crypto.randomBytes(6).toString('base64url')}`;
   }
 
   private normalizeInputDate(value: Date | string, fieldName: string) {
@@ -784,6 +792,91 @@ export class PayrollService {
     });
 
     return employee;
+  }
+
+  async createEmployeeLoginAccount(
+    id: string,
+    actorUserId: string,
+    dto: CreateEmployeeLoginAccountDto,
+  ) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const resolvedEntityId = await this.resolveEntityId(
+      actorUserId,
+      employee.entityId,
+    );
+    if (resolvedEntityId !== employee.entityId) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    if (employee.userId) {
+      throw new ConflictException('Employee already has a linked login account');
+    }
+
+    const email = dto.email.trim().toLowerCase();
+    const password = dto.password?.trim() || this.generateTemporaryPassword();
+    const operatorRole = await this.prisma.role.findFirst({
+      where: {
+        OR: [{ code: 'OPERATOR' }, { name: 'OPERATOR' }],
+      },
+      select: { id: true },
+    });
+
+    const createdUser = await this.usersService.createUser({
+      email,
+      password,
+      name: employee.name,
+      roleIds: operatorRole ? [operatorRole.id] : [],
+      mustChangePassword: true,
+    });
+
+    const updatedEmployee = await this.prisma.employee.update({
+      where: { id: employee.id },
+      data: {
+        userId: createdUser.id,
+      },
+      include: {
+        department: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    await this.auditLogService.record({
+      userId: actorUserId,
+      tableName: 'employees',
+      recordId: updatedEmployee.id,
+      action: 'UPDATE',
+      oldData: employee,
+      newData: updatedEmployee,
+    });
+
+    return {
+      employee: updatedEmployee,
+      user: createdUser,
+      temporaryPassword: password,
+      mustChangePassword: true,
+    };
   }
 
   async updateEmployee(

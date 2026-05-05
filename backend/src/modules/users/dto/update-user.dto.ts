@@ -17,4 +17,8 @@ export class UpdateUserDto {
   @IsString()
   @MinLength(8)
   readonly password?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  readonly mustChangePassword?: boolean;
 }

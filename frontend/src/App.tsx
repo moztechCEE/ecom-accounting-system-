@@ -6,6 +6,8 @@ import { AIProvider } from './contexts/AIContext'
 import DashboardLayout from './components/DashboardLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 import LoginPage from './pages/LoginPage'
+import ForcePasswordChangePage from './pages/ForcePasswordChangePage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import DashboardPage from './pages/DashboardPage'
 import AccountsPage from './pages/AccountsPage'
 import JournalEntriesPage from './pages/JournalEntriesPage'
@@ -44,8 +46,10 @@ const App: React.FC = () => {
           <AIProvider>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
             
             <Route path="/" element={<ProtectedRoute />}>
+              <Route path="auth/change-password" element={<ForcePasswordChangePage />} />
               <Route element={<DashboardLayout />}>
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<DashboardPage />} />

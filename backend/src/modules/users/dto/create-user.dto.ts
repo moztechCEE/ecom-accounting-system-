@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsEmail,
   IsOptional,
   IsString,
@@ -28,4 +29,8 @@ export class CreateUserDto {
   @ArrayUnique()
   @IsUUID('4', { each: true })
   readonly roleIds?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  readonly mustChangePassword?: boolean;
 }

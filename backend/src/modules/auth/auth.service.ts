@@ -6,12 +6,18 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import * as OTPAuth from 'otpauth';
+import { AuthMailService } from './auth-mail.service';
 import { UsersService } from '../users/users.service';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 
 /**
  * AuthService
@@ -30,6 +36,8 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+    private readonly authMailService: AuthMailService,
   ) {}
 
   /**
@@ -56,6 +64,7 @@ export class AuthService {
       email: normalizedEmail,
       name,
       passwordHash,
+      mustChangePassword: false,
     });
 
     this.logger.log(`New user registered: ${normalizedEmail}`);
@@ -68,9 +77,87 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
+        mustChangePassword: user.mustChangePassword,
       },
       access_token: token,
     };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.usersService.findForAuthById(userId);
+    if (!user || !user.passwordHash || !user.isActive) {
+      throw new UnauthorizedException('User not found or inactive');
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    if (dto.currentPassword === dto.newPassword) {
+      throw new BadRequestException('New password must be different');
+    }
+
+    await this.usersService.updatePassword(userId, dto.newPassword, {
+      mustChangePassword: false,
+      clearPasswordResetToken: true,
+    });
+
+    return { success: true };
+  }
+
+  async requestPasswordReset(dto: RequestPasswordResetDto) {
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const user = await this.usersService.findForAuthByEmail(normalizedEmail);
+
+    if (!user || !user.isActive) {
+      return {
+        success: true,
+        message:
+          '如果該電子郵件存在於系統中，您將收到一封重設密碼通知。',
+      };
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+    await this.usersService.setPasswordResetToken(user.id, tokenHash, expiresAt);
+
+    const resetUrl = this.buildPasswordResetUrl(token);
+    await this.authMailService.sendPasswordResetEmail({
+      to: user.email,
+      name: user.name,
+      resetUrl,
+    });
+
+    return {
+      success: true,
+      message:
+        '如果該電子郵件存在於系統中，您將收到一封重設密碼通知。',
+    };
+  }
+
+  async confirmPasswordReset(dto: ConfirmPasswordResetDto) {
+    const tokenHash = crypto
+      .createHash('sha256')
+      .update(dto.token.trim())
+      .digest('hex');
+
+    const user = await this.usersService.findByPasswordResetTokenHash(tokenHash);
+    if (!user || !user.isActive) {
+      throw new BadRequestException('Reset token is invalid or expired');
+    }
+
+    await this.usersService.updatePassword(user.id, dto.newPassword, {
+      mustChangePassword: false,
+      clearPasswordResetToken: true,
+    });
+
+    return { success: true };
   }
 
   /**
@@ -164,6 +251,15 @@ export class AuthService {
     return this.jwtService.signAsync(payload);
   }
 
+  private buildPasswordResetUrl(token: string) {
+    const appBaseUrl = this.configService.get<string>('APP_BASE_URL')?.trim();
+    const corsOrigin = this.configService.get<string>('CORS_ORIGIN')?.trim();
+    const configuredBaseUrl =
+      appBaseUrl || (corsOrigin && corsOrigin !== '*' ? corsOrigin : '') || 'http://localhost:5173';
+    const baseUrl = configuredBaseUrl.replace(/\/+$/, '');
+    return `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  }
+
   /**
    * 產生 2FA Secret
    */
@@ -212,4 +308,3 @@ export class AuthService {
     return true;
   }
 }
-

@@ -7,6 +7,7 @@ import { AccountingModule } from '../accounting/accounting.module'; // 依賴：
 import { ApprovalsModule } from '../approvals/approvals.module'; // 依賴：薪資審批
 import { AttendanceModule } from '../attendance/attendance.module'; // 依賴：考勤數據
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { UsersModule } from '../users/users.module';
 
 /**
  * PayrollModule
@@ -18,7 +19,13 @@ import { RolesGuard } from '../../common/guards/roles.guard';
  * - AttendanceModule: 獲取考勤時數
  */
 @Module({
-  imports: [PrismaModule, AccountingModule, ApprovalsModule, AttendanceModule],
+  imports: [
+    PrismaModule,
+    AccountingModule,
+    ApprovalsModule,
+    AttendanceModule,
+    UsersModule,
+  ],
   controllers: [PayrollController],
   providers: [PayrollService, PayrollRepository, RolesGuard],
   exports: [PayrollService],

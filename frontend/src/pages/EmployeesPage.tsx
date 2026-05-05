@@ -123,10 +123,13 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const [usersLoading, setUsersLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [accountCreateOpen, setAccountCreateOpen] = useState(false);
+  const [accountCreateLoading, setAccountCreateLoading] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
     null,
   );
   const [form] = Form.useForm();
+  const [accountForm] = Form.useForm();
 
   const fetchEmployees = async () => {
     setLoading(true);
@@ -202,6 +205,53 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       }
 
       message.error(getErrorMessage(error, "員工更新失敗"));
+    }
+  };
+
+  const handleCreateLoginAccount = async () => {
+    if (!selectedEmployee) {
+      return;
+    }
+
+    try {
+      const values = await accountForm.validateFields();
+      setAccountCreateLoading(true);
+      const result = await payrollService.createEmployeeLoginAccount(
+        selectedEmployee.id,
+        {
+          email: values.email,
+          password: values.password || undefined,
+        },
+      );
+
+      message.success("登入帳號建立成功");
+      setAccountCreateOpen(false);
+      accountForm.resetFields();
+      form.setFieldValue("userId", result.user.id);
+      setSelectedEmployee(result.employee);
+      await Promise.all([fetchEmployees(), fetchUsers()]);
+
+      Modal.success({
+        title: "登入帳號已建立",
+        content: (
+          <div className="space-y-2">
+            <p>員工：{result.employee.name}</p>
+            <p>登入信箱：{result.user.email}</p>
+            <p>臨時密碼：{result.temporaryPassword}</p>
+            <p className="text-slate-500">
+              這位員工第一次登入後，系統會要求先修改密碼。
+            </p>
+          </div>
+        ),
+      });
+    } catch (error) {
+      if ((error as any)?.errorFields) {
+        return;
+      }
+
+      message.error(getErrorMessage(error, "建立登入帳號失敗"));
+    } finally {
+      setAccountCreateLoading(false);
     }
   };
 
@@ -363,6 +413,12 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
               placeholder="選擇要綁定的使用者"
             />
           </Form.Item>
+          <Alert
+            type="info"
+            showIcon
+            className="mb-4"
+            message="如果還沒有登入帳號，請先建立員工後，再到編輯視窗直接建立登入帳號。"
+          />
           <Form.Item name="departmentId" label="部門">
             <Select
               allowClear
@@ -409,6 +465,32 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
               placeholder="選擇要綁定的使用者"
             />
           </Form.Item>
+          {!selectedEmployee?.userId ? (
+            <Alert
+              type="warning"
+              showIcon
+              className="mb-4"
+              message="目前尚未建立登入帳號"
+              description={
+                <div className="flex flex-wrap items-center gap-3">
+                  <span>你可以直接在這裡替這位員工建立一組登入帳號與臨時密碼。</span>
+                  <Button
+                    type="primary"
+                    size="small"
+                    onClick={() => {
+                      accountForm.setFieldsValue({
+                        email: "",
+                        password: "",
+                      });
+                      setAccountCreateOpen(true);
+                    }}
+                  >
+                    建立登入帳號
+                  </Button>
+                </div>
+              }
+            />
+          ) : null}
           <Form.Item name="departmentId" label="部門">
             <Select
               allowClear
@@ -434,6 +516,45 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           </Form.Item>
           <Form.Item name="isActive" label="狀態" valuePropName="checked">
             <Switch checkedChildren="在職" unCheckedChildren="離職" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="建立登入帳號"
+        open={accountCreateOpen}
+        onCancel={() => setAccountCreateOpen(false)}
+        onOk={() => void handleCreateLoginAccount()}
+        confirmLoading={accountCreateLoading}
+        okText="建立帳號"
+      >
+        <Form form={accountForm} layout="vertical">
+          <Form.Item
+            name="email"
+            label="登入信箱"
+            rules={[
+              { required: true, message: "請輸入電子郵件" },
+              { type: "email", message: "請輸入有效的電子郵件" },
+            ]}
+          >
+            <Input placeholder="例如 user@company.com" />
+          </Form.Item>
+          <Form.Item
+            name="password"
+            label="臨時密碼"
+            extra="可留白，系統會自動產生一組臨時密碼。"
+            rules={[
+              {
+                validator: async (_, value) => {
+                  if (!value || String(value).length >= 8) {
+                    return;
+                  }
+                  throw new Error("密碼至少需要 8 碼");
+                },
+              },
+            ]}
+          >
+            <Input.Password placeholder="留白則自動產生" />
           </Form.Item>
         </Form>
       </Modal>

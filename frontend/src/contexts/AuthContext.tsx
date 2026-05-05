@@ -8,6 +8,7 @@ interface AuthContextType {
   loading: boolean
   login: (data: LoginRequest) => Promise<void>
   logout: () => void
+  refreshCurrentUser: () => Promise<User | null>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -45,6 +46,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth()
   }, [])
 
+  const refreshCurrentUser = async () => {
+    const token = authService.getToken()
+    if (!token) {
+      setUser(null)
+      return null
+    }
+
+    const currentUser = await authService.getCurrentUser()
+    setUser(currentUser)
+    return currentUser
+  }
+
   const login = async (data: LoginRequest) => {
     const response = await authService.login(data)
     ensureDefaultEntityId()
@@ -59,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshCurrentUser }}>
       {children}
     </AuthContext.Provider>
   )

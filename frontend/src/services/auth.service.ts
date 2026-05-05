@@ -23,6 +23,7 @@ const mapManagedUserToUser = (managed: ManagedUser): User => {
     id: managed.id,
     email: managed.email,
     name: managed.name,
+    mustChangePassword: managed.mustChangePassword,
     roles: Array.from(roleSet),
     permissions: Array.from(permissionSet),
   }
@@ -56,6 +57,21 @@ export const authService = {
 
   async enable2FA(token: string, secret: string) {
     const response = await api.post('/auth/2fa/enable', { token, secret })
+    return response.data
+  },
+
+  async changePassword(data: { currentPassword: string; newPassword: string }) {
+    const response = await api.post('/auth/change-password', data)
+    return response.data
+  },
+
+  async requestPasswordReset(email: string) {
+    const response = await api.post('/auth/password-reset/request', { email })
+    return response.data
+  },
+
+  async confirmPasswordReset(data: { token: string; newPassword: string }) {
+    const response = await api.post('/auth/password-reset/confirm', data)
     return response.data
   },
 

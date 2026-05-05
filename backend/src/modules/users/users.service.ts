@@ -50,7 +50,17 @@ export class UsersService {
       return null;
     }
 
-    const { passwordHash, ...rest } = user;
+    const {
+      passwordHash,
+      passwordResetTokenHash,
+      passwordResetTokenExpiresAt,
+      twoFactorSecret,
+      ...rest
+    } = user as UserWithRelations & {
+      passwordResetTokenHash?: string | null;
+      passwordResetTokenExpiresAt?: Date | null;
+      twoFactorSecret?: string | null;
+    };
     return rest;
   }
 
@@ -92,7 +102,12 @@ export class UsersService {
   /**
    * Auth 專用：建立使用者（不載入 roles/permissions）
    */
-  async createForAuth(data: { email: string; name: string; passwordHash: string }) {
+  async createForAuth(data: {
+    email: string;
+    name: string;
+    passwordHash: string;
+    mustChangePassword?: boolean;
+  }) {
     try {
       return await this.prisma.user.create({
         data,
@@ -165,11 +180,14 @@ export class UsersService {
    * 管理員建立使用者（含角色指派）
    */
   async createUser(dto: CreateUserDto) {
-    const { email, password, name, roleIds = [] } = dto;
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const { password, name, roleIds = [], mustChangePassword } = dto;
 
-    const existing = await this.prisma.user.findUnique({ where: { email } });
+    const existing = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
     if (existing) {
-      throw new ConflictException(`Email ${email} already exists`);
+      throw new ConflictException(`Email ${normalizedEmail} already exists`);
     }
 
     const passwordHash = await bcrypt.hash(password, this.SALT_ROUNDS);
@@ -182,9 +200,10 @@ export class UsersService {
 
         const user = await tx.user.create({
           data: {
-            email,
+            email: normalizedEmail,
             name,
             passwordHash,
+            mustChangePassword: mustChangePassword ?? false,
           },
         });
 
@@ -203,10 +222,10 @@ export class UsersService {
         return this.sanitizeUser(created as UserWithRelations);
       });
 
-      this.logger.log(`Created user ${email}`);
+      this.logger.log(`Created user ${normalizedEmail}`);
       return result;
     } catch (error) {
-      this.handlePrismaError(error, `create user with email ${email}`);
+      this.handlePrismaError(error, `create user with email ${normalizedEmail}`);
     }
   }
 
@@ -214,12 +233,13 @@ export class UsersService {
    * 更新使用者資訊
    */
   async updateUser(id: string, dto: UpdateUserDto) {
-    const { name, isActive, password } = dto;
+    const { name, isActive, password, mustChangePassword } = dto;
 
     if (
       typeof name === 'undefined' &&
       typeof isActive === 'undefined' &&
-      typeof password === 'undefined'
+      typeof password === 'undefined' &&
+      typeof mustChangePassword === 'undefined'
     ) {
       throw new BadRequestException('No updates provided');
     }
@@ -236,6 +256,10 @@ export class UsersService {
 
     if (typeof password !== 'undefined') {
       data.passwordHash = await bcrypt.hash(password, this.SALT_ROUNDS);
+    }
+
+    if (typeof mustChangePassword !== 'undefined') {
+      data.mustChangePassword = mustChangePassword;
     }
 
     try {
@@ -378,6 +402,73 @@ export class UsersService {
     });
 
     return this.findById(userId);
+  }
+
+  async findForAuthById(id: string) {
+    try {
+      return await this.prisma.user.findUnique({
+        where: { id },
+      });
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Auth user lookup failed for id ${id}: ${err?.message ?? String(error)}`,
+        err?.stack,
+      );
+      throw error;
+    }
+  }
+
+  async setPasswordResetToken(
+    userId: string,
+    passwordResetTokenHash: string,
+    passwordResetTokenExpiresAt: Date,
+  ) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordResetTokenHash,
+        passwordResetTokenExpiresAt,
+      },
+    });
+  }
+
+  async findByPasswordResetTokenHash(passwordResetTokenHash: string) {
+    return this.prisma.user.findFirst({
+      where: {
+        passwordResetTokenHash,
+        passwordResetTokenExpiresAt: {
+          gt: new Date(),
+        },
+      },
+    });
+  }
+
+  async updatePassword(
+    userId: string,
+    password: string,
+    options?: {
+      mustChangePassword?: boolean;
+      clearPasswordResetToken?: boolean;
+    },
+  ) {
+    const data: Prisma.UserUpdateInput = {
+      passwordHash: await bcrypt.hash(password, this.SALT_ROUNDS),
+    };
+
+    if (typeof options?.mustChangePassword !== 'undefined') {
+      data.mustChangePassword = options.mustChangePassword;
+    }
+
+    if (options?.clearPasswordResetToken) {
+      data.passwordResetTokenHash = null;
+      data.passwordResetTokenExpiresAt = null;
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data,
+    });
   }
 
   private async ensureRoleIdsExist(roleIds: string[], db: PrismaClientOrTx) {

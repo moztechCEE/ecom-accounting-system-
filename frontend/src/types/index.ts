@@ -40,6 +40,7 @@ export interface ManagedUser {
   email: string;
   name: string;
   isActive: boolean;
+  mustChangePassword?: boolean;
   createdAt?: string;
   updatedAt?: string;
   roles: UserRoleLink[];
@@ -60,6 +61,7 @@ export interface User {
   email: string;
   name: string;
   avatar?: string;
+  mustChangePassword?: boolean;
   roles: string[];
   permissions: string[];
 }
@@ -72,6 +74,13 @@ export interface LoginRequest {
 export interface LoginResponse {
   access_token: string;
   user: User;
+}
+
+export interface EmployeeLoginAccountResult {
+  employee: Employee;
+  user: ManagedUser;
+  temporaryPassword: string;
+  mustChangePassword: boolean;
 }
 
 export interface Account {

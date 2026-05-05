@@ -2,6 +2,7 @@ import api from "./api";
 import {
   AuditLogEntry,
   Employee,
+  EmployeeLoginAccountResult,
   Department,
   PayrollRun,
   PayrollRunPrecheckResult,
@@ -53,6 +54,17 @@ export const payrollService = {
   updateEmployee: async (id: string, data: Partial<Employee>) => {
     const response = await api.patch<Employee>(
       `/payroll/employees/${id}`,
+      data,
+    );
+    return response.data;
+  },
+
+  createEmployeeLoginAccount: async (
+    id: string,
+    data: { email: string; password?: string },
+  ) => {
+    const response = await api.post<EmployeeLoginAccountResult>(
+      `/payroll/employees/${id}/login-account`,
       data,
     );
     return response.data;

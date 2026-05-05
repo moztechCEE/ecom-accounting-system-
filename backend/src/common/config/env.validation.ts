@@ -78,6 +78,30 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   OPENAI_COMPUTER_USE_HEADLESS?: string;
+
+  @IsOptional()
+  @IsString()
+  APP_BASE_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  SMTP_HOST?: string;
+
+  @IsOptional()
+  @IsString()
+  SMTP_PORT?: string;
+
+  @IsOptional()
+  @IsString()
+  SMTP_USER?: string;
+
+  @IsOptional()
+  @IsString()
+  SMTP_PASS?: string;
+
+  @IsOptional()
+  @IsString()
+  SMTP_FROM?: string;
 }
 
 /**

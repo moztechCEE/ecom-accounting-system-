@@ -1,9 +1,10 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Form, Input, Button, message, Typography, Divider, Checkbox, Space } from 'antd'
+import { Form, Input, Button, message, Typography, Divider, Checkbox, Space, Modal } from 'antd'
 import { UserOutlined, LockOutlined, GoogleOutlined, GithubOutlined, WindowsOutlined } from '@ant-design/icons'
 import { motion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
+import { authService } from '../services/auth.service'
 import { LoginRequest } from '../types'
 import BrandMark from '../components/BrandMark'
 
@@ -14,6 +15,9 @@ const LoginPage: React.FC = () => {
   const { login } = useAuth()
   const [loading, setLoading] = React.useState(false)
   const [passwordStrength, setPasswordStrength] = React.useState(0)
+  const [forgotOpen, setForgotOpen] = React.useState(false)
+  const [forgotLoading, setForgotLoading] = React.useState(false)
+  const [forgotForm] = Form.useForm<{ email: string }>()
 
   const checkPasswordStrength = (password: string) => {
     let strength = 0
@@ -49,6 +53,28 @@ const LoginPage: React.FC = () => {
       message.error(errorMsg)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleForgotPassword = async () => {
+    try {
+      const values = await forgotForm.validateFields()
+      setForgotLoading(true)
+      await authService.requestPasswordReset(values.email.trim())
+      message.success('若該帳號存在，系統會寄出重設密碼通知。若未收到信，請洽管理員確認郵件設定。')
+      setForgotOpen(false)
+      forgotForm.resetFields()
+    } catch (error: any) {
+      if (error?.errorFields) {
+        return
+      }
+      const errorMsg =
+        error?.response?.data?.message ||
+        error?.message ||
+        '送出忘記密碼申請失敗'
+      message.error(errorMsg)
+    } finally {
+      setForgotLoading(false)
     }
   }
 
@@ -154,7 +180,14 @@ const LoginPage: React.FC = () => {
             <Form.Item name="remember" valuePropName="checked" noStyle>
               <Checkbox className="text-gray-500">記住我</Checkbox>
             </Form.Item>
-            <a className="text-blue-500 hover:text-blue-600 text-sm font-medium" href="#">
+            <a
+              className="text-blue-500 hover:text-blue-600 text-sm font-medium"
+              href="#"
+              onClick={(event) => {
+                event.preventDefault()
+                setForgotOpen(true)
+              }}
+            >
               忘記密碼？
             </a>
           </div>
@@ -200,6 +233,28 @@ const LoginPage: React.FC = () => {
           </div>
         </Form>
       </motion.div>
+
+      <Modal
+        title="忘記密碼"
+        open={forgotOpen}
+        onCancel={() => setForgotOpen(false)}
+        onOk={() => void handleForgotPassword()}
+        confirmLoading={forgotLoading}
+        okText="寄送重設通知"
+      >
+        <Form form={forgotForm} layout="vertical">
+          <Form.Item
+            name="email"
+            label="電子郵件"
+            rules={[
+              { required: true, message: '請輸入電子郵件' },
+              { type: 'email', message: '請輸入有效的電子郵件' },
+            ]}
+          >
+            <Input placeholder="請輸入登入用電子郵件" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }

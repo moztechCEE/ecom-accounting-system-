@@ -25,6 +25,7 @@ import { PayPayrollRunDto } from './dto/pay-payroll-run.dto';
 import { PayrollRunPrecheckDto } from './dto/payroll-run-precheck.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { UpsertPayrollPolicyDto } from './dto/upsert-payroll-policy.dto';
+import { CreateEmployeeLoginAccountDto } from './dto/create-employee-login-account.dto';
 import type { Response } from 'express';
 
 /**
@@ -149,6 +150,19 @@ export class PayrollController {
     @Body() data: any,
   ) {
     return this.payrollService.updateEmployee(id, req.user.id, data);
+  }
+
+  @Post('employees/:id/login-account')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '為員工建立並綁定登入帳號' })
+  @ApiResponse({ status: 201, description: '成功建立並綁定登入帳號' })
+  async createEmployeeLoginAccount(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: CreateEmployeeLoginAccountDto,
+  ) {
+    return this.payrollService.createEmployeeLoginAccount(id, req.user.id, dto);
   }
 
   @Get('runs')
