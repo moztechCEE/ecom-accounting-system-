@@ -33,6 +33,7 @@ const DEFAULT_PAYROLL_POLICY = {
 @Injectable()
 export class PayrollService {
   private readonly logger = new Logger(PayrollService.name);
+  private readonly defaultWeekdaySet = new Set([1, 2, 3, 4, 5]);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -114,6 +115,74 @@ export class PayrollService {
     suffix = 'payslip',
   ) {
     return `${suffix}-${employeeNo}-${payDate.toISOString().slice(0, 10)}.pdf`;
+  }
+
+  private normalizeInputDate(value: Date | string, fieldName: string) {
+    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException(`${fieldName}格式不正確`);
+    }
+    return date;
+  }
+
+  private startOfDay(value: Date) {
+    const date = new Date(value.getTime());
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+
+  private endOfDay(value: Date) {
+    const date = new Date(value.getTime());
+    date.setHours(23, 59, 59, 999);
+    return date;
+  }
+
+  private dateKey(value: Date) {
+    return this.startOfDay(value).toISOString().slice(0, 10);
+  }
+
+  private enumerateDates(start: Date, end: Date) {
+    const dates: Date[] = [];
+    const cursor = this.startOfDay(start);
+    const finalDate = this.startOfDay(end);
+
+    while (cursor <= finalDate) {
+      dates.push(new Date(cursor.getTime()));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return dates;
+  }
+
+  private scopeIdsFromJson(value: unknown) {
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string')
+      : [];
+  }
+
+  private closureAppliesToEmployee(
+    closure: { scopeType: string; scopeIds: unknown },
+    employee: { id: string; departmentId?: string | null; location?: string | null },
+  ) {
+    if (closure.scopeType === 'ENTITY') {
+      return true;
+    }
+
+    const scopeIds = this.scopeIdsFromJson(closure.scopeIds);
+    if (closure.scopeType === 'DEPARTMENT') {
+      return Boolean(employee.departmentId && scopeIds.includes(employee.departmentId));
+    }
+    if (closure.scopeType === 'EMPLOYEE') {
+      return scopeIds.includes(employee.id);
+    }
+    if (closure.scopeType === 'LOCATION') {
+      return Boolean(employee.location && scopeIds.includes(employee.location));
+    }
+    return false;
+  }
+
+  private buildWeekdaySet(values: number[]) {
+    return new Set(values.filter((value) => Number.isInteger(value) && value >= 0 && value <= 6));
   }
 
   private async buildPayslipPdfBuffer(params: {
@@ -1272,20 +1341,367 @@ export class PayrollService {
       filename: this.buildPayslipFileName(employee.employeeNo, run.payDate),
     };
   }
+
+  async previewPayrollRunWarnings(
+    data: {
+      entityId?: string;
+      periodStart: Date | string;
+      periodEnd: Date | string;
+      payDate?: Date | string;
+    },
+    userId: string,
+  ) {
+    const entityId = await this.resolveEntityId(userId, data.entityId);
+    const periodStart = this.startOfDay(
+      this.normalizeInputDate(data.periodStart, '計薪期間開始日'),
+    );
+    const periodEnd = this.endOfDay(
+      this.normalizeInputDate(data.periodEnd, '計薪期間結束日'),
+    );
+
+    if (periodEnd < periodStart) {
+      throw new BadRequestException('計薪期間結束日不可早於開始日');
+    }
+
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        entityId,
+        isActive: true,
+        hireDate: { lte: periodEnd },
+        OR: [{ terminateDate: null }, { terminateDate: { gte: periodStart } }],
+      },
+      select: {
+        id: true,
+        employeeNo: true,
+        name: true,
+        departmentId: true,
+        location: true,
+        hireDate: true,
+        terminateDate: true,
+        department: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: [{ department: { name: 'asc' } }, { employeeNo: 'asc' }],
+    });
+
+    if (employees.length === 0) {
+      return {
+        periodStart: periodStart.toISOString(),
+        periodEnd: periodEnd.toISOString(),
+        periodWorkdayCount: 0,
+        employeesChecked: 0,
+        issueCount: 0,
+        issues: [],
+      };
+    }
+
+    const employeeIds = employees.map((employee) => employee.id);
+    const departmentIds = Array.from(
+      new Set(
+        employees
+          .map((employee) => employee.departmentId)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+
+    const [dailySummaries, leaveRequests, schedules, closures] =
+      await Promise.all([
+        this.prisma.attendanceDailySummary.findMany({
+          where: {
+            entityId,
+            employeeId: { in: employeeIds },
+            workDate: {
+              gte: periodStart,
+              lte: periodEnd,
+            },
+          },
+          select: {
+            employeeId: true,
+            workDate: true,
+            status: true,
+            clockInTime: true,
+            clockOutTime: true,
+            anomalyReason: true,
+          },
+        }),
+        this.prisma.leaveRequest.findMany({
+          where: {
+            entityId,
+            employeeId: { in: employeeIds },
+            status: { in: ['SUBMITTED', 'APPROVED'] },
+            startAt: { lte: periodEnd },
+            endAt: { gte: periodStart },
+          },
+          select: {
+            employeeId: true,
+            startAt: true,
+            endAt: true,
+            status: true,
+            leaveType: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        }),
+        this.prisma.attendanceSchedule.findMany({
+          where: {
+            policy: {
+              entityId,
+            },
+            OR: [
+              { employeeId: { in: employeeIds } },
+              departmentIds.length > 0
+                ? { departmentId: { in: departmentIds } }
+                : { id: '__NO_DEPARTMENT_SCOPE__' },
+              { employeeId: null, departmentId: null },
+            ],
+          },
+          select: {
+            employeeId: true,
+            departmentId: true,
+            weekday: true,
+          },
+        }),
+        this.prisma.disasterClosureEvent.findMany({
+          where: {
+            entityId,
+            isActive: true,
+            closureDate: {
+              gte: periodStart,
+              lte: periodEnd,
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+            closureDate: true,
+            scopeType: true,
+            scopeIds: true,
+          },
+          orderBy: { closureDate: 'asc' },
+        }),
+      ]);
+
+    const summaryByEmployeeDate = new Map<string, (typeof dailySummaries)[number]>();
+    for (const summary of dailySummaries) {
+      summaryByEmployeeDate.set(
+        `${summary.employeeId}:${this.dateKey(summary.workDate)}`,
+        summary,
+      );
+    }
+
+    const leaveByEmployeeDate = new Map<
+      string,
+      { status: string; leaveTypeName: string }[]
+    >();
+    for (const leaveRequest of leaveRequests) {
+      const leaveStart = this.startOfDay(leaveRequest.startAt);
+      const leaveEnd = this.startOfDay(leaveRequest.endAt);
+      const effectiveStart = leaveStart > periodStart ? leaveStart : periodStart;
+      const effectiveEnd = leaveEnd < periodEnd ? leaveEnd : this.startOfDay(periodEnd);
+      const dates = this.enumerateDates(effectiveStart, effectiveEnd);
+      for (const date of dates) {
+        const key = `${leaveRequest.employeeId}:${this.dateKey(date)}`;
+        const current = leaveByEmployeeDate.get(key) ?? [];
+        current.push({
+          status: leaveRequest.status,
+          leaveTypeName: leaveRequest.leaveType?.name ?? '請假',
+        });
+        leaveByEmployeeDate.set(key, current);
+      }
+    }
+
+    const employeeWeekdays = new Map<string, Set<number>>();
+    const departmentWeekdays = new Map<string, Set<number>>();
+    const globalWeekdays: number[] = [];
+
+    for (const schedule of schedules) {
+      if (schedule.employeeId) {
+        const current = employeeWeekdays.get(schedule.employeeId) ?? new Set<number>();
+        current.add(schedule.weekday);
+        employeeWeekdays.set(schedule.employeeId, current);
+        continue;
+      }
+
+      if (schedule.departmentId) {
+        const current =
+          departmentWeekdays.get(schedule.departmentId) ?? new Set<number>();
+        current.add(schedule.weekday);
+        departmentWeekdays.set(schedule.departmentId, current);
+        continue;
+      }
+
+      globalWeekdays.push(schedule.weekday);
+    }
+
+    const globalWeekdaySet =
+      globalWeekdays.length > 0
+        ? this.buildWeekdaySet(globalWeekdays)
+        : this.defaultWeekdaySet;
+
+    const entityWideClosureDates = new Set(
+      closures
+        .filter((closure) => closure.scopeType === 'ENTITY')
+        .map((closure) => this.dateKey(closure.closureDate)),
+    );
+
+    const periodWorkdayCount = this.enumerateDates(periodStart, periodEnd).filter(
+      (date) =>
+        globalWeekdaySet.has(date.getDay()) &&
+        !entityWideClosureDates.has(this.dateKey(date)),
+    ).length;
+
+    const issues: Array<{
+      employeeId: string;
+      employeeNo: string;
+      employeeName: string;
+      departmentName: string | null;
+      workDate: string;
+      issueType: 'MISSING_ATTENDANCE_OR_LEAVE' | 'INCOMPLETE_CLOCK';
+      scheduleSource: 'employee' | 'department' | 'global' | 'default';
+      detail: string;
+      summaryStatus: string | null;
+    }> = [];
+
+    for (const employee of employees) {
+      const employeeStart =
+        this.startOfDay(employee.hireDate) > periodStart
+          ? this.startOfDay(employee.hireDate)
+          : periodStart;
+      const employeeEnd =
+        employee.terminateDate && this.endOfDay(employee.terminateDate) < periodEnd
+          ? this.endOfDay(employee.terminateDate)
+          : periodEnd;
+
+      if (employeeEnd < employeeStart) {
+        continue;
+      }
+
+      let applicableWeekdays = employeeWeekdays.get(employee.id);
+      let scheduleSource: 'employee' | 'department' | 'global' | 'default' =
+        'employee';
+
+      if (!applicableWeekdays && employee.departmentId) {
+        applicableWeekdays = departmentWeekdays.get(employee.departmentId);
+        scheduleSource = 'department';
+      }
+
+      if (!applicableWeekdays && globalWeekdays.length > 0) {
+        applicableWeekdays = globalWeekdaySet;
+        scheduleSource = 'global';
+      }
+
+      if (!applicableWeekdays) {
+        applicableWeekdays = this.defaultWeekdaySet;
+        scheduleSource = 'default';
+      }
+
+      const employeeClosures = closures
+        .filter((closure) => this.closureAppliesToEmployee(closure, employee))
+        .map((closure) => this.dateKey(closure.closureDate));
+      const employeeClosureDates = new Set(employeeClosures);
+
+      for (const date of this.enumerateDates(employeeStart, employeeEnd)) {
+        if (!applicableWeekdays.has(date.getDay())) {
+          continue;
+        }
+
+        const workDate = this.dateKey(date);
+        if (employeeClosureDates.has(workDate)) {
+          continue;
+        }
+
+        const leaveKey = `${employee.id}:${workDate}`;
+        if ((leaveByEmployeeDate.get(leaveKey) ?? []).length > 0) {
+          continue;
+        }
+
+        const summaryKey = `${employee.id}:${workDate}`;
+        const summary = summaryByEmployeeDate.get(summaryKey);
+
+        if (!summary) {
+          issues.push({
+            employeeId: employee.id,
+            employeeNo: employee.employeeNo,
+            employeeName: employee.name,
+            departmentName: employee.department?.name ?? null,
+            workDate,
+            issueType: 'MISSING_ATTENDANCE_OR_LEAVE',
+            scheduleSource,
+            summaryStatus: null,
+            detail: '該工作日沒有打卡摘要，也沒有已送出或已核准的請假紀錄。',
+          });
+          continue;
+        }
+
+        if (
+          summary.status === 'disaster_closure' ||
+          (summary.clockInTime && summary.clockOutTime && summary.status !== 'missing_clock')
+        ) {
+          continue;
+        }
+
+        issues.push({
+          employeeId: employee.id,
+          employeeNo: employee.employeeNo,
+          employeeName: employee.name,
+          departmentName: employee.department?.name ?? null,
+          workDate,
+          issueType: 'INCOMPLETE_CLOCK',
+          scheduleSource,
+          summaryStatus: summary.status ?? null,
+          detail:
+            !summary.clockInTime && !summary.clockOutTime
+              ? '有出勤摘要，但沒有完整打卡時間，請確認是否漏打卡或需要補請假。'
+              : !summary.clockInTime
+                ? '缺少上班打卡時間，請確認是否忘記上班打卡。'
+                : '缺少下班打卡時間，請確認是否忘記下班打卡。',
+        });
+      }
+    }
+
+    issues.sort((left, right) => {
+      const dateCompare = left.workDate.localeCompare(right.workDate);
+      if (dateCompare !== 0) {
+        return dateCompare;
+      }
+      return left.employeeNo.localeCompare(right.employeeNo);
+    });
+
+    return {
+      periodStart: periodStart.toISOString(),
+      periodEnd: periodEnd.toISOString(),
+      periodWorkdayCount,
+      employeesChecked: employees.length,
+      issueCount: issues.length,
+      issues,
+    };
+  }
   /**
    * 建立薪資批次
    */
   async createPayrollRun(
     data: {
       entityId?: string;
-      periodStart: Date;
-      periodEnd: Date;
-      payDate: Date;
+      periodStart: Date | string;
+      periodEnd: Date | string;
+      payDate: Date | string;
     },
     userId: string,
   ) {
     const entityId = await this.resolveEntityId(userId, data.entityId);
-    const { periodStart, periodEnd, payDate } = data;
+    const periodStart = this.startOfDay(
+      this.normalizeInputDate(data.periodStart, '計薪期間開始日'),
+    );
+    const periodEnd = this.endOfDay(
+      this.normalizeInputDate(data.periodEnd, '計薪期間結束日'),
+    );
+    const payDate = this.normalizeInputDate(data.payDate, '預計發薪日');
 
     if (periodEnd < periodStart) {
       throw new BadRequestException('計薪期間結束日不可早於開始日');
@@ -1992,7 +2408,7 @@ export class PayrollService {
       items.push({
         type: 'DISASTER_CLOSURE_DEDUCTION',
         amount: -deductionAmount,
-        remark: `災防停班 ${closure.name} ${new Date(
+        remark: `統一放假 ${closure.name} ${new Date(
           closure.closureDate,
         ).toISOString().slice(0, 10)} (${policyLabel})`,
       });

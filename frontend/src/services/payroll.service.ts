@@ -4,6 +4,7 @@ import {
   Employee,
   Department,
   PayrollRun,
+  PayrollRunPrecheckResult,
   PaginatedResult,
   BankAccount,
   PayrollSettings,
@@ -109,6 +110,19 @@ export const payrollService = {
 
   createPayrollRun: async (data: Partial<PayrollRun>) => {
     const response = await api.post<PayrollRun>("/payroll/runs", data);
+    return response.data;
+  },
+
+  previewPayrollRunWarnings: async (data: {
+    entityId?: string;
+    periodStart: string;
+    periodEnd: string;
+    payDate?: string;
+  }) => {
+    const response = await api.post<PayrollRunPrecheckResult>(
+      "/payroll/runs/precheck",
+      data,
+    );
     return response.data;
   },
 

@@ -395,7 +395,7 @@ const AttendanceAdminPage: React.FC = () => {
       leave: { text: "請假", className: "bg-sky-100/70 text-sky-700" },
       late: { text: "遲到", className: "bg-orange-100/70 text-orange-700" },
       disaster_closure: {
-        text: "災防停班",
+        text: "統一放假",
         className: "bg-cyan-100/70 text-cyan-700",
       },
     };
@@ -620,11 +620,11 @@ const AttendanceAdminPage: React.FC = () => {
       };
 
       if (!payload.name) {
-        message.error("請先輸入停班事件名稱");
+        message.error("請先輸入放假宣告名稱");
         return;
       }
       if (!payload.closureDate) {
-        message.error("請先選擇停班日期");
+        message.error("請先選擇放假日期");
         return;
       }
       if (payload.scopeType !== "ENTITY" && scopeIds.length === 0) {
@@ -637,10 +637,10 @@ const AttendanceAdminPage: React.FC = () => {
           editingClosure.id,
           payload,
         );
-        message.success("災防停班事件已更新");
+        message.success("特殊統一放假宣告已更新");
       } else {
         await attendanceService.createDisasterClosure(payload);
-        message.success("災防停班事件已建立");
+        message.success("特殊統一放假宣告已建立");
       }
 
       setClosureModalOpen(false);
@@ -649,7 +649,7 @@ const AttendanceAdminPage: React.FC = () => {
       await Promise.all([loadManagementData(), loadAttendance()]);
     } catch (error: any) {
       console.error(error);
-      message.error(error?.response?.data?.message || "儲存災防停班事件失敗");
+      message.error(error?.response?.data?.message || "儲存特殊統一放假宣告失敗");
     }
   };
 
@@ -660,11 +660,11 @@ const AttendanceAdminPage: React.FC = () => {
 
     try {
       await attendanceService.deleteDisasterClosure(closure.id);
-      message.success("災防停班事件已停用");
+      message.success("特殊統一放假宣告已停用");
       await loadManagementData();
     } catch (error: any) {
       console.error(error);
-      message.error(error?.response?.data?.message || "停用災防停班事件失敗");
+      message.error(error?.response?.data?.message || "停用特殊統一放假宣告失敗");
     }
   };
 
@@ -814,7 +814,7 @@ const AttendanceAdminPage: React.FC = () => {
     { key: "attendance", label: "每日出勤", icon: <DashboardOutlined /> },
     { key: "requests", label: "假單審核", icon: <CheckCircleOutlined /> },
     { key: "policies", label: "班表政策", icon: <ClockCircleOutlined /> },
-    { key: "closures", label: "災防停班", icon: <WarningOutlined /> },
+    { key: "closures", label: "統一放假", icon: <WarningOutlined /> },
     { key: "types", label: "假別規則", icon: <SettingOutlined /> },
     { key: "balances", label: "年度額度", icon: <CalendarOutlined /> },
   ];
@@ -828,7 +828,7 @@ const AttendanceAdminPage: React.FC = () => {
         }
       : activeTab === "closures"
         ? {
-            label: "新增停班事件",
+            label: "新增放假宣告",
             icon: <WarningOutlined />,
             onClick: openCreateClosure,
           }
@@ -1279,10 +1279,10 @@ const AttendanceAdminPage: React.FC = () => {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <div className="text-sm font-semibold text-cyan-900">
-                      災防停班事件
+                      特殊統一放假宣告
                     </div>
                     <div className="mt-2 text-sm leading-6 text-cyan-800">
-                      颱風、豪雨或其他天然災害停班不建議做成員工逐一申請的假別。請在這裡建立一次事件，系統會依範圍建立出勤摘要，並在薪資計算時套用不扣薪、不支薪或部分支薪政策。
+                      國定假日補放、颱風停班、天然災害或公司統一公告放假，都建議在這裡建立一次宣告。系統會依範圍建立出勤摘要，並在薪資計算時套用不扣薪、不支薪或部分支薪政策，不需要每位員工逐一送假單。
                     </div>
                   </div>
                   <GlassButton
@@ -1290,7 +1290,7 @@ const AttendanceAdminPage: React.FC = () => {
                     onClick={openCreateClosure}
                   >
                     <WarningOutlined />
-                    新增停班事件
+                    新增放假宣告
                   </GlassButton>
                 </div>
               </GlassCard>
@@ -1299,7 +1299,7 @@ const AttendanceAdminPage: React.FC = () => {
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-white/20 text-sm text-slate-500">
-                      <th className="px-5 py-4 font-medium">事件</th>
+                      <th className="px-5 py-4 font-medium">宣告</th>
                       <th className="px-5 py-4 font-medium">日期</th>
                       <th className="px-5 py-4 font-medium">範圍</th>
                       <th className="px-5 py-4 font-medium">薪資政策</th>
@@ -1380,7 +1380,7 @@ const AttendanceAdminPage: React.FC = () => {
                           colSpan={6}
                           className="px-5 py-10 text-center text-sm text-slate-400"
                         >
-                          目前沒有這個年度的災防停班事件
+                          目前沒有這個年度的特殊統一放假宣告
                         </td>
                       </tr>
                     )}
@@ -1567,7 +1567,7 @@ const AttendanceAdminPage: React.FC = () => {
           setEditingClosure(null);
           setClosureForm(emptyClosureForm);
         }}
-        title={editingClosure ? "編輯災防停班事件" : "新增災防停班事件"}
+        title={editingClosure ? "編輯特殊統一放假宣告" : "新增特殊統一放假宣告"}
         maxWidth="max-w-[920px]"
         footer={
           <>
@@ -1582,7 +1582,7 @@ const AttendanceAdminPage: React.FC = () => {
               取消
             </GlassButton>
             <GlassButton onClick={() => void saveClosure()}>
-              {editingClosure ? "儲存更新" : "建立事件"}
+              {editingClosure ? "儲存更新" : "建立宣告"}
             </GlassButton>
           </>
         }
@@ -1593,21 +1593,21 @@ const AttendanceAdminPage: React.FC = () => {
               建議用法
             </div>
             <div className="mt-2 text-sm leading-6 text-amber-800">
-              政府公告某區停班時，在這裡建立一筆事件並選擇適用範圍。員工不用送假單；薪資會依你設定的不扣薪、不支薪或部分支薪規則自動帶入。
+              遇到國定假日補放、政府公告停班，或公司決定統一放假時，在這裡建立一筆宣告並選擇適用範圍。員工不用送假單；薪資會依你設定的不扣薪、不支薪或部分支薪規則自動帶入。
             </div>
           </GlassCard>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <GlassInput
-              label="事件名稱"
+              label="宣告名稱"
               value={closureForm.name}
               onChange={(event) =>
                 setClosureForm((prev) => ({ ...prev, name: event.target.value }))
               }
-              placeholder="例如：台北市颱風停班"
+              placeholder="例如：清明連假統一放假"
             />
             <GlassInput
-              label="停班日期"
+              label="放假日期"
               type="date"
               value={closureForm.closureDate}
               onChange={(event) =>

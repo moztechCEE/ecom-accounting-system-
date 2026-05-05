@@ -22,6 +22,7 @@ import { PayrollService } from './payroll.service';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { PayPayrollRunDto } from './dto/pay-payroll-run.dto';
+import { PayrollRunPrecheckDto } from './dto/payroll-run-precheck.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { UpsertPayrollPolicyDto } from './dto/upsert-payroll-policy.dto';
 import type { Response } from 'express';
@@ -240,6 +241,18 @@ export class PayrollController {
   @ApiResponse({ status: 201, description: '成功建立薪資計算批次' })
   async createPayrollRun(@Request() req: any, @Body() data: any) {
     return this.payrollService.createPayrollRun(data, req.user.id);
+  }
+
+  @Post('runs/precheck')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '薪資結算前檢查出勤與請假異常' })
+  @ApiResponse({ status: 200, description: '成功取得薪資前檢查結果' })
+  async previewPayrollRunWarnings(
+    @Request() req: any,
+    @Body() dto: PayrollRunPrecheckDto,
+  ) {
+    return this.payrollService.previewPayrollRunWarnings(dto, req.user.id);
   }
 
   @Post('runs/:id/submit')

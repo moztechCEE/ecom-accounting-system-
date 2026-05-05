@@ -301,6 +301,27 @@ export interface PayrollRun {
   items?: PayrollItem[];
 }
 
+export interface PayrollRunPrecheckIssue {
+  employeeId: string;
+  employeeNo: string;
+  employeeName: string;
+  departmentName?: string | null;
+  workDate: string;
+  issueType: "MISSING_ATTENDANCE_OR_LEAVE" | "INCOMPLETE_CLOCK";
+  scheduleSource: "employee" | "department" | "global" | "default";
+  detail: string;
+  summaryStatus?: string | null;
+}
+
+export interface PayrollRunPrecheckResult {
+  periodStart: string;
+  periodEnd: string;
+  periodWorkdayCount: number;
+  employeesChecked: number;
+  issueCount: number;
+  issues: PayrollRunPrecheckIssue[];
+}
+
 export interface PayrollItem {
   id: string;
   employeeId: string;

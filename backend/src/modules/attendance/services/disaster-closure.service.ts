@@ -358,7 +358,7 @@ export class DisasterClosureService {
           ? '部分支薪'
           : '不扣薪';
     return [
-      `災防停班：${event.name}`,
+      `統一放假宣告：${event.name}`,
       event.announcementRegion ? `區域：${event.announcementRegion}` : null,
       `薪資：${policyLabel}`,
     ]

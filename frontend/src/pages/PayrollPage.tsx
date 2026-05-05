@@ -22,6 +22,7 @@ import {
 import {
   CalendarOutlined,
   CheckCircleOutlined,
+  ExclamationCircleOutlined,
   DownloadOutlined,
   DollarOutlined,
   FileTextOutlined,
@@ -34,7 +35,14 @@ import { motion } from 'framer-motion'
 import dayjs from 'dayjs'
 import { GlassDrawer, GlassDrawerSection } from '../components/ui/GlassDrawer'
 import { payrollService } from '../services/payroll.service'
-import { AuditLogEntry, BankAccount, PayrollItem, PayrollRun } from '../types'
+import {
+  AuditLogEntry,
+  BankAccount,
+  PayrollItem,
+  PayrollRun,
+  PayrollRunPrecheckIssue,
+  PayrollRunPrecheckResult,
+} from '../types'
 import { useAuth } from '../contexts/AuthContext'
 
 const { Title, Text } = Typography
@@ -48,6 +56,11 @@ const statusMetaMap: Record<string, { label: string; color: string }> = {
 }
 
 type DetailScope = 'admin' | 'mine'
+type PayrollRunCreatePayload = {
+  periodStart: string
+  periodEnd: string
+  payDate: string
+}
 
 const PayrollPage: React.FC = () => {
   const { user } = useAuth()
@@ -59,12 +72,16 @@ const PayrollPage: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [payModalOpen, setPayModalOpen] = useState(false)
+  const [precheckModalOpen, setPrecheckModalOpen] = useState(false)
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null)
+  const [createLoading, setCreateLoading] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailScope, setDetailScope] = useState<DetailScope>('admin')
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([])
   const [myRunsError, setMyRunsError] = useState<string | null>(null)
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
+  const [precheckResult, setPrecheckResult] = useState<PayrollRunPrecheckResult | null>(null)
+  const [pendingCreatePayload, setPendingCreatePayload] = useState<PayrollRunCreatePayload | null>(null)
   const [form] = Form.useForm()
   const [payForm] = Form.useForm()
 
@@ -171,20 +188,48 @@ const PayrollPage: React.FC = () => {
     }
   }
 
+  const finalizeCreate = async (payload: PayrollRunCreatePayload) => {
+    setCreateLoading(true)
+    try {
+      await payrollService.createPayrollRun(payload)
+      message.success('薪資批次已建立')
+      setDrawerOpen(false)
+      setPrecheckModalOpen(false)
+      setPendingCreatePayload(null)
+      setPrecheckResult(null)
+      form.resetFields()
+      fetchAdminRuns()
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '建立薪資批次失敗')
+    } finally {
+      setCreateLoading(false)
+    }
+  }
+
   const handleCreate = async () => {
     try {
       const values = await form.validateFields()
-      await payrollService.createPayrollRun({
+      const payload: PayrollRunCreatePayload = {
         periodStart: values.period[0].toISOString(),
         periodEnd: values.period[1].toISOString(),
         payDate: values.payDate.toISOString(),
-      })
-      message.success('薪資批次已建立')
-      setDrawerOpen(false)
-      form.resetFields()
-      fetchAdminRuns()
-    } catch (error) {
-      // validation/api handled elsewhere
+      }
+      setCreateLoading(true)
+      const preview = await payrollService.previewPayrollRunWarnings(payload)
+      if (preview.issueCount > 0) {
+        setPendingCreatePayload(payload)
+        setPrecheckResult(preview)
+        setPrecheckModalOpen(true)
+        return
+      }
+      await finalizeCreate(payload)
+    } catch (error: any) {
+      if (error?.errorFields) {
+        return
+      }
+      message.error(error?.response?.data?.message || '薪資前檢查失敗')
+    } finally {
+      setCreateLoading(false)
     }
   }
 
@@ -519,6 +564,58 @@ const PayrollPage: React.FC = () => {
     },
   ]
 
+  const precheckIssueColumns = [
+    {
+      title: '日期',
+      dataIndex: 'workDate',
+      key: 'workDate',
+      render: (value: string) => dayjs(value).format('YYYY-MM-DD'),
+    },
+    {
+      title: '員工',
+      key: 'employee',
+      render: (_: unknown, issue: PayrollRunPrecheckIssue) => (
+        <div>
+          <div className="font-medium text-slate-800">
+            {issue.employeeName} ({issue.employeeNo})
+          </div>
+          <div className="text-xs text-slate-400">{issue.departmentName || '未分配部門'}</div>
+        </div>
+      ),
+    },
+    {
+      title: '異常類型',
+      dataIndex: 'issueType',
+      key: 'issueType',
+      render: (value: PayrollRunPrecheckIssue['issueType']) => (
+        <Tag color={value === 'INCOMPLETE_CLOCK' ? 'orange' : 'red'}>
+          {value === 'INCOMPLETE_CLOCK' ? '缺少打卡' : '疑似漏請假／未出勤'}
+        </Tag>
+      ),
+    },
+    {
+      title: '說明',
+      dataIndex: 'detail',
+      key: 'detail',
+      render: (value: string, issue: PayrollRunPrecheckIssue) => (
+        <div>
+          <div>{value}</div>
+          <div className="text-xs text-slate-400">
+            班表來源：
+            {issue.scheduleSource === 'employee'
+              ? '員工個人班表'
+              : issue.scheduleSource === 'department'
+                ? '部門班表'
+                : issue.scheduleSource === 'global'
+                  ? '全公司班表'
+                  : '預設週一至週五'}
+            {issue.summaryStatus ? ` · 出勤狀態：${issue.summaryStatus}` : ''}
+          </div>
+        </div>
+      ),
+    },
+  ]
+
   const itemColumns = [
     {
       title: detailScope === 'admin' ? '員工' : '項目',
@@ -692,7 +789,12 @@ const PayrollPage: React.FC = () => {
       <GlassDrawer
         title="執行薪資計算"
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={() => {
+          setDrawerOpen(false)
+          setPrecheckModalOpen(false)
+          setPendingCreatePayload(null)
+          setPrecheckResult(null)
+        }}
         width={420}
       >
         <Form form={form} layout="vertical" className="h-full flex flex-col">
@@ -710,15 +812,25 @@ const PayrollPage: React.FC = () => {
             <GlassDrawerSection>
               <div className="mb-4 font-semibold text-slate-800">說明</div>
               <Text type="secondary" className="text-xs">
-                系統會自動帶入本期已核准請假、加班與勞健保扣項，建立草稿批次後再由主管或人資送審與批准。
+                系統會先檢查本期是否有漏請假、漏打卡或缺少出勤摘要的員工，再建立薪資草稿，避免直接影響薪資計算。
               </Text>
             </GlassDrawerSection>
           </div>
 
           <GlassDrawerSection>
             <div className="flex justify-end gap-2">
-              <Button onClick={() => setDrawerOpen(false)} className="rounded-full">取消</Button>
-              <Button type="primary" onClick={handleCreate} className="rounded-full bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-200">
+              <Button
+                onClick={() => {
+                  setDrawerOpen(false)
+                  setPrecheckModalOpen(false)
+                  setPendingCreatePayload(null)
+                  setPrecheckResult(null)
+                }}
+                className="rounded-full"
+              >
+                取消
+              </Button>
+              <Button type="primary" loading={createLoading} onClick={handleCreate} className="rounded-full bg-blue-600 hover:bg-blue-500 border-none shadow-lg shadow-blue-200">
                 開始計算
               </Button>
             </div>
@@ -877,6 +989,49 @@ const PayrollPage: React.FC = () => {
           <div className="py-12 text-center text-slate-400">{detailLoading ? '載入中...' : '尚未選取薪資資料'}</div>
         )}
       </GlassDrawer>
+
+      <Modal
+        title={
+          <div className="flex items-center gap-2">
+            <ExclamationCircleOutlined className="text-amber-500" />
+            <span>薪資結算前提醒</span>
+          </div>
+        }
+        open={precheckModalOpen}
+        onCancel={() => {
+          setPrecheckModalOpen(false)
+          setPendingCreatePayload(null)
+          setPrecheckResult(null)
+        }}
+        onOk={() => {
+          if (pendingCreatePayload) {
+            void finalizeCreate(pendingCreatePayload)
+          }
+        }}
+        okText="仍要建立薪資批次"
+        cancelText="先回去確認"
+        confirmLoading={createLoading}
+        width={980}
+      >
+        {precheckResult ? (
+          <div className="space-y-4">
+            <Alert
+              type="warning"
+              showIcon
+              message={`本期預估工作天數 ${precheckResult.periodWorkdayCount} 天，找到 ${precheckResult.issueCount} 筆待確認異常`}
+              description={`已檢查 ${precheckResult.employeesChecked} 位員工。系統已自動排除週末、特殊統一放假宣告，以及已送出／已核准的請假紀錄。建議先確認是否漏請假或漏打卡，再決定是否繼續結算。`}
+            />
+            <Table
+              rowKey={(issue) => `${issue.employeeId}-${issue.workDate}-${issue.issueType}`}
+              columns={precheckIssueColumns}
+              dataSource={precheckResult.issues}
+              pagination={{ pageSize: 8 }}
+              size="small"
+              scroll={{ x: 840 }}
+            />
+          </div>
+        ) : null}
+      </Modal>
 
       <Modal
         title="完成薪資發放"
