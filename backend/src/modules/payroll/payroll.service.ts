@@ -830,9 +830,14 @@ export class PayrollService {
 
     const email = dto.email.trim().toLowerCase();
     const password = dto.password?.trim() || this.generateTemporaryPassword();
-    const operatorRole = await this.prisma.role.findFirst({
+    const defaultEmployeeRole = await this.prisma.role.findFirst({
       where: {
-        OR: [{ code: 'OPERATOR' }, { name: 'OPERATOR' }],
+        OR: [
+          { code: 'EMPLOYEE' },
+          { name: 'EMPLOYEE' },
+          { code: 'OPERATOR' },
+          { name: 'OPERATOR' },
+        ],
       },
       select: { id: true },
     });
@@ -841,7 +846,7 @@ export class PayrollService {
       email,
       password,
       name: employee.name,
-      roleIds: operatorRole ? [operatorRole.id] : [],
+      roleIds: defaultEmployeeRole ? [defaultEmployeeRole.id] : [],
       mustChangePassword: true,
     });
 

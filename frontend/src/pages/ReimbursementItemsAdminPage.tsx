@@ -44,7 +44,7 @@ import { useAuth } from '../contexts/AuthContext'
 const { Title, Text } = Typography
 
 const DEFAULT_ENTITY_ID = import.meta.env.VITE_DEFAULT_ENTITY_ID?.trim() || 'tw-entity-001'
-const ROLE_OPTIONS = ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT', 'OPERATOR']
+const ROLE_OPTIONS = ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT', 'OPERATOR', 'EMPLOYEE']
 const RECEIPT_TYPES = ['TAX_INVOICE', 'RECEIPT', 'BANK_SLIP', 'INTERNAL_ONLY']
 
 const toList = (value?: string | null) =>

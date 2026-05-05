@@ -36,6 +36,7 @@ import { ManagedUser, PaginatedResult, Permission, Role, RolePermissionLink, Use
 import { GlassCard } from '../components/ui/GlassCard'
 import { GlassButton } from '../components/ui/GlassButton'
 import { getResourceName, getActionName, getRoleName } from '../constants/translations'
+import { hasPermission, isAdminUser } from '../utils/access'
 
 type TableColumn<T> = {
   title: React.ReactNode
@@ -877,7 +878,10 @@ const PermissionsTab = ({
 
 const AccessControlPage: React.FC = () => {
   const { user } = useAuth()
-  const isAdmin = user?.roles?.some((role: string) => role === 'SUPER_ADMIN' || role === 'ADMIN')
+  const canAccessControl =
+    isAdminUser(user) ||
+    hasPermission(user, 'access_control:read') ||
+    hasPermission(user, 'access_control:update')
 
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
@@ -909,13 +913,13 @@ const AccessControlPage: React.FC = () => {
   }, [])
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canAccessControl) {
       loadRoles()
       loadPermissions()
     }
-  }, [isAdmin, loadRoles, loadPermissions])
+  }, [canAccessControl, loadRoles, loadPermissions])
 
-  if (!isAdmin) {
+  if (!canAccessControl) {
     return (
       <Result
         status="403"

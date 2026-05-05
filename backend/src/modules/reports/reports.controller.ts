@@ -9,6 +9,8 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { ReportsService } from './reports.service';
 import { ExpenseIntelligenceService } from './expense-intelligence.service';
 
@@ -18,7 +20,8 @@ import { ExpenseIntelligenceService } from './expense-intelligence.service';
  */
 @ApiTags('reports')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions({ resource: 'reports', action: 'read' })
 @UseInterceptors(CacheInterceptor) // Enable Caching for all reports
 @Controller('reports')
 export class ReportsController {

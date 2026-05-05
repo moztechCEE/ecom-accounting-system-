@@ -43,6 +43,7 @@ import type {
   EcpayServiceFeeInvoiceSummary,
 } from '../types'
 import { Link, useSearchParams } from 'react-router-dom'
+import { hasAnyPermission, hasPermission } from '../utils/access'
 
 const { Title, Text } = Typography
 
@@ -51,8 +52,12 @@ const DEFAULT_ENTITY_ID = import.meta.env.VITE_DEFAULT_ENTITY_ID?.trim() || 'tw-
 const AccountsPayablePage: React.FC = () => {
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
-  const isAdmin = useMemo(
-    () => (user?.roles ?? []).some((role) => role === 'SUPER_ADMIN' || role === 'ADMIN'),
+  const canAccessPayables = useMemo(
+    () => hasAnyPermission(user, ['purchase_orders:read', 'accounts:read']),
+    [user],
+  )
+  const canProcessPayments = useMemo(
+    () => hasPermission(user, 'banking:update'),
     [user],
   )
 
@@ -101,10 +106,10 @@ const AccountsPayablePage: React.FC = () => {
   }, [entityId])
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canAccessPayables) {
       loadData()
     }
-  }, [isAdmin, loadData])
+  }, [canAccessPayables, loadData])
 
   // Calculate totals
   const totalExpenseAmount = useMemo(() => 
@@ -243,15 +248,19 @@ const AccountsPayablePage: React.FC = () => {
       key: 'action',
       align: 'center',
       render: (_, record) => (
-        <Button 
-          type="primary" 
-          icon={<DollarOutlined />} 
-          onClick={() => handleOpenExpensePayment(record)}
-          className="bg-green-600 hover:bg-green-500 border-none shadow-sm"
-          size="small"
-        >
-          付款
-        </Button>
+        canProcessPayments ? (
+          <Button 
+            type="primary" 
+            icon={<DollarOutlined />} 
+            onClick={() => handleOpenExpensePayment(record)}
+            className="bg-green-600 hover:bg-green-500 border-none shadow-sm"
+            size="small"
+          >
+            付款
+          </Button>
+        ) : (
+          <Tag color="default">唯讀</Tag>
+        )
       )
     }
   ]
@@ -311,20 +320,24 @@ const AccountsPayablePage: React.FC = () => {
       key: 'action',
       align: 'center',
       render: (_, record) => (
-        <Button 
-          type="primary" 
-          icon={<DollarOutlined />} 
-          onClick={() => handleOpenInvoicePayment(record)}
-          className="bg-blue-600 hover:bg-blue-500 border-none shadow-sm"
-          size="small"
-        >
-          付款
-        </Button>
+        canProcessPayments ? (
+          <Button 
+            type="primary" 
+            icon={<DollarOutlined />} 
+            onClick={() => handleOpenInvoicePayment(record)}
+            className="bg-blue-600 hover:bg-blue-500 border-none shadow-sm"
+            size="small"
+          >
+            付款
+          </Button>
+        ) : (
+          <Tag color="default">唯讀</Tag>
+        )
       )
     }
   ]
 
-  if (!isAdmin) {
+  if (!canAccessPayables) {
     return <div className="p-8 text-center">無權限存取此頁面</div>
   }
 

@@ -30,6 +30,7 @@ import CommandPalette from './CommandPalette'
 import AICopilotWidget from './AICopilotWidget'
 import NotificationCenter from './NotificationCenter'
 import SettingsDrawer from './SettingsDrawer'
+import { hasAnyPermission, hasPermission, isAdminUser } from '../utils/access'
 
 const { Header, Sider, Content } = Layout
 const { Title } = Typography
@@ -47,6 +48,8 @@ const DashboardLayout: React.FC = () => {
   // Determine if we are on a mobile screen (xs or sm, but not md or larger)
   // Note: screens.md is true for >= 768px. So !screens.md means < 768px.
   const isMobile = !screens.md
+  const canAccess = (permissions: string[] = []) =>
+    permissions.length === 0 || hasAnyPermission(user, permissions)
 
   const menuItems = [
     {
@@ -59,12 +62,14 @@ const DashboardLayout: React.FC = () => {
       key: '/reconciliation',
       icon: <AuditOutlined />,
       label: '對帳中心',
+      hidden: !canAccess(['banking:read', 'reports:read', 'accounts:read']),
       onClick: () => navigate('/reconciliation'),
     },
     {
       key: 'accounting',
       icon: <FileTextOutlined />,
       label: '會計管理',
+      hidden: !canAccess(['accounts:read', 'journal_entries:read']),
       children: [
         { key: '/accounting/workbench', label: '會計工作台', onClick: () => navigate('/accounting/workbench') },
         { key: '/accounting/workbench?focus=missing-invoices', label: '缺發票處理', onClick: () => navigate('/accounting/workbench?focus=missing-invoices') },
@@ -77,6 +82,7 @@ const DashboardLayout: React.FC = () => {
       key: 'sales',
       icon: <ShoppingOutlined />,
       label: '銷售管理',
+      hidden: !canAccess(['sales_orders:read']),
       children: [
         { key: '/sales/orders', label: '銷售訂單', onClick: () => navigate('/sales/orders') },
         { key: '/sales/customers', label: '客戶管理', onClick: () => navigate('/sales/customers') },
@@ -86,6 +92,7 @@ const DashboardLayout: React.FC = () => {
       key: 'inventory',
       icon: <BoxPlotOutlined />,
       label: '庫存管理',
+      hidden: !canAccess(['inventory:read']),
       children: [
         { key: '/inventory/products', label: '產品與庫存', onClick: () => navigate('/inventory/products') },
       ],
@@ -94,6 +101,7 @@ const DashboardLayout: React.FC = () => {
       key: 'purchasing',
       icon: <ShopOutlined />,
       label: '採購管理',
+      hidden: !canAccess(['purchase_orders:read']),
       children: [
         { key: '/purchasing/orders', label: '採購訂單', onClick: () => navigate('/purchasing/orders') },
         { key: '/vendors', label: '供應商管理', onClick: () => navigate('/vendors') },
@@ -103,6 +111,7 @@ const DashboardLayout: React.FC = () => {
       key: 'manufacturing',
       icon: <ToolOutlined />,
       label: '製造管理',
+      hidden: !canAccess(['inventory:read']),
       children: [
         { key: '/manufacturing/assembly', label: '組裝工單', onClick: () => navigate('/manufacturing/assembly') },
       ],
@@ -111,6 +120,7 @@ const DashboardLayout: React.FC = () => {
       key: 'ar',
       icon: <DollarOutlined />,
       label: '應收帳款',
+      hidden: !canAccess(['sales_orders:read', 'accounts:read']),
       children: [
         { key: '/ar/invoices', label: '應收帳款', onClick: () => navigate('/sales/invoices') },
         { key: '/ar/payments', label: '收款記錄' },
@@ -120,6 +130,7 @@ const DashboardLayout: React.FC = () => {
       key: 'ap',
       icon: <DollarOutlined />,
       label: '應付帳款',
+      hidden: !canAccess(['purchase_orders:read', 'accounts:read']),
       children: [
         { key: '/vendors', label: '供應商管理', onClick: () => navigate('/vendors') },
         { key: '/ap/payable', label: '費用付款', onClick: () => navigate('/ap/payable') },
@@ -131,6 +142,7 @@ const DashboardLayout: React.FC = () => {
       key: 'banking',
       icon: <BankOutlined />,
       label: '銀行管理',
+      hidden: !canAccess(['banking:read']),
       onClick: () => navigate('/banking'),
     },
     // 新增：財務對帳群組（2026-04）
@@ -138,6 +150,7 @@ const DashboardLayout: React.FC = () => {
       key: 'finance',
       icon: <ReconciliationOutlined />,
       label: '財務對帳',
+      hidden: !canAccess(['banking:read', 'reports:read']),
       children: [
         { key: '/reconciliation', label: '電商對帳中心', onClick: () => navigate('/reconciliation') },
         { key: '/reconciliation/ecpay', label: '綠界撥款追蹤', onClick: () => navigate('/reconciliation') },
@@ -149,6 +162,7 @@ const DashboardLayout: React.FC = () => {
       key: 'attendance',
       icon: <ClockCircleOutlined />,
       label: '考勤管理',
+      hidden: !canAccess(['attendance_self:read', 'leave_self:read']),
       children: [
         { key: '/attendance/dashboard', label: '打卡儀表板', onClick: () => navigate('/attendance/dashboard') },
         { key: '/attendance/leaves', label: '請假申請', onClick: () => navigate('/attendance/leaves') },
@@ -158,6 +172,13 @@ const DashboardLayout: React.FC = () => {
       key: 'payroll',
       icon: <TeamOutlined />,
       label: '考勤後臺',
+      hidden:
+        !canAccess([
+          'employees_admin:read',
+          'attendance_admin:read',
+          'payroll_admin:read',
+          'payroll_self:read',
+        ]),
       children: [
         { key: '/payroll/employees', label: '員工與部門', onClick: () => navigate('/payroll/employees') },
         { key: '/attendance/admin', label: '總覽與審核', onClick: () => navigate('/attendance/admin') },
@@ -168,12 +189,19 @@ const DashboardLayout: React.FC = () => {
       key: '/reports',
       icon: <FileTextOutlined />,
       label: '報表中心',
+      hidden: !canAccess(['reports:read']),
       onClick: () => navigate('/reports'),
     },
     {
       key: 'admin',
       icon: <SettingOutlined />,
       label: '系統管理',
+      hidden:
+        !(
+          isAdminUser(user) ||
+          hasPermission(user, 'access_control:read') ||
+          hasPermission(user, 'access_control:update')
+        ),
       children: [
         {
           key: '/admin/access-control',
@@ -187,7 +215,34 @@ const DashboardLayout: React.FC = () => {
         },
       ],
     },
+    {
+      key: '/profile',
+      icon: <UserOutlined />,
+      label: '個人資料',
+      hidden: !canAccess(['profile_self:read']),
+      onClick: () => navigate('/profile'),
+    },
   ]
+
+  const filterMenuItems = (items: any[]): any[] =>
+    items
+      .filter((item) => !item.hidden)
+      .map((item) => {
+        if (!item.children) {
+          return item
+        }
+        const children = filterMenuItems(item.children)
+        if (children.length === 0) {
+          return null
+        }
+        return {
+          ...item,
+          children,
+        }
+      })
+      .filter(Boolean)
+
+  const visibleMenuItems = filterMenuItems(menuItems)
 
   const resolveMenuLabel = (items: any[], path: string): string | undefined => {
     for (const item of items) {
@@ -204,7 +259,7 @@ const DashboardLayout: React.FC = () => {
     return undefined
   }
 
-  const currentMenuLabel = resolveMenuLabel(menuItems, location.pathname) ?? '儀表板'
+  const currentMenuLabel = resolveMenuLabel(visibleMenuItems, location.pathname) ?? '儀表板'
 
   const userMenuItems = [
     {
@@ -287,7 +342,7 @@ const DashboardLayout: React.FC = () => {
                 mode="inline"
                 selectedKeys={[location.pathname]}
                 defaultOpenKeys={['accounting', 'sales', 'ar', 'ap', 'admin']}
-                items={menuItems}
+                items={visibleMenuItems}
                 className="px-2 bg-transparent border-none"
               />
             </div>
@@ -328,7 +383,7 @@ const DashboardLayout: React.FC = () => {
             mode="inline"
             selectedKeys={[location.pathname]}
             defaultOpenKeys={['accounting', 'sales', 'ar', 'ap', 'admin']}
-            items={menuItems}
+            items={visibleMenuItems}
             className="px-2 bg-transparent border-none"
             onClick={() => setMobileMenuOpen(false)}
           />

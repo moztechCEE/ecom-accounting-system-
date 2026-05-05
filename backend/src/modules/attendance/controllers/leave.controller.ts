@@ -12,11 +12,11 @@ import {
 import { LeaveService } from '../services/leave.service';
 import { CreateLeaveRequestDto } from '../dto/create-leave-request.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../../common/guards/roles.guard';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { UpdateLeaveStatusDto } from '../dto/update-leave-status.dto';
 import { UpsertLeaveTypeDto } from '../dto/upsert-leave-type.dto';
 import { AdjustLeaveBalanceDto } from '../dto/adjust-leave-balance.dto';
-import { Roles } from '../../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 
 @Controller('attendance/leaves')
 @UseGuards(JwtAuthGuard)
@@ -50,8 +50,8 @@ export class LeaveController {
   }
 
   @Patch(':id/status')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
   async updateLeaveStatus(
     @Request() req: any,
     @Param('id') id: string,
@@ -66,8 +66,8 @@ export class LeaveController {
   }
 
   @Get('admin/requests')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
   async getAdminLeaveRequests(
     @Request() req: any,
     @Query('status') status?: string,
@@ -86,8 +86,8 @@ export class LeaveController {
   }
 
   @Get('admin/types')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
   async getAdminLeaveTypes(
     @Request() req: any,
     @Query('entityId') entityId?: string,
@@ -96,15 +96,15 @@ export class LeaveController {
   }
 
   @Post('admin/types')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
   async createLeaveType(@Request() req: any, @Body() dto: UpsertLeaveTypeDto) {
     return this.leaveService.createLeaveType(req.user.id, dto);
   }
 
   @Patch('admin/types/:id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
   async updateLeaveType(
     @Request() req: any,
     @Param('id') id: string,
@@ -114,8 +114,8 @@ export class LeaveController {
   }
 
   @Get('admin/balances')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
   async getAdminLeaveBalances(
     @Request() req: any,
     @Query('year') year?: string,
@@ -132,8 +132,8 @@ export class LeaveController {
   }
 
   @Patch('admin/balances/:id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
   async adjustLeaveBalance(
     @Request() req: any,
     @Param('id') id: string,

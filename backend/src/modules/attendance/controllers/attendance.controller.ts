@@ -14,8 +14,8 @@ import { AttendanceService } from '../services/attendance.service';
 import { ClockInDto } from '../dto/clock-in.dto';
 import { ClockOutDto } from '../dto/clock-out.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../../common/guards/roles.guard';
-import { Roles } from '../../../common/decorators/roles.decorator';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { PolicyService } from '../services/policy.service';
 import { UpsertAttendancePolicyDto } from '../dto/upsert-attendance-policy.dto';
 import { DisasterClosureService } from '../services/disaster-closure.service';
@@ -58,14 +58,16 @@ export class AttendanceController {
   }
 
   @Get('admin/daily-summary')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
   async getDailySummary(@Query('date') dateString: string) {
     const date = dateString ? new Date(dateString) : new Date();
     return this.attendanceService.getDailySummaries(date);
   }
 
   @Get('admin/policies')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
   async getAdminPolicies(
     @Request() req: any,
     @Query('entityId') entityId?: string,
@@ -74,8 +76,8 @@ export class AttendanceController {
   }
 
   @Post('admin/policies')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
   async createAdminPolicy(
     @Request() req: any,
     @Body() dto: UpsertAttendancePolicyDto,
@@ -84,8 +86,8 @@ export class AttendanceController {
   }
 
   @Patch('admin/policies/:id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
   async updateAdminPolicy(
     @Request() req: any,
     @Param('id') id: string,
@@ -95,15 +97,15 @@ export class AttendanceController {
   }
 
   @Delete('admin/policies/:id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
   async deleteAdminPolicy(@Request() req: any, @Param('id') id: string) {
     return this.policyService.deletePolicy(req.user.id, id);
   }
 
   @Get('admin/disaster-closures')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
   async getDisasterClosures(
     @Request() req: any,
     @Query('year') year?: string,
@@ -116,8 +118,8 @@ export class AttendanceController {
   }
 
   @Post('admin/disaster-closures')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
   async createDisasterClosure(
     @Request() req: any,
     @Body() dto: UpsertDisasterClosureDto,
@@ -126,8 +128,8 @@ export class AttendanceController {
   }
 
   @Patch('admin/disaster-closures/:id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
   async updateDisasterClosure(
     @Request() req: any,
     @Param('id') id: string,
@@ -137,15 +139,15 @@ export class AttendanceController {
   }
 
   @Delete('admin/disaster-closures/:id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
   async deleteDisasterClosure(@Request() req: any, @Param('id') id: string) {
     return this.disasterClosureService.deactivateClosure(req.user.id, id);
   }
 
   @Get('admin/overtime-requests')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
   async getAdminOvertimeRequests(
     @Query('status') status?: string,
     @Query('employeeId') employeeId?: string,
@@ -159,8 +161,8 @@ export class AttendanceController {
   }
 
   @Patch('admin/overtime-requests/:id/review')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
-  @UseGuards(RolesGuard)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
   async reviewOvertimeRequest(
     @Request() req: any,
     @Param('id') id: string,

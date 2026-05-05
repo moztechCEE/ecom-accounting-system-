@@ -35,6 +35,7 @@ import { bankingService } from '../services/banking.service'
 import { BankAccount, BankTransaction, ManagedUser } from '../types'
 import { usersService } from '../services/users.service'
 import { useAuth } from '../contexts/AuthContext'
+import { hasPermission } from '../utils/access'
 
 const { Title, Text } = Typography
 const DEFAULT_ENTITY_ID = import.meta.env.VITE_DEFAULT_ENTITY_ID?.trim() || 'tw-entity-001'
@@ -91,7 +92,7 @@ const AccountsTab = () => {
   const [accessTarget, setAccessTarget] = useState<BankAccount | null>(null)
   const [form] = Form.useForm()
   const [accessForm] = Form.useForm()
-  const canManageBankAccess = (user?.roles ?? []).some((role) => role === 'SUPER_ADMIN' || role === 'ADMIN')
+  const canManageBankAccess = hasPermission(user, 'banking:update')
 
   const fetchAccounts = async () => {
     setLoading(true)

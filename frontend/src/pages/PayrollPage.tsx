@@ -44,6 +44,7 @@ import {
   PayrollRunPrecheckResult,
 } from '../types'
 import { useAuth } from '../contexts/AuthContext'
+import { hasPermission } from '../utils/access'
 
 const { Title, Text } = Typography
 
@@ -86,15 +87,12 @@ const PayrollPage: React.FC = () => {
   const [payForm] = Form.useForm()
 
   const canManagePayroll = useMemo(
-    () => (user?.roles ?? []).some((role) => role === 'SUPER_ADMIN' || role === 'ADMIN'),
+    () => hasPermission(user, 'payroll_admin:update'),
     [user],
   )
 
   const canReviewPayroll = useMemo(
-    () =>
-      (user?.roles ?? []).some(
-        (role) => role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'ACCOUNTANT',
-      ),
+    () => hasPermission(user, 'payroll_admin:read'),
     [user],
   )
 

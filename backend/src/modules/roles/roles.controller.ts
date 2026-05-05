@@ -11,12 +11,12 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesService } from './roles.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { SetRolePermissionsDto } from './dto/set-role-permissions.dto';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 
 @ApiTags('roles')
 @ApiBearerAuth()
@@ -26,49 +26,49 @@ export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
   @Get()
-  @Roles('ADMIN')
-  @UseGuards(RolesGuard)
-  @ApiOperation({ summary: '查詢所有角色（管理員）' })
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'access_control', action: 'read' })
+  @ApiOperation({ summary: '查詢所有角色（帳號與權限管理）' })
   async findAll() {
     return this.rolesService.findAll();
   }
 
   @Get(':id')
-  @Roles('ADMIN')
-  @UseGuards(RolesGuard)
-  @ApiOperation({ summary: '查詢指定角色（管理員）' })
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'access_control', action: 'read' })
+  @ApiOperation({ summary: '查詢指定角色（帳號與權限管理）' })
   async findOne(@Param('id') id: string) {
     return this.rolesService.findById(id);
   }
 
   @Post()
-  @Roles('ADMIN')
-  @UseGuards(RolesGuard)
-  @ApiOperation({ summary: '建立角色（管理員）' })
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'access_control', action: 'update' })
+  @ApiOperation({ summary: '建立角色（帳號與權限管理）' })
   async create(@Body() dto: CreateRoleDto) {
     return this.rolesService.create(dto);
   }
 
   @Patch(':id')
-  @Roles('ADMIN')
-  @UseGuards(RolesGuard)
-  @ApiOperation({ summary: '更新角色（管理員）' })
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'access_control', action: 'update' })
+  @ApiOperation({ summary: '更新角色（帳號與權限管理）' })
   async update(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
     return this.rolesService.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
-  @UseGuards(RolesGuard)
-  @ApiOperation({ summary: '刪除角色（管理員）' })
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'access_control', action: 'update' })
+  @ApiOperation({ summary: '刪除角色（帳號與權限管理）' })
   async remove(@Param('id') id: string) {
     return this.rolesService.remove(id);
   }
 
   @Put(':id/permissions')
-  @Roles('ADMIN')
-  @UseGuards(RolesGuard)
-  @ApiOperation({ summary: '設定角色權限（管理員）' })
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'access_control', action: 'update' })
+  @ApiOperation({ summary: '設定角色權限（帳號與權限管理）' })
   async setPermissions(
     @Param('id') id: string,
     @Body() dto: SetRolePermissionsDto,

@@ -5,6 +5,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import { AIProvider } from './contexts/AIContext'
 import DashboardLayout from './components/DashboardLayout'
 import ProtectedRoute from './components/ProtectedRoute'
+import PermissionRoute from './components/PermissionRoute'
 import LoginPage from './pages/LoginPage'
 import ForcePasswordChangePage from './pages/ForcePasswordChangePage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
@@ -54,40 +55,40 @@ const App: React.FC = () => {
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="reconciliation" element={<ReconciliationCenterPage />} />
-                <Route path="accounting/workbench" element={<AccountingWorkbenchPage />} />
-                <Route path="accounting/accounts" element={<AccountsPage />} />
-                <Route path="accounting/journals" element={<JournalEntriesPage />} />
-                <Route path="accounting/periods" element={<AccountingPeriodsPage />} />
-                <Route path="sales/orders" element={<SalesPage />} />
-                <Route path="reports" element={<ReportsPage />} />
-                <Route path="vendors" element={<VendorsPage />} />
+                <Route path="accounting/workbench" element={<PermissionRoute anyPermissions={['accounts:read', 'journal_entries:read']}><AccountingWorkbenchPage /></PermissionRoute>} />
+                <Route path="accounting/accounts" element={<PermissionRoute anyPermissions={['accounts:read']}><AccountsPage /></PermissionRoute>} />
+                <Route path="accounting/journals" element={<PermissionRoute anyPermissions={['journal_entries:read']}><JournalEntriesPage /></PermissionRoute>} />
+                <Route path="accounting/periods" element={<PermissionRoute anyPermissions={['accounts:read']}><AccountingPeriodsPage /></PermissionRoute>} />
+                <Route path="sales/orders" element={<PermissionRoute anyPermissions={['sales_orders:read']}><SalesPage /></PermissionRoute>} />
+                <Route path="reports" element={<PermissionRoute anyPermissions={['reports:read']}><ReportsPage /></PermissionRoute>} />
+                <Route path="vendors" element={<PermissionRoute anyPermissions={['purchase_orders:read', 'accounts:read']}><VendorsPage /></PermissionRoute>} />
                 
                 {/* New Module Routes */}
-                <Route path="sales/invoices" element={<ArInvoicesPage />} />
+                <Route path="sales/invoices" element={<PermissionRoute anyPermissions={['sales_orders:read', 'accounts:read']}><ArInvoicesPage /></PermissionRoute>} />
                 {/* <Route path="purchasing/invoices" element={<ApInvoicesPage />} /> */}
-                <Route path="banking" element={<BankingPage />} />
-                <Route path="payroll/runs" element={<PayrollPage />} />
-                <Route path="payroll/employees" element={<EmployeesPage />} />
+                <Route path="banking" element={<PermissionRoute anyPermissions={['banking:read']}><BankingPage /></PermissionRoute>} />
+                <Route path="payroll/runs" element={<PermissionRoute anyPermissions={['payroll_self:read', 'payroll_admin:read']}><PayrollPage /></PermissionRoute>} />
+                <Route path="payroll/employees" element={<PermissionRoute anyPermissions={['employees_admin:read']}><EmployeesPage /></PermissionRoute>} />
                 <Route path="ap/expenses" element={<ExpenseRequestsPage />} />
                 <Route path="ap/expense-review" element={<ExpenseReviewCenterPage />} />
                 <Route path="ap/payable" element={<AccountsPayablePage />} />
-                <Route path="admin/access-control" element={<AccessControlPage />} />
+                <Route path="admin/access-control" element={<PermissionRoute anyPermissions={['access_control:read', 'access_control:update']}><AccessControlPage /></PermissionRoute>} />
                 <Route path="admin/reimbursement-items" element={<ReimbursementItemsAdminPage />} />
                 <Route path="admin/settings" element={<SystemSettingsPage />} />
                 
                 {/* Attendance Routes */}
-                <Route path="attendance/dashboard" element={<EmployeeDashboardPage />} />
-                <Route path="attendance/leaves" element={<LeaveRequestPage />} />
-                <Route path="attendance/admin" element={<AttendanceAdminPage />} />
+                <Route path="attendance/dashboard" element={<PermissionRoute anyPermissions={['attendance_self:read']}><EmployeeDashboardPage /></PermissionRoute>} />
+                <Route path="attendance/leaves" element={<PermissionRoute anyPermissions={['leave_self:read']}><LeaveRequestPage /></PermissionRoute>} />
+                <Route path="attendance/admin" element={<PermissionRoute anyPermissions={['attendance_admin:read']}><AttendanceAdminPage /></PermissionRoute>} />
 
                 {/* Supply Chain Routes */}
-                <Route path="inventory/products" element={<ProductsPage />} />
-                <Route path="purchasing/orders" element={<PurchaseOrdersPage />} />
-                <Route path="manufacturing/assembly" element={<AssemblyPage />} />
-                <Route path="sales/customers" element={<CustomersPage />} />
+                <Route path="inventory/products" element={<PermissionRoute anyPermissions={['inventory:read']}><ProductsPage /></PermissionRoute>} />
+                <Route path="purchasing/orders" element={<PermissionRoute anyPermissions={['purchase_orders:read']}><PurchaseOrdersPage /></PermissionRoute>} />
+                <Route path="manufacturing/assembly" element={<PermissionRoute anyPermissions={['inventory:read']}><AssemblyPage /></PermissionRoute>} />
+                <Route path="sales/customers" element={<PermissionRoute anyPermissions={['sales_orders:read']}><CustomersPage /></PermissionRoute>} />
 
                 {/* User Routes */}
-                <Route path="profile" element={<ProfilePage />} />
+                <Route path="profile" element={<PermissionRoute anyPermissions={['profile_self:read']}><ProfilePage /></PermissionRoute>} />
 
                 {/* 電商對帳中心路由（2026-04）*/}
                 <Route path="reconciliation" element={<ReconciliationCenterPage />} />

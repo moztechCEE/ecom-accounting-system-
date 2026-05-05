@@ -12,13 +12,13 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { SetUserRolesDto } from './dto/set-user-roles.dto';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 
 /**
  * UsersController
@@ -50,12 +50,12 @@ export class UsersController {
   }
 
   /**
-   * 取得使用者列表（僅限 ADMIN）
+   * 取得使用者列表（帳號與權限管理）
    */
   @Get()
-  @Roles('ADMIN')
-  @UseGuards(RolesGuard)
-  @ApiOperation({ summary: '查詢所有使用者（管理員）' })
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'access_control', action: 'read' })
+  @ApiOperation({ summary: '查詢所有使用者（帳號與權限管理）' })
   async listUsers(@Query('page') page = '1', @Query('limit') limit = '25') {
     const pageNumber = Math.max(1, Number.parseInt(page, 10) || 1);
     const limitNumber = Math.min(
@@ -67,56 +67,56 @@ export class UsersController {
   }
 
   /**
-   * 查詢單一使用者（僅限 ADMIN）
+   * 查詢單一使用者（帳號與權限管理）
    */
   @Get(':id')
-  @Roles('ADMIN')
-  @UseGuards(RolesGuard)
-  @ApiOperation({ summary: '查詢指定使用者（管理員）' })
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'access_control', action: 'read' })
+  @ApiOperation({ summary: '查詢指定使用者（帳號與權限管理）' })
   async findOne(@Param('id') id: string) {
     return this.usersService.findById(id);
   }
 
   /**
-   * 建立新使用者（僅限 ADMIN）
+   * 建立新使用者（帳號與權限管理）
    */
   @Post()
-  @Roles('ADMIN')
-  @UseGuards(RolesGuard)
-  @ApiOperation({ summary: '建立新使用者（管理員）' })
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'access_control', action: 'update' })
+  @ApiOperation({ summary: '建立新使用者（帳號與權限管理）' })
   async createUser(@Body() dto: CreateUserDto) {
     return this.usersService.createUser(dto);
   }
 
   /**
-   * 更新使用者（僅限 ADMIN）
+   * 更新使用者（帳號與權限管理）
    */
   @Patch(':id')
-  @Roles('ADMIN')
-  @UseGuards(RolesGuard)
-  @ApiOperation({ summary: '更新使用者資訊（管理員）' })
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'access_control', action: 'update' })
+  @ApiOperation({ summary: '更新使用者資訊（帳號與權限管理）' })
   async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.updateUser(id, dto);
   }
 
   /**
-   * 設定使用者角色（僅限 ADMIN）
+   * 設定使用者角色（帳號與權限管理）
    */
   @Put(':id/roles')
-  @Roles('ADMIN')
-  @UseGuards(RolesGuard)
-  @ApiOperation({ summary: '設定使用者角色（管理員）' })
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'access_control', action: 'update' })
+  @ApiOperation({ summary: '設定使用者角色（帳號與權限管理）' })
   async setRoles(@Param('id') id: string, @Body() dto: SetUserRolesDto) {
     return this.usersService.setUserRoles(id, dto.roleIds);
   }
 
   /**
-   * 停用使用者（僅限 ADMIN）
+   * 停用使用者（帳號與權限管理）
    */
   @Delete(':id')
-  @Roles('ADMIN')
-  @UseGuards(RolesGuard)
-  @ApiOperation({ summary: '停用使用者帳號（管理員）' })
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'access_control', action: 'update' })
+  @ApiOperation({ summary: '停用使用者帳號（帳號與權限管理）' })
   async deactivate(@Param('id') id: string) {
     return this.usersService.deactivateUser(id);
   }

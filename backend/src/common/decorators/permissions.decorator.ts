@@ -23,4 +23,7 @@ export interface PermissionRequirement {
  * ```
  */
 export const RequirePermissions = (...permissions: PermissionRequirement[]) =>
-  SetMetadata(PERMISSIONS_KEY, permissions);
+  SetMetadata(
+    PERMISSIONS_KEY,
+    permissions.map((permission) => `${permission.resource}:${permission.action}`),
+  );

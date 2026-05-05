@@ -15,6 +15,8 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -32,6 +34,8 @@ export class BankingController {
   constructor(private readonly bankingService: BankingService) {}
 
   @Get('accounts')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'banking', action: 'read' })
   @ApiOperation({ summary: '查詢銀行帳戶列表' })
   @ApiResponse({ status: 200, description: '成功取得銀行帳戶列表' })
   async getBankAccounts(
@@ -42,6 +46,8 @@ export class BankingController {
   }
 
   @Get('accounts/:id')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'banking', action: 'read' })
   @ApiOperation({ summary: '查詢單一銀行帳戶' })
   @ApiResponse({ status: 200, description: '成功取得銀行帳戶詳情' })
   async getBankAccount(@CurrentUser() user: any, @Param('id') id: string) {
@@ -75,6 +81,8 @@ export class BankingController {
   }
 
   @Get('transactions')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'banking', action: 'read' })
   @ApiOperation({ summary: '查詢銀行交易記錄' })
   @ApiResponse({ status: 200, description: '成功取得交易記錄' })
   async getTransactions(
@@ -101,6 +109,8 @@ export class BankingController {
   }
 
   @Put('transactions/:id/reconcile')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'banking', action: 'update' })
   @ApiOperation({ summary: '更新對帳狀態' })
   @ApiResponse({ status: 200, description: '成功更新對帳狀態' })
   async updateReconciliation(@Param('id') id: string, @Body() data: any) {
@@ -108,6 +118,8 @@ export class BankingController {
   }
 
   @Get('accounts/:id/balance')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'banking', action: 'read' })
   @ApiOperation({ summary: '查詢帳戶餘額' })
   @ApiResponse({ status: 200, description: '成功取得帳戶餘額' })
   async getAccountBalance(@CurrentUser() user: any, @Param('id') id: string) {
@@ -132,6 +144,8 @@ export class BankingController {
   }
 
   @Post('accounts/:id/import-statement/preview')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'banking', action: 'read' })
   @ApiOperation({ summary: '預覽銀行對帳單匯入結果，不寫入資料' })
   @ApiResponse({ status: 201, description: '成功解析對帳單預覽' })
   async previewStatement(
@@ -147,6 +161,8 @@ export class BankingController {
   }
 
   @Post('accounts/:id/auto-reconcile')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'banking', action: 'update' })
   @ApiOperation({ summary: '執行銀行自動對帳' })
   @ApiResponse({ status: 200, description: '成功執行自動對帳' })
   async autoReconcile(
@@ -162,6 +178,8 @@ export class BankingController {
   }
 
   @Post('transactions/:id/manual-reconcile')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'banking', action: 'update' })
   @ApiOperation({ summary: '手動對帳指定銀行交易' })
   @ApiResponse({ status: 200, description: '成功手動對帳' })
   async manualReconcile(
@@ -173,6 +191,8 @@ export class BankingController {
   }
 
   @Get('accounts/:id/reconciliation-report')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'banking', action: 'read' })
   @ApiOperation({ summary: '查詢銀行對帳報表' })
   @ApiResponse({ status: 200, description: '成功取得對帳報表' })
   async getReconciliationReport(

@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
  * 
  * 建立內容：
  * 1. 兩個公司實體（台灣、大陸）
- * 2. 角色與權限（ADMIN, ACCOUNTANT, OPERATOR）
+ * 2. 角色與權限（SUPER_ADMIN, ADMIN, ACCOUNTANT, OPERATOR, EMPLOYEE）
  * 3. 預設管理員使用者
  * 4. 完整的會計科目表（IFRS / 台灣常用架構）
  * 5. 銷售渠道（Shopify, momo, PChome, Shopee, Coupang 等）
@@ -72,6 +72,16 @@ async function main() {
       update: {},
       create: { resource: 'users', action: 'create', description: '建立使用者' },
     }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'access_control', action: 'read' } },
+      update: {},
+      create: { resource: 'access_control', action: 'read', description: '查看帳號與權限管理' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'access_control', action: 'update' } },
+      update: {},
+      create: { resource: 'access_control', action: 'update', description: '維護帳號、角色與權限設定' },
+    }),
     // Accounts
     prisma.permission.upsert({
       where: { resource_action: { resource: 'accounts', action: 'read' } },
@@ -110,6 +120,96 @@ async function main() {
       update: {},
       create: { resource: 'sales_orders', action: 'create', description: '建立銷售訂單' },
     }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'purchase_orders', action: 'read' } },
+      update: {},
+      create: { resource: 'purchase_orders', action: 'read', description: '查看採購訂單' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'purchase_orders', action: 'create' } },
+      update: {},
+      create: { resource: 'purchase_orders', action: 'create', description: '建立採購訂單' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'inventory', action: 'read' } },
+      update: {},
+      create: { resource: 'inventory', action: 'read', description: '查看庫存與產品' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'inventory', action: 'update' } },
+      update: {},
+      create: { resource: 'inventory', action: 'update', description: '維護庫存與產品' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'banking', action: 'read' } },
+      update: {},
+      create: { resource: 'banking', action: 'read', description: '查看銀行與對帳資料' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'banking', action: 'update' } },
+      update: {},
+      create: { resource: 'banking', action: 'update', description: '執行銀行與對帳作業' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'reports', action: 'read' } },
+      update: {},
+      create: { resource: 'reports', action: 'read', description: '查看報表中心' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'attendance_self', action: 'read' } },
+      update: {},
+      create: { resource: 'attendance_self', action: 'read', description: '查看自己的打卡與出勤' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'leave_self', action: 'read' } },
+      update: {},
+      create: { resource: 'leave_self', action: 'read', description: '查看與申請自己的請假' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'payroll_self', action: 'read' } },
+      update: {},
+      create: { resource: 'payroll_self', action: 'read', description: '查看自己的薪資單' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'payroll_self_breakdown', action: 'read' } },
+      update: {},
+      create: { resource: 'payroll_self_breakdown', action: 'read', description: '查看自己的薪資明細與計算方式' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'profile_self', action: 'read' } },
+      update: {},
+      create: { resource: 'profile_self', action: 'read', description: '查看自己的個人資料' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'employees_admin', action: 'read' } },
+      update: {},
+      create: { resource: 'employees_admin', action: 'read', description: '查看員工與部門資料' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'employees_admin', action: 'update' } },
+      update: {},
+      create: { resource: 'employees_admin', action: 'update', description: '維護員工與部門資料' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'attendance_admin', action: 'read' } },
+      update: {},
+      create: { resource: 'attendance_admin', action: 'read', description: '查看考勤後臺審核資料' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'attendance_admin', action: 'update' } },
+      update: {},
+      create: { resource: 'attendance_admin', action: 'update', description: '維護考勤規則與執行審核' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'payroll_admin', action: 'read' } },
+      update: {},
+      create: { resource: 'payroll_admin', action: 'read', description: '查看薪資批次與設定' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'payroll_admin', action: 'update' } },
+      update: {},
+      create: { resource: 'payroll_admin', action: 'update', description: '執行薪資計算與發薪' },
+    }),
   ]);
 
   // 建立角色（四層級）
@@ -131,6 +231,12 @@ async function main() {
       name: 'ACCOUNTANT',
       description: '財會部門成員，可處理會計與報表作業',
       hierarchyLevel: 3,
+    },
+    {
+      code: 'EMPLOYEE',
+      name: 'EMPLOYEE',
+      description: '一般員工，預設只可查看自己的資料與進行自助作業',
+      hierarchyLevel: 5,
     },
     {
       code: 'OPERATOR',
@@ -198,15 +304,44 @@ async function main() {
   await ensureRolePermissions('SUPER_ADMIN', 'ALL');
   await ensureRolePermissions('ADMIN', 'ALL');
   await ensureRolePermissions('ACCOUNTANT', [
+    'access_control:read',
+    'attendance_self:read',
+    'leave_self:read',
+    'payroll_self:read',
+    'payroll_self_breakdown:read',
+    'profile_self:read',
     'accounts:read',
     'journal_entries:read',
     'journal_entries:create',
     'journal_entries:approve',
+    'reports:read',
+    'banking:read',
+    'attendance_admin:read',
+    'payroll_admin:read',
     'sales_orders:read',
   ]);
-  await ensureRolePermissions('OPERATOR', ['sales_orders:read', 'sales_orders:create']);
+  await ensureRolePermissions('EMPLOYEE', [
+    'attendance_self:read',
+    'leave_self:read',
+    'payroll_self:read',
+    'payroll_self_breakdown:read',
+    'profile_self:read',
+  ]);
+  await ensureRolePermissions('OPERATOR', [
+    'attendance_self:read',
+    'leave_self:read',
+    'payroll_self:read',
+    'payroll_self_breakdown:read',
+    'profile_self:read',
+    'sales_orders:read',
+    'sales_orders:create',
+    'purchase_orders:read',
+    'purchase_orders:create',
+    'inventory:read',
+    'inventory:update',
+  ]);
 
-  console.log(`✅ Created roles with hierarchy: SUPER_ADMIN, ADMIN, ACCOUNTANT, OPERATOR\n`);
+  console.log(`✅ Created roles with hierarchy: SUPER_ADMIN, ADMIN, ACCOUNTANT, OPERATOR, EMPLOYEE\n`);
 
   const superAdminRole = roles['SUPER_ADMIN'];
   const adminRole = roles['ADMIN'];
@@ -868,7 +1003,7 @@ async function main() {
   console.log('📝 Summary:');
   console.log(`   - Entities: 2 (台灣公司, 大陸公司)`);
   console.log('   - Users: 1 admin (credentials sourced from SUPER_ADMIN_* environment variables)');
-  console.log('   - Roles: 4 (SUPER_ADMIN, ADMIN, ACCOUNTANT, OPERATOR)');
+  console.log('   - Roles: 5 (SUPER_ADMIN, ADMIN, ACCOUNTANT, OPERATOR, EMPLOYEE)');
   console.log(`   - Permissions: ${permissions.length}`);
   console.log(`   - Accounts: ${twAccounts.length + cnAccounts.length}`);
   console.log(`   - Sales Channels: ${channels.length}`);

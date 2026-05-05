@@ -16,6 +16,10 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { AccountingService } from './accounting.service';
 import { ReportService } from './services/report.service';
 import { JournalService } from './services/journal.service';
@@ -47,6 +51,8 @@ export class AccountingController {
    * 取得會計科目表
    */
   @Get('accounts')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'accounts', action: 'read' })
   @ApiOperation({ summary: '查詢會計科目表' })
   @ApiQuery({ name: 'entityId', required: true, description: '公司實體 ID' })
   @ApiQuery({
@@ -66,6 +72,8 @@ export class AccountingController {
    * 取得會計期間
    */
   @Get('periods')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'accounts', action: 'read' })
   @ApiOperation({ summary: '查詢會計期間' })
   @ApiQuery({ name: 'entityId', required: true, description: '公司實體 ID' })
   @ApiQuery({
@@ -82,6 +90,8 @@ export class AccountingController {
   }
 
   @Get('journals')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'journal_entries', action: 'read' })
   @ApiOperation({ summary: '查詢會計分錄' })
   @ApiQuery({ name: 'entityId', required: true, description: '公司實體 ID' })
   @ApiQuery({ name: 'periodId', required: false, description: '會計期間 ID' })
@@ -94,6 +104,8 @@ export class AccountingController {
   }
 
   @Post('journals')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'journal_entries', action: 'create' })
   @ApiOperation({ summary: '手動建立會計分錄' })
   async createManualJournalEntry(
     @Body()
@@ -123,6 +135,8 @@ export class AccountingController {
   }
 
   @Post('journals/:journalEntryId/approve')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'journal_entries', action: 'approve' })
   @ApiOperation({ summary: '審核會計分錄' })
   async approveJournalEntry(
     @Param('journalEntryId') journalEntryId: string,
@@ -132,6 +146,8 @@ export class AccountingController {
   }
 
   @Post('periods/:periodId/close')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '關閉會計期間' })
   async closePeriod(
     @Param('periodId') periodId: string,
@@ -141,6 +157,8 @@ export class AccountingController {
   }
 
   @Post('periods/:periodId/lock')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseGuards(RolesGuard)
   @ApiOperation({ summary: '鎖定會計期間' })
   async lockPeriod(
     @Param('periodId') periodId: string,
@@ -153,6 +171,8 @@ export class AccountingController {
    * 產生損益表
    */
   @Get('reports/income-statement')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'reports', action: 'read' })
   @ApiOperation({ summary: '產生損益表' })
   @ApiQuery({ name: 'entityId', required: true, description: '公司實體 ID' })
   @ApiQuery({
@@ -182,6 +202,8 @@ export class AccountingController {
    * 產生資產負債表
    */
   @Get('reports/balance-sheet')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'reports', action: 'read' })
   @ApiOperation({ summary: '產生資產負債表' })
   @ApiQuery({ name: 'entityId', required: true, description: '公司實體 ID' })
   @ApiQuery({
@@ -198,6 +220,8 @@ export class AccountingController {
   }
 
   @Get('reports/trial-balance')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'reports', action: 'read' })
   @ApiOperation({ summary: '產生試算表' })
   @ApiQuery({ name: 'entityId', required: true, description: '公司實體 ID' })
   @ApiQuery({
@@ -217,6 +241,8 @@ export class AccountingController {
   }
 
   @Get('reports/general-ledger')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'reports', action: 'read' })
   @ApiOperation({ summary: '產生總分類帳' })
   @ApiQuery({ name: 'entityId', required: true, description: '公司實體 ID' })
   @ApiQuery({
