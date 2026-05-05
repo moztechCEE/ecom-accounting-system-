@@ -60,9 +60,9 @@ export class AttendanceController {
   @Get('admin/daily-summary')
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
-  async getDailySummary(@Query('date') dateString: string) {
+  async getDailySummary(@Request() req: any, @Query('date') dateString: string) {
     const date = dateString ? new Date(dateString) : new Date();
-    return this.attendanceService.getDailySummaries(date);
+    return this.attendanceService.getDailySummaries(req.user.id, date);
   }
 
   @Get('admin/policies')
@@ -149,11 +149,12 @@ export class AttendanceController {
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
   async getAdminOvertimeRequests(
+    @Request() req: any,
     @Query('status') status?: string,
     @Query('employeeId') employeeId?: string,
     @Query('year') year?: string,
   ) {
-    return this.overtimeService.getAdminRequests({
+    return this.overtimeService.getAdminRequests(req.user.id, {
       status,
       employeeId,
       year: year ? Number(year) : undefined,

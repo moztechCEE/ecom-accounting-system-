@@ -126,8 +126,8 @@ export class PayrollController {
   @RequirePermissions({ resource: 'employees_admin', action: 'read' })
   @ApiOperation({ summary: '查詢單一員工' })
   @ApiResponse({ status: 200, description: '成功取得員工詳情' })
-  async getEmployee(@Param('id') id: string) {
-    return this.payrollService.getEmployeeById(id);
+  async getEmployee(@Request() req: any, @Param('id') id: string) {
+    return this.payrollService.getEmployeeById(req.user.id, id);
   }
 
   @Post('employees')
@@ -182,8 +182,8 @@ export class PayrollController {
   @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
   @ApiOperation({ summary: '查詢單一薪資批次' })
   @ApiResponse({ status: 200, description: '成功取得薪資批次詳情' })
-  async getPayrollRun(@Param('id') id: string) {
-    return this.payrollService.getPayrollRunById(id);
+  async getPayrollRun(@Request() req: any, @Param('id') id: string) {
+    return this.payrollService.getPayrollRunById(req.user.id, id);
   }
 
   @Get('runs/:id/audit-logs')
@@ -191,8 +191,8 @@ export class PayrollController {
   @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
   @ApiOperation({ summary: '查詢薪資批次操作紀錄' })
   @ApiResponse({ status: 200, description: '成功取得薪資批次操作紀錄' })
-  async getPayrollRunAuditLogs(@Param('id') id: string) {
-    return this.payrollService.getPayrollRunAuditLogs(id);
+  async getPayrollRunAuditLogs(@Request() req: any, @Param('id') id: string) {
+    return this.payrollService.getPayrollRunAuditLogs(req.user.id, id);
   }
 
   @Get('runs/:id/pdf')
@@ -201,11 +201,16 @@ export class PayrollController {
   @ApiOperation({ summary: '下載指定員工薪資單 PDF' })
   @ApiResponse({ status: 200, description: '成功下載薪資單 PDF' })
   async downloadPayrollRunPdf(
+    @Request() req: any,
     @Param('id') id: string,
     @Query('employeeId') employeeId: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.payrollService.getPayrollRunPdf(id, employeeId);
+    const result = await this.payrollService.getPayrollRunPdf(
+      req.user.id,
+      id,
+      employeeId,
+    );
     response.setHeader('Content-Type', 'application/pdf');
     response.setHeader(
       'Content-Disposition',
@@ -333,8 +338,8 @@ export class PayrollController {
   @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
   @ApiOperation({ summary: '查詢單一薪資記錄' })
   @ApiResponse({ status: 200, description: '成功取得薪資記錄詳情' })
-  async getPayroll(@Param('id') id: string) {
-    return this.payrollService.getPayrollRunById(id);
+  async getPayroll(@Request() req: any, @Param('id') id: string) {
+    return this.payrollService.getPayrollRunById(req.user.id, id);
   }
 
   @Post('payrolls')

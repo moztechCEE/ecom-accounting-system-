@@ -7,6 +7,7 @@ import { BalanceService } from './balance.service';
 import { UpsertLeaveTypeDto } from '../dto/upsert-leave-type.dto';
 import { AdjustLeaveBalanceDto } from '../dto/adjust-leave-balance.dto';
 import { AuditLogService } from '../../../common/audit/audit-log.service';
+import { UsersService } from '../../users/users.service';
 
 type DefaultLeaveTypeTemplate = {
   code: string;
@@ -146,7 +147,16 @@ export class LeaveService {
     private readonly notificationService: NotificationService,
     private readonly balanceService: BalanceService,
     private readonly auditLogService: AuditLogService,
+    private readonly usersService: UsersService,
   ) {}
+
+  private async getAdminAccessContext(userId: string, requestedEntityId?: string) {
+    return this.usersService.getDataAccessContext(
+      userId,
+      'attendance',
+      requestedEntityId,
+    );
+  }
 
   async initializeEmployeeLeaveSetup(
     actorUserId: string,
@@ -329,6 +339,20 @@ export class LeaveService {
       throw new BadRequestException('Leave request not found');
     }
 
+    const access = await this.getAdminAccessContext(
+      reviewerId,
+      existingRequest.entityId,
+    );
+    const canAccessRequest =
+      !access.noAccess &&
+      (access.scope === 'ENTITY' ||
+        (access.scope === 'SELF' && access.employeeId === existingRequest.employeeId) ||
+        (access.scope === 'DEPARTMENT' &&
+          access.departmentId === existingRequest.employee.departmentId));
+    if (!canAccessRequest) {
+      throw new BadRequestException('Leave request not found');
+    }
+
     if (
       existingRequest.status === LeaveStatus.APPROVED ||
       existingRequest.status === LeaveStatus.REJECTED ||
@@ -457,7 +481,8 @@ export class LeaveService {
       entityId?: string;
     },
   ) {
-    const entityId = await this.resolveEntityId(userId, filters.entityId);
+    const access = await this.getAdminAccessContext(userId, filters.entityId);
+    const entityId = access.entityId;
     const periodFilter =
       filters.year !== undefined
         ? {
@@ -473,6 +498,13 @@ export class LeaveService {
         ...(filters.employeeId ? { employeeId: filters.employeeId } : {}),
         ...(filters.leaveTypeId ? { leaveTypeId: filters.leaveTypeId } : {}),
         ...(periodFilter ? { startAt: periodFilter } : {}),
+        ...(access.noAccess
+          ? { employeeId: '__no_access__' }
+          : access.scope === 'SELF'
+            ? { employeeId: access.employeeId || '__no_access__' }
+            : access.scope === 'DEPARTMENT'
+              ? { employee: { departmentId: access.departmentId || '__no_access__' } }
+              : {}),
       },
       include: {
         employee: {
@@ -636,7 +668,8 @@ export class LeaveService {
       entityId?: string;
     },
   ) {
-    const entityId = await this.resolveEntityId(userId, filters.entityId);
+    const access = await this.getAdminAccessContext(userId, filters.entityId);
+    const entityId = access.entityId;
     await this.ensureDefaultLeaveTypes(entityId, userId);
 
     if (entityId) {
@@ -646,6 +679,13 @@ export class LeaveService {
             entityId,
             ...(filters.employeeId ? { id: filters.employeeId } : {}),
             isActive: true,
+            ...(access.noAccess
+              ? { id: '__no_access__' }
+              : access.scope === 'SELF'
+                ? { id: access.employeeId || '__no_access__' }
+                : access.scope === 'DEPARTMENT'
+                  ? { departmentId: access.departmentId || '__no_access__' }
+                  : {}),
           },
           select: {
             id: true,
@@ -685,6 +725,13 @@ export class LeaveService {
         ...(filters.year !== undefined ? { year: filters.year } : {}),
         ...(filters.employeeId ? { employeeId: filters.employeeId } : {}),
         ...(filters.leaveTypeId ? { leaveTypeId: filters.leaveTypeId } : {}),
+        ...(access.noAccess
+          ? { employeeId: '__no_access__' }
+          : access.scope === 'SELF'
+            ? { employeeId: access.employeeId || '__no_access__' }
+            : access.scope === 'DEPARTMENT'
+              ? { employee: { departmentId: access.departmentId || '__no_access__' } }
+              : {}),
       },
       include: {
         leaveType: true,
@@ -720,14 +767,28 @@ export class LeaveService {
   ) {
     const existing = await this.prisma.leaveBalance.findUnique({
       where: { id },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            departmentId: true,
+          },
+        },
+      },
     });
 
     if (!existing) {
       throw new BadRequestException('Leave balance not found');
     }
 
-    const entityId = await this.resolveEntityId(userId, existing.entityId);
-    if (entityId && existing.entityId !== entityId) {
+    const access = await this.getAdminAccessContext(userId, existing.entityId);
+    const canAccessBalance =
+      !access.noAccess &&
+      (access.scope === 'ENTITY' ||
+        (access.scope === 'SELF' && access.employeeId === existing.employeeId) ||
+        (access.scope === 'DEPARTMENT' &&
+          access.departmentId === existing.employee?.departmentId));
+    if (!canAccessBalance || existing.entityId !== access.entityId) {
       throw new BadRequestException(
         'Leave balance not found in current entity',
       );

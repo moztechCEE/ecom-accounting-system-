@@ -2,6 +2,7 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -33,4 +34,19 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   readonly mustChangePassword?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['SELF', 'DEPARTMENT', 'ENTITY'])
+  readonly employeeDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['SELF', 'DEPARTMENT', 'ENTITY'])
+  readonly attendanceDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['SELF', 'DEPARTMENT', 'ENTITY'])
+  readonly payrollDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
 }

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -415,6 +416,94 @@ export class PayrollService {
     return fallbackEntity.id;
   }
 
+  private async getEmployeeDataAccessContext(
+    userId: string,
+    requestedEntityId?: string,
+  ) {
+    return this.usersService.getDataAccessContext(
+      userId,
+      'employees',
+      requestedEntityId,
+    );
+  }
+
+  private async getPayrollDataAccessContext(
+    userId: string,
+    requestedEntityId?: string,
+  ) {
+    return this.usersService.getDataAccessContext(
+      userId,
+      'payroll',
+      requestedEntityId,
+    );
+  }
+
+  private buildEmployeeAccessWhere(
+    access: {
+      scope: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+      entityId: string;
+      employeeId: string | null;
+      departmentId: string | null;
+      noAccess: boolean;
+    },
+  ) {
+    if (access.noAccess) {
+      return { id: '__no_access__', entityId: access.entityId };
+    }
+
+    if (access.scope === 'SELF') {
+      return {
+        entityId: access.entityId,
+        id: access.employeeId || '__no_access__',
+      };
+    }
+
+    if (access.scope === 'DEPARTMENT') {
+      return {
+        entityId: access.entityId,
+        departmentId: access.departmentId || '__no_access__',
+      };
+    }
+
+    return { entityId: access.entityId };
+  }
+
+  private buildPayrollItemAccessWhere(
+    access: {
+      scope: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+      employeeId: string | null;
+      departmentId: string | null;
+      noAccess: boolean;
+    },
+  ) {
+    if (access.noAccess) {
+      return { employeeId: '__no_access__' };
+    }
+
+    if (access.scope === 'SELF') {
+      return { employeeId: access.employeeId || '__no_access__' };
+    }
+
+    if (access.scope === 'DEPARTMENT') {
+      return {
+        employee: {
+          departmentId: access.departmentId || '__no_access__',
+        },
+      };
+    }
+
+    return undefined;
+  }
+
+  private ensureEntityWideAccess(access: {
+    scope: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+    noAccess: boolean;
+  }) {
+    if (access.noAccess || access.scope !== 'ENTITY') {
+      throw new ForbiddenException('目前帳號僅能查看限定範圍資料，無法執行此管理操作');
+    }
+  }
+
   private async ensureDepartmentInEntity(
     departmentId: string | undefined,
     entityId: string,
@@ -514,9 +603,13 @@ export class PayrollService {
     return this.serializePayrollPolicy(policy);
   }
 
-  async getEmployeeById(id: string) {
-    const employee = await this.prisma.employee.findUnique({
-      where: { id },
+  async getEmployeeById(userId: string, id: string) {
+    const access = await this.getEmployeeDataAccessContext(userId);
+    const employee = await this.prisma.employee.findFirst({
+      where: {
+        id,
+        ...this.buildEmployeeAccessWhere(access),
+      },
       include: {
         department: true,
         user: {
@@ -537,12 +630,10 @@ export class PayrollService {
   }
 
   async getEmployees(userId: string, entityId?: string) {
-    const resolvedEntityId = entityId
-      ? await this.resolveEntityId(userId, entityId)
-      : undefined;
+    const access = await this.getEmployeeDataAccessContext(userId, entityId);
 
     return this.prisma.employee.findMany({
-      where: resolvedEntityId ? { entityId: resolvedEntityId } : undefined,
+      where: this.buildEmployeeAccessWhere(access),
       include: {
         department: true,
         user: {
@@ -557,10 +648,17 @@ export class PayrollService {
   }
 
   async getDepartments(userId: string, entityId?: string) {
-    const resolvedEntityId = await this.resolveEntityId(userId, entityId);
+    const access = await this.getEmployeeDataAccessContext(userId, entityId);
 
     return this.prisma.department.findMany({
-      where: { entityId: resolvedEntityId },
+      where: access.noAccess
+        ? { id: '__no_access__', entityId: access.entityId }
+        : access.scope === 'DEPARTMENT' || access.scope === 'SELF'
+          ? {
+              entityId: access.entityId,
+              id: access.departmentId || '__no_access__',
+            }
+          : { entityId: access.entityId },
       orderBy: { name: 'asc' },
     });
   }
@@ -574,7 +672,9 @@ export class PayrollService {
       isActive?: boolean;
     },
   ) {
-    const entityId = await this.resolveEntityId(userId, data.entityId);
+    const access = await this.getEmployeeDataAccessContext(userId, data.entityId);
+    this.ensureEntityWideAccess(access);
+    const entityId = access.entityId;
     const name = data.name?.trim();
 
     if (!name) {
@@ -630,11 +730,9 @@ export class PayrollService {
       throw new NotFoundException('Department not found');
     }
 
-    const resolvedEntityId = await this.resolveEntityId(
-      userId,
-      department.entityId,
-    );
-    if (resolvedEntityId !== department.entityId) {
+    const access = await this.getEmployeeDataAccessContext(userId, department.entityId);
+    this.ensureEntityWideAccess(access);
+    if (access.entityId !== department.entityId) {
       throw new NotFoundException('Department not found');
     }
 
@@ -701,7 +799,9 @@ export class PayrollService {
       location?: string;
     },
   ) {
-    const entityId = await this.resolveEntityId(userId, data.entityId);
+    const access = await this.getEmployeeDataAccessContext(userId, data.entityId);
+    this.ensureEntityWideAccess(access);
+    const entityId = access.entityId;
     const entity = await this.prisma.entity.findUnique({
       where: { id: entityId },
       select: {
@@ -816,11 +916,18 @@ export class PayrollService {
       throw new NotFoundException('Employee not found');
     }
 
-    const resolvedEntityId = await this.resolveEntityId(
+    const access = await this.getEmployeeDataAccessContext(
       actorUserId,
       employee.entityId,
     );
-    if (resolvedEntityId !== employee.entityId) {
+    const visibleEmployee = await this.prisma.employee.findFirst({
+      where: {
+        id: employee.id,
+        ...this.buildEmployeeAccessWhere(access),
+      },
+      select: { id: true },
+    });
+    if (!visibleEmployee) {
       throw new NotFoundException('Employee not found');
     }
 
@@ -909,11 +1016,15 @@ export class PayrollService {
       throw new NotFoundException('Employee not found');
     }
 
-    const resolvedEntityId = await this.resolveEntityId(
-      userId,
-      employee.entityId,
-    );
-    if (resolvedEntityId !== employee.entityId) {
+    const access = await this.getEmployeeDataAccessContext(userId, employee.entityId);
+    const visibleEmployee = await this.prisma.employee.findFirst({
+      where: {
+        id: employee.id,
+        ...this.buildEmployeeAccessWhere(access),
+      },
+      select: { id: true },
+    });
+    if (!visibleEmployee) {
       throw new NotFoundException('Employee not found');
     }
 
@@ -1059,14 +1170,16 @@ export class PayrollService {
   }
 
   async getPayrollRuns(userId: string, entityId?: string) {
-    const resolvedEntityId = entityId
-      ? await this.resolveEntityId(userId, entityId)
-      : undefined;
+    const access = await this.getPayrollDataAccessContext(userId, entityId);
+    const itemWhere = this.buildPayrollItemAccessWhere(access);
 
     const runs = await this.prisma.payrollRun.findMany({
-      where: resolvedEntityId ? { entityId: resolvedEntityId } : undefined,
+      where: {
+        entityId: access.entityId,
+        ...(itemWhere ? { items: { some: itemWhere } } : {}),
+      },
       include: {
-        items: true,
+        items: itemWhere ? { where: itemWhere } : true,
         creator: {
           select: { id: true, name: true },
         },
@@ -1113,9 +1226,15 @@ export class PayrollService {
     });
   }
 
-  async getPayrollRunById(id: string) {
-    const run = await this.prisma.payrollRun.findUnique({
-      where: { id },
+  async getPayrollRunById(userId: string, id: string) {
+    const access = await this.getPayrollDataAccessContext(userId);
+    const itemWhere = this.buildPayrollItemAccessWhere(access);
+    const run = await this.prisma.payrollRun.findFirst({
+      where: {
+        id,
+        entityId: access.entityId,
+        ...(itemWhere ? { items: { some: itemWhere } } : {}),
+      },
       include: {
         entity: {
           select: { id: true, name: true },
@@ -1137,18 +1256,32 @@ export class PayrollService {
             currency: true,
           },
         },
-        items: {
-          include: {
-            employee: {
-              select: {
-                id: true,
-                employeeNo: true,
-                name: true,
+        items: itemWhere
+          ? {
+              where: itemWhere,
+              include: {
+                employee: {
+                  select: {
+                    id: true,
+                    employeeNo: true,
+                    name: true,
+                  },
+                },
               },
+              orderBy: [{ employeeId: 'asc' }, { type: 'asc' }],
+            }
+          : {
+              include: {
+                employee: {
+                  select: {
+                    id: true,
+                    employeeNo: true,
+                    name: true,
+                  },
+                },
+              },
+              orderBy: [{ employeeId: 'asc' }, { type: 'asc' }],
             },
-          },
-          orderBy: [{ employeeId: 'asc' }, { type: 'asc' }],
-        },
       },
     });
 
@@ -1159,15 +1292,8 @@ export class PayrollService {
     return this.serializePayrollRun(run);
   }
 
-  async getPayrollRunAuditLogs(id: string) {
-    const run = await this.prisma.payrollRun.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-
-    if (!run) {
-      throw new NotFoundException('Payroll run not found');
-    }
+  async getPayrollRunAuditLogs(userId: string, id: string) {
+    await this.getPayrollRunById(userId, id);
 
     const logs = await this.auditLogService.listByRecord('payroll_runs', id);
     return logs.map((log) => this.serializeAuditLog(log));
@@ -1296,9 +1422,15 @@ export class PayrollService {
     return this.serializePayrollRun(run);
   }
 
-  async getPayrollRunPdf(id: string, employeeId?: string) {
-    const run = await this.prisma.payrollRun.findUnique({
-      where: { id },
+  async getPayrollRunPdf(userId: string, id: string, employeeId?: string) {
+    const access = await this.getPayrollDataAccessContext(userId);
+    const itemWhere = this.buildPayrollItemAccessWhere(access);
+    const run = await this.prisma.payrollRun.findFirst({
+      where: {
+        id,
+        entityId: access.entityId,
+        ...(itemWhere ? { items: { some: itemWhere } } : {}),
+      },
       include: {
         entity: {
           select: { id: true, name: true },
@@ -1314,23 +1446,42 @@ export class PayrollService {
             currency: true,
           },
         },
-        items: {
-          include: {
-            employee: {
-              select: {
-                id: true,
-                employeeNo: true,
-                name: true,
-                department: {
+        items: itemWhere
+          ? {
+              where: itemWhere,
+              include: {
+                employee: {
                   select: {
+                    id: true,
+                    employeeNo: true,
                     name: true,
+                    department: {
+                      select: {
+                        name: true,
+                      },
+                    },
                   },
                 },
               },
+              orderBy: { type: 'asc' },
+            }
+          : {
+              include: {
+                employee: {
+                  select: {
+                    id: true,
+                    employeeNo: true,
+                    name: true,
+                    department: {
+                      select: {
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+              orderBy: { type: 'asc' },
             },
-          },
-          orderBy: { type: 'asc' },
-        },
       },
     });
 
@@ -1449,7 +1600,8 @@ export class PayrollService {
     },
     userId: string,
   ) {
-    const entityId = await this.resolveEntityId(userId, data.entityId);
+    const access = await this.getPayrollDataAccessContext(userId, data.entityId);
+    const entityId = access.entityId;
     const periodStart = this.startOfDay(
       this.normalizeInputDate(data.periodStart, '計薪期間開始日'),
     );
@@ -1463,7 +1615,7 @@ export class PayrollService {
 
     const employees = await this.prisma.employee.findMany({
       where: {
-        entityId,
+        ...this.buildEmployeeAccessWhere(access),
         isActive: true,
         hireDate: { lte: periodEnd },
         OR: [{ terminateDate: null }, { terminateDate: { gte: periodStart } }],
@@ -1792,7 +1944,8 @@ export class PayrollService {
     },
     userId: string,
   ) {
-    const entityId = await this.resolveEntityId(userId, data.entityId);
+    const access = await this.getPayrollDataAccessContext(userId, data.entityId);
+    const entityId = access.entityId;
     const periodStart = this.startOfDay(
       this.normalizeInputDate(data.periodStart, '計薪期間開始日'),
     );
@@ -1840,7 +1993,7 @@ export class PayrollService {
     // 3. Get Active Employees
     const employees = await this.prisma.employee.findMany({
       where: {
-        entityId,
+        ...this.buildEmployeeAccessWhere(access),
         isActive: true,
         hireDate: { lte: periodEnd },
         OR: [{ terminateDate: null }, { terminateDate: { gte: periodStart } }],
@@ -1881,7 +2034,7 @@ export class PayrollService {
       }
     }
 
-    const createdRun = await this.getPayrollRunById(payrollRun.id);
+    const createdRun = await this.getPayrollRunById(userId, payrollRun.id);
 
     await this.auditLogService.record({
       userId,
@@ -1976,7 +2129,7 @@ export class PayrollService {
       },
     });
 
-    return this.getPayrollRunById(id);
+    return this.getPayrollRunById(userId, id);
   }
 
   async approvePayrollRun(id: string, userId: string) {
@@ -2053,7 +2206,7 @@ export class PayrollService {
       },
     });
 
-    return this.getPayrollRunById(id);
+    return this.getPayrollRunById(userId, id);
   }
 
   async postPayrollRun(id: string, userId: string) {
@@ -2176,7 +2329,7 @@ export class PayrollService {
       },
     });
 
-    return this.getPayrollRunById(id);
+    return this.getPayrollRunById(userId, id);
   }
 
   async payPayrollRun(
@@ -2314,7 +2467,7 @@ export class PayrollService {
       },
     });
 
-    return this.getPayrollRunById(id);
+    return this.getPayrollRunById(userId, id);
   }
 
   async processLegacyPayroll(
@@ -2376,7 +2529,7 @@ export class PayrollService {
       });
     }
 
-    return this.getPayrollRunById(id);
+    return this.getPayrollRunById(userId, id);
   }
 
   /**

@@ -7,6 +7,7 @@ import { PolicyService } from './policy.service';
 import { GpsValidationStrategy } from '../strategies/gps-validation.strategy';
 import { IpValidationStrategy } from '../strategies/ip-validation.strategy';
 import { AttendanceEventType } from '@prisma/client';
+import { UsersService } from '../../users/users.service';
 
 @Injectable()
 export class AttendanceService {
@@ -16,7 +17,12 @@ export class AttendanceService {
     private readonly policyService: PolicyService,
     private readonly gpsStrategy: GpsValidationStrategy,
     private readonly ipStrategy: IpValidationStrategy,
+    private readonly usersService: UsersService,
   ) {}
+
+  private async getAdminAccessContext(userId: string) {
+    return this.usersService.getDataAccessContext(userId, 'attendance');
+  }
 
   async clockIn(userId: string, dto: ClockInDto) {
     const employee = await this.prisma.employee.findUnique({
@@ -255,18 +261,27 @@ export class AttendanceService {
     return record;
   }
 
-  async getDailySummaries(date: Date) {
+  async getDailySummaries(userId: string, date: Date) {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
+    const access = await this.getAdminAccessContext(userId);
 
     return this.prisma.attendanceDailySummary.findMany({
       where: {
+        entityId: access.entityId,
         workDate: {
           gte: startOfDay,
           lte: endOfDay,
         },
+        ...(access.noAccess
+          ? { employeeId: '__no_access__' }
+          : access.scope === 'SELF'
+            ? { employeeId: access.employeeId || '__no_access__' }
+            : access.scope === 'DEPARTMENT'
+              ? { employee: { departmentId: access.departmentId || '__no_access__' } }
+              : {}),
       },
       include: {
         employee: true,

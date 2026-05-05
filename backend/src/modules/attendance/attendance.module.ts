@@ -14,10 +14,11 @@ import { GpsValidationStrategy } from './strategies/gps-validation.strategy';
 import { IpValidationStrategy } from './strategies/ip-validation.strategy';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { NotificationModule } from '../notification/notification.module';
+import { UsersModule } from '../users/users.module';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Module({
-  imports: [PrismaModule, NotificationModule],
+  imports: [PrismaModule, NotificationModule, UsersModule],
   controllers: [AttendanceController, LeaveController],
   providers: [
     AttendanceService,

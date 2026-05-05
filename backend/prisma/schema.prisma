@@ -28,6 +28,9 @@ model User {
   passwordHash String  @map("password_hash")
   name         String
   isActive     Boolean @default(true) @map("is_active")
+  employeeDataScope       String    @default("SELF") @map("employee_data_scope")
+  attendanceDataScope     String    @default("SELF") @map("attendance_data_scope")
+  payrollDataScope        String    @default("SELF") @map("payroll_data_scope")
   mustChangePassword         Boolean   @default(false) @map("must_change_password")
   passwordResetTokenHash     String?   @unique @map("password_reset_token_hash")
   passwordResetTokenExpiresAt DateTime? @map("password_reset_token_expires_at")

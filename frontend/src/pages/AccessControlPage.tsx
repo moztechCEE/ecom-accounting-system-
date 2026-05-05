@@ -52,6 +52,14 @@ type SimplePagination = {
 }
 
 const { Title, Text } = Typography
+const DATA_SCOPE_OPTIONS = [
+  { label: '僅自己', value: 'SELF' },
+  { label: '部門', value: 'DEPARTMENT' },
+  { label: '全公司', value: 'ENTITY' },
+]
+const DATA_SCOPE_LABEL_MAP = Object.fromEntries(
+  DATA_SCOPE_OPTIONS.map((item) => [item.value, item.label]),
+)
 
 type UsersTabProps = {
   availableRoles: Role[]
@@ -167,6 +175,9 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
       const payload: UpdateUserPayload = {
         name: values.name,
         isActive: values.isActive,
+        employeeDataScope: values.employeeDataScope,
+        attendanceDataScope: values.attendanceDataScope,
+        payrollDataScope: values.payrollDataScope,
       }
 
       if (values.password) {
@@ -220,6 +231,17 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
       ),
     },
     {
+      title: '資料範圍',
+      key: 'scopes',
+      render: (_value: any, record: ManagedUser) => (
+        <Space wrap size={[4, 4]}>
+          <Tag color="blue">員工 {DATA_SCOPE_LABEL_MAP[record.employeeDataScope || 'SELF']}</Tag>
+          <Tag color="gold">考勤 {DATA_SCOPE_LABEL_MAP[record.attendanceDataScope || 'SELF']}</Tag>
+          <Tag color="purple">薪資 {DATA_SCOPE_LABEL_MAP[record.payrollDataScope || 'SELF']}</Tag>
+        </Space>
+      ),
+    },
+    {
       title: '操作',
       key: 'actions',
       render: (_value: any, record: ManagedUser) => (
@@ -247,6 +269,9 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
                   name: record.name,
                   isActive: record.isActive,
                   password: undefined,
+                  employeeDataScope: record.employeeDataScope || 'SELF',
+                  attendanceDataScope: record.attendanceDataScope || 'SELF',
+                  payrollDataScope: record.payrollDataScope || 'SELF',
                 })
                 setEditOpen(true)
               }}
@@ -315,7 +340,17 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
         okText="建立"
         width={500}
       >
-        <Form layout="vertical" form={createForm} initialValues={{ roleIds: [] }} className="pt-4">
+        <Form
+          layout="vertical"
+          form={createForm}
+          initialValues={{
+            roleIds: [],
+            employeeDataScope: 'SELF',
+            attendanceDataScope: 'SELF',
+            payrollDataScope: 'SELF',
+          }}
+          className="pt-4"
+        >
           <div className="bg-gray-50 p-4 rounded-lg mb-4 border border-gray-100">
             <Form.Item name="name" label="姓名" rules={[{ required: true, message: '請輸入姓名' }]}>
               <Input placeholder="輸入使用者姓名" className="rounded-md" />
@@ -348,6 +383,17 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
                 className="rounded-md"
               />
             </Form.Item>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+              <Form.Item name="employeeDataScope" label="員工資料範圍" className="mb-0">
+                <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
+              </Form.Item>
+              <Form.Item name="attendanceDataScope" label="考勤資料範圍" className="mb-0">
+                <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
+              </Form.Item>
+              <Form.Item name="payrollDataScope" label="薪資資料範圍" className="mb-0">
+                <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
+              </Form.Item>
+            </div>
           </div>
         </Form>
       </Modal>
@@ -404,6 +450,17 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
             >
               <Input.Password autoComplete="new-password" className="rounded-md" />
             </Form.Item>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+              <Form.Item name="employeeDataScope" label="員工資料範圍">
+                <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
+              </Form.Item>
+              <Form.Item name="attendanceDataScope" label="考勤資料範圍">
+                <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
+              </Form.Item>
+              <Form.Item name="payrollDataScope" label="薪資資料範圍" className="mb-0">
+                <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
+              </Form.Item>
+            </div>
           </div>
         </Form>
       </Modal>

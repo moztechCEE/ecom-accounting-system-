@@ -7,6 +7,7 @@ import { ApprovalRequest } from '@prisma/client';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { CreateOvertimeRequestDto } from '../dto/create-overtime-request.dto';
 import { ReviewOvertimeRequestDto } from '../dto/review-overtime-request.dto';
+import { UsersService } from '../../users/users.service';
 
 type OvertimeRequestPayload = {
   employeeId: string;
@@ -41,7 +42,10 @@ export class OvertimeService {
   private readonly lateGraceMinutes = 20;
   private readonly intervalMinutes = 30;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly usersService: UsersService,
+  ) {}
 
   async createRequest(userId: string, dto: CreateOvertimeRequestDto) {
     if (dto.requestedMinutes % this.intervalMinutes !== 0) {
@@ -232,12 +236,17 @@ export class OvertimeService {
   }
 
   async getAdminRequests(
+    userId: string,
     params?: {
       status?: string;
       employeeId?: string;
       year?: number;
     },
   ) {
+    const access = await this.usersService.getDataAccessContext(
+      userId,
+      'attendance',
+    );
     const requests = await this.prisma.approvalRequest.findMany({
       where: {
         type: this.overtimeType,
@@ -264,7 +273,17 @@ export class OvertimeService {
     );
 
     const employees = await this.prisma.employee.findMany({
-      where: { id: { in: employeeIds } },
+      where: {
+        id: { in: employeeIds },
+        entityId: access.entityId,
+        ...(access.noAccess
+          ? { id: '__no_access__' }
+          : access.scope === 'SELF'
+            ? { id: access.employeeId || '__no_access__' }
+            : access.scope === 'DEPARTMENT'
+              ? { departmentId: access.departmentId || '__no_access__' }
+              : {}),
+      },
       select: {
         id: true,
         name: true,

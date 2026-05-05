@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 
 /**
  * DTO: UpdateUserDto
@@ -21,4 +21,19 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   readonly mustChangePassword?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['SELF', 'DEPARTMENT', 'ENTITY'])
+  readonly employeeDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['SELF', 'DEPARTMENT', 'ENTITY'])
+  readonly attendanceDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['SELF', 'DEPARTMENT', 'ENTITY'])
+  readonly payrollDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
 }

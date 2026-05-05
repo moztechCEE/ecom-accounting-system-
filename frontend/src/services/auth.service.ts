@@ -24,6 +24,9 @@ const mapManagedUserToUser = (managed: ManagedUser): User => {
     email: managed.email,
     name: managed.name,
     mustChangePassword: managed.mustChangePassword,
+    employeeDataScope: managed.employeeDataScope,
+    attendanceDataScope: managed.attendanceDataScope,
+    payrollDataScope: managed.payrollDataScope,
     roles: Array.from(roleSet),
     permissions: Array.from(permissionSet),
   }

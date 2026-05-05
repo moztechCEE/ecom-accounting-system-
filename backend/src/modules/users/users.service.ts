@@ -33,6 +33,16 @@ type UserWithRelations = Prisma.UserGetPayload<{
 }>;
 
 type PrismaClientOrTx = PrismaService | Prisma.TransactionClient;
+type DataAccessScope = 'SELF' | 'DEPARTMENT' | 'ENTITY';
+type DataAccessModule = 'employees' | 'attendance' | 'payroll';
+
+type UserDataAccessContext = {
+  scope: DataAccessScope;
+  entityId: string;
+  employeeId: string | null;
+  departmentId: string | null;
+  noAccess: boolean;
+};
 
 /**
  * UsersService
@@ -44,6 +54,19 @@ export class UsersService {
   private readonly SALT_ROUNDS = 10;
 
   constructor(private readonly prisma: PrismaService) {}
+
+  private readonly dataScopeFields: Record<
+    DataAccessModule,
+    'employeeDataScope' | 'attendanceDataScope' | 'payrollDataScope'
+  > = {
+    employees: 'employeeDataScope',
+    attendance: 'attendanceDataScope',
+    payroll: 'payrollDataScope',
+  };
+
+  private normalizeDataScope(value?: string | null): DataAccessScope {
+    return value === 'DEPARTMENT' || value === 'ENTITY' ? value : 'SELF';
+  }
 
   private sanitizeUser(user: UserWithRelations | null) {
     if (!user) {
@@ -181,7 +204,15 @@ export class UsersService {
    */
   async createUser(dto: CreateUserDto) {
     const normalizedEmail = dto.email.trim().toLowerCase();
-    const { password, name, roleIds = [], mustChangePassword } = dto;
+    const {
+      password,
+      name,
+      roleIds = [],
+      mustChangePassword,
+      employeeDataScope,
+      attendanceDataScope,
+      payrollDataScope,
+    } = dto;
 
     const existing = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
@@ -204,6 +235,9 @@ export class UsersService {
             name,
             passwordHash,
             mustChangePassword: mustChangePassword ?? false,
+            employeeDataScope: this.normalizeDataScope(employeeDataScope),
+            attendanceDataScope: this.normalizeDataScope(attendanceDataScope),
+            payrollDataScope: this.normalizeDataScope(payrollDataScope),
           },
         });
 
@@ -233,7 +267,15 @@ export class UsersService {
    * 更新使用者資訊
    */
   async updateUser(id: string, dto: UpdateUserDto) {
-    const { name, isActive, password, mustChangePassword } = dto;
+    const {
+      name,
+      isActive,
+      password,
+      mustChangePassword,
+      employeeDataScope,
+      attendanceDataScope,
+      payrollDataScope,
+    } = dto;
 
     if (
       typeof name === 'undefined' &&
@@ -260,6 +302,15 @@ export class UsersService {
 
     if (typeof mustChangePassword !== 'undefined') {
       data.mustChangePassword = mustChangePassword;
+    }
+    if (typeof employeeDataScope !== 'undefined') {
+      data.employeeDataScope = this.normalizeDataScope(employeeDataScope);
+    }
+    if (typeof attendanceDataScope !== 'undefined') {
+      data.attendanceDataScope = this.normalizeDataScope(attendanceDataScope);
+    }
+    if (typeof payrollDataScope !== 'undefined') {
+      data.payrollDataScope = this.normalizeDataScope(payrollDataScope);
     }
 
     try {
@@ -363,6 +414,63 @@ export class UsersService {
       ) ?? [];
 
     return permissions;
+  }
+
+  async getDataAccessContext(
+    userId: string,
+    module: DataAccessModule,
+    requestedEntityId?: string,
+  ): Promise<UserDataAccessContext> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        employeeDataScope: true,
+        attendanceDataScope: true,
+        payrollDataScope: true,
+        employee: {
+          select: {
+            id: true,
+            entityId: true,
+            departmentId: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    const scope = this.normalizeDataScope(user[this.dataScopeFields[module]]);
+
+    const fallbackEntity = await this.prisma.entity.findFirst({
+      orderBy: { id: 'asc' },
+      select: { id: true },
+    });
+
+    if (!fallbackEntity && !requestedEntityId && !user.employee?.entityId) {
+      throw new NotFoundException('No entity configured');
+    }
+
+    const entityId =
+      requestedEntityId || user.employee?.entityId || fallbackEntity?.id || '';
+
+    const noAccess =
+      scope === 'SELF'
+        ? !user.employee?.id ||
+          (Boolean(requestedEntityId) && requestedEntityId !== user.employee?.entityId)
+        : scope === 'DEPARTMENT'
+          ? !user.employee?.departmentId ||
+            (Boolean(requestedEntityId) && requestedEntityId !== user.employee?.entityId)
+          : false;
+
+    return {
+      scope,
+      entityId,
+      employeeId: user.employee?.id || null,
+      departmentId: user.employee?.departmentId || null,
+      noAccess,
+    };
   }
 
   /**

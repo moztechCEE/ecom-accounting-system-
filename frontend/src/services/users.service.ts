@@ -6,12 +6,18 @@ export interface CreateUserPayload {
   name: string
   password: string
   roleIds?: string[]
+  employeeDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  attendanceDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  payrollDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
 }
 
 export interface UpdateUserPayload {
   name?: string
   isActive?: boolean
   password?: string
+  employeeDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  attendanceDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  payrollDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
 }
 
 export const usersService = {
