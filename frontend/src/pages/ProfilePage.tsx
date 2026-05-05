@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Typography, Button, Steps, QRCode, Input, message, Spin, Divider, Tag } from 'antd'
+import { Card, Typography, Button, Steps, QRCode, Input, message, Divider, Tag, Form, Upload, Alert, Space } from 'antd'
 import { motion } from 'framer-motion'
-import { SafetyCertificateOutlined, CheckCircleOutlined, LockOutlined } from '@ant-design/icons'
+import { SafetyCertificateOutlined, CheckCircleOutlined, LockOutlined, UploadOutlined, DownloadOutlined } from '@ant-design/icons'
 import { authService } from '../services/auth.service'
+import { payrollService } from '../services/payroll.service'
+import type { Employee, EmployeeOnboardingDocument } from '../types'
 
 const { Title, Text } = Typography
 const { Step } = Steps
@@ -13,9 +15,33 @@ const ProfilePage: React.FC = () => {
   const [token, setToken] = useState('')
   const [currentStep, setCurrentStep] = useState(0)
   const [user, setUser] = useState<any>(null)
+  const [employeeProfile, setEmployeeProfile] = useState<Employee | null>(null)
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [documentLoading, setDocumentLoading] = useState<string | null>(null)
+  const [profileForm] = Form.useForm()
+
+  const onboardingDocDefinitions: Array<{
+    docType: EmployeeOnboardingDocument['docType']
+    label: string
+  }> = [
+    { docType: 'ID_FRONT', label: '身分證正面' },
+    { docType: 'ID_BACK', label: '身分證反面' },
+    { docType: 'HEALTH_CHECK', label: '體檢單' },
+  ]
+
+  const onboardingStatusMeta: Record<
+    EmployeeOnboardingDocument['status'],
+    { color: string; label: string }
+  > = {
+    PENDING: { color: 'default', label: '未上傳' },
+    UPLOADED: { color: 'blue', label: '已上傳，待管理者核實' },
+    VERIFIED: { color: 'green', label: '已核實' },
+  }
 
   useEffect(() => {
     fetchUser()
+    void fetchEmployeeProfile()
   }, [])
 
   const fetchUser = async () => {
@@ -27,6 +53,70 @@ const ProfilePage: React.FC = () => {
       // but let's assume valid setup flow is available.
     } catch (error) {
        // ignore
+    }
+  }
+
+  const fetchEmployeeProfile = async () => {
+    setProfileLoading(true)
+    try {
+      const profile = await payrollService.getMyEmployeeProfile()
+      setEmployeeProfile(profile)
+      profileForm.setFieldsValue({
+        nationalId: profile.nationalId || '',
+        mailingAddress: profile.mailingAddress || '',
+      })
+    } catch (error: any) {
+      setEmployeeProfile(null)
+    } finally {
+      setProfileLoading(false)
+    }
+  }
+
+  const handleSaveProfile = async () => {
+    try {
+      const values = await profileForm.validateFields()
+      setProfileSaving(true)
+      const profile = await payrollService.updateMyEmployeeProfile(values)
+      setEmployeeProfile(profile)
+      message.success('入職資料已更新')
+    } catch (error: any) {
+      if (error?.errorFields) {
+        return
+      }
+      message.error(error?.response?.data?.message || '更新入職資料失敗')
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
+  const handleUploadDocument = async (
+    docType: EmployeeOnboardingDocument['docType'],
+    file: File,
+  ) => {
+    try {
+      setDocumentLoading(docType)
+      await payrollService.uploadMyOnboardingDocument(docType, file)
+      await fetchEmployeeProfile()
+      message.success('文件上傳成功，已送管理者核實')
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '文件上傳失敗')
+    } finally {
+      setDocumentLoading(null)
+    }
+
+    return false
+  }
+
+  const handleDownloadDocument = async (
+    docType: EmployeeOnboardingDocument['docType'],
+  ) => {
+    try {
+      setDocumentLoading(docType)
+      await payrollService.downloadMyOnboardingDocument(docType)
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '下載文件失敗')
+    } finally {
+      setDocumentLoading(null)
     }
   }
 
@@ -65,8 +155,87 @@ const ProfilePage: React.FC = () => {
       className="space-y-8"
     >
       <Title level={2} className="!mb-1 !font-light">
-        My Profile
+        個人資料
       </Title>
+
+      <Card title="入職資料與文件">
+        {employeeProfile ? (
+          <div className="space-y-6">
+            <Alert
+              type="info"
+              showIcon
+              message="這裡提供員工自行補上入職資料與必要文件"
+              description="身分證正反面與體檢單上傳後，會由管理者核實；核實前狀態會顯示為已上傳。"
+            />
+
+            <Form form={profileForm} layout="vertical">
+              <Form.Item name="nationalId" label="身分證字號">
+                <Input placeholder="例如 A123456789" />
+              </Form.Item>
+              <Form.Item name="mailingAddress" label="通訊地址">
+                <Input.TextArea rows={3} placeholder="請輸入通訊地址" />
+              </Form.Item>
+              <Button type="primary" loading={profileSaving} onClick={handleSaveProfile}>
+                儲存入職資料
+              </Button>
+            </Form>
+
+            <Divider />
+
+            <div className="space-y-3">
+              {onboardingDocDefinitions.map(({ docType, label }) => {
+                const document =
+                  employeeProfile.onboardingDocuments?.find((item) => item.docType === docType) ||
+                  ({
+                    id: `${employeeProfile.id}:${docType}`,
+                    docType,
+                    status: 'PENDING',
+                  } as EmployeeOnboardingDocument)
+                const statusMeta = onboardingStatusMeta[document.status]
+
+                return (
+                  <div key={docType} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-slate-800">{label}</div>
+                        <div className="text-xs text-slate-500">{document.fileName || '尚未上傳'}</div>
+                      </div>
+                      <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
+                    </div>
+                    <Space className="mt-3" wrap>
+                      <Upload
+                        showUploadList={false}
+                        beforeUpload={(file) => handleUploadDocument(docType, file)}
+                      >
+                        <Button icon={<UploadOutlined />} loading={documentLoading === docType}>
+                          上傳文件
+                        </Button>
+                      </Upload>
+                      <Button
+                        icon={<DownloadOutlined />}
+                        disabled={!document.fileName}
+                        loading={documentLoading === docType}
+                        onClick={() => void handleDownloadDocument(docType)}
+                      >
+                        下載
+                      </Button>
+                    </Space>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ) : profileLoading ? (
+          <div className="py-10 text-center text-slate-400">載入中...</div>
+        ) : (
+          <Alert
+            type="warning"
+            showIcon
+            message="目前帳號尚未綁定員工資料"
+            description="請請管理者先在員工與部門裡將你的登入帳號綁定到對應員工。"
+          />
+        )}
+      </Card>
       
       <Card title={<span><SafetyCertificateOutlined /> Security Settings</span>}>
         <div className="max-w-xl mx-auto">

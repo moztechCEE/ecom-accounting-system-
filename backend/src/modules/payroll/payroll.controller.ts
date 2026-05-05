@@ -243,6 +243,79 @@ export class PayrollController {
     return new StreamableFile(result.buffer);
   }
 
+  @Get('my/employee')
+  @ApiOperation({ summary: '查詢我的員工入職資料' })
+  @ApiResponse({ status: 200, description: '成功取得我的員工入職資料' })
+  async getMyEmployeeProfile(@Request() req: any) {
+    return this.payrollService.getMyEmployeeProfile(req.user.id);
+  }
+
+  @Patch('my/employee')
+  @ApiOperation({ summary: '更新我的員工入職資料' })
+  @ApiResponse({ status: 200, description: '成功更新我的員工入職資料' })
+  async updateMyEmployeeProfile(
+    @Request() req: any,
+    @Body()
+    body: {
+      nationalId?: string | null;
+      mailingAddress?: string | null;
+    },
+  ) {
+    return this.payrollService.updateMyEmployeeProfile(req.user.id, body);
+  }
+
+  @Post('my/onboarding-documents/:docType/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: multer.memoryStorage(),
+      limits: {
+        fileSize: 5 * 1024 * 1024,
+      },
+    }),
+  )
+  @ApiOperation({ summary: '上傳我的入職文件' })
+  @ApiResponse({ status: 201, description: '成功上傳我的入職文件' })
+  async uploadMyOnboardingDocument(
+    @Request() req: any,
+    @Param('docType') docType: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.payrollService.uploadMyOnboardingDocument(
+      req.user.id,
+      docType,
+      file,
+    );
+  }
+
+  @Get('my/onboarding-documents/:docType/download')
+  @ApiOperation({ summary: '下載我的入職文件' })
+  @ApiResponse({ status: 200, description: '成功下載我的入職文件' })
+  async downloadMyOnboardingDocument(
+    @Request() req: any,
+    @Param('docType') docType: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.payrollService.downloadMyOnboardingDocument(
+      req.user.id,
+      docType,
+    );
+    response.setHeader('Content-Type', result.mimeType);
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"`,
+    );
+    return new StreamableFile(result.buffer);
+  }
+
+  @Get('onboarding-review-queue')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'employees_admin', action: 'read' })
+  @ApiOperation({ summary: '查詢員工入職文件待核實清單' })
+  @ApiResponse({ status: 200, description: '成功取得員工入職文件待核實清單' })
+  async getOnboardingReviewQueue(@Request() req: any) {
+    return this.payrollService.getOnboardingReviewQueue(req.user.id);
+  }
+
   @Get('runs')
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'payroll_admin', action: 'read' })

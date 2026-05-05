@@ -1579,6 +1579,138 @@ export class PayrollService {
     };
   }
 
+  async getMyEmployeeProfile(userId: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { userId },
+      include: this.buildEmployeeInclude(),
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee profile not found');
+    }
+
+    return this.serializeEmployee(employee);
+  }
+
+  async updateMyEmployeeProfile(
+    userId: string,
+    data: {
+      nationalId?: string | null;
+      mailingAddress?: string | null;
+    },
+  ) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { userId },
+      include: this.buildEmployeeInclude(),
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee profile not found');
+    }
+
+    const updatedEmployee = await this.prisma.employee.update({
+      where: { id: employee.id },
+      data: {
+        ...(data.nationalId !== undefined
+          ? { nationalId: data.nationalId?.trim() || null }
+          : {}),
+        ...(data.mailingAddress !== undefined
+          ? { mailingAddress: data.mailingAddress?.trim() || null }
+          : {}),
+      },
+      include: this.buildEmployeeInclude(),
+    });
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'employees',
+      recordId: employee.id,
+      action: 'UPDATE',
+      oldData: this.serializeEmployee(employee),
+      newData: this.serializeEmployee(updatedEmployee),
+    });
+
+    return this.serializeEmployee(updatedEmployee);
+  }
+
+  async uploadMyOnboardingDocument(
+    userId: string,
+    docType: string,
+    file: Express.Multer.File | undefined,
+  ) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee profile not found');
+    }
+
+    return this.uploadEmployeeOnboardingDocument(
+      userId,
+      employee.id,
+      docType,
+      file,
+    );
+  }
+
+  async downloadMyOnboardingDocument(userId: string, docType: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee profile not found');
+    }
+
+    return this.downloadEmployeeOnboardingDocument(userId, employee.id, docType);
+  }
+
+  async getOnboardingReviewQueue(userId: string) {
+    const access = await this.getEmployeeDataAccessContext(userId);
+    const employees = await this.prisma.employee.findMany({
+      where: this.buildEmployeeAccessWhere(access),
+      include: {
+        department: true,
+        onboardingDocuments: {
+          where: {
+            status: {
+              in: ['UPLOADED', 'VERIFIED'],
+            },
+          },
+          select: {
+            id: true,
+            docType: true,
+            status: true,
+            fileName: true,
+            mimeType: true,
+            fileSize: true,
+            uploadedAt: true,
+            verifiedAt: true,
+            verifiedBy: true,
+          },
+          orderBy: [{ uploadedAt: 'desc' }],
+        },
+      },
+      orderBy: [{ hireDate: 'desc' }, { employeeNo: 'asc' }],
+    });
+
+    return employees
+      .map((employee) => ({
+        employeeId: employee.id,
+        employeeNo: employee.employeeNo,
+        employeeName: employee.name,
+        departmentName: employee.department?.name ?? null,
+        hireDate: employee.hireDate,
+        documents: employee.onboardingDocuments,
+      }))
+      .filter((employee) =>
+        employee.documents.some((document) => document.status === 'UPLOADED'),
+      );
+  }
+
   async getBankAccounts(userId: string, entityId?: string) {
     const resolvedEntityId = await this.resolveEntityId(userId, entityId);
 

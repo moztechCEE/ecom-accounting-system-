@@ -76,6 +76,19 @@ export const payrollService = {
     return response.data;
   },
 
+  getMyEmployeeProfile: async () => {
+    const response = await api.get<Employee>("/payroll/my/employee");
+    return response.data;
+  },
+
+  updateMyEmployeeProfile: async (data: {
+    nationalId?: string | null;
+    mailingAddress?: string | null;
+  }) => {
+    const response = await api.patch<Employee>("/payroll/my/employee", data);
+    return response.data;
+  },
+
   uploadEmployeeOnboardingDocument: async (
     employeeId: string,
     docType: EmployeeOnboardingDocument["docType"],
@@ -119,6 +132,48 @@ export const payrollService = {
       },
     );
     triggerFileDownload(response.data, `${employeeId}-${docType}`);
+  },
+
+  uploadMyOnboardingDocument: async (
+    docType: EmployeeOnboardingDocument["docType"],
+    file: File,
+  ) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await api.post<EmployeeOnboardingDocument>(
+      `/payroll/my/onboarding-documents/${docType}/upload`,
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+      },
+    );
+    return response.data;
+  },
+
+  downloadMyOnboardingDocument: async (
+    docType: EmployeeOnboardingDocument["docType"],
+  ) => {
+    const response = await api.get<Blob>(
+      `/payroll/my/onboarding-documents/${docType}/download`,
+      {
+        responseType: "blob",
+      },
+    );
+    triggerFileDownload(response.data, `my-${docType}`);
+  },
+
+  getOnboardingReviewQueue: async () => {
+    const response = await api.get<
+      Array<{
+        employeeId: string;
+        employeeNo: string;
+        employeeName: string;
+        departmentName?: string | null;
+        hireDate: string;
+        documents: EmployeeOnboardingDocument[];
+      }>
+    >("/payroll/onboarding-review-queue");
+    return response.data;
   },
 
   // Departments (Assuming they are managed under payroll or entities)

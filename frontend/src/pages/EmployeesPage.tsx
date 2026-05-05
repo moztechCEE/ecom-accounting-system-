@@ -191,6 +191,16 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const [documentActionLoading, setDocumentActionLoading] = useState<
     string | null
   >(null);
+  const [reviewQueue, setReviewQueue] = useState<
+    Array<{
+      employeeId: string;
+      employeeNo: string;
+      employeeName: string;
+      departmentName?: string | null;
+      hireDate: string;
+      documents: EmployeeOnboardingDocument[];
+    }>
+  >([]);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
     null,
   );
@@ -222,9 +232,19 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     }
   };
 
+  const fetchReviewQueue = async () => {
+    try {
+      const result = await payrollService.getOnboardingReviewQueue();
+      setReviewQueue(result);
+    } catch (error) {
+      setReviewQueue([]);
+    }
+  };
+
   useEffect(() => {
     void fetchEmployees();
     void fetchUsers();
+    void fetchReviewQueue();
   }, []);
 
   const buildFormValues = (employee?: Employee | null) => ({
@@ -285,7 +305,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       message.success("員工建立成功");
       setCreateOpen(false);
       form.resetFields();
-      void fetchEmployees();
+      void Promise.all([fetchEmployees(), fetchReviewQueue()]);
     } catch (error) {
       if ((error as any)?.errorFields) {
         return;
@@ -315,7 +335,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       message.success("員工更新成功");
       setEditOpen(false);
       form.resetFields();
-      void fetchEmployees();
+      void Promise.all([fetchEmployees(), fetchReviewQueue()]);
     } catch (error) {
       if ((error as any)?.errorFields) {
         return;
@@ -347,6 +367,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       form.setFieldValue("userId", result.user.id);
       setSelectedEmployee(result.employee);
       await Promise.all([fetchEmployees(), fetchUsers()]);
+      await fetchReviewQueue();
       await refreshSingleEmployee(result.employee.id);
 
       Modal.success({
@@ -398,6 +419,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           employee.id === nextEmployee.id ? nextEmployee : employee,
         ),
       );
+      void fetchReviewQueue();
       message.success("文件上傳成功");
     } catch (error) {
       message.error(getErrorMessage(error, "文件上傳失敗"));
@@ -435,6 +457,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           employee.id === nextEmployee.id ? nextEmployee : employee,
         ),
       );
+      void fetchReviewQueue();
       message.success(
         clearFile
           ? "文件已清除"
@@ -609,6 +632,63 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       <div className="rounded-2xl border border-white/30 bg-white/45 px-4 py-3 text-xs leading-6 text-slate-500 shadow-[0_10px_30px_rgba(148,163,184,0.08)]">
         建議先建立部門，再新增員工與綁定登入帳號；若需要處理假別或額度，可切換上方頁籤接續設定。
       </div>
+
+      {reviewQueue.length > 0 ? (
+        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 shadow-[0_10px_30px_rgba(245,158,11,0.08)]">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="font-medium text-amber-900">入職文件待核實</div>
+              <div className="text-xs text-amber-700">
+                目前有 {reviewQueue.length} 位員工至少 1 份文件待核實。
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {reviewQueue.slice(0, 6).map((item) => (
+              <div
+                key={item.employeeId}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-100 bg-white/80 px-3 py-3"
+              >
+                <div>
+                  <div className="font-medium text-slate-800">
+                    {item.employeeName} ({item.employeeNo})
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {item.departmentName || "未分配部門"} · 待核實：
+                    {item.documents
+                      .filter((document) => document.status === "UPLOADED")
+                      .map(
+                        (document) =>
+                          onboardingDocDefinitions.find(
+                            (definition) => definition.docType === document.docType,
+                          )?.label || document.docType,
+                      )
+                      .join("、")}
+                  </div>
+                </div>
+                <Button
+                  type="link"
+                  onClick={() => {
+                    const matchedEmployee = employees.find(
+                      (employee) => employee.id === item.employeeId,
+                    );
+                    if (matchedEmployee) {
+                      setSelectedEmployee(matchedEmployee);
+                      form.setFieldsValue(buildFormValues(matchedEmployee));
+                      setEditOpen(true);
+                      void refreshSingleEmployee(matchedEmployee.id).catch(
+                        () => null,
+                      );
+                    }
+                  }}
+                >
+                  前往核實
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <Table
         rowKey="id"
