@@ -52,7 +52,10 @@ const KanbanColumn: React.FC<{ title: string; status: string; orders: SalesOrder
             <span className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString()}</span>
           </div>
           <div className="font-medium text-gray-800 dark:text-gray-200 mb-1">{order.customerName || 'Guest'}</div>
-          <div className="text-xs text-gray-400">{order.sourceLabel || order.channelName || '未歸戶來源'}</div>
+          <div className="flex flex-wrap gap-1 text-xs">
+            <Tag color="geekblue" className="m-0">{order.sourceBrand || '未分類品牌'}</Tag>
+            <Tag className="m-0">{order.sourcePlatform || order.sourceLabel || order.channelName || '未歸戶平台'}</Tag>
+          </div>
           <div className="flex justify-between items-center mt-3">
             <span className="text-gray-500 text-sm">{order.items?.length || 0} items</span>
             <span className="font-mono font-medium dark:text-gray-300">NT$ {Number(order.totalAmount).toLocaleString()}</span>
@@ -105,7 +108,26 @@ const SalesPage: React.FC = () => {
   }, [quickRange, customRange])
 
   const handleExport = () => {
-    const ws = XLSX.utils.json_to_sheet(orders)
+    const exportRows = filteredOrders.map((order) => ({
+      訂單編號: order.orderNumber,
+      日期: dayjs(order.createdAt).format('YYYY-MM-DD HH:mm'),
+      客戶: order.customerName || 'Guest',
+      Email: order.customerEmail || '',
+      電話: order.customerPhone || '',
+      品牌: order.sourceBrand || '未分類品牌',
+      平台: order.sourcePlatform || order.sourceLabel || order.channelName || '',
+      通路: order.channelName || order.channelCode || '',
+      金額: order.totalAmount,
+      幣別: order.currency,
+      訂單狀態: order.status,
+      付款狀態: order.paymentStatus,
+      發票號碼: order.invoiceNumber || '',
+      發票狀態: order.invoiceStatus || '',
+      應收餘額: order.outstandingAmountOriginal || 0,
+      手續費: (order.feeGatewayOriginal || 0) + (order.feePlatformOriginal || 0),
+      淨額: order.amountNetOriginal || 0,
+    }))
+    const ws = XLSX.utils.json_to_sheet(exportRows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Sales Orders")
     XLSX.writeFile(wb, "sales_orders_export.xlsx")
@@ -194,9 +216,9 @@ const SalesPage: React.FC = () => {
       ),
     },
     {
-      title: '客戶 / 來源',
+      title: '客戶 / 品牌平台',
       key: 'customer',
-      width: 260,
+      width: 300,
       render: (_: string, record: SalesOrder) => (
         <div>
           <div className="font-medium text-slate-900 leading-5">{record.customerName || 'Guest'}</div>
@@ -204,8 +226,13 @@ const SalesPage: React.FC = () => {
             {record.customerEmail || '未填 Email'}
             {record.customerPhone ? ` · ${record.customerPhone}` : ''}
           </div>
-          <div className="pt-1 text-xs text-slate-500">
-            {record.sourceLabel || '未歸戶來源'} · {record.sourceBrand || record.channelName || '其他來源'}
+          <div className="flex min-w-0 flex-wrap gap-1 pt-1">
+            <Tag color="geekblue" className="m-0 max-w-[130px] truncate">
+              {record.sourceBrand || '未分類品牌'}
+            </Tag>
+            <Tag className="m-0 max-w-[150px] truncate">
+              {record.sourcePlatform || record.sourceLabel || record.channelName || '未歸戶平台'}
+            </Tag>
           </div>
         </div>
       ),
@@ -365,6 +392,7 @@ const SalesPage: React.FC = () => {
       (order.customerName || '').toLowerCase().includes(keyword) ||
       (order.channelName || '').toLowerCase().includes(keyword) ||
       (order.sourceLabel || '').toLowerCase().includes(keyword) ||
+      (order.sourcePlatform || '').toLowerCase().includes(keyword) ||
       (order.sourceBrand || '').toLowerCase().includes(keyword) ||
       (order.customerEmail || '').toLowerCase().includes(keyword)
     )

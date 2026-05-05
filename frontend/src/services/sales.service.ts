@@ -17,6 +17,7 @@ export interface SalesOrder {
   createdAt: string
   sourceLabel?: string
   sourceBrand?: string
+  sourcePlatform?: string
   channelCode?: string
   items?: SalesOrderItem[]
   channelName?: string
@@ -136,19 +137,100 @@ const extractMetadata = (notes?: string | null) => {
   return meta
 }
 
+const PLATFORM_KEYWORDS = ['萬魔未來工學院', '萬物未來工學院', '1SHOP', 'SHOPLINE']
+
+const KNOWN_BRANDS = [
+  'MOZTECH',
+  '墨子科技',
+  'BONSON',
+  '邦生',
+  'AIRITY',
+  'MORITEK',
+]
+
+const normalizeBrandName = (value?: string | null) => {
+  const normalized = (value || '').trim()
+  if (!normalized) return ''
+
+  if (/moztech|墨子/i.test(normalized)) return 'MOZTECH'
+  if (/bonson|邦生/i.test(normalized)) return 'BONSON'
+  if (/airity/i.test(normalized)) return 'AIRITY'
+  if (/moritek/i.test(normalized)) return 'MORITEK'
+
+  return normalized
+}
+
+const resolveBrandFromItems = (items?: SalesOrderApiResponse['items']) => {
+  for (const item of items || []) {
+    const productName = item.product?.name?.trim() || ''
+    const sku = item.product?.sku?.trim() || ''
+    const candidates = [productName, sku]
+
+    for (const candidate of candidates) {
+      const [prefix] = candidate.split(/[|｜]/)
+      const possibleBrand = normalizeBrandName(prefix)
+      if (
+        possibleBrand &&
+        possibleBrand !== candidate &&
+        possibleBrand.length <= 40 &&
+        !PLATFORM_KEYWORDS.some((keyword) => possibleBrand.includes(keyword))
+      ) {
+        return possibleBrand
+      }
+    }
+
+    for (const brand of KNOWN_BRANDS) {
+      if (candidateIncludesBrand(productName, brand) || candidateIncludesBrand(sku, brand)) {
+        return normalizeBrandName(brand)
+      }
+    }
+  }
+
+  return ''
+}
+
+const candidateIncludesBrand = (candidate: string, brand: string) => {
+  if (!candidate || !brand) return false
+  return candidate.toLowerCase().includes(brand.toLowerCase())
+}
+
+const resolveCommerceBrand = (
+  order: SalesOrderApiResponse,
+  fallback: string,
+) => {
+  const itemBrand = resolveBrandFromItems(order.items)
+  if (itemBrand) return itemBrand
+
+  const normalizedFallback = normalizeBrandName(fallback)
+  if (
+    normalizedFallback &&
+    !PLATFORM_KEYWORDS.some((keyword) => normalizedFallback.includes(keyword))
+  ) {
+    return normalizedFallback
+  }
+
+  return '未分類品牌'
+}
+
 const resolveOrderSource = (order: SalesOrderApiResponse) => {
   const meta = extractMetadata(order.notes)
   const channelCode = order.channel?.code?.trim().toUpperCase() || ''
 
   if (channelCode === 'SHOPIFY') {
-    return { sourceLabel: 'MOZTECH 官網', sourceBrand: 'MOZTECH', channelCode }
+    return {
+      sourceLabel: 'MOZTECH 官網',
+      sourcePlatform: 'Shopify',
+      sourceBrand: 'MOZTECH',
+      channelCode,
+    }
   }
 
   if (channelCode === '1SHOP') {
     const storeName = meta.storeName || meta.storeAccount || '萬魔未來工學院團購'
     return {
       sourceLabel: storeName,
-      sourceBrand: storeName.includes('萬魔') ? '萬魔未來工學院' : storeName,
+      sourcePlatform: storeName,
+      sourceBrand: resolveCommerceBrand(order, storeName),
       channelCode,
     }
   }
@@ -157,14 +239,16 @@ const resolveOrderSource = (order: SalesOrderApiResponse) => {
     const storeName = meta.storeName || meta.storeHandle || 'Shopline'
     return {
       sourceLabel: storeName,
-      sourceBrand: storeName.includes('萬魔') ? '萬魔未來工學院' : storeName,
+      sourcePlatform: storeName,
+      sourceBrand: resolveCommerceBrand(order, storeName),
       channelCode,
     }
   }
 
   return {
     sourceLabel: order.channel?.name?.trim() || '其他來源',
-    sourceBrand: order.channel?.name?.trim() || '其他來源',
+    sourcePlatform: order.channel?.name?.trim() || '其他來源',
+    sourceBrand: resolveCommerceBrand(order, order.channel?.name?.trim() || '其他來源'),
     channelCode: channelCode || undefined,
   }
 }

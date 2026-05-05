@@ -110,10 +110,14 @@
   - 2026-05-05 更新：已新增 `preview/orders`、`preview/customers` 只讀端點；正式匯入前已用最近 30 天 dry-run 驗證 Shopline 回傳 728 筆訂單、1410 筆顧客事件，mapping 可用。
   - 2026-05-05 更新：已用一般 OpenAPI 依 30 天區間回補 `2024-05-05` 到 `2026-05-05`。Cloud Run summary 顯示 SHOPLINE 已進 `SalesOrder` 4689 筆，總額 9,250,001；Payment 4687 筆，gross/net 8,488,187。
   - 2026-05-05 更新：已建立 Cloud Scheduler `ecom-accounting-shopline-auto-sync`，每 20 分鐘呼叫 `POST /integrations/shopline/sync/auto`；`SHOPLINE_SYNC_ENABLED=true`，lookback 240 分鐘。手動驗證 auto sync 成功抓到最近 4 小時 56 筆訂單與 63 筆顧客事件。
+  - 2026-05-06 更新：再檢查 Cloud Run 設定，Shopline token / handle / merchant id / sync enabled 都已掛上；手動觸發排程回應 HTTP 201，最近排程記錄可正常完成增量同步。
   - Shopline Adapter / Service / Controller 已存在。
   - 訂單、顧客、Payment 草稿同步骨架已存在。
 - 暫停原因：
-  - 一般 orders / customers / Payment 草稿資料已進系統；剩餘缺口是兩年以上 archived orders 匯出、正式 payout / settlement / 手續費來源、webhook topic 與簽章驗證。
+  - 一般 orders / customers / Payment 草稿資料已進系統；剩餘缺口是兩年以上 archived orders 匯出、正式 payout / settlement / 手續費來源、webhook topic 與簽章驗證、商品 / 分類 / 庫存主檔同步、Shopline invoice 欄位正式回寫。
+- 品牌 / 平台歸屬確認：
+  - 使用者已確認 `萬魔未來工學院` 是平台，不是商品品牌。
+  - 若要精準統計品牌貢獻，需讓商品主檔、SKU 或商品名稱有穩定品牌欄位 / 前綴，例如 `BONSON｜商品名`、`MOZTECH｜商品名`，或後續建立正式商品品牌欄位。
 
 ### 6. LINE Pay / TWQR / 行動支付分流
 

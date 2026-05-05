@@ -3801,7 +3801,7 @@ export class ReportsService {
 
       return {
         label: storeName,
-        brand: storeName.includes('萬魔') ? '萬魔未來工學院' : storeName,
+        brand: this.resolveCommerceBrand(storeName),
         channelCode,
       };
     }
@@ -3811,7 +3811,7 @@ export class ReportsService {
         meta.storeName || meta.storeHandle || params.channelName || 'Shopline';
       return {
         label: storeName,
-        brand: storeName.includes('萬魔') ? '萬魔未來工學院' : storeName,
+        brand: this.resolveCommerceBrand(storeName),
         channelCode,
       };
     }
@@ -3819,7 +3819,7 @@ export class ReportsService {
     const fallback = meta.storeName || meta.storeHandle || params.channelName || '其他來源';
     return {
       label: fallback,
-      brand: fallback,
+      brand: this.resolveCommerceBrand(fallback),
       channelCode: channelCode || null,
     };
   }
@@ -3827,17 +3827,35 @@ export class ReportsService {
   private resolveProductBrand(productName?: string | null, fallbackBrand?: string) {
     const normalizedName = (productName || '').trim();
     if (!normalizedName) {
-      return (fallbackBrand || '未分類品牌').trim();
+      return this.resolveCommerceBrand(fallbackBrand);
     }
 
     const [prefix] = normalizedName.split(/[|｜]/);
-    const candidate = prefix?.trim();
+    const candidate = this.resolveCommerceBrand(prefix);
 
-    if (candidate && candidate.length <= 40) {
+    if (candidate && candidate !== '未分類品牌' && candidate.length <= 40) {
       return candidate;
     }
 
-    return (fallbackBrand || '未分類品牌').trim();
+    return this.resolveCommerceBrand(fallbackBrand);
+  }
+
+  private resolveCommerceBrand(value?: string | null) {
+    const normalized = (value || '').trim();
+    if (!normalized || this.isPlatformName(normalized)) {
+      return '未分類品牌';
+    }
+    if (/moztech|墨子/i.test(normalized)) return 'MOZTECH';
+    if (/bonson|邦生/i.test(normalized)) return 'BONSON';
+    if (/airity/i.test(normalized)) return 'AIRITY';
+    if (/moritek/i.test(normalized)) return 'MORITEK';
+    return normalized;
+  }
+
+  private isPlatformName(value: string) {
+    return ['萬魔未來工學院', '萬物未來工學院', '1SHOP', 'SHOPLINE'].some(
+      (keyword) => value.toUpperCase().includes(keyword.toUpperCase()),
+    );
   }
 
   private buildConnectorReadiness(params: {

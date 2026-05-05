@@ -1689,7 +1689,7 @@ export class ArService {
       const storeName = meta.storeName || meta.storeAccount || '萬魔未來工學院團購';
       return {
         label: storeName,
-        brand: storeName.includes('萬魔') ? '萬魔未來工學院' : storeName,
+        brand: this.resolveCommerceBrand(storeName),
       };
     }
 
@@ -1697,14 +1697,33 @@ export class ArService {
       const storeName = meta.storeName || meta.storeHandle || 'Shopline';
       return {
         label: storeName,
-        brand: storeName.includes('萬魔') ? '萬魔未來工學院' : storeName,
+        brand: this.resolveCommerceBrand(storeName),
       };
     }
 
+    const fallback = meta.storeName || meta.storeHandle || '其他來源';
     return {
-      label: meta.storeName || meta.storeHandle || '其他來源',
-      brand: meta.storeName || meta.storeHandle || '其他來源',
+      label: fallback,
+      brand: this.resolveCommerceBrand(fallback),
     };
+  }
+
+  private resolveCommerceBrand(value?: string | null) {
+    const normalized = (value || '').trim();
+    if (!normalized || this.isPlatformName(normalized)) {
+      return '未分類品牌';
+    }
+    if (/moztech|墨子/i.test(normalized)) return 'MOZTECH';
+    if (/bonson|邦生/i.test(normalized)) return 'BONSON';
+    if (/airity/i.test(normalized)) return 'AIRITY';
+    if (/moritek/i.test(normalized)) return 'MORITEK';
+    return normalized;
+  }
+
+  private isPlatformName(value: string) {
+    return ['萬魔未來工學院', '萬物未來工學院', '1SHOP', 'SHOPLINE'].some(
+      (keyword) => value.toUpperCase().includes(keyword.toUpperCase()),
+    );
   }
 
   private classifyReceivable(params: {
@@ -1741,8 +1760,8 @@ export class ArService {
     const isB2B = this.isB2BReceivable(params.customerType, meta, params.customer);
     const isGroupBuy =
       channelCode === '1SHOP' ||
-      params.source.brand.includes('萬魔') ||
-      params.source.brand.includes('萬物') ||
+      params.source.label.includes('萬魔') ||
+      params.source.label.includes('萬物') ||
       params.source.label.includes('團購');
     const isShopline = channelCode === 'SHOPLINE';
     const isCod = ['cod', 'cvs_pickup_pay'].includes(paymentMethodGroup);

@@ -196,8 +196,9 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
               <Descriptions column={1} size="small" labelStyle={{ background: 'transparent' }} contentStyle={{ background: 'transparent' }}>
                 <Descriptions.Item label="Email">{order.customerEmail || '未填寫'}</Descriptions.Item>
                 <Descriptions.Item label="電話">{order.customerPhone || '未填寫'}</Descriptions.Item>
-                <Descriptions.Item label="來源">{order.sourceLabel || order.channelName || '未歸戶來源'}</Descriptions.Item>
-                <Descriptions.Item label="通路品牌">{order.sourceBrand || '未設定'}</Descriptions.Item>
+                <Descriptions.Item label="品牌">{order.sourceBrand || '未分類品牌'}</Descriptions.Item>
+                <Descriptions.Item label="平台">{order.sourcePlatform || order.sourceLabel || order.channelName || '未歸戶平台'}</Descriptions.Item>
+                <Descriptions.Item label="通路">{order.channelName || order.channelCode || '未設定'}</Descriptions.Item>
                 <Descriptions.Item label="發票號碼">{order.invoiceNumber || '尚未開立'}</Descriptions.Item>
                 <Descriptions.Item label="發票日期">{order.invoiceDate || '待確認'}</Descriptions.Item>
               </Descriptions>

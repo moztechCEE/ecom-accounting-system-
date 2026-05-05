@@ -239,7 +239,7 @@ export class CustomerService {
       const storeName = meta.storeName || meta.storeAccount || '團購';
       return {
         label: `${storeName}`,
-        brand: storeName.includes('萬魔') ? '萬魔未來工學院' : storeName,
+        brand: this.resolveCommerceBrand(storeName),
         channelCode: normalizedChannel,
       };
     }
@@ -248,16 +248,35 @@ export class CustomerService {
       const storeName = meta.storeName || meta.storeHandle || 'Shopline';
       return {
         label: `${storeName}`,
-        brand: storeName.includes('萬魔') ? '萬魔未來工學院' : storeName,
+        brand: this.resolveCommerceBrand(storeName),
         channelCode: normalizedChannel,
       };
     }
 
+    const fallback = meta.storeName || meta.storeHandle || '其他來源';
     return {
-      label: meta.storeName || meta.storeHandle || '其他來源',
-      brand: meta.storeName || meta.storeHandle || '其他來源',
+      label: fallback,
+      brand: this.resolveCommerceBrand(fallback),
       channelCode: normalizedChannel || null,
     };
+  }
+
+  private resolveCommerceBrand(value?: string | null) {
+    const normalized = (value || '').trim();
+    if (!normalized || this.isPlatformName(normalized)) {
+      return '未分類品牌';
+    }
+    if (/moztech|墨子/i.test(normalized)) return 'MOZTECH';
+    if (/bonson|邦生/i.test(normalized)) return 'BONSON';
+    if (/airity/i.test(normalized)) return 'AIRITY';
+    if (/moritek/i.test(normalized)) return 'MORITEK';
+    return normalized;
+  }
+
+  private isPlatformName(value: string) {
+    return ['萬魔未來工學院', '萬物未來工學院', '1SHOP', 'SHOPLINE'].some(
+      (keyword) => value.toUpperCase().includes(keyword.toUpperCase()),
+    );
   }
 
   private extractMetadata(notes?: string | null) {
