@@ -28,6 +28,8 @@ import {
   DisasterClosureScopeType,
   LeaveStatus,
   LeaveType,
+  OvertimeRequest,
+  OvertimeRequestStatus,
   SeniorityTier,
 } from "../../types/attendance";
 import { Department, Employee } from "../../types";
@@ -41,6 +43,7 @@ import { GlassTextarea } from "../../components/ui/GlassTextarea";
 type AdminTab =
   | "attendance"
   | "requests"
+  | "overtime"
   | "policies"
   | "closures"
   | "types"
@@ -198,6 +201,7 @@ const AttendanceAdminPage: React.FC = () => {
   const [dailyData, setDailyData] = useState<any[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<AdminLeaveRequest[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>([]);
   const [leaveBalances, setLeaveBalances] = useState<AdminLeaveBalance[]>([]);
   const [policies, setPolicies] = useState<AttendancePolicy[]>([]);
   const [disasterClosures, setDisasterClosures] = useState<
@@ -206,6 +210,7 @@ const AttendanceAdminPage: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [requestStatusFilter, setRequestStatusFilter] = useState<string>("");
+  const [overtimeStatusFilter, setOvertimeStatusFilter] = useState<string>("");
   const [employeeFilter, setEmployeeFilter] = useState<string>("");
   const [typeModalOpen, setTypeModalOpen] = useState(false);
   const [editingLeaveType, setEditingLeaveType] = useState<LeaveType | null>(
@@ -228,6 +233,8 @@ const AttendanceAdminPage: React.FC = () => {
   const [selectedRequest, setSelectedRequest] =
     useState<AdminLeaveRequest | null>(null);
   const [reviewNote, setReviewNote] = useState("");
+  const [selectedOvertimeRequest, setSelectedOvertimeRequest] =
+    useState<OvertimeRequest | null>(null);
   const [balanceForm, setBalanceForm] = useState({
     accruedHours: "",
     carryOverHours: "",
@@ -240,7 +247,7 @@ const AttendanceAdminPage: React.FC = () => {
 
   useEffect(() => {
     void loadManagementData();
-  }, [selectedYear, requestStatusFilter, employeeFilter]);
+  }, [selectedYear, requestStatusFilter, overtimeStatusFilter, employeeFilter]);
 
   useEffect(() => {
     void loadReferenceData();
@@ -264,11 +271,16 @@ const AttendanceAdminPage: React.FC = () => {
   const loadManagementData = async () => {
     try {
       setLoading(true);
-      const [requests, types, balances, policies, closures] =
+      const [requests, overtimeItems, types, balances, policies, closures] =
         await Promise.all([
         attendanceService.getAdminLeaveRequests({
           year: selectedYear,
           status: (requestStatusFilter as LeaveStatus | "") || "",
+          employeeId: employeeFilter || undefined,
+        }),
+        attendanceService.getAdminOvertimeRequests({
+          year: selectedYear,
+          status: overtimeStatusFilter || undefined,
           employeeId: employeeFilter || undefined,
         }),
         attendanceService.getAdminLeaveTypes(),
@@ -280,6 +292,7 @@ const AttendanceAdminPage: React.FC = () => {
         attendanceService.getDisasterClosures({ year: selectedYear }),
       ]);
       setLeaveRequests(requests);
+      setOvertimeRequests(overtimeItems);
       setLeaveTypes(types);
       setLeaveBalances(balances);
       setPolicies(policies);
@@ -381,6 +394,44 @@ const AttendanceAdminPage: React.FC = () => {
     );
   };
 
+  const overtimeStatusBadge = (status: string) => {
+    const config: Record<string, { text: string; className: string }> = {
+      [OvertimeRequestStatus.PENDING_MANAGER]: {
+        text: "待主管初審",
+        className: "bg-amber-100/70 text-amber-700",
+      },
+      [OvertimeRequestStatus.PENDING_FINAL]: {
+        text: "待負責人覆核",
+        className: "bg-sky-100/70 text-sky-700",
+      },
+      [OvertimeRequestStatus.APPROVED]: {
+        text: "已核准",
+        className: "bg-emerald-100/70 text-emerald-700",
+      },
+      [OvertimeRequestStatus.REJECTED]: {
+        text: "已駁回",
+        className: "bg-rose-100/70 text-rose-700",
+      },
+      [OvertimeRequestStatus.CANCELLED]: {
+        text: "已取消",
+        className: "bg-slate-100/70 text-slate-500",
+      },
+    };
+
+    const badge = config[status] || {
+      text: status,
+      className: "bg-slate-100/70 text-slate-600",
+    };
+
+    return (
+      <span
+        className={`rounded-full px-3 py-1 text-xs font-semibold ${badge.className}`}
+      >
+        {badge.text}
+      </span>
+    );
+  };
+
   const attendanceStatusBadge = (status: string) => {
     const config: Record<string, { text: string; className: string }> = {
       completed: {
@@ -431,6 +482,31 @@ const AttendanceAdminPage: React.FC = () => {
     } catch (error: any) {
       console.error(error);
       message.error(error?.response?.data?.message || "更新假單狀態失敗");
+    }
+  };
+
+  const handleReviewOvertimeRequest = async (
+    requestId: string,
+    action: "approve_manager" | "approve_final" | "reject",
+  ) => {
+    try {
+      await attendanceService.reviewOvertimeRequest(requestId, {
+        action,
+        note: reviewNote || undefined,
+      });
+      message.success(
+        action === "reject"
+          ? "加班申請已駁回"
+          : action === "approve_manager"
+            ? "已完成主管初審"
+            : "加班申請已核准",
+      );
+      setSelectedOvertimeRequest(null);
+      setReviewNote("");
+      await loadManagementData();
+    } catch (error: any) {
+      console.error(error);
+      message.error(error?.response?.data?.message || "更新加班申請失敗");
     }
   };
 
@@ -813,6 +889,7 @@ const AttendanceAdminPage: React.FC = () => {
   const tabs: { key: AdminTab; label: string; icon: React.ReactNode }[] = [
     { key: "attendance", label: "每日出勤", icon: <DashboardOutlined /> },
     { key: "requests", label: "假單審核", icon: <CheckCircleOutlined /> },
+    { key: "overtime", label: "加班審核", icon: <ClockCircleOutlined /> },
     { key: "policies", label: "班表政策", icon: <ClockCircleOutlined /> },
     { key: "closures", label: "統一放假", icon: <WarningOutlined /> },
     { key: "types", label: "假別規則", icon: <SettingOutlined /> },
@@ -820,7 +897,9 @@ const AttendanceAdminPage: React.FC = () => {
   ];
 
   const primaryAction =
-    activeTab === "policies"
+    activeTab === "overtime"
+      ? null
+      : activeTab === "policies"
       ? {
           label: "新增班表政策",
           icon: <ClockCircleOutlined />,
@@ -885,13 +964,19 @@ const AttendanceAdminPage: React.FC = () => {
               <ReloadOutlined />
               重新整理資料
             </GlassButton>
-            <GlassButton
-              className="h-12 gap-2 text-sm"
-              onClick={primaryAction.onClick}
-            >
-              {primaryAction.icon}
-              {primaryAction.label}
-            </GlassButton>
+            {primaryAction ? (
+              <GlassButton
+                className="h-12 gap-2 text-sm"
+                onClick={primaryAction.onClick}
+              >
+                {primaryAction.icon}
+                {primaryAction.label}
+              </GlassButton>
+            ) : (
+              <GlassCard className="flex h-12 items-center justify-center border border-white/25 bg-white/20 text-xs text-slate-500">
+                加班申請由員工送出，這裡負責審核
+              </GlassCard>
+            )}
           </div>
         </GlassCard>
       </div>
@@ -970,22 +1055,38 @@ const AttendanceAdminPage: React.FC = () => {
         </div>
 
         <div className="p-6">
-          {(activeTab === "requests" || activeTab === "balances") && (
+          {(activeTab === "requests" || activeTab === "overtime" || activeTab === "balances") && (
             <div className="mb-6 flex flex-wrap gap-3">
               <div className="w-40">
-                <GlassSelect
-                  options={[
-                    { value: "", label: "全部狀態" },
-                    { value: LeaveStatus.SUBMITTED, label: "簽核中" },
-                    { value: LeaveStatus.APPROVED, label: "已核准" },
-                    { value: LeaveStatus.REJECTED, label: "已駁回" },
-                    { value: LeaveStatus.CANCELLED, label: "已取消" },
-                  ]}
-                  value={requestStatusFilter}
-                  onChange={(event) =>
-                    setRequestStatusFilter(event.target.value)
-                  }
-                />
+                {activeTab === "overtime" ? (
+                  <GlassSelect
+                    options={[
+                      { value: "", label: "全部狀態" },
+                      { value: OvertimeRequestStatus.PENDING_MANAGER, label: "待主管初審" },
+                      { value: OvertimeRequestStatus.PENDING_FINAL, label: "待負責人覆核" },
+                      { value: OvertimeRequestStatus.APPROVED, label: "已核准" },
+                      { value: OvertimeRequestStatus.REJECTED, label: "已駁回" },
+                    ]}
+                    value={overtimeStatusFilter}
+                    onChange={(event) =>
+                      setOvertimeStatusFilter(event.target.value)
+                    }
+                  />
+                ) : (
+                  <GlassSelect
+                    options={[
+                      { value: "", label: "全部狀態" },
+                      { value: LeaveStatus.SUBMITTED, label: "簽核中" },
+                      { value: LeaveStatus.APPROVED, label: "已核准" },
+                      { value: LeaveStatus.REJECTED, label: "已駁回" },
+                      { value: LeaveStatus.CANCELLED, label: "已取消" },
+                    ]}
+                    value={requestStatusFilter}
+                    onChange={(event) =>
+                      setRequestStatusFilter(event.target.value)
+                    }
+                  />
+                )}
               </div>
               <div className="w-48">
                 <GlassSelect
@@ -1172,6 +1273,164 @@ const AttendanceAdminPage: React.FC = () => {
                         className="px-5 py-10 text-center text-sm text-slate-400"
                       >
                         目前沒有符合條件的假單
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeTab === "overtime" && (
+            <div className="overflow-x-auto rounded-3xl border border-white/20 bg-white/20">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-white/20 text-sm text-slate-500">
+                    <th className="px-5 py-4 font-medium">員工</th>
+                    <th className="px-5 py-4 font-medium">日期</th>
+                    <th className="px-5 py-4 font-medium">申請分鐘</th>
+                    <th className="px-5 py-4 font-medium">原因</th>
+                    <th className="px-5 py-4 font-medium">狀態</th>
+                    <th className="px-5 py-4 font-medium">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {overtimeRequests.map((request) => (
+                    <tr
+                      key={request.id}
+                      className="border-b border-white/10 text-sm text-slate-700"
+                    >
+                      <td className="px-5 py-4">
+                        <div className="font-medium text-slate-900">
+                          {request.employeeName}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          {request.departmentName || "未分配部門"}
+                          {request.employeeNo ? ` · ${request.employeeNo}` : ""}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 font-mono">
+                        {dayjs(request.workDate).format("YYYY/MM/DD")}
+                      </td>
+                      <td className="px-5 py-4">{request.requestedMinutes} 分鐘</td>
+                      <td className="px-5 py-4 max-w-[320px]">
+                        <div className="truncate">{request.reason}</div>
+                        <div className="mt-1 text-xs text-slate-400">
+                          送出：{dayjs(request.submittedAt).format("YYYY/MM/DD HH:mm")}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        {overtimeStatusBadge(request.status)}
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          {request.status === OvertimeRequestStatus.PENDING_MANAGER ? (
+                            <>
+                              <GlassButton
+                                variant="secondary"
+                                className="gap-2 px-4 py-2 text-sm"
+                                onClick={() => {
+                                  setSelectedOvertimeRequest(request);
+                                  setReviewNote("");
+                                }}
+                              >
+                                <FileTextOutlined />
+                                審核
+                              </GlassButton>
+                              {selectedOvertimeRequest?.id === request.id ? (
+                                <>
+                                  <GlassInput
+                                    value={reviewNote}
+                                    onChange={(event) => setReviewNote(event.target.value)}
+                                    placeholder="初審備註（選填）"
+                                  />
+                                  <GlassButton
+                                    className="px-4 py-2 text-sm"
+                                    onClick={() =>
+                                      void handleReviewOvertimeRequest(
+                                        request.id,
+                                        "approve_manager",
+                                      )
+                                    }
+                                  >
+                                    主管初審通過
+                                  </GlassButton>
+                                  <GlassButton
+                                    variant="danger"
+                                    className="px-4 py-2 text-sm"
+                                    onClick={() =>
+                                      void handleReviewOvertimeRequest(request.id, "reject")
+                                    }
+                                  >
+                                    駁回
+                                  </GlassButton>
+                                </>
+                              ) : null}
+                            </>
+                          ) : request.status === OvertimeRequestStatus.PENDING_FINAL ? (
+                            <>
+                              <GlassButton
+                                variant="secondary"
+                                className="gap-2 px-4 py-2 text-sm"
+                                onClick={() => {
+                                  setSelectedOvertimeRequest(request);
+                                  setReviewNote("");
+                                }}
+                              >
+                                <FileTextOutlined />
+                                覆核
+                              </GlassButton>
+                              {selectedOvertimeRequest?.id === request.id ? (
+                                <>
+                                  <GlassInput
+                                    value={reviewNote}
+                                    onChange={(event) => setReviewNote(event.target.value)}
+                                    placeholder="覆核備註（選填）"
+                                  />
+                                  <GlassButton
+                                    className="px-4 py-2 text-sm"
+                                    onClick={() =>
+                                      void handleReviewOvertimeRequest(
+                                        request.id,
+                                        "approve_final",
+                                      )
+                                    }
+                                  >
+                                    覆核通過
+                                  </GlassButton>
+                                  <GlassButton
+                                    variant="danger"
+                                    className="px-4 py-2 text-sm"
+                                    onClick={() =>
+                                      void handleReviewOvertimeRequest(request.id, "reject")
+                                    }
+                                  >
+                                    駁回
+                                  </GlassButton>
+                                </>
+                              ) : null}
+                            </>
+                          ) : (
+                            <span className="text-xs text-slate-400">
+                              {request.managerApproverName
+                                ? `初審：${request.managerApproverName}`
+                                : "已完成審核"}
+                              {request.finalApproverName
+                                ? ` · 覆核：${request.finalApproverName}`
+                                : ""}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {overtimeRequests.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-5 py-10 text-center text-sm text-slate-400"
+                      >
+                        目前沒有符合條件的加班申請
                       </td>
                     </tr>
                   )}

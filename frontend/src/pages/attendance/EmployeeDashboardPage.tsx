@@ -6,14 +6,22 @@ import {
   LoginOutlined, 
   LogoutOutlined,
   ClockCircleOutlined,
-  WarningOutlined
+  WarningOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-tw';
 import { attendanceService } from '../../services/attendance.service';
-import { AttendanceMethod } from '../../types/attendance';
+import {
+  AttendanceMethod,
+  OvertimeRequest,
+  OvertimeRequestStatus,
+} from '../../types/attendance';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { GlassButton } from '../../components/ui/GlassButton';
+import { GlassModal } from '../../components/ui/GlassModal';
+import { GlassInput } from '../../components/ui/GlassInput';
+import { GlassTextarea } from '../../components/ui/GlassTextarea';
 
 dayjs.locale('zh-tw');
 
@@ -25,6 +33,13 @@ const EmployeeDashboardPage: React.FC = () => {
   const [employeeLinkMissing, setEmployeeLinkMissing] = useState(false);
   const [lastAction, setLastAction] = useState<{ type: string; time: string } | null>(null);
   const [todayRecords, setTodayRecords] = useState<any[]>([]);
+  const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>([]);
+  const [overtimeModalOpen, setOvertimeModalOpen] = useState(false);
+  const [overtimeForm, setOvertimeForm] = useState({
+    workDate: dayjs().format('YYYY-MM-DD'),
+    requestedMinutes: '30',
+    reason: '',
+  });
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -32,6 +47,52 @@ const EmployeeDashboardPage: React.FC = () => {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    void loadOvertimeRequests();
+  }, []);
+
+  const loadOvertimeRequests = async () => {
+    try {
+      const result = await attendanceService.getMyOvertimeRequests();
+      setOvertimeRequests(result);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const statusLabelMap: Record<string, string> = {
+    [OvertimeRequestStatus.PENDING_MANAGER]: '待主管初審',
+    [OvertimeRequestStatus.PENDING_FINAL]: '待負責人覆核',
+    [OvertimeRequestStatus.APPROVED]: '已核准',
+    [OvertimeRequestStatus.REJECTED]: '已駁回',
+    [OvertimeRequestStatus.CANCELLED]: '已取消',
+  };
+
+  const openOvertimeModal = () => {
+    setOvertimeForm({
+      workDate: dayjs().format('YYYY-MM-DD'),
+      requestedMinutes: '30',
+      reason: '',
+    });
+    setOvertimeModalOpen(true);
+  };
+
+  const handleSubmitOvertime = async () => {
+    try {
+      await attendanceService.createOvertimeRequest({
+        workDate: overtimeForm.workDate,
+        requestedMinutes: Number(overtimeForm.requestedMinutes || 0),
+        reason: overtimeForm.reason.trim(),
+      });
+      message.success('加班申請已送出，待主管審核');
+      setOvertimeModalOpen(false);
+      void loadOvertimeRequests();
+    } catch (error: any) {
+      console.error(error);
+      message.error(error?.response?.data?.message || '送出加班申請失敗');
+    }
+  };
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -70,6 +131,7 @@ const EmployeeDashboardPage: React.FC = () => {
       const timeStr = dayjs().format('HH:mm:ss');
       setLastAction({ type: '上班', time: timeStr });
       setTodayRecords(prev => [...prev, { type: 'clock_in', time: timeStr }]);
+      void loadOvertimeRequests();
     } catch (error) {
       console.error(error);
       const backendMessage =
@@ -108,6 +170,7 @@ const EmployeeDashboardPage: React.FC = () => {
       const timeStr = dayjs().format('HH:mm:ss');
       setLastAction({ type: '下班', time: timeStr });
       setTodayRecords(prev => [...prev, { type: 'clock_out', time: timeStr }]);
+      void loadOvertimeRequests();
     } catch (error) {
       console.error(error);
       const backendMessage =
@@ -237,6 +300,16 @@ const EmployeeDashboardPage: React.FC = () => {
               <span className="text-2xl font-medium">下班打卡</span>
             </GlassButton>
           </div>
+
+          <GlassButton
+            variant="secondary"
+            size="lg"
+            className="h-16 flex items-center justify-center gap-3"
+            onClick={openOvertimeModal}
+          >
+            <PlusOutlined className="text-xl" />
+            <span className="text-lg font-medium">提出加班申請</span>
+          </GlassButton>
         </div>
 
         {/* Right Column: History */}
@@ -296,8 +369,96 @@ const EmployeeDashboardPage: React.FC = () => {
               </div>
             )}
           </GlassCard>
+
+          <GlassCard className="w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">我的加班申請</h3>
+              <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+                {overtimeRequests.length} 筆
+              </span>
+            </div>
+
+            {overtimeRequests.length > 0 ? (
+              <div className="space-y-3">
+                {overtimeRequests.slice(0, 5).map((request) => (
+                  <div
+                    key={request.id}
+                    className="rounded-xl border border-white/30 bg-white/35 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-slate-800">
+                          {dayjs(request.workDate).format('YYYY/MM/DD')} · {request.requestedMinutes} 分鐘
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">{request.reason}</div>
+                      </div>
+                      <span className="rounded-full bg-white/50 px-3 py-1 text-xs font-semibold text-slate-600">
+                        {statusLabelMap[request.status] || request.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-6 text-center text-sm text-slate-400">
+                目前尚無加班申請
+              </div>
+            )}
+          </GlassCard>
         </div>
       </div>
+
+      <GlassModal
+        isOpen={overtimeModalOpen}
+        onClose={() => setOvertimeModalOpen(false)}
+        title="提出加班申請"
+        maxWidth="max-w-[640px]"
+        footer={
+          <>
+            <GlassButton variant="secondary" onClick={() => setOvertimeModalOpen(false)}>
+              取消
+            </GlassButton>
+            <GlassButton onClick={() => void handleSubmitOvertime()}>
+              送出申請
+            </GlassButton>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-amber-100/70 bg-amber-50/70 px-4 py-3 text-sm leading-6 text-amber-800">
+            加班需先完成當日上下班打卡，並且以 30 分鐘為一個申請單位。只有完成主管初審與覆核的加班申請，才可以拿來折抵遲到或計算加班費。
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <GlassInput
+              label="加班日期"
+              type="date"
+              value={overtimeForm.workDate}
+              onChange={(event) =>
+                setOvertimeForm((prev) => ({ ...prev, workDate: event.target.value }))
+              }
+            />
+            <GlassInput
+              label="申請分鐘數"
+              type="number"
+              value={overtimeForm.requestedMinutes}
+              onChange={(event) =>
+                setOvertimeForm((prev) => ({
+                  ...prev,
+                  requestedMinutes: event.target.value,
+                }))
+              }
+            />
+          </div>
+          <GlassTextarea
+            label="加班原因"
+            value={overtimeForm.reason}
+            onChange={(event) =>
+              setOvertimeForm((prev) => ({ ...prev, reason: event.target.value }))
+            }
+            placeholder="請說明今天延後下班的工作內容"
+          />
+        </div>
+      </GlassModal>
     </div>
   );
 };

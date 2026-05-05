@@ -9,6 +9,7 @@ import { AnomalyService } from './services/anomaly.service';
 import { BalanceService } from './services/balance.service';
 import { DisasterClosureService } from './services/disaster-closure.service';
 import { AttendanceIntegrationService } from './services/integration.service';
+import { OvertimeService } from './services/overtime.service';
 import { GpsValidationStrategy } from './strategies/gps-validation.strategy';
 import { IpValidationStrategy } from './strategies/ip-validation.strategy';
 import { PrismaModule } from '../../common/prisma/prisma.module';
@@ -27,6 +28,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
     BalanceService,
     DisasterClosureService,
     AttendanceIntegrationService,
+    OvertimeService,
     GpsValidationStrategy,
     IpValidationStrategy,
     RolesGuard,
@@ -37,6 +39,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
     BalanceService,
     DisasterClosureService,
     AttendanceIntegrationService,
+    OvertimeService,
   ],
 })
 export class AttendanceModule {}

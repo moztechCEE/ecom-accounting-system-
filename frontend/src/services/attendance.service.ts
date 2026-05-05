@@ -13,6 +13,9 @@ import {
   AttendancePolicy,
   DisasterClosureEvent,
   UpsertDisasterClosureDto,
+  CreateOvertimeRequestDto,
+  OvertimeRequest,
+  ReviewOvertimeRequestDto,
 } from "../types/attendance";
 
 export const attendanceService = {
@@ -41,6 +44,21 @@ export const attendanceService = {
 
   getLeaveRequests: async (): Promise<LeaveRequest[]> => {
     const response = await api.get<LeaveRequest[]>("/attendance/leaves");
+    return response.data;
+  },
+
+  getMyOvertimeRequests: async (): Promise<OvertimeRequest[]> => {
+    const response = await api.get<OvertimeRequest[]>("/attendance/overtime-requests");
+    return response.data;
+  },
+
+  createOvertimeRequest: async (
+    data: CreateOvertimeRequestDto,
+  ): Promise<OvertimeRequest> => {
+    const response = await api.post<OvertimeRequest>(
+      "/attendance/overtime-requests",
+      data,
+    );
     return response.data;
   },
 
@@ -118,6 +136,29 @@ export const attendanceService = {
   deleteDisasterClosure: async (id: string): Promise<{ success: boolean }> => {
     const response = await api.delete<{ success: boolean }>(
       `/attendance/admin/disaster-closures/${id}`,
+    );
+    return response.data;
+  },
+
+  getAdminOvertimeRequests: async (params?: {
+    status?: string;
+    employeeId?: string;
+    year?: number;
+  }): Promise<OvertimeRequest[]> => {
+    const response = await api.get<OvertimeRequest[]>(
+      "/attendance/admin/overtime-requests",
+      { params },
+    );
+    return response.data;
+  },
+
+  reviewOvertimeRequest: async (
+    id: string,
+    data: ReviewOvertimeRequestDto,
+  ): Promise<OvertimeRequest> => {
+    const response = await api.patch<OvertimeRequest>(
+      `/attendance/admin/overtime-requests/${id}/review`,
+      data,
     );
     return response.data;
   },

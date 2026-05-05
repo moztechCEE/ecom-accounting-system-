@@ -2341,6 +2341,19 @@ export class PayrollService {
       });
     }
 
+    if (attendanceData.lateDeductionHours > 0) {
+      const lateDeductionAmount = Math.round(
+        attendanceData.lateDeductionHours * hourlyRate,
+      );
+      if (lateDeductionAmount > 0) {
+        items.push({
+          type: 'LATE_DEDUCTION',
+          amount: -lateDeductionAmount,
+          remark: `遲到扣款 ${attendanceData.lateDeductionHours}h（已扣除核准加班互抵時數）`,
+        });
+      }
+    }
+
     const leaveDeductions = new Map<
       string,
       { amount: number; hours: number; paidPercentage: number; name: string }

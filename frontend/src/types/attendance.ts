@@ -261,3 +261,59 @@ export interface AttendanceRecord {
   timestamp: string;
   method: AttendanceMethod;
 }
+
+export const OvertimeRequestStatus = {
+  PENDING_MANAGER: "pending_manager",
+  PENDING_FINAL: "pending_final",
+  APPROVED: "approved",
+  REJECTED: "rejected",
+  CANCELLED: "cancelled",
+} as const;
+export type OvertimeRequestStatus =
+  (typeof OvertimeRequestStatus)[keyof typeof OvertimeRequestStatus];
+
+export interface CreateOvertimeRequestDto {
+  workDate: string;
+  requestedMinutes: number;
+  reason: string;
+}
+
+export interface ReviewOvertimeRequestDto {
+  action: "approve_manager" | "approve_final" | "reject";
+  note?: string;
+}
+
+export interface OvertimeRequest {
+  id: string;
+  entityId: string;
+  employeeId: string;
+  employeeName: string;
+  employeeNo?: string;
+  departmentName?: string | null;
+  workDate: string;
+  requestedMinutes: number;
+  approvedMinutes: number;
+  reason: string;
+  note?: string | null;
+  status: OvertimeRequestStatus;
+  submittedAt: string;
+  managerApprovedAt?: string | null;
+  finalApprovedAt?: string | null;
+  managerApproverName?: string | null;
+  finalApproverName?: string | null;
+  requestedByName?: string | null;
+}
+
+export interface DailyAttendanceCompensation {
+  workDate: string;
+  scheduledMinutes: number;
+  workedMinutes: number;
+  leaveMinutes: number;
+  lateActualMinutes: number;
+  latePenaltyMinutes: number;
+  approvedOvertimeRequestMinutes: number;
+  approvedOffsetMinutes: number;
+  remainingLatePenaltyMinutes: number;
+  payableOvertimeMinutes: number;
+  extraWorkMinutes: number;
+}

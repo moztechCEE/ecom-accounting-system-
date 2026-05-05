@@ -20,6 +20,9 @@ import { PolicyService } from '../services/policy.service';
 import { UpsertAttendancePolicyDto } from '../dto/upsert-attendance-policy.dto';
 import { DisasterClosureService } from '../services/disaster-closure.service';
 import { UpsertDisasterClosureDto } from '../dto/upsert-disaster-closure.dto';
+import { OvertimeService } from '../services/overtime.service';
+import { CreateOvertimeRequestDto } from '../dto/create-overtime-request.dto';
+import { ReviewOvertimeRequestDto } from '../dto/review-overtime-request.dto';
 
 @Controller('attendance')
 @UseGuards(JwtAuthGuard)
@@ -28,6 +31,7 @@ export class AttendanceController {
     private readonly attendanceService: AttendanceService,
     private readonly policyService: PolicyService,
     private readonly disasterClosureService: DisasterClosureService,
+    private readonly overtimeService: OvertimeService,
   ) {}
 
   @Post('clock-in')
@@ -38,6 +42,19 @@ export class AttendanceController {
   @Post('clock-out')
   async clockOut(@Request() req: any, @Body() dto: ClockOutDto) {
     return this.attendanceService.clockOut(req.user.id, dto);
+  }
+
+  @Get('overtime-requests')
+  async getMyOvertimeRequests(@Request() req: any) {
+    return this.overtimeService.getMyRequests(req.user.id);
+  }
+
+  @Post('overtime-requests')
+  async createOvertimeRequest(
+    @Request() req: any,
+    @Body() dto: CreateOvertimeRequestDto,
+  ) {
+    return this.overtimeService.createRequest(req.user.id, dto);
   }
 
   @Get('admin/daily-summary')
@@ -124,5 +141,31 @@ export class AttendanceController {
   @UseGuards(RolesGuard)
   async deleteDisasterClosure(@Request() req: any, @Param('id') id: string) {
     return this.disasterClosureService.deactivateClosure(req.user.id, id);
+  }
+
+  @Get('admin/overtime-requests')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
+  @UseGuards(RolesGuard)
+  async getAdminOvertimeRequests(
+    @Query('status') status?: string,
+    @Query('employeeId') employeeId?: string,
+    @Query('year') year?: string,
+  ) {
+    return this.overtimeService.getAdminRequests({
+      status,
+      employeeId,
+      year: year ? Number(year) : undefined,
+    });
+  }
+
+  @Patch('admin/overtime-requests/:id/review')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
+  @UseGuards(RolesGuard)
+  async reviewOvertimeRequest(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: ReviewOvertimeRequestDto,
+  ) {
+    return this.overtimeService.reviewRequest(req.user.id, id, dto);
   }
 }

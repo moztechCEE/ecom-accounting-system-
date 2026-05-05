@@ -70,7 +70,7 @@ export class ScheduleService {
     }
 
     const maxEarlyClock = selectedSchedule.policy?.maxEarlyClock ?? 15;
-    const maxLateClock = selectedSchedule.policy?.maxLateClock ?? 5;
+    const maxLateClock = Math.max(selectedSchedule.policy?.maxLateClock ?? 5, 20);
     const allowedClockInFrom = new Date(
       shiftStartAt.getTime() - maxEarlyClock * 60 * 1000,
     );
