@@ -57,6 +57,10 @@ export class ShoplineService {
     return this.adapter.getTokenInfo();
   }
 
+  async getAgents(params: { merchantId?: string } = {}) {
+    return this.adapter.getAgents(params);
+  }
+
   assertSchedulerToken(providedToken?: string | null) {
     const expected =
       this.config.get<string>('SHOPLINE_SYNC_JOB_TOKEN', '') ||

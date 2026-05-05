@@ -29,6 +29,12 @@ class SummaryQueryDto {
   until?: string;
 }
 
+class AgentsQueryDto {
+  @IsOptional()
+  @IsString()
+  merchantId?: string;
+}
+
 @Controller('integrations/shopline')
 export class ShoplineController {
   constructor(private readonly shoplineService: ShoplineService) {}
@@ -46,6 +52,13 @@ export class ShoplineController {
   @Get('token-info')
   async tokenInfo() {
     return this.shoplineService.getTokenInfo();
+  }
+
+  @Get('agents')
+  async agents(@Query() query: AgentsQueryDto) {
+    return this.shoplineService.getAgents({
+      merchantId: query.merchantId,
+    });
   }
 
   @Post('sync/orders')

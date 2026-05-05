@@ -102,13 +102,16 @@
   - 若要補兩年以上資料，需確認 archived orders 匯出流程可用。
 - 目前系統狀態：
   - 2026-05-05 更新：使用者已提供 Shopline `access_token`；不可寫入 repo。已放入 GCP Secret Manager 並掛到 Cloud Run backend。
-  - 2026-05-05 更新：Shopline adapter 已調整為 token-only 時也可先查 `token-info`，用來確認 token 對應的 merchant / handle；正式訂單、顧客與付款草稿同步仍需 `User-Agent / handle code`。
+  - 2026-05-05 更新：Shopline adapter 已調整為 token-only 時也可先查 `token-info`，用來確認 token 對應的 merchant / handle；修正後 token 已由 Cloud Run 驗證可讀到 BONSON 店鋪資訊。
   - 2026-05-05 更新：Shopline 後台 IP 白名單已加入 Cloud Run 固定出口 IP；Cloud Run `connection-info` 已可讀到 Shopline 設定。
-  - 2026-05-05 更新：以後台網址推測的 handle `onemorefuture` 測試 `token-info`，Shopline 回 `UnsupportedAccessTokenError`；錯誤 log 已改為遮罩 token，不再把 token 原文寫進 Cloud Run log。
+  - 2026-05-05 更新：已確認正式 `User-Agent / handle code` 使用 `onemorefuture`；程式會在 request header 帶入 `User-Agent: onemorefuture`。
+  - 2026-05-05 更新：已確認 Shopline Merchant ID 為 `5e0738e792f5c90009548b54`；Cloud Run 應固定設定 `SHOPLINE_MERCHANT_ID`，避免診斷與後續同步每次都依賴 `token-info` 推導。
+  - 2026-05-05 更新：已新增只讀 `agents` 診斷端點，依 Shopline 文件用 `token-info` 取得 `merchant_id` 後呼叫 `GET /v1/agents`；Cloud Run 呼叫成功，目前 Shopline 回傳 agents 0 筆。
+  - 2026-05-05 更新：本機直接 curl Shopline 仍會回 IP 白名單錯誤，這是預期狀態；正式驗證要從 Cloud Run backend 走固定出口 IP。
   - Shopline Adapter / Service / Controller 已存在。
   - 訂單、顧客、Payment 草稿同步骨架已存在。
 - 暫停原因：
-  - 目前這組 token 尚未被 Shopline OpenAPI 接受；需要 Shopline 後台重新產生正確 OpenAPI access token，或向 Shopline 確認該 token 對應的正式 `User-Agent / handle code` 與 API 權限。
+  - token / handle / 白名單已通過只讀驗證；下一步需做 orders / customers 小批量 dry-run 與正式匯入驗證，確認欄位 mapping、日期區間與是否需要 archived orders 流程。
 
 ### 6. LINE Pay / TWQR / 行動支付分流
 

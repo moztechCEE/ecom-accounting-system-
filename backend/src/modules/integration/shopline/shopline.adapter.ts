@@ -145,6 +145,16 @@ type ShoplineTokenInfoResponse = {
   };
 };
 
+type ShoplineAgentPayload = {
+  id?: string;
+  _id?: string;
+  name?: string;
+  email?: string;
+  status?: string;
+  role?: string;
+  [key: string]: unknown;
+};
+
 @Injectable()
 export class ShoplineHttpAdapter implements ISalesChannelAdapter {
   readonly code = 'SHOPLINE';
@@ -204,6 +214,54 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
           merchantHandle: info.merchant?.handle || null,
           merchantName: info.merchant?.name || null,
           userEmail: info.user?.email || info.staff?.email || null,
+        };
+      }),
+    );
+  }
+
+  async getAgents(params: { merchantId?: string } = {}) {
+    const stores = this.getSyncReadyStores();
+
+    return Promise.all(
+      stores.map(async (store) => {
+        const configuredMerchantId = params.merchantId || store.merchantId || '';
+        const tokenInfo = configuredMerchantId
+          ? null
+          : await this.fetchTokenInfo(store);
+        const merchantId =
+          configuredMerchantId ||
+          tokenInfo?.merchant?._id ||
+          tokenInfo?.staff?.merchant_ids?.[0] ||
+          '';
+
+        if (!merchantId) {
+          throw new Error(
+            `SHOPLINE merchant_id is required for agents API (${store.handle})`,
+          );
+        }
+
+        const search = new URLSearchParams({ merchant_id: merchantId });
+        const response = await this.request<
+          ShoplineAgentPayload[] | { items?: ShoplineAgentPayload[] }
+        >(`/agents?${search.toString()}`, store);
+        const agents = Array.isArray(response)
+          ? response
+          : Array.isArray(response.items)
+            ? response.items
+            : [];
+
+        return {
+          storeName: store.storeName || null,
+          handle: store.handle,
+          merchantId,
+          count: agents.length,
+          agents: agents.map((agent) => ({
+            id: String(agent._id || agent.id || '').trim() || null,
+            name: typeof agent.name === 'string' ? agent.name : null,
+            email: typeof agent.email === 'string' ? agent.email : null,
+            status: typeof agent.status === 'string' ? agent.status : null,
+            role: typeof agent.role === 'string' ? agent.role : null,
+          })),
         };
       }),
     );
