@@ -3,6 +3,7 @@ import {
   Alert,
   Button,
   DatePicker,
+  Divider,
   Form,
   Input,
   InputNumber,
@@ -15,15 +16,19 @@ import {
   Tabs,
   Tag,
   Typography,
+  Upload,
   message,
 } from "antd";
 import {
   ApartmentOutlined,
   CalendarOutlined,
+  CheckCircleOutlined,
+  DownloadOutlined,
   DeleteOutlined,
   EditOutlined,
   PlusOutlined,
   SettingOutlined,
+  UploadOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import { motion } from "framer-motion";
@@ -33,7 +38,12 @@ import { payrollService } from "../services/payroll.service";
 import { usersService } from "../services/users.service";
 import { useAuth } from "../contexts/AuthContext";
 import { GlassCard } from "../components/ui/GlassCard";
-import { Department, Employee, ManagedUser } from "../types";
+import {
+  Department,
+  Employee,
+  EmployeeOnboardingDocument,
+  ManagedUser,
+} from "../types";
 import {
   AdminLeaveBalance,
   LeaveType,
@@ -115,6 +125,59 @@ const isAnnualLeaveType = (leaveType: Pick<LeaveType, "code" | "name">) =>
   String(leaveType.code || "").trim().toUpperCase() === "ANNUAL" ||
   ["特休", "特別休假"].includes(String(leaveType.name || "").trim());
 
+const onboardingDocDefinitions: Array<{
+  docType: EmployeeOnboardingDocument["docType"];
+  label: string;
+}> = [
+  { docType: "ID_FRONT", label: "身分證正面" },
+  { docType: "ID_BACK", label: "身分證反面" },
+  { docType: "HEALTH_CHECK", label: "體檢單" },
+];
+
+const compensationDefaults = {
+  transportAllowance: 0,
+  supervisorAllowance: 0,
+  extraAllowance: 0,
+  courseAllowance: 0,
+  seniorityPay: 0,
+  bonus: 0,
+  salaryAdjustment: 0,
+  annualAdjustment: 0,
+  laborInsuranceDeduction: 0,
+  healthInsuranceDeduction: 0,
+  pensionSelfContribution: 0,
+  dependentInsurance: 0,
+  salaryAdvance: 0,
+};
+
+const fixedAdditionFields = [
+  { key: "transportAllowance", label: "車資補助" },
+  { key: "supervisorAllowance", label: "主管加級" },
+  { key: "extraAllowance", label: "額外補貼" },
+  { key: "courseAllowance", label: "課程補助" },
+  { key: "seniorityPay", label: "年工薪" },
+  { key: "bonus", label: "獎金" },
+  { key: "salaryAdjustment", label: "調薪" },
+  { key: "annualAdjustment", label: "年度調節" },
+] as const;
+
+const fixedDeductionFields = [
+  { key: "laborInsuranceDeduction", label: "勞保扣照額" },
+  { key: "healthInsuranceDeduction", label: "健保扣照額" },
+  { key: "pensionSelfContribution", label: "個人自提 6%" },
+  { key: "dependentInsurance", label: "家人加保" },
+  { key: "salaryAdvance", label: "薪資預支" },
+] as const;
+
+const onboardingStatusMeta: Record<
+  EmployeeOnboardingDocument["status"],
+  { color: string; label: string }
+> = {
+  PENDING: { color: "default", label: "未上傳" },
+  UPLOADED: { color: "blue", label: "已上傳" },
+  VERIFIED: { color: "green", label: "已核實" },
+};
+
 const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const { user } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -125,6 +188,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const [editOpen, setEditOpen] = useState(false);
   const [accountCreateOpen, setAccountCreateOpen] = useState(false);
   const [accountCreateLoading, setAccountCreateLoading] = useState(false);
+  const [documentActionLoading, setDocumentActionLoading] = useState<
+    string | null
+  >(null);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
     null,
   );
@@ -161,12 +227,60 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     void fetchUsers();
   }, []);
 
+  const buildFormValues = (employee?: Employee | null) => ({
+    employeeNo: employee?.employeeNo,
+    name: employee?.name,
+    userId: employee?.userId || undefined,
+    nationalId: employee?.nationalId || "",
+    mailingAddress: employee?.mailingAddress || "",
+    departmentId: employee?.departmentId || undefined,
+    hireDate: employee?.hireDate ? dayjs(employee.hireDate) : undefined,
+    terminateDate: employee?.terminateDate ? dayjs(employee.terminateDate) : null,
+    salaryBaseOriginal: employee?.salaryBaseOriginal ?? 0,
+    isActive: employee?.isActive ?? true,
+    compensationSettings: {
+      ...compensationDefaults,
+      ...(employee?.compensationSettings || {}),
+    },
+  });
+
+  const replaceSelectedEmployeeDocument = (
+    employee: Employee,
+    nextDocument: EmployeeOnboardingDocument,
+  ): Employee => ({
+    ...employee,
+    onboardingDocuments: onboardingDocDefinitions.map(({ docType, label }) => {
+      const existing =
+        employee.onboardingDocuments?.find((document) => document.docType === docType) ||
+        ({
+          id: `${employee.id}:${docType}`,
+          docType,
+          status: "PENDING",
+        } as EmployeeOnboardingDocument);
+
+      return docType === nextDocument.docType ? nextDocument : existing;
+    }),
+  });
+
+  const refreshSingleEmployee = async (employeeId: string) => {
+    const detail = await payrollService.getEmployee(employeeId);
+    setSelectedEmployee(detail);
+    form.setFieldsValue(buildFormValues(detail));
+    setEmployees((prev) =>
+      prev.map((employee) => (employee.id === detail.id ? detail : employee)),
+    );
+    return detail;
+  };
+
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
       await payrollService.createEmployee({
         ...values,
         hireDate: values.hireDate.toISOString(),
+        nationalId: values.nationalId,
+        mailingAddress: values.mailingAddress,
+        compensationSettings: values.compensationSettings,
       });
       message.success("員工建立成功");
       setCreateOpen(false);
@@ -194,6 +308,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         terminateDate: values.terminateDate
           ? values.terminateDate.toISOString()
           : null,
+        nationalId: values.nationalId,
+        mailingAddress: values.mailingAddress,
+        compensationSettings: values.compensationSettings,
       });
       message.success("員工更新成功");
       setEditOpen(false);
@@ -230,6 +347,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       form.setFieldValue("userId", result.user.id);
       setSelectedEmployee(result.employee);
       await Promise.all([fetchEmployees(), fetchUsers()]);
+      await refreshSingleEmployee(result.employee.id);
 
       Modal.success({
         title: "登入帳號已建立",
@@ -255,6 +373,102 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     }
   };
 
+  const handleUploadOnboardingDocument = async (
+    docType: EmployeeOnboardingDocument["docType"],
+    file: File,
+  ) => {
+    if (!selectedEmployee) {
+      return false;
+    }
+
+    try {
+      setDocumentActionLoading(docType);
+      const nextDocument = await payrollService.uploadEmployeeOnboardingDocument(
+        selectedEmployee.id,
+        docType,
+        file,
+      );
+      const nextEmployee = replaceSelectedEmployeeDocument(
+        selectedEmployee,
+        nextDocument,
+      );
+      setSelectedEmployee(nextEmployee);
+      setEmployees((prev) =>
+        prev.map((employee) =>
+          employee.id === nextEmployee.id ? nextEmployee : employee,
+        ),
+      );
+      message.success("文件上傳成功");
+    } catch (error) {
+      message.error(getErrorMessage(error, "文件上傳失敗"));
+    } finally {
+      setDocumentActionLoading(null);
+    }
+
+    return false;
+  };
+
+  const handleUpdateOnboardingDocumentStatus = async (
+    docType: EmployeeOnboardingDocument["docType"],
+    status: EmployeeOnboardingDocument["status"],
+    clearFile = false,
+  ) => {
+    if (!selectedEmployee) {
+      return;
+    }
+
+    try {
+      setDocumentActionLoading(docType);
+      const nextDocument =
+        await payrollService.updateEmployeeOnboardingDocumentStatus(
+          selectedEmployee.id,
+          docType,
+          { status, clearFile },
+        );
+      const nextEmployee = replaceSelectedEmployeeDocument(
+        selectedEmployee,
+        nextDocument,
+      );
+      setSelectedEmployee(nextEmployee);
+      setEmployees((prev) =>
+        prev.map((employee) =>
+          employee.id === nextEmployee.id ? nextEmployee : employee,
+        ),
+      );
+      message.success(
+        clearFile
+          ? "文件已清除"
+          : status === "VERIFIED"
+            ? "文件已標記為已核實"
+            : "文件狀態已更新",
+      );
+    } catch (error) {
+      message.error(getErrorMessage(error, "更新文件狀態失敗"));
+    } finally {
+      setDocumentActionLoading(null);
+    }
+  };
+
+  const handleDownloadOnboardingDocument = async (
+    docType: EmployeeOnboardingDocument["docType"],
+  ) => {
+    if (!selectedEmployee) {
+      return;
+    }
+
+    try {
+      setDocumentActionLoading(docType);
+      await payrollService.downloadEmployeeOnboardingDocument(
+        selectedEmployee.id,
+        docType,
+      );
+    } catch (error) {
+      message.error(getErrorMessage(error, "下載文件失敗"));
+    } finally {
+      setDocumentActionLoading(null);
+    }
+  };
+
   const columns = [
     { title: "員工編號", dataIndex: "employeeNo", key: "employeeNo" },
     { title: "姓名", dataIndex: "name", key: "name" },
@@ -273,6 +487,26 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         ) : (
           <Tag color="default">未綁定</Tag>
         ),
+    },
+    {
+      title: "入職文件",
+      key: "onboardingDocuments",
+      render: (_: unknown, record: Employee) => {
+        const verifiedCount =
+          record.onboardingDocuments?.filter(
+            (document) => document.status === "VERIFIED",
+          ).length || 0;
+        return (
+          <Space wrap size={[4, 4]}>
+            <Tag color={verifiedCount === onboardingDocDefinitions.length ? "green" : "default"}>
+              {verifiedCount}/{onboardingDocDefinitions.length} 已核實
+            </Tag>
+            {record.onboardingDocuments?.some(
+              (document) => document.status === "UPLOADED",
+            ) ? <Tag color="blue">待覆核</Tag> : null}
+          </Space>
+        );
+      },
     },
     {
       title: "部門",
@@ -313,11 +547,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
             icon={<EditOutlined />}
             onClick={() => {
               setSelectedEmployee(record);
-              form.setFieldsValue({
-                ...record,
-                hireDate: dayjs(record.hireDate),
-              });
+              form.setFieldsValue(buildFormValues(record));
               setEditOpen(true);
+              void refreshSingleEmployee(record.id).catch(() => null);
             }}
           >
             編輯
@@ -355,6 +587,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
             className="h-12 rounded-2xl px-6 shadow-[0_14px_32px_rgba(26,115,232,0.22)]"
             onClick={() => {
               form.resetFields();
+              form.setFieldsValue(buildFormValues(null));
               setCreateOpen(true);
             }}
           >
@@ -403,6 +636,12 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           <Form.Item name="name" label="姓名" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
+          <Form.Item name="nationalId" label="身分證字號">
+            <Input placeholder="例如 A123456789" />
+          </Form.Item>
+          <Form.Item name="mailingAddress" label="通訊地址">
+            <Input.TextArea rows={2} placeholder="請輸入員工通訊地址" />
+          </Form.Item>
           <Form.Item name="userId" label="綁定登入帳號">
             <Select
               allowClear
@@ -442,6 +681,31 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           >
             <InputNumber className="w-full" min={0} />
           </Form.Item>
+          <Divider orientation="left">固定給付項目（管理者輸入）</Divider>
+          {fixedAdditionFields.map((field) => (
+            <Form.Item
+              key={field.key}
+              name={["compensationSettings", field.key]}
+              label={field.label}
+            >
+              <InputNumber className="w-full" min={0} />
+            </Form.Item>
+          ))}
+          <Divider orientation="left">固定扣除項目（管理者輸入）</Divider>
+          {fixedDeductionFields.map((field) => (
+            <Form.Item
+              key={field.key}
+              name={["compensationSettings", field.key]}
+              label={field.label}
+            >
+              <InputNumber className="w-full" min={0} />
+            </Form.Item>
+          ))}
+          <Alert
+            type="info"
+            showIcon
+            message="入職文件會在建立員工後於編輯視窗上傳與核實"
+          />
         </Form>
       </Modal>
 
@@ -454,6 +718,12 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         <Form form={form} layout="vertical">
           <Form.Item name="name" label="姓名" rules={[{ required: true }]}>
             <Input />
+          </Form.Item>
+          <Form.Item name="nationalId" label="身分證字號">
+            <Input placeholder="例如 A123456789" />
+          </Form.Item>
+          <Form.Item name="mailingAddress" label="通訊地址">
+            <Input.TextArea rows={2} placeholder="請輸入員工通訊地址" />
           </Form.Item>
           <Form.Item name="userId" label="綁定登入帳號">
             <Select
@@ -514,9 +784,122 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           >
             <InputNumber className="w-full" min={0} />
           </Form.Item>
+          <Divider orientation="left">固定給付項目（管理者輸入）</Divider>
+          {fixedAdditionFields.map((field) => (
+            <Form.Item
+              key={field.key}
+              name={["compensationSettings", field.key]}
+              label={field.label}
+            >
+              <InputNumber className="w-full" min={0} />
+            </Form.Item>
+          ))}
+          <Divider orientation="left">固定扣除項目（管理者輸入）</Divider>
+          {fixedDeductionFields.map((field) => (
+            <Form.Item
+              key={field.key}
+              name={["compensationSettings", field.key]}
+              label={field.label}
+            >
+              <InputNumber className="w-full" min={0} />
+            </Form.Item>
+          ))}
           <Form.Item name="isActive" label="狀態" valuePropName="checked">
             <Switch checkedChildren="在職" unCheckedChildren="離職" />
           </Form.Item>
+          <Divider orientation="left">入職文件</Divider>
+          <div className="space-y-3">
+            {onboardingDocDefinitions.map(({ docType, label }) => {
+              const document =
+                selectedEmployee?.onboardingDocuments?.find(
+                  (item) => item.docType === docType,
+                ) || ({
+                  id: `${selectedEmployee?.id || "employee"}:${docType}`,
+                  docType,
+                  status: "PENDING",
+                } as EmployeeOnboardingDocument);
+              const statusMeta = onboardingStatusMeta[document.status];
+
+              return (
+                <div
+                  key={docType}
+                  className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-slate-800">{label}</div>
+                      <div className="text-xs text-slate-500">
+                        {document.fileName || "尚未上傳"}
+                      </div>
+                    </div>
+                    <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Upload
+                      showUploadList={false}
+                      beforeUpload={(file) =>
+                        handleUploadOnboardingDocument(docType, file)
+                      }
+                    >
+                      <Button
+                        icon={<UploadOutlined />}
+                        loading={documentActionLoading === docType}
+                      >
+                        上傳
+                      </Button>
+                    </Upload>
+                    <Button
+                      icon={<DownloadOutlined />}
+                      disabled={!document.fileName}
+                      loading={documentActionLoading === docType}
+                      onClick={() => void handleDownloadOnboardingDocument(docType)}
+                    >
+                      下載
+                    </Button>
+                    <Button
+                      icon={<CheckCircleOutlined />}
+                      disabled={document.status === "PENDING"}
+                      loading={documentActionLoading === docType}
+                      onClick={() =>
+                        void handleUpdateOnboardingDocumentStatus(
+                          docType,
+                          "VERIFIED",
+                        )
+                      }
+                    >
+                      標記已核實
+                    </Button>
+                    <Button
+                      disabled={document.status !== "VERIFIED"}
+                      loading={documentActionLoading === docType}
+                      onClick={() =>
+                        void handleUpdateOnboardingDocumentStatus(
+                          docType,
+                          "UPLOADED",
+                        )
+                      }
+                    >
+                      改回已上傳
+                    </Button>
+                    <Button
+                      danger
+                      disabled={!document.fileName}
+                      loading={documentActionLoading === docType}
+                      onClick={() =>
+                        void handleUpdateOnboardingDocumentStatus(
+                          docType,
+                          "PENDING",
+                          true,
+                        )
+                      }
+                    >
+                      清除
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </Form>
       </Modal>
 

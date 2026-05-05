@@ -10,7 +10,10 @@ import {
   Request,
   Res,
   StreamableFile,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
@@ -27,6 +30,7 @@ import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { UpsertPayrollPolicyDto } from './dto/upsert-payroll-policy.dto';
 import { CreateEmployeeLoginAccountDto } from './dto/create-employee-login-account.dto';
 import type { Response } from 'express';
+import * as multer from 'multer';
 
 /**
  * 薪資控制器
@@ -163,6 +167,80 @@ export class PayrollController {
     @Body() dto: CreateEmployeeLoginAccountDto,
   ) {
     return this.payrollService.createEmployeeLoginAccount(id, req.user.id, dto);
+  }
+
+  @Post('employees/:id/onboarding-documents/:docType/upload')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'employees_admin', action: 'update' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: multer.memoryStorage(),
+      limits: {
+        fileSize: 5 * 1024 * 1024,
+      },
+    }),
+  )
+  @ApiOperation({ summary: '上傳員工入職文件' })
+  @ApiResponse({ status: 201, description: '成功上傳員工入職文件' })
+  async uploadEmployeeOnboardingDocument(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('docType') docType: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.payrollService.uploadEmployeeOnboardingDocument(
+      req.user.id,
+      id,
+      docType,
+      file,
+    );
+  }
+
+  @Patch('employees/:id/onboarding-documents/:docType/status')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'employees_admin', action: 'update' })
+  @ApiOperation({ summary: '更新員工入職文件狀態' })
+  @ApiResponse({ status: 200, description: '成功更新員工入職文件狀態' })
+  async updateEmployeeOnboardingDocumentStatus(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('docType') docType: string,
+    @Body()
+    body: {
+      status: 'PENDING' | 'UPLOADED' | 'VERIFIED';
+      clearFile?: boolean;
+    },
+  ) {
+    return this.payrollService.updateEmployeeOnboardingDocumentStatus(
+      req.user.id,
+      id,
+      docType,
+      body,
+    );
+  }
+
+  @Get('employees/:id/onboarding-documents/:docType/download')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'employees_admin', action: 'read' })
+  @ApiOperation({ summary: '下載員工入職文件' })
+  @ApiResponse({ status: 200, description: '成功下載員工入職文件' })
+  async downloadEmployeeOnboardingDocument(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('docType') docType: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.payrollService.downloadEmployeeOnboardingDocument(
+      req.user.id,
+      id,
+      docType,
+    );
+    response.setHeader('Content-Type', result.mimeType);
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"`,
+    );
+    return new StreamableFile(result.buffer);
   }
 
   @Get('runs')

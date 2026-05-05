@@ -273,16 +273,49 @@ export interface Employee {
   userId?: string | null;
   employeeNo: string;
   name: string;
+  nationalId?: string | null;
+  mailingAddress?: string | null;
   departmentId?: string;
   departmentName?: string;
   salaryBaseOriginal: number;
   isActive: boolean;
   hireDate: string;
+  terminateDate?: string | null;
+  compensationSettings?: EmployeeCompensationSettings;
+  onboardingDocuments?: EmployeeOnboardingDocument[];
   user?: {
     id: string;
     name: string;
     email?: string;
   } | null;
+}
+
+export interface EmployeeCompensationSettings {
+  transportAllowance: number;
+  supervisorAllowance: number;
+  extraAllowance: number;
+  courseAllowance: number;
+  seniorityPay: number;
+  bonus: number;
+  salaryAdjustment: number;
+  annualAdjustment: number;
+  laborInsuranceDeduction: number;
+  healthInsuranceDeduction: number;
+  pensionSelfContribution: number;
+  dependentInsurance: number;
+  salaryAdvance: number;
+}
+
+export interface EmployeeOnboardingDocument {
+  id: string;
+  docType: "ID_FRONT" | "ID_BACK" | "HEALTH_CHECK";
+  status: "PENDING" | "UPLOADED" | "VERIFIED";
+  fileName?: string | null;
+  mimeType?: string | null;
+  fileSize?: number;
+  uploadedAt?: string | null;
+  verifiedAt?: string | null;
+  verifiedBy?: string | null;
 }
 
 export interface PayrollRun {

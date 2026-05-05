@@ -2,6 +2,7 @@ import api from "./api";
 import {
   AuditLogEntry,
   Employee,
+  EmployeeOnboardingDocument,
   EmployeeLoginAccountResult,
   Department,
   PayrollRun,
@@ -59,6 +60,11 @@ export const payrollService = {
     return response.data;
   },
 
+  getEmployee: async (id: string) => {
+    const response = await api.get<Employee>(`/payroll/employees/${id}`);
+    return response.data;
+  },
+
   createEmployeeLoginAccount: async (
     id: string,
     data: { email: string; password?: string },
@@ -68,6 +74,51 @@ export const payrollService = {
       data,
     );
     return response.data;
+  },
+
+  uploadEmployeeOnboardingDocument: async (
+    employeeId: string,
+    docType: EmployeeOnboardingDocument["docType"],
+    file: File,
+  ) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await api.post<EmployeeOnboardingDocument>(
+      `/payroll/employees/${employeeId}/onboarding-documents/${docType}/upload`,
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+      },
+    );
+    return response.data;
+  },
+
+  updateEmployeeOnboardingDocumentStatus: async (
+    employeeId: string,
+    docType: EmployeeOnboardingDocument["docType"],
+    data: {
+      status: EmployeeOnboardingDocument["status"];
+      clearFile?: boolean;
+    },
+  ) => {
+    const response = await api.patch<EmployeeOnboardingDocument>(
+      `/payroll/employees/${employeeId}/onboarding-documents/${docType}/status`,
+      data,
+    );
+    return response.data;
+  },
+
+  downloadEmployeeOnboardingDocument: async (
+    employeeId: string,
+    docType: EmployeeOnboardingDocument["docType"],
+  ) => {
+    const response = await api.get<Blob>(
+      `/payroll/employees/${employeeId}/onboarding-documents/${docType}/download`,
+      {
+        responseType: "blob",
+      },
+    );
+    triggerFileDownload(response.data, `${employeeId}-${docType}`);
   },
 
   // Departments (Assuming they are managed under payroll or entities)

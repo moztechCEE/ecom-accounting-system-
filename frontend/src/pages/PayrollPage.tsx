@@ -56,6 +56,31 @@ const statusMetaMap: Record<string, { label: string; color: string }> = {
   paid: { label: '已發薪', color: 'gold' },
 }
 
+const payrollItemLabelMap: Record<string, string> = {
+  BASE_SALARY: '月薪',
+  TRANSPORT_ALLOWANCE: '車資補助',
+  SUPERVISOR_ALLOWANCE: '主管加級',
+  EXTRA_ALLOWANCE: '額外補貼',
+  COURSE_ALLOWANCE: '課程補助',
+  SENIORITY_PAY: '年工薪',
+  BONUS: '獎金',
+  SALARY_ADJUSTMENT: '調薪',
+  ANNUAL_ADJUSTMENT: '年度調節',
+  OVERTIME: '加班費',
+  LATE_DEDUCTION: '遲到扣款',
+  LEAVE_DEDUCTION: '請假扣款',
+  LABOR_INSURANCE_DEDUCTION: '勞保扣照額',
+  HEALTH_INSURANCE_DEDUCTION: '健保扣照額',
+  PENSION_SELF_CONTRIBUTION: '個人自提 6%',
+  DEPENDENT_INSURANCE: '家人加保',
+  SALARY_ADVANCE: '薪資預支',
+  DISASTER_CLOSURE_DEDUCTION: '統一放假扣款',
+  ANNUAL_LEAVE_OVERUSE_DEDUCTION: '特休超用扣款',
+  INS_EMP_LABOR: '勞保扣款（舊制）',
+  INS_EMP_HEALTH: '健保扣款（舊制）',
+  INS_EMP_SOCIAL: '社保扣款（舊制）',
+}
+
 type DetailScope = 'admin' | 'mine'
 type PayrollRunCreatePayload = {
   periodStart: string
@@ -350,7 +375,7 @@ const PayrollPage: React.FC = () => {
       .map(
         (item) => `
           <tr>
-            <td>${escapeHtml(item.type)}</td>
+            <td>${escapeHtml(payrollItemLabelMap[item.type] || item.type)}</td>
             <td>${escapeHtml(item.remark || '—')}</td>
             <td style="text-align:right;">$${(item.amountBase ?? 0).toLocaleString()}</td>
           </tr>
@@ -623,13 +648,14 @@ const PayrollPage: React.FC = () => {
           ? item.employee
             ? `${item.employee.name} (${item.employee.employeeNo})`
             : item.employeeId
-          : item.type,
+          : payrollItemLabelMap[item.type] || item.type,
     },
     detailScope === 'admin'
       ? {
           title: '項目',
           dataIndex: 'type',
           key: 'type',
+          render: (value: string) => payrollItemLabelMap[value] || value,
         }
       : null,
     {

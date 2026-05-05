@@ -19,11 +19,36 @@ import PDFDocument = require('pdfkit');
 
 const DEFAULT_PAYROLL_POLICY = {
   standardMonthlyHours: 240,
-  overtimeMultiplier: 1.33,
+  overtimeMultiplier: 1.34,
   twLaborInsuranceRate: 0.022,
   twHealthInsuranceRate: 0.015,
   cnSocialInsuranceRate: 0.105,
 } as const;
+
+const EMPLOYEE_ONBOARDING_DOC_TYPES = [
+  'ID_FRONT',
+  'ID_BACK',
+  'HEALTH_CHECK',
+] as const;
+
+const EMPLOYEE_COMPENSATION_FIELD_KEYS = [
+  'transportAllowance',
+  'supervisorAllowance',
+  'extraAllowance',
+  'courseAllowance',
+  'seniorityPay',
+  'bonus',
+  'salaryAdjustment',
+  'annualAdjustment',
+  'laborInsuranceDeduction',
+  'healthInsuranceDeduction',
+  'pensionSelfContribution',
+  'dependentInsurance',
+  'salaryAdvance',
+] as const;
+
+type EmployeeCompensationFieldKey =
+  (typeof EMPLOYEE_COMPENSATION_FIELD_KEYS)[number];
 
 /**
  * 薪資管理服務
@@ -38,6 +63,7 @@ const DEFAULT_PAYROLL_POLICY = {
 export class PayrollService {
   private readonly logger = new Logger(PayrollService.name);
   private readonly defaultWeekdaySet = new Set([1, 2, 3, 4, 5]);
+  private readonly maxOnboardingDocumentSizeBytes = 5 * 1024 * 1024;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -55,6 +81,135 @@ export class PayrollService {
     }
 
     return Number(value);
+  }
+
+  private isEmployeeOnboardingDocType(value: string): value is (typeof EMPLOYEE_ONBOARDING_DOC_TYPES)[number] {
+    return (EMPLOYEE_ONBOARDING_DOC_TYPES as readonly string[]).includes(value);
+  }
+
+  private getDefaultCompensationSettings() {
+    return {
+      transportAllowance: 0,
+      supervisorAllowance: 0,
+      extraAllowance: 0,
+      courseAllowance: 0,
+      seniorityPay: 0,
+      bonus: 0,
+      salaryAdjustment: 0,
+      annualAdjustment: 0,
+      laborInsuranceDeduction: 0,
+      healthInsuranceDeduction: 0,
+      pensionSelfContribution: 0,
+      dependentInsurance: 0,
+      salaryAdvance: 0,
+    };
+  }
+
+  private normalizeCompensationSettings(input?: Record<string, unknown> | null) {
+    const defaults = this.getDefaultCompensationSettings();
+    const normalized = { ...defaults };
+
+    for (const key of EMPLOYEE_COMPENSATION_FIELD_KEYS) {
+      const rawValue = input?.[key];
+      const value =
+        rawValue === undefined || rawValue === null || rawValue === ''
+          ? 0
+          : Number(rawValue);
+
+      if (!Number.isFinite(value) || value < 0) {
+        throw new BadRequestException(`薪資欄位 ${key} 必須是有效的非負數字`);
+      }
+
+      normalized[key] = value;
+    }
+
+    return normalized;
+  }
+
+  private buildEmployeeInclude() {
+    return {
+      department: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      compensationSettings: true,
+      onboardingDocuments: {
+        select: {
+          id: true,
+          docType: true,
+          status: true,
+          fileName: true,
+          mimeType: true,
+          fileSize: true,
+          uploadedAt: true,
+          verifiedAt: true,
+          verifiedBy: true,
+        },
+        orderBy: [{ docType: 'asc' as const }],
+      },
+    };
+  }
+
+  private serializeEmployee<T extends Record<string, any>>(employee: T) {
+    const compensation = employee.compensationSettings
+      ? {
+          ...this.getDefaultCompensationSettings(),
+          ...Object.fromEntries(
+            EMPLOYEE_COMPENSATION_FIELD_KEYS.map((key) => [
+              key,
+              this.toNumber(employee.compensationSettings?.[key]),
+            ]),
+          ),
+        }
+      : this.getDefaultCompensationSettings();
+
+    const existingDocuments = new Map(
+      Array.isArray(employee.onboardingDocuments)
+        ? employee.onboardingDocuments.map((document: Record<string, any>) => [
+            String(document.docType),
+            {
+              ...document,
+              fileSize:
+                document.fileSize === undefined || document.fileSize === null
+                  ? undefined
+                  : Number(document.fileSize),
+            },
+          ])
+        : [],
+    );
+
+    const onboardingDocuments = EMPLOYEE_ONBOARDING_DOC_TYPES.map((docType) => {
+      const document = existingDocuments.get(docType);
+      if (document) {
+        return document;
+      }
+
+      return {
+        id: `${employee.id}:${docType}`,
+        docType,
+        status: 'PENDING',
+        fileName: null,
+        mimeType: null,
+        fileSize: undefined,
+        uploadedAt: null,
+        verifiedAt: null,
+        verifiedBy: null,
+      };
+    });
+
+    return {
+      ...employee,
+      salaryBaseOriginal: this.toNumber(employee.salaryBaseOriginal),
+      salaryBaseFxRate: this.toNumber(employee.salaryBaseFxRate),
+      salaryBaseBase: this.toNumber(employee.salaryBaseBase),
+      departmentName: employee.department?.name ?? null,
+      compensationSettings: compensation,
+      onboardingDocuments,
+    };
   }
 
   private serializePayrollRun<T extends Record<string, any>>(run: T) {
@@ -610,41 +765,25 @@ export class PayrollService {
         id,
         ...this.buildEmployeeAccessWhere(access),
       },
-      include: {
-        department: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
+      include: this.buildEmployeeInclude(),
     });
 
     if (!employee) {
       throw new NotFoundException('Employee not found');
     }
 
-    return employee;
+    return this.serializeEmployee(employee);
   }
 
   async getEmployees(userId: string, entityId?: string) {
     const access = await this.getEmployeeDataAccessContext(userId, entityId);
 
-    return this.prisma.employee.findMany({
+    const employees = await this.prisma.employee.findMany({
       where: this.buildEmployeeAccessWhere(access),
-      include: {
-        department: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
+      include: this.buildEmployeeInclude(),
     });
+
+    return employees.map((employee) => this.serializeEmployee(employee));
   }
 
   async getDepartments(userId: string, entityId?: string) {
@@ -797,6 +936,9 @@ export class PayrollService {
       salaryBaseOriginal: number;
       isActive?: boolean;
       location?: string;
+      nationalId?: string | null;
+      mailingAddress?: string | null;
+      compensationSettings?: Record<string, unknown> | null;
     },
   ) {
     const access = await this.getEmployeeDataAccessContext(userId, data.entityId);
@@ -849,12 +991,18 @@ export class PayrollService {
       );
     }
 
+    const compensationSettings = this.normalizeCompensationSettings(
+      data.compensationSettings,
+    );
+
     const employee = await this.prisma.employee.create({
       data: {
         entityId,
         userId: data.userId || null,
         employeeNo,
         name,
+        nationalId: data.nationalId?.trim() || null,
+        mailingAddress: data.mailingAddress?.trim() || null,
         country: entity.country,
         location: data.location?.trim() || null,
         departmentId: data.departmentId || null,
@@ -864,17 +1012,11 @@ export class PayrollService {
         salaryBaseFxRate: 1,
         salaryBaseBase: salaryBaseOriginal,
         isActive: data.isActive ?? true,
-      },
-      include: {
-        department: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
+        compensationSettings: {
+          create: compensationSettings,
         },
       },
+      include: this.buildEmployeeInclude(),
     });
 
     await this.leaveService.initializeEmployeeLeaveSetup(userId, {
@@ -888,10 +1030,10 @@ export class PayrollService {
       tableName: 'employees',
       recordId: employee.id,
       action: 'CREATE',
-      newData: employee,
+      newData: this.serializeEmployee(employee),
     });
 
-    return employee;
+    return this.serializeEmployee(employee);
   }
 
   async createEmployeeLoginAccount(
@@ -1003,13 +1145,14 @@ export class PayrollService {
       isActive?: boolean;
       location?: string | null;
       terminateDate?: string | Date | null;
+      nationalId?: string | null;
+      mailingAddress?: string | null;
+      compensationSettings?: Record<string, unknown> | null;
     },
   ) {
     const employee = await this.prisma.employee.findUnique({
       where: { id },
-      include: {
-        department: true,
-      },
+      include: this.buildEmployeeInclude(),
     });
 
     if (!employee) {
@@ -1076,25 +1219,41 @@ export class PayrollService {
       updateData.location = data.location?.trim() || null;
     }
 
+    if (data.nationalId !== undefined) {
+      updateData.nationalId = data.nationalId?.trim() || null;
+    }
+
+    if (data.mailingAddress !== undefined) {
+      updateData.mailingAddress = data.mailingAddress?.trim() || null;
+    }
+
     if (data.terminateDate !== undefined) {
       updateData.terminateDate = data.terminateDate
         ? new Date(data.terminateDate)
         : null;
     }
 
+    const compensationSettings =
+      data.compensationSettings !== undefined
+        ? this.normalizeCompensationSettings(data.compensationSettings)
+        : undefined;
+
     const updatedEmployee = await this.prisma.employee.update({
       where: { id },
-      data: updateData,
-      include: {
-        department: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+      data: {
+        ...updateData,
+        ...(compensationSettings
+          ? {
+              compensationSettings: {
+                upsert: {
+                  create: compensationSettings,
+                  update: compensationSettings,
+                },
+              },
+            }
+          : {}),
       },
+      include: this.buildEmployeeInclude(),
     });
 
     await this.auditLogService.record({
@@ -1103,10 +1262,321 @@ export class PayrollService {
       recordId: id,
       action: 'UPDATE',
       oldData: employee,
-      newData: updatedEmployee,
+      newData: this.serializeEmployee(updatedEmployee),
     });
 
-    return updatedEmployee;
+    return this.serializeEmployee(updatedEmployee);
+  }
+
+  async uploadEmployeeOnboardingDocument(
+    actorUserId: string,
+    employeeId: string,
+    docType: string,
+    file: Express.Multer.File | undefined,
+  ) {
+    if (!this.isEmployeeOnboardingDocType(docType)) {
+      throw new BadRequestException('不支援的入職文件類型');
+    }
+
+    if (!file) {
+      throw new BadRequestException('請選擇要上傳的檔案');
+    }
+
+    if (file.size > this.maxOnboardingDocumentSizeBytes) {
+      throw new BadRequestException('單一檔案大小不可超過 5MB');
+    }
+
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: this.buildEmployeeInclude(),
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const access = await this.getEmployeeDataAccessContext(
+      actorUserId,
+      employee.entityId,
+    );
+    const visibleEmployee = await this.prisma.employee.findFirst({
+      where: {
+        id: employee.id,
+        ...this.buildEmployeeAccessWhere(access),
+      },
+      select: { id: true },
+    });
+    if (!visibleEmployee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const uploaded = await this.prisma.employeeOnboardingDocument.upsert({
+      where: {
+        employeeId_docType: {
+          employeeId,
+          docType,
+        },
+      },
+      create: {
+        employeeId,
+        docType,
+        status: 'UPLOADED',
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+        fileDataBase64: file.buffer.toString('base64'),
+        uploadedAt: new Date(),
+        verifiedAt: null,
+        verifiedBy: null,
+      },
+      update: {
+        status: 'UPLOADED',
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+        fileDataBase64: file.buffer.toString('base64'),
+        uploadedAt: new Date(),
+        verifiedAt: null,
+        verifiedBy: null,
+      },
+      select: {
+        id: true,
+        docType: true,
+        status: true,
+        fileName: true,
+        mimeType: true,
+        fileSize: true,
+        uploadedAt: true,
+        verifiedAt: true,
+        verifiedBy: true,
+      },
+    });
+
+    await this.auditLogService.record({
+      userId: actorUserId,
+      tableName: 'employee_onboarding_documents',
+      recordId: uploaded.id,
+      action: 'UPLOAD',
+      newData: {
+        employeeId,
+        docType,
+        fileName: uploaded.fileName,
+        mimeType: uploaded.mimeType,
+        fileSize: uploaded.fileSize,
+        status: uploaded.status,
+      },
+    });
+
+    return uploaded;
+  }
+
+  async updateEmployeeOnboardingDocumentStatus(
+    actorUserId: string,
+    employeeId: string,
+    docType: string,
+    data: {
+      status: 'PENDING' | 'UPLOADED' | 'VERIFIED';
+      clearFile?: boolean;
+    },
+  ) {
+    if (!this.isEmployeeOnboardingDocType(docType)) {
+      throw new BadRequestException('不支援的入職文件類型');
+    }
+
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { id: true, entityId: true },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const access = await this.getEmployeeDataAccessContext(
+      actorUserId,
+      employee.entityId,
+    );
+    const visibleEmployee = await this.prisma.employee.findFirst({
+      where: {
+        id: employee.id,
+        ...this.buildEmployeeAccessWhere(access),
+      },
+      select: { id: true },
+    });
+    if (!visibleEmployee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const existing = await this.prisma.employeeOnboardingDocument.findUnique({
+      where: {
+        employeeId_docType: {
+          employeeId,
+          docType,
+        },
+      },
+    });
+
+    if (!existing && data.status !== 'PENDING') {
+      throw new BadRequestException('請先上傳文件，再更新狀態');
+    }
+
+    if (data.status === 'VERIFIED' && !existing?.fileDataBase64) {
+      throw new BadRequestException('尚未上傳文件，無法標記為已核實');
+    }
+
+    if (!existing && data.status === 'PENDING') {
+      return {
+        id: `${employeeId}:${docType}`,
+        docType,
+        status: 'PENDING',
+        fileName: null,
+        mimeType: null,
+        fileSize: undefined,
+        uploadedAt: null,
+        verifiedAt: null,
+        verifiedBy: null,
+      };
+    }
+
+    const nextDocument =
+      data.status === 'PENDING' || data.clearFile
+        ? await this.prisma.employeeOnboardingDocument.upsert({
+            where: {
+              employeeId_docType: {
+                employeeId,
+                docType,
+              },
+            },
+            create: {
+              employeeId,
+              docType,
+              status: 'PENDING',
+            },
+            update: {
+              status: 'PENDING',
+              fileName: null,
+              mimeType: null,
+              fileSize: null,
+              fileDataBase64: null,
+              uploadedAt: null,
+              verifiedAt: null,
+              verifiedBy: null,
+            },
+            select: {
+              id: true,
+              docType: true,
+              status: true,
+              fileName: true,
+              mimeType: true,
+              fileSize: true,
+              uploadedAt: true,
+              verifiedAt: true,
+              verifiedBy: true,
+            },
+          })
+        : await this.prisma.employeeOnboardingDocument.update({
+            where: {
+              employeeId_docType: {
+                employeeId,
+                docType,
+              },
+            },
+            data: {
+              status: data.status,
+              verifiedAt: data.status === 'VERIFIED' ? new Date() : null,
+              verifiedBy: data.status === 'VERIFIED' ? actorUserId : null,
+            },
+            select: {
+              id: true,
+              docType: true,
+              status: true,
+              fileName: true,
+              mimeType: true,
+              fileSize: true,
+              uploadedAt: true,
+              verifiedAt: true,
+              verifiedBy: true,
+            },
+          });
+
+    await this.auditLogService.record({
+      userId: actorUserId,
+      tableName: 'employee_onboarding_documents',
+      recordId: nextDocument.id,
+      action: 'UPDATE',
+      oldData: existing
+        ? {
+            status: existing.status,
+            fileName: existing.fileName,
+            verifiedAt: existing.verifiedAt,
+          }
+        : null,
+      newData: {
+        status: nextDocument.status,
+        fileName: nextDocument.fileName,
+        verifiedAt: nextDocument.verifiedAt,
+      },
+    });
+
+    return nextDocument;
+  }
+
+  async downloadEmployeeOnboardingDocument(
+    actorUserId: string,
+    employeeId: string,
+    docType: string,
+  ) {
+    if (!this.isEmployeeOnboardingDocType(docType)) {
+      throw new BadRequestException('不支援的入職文件類型');
+    }
+
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { id: true, entityId: true, employeeNo: true },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const access = await this.getEmployeeDataAccessContext(
+      actorUserId,
+      employee.entityId,
+    );
+    const visibleEmployee = await this.prisma.employee.findFirst({
+      where: {
+        id: employee.id,
+        ...this.buildEmployeeAccessWhere(access),
+      },
+      select: { id: true },
+    });
+    if (!visibleEmployee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const document = await this.prisma.employeeOnboardingDocument.findUnique({
+      where: {
+        employeeId_docType: {
+          employeeId,
+          docType,
+        },
+      },
+      select: {
+        fileName: true,
+        mimeType: true,
+        fileDataBase64: true,
+      },
+    });
+
+    if (!document?.fileName || !document.fileDataBase64) {
+      throw new NotFoundException('Onboarding document not found');
+    }
+
+    return {
+      filename: document.fileName,
+      mimeType: document.mimeType || 'application/octet-stream',
+      buffer: Buffer.from(document.fileDataBase64, 'base64'),
+    };
   }
 
   async getBankAccounts(userId: string, entityId?: string) {
@@ -2544,6 +3014,9 @@ export class PayrollService {
 
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
+      include: {
+        compensationSettings: true,
+      },
     });
     if (!employee) throw new Error('Employee not found');
     const payrollPolicy = await this.getOrCreatePayrollPolicy(
@@ -2580,7 +3053,66 @@ export class PayrollService {
     items.push({
       type: 'BASE_SALARY',
       amount: baseSalary,
+      remark: '固定給付：月薪',
     });
+
+    const compensationSettings = employee.compensationSettings
+      ? this.normalizeCompensationSettings(employee.compensationSettings as Record<string, unknown>)
+      : null;
+
+    const fixedAdditionItems = [
+      {
+        key: 'transportAllowance' as const,
+        type: 'TRANSPORT_ALLOWANCE',
+        remark: '固定給付：車資補助',
+      },
+      {
+        key: 'supervisorAllowance' as const,
+        type: 'SUPERVISOR_ALLOWANCE',
+        remark: '固定給付：主管加級',
+      },
+      {
+        key: 'extraAllowance' as const,
+        type: 'EXTRA_ALLOWANCE',
+        remark: '固定給付：額外補貼',
+      },
+      {
+        key: 'courseAllowance' as const,
+        type: 'COURSE_ALLOWANCE',
+        remark: '固定給付：課程補助',
+      },
+      {
+        key: 'seniorityPay' as const,
+        type: 'SENIORITY_PAY',
+        remark: '固定給付：年工薪',
+      },
+      {
+        key: 'bonus' as const,
+        type: 'BONUS',
+        remark: '固定給付：獎金',
+      },
+      {
+        key: 'salaryAdjustment' as const,
+        type: 'SALARY_ADJUSTMENT',
+        remark: '固定給付：調薪',
+      },
+      {
+        key: 'annualAdjustment' as const,
+        type: 'ANNUAL_ADJUSTMENT',
+        remark: '固定給付：年度調節',
+      },
+    ];
+
+    for (const addition of fixedAdditionItems) {
+      const amount = this.toNumber(compensationSettings?.[addition.key]);
+      if (amount > 0) {
+        items.push({
+          type: addition.type,
+          amount: Math.round(amount),
+          remark: addition.remark,
+        });
+      }
+    }
 
     // 3. Overtime Pay
     if (attendanceData.overtimeHours > 0) {
@@ -2589,6 +3121,7 @@ export class PayrollService {
       items.push({
         type: 'OVERTIME',
         amount: Math.round(overtimePay),
+        remark: `核准加班 ${attendanceData.overtimeHours}h × ${overtimeMultiplier.toFixed(2)} 倍`,
       });
     }
 
@@ -2699,16 +3232,71 @@ export class PayrollService {
       }
     }
 
-    // 4. Deductions (Insurance & Tax)
-    if (employee.country === 'TW') {
-      const laborIns = Math.round(baseSalary * twLaborInsuranceRate);
-      items.push({ type: 'INS_EMP_LABOR', amount: -laborIns });
+    // 4. Deductions
+    const fixedDeductionItems = [
+      {
+        key: 'laborInsuranceDeduction' as const,
+        type: 'LABOR_INSURANCE_DEDUCTION',
+        remark: '固定扣除：勞保扣照額',
+      },
+      {
+        key: 'healthInsuranceDeduction' as const,
+        type: 'HEALTH_INSURANCE_DEDUCTION',
+        remark: '固定扣除：健保扣照額',
+      },
+      {
+        key: 'pensionSelfContribution' as const,
+        type: 'PENSION_SELF_CONTRIBUTION',
+        remark: '固定扣除：個人自提 6%',
+      },
+      {
+        key: 'dependentInsurance' as const,
+        type: 'DEPENDENT_INSURANCE',
+        remark: '固定扣除：家人加保',
+      },
+      {
+        key: 'salaryAdvance' as const,
+        type: 'SALARY_ADVANCE',
+        remark: '固定扣除：薪資預支',
+      },
+    ];
 
-      const healthIns = Math.round(baseSalary * twHealthInsuranceRate);
-      items.push({ type: 'INS_EMP_HEALTH', amount: -healthIns });
-    } else if (employee.country === 'CN') {
-      const socialIns = Math.round(baseSalary * cnSocialInsuranceRate);
-      items.push({ type: 'INS_EMP_SOCIAL', amount: -socialIns });
+    const useLegacyAutoDeductions = !employee.compensationSettings;
+
+    for (const deduction of fixedDeductionItems) {
+      const amount = this.toNumber(compensationSettings?.[deduction.key]);
+      if (amount > 0) {
+        items.push({
+          type: deduction.type,
+          amount: -Math.round(amount),
+          remark: deduction.remark,
+        });
+      }
+    }
+
+    if (useLegacyAutoDeductions) {
+      if (employee.country === 'TW') {
+        const laborIns = Math.round(baseSalary * twLaborInsuranceRate);
+        items.push({
+          type: 'INS_EMP_LABOR',
+          amount: -laborIns,
+          remark: '未設定固定扣除時，沿用舊制自動勞保扣款',
+        });
+
+        const healthIns = Math.round(baseSalary * twHealthInsuranceRate);
+        items.push({
+          type: 'INS_EMP_HEALTH',
+          amount: -healthIns,
+          remark: '未設定固定扣除時，沿用舊制自動健保扣款',
+        });
+      } else if (employee.country === 'CN') {
+        const socialIns = Math.round(baseSalary * cnSocialInsuranceRate);
+        items.push({
+          type: 'INS_EMP_SOCIAL',
+          amount: -socialIns,
+          remark: '未設定固定扣除時，沿用舊制自動社保扣款',
+        });
+      }
     }
 
     // Calculate Totals

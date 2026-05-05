@@ -66,6 +66,7 @@ model User {
 
   // Attendance Relations
   employee                Employee?
+  verifiedEmployeeDocuments EmployeeOnboardingDocument[] @relation("EmployeeOnboardingDocumentVerifier")
   reviewedLeaveRequests   LeaveRequest[]         @relation("LeaveReviewer")
   uploadedLeaveDocuments  LeaveDocument[]        @relation("LeaveDocumentUploader")
   leaveRequestHistories   LeaveRequestHistory[]  @relation("LeaveHistoryActor")
@@ -1389,6 +1390,8 @@ model Employee {
   userId        String?   @unique @map("user_id")
   employeeNo    String    @map("employee_no")
   name          String
+  nationalId    String?   @map("national_id")
+  mailingAddress String?  @map("mailing_address")
   country       String // TW, CN
   location      String?
   departmentId  String?   @map("department_id")
@@ -1410,6 +1413,8 @@ model Employee {
   user         User?         @relation(fields: [userId], references: [id])
   department   Department?   @relation(fields: [departmentId], references: [id])
   payrollItems PayrollItem[]
+  compensationSettings EmployeeCompensationSettings?
+  onboardingDocuments EmployeeOnboardingDocument[]
 
   // Attendance Relations
   attendanceSchedules AttendanceSchedule[]
@@ -1422,6 +1427,53 @@ model Employee {
   @@unique([entityId, employeeNo])
   @@index([entityId])
   @@map("employees")
+}
+
+model EmployeeCompensationSettings {
+  id                      String   @id @default(uuid())
+  employeeId              String   @unique @map("employee_id")
+  transportAllowance      Decimal  @default(0) @map("transport_allowance") @db.Decimal(18, 2)
+  supervisorAllowance     Decimal  @default(0) @map("supervisor_allowance") @db.Decimal(18, 2)
+  extraAllowance          Decimal  @default(0) @map("extra_allowance") @db.Decimal(18, 2)
+  courseAllowance         Decimal  @default(0) @map("course_allowance") @db.Decimal(18, 2)
+  seniorityPay            Decimal  @default(0) @map("seniority_pay") @db.Decimal(18, 2)
+  bonus                   Decimal  @default(0) @db.Decimal(18, 2)
+  salaryAdjustment        Decimal  @default(0) @map("salary_adjustment") @db.Decimal(18, 2)
+  annualAdjustment        Decimal  @default(0) @map("annual_adjustment") @db.Decimal(18, 2)
+  laborInsuranceDeduction Decimal  @default(0) @map("labor_insurance_deduction") @db.Decimal(18, 2)
+  healthInsuranceDeduction Decimal @default(0) @map("health_insurance_deduction") @db.Decimal(18, 2)
+  pensionSelfContribution Decimal  @default(0) @map("pension_self_contribution") @db.Decimal(18, 2)
+  dependentInsurance      Decimal  @default(0) @map("dependent_insurance") @db.Decimal(18, 2)
+  salaryAdvance           Decimal  @default(0) @map("salary_advance") @db.Decimal(18, 2)
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_compensation_settings")
+}
+
+model EmployeeOnboardingDocument {
+  id             String    @id @default(uuid())
+  employeeId     String    @map("employee_id")
+  docType        String    @map("doc_type") // ID_FRONT, ID_BACK, HEALTH_CHECK
+  status         String    @default("PENDING") // PENDING, UPLOADED, VERIFIED
+  fileName       String?   @map("file_name")
+  mimeType       String?   @map("mime_type")
+  fileSize       Int?      @map("file_size")
+  fileDataBase64 String?   @map("file_data_base64") @db.Text
+  uploadedAt     DateTime? @map("uploaded_at")
+  verifiedAt     DateTime? @map("verified_at")
+  verifiedBy     String?   @map("verified_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  verifier   User?    @relation("EmployeeOnboardingDocumentVerifier", fields: [verifiedBy], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, docType])
+  @@index([employeeId, status])
+  @@map("employee_onboarding_documents")
 }
 
 // 薪資規則
