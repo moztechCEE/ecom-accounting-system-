@@ -95,17 +95,18 @@
 ### 5. Shopline 正式同步
 
 - 需要你提供：
-  - Shopline `access_token`。
   - Shopline `User-Agent / handle code`。
   - 是單店還是多店；若多店，需每店的 token / handle / 名稱 / merchant id。
   - webhook 是否已開通；可訂閱哪些 topic。
   - 是否有金流 / 撥款資料來源。
   - 若要補兩年以上資料，需確認 archived orders 匯出流程可用。
 - 目前系統狀態：
+  - 2026-05-05 更新：使用者已提供 Shopline `access_token`；不可寫入 repo。Cloud Run 目前尚未掛 `SHOPLINE_*` env / secret。
+  - 2026-05-05 更新：Shopline adapter 已調整為 token-only 時也可先查 `token-info`，用來確認 token 對應的 merchant / handle；正式訂單、顧客與付款草稿同步仍需 `User-Agent / handle code`。
   - Shopline Adapter / Service / Controller 已存在。
   - 訂單、顧客、Payment 草稿同步骨架已存在。
 - 暫停原因：
-  - 沒有正式 token 與 handle 前，只能保留程式骨架與 readiness，不能正式同步。
+  - 沒有正式 handle 前，只能先驗證 token-info，不能正式同步 orders / customers / transactions。
 
 ### 6. LINE Pay / TWQR / 行動支付分流
 

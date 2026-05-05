@@ -9,7 +9,7 @@ import {
 
 export type ShoplineStoreConfig = {
   token: string;
-  handle: string;
+  handle?: string;
   storeName?: string;
   merchantId?: string;
 };
@@ -192,14 +192,14 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
   }
 
   async getTokenInfo() {
-    this.assertConfig();
+    this.assertTokenConfig();
 
     return Promise.all(
       this.stores.map(async (store) => {
         const info = await this.fetchTokenInfo(store);
         return {
           storeName: store.storeName || null,
-          handle: store.handle,
+          handle: store.handle || null,
           merchantId: info.merchant?._id || store.merchantId || null,
           merchantHandle: info.merchant?.handle || null,
           merchantName: info.merchant?.name || null,
@@ -213,10 +213,10 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     start: Date;
     end: Date;
   }): Promise<UnifiedOrder[]> {
-    this.assertConfig();
+    const stores = this.getSyncReadyStores();
 
     const orders = await Promise.all(
-      this.stores.map((store) => this.fetchOrdersForStore(store, params)),
+      stores.map((store) => this.fetchOrdersForStore(store, params)),
     );
 
     return orders.flat();
@@ -226,10 +226,10 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     start: Date;
     end: Date;
   }): Promise<Array<ShoplineCustomerPayload & { rawStore: ShoplineStoreConfig }>> {
-    this.assertConfig();
+    const stores = this.getSyncReadyStores();
 
     const customers = await Promise.all(
-      this.stores.map((store) => this.fetchCustomersForStore(store, params)),
+      stores.map((store) => this.fetchCustomersForStore(store, params)),
     );
 
     return customers.flat();
@@ -239,10 +239,10 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     start: Date;
     end: Date;
   }): Promise<UnifiedTransaction[]> {
-    this.assertConfig();
+    const stores = this.getSyncReadyStores();
 
     const transactions = await Promise.all(
-      this.stores.map((store) => this.fetchTransactionsForStore(store, _params)),
+      stores.map((store) => this.fetchTransactionsForStore(store, _params)),
     );
 
     return transactions.flat();
@@ -588,13 +588,17 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
   }
 
   private async request<T>(path: string, store: ShoplineStoreConfig) {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      Authorization: `Bearer ${store.token}`,
+    };
+    if (store.handle) {
+      headers['User-Agent'] = store.handle;
+    }
+
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${store.token}`,
-        'User-Agent': store.handle,
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -617,12 +621,25 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   }
 
-  private assertConfig() {
+  private assertTokenConfig() {
     if (!this.stores.length) {
       throw new Error(
-        'SHOPLINE_ACCESS_TOKEN / SHOPLINE_HANDLE or SHOPLINE_STORES_JSON is required',
+        'SHOPLINE_ACCESS_TOKEN or SHOPLINE_STORES_JSON with token is required',
       );
     }
+  }
+
+  private getSyncReadyStores() {
+    this.assertTokenConfig();
+
+    const stores = this.stores.filter((store) => store.token && store.handle);
+    if (!stores.length) {
+      throw new Error(
+        'SHOPLINE_HANDLE or SHOPLINE_STORES_JSON handle is required for order/customer sync',
+      );
+    }
+
+    return stores as Array<ShoplineStoreConfig & { handle: string }>;
   }
 
   private loadStores() {
@@ -648,7 +665,7 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
                   ? store.merchantId.trim()
                   : '',
             }))
-            .filter((store) => store.token && store.handle);
+            .filter((store) => store.token);
         }
       } catch (error: any) {
         this.logger.warn(
@@ -661,7 +678,7 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
       this.configService.get<string>('SHOPLINE_ACCESS_TOKEN', '') || '';
     const handle = this.configService.get<string>('SHOPLINE_HANDLE', '') || '';
 
-    if (!token.trim() || !handle.trim()) {
+    if (!token.trim()) {
       return [] as ShoplineStoreConfig[];
     }
 
