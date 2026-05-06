@@ -64,6 +64,19 @@
 - `GET /reports/data-completeness-audit?entityId=tw-entity-001&startDate=2026-05-01&endDate=2026-05-06` 回傳：orders 311、payments 384、invoices 91、missingInvoiceOrders 283、invoiceLinkedRate 9%。注意此稽核用訂單日期作口徑，而發票同步用發票日期作口徑，因此 5 月開立但對到更早訂單的發票不會全部拉高該訂單日期區間的覆蓋率。
 - 90 天一次同步曾遇到 upstream timeout；後續需要改為背景工作、分段同步或增量排程，避免前端長區間按鈕等待過久。
 
+2026-05-07 未匹配原因拆解與修正：
+
+- 真因之一不是綠界少資料，而是 1Shop 發票關聯號會出現 `DI...a...` 後綴；原本匹配邏輯只吃完整關聯號，沒有拆回 1Shop 原始訂單號。
+- 已更新 `SalesOrderService`：綠界發票關聯號匹配會同時嘗試原值、去 `#`、去 1Shop `a...` 後綴與兩者組合，並讓未匹配結果回傳 `reasonCode` / 中文原因 / 候選訂單摘要。
+- Cloud Run backend 已部署至 revision `ecom-accounting-backend-00309-vd9`。
+- 修正後 dry-run 驗證 `2026-05-01` 到 `2026-05-06`：雙帳號共抓 303 張發票；可匹配由 91 張提升到 201 張，未匹配由 212 張降到 102 張。
+- 已正式寫入修正後可匹配結果：新增 110 張 `Invoice`、更新 91 張既有 `Invoice`；其中 `groupbuy-main / 3150241` 匹配 138 張、剩 10 張未匹配，`shopify-main / 3290494` 匹配 63 張、剩 92 張未匹配。
+- 剩餘 102 張分類：
+  - `groupbuy-main` 10 張為 `manual_or_batch_invoice_mapping_required`：關聯號像 `20260505U009` / `20260506-18`，不是目前系統可辨識訂單號；需要綠界或 1Shop 的手開 / 批次發票對應表，或補上上游訂單來源。
+  - `shopify-main` 87 張為 `shopify_order_not_synced`：關聯號是 Shopify 顯示訂單號（例如 `#148675`），但系統找不到對應 Shopify 訂單；下一步需確認 Shopify app 是否具備 `read_all_orders`，並跑更長區間的 Shopify 歷史訂單回補。
+  - `shopify-main` 5 張為 `channel_mismatch`：資料庫有疑似候選，但通路不是 Shopify；目前保守不自動配，需確認是否為數字碰撞、手動單或帳號 mapping 錯置。
+- `GET /reports/data-completeness-audit?entityId=tw-entity-001&startDate=2026-05-01&endDate=2026-05-06` 仍顯示 `missingInvoiceOrders=283`，原因是該稽核用訂單日期口徑；本次回填的發票多數對到較早訂單，因此不會等比例反映在 5/1-5/6 訂單日期區間。
+
 必補能力：
 
 - B2C / B2B 開立的小額測試與正式啟用流程

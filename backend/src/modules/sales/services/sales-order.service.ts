@@ -589,6 +589,10 @@ export class SalesOrderService {
       relateNumber?: string | null;
       orderId?: string | null;
       orderNumber?: string | null;
+      reasonCode?: string;
+      reason?: string;
+      candidateCount?: number;
+      candidateOrderNumbers?: string[];
       status:
         | 'created'
         | 'updated'
@@ -621,12 +625,23 @@ export class SalesOrderService {
       });
 
       if (!order) {
+        const diagnosis = await this.diagnoseEcpayInvoiceUnmatchedReason({
+          entityId: params.entityId,
+          merchantKey,
+          merchantId,
+          invoiceNumber: normalized.invoiceNumber,
+          relateNumber: normalized.relateNumber,
+        });
         unmatched += 1;
         results.push({
           invoiceNumber: normalized.invoiceNumber,
           relateNumber: normalized.relateNumber,
           status: 'unmatched',
-          message: '找不到可回填的訂單',
+          message: diagnosis.reason || '找不到可回填的訂單',
+          reasonCode: diagnosis.reasonCode,
+          reason: diagnosis.reason,
+          candidateCount: diagnosis.candidateCount,
+          candidateOrderNumbers: diagnosis.candidateOrderNumbers,
         });
         continue;
       }
@@ -1174,32 +1189,7 @@ export class SalesOrderService {
         ? ['1SHOP', 'SHOPLINE']
         : ['SHOPIFY'];
     const relateNumber = params.relateNumber?.trim();
-    const normalizedRelateNumber = relateNumber?.replace(/^#/, '');
-    const relateNumberMatchers = relateNumber
-      ? [
-          { externalOrderId: relateNumber },
-          { externalOrderId: { endsWith: `:${relateNumber}` } },
-          { notes: { contains: `originalOrderNumber=${relateNumber}` } },
-          { notes: { contains: `oneShopOrderId=${relateNumber}` } },
-          { notes: { contains: `shopifyOrderName=${relateNumber}` } },
-          { notes: { contains: `shopifyOrderNumber=${relateNumber}` } },
-          ...(normalizedRelateNumber && normalizedRelateNumber !== relateNumber
-            ? [
-                { externalOrderId: normalizedRelateNumber },
-                {
-                  notes: {
-                    contains: `shopifyOrderNumber=${normalizedRelateNumber}`,
-                  },
-                },
-                {
-                  notes: {
-                    contains: `shopifyOrderName=#${normalizedRelateNumber}`,
-                  },
-                },
-              ]
-            : []),
-        ]
-      : [];
+    const relateNumberMatchers = this.buildEcpayRelateNumberMatchers(relateNumber);
 
     return this.prisma.salesOrder.findFirst({
       where: {
@@ -1220,6 +1210,145 @@ export class SalesOrderService {
       },
       orderBy: { orderDate: 'desc' },
     });
+  }
+
+  private buildEcpayRelateNumberMatchers(relateNumber?: string | null) {
+    const variants = this.buildEcpayRelateNumberVariants(relateNumber);
+    return variants.flatMap((value) => [
+      { externalOrderId: value },
+      { externalOrderId: { endsWith: `:${value}` } },
+      { externalOrderId: { contains: value } },
+      { notes: { contains: `originalOrderNumber=${value}` } },
+      { notes: { contains: `oneShopOrderId=${value}` } },
+      { notes: { contains: `shopifyOrderName=${value}` } },
+      { notes: { contains: `shopifyOrderName=#${value.replace(/^#/, '')}` } },
+      { notes: { contains: `shopifyOrderNumber=${value.replace(/^#/, '')}` } },
+    ]);
+  }
+
+  private buildEcpayRelateNumberVariants(relateNumber?: string | null) {
+    const raw = relateNumber?.trim();
+    if (!raw) {
+      return [];
+    }
+
+    const withoutHash = raw.replace(/^#/, '');
+    const withoutOneShopSuffix = raw.replace(/a\d+$/, '');
+    const withoutHashAndOneShopSuffix = withoutHash.replace(/a\d+$/, '');
+
+    return Array.from(
+      new Set(
+        [
+          raw,
+          withoutHash,
+          withoutOneShopSuffix,
+          withoutHashAndOneShopSuffix,
+        ].filter(Boolean),
+      ),
+    );
+  }
+
+  private async diagnoseEcpayInvoiceUnmatchedReason(params: {
+    entityId: string;
+    merchantKey: string;
+    merchantId: string;
+    invoiceNumber: string;
+    relateNumber?: string | null;
+  }) {
+    const channelCodes =
+      params.merchantKey === 'groupbuy-main' || params.merchantId === '3150241'
+        ? ['1SHOP', 'SHOPLINE']
+        : ['SHOPIFY'];
+    const relateNumber = params.relateNumber?.trim();
+    if (!relateNumber) {
+      return {
+        reasonCode: 'missing_relate_number',
+        reason: '綠界發票缺關聯號，無法自動判斷應回填哪一筆訂單。',
+        candidateCount: 0,
+        candidateOrderNumbers: [],
+      };
+    }
+
+    const variants = this.buildEcpayRelateNumberVariants(relateNumber);
+    const broadMatchers = [
+      { invoices: { some: { invoiceNumber: params.invoiceNumber } } },
+      { notes: { contains: `invoiceNumber=${params.invoiceNumber}` } },
+      ...this.buildEcpayRelateNumberMatchers(relateNumber),
+    ];
+    const candidates = await this.prisma.salesOrder.findMany({
+      where: {
+        entityId: params.entityId,
+        OR: broadMatchers,
+      },
+      select: {
+        externalOrderId: true,
+        orderDate: true,
+        channel: { select: { code: true, name: true } },
+      },
+      orderBy: { orderDate: 'desc' },
+      take: 10,
+    });
+    const inExpectedChannel = candidates.filter((candidate) =>
+      channelCodes.includes(candidate.channel?.code || ''),
+    );
+    const candidateOrderNumbers = candidates
+      .map((candidate) => candidate.externalOrderId)
+      .filter(Boolean)
+      .slice(0, 5);
+
+    if (inExpectedChannel.length) {
+      return {
+        reasonCode: 'matcher_rule_gap',
+        reason:
+          '資料庫找得到同通路候選訂單，但現行發票回填規則未命中；需要補匹配規則後重跑。',
+        candidateCount: inExpectedChannel.length,
+        candidateOrderNumbers,
+      };
+    }
+    if (candidates.length) {
+      return {
+        reasonCode: 'channel_mismatch',
+        reason:
+          '資料庫找得到候選訂單，但通路不在此綠界帳號預期範圍，需確認發票帳號與訂單通路 mapping。',
+        candidateCount: candidates.length,
+        candidateOrderNumbers,
+      };
+    }
+    if (/^#[0-9]+$/.test(relateNumber)) {
+      return {
+        reasonCode: 'shopify_order_not_synced',
+        reason:
+          '綠界關聯號是 Shopify 顯示訂單號，但系統內找不到對應 Shopify 訂單；通常是訂單日期早於目前同步範圍或 Shopify read_all_orders 未授權。',
+        candidateCount: 0,
+        candidateOrderNumbers: [],
+      };
+    }
+    if (/^[A-Z]+[0-9]+a[0-9]+$/.test(relateNumber)) {
+      return {
+        reasonCode: variants.length > 1 ? 'oneshop_suffix_order_not_found' : 'oneshop_order_not_found',
+        reason:
+          '綠界關聯號像 1Shop 訂單衍生碼，但系統內找不到原始 1Shop 訂單；需確認 1Shop 該期間訂單是否已同步或需用匯出檔回補。',
+        candidateCount: 0,
+        candidateOrderNumbers: [],
+      };
+    }
+    if (/^[0-9]{8}U[0-9]+$/.test(relateNumber) || /^[0-9]{8}-[0-9]+$/.test(relateNumber)) {
+      return {
+        reasonCode: 'manual_or_batch_invoice_mapping_required',
+        reason:
+          '關聯號像手開或批次發票編號，不是目前系統可直接辨識的訂單號；需要提供對應表或上游訂單來源。',
+        candidateCount: 0,
+        candidateOrderNumbers: [],
+      };
+    }
+
+    return {
+      reasonCode: 'order_not_found',
+      reason:
+        '依發票號碼、關聯號與常見訂單號變體都找不到候選訂單；需確認訂單是否尚未同步或關聯號規則是否另有格式。',
+      candidateCount: 0,
+      candidateOrderNumbers: [],
+    };
   }
 
   private async materializeInvoiceCandidate(
