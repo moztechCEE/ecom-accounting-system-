@@ -169,6 +169,7 @@ export class SalesController {
       merchantKey: dto.merchantKey?.trim() || undefined,
       merchantId: dto.merchantId?.trim() || undefined,
       markIssued: dto.markIssued !== false,
+      dryRun: dto.dryRun === true,
       rows: dto.rows,
       mapping: dto.mapping,
     });

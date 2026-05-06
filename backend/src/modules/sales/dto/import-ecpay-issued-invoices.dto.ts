@@ -24,6 +24,10 @@ export class ImportEcpayIssuedInvoicesDto {
   @IsBoolean()
   markIssued?: boolean;
 
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+
   @IsArray()
   rows!: Record<string, ImportRowValue>[];
 

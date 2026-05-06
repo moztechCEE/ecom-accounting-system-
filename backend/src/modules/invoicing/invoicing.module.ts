@@ -4,6 +4,7 @@ import { InvoicingService } from './invoicing.service';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { EcpayEinvoiceAdapter } from './adapters/ecpay-einvoice.adapter';
 import { EcpayEinvoiceConfigService } from './services/ecpay-einvoice-config.service';
+import { SalesModule } from '../sales/sales.module';
 
 /**
  * InvoicingModule
@@ -23,7 +24,7 @@ import { EcpayEinvoiceConfigService } from './services/ecpay-einvoice-config.ser
  * - 發票PDF產生與email寄送
  */
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, SalesModule],
   controllers: [InvoicingController],
   providers: [
     InvoicingService,

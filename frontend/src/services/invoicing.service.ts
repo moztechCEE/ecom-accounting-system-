@@ -114,6 +114,24 @@ export type InvoiceProviderStatusReadiness = {
   items: InvoiceProviderStatusReadinessItem[];
 };
 
+export type EcpayInvoiceSyncToOrdersResult = {
+  success: boolean;
+  entityId: string;
+  beginDate: string;
+  endDate: string;
+  dryRun: boolean;
+  requestedMerchants: number;
+  windows: number;
+  fetched: number;
+  matched: number;
+  created: number;
+  updated: number;
+  previewed: number;
+  unmatched: number;
+  invalid: number;
+  results: Array<Record<string, unknown>>;
+};
+
 export const invoicingService = {
   async getQueue(params?: {
     entityId?: string;
@@ -181,6 +199,33 @@ export const invoicingService = {
     const response = await api.get<InvoiceProviderStatusReadiness>(
       `/invoicing/provider-status/readiness?${query.toString()}`,
       { timeout: 30000 },
+    );
+    return response.data;
+  },
+
+  async syncEcpayInvoiceListToOrders(params: {
+    entityId?: string;
+    merchantKey?: string;
+    merchantId?: string;
+    beginDate?: string;
+    endDate?: string;
+    pageSize?: number;
+    maxPages?: number;
+    dryRun?: boolean;
+  }): Promise<EcpayInvoiceSyncToOrdersResult> {
+    const response = await api.post<EcpayInvoiceSyncToOrdersResult>(
+      "/invoicing/ecpay/invoices/sync-to-orders",
+      {
+        entityId: params.entityId?.trim() || DEFAULT_ENTITY_ID,
+        merchantKey: params.merchantKey,
+        merchantId: params.merchantId,
+        beginDate: params.beginDate,
+        endDate: params.endDate,
+        pageSize: params.pageSize,
+        maxPages: params.maxPages,
+        dryRun: params.dryRun,
+      },
+      { timeout: 180000 },
     );
     return response.data;
   },

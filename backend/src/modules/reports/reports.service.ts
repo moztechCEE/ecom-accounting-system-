@@ -1313,14 +1313,16 @@ export class ReportsService {
           'SHOPLINE_MERCHANT_ID',
           'SHOPLINE_SYNC_ENABLED',
           'SHOPLINE_SYNC_JOB_TOKEN',
+          'SHOPLINE_ADMIN_API_VERSION',
+          'SHOPLINE_PAYMENTS_SYNC_ENABLED',
         ],
         jsonEnvName: 'SHOPLINE_STORES_JSON',
         externalNeeds: [
-          '提供正式 access_token 與 User-Agent / handle code。',
-          '確認單店或多店、webhook 可用性，以及 archived orders 匯出流程。',
+          '確認 Shopline token 已勾選 read_payment，否則 SHOPLINE Payments 帳務 API 會無法查詢。',
+          '確認 webhook 可用性，以及兩年以上 archived orders 匯出流程。',
         ],
         nextAction:
-          '先讓 token-info / orders / customers 同步可跑，再把 Shopline 訂單接進 AR / 發票 / 對帳鏈。',
+          '先從 Cloud Run 執行 Shopline Payments 帳務同步；成功後再開 SHOPLINE_PAYMENTS_SYNC_ENABLED 讓排程一併同步。',
       }),
       this.buildConnectorReadiness({
         key: 'ecpay-einvoice',

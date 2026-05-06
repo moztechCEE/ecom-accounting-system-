@@ -622,7 +622,7 @@ export class ShopifyService {
       shippingFeeBase: toBase(order.totals.shipping),
       status: order.status,
       // hasInvoice: existing?.hasInvoice ?? false, // Keep existing flag
-      notes: order.raw?.note || null,
+      notes: this.mergeShopifyOrderMetadataIntoNotes(existing?.notes, order),
     };
 
     if (existing) {
@@ -713,6 +713,40 @@ export class ShopifyService {
       return normalized.slice(0, 120);
     }
     return `SHOPIFY-${orderId}-${index + 1}`.slice(0, 120);
+  }
+
+  private mergeShopifyOrderMetadataIntoNotes(
+    existingNotes: string | null | undefined,
+    order: UnifiedOrder,
+  ) {
+    const raw = order.raw || {};
+    const parts = [
+      `shopifyOrderId=${this.sanitizeNoteValue(order.externalId)}`,
+      raw.name
+        ? `shopifyOrderName=${this.sanitizeNoteValue(raw.name)}`
+        : null,
+      raw.order_number
+        ? `shopifyOrderNumber=${this.sanitizeNoteValue(raw.order_number)}`
+        : null,
+      raw.note ? `shopifyNote=${this.sanitizeNoteValue(raw.note)}` : null,
+    ].filter((part): part is string => Boolean(part));
+
+    const preservedNotes = (existingNotes || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('[shopify-order]'));
+
+    if (parts.length) {
+      preservedNotes.push(`[shopify-order] ${parts.join('; ')}`);
+    }
+
+    return preservedNotes.length ? preservedNotes.join('\n') : null;
+  }
+
+  private sanitizeNoteValue(value: unknown) {
+    return String(value ?? '')
+      .trim()
+      .replace(/[;\n\r]/g, ',');
   }
 
   private async upsertPayment(

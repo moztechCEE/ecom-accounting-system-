@@ -149,6 +149,30 @@ export class InvoicingController {
     });
   }
 
+  @Post('ecpay/invoices/sync-to-orders')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '從綠界銷項發票清單同步回填 SalesOrder / Invoice',
+    description:
+      '呼叫綠界 B2CInvoice/GetIssueList 讀取正式發票清單，依關聯號碼 / 訂單號回填本地 SalesOrder 與 Invoice。可用 dryRun 先預覽，不會開票、作廢或折讓。',
+  })
+  async syncEcpayInvoiceListToOrders(
+    @Body()
+    body: {
+      entityId: string;
+      merchantKey?: string;
+      merchantId?: string;
+      beginDate?: string;
+      endDate?: string;
+      pageSize?: number;
+      maxPages?: number;
+      dryRun?: boolean;
+    },
+  ) {
+    return this.invoicingService.syncEcpayInvoiceListToOrders(body);
+  }
+
   @Get('ecpay/word-settings')
   @Roles('ADMIN', 'ACCOUNTANT')
   @ApiOperation({

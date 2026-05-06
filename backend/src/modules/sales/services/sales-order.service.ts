@@ -566,6 +566,7 @@ export class SalesOrderService {
     merchantKey?: string;
     merchantId?: string;
     markIssued?: boolean;
+    dryRun?: boolean;
     rows: Record<string, string | number | boolean | null>[];
     mapping?: Record<string, string | string[]>;
   }) {
@@ -582,12 +583,19 @@ export class SalesOrderService {
     let updated = 0;
     let unmatched = 0;
     let invalid = 0;
+    let previewed = 0;
     const results: Array<{
       invoiceNumber?: string | null;
       relateNumber?: string | null;
       orderId?: string | null;
       orderNumber?: string | null;
-      status: 'created' | 'updated' | 'unmatched' | 'invalid';
+      status:
+        | 'created'
+        | 'updated'
+        | 'would_create'
+        | 'would_update'
+        | 'unmatched'
+        | 'invalid';
       message: string;
     }> = [];
 
@@ -627,6 +635,22 @@ export class SalesOrderService {
         where: { invoiceNumber: normalized.invoiceNumber },
         select: { id: true },
       });
+
+      if (params.dryRun) {
+        matched += 1;
+        previewed += 1;
+        results.push({
+          invoiceNumber: normalized.invoiceNumber,
+          relateNumber: normalized.relateNumber,
+          orderId: order.id,
+          orderNumber: order.externalOrderId || order.id,
+          status: existingInvoice ? 'would_update' : 'would_create',
+          message: existingInvoice
+            ? 'dryRun：可更新既有發票並回填訂單'
+            : 'dryRun：可建立發票並回填訂單',
+        });
+        continue;
+      }
 
       const invoiceRecord = await this.materializeInvoiceCandidate(
         order,
@@ -682,10 +706,12 @@ export class SalesOrderService {
       entityId: params.entityId,
       merchantKey,
       merchantId,
+      dryRun: params.dryRun === true,
       requested: params.rows.length,
       matched,
       created,
       updated,
+      previewed,
       unmatched,
       invalid,
       results,
@@ -1082,18 +1108,30 @@ export class SalesOrderService {
       invoiceNumber: fromMapping('invoiceNo', [
         'invoiceNo',
         'InvoiceNo',
+        'InvoiceNO',
+        'IIS_Number',
+        'IIS_Invoice_No',
+        'InvoiceNumber',
         '發票號碼',
         'invoice_number',
       ]),
-      invoiceDate: fromMapping('invoiceDate', [
-        'invoiceDate',
-        'InvoiceDate',
-        '發票日期',
-        'invoice_date',
-      ]),
+      invoiceDate: this.normalizeEcpayIssuedInvoiceDate(
+        fromMapping('invoiceDate', [
+          'invoiceDate',
+          'InvoiceDate',
+          'IIS_Create_Date',
+          'IIS_Date',
+          '發票日期',
+          '開立日期',
+          'invoice_date',
+        ]),
+      ),
       relateNumber: fromMapping('relateNumber', [
         'relateNumber',
         'RelateNumber',
+        'IIS_Relate_Number',
+        'MerchantTradeNo',
+        'MerchantOrderNo',
         '關聯號碼',
         '關聯號',
         '訂單編號',
@@ -1102,6 +1140,26 @@ export class SalesOrderService {
       ]),
       note: fromMapping('note', ['note', '備註', 'Remark', '發票備註']),
     };
+  }
+
+  private normalizeEcpayIssuedInvoiceDate(value?: string | null) {
+    const raw = value?.trim();
+    if (!raw) {
+      return '';
+    }
+
+    const dateOnly = raw.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+    if (dateOnly) {
+      const [, year, month, day] = dateOnly;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10);
+    }
+
+    return raw;
   }
 
   private async findSalesOrderForEcpayInvoiceImport(params: {
@@ -1116,6 +1174,32 @@ export class SalesOrderService {
         ? ['1SHOP', 'SHOPLINE']
         : ['SHOPIFY'];
     const relateNumber = params.relateNumber?.trim();
+    const normalizedRelateNumber = relateNumber?.replace(/^#/, '');
+    const relateNumberMatchers = relateNumber
+      ? [
+          { externalOrderId: relateNumber },
+          { externalOrderId: { endsWith: `:${relateNumber}` } },
+          { notes: { contains: `originalOrderNumber=${relateNumber}` } },
+          { notes: { contains: `oneShopOrderId=${relateNumber}` } },
+          { notes: { contains: `shopifyOrderName=${relateNumber}` } },
+          { notes: { contains: `shopifyOrderNumber=${relateNumber}` } },
+          ...(normalizedRelateNumber && normalizedRelateNumber !== relateNumber
+            ? [
+                { externalOrderId: normalizedRelateNumber },
+                {
+                  notes: {
+                    contains: `shopifyOrderNumber=${normalizedRelateNumber}`,
+                  },
+                },
+                {
+                  notes: {
+                    contains: `shopifyOrderName=#${normalizedRelateNumber}`,
+                  },
+                },
+              ]
+            : []),
+        ]
+      : [];
 
     return this.prisma.salesOrder.findFirst({
       where: {
@@ -1128,14 +1212,7 @@ export class SalesOrderService {
         OR: [
           { invoices: { some: { invoiceNumber: params.invoiceNumber } } },
           { notes: { contains: `invoiceNumber=${params.invoiceNumber}` } },
-          ...(relateNumber
-            ? [
-                { externalOrderId: relateNumber },
-                { externalOrderId: { endsWith: `:${relateNumber}` } },
-                { notes: { contains: `originalOrderNumber=${relateNumber}` } },
-                { notes: { contains: `oneShopOrderId=${relateNumber}` } },
-              ]
-            : []),
+          ...relateNumberMatchers,
         ],
       },
       include: {

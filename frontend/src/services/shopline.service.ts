@@ -12,6 +12,21 @@ type SyncResult = {
   message?: string;
 };
 
+type ShoplinePaymentSyncResult = {
+  success: boolean;
+  fetched: number;
+  importable?: number;
+  imported?: number;
+  skipped?: boolean;
+  message?: string;
+  batchId?: string;
+  provider?: "shoplinepay";
+  recordCount?: number;
+  matchedCount?: number;
+  unmatchedCount?: number;
+  invalidCount?: number;
+};
+
 export const shoplineService = {
   async syncOrders(params?: {
     entityId?: string;
@@ -56,6 +71,31 @@ export const shoplineService = {
         entityId: params?.entityId?.trim() || DEFAULT_ENTITY_ID,
         since: params?.since,
         until: params?.until,
+      },
+    );
+    return response.data;
+  },
+
+  async syncPaymentBillingRecords(params?: {
+    entityId?: string;
+    since?: string;
+    until?: string;
+    maxPages?: string | number;
+    payoutId?: string;
+    accountType?: string;
+  }): Promise<ShoplinePaymentSyncResult> {
+    const response = await api.post<ShoplinePaymentSyncResult>(
+      "/integrations/shopline/sync/payments/billing-records",
+      {
+        entityId: params?.entityId?.trim() || DEFAULT_ENTITY_ID,
+        since: params?.since,
+        until: params?.until,
+        maxPages: params?.maxPages,
+        payoutId: params?.payoutId,
+        accountType: params?.accountType,
+      },
+      {
+        timeout: 180000,
       },
     );
     return response.data;

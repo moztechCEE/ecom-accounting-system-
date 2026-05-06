@@ -68,6 +68,7 @@ import { salesService } from '../services/sales.service'
 import { apService } from '../services/ap.service'
 import { reconciliationService } from '../services/reconciliation.service'
 import { invoicingService, InvoiceProviderReadiness } from '../services/invoicing.service'
+import { shoplineService } from '../services/shopline.service'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -195,12 +196,14 @@ const AccountingWorkbenchPage: React.FC = () => {
   const [importingLinePayCapture, setImportingLinePayCapture] = useState(false)
   const [importingEcpayPayout, setImportingEcpayPayout] = useState(false)
   const [importingEcpayIssuedInvoices, setImportingEcpayIssuedInvoices] = useState(false)
+  const [syncingEcpayIssuedInvoices, setSyncingEcpayIssuedInvoices] = useState(false)
   const [issuedInvoiceImportOpen, setIssuedInvoiceImportOpen] = useState(false)
   const [issuedInvoiceImportFile, setIssuedInvoiceImportFile] = useState<File | null>(null)
   const [backfillingOneShopClosure, setBackfillingOneShopClosure] = useState(false)
   const [refreshingLinePayStatuses, setRefreshingLinePayStatuses] = useState(false)
   const [processingLinePayRefunds, setProcessingLinePayRefunds] = useState(false)
   const [runningLinePayClosurePass, setRunningLinePayClosurePass] = useState(false)
+  const [syncingShoplinePayments, setSyncingShoplinePayments] = useState(false)
   const [executive, setExecutive] = useState<DashboardExecutiveOverview | null>(null)
   const [feed, setFeed] = useState<DashboardReconciliationFeed | null>(null)
   const [audit, setAudit] = useState<OrderReconciliationAudit | null>(null)
@@ -584,6 +587,37 @@ const AccountingWorkbenchPage: React.FC = () => {
     )
   }
 
+  const handleSyncEcpayIssuedInvoices = async () => {
+    const beginDate = dateRange?.[0]
+      ? dateRange[0].format('YYYY-MM-DD')
+      : dayjs().subtract(61, 'day').format('YYYY-MM-DD')
+    const endDate = dateRange?.[1]
+      ? dateRange[1].format('YYYY-MM-DD')
+      : dayjs().format('YYYY-MM-DD')
+
+    setSyncingEcpayIssuedInvoices(true)
+    try {
+      const result = await invoicingService.syncEcpayInvoiceListToOrders({
+        entityId,
+        beginDate,
+        endDate,
+        pageSize: 200,
+        maxPages: 20,
+      })
+
+      message.success(
+        `綠界銷項發票同步完成：抓到 ${result.fetched || 0} 筆，已配對 ${result.matched || 0} 筆，新增 ${result.created || 0} 筆，更新 ${result.updated || 0} 筆，未配對 ${result.unmatched || 0} 筆`,
+        8,
+      )
+      await runOneShopClosureAfterImport()
+      await fetchWorkbench()
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '同步綠界銷項發票失敗')
+    } finally {
+      setSyncingEcpayIssuedInvoices(false)
+    }
+  }
+
   const handleBackfillOneShopClosure = async () => {
     const beginDate = dateRange?.[0]
       ? dateRange[0].format('YYYY-MM-DD')
@@ -720,6 +754,36 @@ const AccountingWorkbenchPage: React.FC = () => {
       throw error
     } finally {
       setRunningLinePayClosurePass(false)
+    }
+  }
+
+  const handleSyncShoplinePayments = async () => {
+    setSyncingShoplinePayments(true)
+    try {
+      const result = await shoplineService.syncPaymentBillingRecords({
+        entityId,
+        since: startDate,
+        until: endDate,
+        maxPages: 20,
+      })
+
+      if (result.skipped) {
+        message.info(result.message || 'Shopline Payments 目前沒有可匯入的帳務明細')
+      } else {
+        message.success(
+          `Shopline Payments 帳務同步完成：抓到 ${result.fetched || 0} 筆，可匯入 ${result.importable || result.recordCount || 0} 筆，已匹配 ${result.matchedCount || 0} 筆，待確認 ${result.unmatchedCount || 0} 筆，無效 ${result.invalidCount || 0} 筆`,
+          6,
+        )
+      }
+
+      await fetchWorkbench()
+    } catch (error: any) {
+      message.error(
+        error?.response?.data?.message ||
+          '同步 Shopline Payments 帳務失敗，請確認 token 是否具備 read_payment 權限',
+      )
+    } finally {
+      setSyncingShoplinePayments(false)
     }
   }
 
@@ -1460,6 +1524,9 @@ const AccountingWorkbenchPage: React.FC = () => {
               <Button loading={syncingInvoiceStatus} onClick={handleSyncInvoiceStatuses}>
                 同步發票狀態
               </Button>
+              <Button loading={syncingEcpayIssuedInvoices} onClick={handleSyncEcpayIssuedInvoices}>
+                同步綠界銷項發票
+              </Button>
               <Button type="primary" onClick={() => navigate('/reconciliation')}>
                 回對帳中心
               </Button>
@@ -1547,6 +1614,13 @@ const AccountingWorkbenchPage: React.FC = () => {
             onClick={openIssuedInvoiceImportModal}
           >
             匯入綠界銷項發票
+          </Button>
+          <Button
+            icon={<ReloadOutlined />}
+            loading={syncingEcpayIssuedInvoices}
+            onClick={handleSyncEcpayIssuedInvoices}
+          >
+            同步綠界銷項發票
           </Button>
           <Button
             icon={<ReloadOutlined />}
@@ -1769,6 +1843,13 @@ const AccountingWorkbenchPage: React.FC = () => {
             >
               匯入綠界銷項發票
             </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              loading={syncingEcpayIssuedInvoices}
+              onClick={handleSyncEcpayIssuedInvoices}
+            >
+              同步綠界銷項發票
+            </Button>
             <Upload
               accept=".xlsx,.xls,.csv"
               showUploadList={false}
@@ -1817,6 +1898,13 @@ const AccountingWorkbenchPage: React.FC = () => {
               onClick={handleBackfillOneShopClosure}
             >
               補跑 1Shop 團購閉環
+            </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              loading={syncingShoplinePayments}
+              onClick={handleSyncShoplinePayments}
+            >
+              同步 Shopline Payments 帳務
             </Button>
             <Button
               icon={<AuditOutlined />}

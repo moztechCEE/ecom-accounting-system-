@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Decimal } from '@prisma/client/runtime/library';
 import {
@@ -888,7 +888,12 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
       );
     }
 
-    return (await response.json()) as T;
+    return this.parseJsonResponse<T>(await response.text(), {
+      source: 'SHOPLINE API',
+      status: response.status,
+      contentType: response.headers.get('content-type'),
+      store,
+    });
   }
 
   private async adminRequest<T>(
@@ -900,26 +905,58 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
       Authorization: `Bearer ${store.token}`,
       'Content-Type': 'application/json; charset=utf-8',
     };
+    if (store.handle) {
+      headers['User-Agent'] = store.handle;
+    }
 
     const response = await fetch(`${this.getAdminBaseUrl(store)}${path}`, {
       method: 'GET',
       headers,
     });
 
+    const bodyText = await response.text();
+
     if (!response.ok) {
-      const bodyText = this.redactSensitiveText(await response.text(), store);
-      throw new Error(
+      throw new BadGatewayException(
         `SHOPLINE Payments API Error ${response.status}: ${
-          bodyText || response.statusText
+          this.redactSensitiveText(bodyText, store) || response.statusText
         }`,
       );
     }
 
     return {
-      data: (await response.json()) as T,
+      data: this.parseJsonResponse<T>(bodyText, {
+        source: 'SHOPLINE Payments API',
+        status: response.status,
+        contentType: response.headers.get('content-type'),
+        store,
+      }),
       link: response.headers.get('link'),
       traceId: response.headers.get('traceId'),
     };
+  }
+
+  private parseJsonResponse<T>(
+    bodyText: string,
+    context: {
+      source: string;
+      status: number;
+      contentType: string | null;
+      store: ShoplineStoreConfig;
+    },
+  ) {
+    try {
+      return JSON.parse(bodyText) as T;
+    } catch (error: any) {
+      const preview = this.redactSensitiveText(bodyText, context.store)
+        .replace(/\s+/g, ' ')
+        .slice(0, 240);
+      throw new BadGatewayException(
+        `${context.source} returned non-JSON response ${context.status} (${context.contentType || 'unknown content-type'}): ${
+          preview || error.message
+        }`,
+      );
+    }
   }
 
   private redactSensitiveText(value: string, store: ShoplineStoreConfig) {

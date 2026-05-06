@@ -12,6 +12,7 @@ import { IssueInvoiceDto } from './dto/issue-invoice.dto';
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { EcpayEinvoiceAdapter } from './adapters/ecpay-einvoice.adapter';
+import { SalesOrderService } from '../sales/services/sales-order.service';
 
 /**
  * InvoicingService
@@ -32,6 +33,7 @@ export class InvoicingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ecpayEinvoiceAdapter: EcpayEinvoiceAdapter,
+    private readonly salesOrderService: SalesOrderService,
   ) {}
 
   getInvoiceProviderReadiness() {
@@ -69,6 +71,130 @@ export class InvoicingService {
     });
   }
 
+  async syncEcpayInvoiceListToOrders(options: {
+    entityId: string;
+    merchantKey?: string;
+    merchantId?: string;
+    beginDate?: string;
+    endDate?: string;
+    pageSize?: number;
+    maxPages?: number;
+    dryRun?: boolean;
+  }) {
+    const entityId = options.entityId?.trim();
+    if (!entityId) {
+      throw new BadRequestException('entityId is required');
+    }
+
+    const beginDate = this.normalizeQueryDate(options.beginDate, 'beginDate');
+    const endDate = this.normalizeQueryDate(options.endDate, 'endDate');
+    const windows = this.buildInvoiceSyncDateWindows(beginDate, endDate, 62);
+
+    const pageSize = Math.min(
+      Math.max(Math.floor(Number(options.pageSize || 200)), 1),
+      200,
+    );
+    const maxPages = Math.min(
+      Math.max(Math.floor(Number(options.maxPages || 20)), 1),
+      50,
+    );
+    const merchants = this.resolveInvoiceSyncMerchants(
+      options.merchantKey,
+      options.merchantId,
+    );
+
+    const results = [];
+    let fetched = 0;
+    let matched = 0;
+    let created = 0;
+    let updated = 0;
+    let previewed = 0;
+    let unmatched = 0;
+    let invalid = 0;
+
+    for (const merchant of merchants) {
+      for (const window of windows) {
+        const rows: Record<string, string | number | boolean | null>[] = [];
+        let totalCount = 0;
+        let pagesFetched = 0;
+
+        for (let page = 1; page <= maxPages; page += 1) {
+          const response = await this.ecpayEinvoiceAdapter.queryInvoiceList({
+            merchantKey: merchant.merchantKey,
+            merchantId: merchant.merchantId,
+            beginDate: window.beginDate,
+            endDate: window.endDate,
+            page,
+            pageSize,
+            dataType: 1,
+          });
+
+          if (!response.success) {
+            throw new BadRequestException(
+              `綠界發票清單查詢失敗 (${merchant.merchantKey} ${window.beginDate}..${window.endDate}): ${response.rawMessage || 'unknown error'}`,
+            );
+          }
+
+          const pageRows = Array.isArray(response.invoiceData)
+            ? response.invoiceData
+            : [];
+          rows.push(...(pageRows as Record<string, string | number | boolean | null>[]));
+          totalCount = Number(response.totalCount || totalCount || 0);
+          pagesFetched = page;
+
+          if (!pageRows.length || rows.length >= totalCount) {
+            break;
+          }
+        }
+
+        const importResult = await this.salesOrderService.importEcpayIssuedInvoices({
+          entityId,
+          merchantKey: merchant.merchantKey,
+          merchantId: merchant.merchantId,
+          markIssued: true,
+          dryRun: options.dryRun === true,
+          rows,
+        });
+
+        fetched += rows.length;
+        matched += importResult.matched || 0;
+        created += importResult.created || 0;
+        updated += importResult.updated || 0;
+        previewed += importResult.previewed || 0;
+        unmatched += importResult.unmatched || 0;
+        invalid += importResult.invalid || 0;
+        results.push({
+          merchantKey: merchant.merchantKey,
+          merchantId: merchant.merchantId,
+          beginDate: window.beginDate,
+          endDate: window.endDate,
+          totalCount,
+          pagesFetched,
+          fetched: rows.length,
+          importResult,
+        });
+      }
+    }
+
+    return {
+      success: true,
+      entityId,
+      beginDate,
+      endDate,
+      dryRun: options.dryRun === true,
+      requestedMerchants: merchants.length,
+      windows: windows.length,
+      fetched,
+      matched,
+      created,
+      updated,
+      previewed,
+      unmatched,
+      invalid,
+      results,
+    };
+  }
+
   async queryEcpayGovInvoiceWordSettings(options: {
     merchantKey?: string;
     merchantId?: string;
@@ -81,6 +207,28 @@ export class InvoicingService {
       merchantId: options.merchantId,
       invoiceYear,
     });
+  }
+
+  private resolveInvoiceSyncMerchants(
+    merchantKey?: string | null,
+    merchantId?: string | null,
+  ) {
+    const key = merchantKey?.trim();
+    const id = merchantId?.trim();
+    if (key || id) {
+      return [
+        {
+          merchantKey:
+            key || (id === '3150241' ? 'groupbuy-main' : 'shopify-main'),
+          merchantId: id || (key === 'groupbuy-main' ? '3150241' : '3290494'),
+        },
+      ];
+    }
+
+    return [
+      { merchantKey: 'groupbuy-main', merchantId: '3150241' },
+      { merchantKey: 'shopify-main', merchantId: '3290494' },
+    ];
   }
 
   /**
@@ -1089,6 +1237,45 @@ export class InvoicingService {
         `綠界多筆發票查詢一次最多 ${maxDays} 天，請縮小日期區間分批查詢。`,
       );
     }
+  }
+
+  private buildInvoiceSyncDateWindows(
+    beginDate: string,
+    endDate: string,
+    maxDays: number,
+  ) {
+    const begin = new Date(`${beginDate}T00:00:00+08:00`);
+    const end = new Date(`${endDate}T00:00:00+08:00`);
+    if (begin > end) {
+      throw new BadRequestException('beginDate 不可晚於 endDate。');
+    }
+
+    const windows: Array<{ beginDate: string; endDate: string }> = [];
+    let cursor = begin;
+    while (cursor <= end) {
+      const windowEnd = new Date(cursor);
+      windowEnd.setDate(windowEnd.getDate() + maxDays - 1);
+      if (windowEnd > end) {
+        windowEnd.setTime(end.getTime());
+      }
+
+      windows.push({
+        beginDate: this.formatQueryDate(cursor),
+        endDate: this.formatQueryDate(windowEnd),
+      });
+
+      cursor = new Date(windowEnd);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return windows;
+  }
+
+  private formatQueryDate(date: Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   private normalizeRocInvoiceYear(value?: string) {
