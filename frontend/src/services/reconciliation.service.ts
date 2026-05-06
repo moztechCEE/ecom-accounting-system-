@@ -135,7 +135,7 @@ export type ClearReadyPaymentsResponse = {
 export type ImportProviderPayoutsResponse = {
   success: boolean
   batchId: string
-  provider: 'ecpay' | 'hitrust' | 'linepay'
+  provider: 'ecpay' | 'hitrust' | 'linepay' | 'shoplinepay'
   recordCount: number
   matchedCount: number
   unmatchedCount: number
@@ -313,7 +313,7 @@ export const reconciliationService = {
 
   importProviderPayouts: async (params: {
     entityId?: string
-    provider: 'ecpay' | 'hitrust' | 'linepay'
+    provider: 'ecpay' | 'hitrust' | 'linepay' | 'shoplinepay'
     sourceType?: 'statement' | 'reconciliation'
     fileName?: string
     rows: Record<string, string | number | boolean | null>[]

@@ -435,7 +435,7 @@ export class ReconciliationController {
   @ApiOperation({
     summary: '匯入金流撥款/對帳報表',
     description:
-      '支援綠界、HiTRUST 與 LINE Pay 的原始報表列資料，會回填每筆收款的實際金流手續費、撥款日與淨額。',
+      '支援綠界、HiTRUST、LINE Pay 與 Shopline Payment 的原始報表列資料，會回填每筆收款的實際金流手續費、撥款日與淨額。',
   })
   @ApiResponse({ status: 201, description: '匯入成功' })
   async importProviderPayouts(

@@ -9,7 +9,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ImportProviderPayoutsDto } from './dto/import-provider-payouts.dto';
 
-type SupportedProvider = 'ecpay' | 'hitrust' | 'linepay';
+type SupportedProvider = 'ecpay' | 'hitrust' | 'linepay' | 'shoplinepay';
 type ImportRow = Record<string, string | number | boolean | null>;
 type MappingConfig = Record<string, string | string[]>;
 type MatchCandidate = Prisma.PaymentGetPayload<{
@@ -283,6 +283,19 @@ const PROVIDER_ALIASES: Record<
       '交易日期',
     ],
     payoutStatus: ['settlementStatus', 'paymentStatus', '結算狀態', '付款狀態'],
+  },
+  shoplinepay: {
+    externalOrderId: ['訂單號碼', '訂單編號', 'Order No', 'OrderNo'],
+    providerPaymentId: ['交易序號', '支付單號', 'Transaction ID'],
+    providerTradeNo: ['交易序號', '交易編號', 'Transaction ID'],
+    grossAmount: ['金額', '交易金額', 'amount'],
+    feeAmount: ['手續費', '交易手續費', 'fee'],
+    gatewayFeeAmount: ['手續費', '交易手續費', 'fee'],
+    netAmount: ['實際收款金額', '結算金額', '實收金額', 'netAmount'],
+    payoutDate: ['結帳時間', '結帳日期', '記帳時間', 'payoutDate'],
+    transactionDate: ['交易時間', '交易日期', 'transactionDate'],
+    gateway: ['支付標籤', '付款方式', '支付方式', 'gateway'],
+    payoutStatus: ['交易狀態', '狀態', 'status'],
   },
 };
 
@@ -865,7 +878,7 @@ export class ProviderPayoutReconciliationService {
 
   private isRefundOrReversalLine(line: NormalizedPayoutLine) {
     return (
-      line.provider === 'linepay' &&
+      ['linepay', 'shoplinepay'].includes(line.provider) &&
       (line.grossAmount?.lessThan(0) || line.netAmount?.lessThan(0))
     );
   }

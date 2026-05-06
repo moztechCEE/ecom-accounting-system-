@@ -56,6 +56,11 @@
    - 優先找 Shopline 後台是否可匯出結算、撥款、付款手續費報表，欄位至少需包含訂單號、付款單號、撥款日、總額、手續費、淨額、退款。
    - 若 Shopline 有 payout / settlement API，補 API 文件與權限後可做正式 connector。
    - 這份資料用來把目前的 Payment 草稿改成實際撥款資料，並進入對帳核銷。
+   - 2026-05-06 檢查使用者提供的 Shopline Payment 月綜合對帳單：
+     - `Payout account` / `Reserve account` / `Unsettled account` 都有 `帳單總覽` 與 `帳戶收支明細`。
+     - 可用逐筆欄位包含：`交易狀態`、`訂單號碼`、`交易序號`、`支付標籤`、`類型`、`幣別`、`金額`、`手續費`、`實際收款金額`、`交易時間`、`結帳時間`。
+     - 已將系統 provider payout 匯入器擴充為支援 `shoplinepay` provider，這些欄位可映射到現有 Payment matching / 實際手續費 / 淨額回填流程。
+     - 但本次三份檔案的 `帳戶收支明細` 並不是完整月內逐筆交易：Payout 只有提款手續費一列，Reserve 空白，Unsettled 只有一筆 4/30 付款。若要逐筆核銷所有 Shopline 訂單，仍需匯出完整交易明細或 payout API。
 2. 兩年以上 / archived orders
    - 使用 Shopline archived orders 非同步匯出流程取得檔案或下載連結。
    - 匯入後補回 `SalesOrder` / `SalesOrderItem`，避免兩年以上歷史營收缺漏。

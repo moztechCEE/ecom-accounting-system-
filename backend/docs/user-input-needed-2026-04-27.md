@@ -118,6 +118,10 @@
 - 品牌 / 平台歸屬確認：
   - 使用者已確認 `萬魔未來工學院` 是平台，不是商品品牌。
   - 若要精準統計品牌貢獻，需讓商品主檔、SKU 或商品名稱有穩定品牌欄位 / 前綴，例如 `BONSON｜商品名`、`MOZTECH｜商品名`，或後續建立正式商品品牌欄位。
+- Shopline Payment 對帳檔確認：
+  - 2026-05-06 使用者提供 2026-04 的 Payout / Reserve / Unsettled account consolidated statement。
+  - 系統已新增 `shoplinepay` provider 匯入映射，可吃逐筆明細欄位並回填 Payment 實際手續費 / 淨額。
+  - 目前檔案主要是月彙總 / 日彙總，逐筆 `帳戶收支明細` 不完整；若要全月逐筆核銷，仍需 Shopline Payment 完整交易明細匯出或 API。
 
 ### 6. LINE Pay / TWQR / 行動支付分流
 
@@ -154,6 +158,8 @@
 
 - 需要你提供 / 開通：
   - Meta / Facebook / Instagram 廣告帳號與 API 權限。
+  - Meta 建議使用 Business Manager 的 System User access token，並授權至少 `ads_read`；若系統需讀取 Business 資產清單 / 廣告帳號清單，通常還需要 `business_management`。
+  - Meta Ad Account ID，格式通常為 `act_<ad_account_id>`；若有多個廣告帳號，需提供每個帳號對應品牌 / 平台規則。
   - Google Ads 帳號與 API 權限。
   - TikTok Ads 帳號與 API 權限。
   - 廣告帳戶與品牌 / 通路對應。
@@ -165,6 +171,9 @@
   - 若尚未提供 Meta / Google / TikTok API 與 mapping，Dashboard 會顯示「待串接」，不會假造平台花費。
 - 暫停原因：
   - 沒有廣告平台 API 權限、帳戶 mapping、發票 / 收據來源與扣款帳戶前，只能彙總內部費用資料，不能完成自動對帳與 ROAS / 現金流聯動。
+- MCP 使用原則：
+  - MCP 可以用來協助開發、測試、讀取你授權的工具或瀏覽器資料。
+  - 但正式每日日結 / 月結的廣告費同步，不應只靠 MCP 或人工瀏覽器操作；正式流程應做成 Cloud Run connector + Secret Manager + Cloud Scheduler，才能穩定排程、留紀錄、錯誤重跑與被財務稽核。
 
 ## 資料治理 / 主檔
 
