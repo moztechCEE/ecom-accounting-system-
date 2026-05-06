@@ -97,7 +97,7 @@
 - 需要你提供：
   - 若未來增加第二間 Shopline 店，需提供每店的 token / handle / 名稱 / merchant id。
   - webhook 是否已開通；可訂閱哪些 topic。
-  - 是否有金流 / 撥款資料來源。
+  - Shopline API token 是否已勾選 `read_payment` 權限；若未勾，Payments API 會無法查帳務。
   - 若要補兩年以上資料，需確認 archived orders 匯出流程可用。
 - 目前系統狀態：
   - 2026-05-05 更新：使用者已提供 Shopline `access_token`；不可寫入 repo。已放入 GCP Secret Manager 並掛到 Cloud Run backend。
@@ -111,10 +111,12 @@
   - 2026-05-05 更新：已用一般 OpenAPI 依 30 天區間回補 `2024-05-05` 到 `2026-05-05`。Cloud Run summary 顯示 SHOPLINE 已進 `SalesOrder` 4689 筆，總額 9,250,001；Payment 4687 筆，gross/net 8,488,187。
   - 2026-05-05 更新：已建立 Cloud Scheduler `ecom-accounting-shopline-auto-sync`，每 20 分鐘呼叫 `POST /integrations/shopline/sync/auto`；`SHOPLINE_SYNC_ENABLED=true`，lookback 240 分鐘。手動驗證 auto sync 成功抓到最近 4 小時 56 筆訂單與 63 筆顧客事件。
   - 2026-05-06 更新：再檢查 Cloud Run 設定，Shopline token / handle / merchant id / sync enabled 都已掛上；手動觸發排程回應 HTTP 201，最近排程記錄可正常完成增量同步。
+  - 2026-05-06 更新：官方文件確認 SHOPLINE Payments 有 Admin OpenAPI 可查帳務與提款：`balance_transactions.json`、`transactions.json`、`payouts.json`、`balance.json`，需要 `read_payment` 權限。
+  - 2026-05-06 更新：後端已補上 Payments 只讀預覽端點與 `sync/payments/billing-records` 匯入端點，會把 `balance_transactions.json` 的帳務明細轉成 `shoplinepay` provider payout rows。
   - Shopline Adapter / Service / Controller 已存在。
   - 訂單、顧客、Payment 草稿同步骨架已存在。
 - 暫停原因：
-  - 一般 orders / customers / Payment 草稿資料已進系統；剩餘缺口是兩年以上 archived orders 匯出、正式 payout / settlement / 手續費來源、webhook topic 與簽章驗證、商品 / 分類 / 庫存主檔同步、Shopline invoice 欄位正式回寫。
+  - 一般 orders / customers / Payment 草稿資料已進系統；Payments API 程式已補上，但仍需從 Cloud Run 實測 token 是否具備 `read_payment`。剩餘缺口是兩年以上 archived orders 匯出、webhook topic 與簽章驗證、商品 / 分類 / 庫存主檔同步、Shopline invoice 欄位正式回寫。
 - 品牌 / 平台歸屬確認：
   - 使用者已確認 `萬魔未來工學院` 是平台，不是商品品牌。
   - 若要精準統計品牌貢獻，需讓商品主檔、SKU 或商品名稱有穩定品牌欄位 / 前綴，例如 `BONSON｜商品名`、`MOZTECH｜商品名`，或後續建立正式商品品牌欄位。
@@ -122,6 +124,7 @@
   - 2026-05-06 使用者提供 2026-04 的 Payout / Reserve / Unsettled account consolidated statement。
   - 系統已新增 `shoplinepay` provider 匯入映射，可吃逐筆明細欄位並回填 Payment 實際手續費 / 淨額。
   - 目前檔案主要是月彙總 / 日彙總，逐筆 `帳戶收支明細` 不完整；若要全月逐筆核銷，仍需 Shopline Payment 完整交易明細匯出或 API。
+  - 2026-05-06 使用者另提供 `帳務明細查詢.xlsx`，這份是可用的逐筆帳務明細，共 1009 筆資料列；系統 `shoplinepay` 映射已補上這份欄位，可用來測試逐筆 Payment matching。
 
 ### 6. LINE Pay / TWQR / 行動支付分流
 

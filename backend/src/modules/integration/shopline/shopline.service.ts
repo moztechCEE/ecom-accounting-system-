@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  InternalServerErrorException,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -12,9 +13,33 @@ import {
   UnifiedOrder,
   UnifiedTransaction,
 } from '../interfaces/sales-channel-adapter.interface';
-import { ShoplineHttpAdapter } from './shopline.adapter';
+import {
+  ShoplineHttpAdapter,
+  ShoplinePaymentBillingRecord,
+  ShoplinePaymentPayout,
+  ShoplinePaymentStoreTransaction,
+} from './shopline.adapter';
+import { ProviderPayoutReconciliationService } from '../../reconciliation/provider-payout-reconciliation.service';
 
 const SHOPLINE_CHANNEL_CODE = 'SHOPLINE';
+
+type ShoplinePaymentQueryParams = {
+  since?: Date;
+  until?: Date;
+  limit?: string | number;
+  maxPages?: string | number;
+  pageInfo?: string;
+  sinceId?: string;
+  payoutId?: string;
+  payoutTransactionNo?: string;
+  accountType?: string;
+  isSettlementDetails?: boolean | string;
+  transactionType?: string;
+  status?: string;
+  tradeOrderId?: string;
+};
+
+type ShoplinePayPayoutRow = Record<string, string | number | boolean | null>;
 
 @Injectable()
 export class ShoplineService {
@@ -25,6 +50,7 @@ export class ShoplineService {
     private readonly prisma: PrismaService,
     private readonly adapter: ShoplineHttpAdapter,
     private readonly config: ConfigService,
+    private readonly providerPayoutService: ProviderPayoutReconciliationService,
   ) {}
 
   onModuleInit() {
@@ -49,7 +75,23 @@ export class ShoplineService {
       authMode: 'bearer_token',
       requiredHeaders: ['Authorization', 'User-Agent'],
       rateLimit: '20 requests / second',
-      supports: ['orders', 'customers', 'webhooks'],
+      supports: [
+        'orders',
+        'customers',
+        'webhooks',
+        'payments.balance',
+        'payments.balance_transactions',
+        'payments.transactions',
+        'payments.payouts',
+      ],
+      paymentsApi: {
+        baseUrlPattern:
+          'https://{handle}.myshopline.com/admin/openapi/{version}',
+        version:
+          this.config.get<string>('SHOPLINE_ADMIN_API_VERSION', 'v20260301') ||
+          'v20260301',
+        requiredScope: 'read_payment',
+      },
     };
   }
 
@@ -66,7 +108,10 @@ export class ShoplineService {
     until?: Date;
     limit?: string | number;
   }) {
-    const { since, until } = this.resolvePreviewRange(params.since, params.until);
+    const { since, until } = this.resolvePreviewRange(
+      params.since,
+      params.until,
+    );
     const limit = this.parsePreviewLimit(params.limit);
     const orders = await this.adapter.fetchOrders({ start: since, end: until });
 
@@ -114,7 +159,10 @@ export class ShoplineService {
     until?: Date;
     limit?: string | number;
   }) {
-    const { since, until } = this.resolvePreviewRange(params.since, params.until);
+    const { since, until } = this.resolvePreviewRange(
+      params.since,
+      params.until,
+    );
     const limit = this.parsePreviewLimit(params.limit);
     const customers = await this.adapter.fetchCustomers({
       start: since,
@@ -145,6 +193,74 @@ export class ShoplineService {
         sourceStoreHandle: customer.rawStore.handle || null,
         sourceStoreName: customer.rawStore.storeName || null,
       })),
+    };
+  }
+
+  async previewPaymentBalance() {
+    const balances = await this.adapter.fetchPaymentBalance();
+
+    return {
+      success: true,
+      stores: balances.map((item) => ({
+        store: item.store,
+        balance: item.balance,
+        traceId: item.traceId,
+      })),
+    };
+  }
+
+  async previewPaymentBillingRecords(params: ShoplinePaymentQueryParams) {
+    const query = this.resolvePaymentsQuery(params, 3);
+    const records = await this.adapter.fetchPaymentBillingRecords({
+      ...query,
+      maxPages: params.maxPages || 1,
+      isSettlementDetails: params.isSettlementDetails ?? true,
+    });
+    const limit = this.parsePreviewLimit(params.limit);
+
+    return {
+      success: true,
+      range: this.toRangeResponse(query.start, query.end),
+      fetched: records.length,
+      sample: records
+        .slice(0, limit)
+        .map((record) => this.summarizeBillingRecord(record)),
+    };
+  }
+
+  async previewPaymentTransactions(params: ShoplinePaymentQueryParams) {
+    const query = this.resolvePaymentsQuery(params, 6);
+    const transactions = await this.adapter.fetchPaymentStoreTransactions({
+      ...query,
+      maxPages: params.maxPages || 1,
+    });
+    const limit = this.parsePreviewLimit(params.limit);
+
+    return {
+      success: true,
+      range: this.toRangeResponse(query.start, query.end),
+      fetched: transactions.length,
+      sample: transactions
+        .slice(0, limit)
+        .map((transaction) => this.summarizeStoreTransaction(transaction)),
+    };
+  }
+
+  async previewPaymentPayouts(params: ShoplinePaymentQueryParams) {
+    const query = this.resolvePaymentsQuery(params, 3);
+    const payouts = await this.adapter.fetchPaymentPayouts({
+      ...query,
+      maxPages: params.maxPages || 1,
+    });
+    const limit = this.parsePreviewLimit(params.limit);
+
+    return {
+      success: true,
+      range: this.toRangeResponse(query.start, query.end),
+      fetched: payouts.length,
+      sample: payouts
+        .slice(0, limit)
+        .map((payout) => this.summarizePayout(payout)),
     };
   }
 
@@ -291,11 +407,68 @@ export class ShoplineService {
     };
   }
 
-  async autoSync(options?: {
-    entityId?: string;
+  async syncPaymentBillingRecords(params: {
+    entityId: string;
     since?: Date;
     until?: Date;
+    accountType?: string;
+    payoutId?: string;
+    maxPages?: string | number;
+    userId?: string | null;
   }) {
+    await this.assertEntityExists(params.entityId);
+    const query = this.resolvePaymentsQuery(
+      {
+        since: params.since,
+        until: params.until,
+        accountType: params.accountType,
+        payoutId: params.payoutId,
+        maxPages: params.maxPages,
+        isSettlementDetails: true,
+      },
+      3,
+    );
+    const records = await this.adapter.fetchPaymentBillingRecords(query);
+    const rows = records
+      .filter((record) => this.isImportableBillingRecord(record))
+      .map((record) => this.toShoplinePayPayoutRow(record));
+
+    if (!rows.length) {
+      return {
+        success: true,
+        skipped: true,
+        fetched: records.length,
+        imported: 0,
+        message:
+          'SHOPLINE Payments 回傳資料內沒有可自動對應訂單的 PAYMENT / REFUND 帳務列。',
+      };
+    }
+
+    const importedBy = await this.resolveSyncUserId(params.userId);
+    const result = await this.providerPayoutService.importProviderPayouts(
+      {
+        entityId: params.entityId,
+        provider: 'shoplinepay',
+        sourceType: 'reconciliation',
+        fileName: `shoplinepay-balance-transactions-${this.formatDateForFile(
+          query.start,
+        )}-${this.formatDateForFile(query.end)}.json`,
+        rows,
+        notes:
+          'source=shopline.payments.balance_transactions; isSettlementDetails=true',
+      },
+      importedBy,
+    );
+
+    return {
+      success: true,
+      fetched: records.length,
+      importable: rows.length,
+      ...result,
+    };
+  }
+
+  async autoSync(options?: { entityId?: string; since?: Date; until?: Date }) {
     const enabled =
       this.config.get<string>('SHOPLINE_SYNC_ENABLED', 'false') === 'true';
 
@@ -313,14 +486,23 @@ export class ShoplineService {
     );
     const until = options?.until || new Date();
     const since =
-      options?.since ||
-      new Date(until.getTime() - lookbackMinutes * 60 * 1000);
+      options?.since || new Date(until.getTime() - lookbackMinutes * 60 * 1000);
 
     const [orders, customers, transactions] = await Promise.all([
       this.syncOrders({ entityId, since, until }),
       this.syncCustomers({ entityId, since, until }),
       this.syncTransactions({ entityId, since, until }),
     ]);
+
+    const syncPayments =
+      this.config.get<string>('SHOPLINE_PAYMENTS_SYNC_ENABLED', 'false') ===
+      'true';
+    const payments = syncPayments
+      ? await this.syncPaymentBillingRecords({ entityId, since, until })
+      : {
+          skipped: true,
+          message: 'SHOPLINE_PAYMENTS_SYNC_ENABLED is false',
+        };
 
     return {
       success: true,
@@ -330,6 +512,7 @@ export class ShoplineService {
       orders,
       customers,
       transactions,
+      payments,
     };
   }
 
@@ -453,10 +636,7 @@ export class ShoplineService {
       topic,
       message: 'SHOPLINE webhook accepted and queued for incremental sync.',
       resourceId:
-        payload?.resource?.id ||
-        payload?.resource?._id ||
-        payload?.id ||
-        null,
+        payload?.resource?.id || payload?.resource?._id || payload?.id || null,
     };
   }
 
@@ -563,7 +743,13 @@ export class ShoplineService {
           hasInvoice: existing.hasInvoice,
         },
       });
-      await this.syncSalesOrderItems(updated.id, entityId, order, currency, fxRate);
+      await this.syncSalesOrderItems(
+        updated.id,
+        entityId,
+        order,
+        currency,
+        fxRate,
+      );
       return 'updated';
     }
 
@@ -576,7 +762,13 @@ export class ShoplineService {
         ...data,
       },
     });
-    await this.syncSalesOrderItems(created.id, entityId, order, currency, fxRate);
+    await this.syncSalesOrderItems(
+      created.id,
+      entityId,
+      order,
+      currency,
+      fxRate,
+    );
 
     return 'created';
   }
@@ -635,9 +827,17 @@ export class ShoplineService {
     }
   }
 
-  private normalizeLineItemSku(orderId: string, sku: string | undefined, index: number) {
+  private normalizeLineItemSku(
+    orderId: string,
+    sku: string | undefined,
+    index: number,
+  ) {
     const normalized = (sku || '').trim();
-    if (normalized && normalized !== 'UNKNOWN' && normalized !== 'SHOPLINE-ITEM') {
+    if (
+      normalized &&
+      normalized !== 'UNKNOWN' &&
+      normalized !== 'SHOPLINE-ITEM'
+    ) {
       return normalized.slice(0, 120);
     }
     return `SHOPLINE-${orderId}-${index + 1}`.slice(0, 120);
@@ -688,7 +888,9 @@ export class ShoplineService {
     const currency = tx.currency || 'TWD';
     const fxRate = new Decimal(await this.getFxRate(currency));
     const zero = new Decimal(0);
-    const hasLockedProviderPayout = this.hasLockedProviderPayout(existing?.notes);
+    const hasLockedProviderPayout = this.hasLockedProviderPayout(
+      existing?.notes,
+    );
     const isPaymentCaptured = tx.status === 'success';
     const capturedAmount = isPaymentCaptured ? tx.amount : zero;
     const capturedFee = isPaymentCaptured ? tx.fee : zero;
@@ -948,5 +1150,258 @@ export class ShoplineService {
     if (cursor === undefined || cursor === null) return null;
     const value = String(cursor).trim();
     return value || null;
+  }
+
+  private resolvePaymentsQuery(
+    params: ShoplinePaymentQueryParams,
+    maxMonths: number,
+  ) {
+    const { since, until } = this.resolvePreviewRange(
+      params.since,
+      params.until,
+    );
+    const maxWindowMs = maxMonths * 31 * 24 * 60 * 60 * 1000;
+
+    if (!params.payoutId && until.getTime() - since.getTime() > maxWindowMs) {
+      throw new BadRequestException(
+        `SHOPLINE Payments 查詢區間不可超過 ${maxMonths} 個月。`,
+      );
+    }
+
+    return {
+      start: since,
+      end: until,
+      limit: Math.min(Math.max(Number(params.limit || 100), 1), 100),
+      maxPages: params.maxPages,
+      pageInfo: params.pageInfo,
+      sinceId: params.sinceId,
+      payoutId: params.payoutId,
+      payoutTransactionNo: params.payoutTransactionNo,
+      accountType: params.accountType,
+      isSettlementDetails: params.isSettlementDetails,
+      transactionType: params.transactionType,
+      status: params.status,
+      tradeOrderId: params.tradeOrderId,
+    };
+  }
+
+  private toRangeResponse(since?: Date, until?: Date) {
+    return {
+      since: since?.toISOString() || null,
+      until: until?.toISOString() || null,
+    };
+  }
+
+  private summarizeBillingRecord(record: ShoplinePaymentBillingRecord) {
+    return {
+      id: this.toCleanString(record.id),
+      type: this.toCleanString(record.type),
+      orderId: this.toCleanString(record.source_order_id),
+      transactionId: this.toCleanString(record.source_order_transaction_id),
+      gross: this.toCleanString(record.transaction_amount || record.amount),
+      net: this.toCleanString(record.net),
+      fee: this.computeShoplinePaymentFee(record),
+      currency: this.toCleanString(
+        record.transaction_currency || record.account_currency,
+      ),
+      postingTime: this.toCleanString(record.posting_time),
+      settlementBatchId: this.toCleanString(record.settlement_batch_id),
+      accountType: this.toCleanString(record.account_type),
+      storeHandle: this.toCleanString(record.rawStore?.handle),
+    };
+  }
+
+  private summarizeStoreTransaction(
+    transaction: ShoplinePaymentStoreTransaction,
+  ) {
+    return {
+      id: this.toCleanString(transaction.id),
+      tradeOrderId: this.toCleanString(transaction.trade_order_id),
+      type: this.toCleanString(transaction.transaction_type),
+      status: this.toCleanString(transaction.status),
+      amount: this.toCleanString(transaction.amount),
+      currency: this.toCleanString(transaction.currency),
+      createdAt: this.toCleanString(transaction.created_at),
+      storeHandle: this.toCleanString(transaction.rawStore?.handle),
+    };
+  }
+
+  private summarizePayout(payout: ShoplinePaymentPayout) {
+    return {
+      id: this.toCleanString(payout.id || payout.payout_transaction_no),
+      status: this.toCleanString(payout.status),
+      amount: this.toCleanString(payout.amount),
+      currency: this.toCleanString(payout.currency),
+      time: this.toCleanString(payout.time || payout.date),
+      storeHandle: this.toCleanString(payout.rawStore?.handle),
+    };
+  }
+
+  private isImportableBillingRecord(record: ShoplinePaymentBillingRecord) {
+    const type = this.toCleanString(record.type).toUpperCase();
+    const hasOrderKey = Boolean(
+      this.toCleanString(record.source_order_id) ||
+        this.toCleanString(record.source_order_transaction_id),
+    );
+    const hasAmountContext = Boolean(
+      this.toCleanString(record.transaction_amount || record.amount) ||
+        this.toCleanString(record.net),
+    );
+
+    if (!hasOrderKey || !hasAmountContext) {
+      return false;
+    }
+
+    if (type.includes('PAYOUT') || type.includes('TRANSFER')) {
+      return false;
+    }
+
+    return (
+      type.startsWith('PAYMENT') ||
+      type.startsWith('REFUND') ||
+      type.includes('CHARGEBACK')
+    );
+  }
+
+  private toShoplinePayPayoutRow(
+    record: ShoplinePaymentBillingRecord,
+  ): ShoplinePayPayoutRow {
+    const gross = this.toCleanString(
+      record.transaction_amount || record.amount,
+    );
+    const net = this.toCleanString(record.net);
+    const fee = this.computeShoplinePaymentFee(record);
+    const processingFee = this.sumAbsDecimalStrings(
+      record.interchange_fee,
+      record.scheme_fee,
+    );
+
+    return {
+      provider: 'shoplinepay',
+      externalOrderId: this.toCleanString(record.source_order_id),
+      providerPaymentId: this.toCleanString(
+        record.source_order_transaction_id || record.id,
+      ),
+      providerTradeNo: this.toCleanString(record.id),
+      grossAmount: gross,
+      feeAmount: fee,
+      gatewayFeeAmount: this.absDecimalString(record.payment_method_fee),
+      processingFeeAmount: processingFee,
+      platformFeeAmount: this.absDecimalString(
+        record.revolving_margin_account_balance,
+      ),
+      netAmount: net,
+      payoutDate: this.toCleanString(record.posting_time),
+      transactionDate: this.toCleanString(record.posting_time),
+      currency:
+        this.toCleanString(record.transaction_currency) ||
+        this.toCleanString(record.account_currency) ||
+        'TWD',
+      gateway: 'SHOPLINE Payments',
+      payoutStatus: this.toCleanString(record.type),
+      settlementBatchId: this.toCleanString(record.settlement_batch_id),
+      accountType: this.toCleanString(record.account_type),
+      sourceStoreHandle: this.toCleanString(record.rawStore?.handle),
+      sourceStoreName: this.toCleanString(record.rawStore?.storeName),
+      sourceMerchantId: this.toCleanString(record.rawStore?.merchantId),
+      shoplineBillingRecordId: this.toCleanString(record.id),
+    };
+  }
+
+  private computeShoplinePaymentFee(record: ShoplinePaymentBillingRecord) {
+    const gross = this.parseDecimalLike(
+      record.transaction_amount || record.amount,
+    );
+    const net = this.parseDecimalLike(record.net);
+
+    if (gross && net) {
+      return gross.sub(net).abs().toDecimalPlaces(2).toString();
+    }
+
+    return this.sumAbsDecimalStrings(
+      record.payment_method_fee,
+      record.interchange_fee,
+      record.scheme_fee,
+      record.revolving_margin_account_balance,
+    );
+  }
+
+  private sumAbsDecimalStrings(...values: unknown[]) {
+    const total = values.reduce<Decimal>((sum, value) => {
+      const decimal = this.parseDecimalLike(value);
+      return decimal ? sum.add(decimal.abs()) : sum;
+    }, new Decimal(0));
+
+    return total.greaterThan(0) ? total.toDecimalPlaces(2).toString() : null;
+  }
+
+  private absDecimalString(value: unknown) {
+    const decimal = this.parseDecimalLike(value);
+    return decimal ? decimal.abs().toDecimalPlaces(2).toString() : null;
+  }
+
+  private parseDecimalLike(value: unknown) {
+    const normalized = this.toCleanString(value).replace(/,/g, '');
+    if (!normalized) {
+      return null;
+    }
+
+    try {
+      const decimal = new Decimal(normalized);
+      return decimal.isFinite() ? decimal : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private toCleanString(value: unknown) {
+    if (value === undefined || value === null) {
+      return '';
+    }
+    return String(value).trim();
+  }
+
+  private formatDateForFile(date?: Date) {
+    if (!date) {
+      return 'na';
+    }
+    return date.toISOString().slice(0, 10);
+  }
+
+  private async resolveSyncUserId(preferredUserId?: string | null) {
+    if (preferredUserId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: preferredUserId },
+        select: { id: true },
+      });
+      if (user) {
+        return user.id;
+      }
+    }
+
+    const preferredEmail =
+      this.config.get<string>('SUPER_ADMIN_EMAIL', '') || '';
+    if (preferredEmail.trim()) {
+      const user = await this.prisma.user.findUnique({
+        where: { email: preferredEmail.trim() },
+        select: { id: true },
+      });
+      if (user) {
+        return user.id;
+      }
+    }
+
+    const fallbackUser = await this.prisma.user.findFirst({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    if (!fallbackUser) {
+      throw new InternalServerErrorException(
+        '找不到可用來記錄 Shopline Payment 匯入批次的系統使用者。',
+      );
+    }
+
+    return fallbackUser.id;
   }
 }

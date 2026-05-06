@@ -285,17 +285,65 @@ const PROVIDER_ALIASES: Record<
     payoutStatus: ['settlementStatus', 'paymentStatus', '結算狀態', '付款狀態'],
   },
   shoplinepay: {
-    externalOrderId: ['訂單號碼', '訂單編號', 'Order No', 'OrderNo'],
-    providerPaymentId: ['交易序號', '支付單號', 'Transaction ID'],
-    providerTradeNo: ['交易序號', '交易編號', 'Transaction ID'],
-    grossAmount: ['金額', '交易金額', 'amount'],
-    feeAmount: ['手續費', '交易手續費', 'fee'],
-    gatewayFeeAmount: ['手續費', '交易手續費', 'fee'],
-    netAmount: ['實際收款金額', '結算金額', '實收金額', 'netAmount'],
-    payoutDate: ['結帳時間', '結帳日期', '記帳時間', 'payoutDate'],
-    transactionDate: ['交易時間', '交易日期', 'transactionDate'],
-    gateway: ['支付標籤', '付款方式', '支付方式', 'gateway'],
-    payoutStatus: ['交易狀態', '狀態', 'status'],
+    externalOrderId: [
+      '訂單號碼',
+      '訂單編號',
+      'Order No',
+      'OrderNo',
+      'source_order_id',
+      'sourceOrderId',
+    ],
+    providerPaymentId: [
+      '交易序號',
+      '支付單號',
+      'Transaction ID',
+      'source_order_transaction_id',
+      'sourceOrderTransactionId',
+    ],
+    providerTradeNo: ['交易序號', '交易編號', 'Transaction ID', 'id'],
+    grossAmount: [
+      '交易金額',
+      '結算金額',
+      '金額',
+      'transaction_amount',
+      'amount',
+    ],
+    feeAmount: ['應收手續費', '交易手續費', '手續費', 'fee'],
+    gatewayFeeAmount: ['交易手續費', '應收手續費', '手續費', 'fee'],
+    processingFeeAmount: ['其他費用', 'Interchange费', 'Scheme费'],
+    platformFeeAmount: ['應收循環保證金'],
+    netAmount: [
+      '交易淨額',
+      '實際收款金額',
+      '結算金額',
+      '實收金額',
+      'netAmount',
+      'net',
+    ],
+    payoutDate: [
+      '結帳記錄時間',
+      '結帳時間',
+      '結帳日期',
+      '記帳時間',
+      'payoutDate',
+      'posting_time',
+    ],
+    transactionDate: [
+      '交易完成時間',
+      '交易時間',
+      '交易日期',
+      'transactionDate',
+      'posting_time',
+    ],
+    gateway: ['支付方式', '支付標籤', '付款方式', 'gateway'],
+    payoutStatus: [
+      '結算狀態',
+      '交易詳情',
+      '交易狀態',
+      '狀態',
+      'status',
+      'type',
+    ],
   },
 };
 
@@ -358,9 +406,7 @@ export class ProviderPayoutReconciliationService {
       const candidatePayments = await this.loadCandidatePayments(
         tx,
         params.entityId,
-        lines.map((line, index) =>
-          this.toSyntheticRefundLine(line, index + 1),
-        ),
+        lines.map((line, index) => this.toSyntheticRefundLine(line, index + 1)),
       );
       const journalContextCache = new Map<string, PayoutJournalContext>();
       const openPeriodCache = new Map<string, string | null>();
@@ -380,7 +426,10 @@ export class ProviderPayoutReconciliationService {
         const line = lines[index];
         const syntheticLine = this.toSyntheticRefundLine(line, index + 1);
 
-        if (!syntheticLine.grossAmount || syntheticLine.grossAmount.lessThanOrEqualTo(0)) {
+        if (
+          !syntheticLine.grossAmount ||
+          syntheticLine.grossAmount.lessThanOrEqualTo(0)
+        ) {
           skipped += 1;
           results.push({
             lineId: line.id,
@@ -471,161 +520,164 @@ export class ProviderPayoutReconciliationService {
 
     await this.assertEntityExists(dto.entityId);
 
-    return this.prisma.$transaction(async (tx) => {
-      const batch = await tx.payoutImportBatch.create({
-        data: {
-          entityId: dto.entityId,
-          provider: dto.provider,
-          sourceType: dto.sourceType || 'statement',
-          importedBy: userId,
-          fileName: dto.fileName?.trim() || null,
-          recordCount: dto.rows.length,
-          notes: dto.notes?.trim() || null,
-        },
-      });
+    return this.prisma.$transaction(
+      async (tx) => {
+        const batch = await tx.payoutImportBatch.create({
+          data: {
+            entityId: dto.entityId,
+            provider: dto.provider,
+            sourceType: dto.sourceType || 'statement',
+            importedBy: userId,
+            fileName: dto.fileName?.trim() || null,
+            recordCount: dto.rows.length,
+            notes: dto.notes?.trim() || null,
+          },
+        });
 
-      const normalizedRows = dto.rows.map((row, index) =>
-        this.normalizeRow(dto.provider, row, index + 1, dto.mapping),
-      );
+        const normalizedRows = dto.rows.map((row, index) =>
+          this.normalizeRow(dto.provider, row, index + 1, dto.mapping),
+        );
 
-      const candidatePayments = await this.loadCandidatePayments(
-        tx,
-        dto.entityId,
-        normalizedRows,
-      );
-      const journalContextCache = new Map<string, PayoutJournalContext>();
-      const openPeriodCache = new Map<string, string | null>();
-      const reservedPaymentIds = new Set<string>();
-      const lineWrites: Prisma.PayoutImportLineCreateManyInput[] = [];
-      let matchedCount = 0;
-      let unmatchedCount = 0;
-      let invalidCount = 0;
+        const candidatePayments = await this.loadCandidatePayments(
+          tx,
+          dto.entityId,
+          normalizedRows,
+        );
+        const journalContextCache = new Map<string, PayoutJournalContext>();
+        const openPeriodCache = new Map<string, string | null>();
+        const reservedPaymentIds = new Set<string>();
+        const lineWrites: Prisma.PayoutImportLineCreateManyInput[] = [];
+        let matchedCount = 0;
+        let unmatchedCount = 0;
+        let invalidCount = 0;
 
-      for (const line of normalizedRows) {
-        if (this.isRefundOrReversalLine(line)) {
-          const refundMatch = this.findRefundPaymentMatch(
-            line,
-            candidatePayments,
-          );
+        for (const line of normalizedRows) {
+          if (this.isRefundOrReversalLine(line)) {
+            const refundMatch = this.findRefundPaymentMatch(
+              line,
+              candidatePayments,
+            );
 
-          if (!refundMatch.candidate) {
-            unmatchedCount += 1;
+            if (!refundMatch.candidate) {
+              unmatchedCount += 1;
+              lineWrites.push(
+                this.toLineWrite(batch.id, line, {
+                  status: 'refund_unmatched',
+                  confidence: refundMatch.confidence,
+                  message: refundMatch.message,
+                }),
+              );
+              continue;
+            }
+
+            const reversalJournalId = await this.applyRefundReversalToPayment(
+              tx,
+              batch.id,
+              line,
+              refundMatch.candidate,
+              userId,
+              journalContextCache,
+              openPeriodCache,
+            );
+
+            matchedCount += 1;
             lineWrites.push(
               this.toLineWrite(batch.id, line, {
-                status: 'refund_unmatched',
+                status: 'refund_reversed',
                 confidence: refundMatch.confidence,
-                message: refundMatch.message,
+                message: `${refundMatch.message}；已建立退款/扣回對帳分錄 ${reversalJournalId}`,
+                matchedPaymentId: refundMatch.candidate.id,
+                matchedSalesOrderId: refundMatch.candidate.salesOrderId || null,
               }),
             );
             continue;
           }
 
-          const reversalJournalId = await this.applyRefundReversalToPayment(
+          const validationError = this.validateNormalizedLine(line);
+
+          if (validationError) {
+            invalidCount += 1;
+            lineWrites.push(
+              this.toLineWrite(batch.id, line, {
+                status: 'invalid',
+                confidence: 0,
+                message: validationError,
+              }),
+            );
+            continue;
+          }
+
+          const match = this.findBestPaymentMatch(
+            line,
+            candidatePayments,
+            reservedPaymentIds,
+          );
+
+          if (!match.candidate) {
+            unmatchedCount += 1;
+            lineWrites.push(
+              this.toLineWrite(batch.id, line, {
+                status: 'unmatched',
+                confidence: match.confidence,
+                message: match.message,
+              }),
+            );
+            continue;
+          }
+
+          reservedPaymentIds.add(match.candidate.id);
+          await this.applyActualPayoutToPayment(
             tx,
             batch.id,
             line,
-            refundMatch.candidate,
+            match.candidate,
             userId,
             journalContextCache,
             openPeriodCache,
           );
-
           matchedCount += 1;
+
           lineWrites.push(
             this.toLineWrite(batch.id, line, {
-              status: 'refund_reversed',
-              confidence: refundMatch.confidence,
-              message: `${refundMatch.message}；已建立退款/扣回對帳分錄 ${reversalJournalId}`,
-              matchedPaymentId: refundMatch.candidate.id,
-              matchedSalesOrderId: refundMatch.candidate.salesOrderId || null,
-            }),
-          );
-          continue;
-        }
-
-        const validationError = this.validateNormalizedLine(line);
-
-        if (validationError) {
-          invalidCount += 1;
-          lineWrites.push(
-            this.toLineWrite(batch.id, line, {
-              status: 'invalid',
-              confidence: 0,
-              message: validationError,
-            }),
-          );
-          continue;
-        }
-
-        const match = this.findBestPaymentMatch(
-          line,
-          candidatePayments,
-          reservedPaymentIds,
-        );
-
-        if (!match.candidate) {
-          unmatchedCount += 1;
-          lineWrites.push(
-            this.toLineWrite(batch.id, line, {
-              status: 'unmatched',
+              status: 'matched',
               confidence: match.confidence,
               message: match.message,
+              matchedPaymentId: match.candidate.id,
+              matchedSalesOrderId: match.candidate.salesOrderId || null,
             }),
           );
-          continue;
         }
 
-        reservedPaymentIds.add(match.candidate.id);
-        await this.applyActualPayoutToPayment(
-          tx,
-          batch.id,
-          line,
-          match.candidate,
-          userId,
-          journalContextCache,
-          openPeriodCache,
-        );
-        matchedCount += 1;
+        if (lineWrites.length) {
+          await tx.payoutImportLine.createMany({
+            data: lineWrites,
+          });
+        }
 
-        lineWrites.push(
-          this.toLineWrite(batch.id, line, {
-            status: 'matched',
-            confidence: match.confidence,
-            message: match.message,
-            matchedPaymentId: match.candidate.id,
-            matchedSalesOrderId: match.candidate.salesOrderId || null,
-          }),
-        );
-      }
-
-      if (lineWrites.length) {
-        await tx.payoutImportLine.createMany({
-          data: lineWrites,
+        await tx.payoutImportBatch.update({
+          where: { id: batch.id },
+          data: {
+            matchedCount,
+            unmatchedCount,
+            invalidCount,
+          },
         });
-      }
 
-      await tx.payoutImportBatch.update({
-        where: { id: batch.id },
-        data: {
+        return {
+          success: true,
+          batchId: batch.id,
+          provider: dto.provider,
+          recordCount: dto.rows.length,
           matchedCount,
           unmatchedCount,
           invalidCount,
-        },
-      });
-
-      return {
-        success: true,
-        batchId: batch.id,
-        provider: dto.provider,
-        recordCount: dto.rows.length,
-        matchedCount,
-        unmatchedCount,
-        invalidCount,
-      };
-    }, {
-      maxWait: 20_000,
-      timeout: 120_000,
-    });
+        };
+      },
+      {
+        maxWait: 20_000,
+        timeout: 120_000,
+      },
+    );
   }
 
   async getPayoutImportBatches(entityId: string, provider?: string) {
@@ -669,14 +721,23 @@ export class ProviderPayoutReconciliationService {
     const grossAmount = this.parseDecimal(
       this.pickFieldValue(provider, row, 'grossAmount', mapping),
     );
-    const gatewayFeeAmount = this.parseDecimal(
-      this.pickFieldValue(provider, row, 'gatewayFeeAmount', mapping),
+    const gatewayFeeAmount = this.normalizeFeeDecimal(
+      this.parseDecimal(
+        this.pickFieldValue(provider, row, 'gatewayFeeAmount', mapping),
+      ),
+      provider,
     );
-    const processingFeeAmount = this.parseDecimal(
-      this.pickFieldValue(provider, row, 'processingFeeAmount', mapping),
+    const processingFeeAmount = this.normalizeFeeDecimal(
+      this.parseDecimal(
+        this.pickFieldValue(provider, row, 'processingFeeAmount', mapping),
+      ),
+      provider,
     );
-    const platformFeeAmount = this.parseDecimal(
-      this.pickFieldValue(provider, row, 'platformFeeAmount', mapping),
+    const platformFeeAmount = this.normalizeFeeDecimal(
+      this.parseDecimal(
+        this.pickFieldValue(provider, row, 'platformFeeAmount', mapping),
+      ),
+      provider,
     );
     let feeAmount = this.parseDecimal(
       this.pickFieldValue(provider, row, 'feeAmount', mapping),
@@ -697,8 +758,10 @@ export class ProviderPayoutReconciliationService {
       feeAmount = splitFeeTotal.toDecimalPlaces(2);
     }
 
+    feeAmount = this.normalizeFeeDecimal(feeAmount, provider);
+
     if (!feeAmount && grossAmount && netAmount) {
-      feeAmount = grossAmount.sub(netAmount).toDecimalPlaces(2);
+      feeAmount = grossAmount.sub(netAmount).abs().toDecimalPlaces(2);
     }
 
     if (!netAmount && grossAmount && feeAmount) {
@@ -737,7 +800,12 @@ export class ProviderPayoutReconciliationService {
         this.pickFieldValue(provider, row, 'providerPaymentId', mapping),
       ),
       originalProviderPaymentId: this.toCleanString(
-        this.pickFieldValue(provider, row, 'originalProviderPaymentId', mapping),
+        this.pickFieldValue(
+          provider,
+          row,
+          'originalProviderPaymentId',
+          mapping,
+        ),
       ),
       providerTradeNo: this.toCleanString(
         this.pickFieldValue(provider, row, 'providerTradeNo', mapping),
@@ -920,8 +988,7 @@ export class ProviderPayoutReconciliationService {
       return {
         candidate: null,
         confidence: best.confidence,
-        message:
-          '退款列對到多筆相似原始收款，系統暫停自動沖銷以避免錯帳。',
+        message: '退款列對到多筆相似原始收款，系統暫停自動沖銷以避免錯帳。',
       };
     }
 
@@ -958,7 +1025,9 @@ export class ProviderPayoutReconciliationService {
       reasons.push('退款訂單號碼一致');
     }
 
-    const refundGross = this.absoluteDecimal(line.grossAmount || line.netAmount);
+    const refundGross = this.absoluteDecimal(
+      line.grossAmount || line.netAmount,
+    );
     if (refundGross) {
       const grossDelta = this.decimalDelta(
         candidate.amountGrossOriginal,
@@ -1006,7 +1075,8 @@ export class ProviderPayoutReconciliationService {
       currency: line.currency || 'TWD',
       gateway,
       payoutStatus: 'refund',
-      externalOrderId: line.externalOrderId || this.toCleanString(refresh.orderId),
+      externalOrderId:
+        line.externalOrderId || this.toCleanString(refresh.orderId),
       providerPaymentId: null,
       originalProviderPaymentId: line.providerPaymentId || line.providerTradeNo,
       providerTradeNo: line.providerTradeNo,
@@ -1270,9 +1340,8 @@ export class ProviderPayoutReconciliationService {
     const refundNet = this.absoluteDecimal(
       line.netAmount || line.grossAmount || payment.amountGrossOriginal,
     )!.toDecimalPlaces(2);
-    const refundPlatformFee = this.absoluteDecimal(
-      line.platformFeeAmount,
-    )?.toDecimalPlaces(2) || zero;
+    const refundPlatformFee =
+      this.absoluteDecimal(line.platformFeeAmount)?.toDecimalPlaces(2) || zero;
     const refundGatewayFee =
       this.absoluteDecimal(
         (line.gatewayFeeAmount || zero).add(line.processingFeeAmount || zero),
@@ -1430,7 +1499,9 @@ export class ProviderPayoutReconciliationService {
     if (params.providerPaymentId)
       parts.push(`providerPaymentId=${params.providerPaymentId}`);
     if (params.originalProviderPaymentId)
-      parts.push(`originalProviderPaymentId=${params.originalProviderPaymentId}`);
+      parts.push(
+        `originalProviderPaymentId=${params.originalProviderPaymentId}`,
+      );
 
     const refundNote = `[provider-refund] ${parts.join('; ')}`;
     const refundIdentifiers = [
@@ -1618,7 +1689,8 @@ export class ProviderPayoutReconciliationService {
       payment.entityId,
       journalContextCache,
     );
-    const journalDate = line.payoutDate || line.transactionDate || payment.payoutDate;
+    const journalDate =
+      line.payoutDate || line.transactionDate || payment.payoutDate;
     const openPeriodId = await this.resolveOpenPeriodId(
       tx,
       payment.entityId,
@@ -1947,6 +2019,21 @@ export class ProviderPayoutReconciliationService {
     }
 
     return new Decimal(parsed).toDecimalPlaces(2);
+  }
+
+  private normalizeFeeDecimal(
+    value: Decimal | null,
+    provider: SupportedProvider,
+  ) {
+    if (!value) {
+      return null;
+    }
+
+    if (provider === 'shoplinepay') {
+      return value.abs().toDecimalPlaces(2);
+    }
+
+    return value.toDecimalPlaces(2);
   }
 
   private absoluteDecimal(value?: Decimal | Prisma.Decimal | null) {

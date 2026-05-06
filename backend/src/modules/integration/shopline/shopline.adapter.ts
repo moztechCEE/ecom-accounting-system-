@@ -14,6 +14,64 @@ export type ShoplineStoreConfig = {
   merchantId?: string;
 };
 
+export type ShoplinePaymentsQuery = {
+  start?: Date;
+  end?: Date;
+  limit?: number | string;
+  maxPages?: number | string;
+  pageInfo?: string;
+  sinceId?: string;
+  payoutId?: string;
+  payoutTransactionNo?: string;
+  accountType?: string;
+  isSettlementDetails?: boolean | string;
+  transactionType?: string;
+  status?: string;
+  tradeOrderId?: string;
+};
+
+export type ShoplinePaymentBillingRecord = Record<string, unknown> & {
+  id?: string;
+  type?: string;
+  source_order_id?: string;
+  source_order_transaction_id?: string;
+  transaction_amount?: string;
+  transaction_currency?: string;
+  amount?: string;
+  net?: string;
+  payment_method_fee?: string | null;
+  interchange_fee?: string | null;
+  scheme_fee?: string | null;
+  revolving_margin_account_balance?: string | null;
+  posting_time?: string;
+  settlement_batch_id?: string;
+  account_type?: string;
+  account_currency?: string;
+  rawStore?: Pick<ShoplineStoreConfig, 'handle' | 'storeName' | 'merchantId'>;
+};
+
+export type ShoplinePaymentStoreTransaction = Record<string, unknown> & {
+  id?: string;
+  trade_order_id?: string;
+  transaction_type?: string;
+  status?: string;
+  amount?: string;
+  currency?: string;
+  created_at?: string;
+  rawStore?: Pick<ShoplineStoreConfig, 'handle' | 'storeName' | 'merchantId'>;
+};
+
+export type ShoplinePaymentPayout = Record<string, unknown> & {
+  id?: string;
+  payout_transaction_no?: string;
+  amount?: string;
+  currency?: string;
+  status?: string;
+  time?: string;
+  date?: string;
+  rawStore?: Pick<ShoplineStoreConfig, 'handle' | 'storeName' | 'merchantId'>;
+};
+
 type ShoplineMoney = {
   dollars?: number | string;
   cents?: number | string;
@@ -155,6 +213,11 @@ type ShoplineAgentPayload = {
   [key: string]: unknown;
 };
 
+type ShoplineAdminListResult<T> = {
+  items: T[];
+  nextPageInfo: string | null;
+};
+
 @Injectable()
 export class ShoplineHttpAdapter implements ISalesChannelAdapter {
   readonly code = 'SHOPLINE';
@@ -224,7 +287,8 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
 
     return Promise.all(
       stores.map(async (store) => {
-        const configuredMerchantId = params.merchantId || store.merchantId || '';
+        const configuredMerchantId =
+          params.merchantId || store.merchantId || '';
         const tokenInfo = configuredMerchantId
           ? null
           : await this.fetchTokenInfo(store);
@@ -283,7 +347,9 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
   async fetchCustomers(params: {
     start: Date;
     end: Date;
-  }): Promise<Array<ShoplineCustomerPayload & { rawStore: ShoplineStoreConfig }>> {
+  }): Promise<
+    Array<ShoplineCustomerPayload & { rawStore: ShoplineStoreConfig }>
+  > {
     const stores = this.getSyncReadyStores();
 
     const customers = await Promise.all(
@@ -304,6 +370,79 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     );
 
     return transactions.flat();
+  }
+
+  async fetchPaymentBalance() {
+    const stores = this.getSyncReadyStores();
+
+    return Promise.all(
+      stores.map(async (store) => {
+        const response = await this.adminRequest<{ balance?: unknown }>(
+          '/payments/store/balance.json',
+          store,
+        );
+
+        return {
+          store: this.toRawStore(store),
+          balance: response.data.balance ?? response.data,
+          traceId: response.traceId,
+        };
+      }),
+    );
+  }
+
+  async fetchPaymentBillingRecords(
+    params: ShoplinePaymentsQuery,
+  ): Promise<ShoplinePaymentBillingRecord[]> {
+    const stores = this.getSyncReadyStores();
+    const records = await Promise.all(
+      stores.map((store) =>
+        this.fetchAdminPaginated<ShoplinePaymentBillingRecord>(
+          store,
+          '/payments/store/balance_transactions.json',
+          params,
+          'transactions',
+        ),
+      ),
+    );
+
+    return records.flat();
+  }
+
+  async fetchPaymentStoreTransactions(
+    params: ShoplinePaymentsQuery,
+  ): Promise<ShoplinePaymentStoreTransaction[]> {
+    const stores = this.getSyncReadyStores();
+    const records = await Promise.all(
+      stores.map((store) =>
+        this.fetchAdminPaginated<ShoplinePaymentStoreTransaction>(
+          store,
+          '/payments/store/transactions.json',
+          params,
+          'transactions',
+        ),
+      ),
+    );
+
+    return records.flat();
+  }
+
+  async fetchPaymentPayouts(
+    params: ShoplinePaymentsQuery,
+  ): Promise<ShoplinePaymentPayout[]> {
+    const stores = this.getSyncReadyStores();
+    const payouts = await Promise.all(
+      stores.map((store) =>
+        this.fetchAdminPaginated<ShoplinePaymentPayout>(
+          store,
+          '/payments/store/payouts.json',
+          params,
+          'payouts',
+        ),
+      ),
+    );
+
+    return payouts.flat();
   }
 
   private async fetchOrdersForStore(
@@ -329,10 +468,9 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
         search.set('previous_id', previousId);
       }
 
-      const response = await this.request<ShoplineListResponse<ShoplineOrderPayload>>(
-        `/orders?${search.toString()}`,
-        store,
-      );
+      const response = await this.request<
+        ShoplineListResponse<ShoplineOrderPayload>
+      >(`/orders?${search.toString()}`, store);
       const items = Array.isArray(response.items) ? response.items : [];
 
       orders.push(...items.map((item) => this.mapToUnifiedOrder(item, store)));
@@ -384,11 +522,9 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
         search.set('previous_id', previousId);
       }
 
-      const response =
-        await this.request<ShoplineListResponse<ShoplineCustomerPayload>>(
-          `/customers?${search.toString()}`,
-          store,
-        );
+      const response = await this.request<
+        ShoplineListResponse<ShoplineCustomerPayload>
+      >(`/customers?${search.toString()}`, store);
       const items = Array.isArray(response.items) ? response.items : [];
 
       customers.push(...items.map((item) => ({ ...item, rawStore: store })));
@@ -405,6 +541,97 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
 
   private async fetchTokenInfo(store: ShoplineStoreConfig) {
     return this.request<ShoplineTokenInfoResponse>('/token/info', store);
+  }
+
+  private async fetchAdminPaginated<T extends Record<string, unknown>>(
+    store: ShoplineStoreConfig & { handle: string },
+    path: string,
+    params: ShoplinePaymentsQuery,
+    responseKey: 'transactions' | 'payouts',
+  ): Promise<T[]> {
+    const maxPages = Math.min(
+      Math.max(Number(params.maxPages || (params.pageInfo ? 1 : 20)), 1),
+      200,
+    );
+    const items: T[] = [];
+    let pageInfo = params.pageInfo?.trim() || '';
+    let page = 0;
+
+    while (page < maxPages) {
+      const result = await this.fetchAdminPage<T>(
+        store,
+        path,
+        params,
+        responseKey,
+        pageInfo || undefined,
+      );
+
+      items.push(
+        ...result.items.map((item) => ({
+          ...item,
+          rawStore: this.toRawStore(store),
+        })),
+      );
+
+      page += 1;
+      pageInfo = result.nextPageInfo || '';
+      if (!pageInfo || params.pageInfo) {
+        break;
+      }
+    }
+
+    return items;
+  }
+
+  private async fetchAdminPage<T extends Record<string, unknown>>(
+    store: ShoplineStoreConfig & { handle: string },
+    path: string,
+    params: ShoplinePaymentsQuery,
+    responseKey: 'transactions' | 'payouts',
+    pageInfo?: string,
+  ): Promise<ShoplineAdminListResult<T>> {
+    const search = new URLSearchParams();
+    const limit = Math.min(Math.max(Number(params.limit || 100), 1), 100);
+    search.set('limit', String(limit));
+
+    if (pageInfo) {
+      search.set('page_info', pageInfo);
+    } else {
+      this.addAdminDateRangeParams(path, search, params);
+      this.setSearchParam(search, 'since_id', params.sinceId);
+      this.setSearchParam(search, 'payout_id', params.payoutId);
+      this.setSearchParam(
+        search,
+        'payout_transaction_no',
+        params.payoutTransactionNo,
+      );
+      this.setSearchParam(search, 'account_type', params.accountType);
+      this.setSearchParam(search, 'transaction_type', params.transactionType);
+      this.setSearchParam(search, 'status', params.status);
+      this.setSearchParam(search, 'trade_order_id', params.tradeOrderId);
+
+      if (params.isSettlementDetails !== undefined) {
+        search.set(
+          'is_settlement_details',
+          String(
+            params.isSettlementDetails === true ||
+              params.isSettlementDetails === 'true',
+          ),
+        );
+      }
+    }
+
+    const response = await this.adminRequest<Record<string, unknown>>(
+      `${path}?${search.toString()}`,
+      store,
+    );
+    const rawItems = response.data[responseKey];
+    const pageItems = Array.isArray(rawItems) ? (rawItems as T[]) : [];
+
+    return {
+      items: pageItems,
+      nextPageInfo: this.extractNextPageInfo(response.link),
+    };
   }
 
   private mapToUnifiedOrder(
@@ -449,9 +676,7 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     };
   }
 
-  mapOrderToUnifiedTransaction(
-    order: UnifiedOrder,
-  ): UnifiedTransaction | null {
+  mapOrderToUnifiedTransaction(order: UnifiedOrder): UnifiedTransaction | null {
     const raw = order.raw || {};
     const payment = raw.order_payment || {};
     const paymentType = this.pickString(
@@ -459,10 +684,9 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
       payment.payment_type,
     );
     const fee = this.moneyToDecimal(payment.payment_fee);
-    const amount =
-      this.moneyToDecimal(payment.total).greaterThan(0)
-        ? this.moneyToDecimal(payment.total)
-        : order.totals.gross;
+    const amount = this.moneyToDecimal(payment.total).greaterThan(0)
+      ? this.moneyToDecimal(payment.total)
+      : order.totals.gross;
     const status = this.mapTransactionStatus(raw);
     const feeMeta = this.resolveFeeMeta(paymentType, fee);
     const externalId = this.pickString(
@@ -561,7 +785,9 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
   private mapTransactionStatus(
     raw: ShoplineOrderPayload,
   ): 'pending' | 'success' | 'failed' {
-    const paymentStatus = (raw.order_payment?.status || '').trim().toLowerCase();
+    const paymentStatus = (raw.order_payment?.status || '')
+      .trim()
+      .toLowerCase();
     const orderStatus = (raw.status || '').trim().toLowerCase();
 
     if (
@@ -593,13 +819,9 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     const normalized = paymentType.trim().toLowerCase();
 
     if (
-      [
-        'cash_on_delivery',
-        'cod',
-        'cash',
-        'bank_transfer',
-        'atm',
-      ].includes(normalized)
+      ['cash_on_delivery', 'cod', 'cash', 'bank_transfer', 'atm'].includes(
+        normalized,
+      )
     ) {
       return {
         status: 'not_applicable',
@@ -669,6 +891,37 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     return (await response.json()) as T;
   }
 
+  private async adminRequest<T>(
+    path: string,
+    store: ShoplineStoreConfig & { handle: string },
+  ) {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      Authorization: `Bearer ${store.token}`,
+      'Content-Type': 'application/json; charset=utf-8',
+    };
+
+    const response = await fetch(`${this.getAdminBaseUrl(store)}${path}`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!response.ok) {
+      const bodyText = this.redactSensitiveText(await response.text(), store);
+      throw new Error(
+        `SHOPLINE Payments API Error ${response.status}: ${
+          bodyText || response.statusText
+        }`,
+      );
+    }
+
+    return {
+      data: (await response.json()) as T,
+      link: response.headers.get('link'),
+      traceId: response.headers.get('traceId'),
+    };
+  }
+
   private redactSensitiveText(value: string, store: ShoplineStoreConfig) {
     let redacted = value;
     if (store.token) {
@@ -688,6 +941,89 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
     const minutes = String(date.getUTCMinutes()).padStart(2, '0');
     const seconds = String(date.getUTCSeconds()).padStart(2, '0');
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  }
+
+  private formatIsoDateTime(date: Date) {
+    return date.toISOString();
+  }
+
+  private addAdminDateRangeParams(
+    path: string,
+    search: URLSearchParams,
+    params: ShoplinePaymentsQuery,
+  ) {
+    if (!params.start || !params.end) {
+      return;
+    }
+
+    if (path.includes('/transactions.json')) {
+      search.set('date_min', this.formatIsoDateTime(params.start));
+      search.set('date_max', this.formatIsoDateTime(params.end));
+      return;
+    }
+
+    search.set('start_time', this.formatIsoDateTime(params.start));
+    search.set('end_time', this.formatIsoDateTime(params.end));
+  }
+
+  private setSearchParam(
+    search: URLSearchParams,
+    key: string,
+    value?: string | null,
+  ) {
+    const normalized = value?.trim();
+    if (normalized) {
+      search.set(key, normalized);
+    }
+  }
+
+  private extractNextPageInfo(linkHeader: string | null) {
+    if (!linkHeader) {
+      return null;
+    }
+
+    for (const part of linkHeader.split(',')) {
+      if (!/rel="?next"?/i.test(part)) {
+        continue;
+      }
+      const match = part.match(/<([^>]+)>/);
+      if (!match?.[1]) {
+        continue;
+      }
+      try {
+        return new URL(match[1]).searchParams.get('page_info');
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  private getAdminBaseUrl(store: ShoplineStoreConfig & { handle: string }) {
+    const explicitBase =
+      this.configService.get<string>('SHOPLINE_ADMIN_API_BASE_URL', '') || '';
+    if (explicitBase.trim()) {
+      return explicitBase
+        .trim()
+        .replace('{handle}', store.handle)
+        .replace(/\/$/, '');
+    }
+
+    const version =
+      this.configService.get<string>(
+        'SHOPLINE_ADMIN_API_VERSION',
+        'v20260301',
+      ) || 'v20260301';
+    return `https://${store.handle}.myshopline.com/admin/openapi/${version}`;
+  }
+
+  private toRawStore(store: ShoplineStoreConfig) {
+    return {
+      handle: store.handle || '',
+      storeName: store.storeName || '',
+      merchantId: store.merchantId || '',
+    };
   }
 
   private assertTokenConfig() {
@@ -721,8 +1057,7 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
         if (Array.isArray(parsed)) {
           return parsed
             .map((store) => ({
-              token:
-                typeof store?.token === 'string' ? store.token.trim() : '',
+              token: typeof store?.token === 'string' ? store.token.trim() : '',
               handle:
                 typeof store?.handle === 'string' ? store.handle.trim() : '',
               storeName:
