@@ -209,6 +209,67 @@ export class ShoplineService {
     };
   }
 
+  async getPaymentsReadiness() {
+    const stores = this.adapter.getStores();
+    const version =
+      this.config.get<string>('SHOPLINE_ADMIN_API_VERSION', 'v20260301') ||
+      'v20260301';
+    const explicitBase =
+      this.config.get<string>('SHOPLINE_ADMIN_API_BASE_URL', '') || '';
+    const configured = stores.map((store) => {
+      const missing: string[] = [];
+      if (!store.token) missing.push('token');
+      if (!store.handle) missing.push('handle');
+
+      return {
+        storeName: store.storeName || null,
+        handle: store.handle || null,
+        merchantId: store.merchantId || null,
+        readyForAttempt: missing.length === 0,
+        missing,
+        adminBaseUrl: store.handle
+          ? (explicitBase.trim()
+              ? explicitBase.trim().replace('{handle}', store.handle)
+              : `https://${store.handle}.myshopline.com/admin/openapi/${version}`)
+          : null,
+      };
+    });
+
+    if (!stores.length) {
+      return {
+        ready: false,
+        configured,
+        message: 'SHOPLINE_ACCESS_TOKEN / SHOPLINE_STORES_JSON 尚未設定。',
+      };
+    }
+
+    if (configured.some((store) => !store.readyForAttempt)) {
+      return {
+        ready: false,
+        configured,
+        message: 'SHOPLINE Payments 查詢需要 token 與 handle。',
+      };
+    }
+
+    try {
+      const balance = await this.previewPaymentBalance();
+      return {
+        ready: true,
+        configured,
+        balance,
+        message: 'SHOPLINE Payments API 可讀取。',
+      };
+    } catch (error: any) {
+      return {
+        ready: false,
+        configured,
+        error: error?.message || String(error),
+        message:
+          'SHOPLINE 一般 OpenAPI 已可用，但 Payments Admin OpenAPI 尚未確認可讀；請確認 read_payment 權限、SHOPLINE_ADMIN_API_BASE_URL 與 handle 對應的 admin openapi host。',
+      };
+    }
+  }
+
   async previewPaymentBillingRecords(params: ShoplinePaymentQueryParams) {
     const query = this.resolvePaymentsQuery(params, 3);
     const records = await this.adapter.fetchPaymentBillingRecords({

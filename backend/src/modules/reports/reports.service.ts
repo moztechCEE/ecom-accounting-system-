@@ -1280,12 +1280,13 @@ export class ReportsService {
         key: 'oneshop',
         label: '1Shop / 團購',
         category: 'sales_channel',
-        envNames: ['ONESHOP_API_BASE_URL'],
+        envNames: [],
         credentialGroups: [
           ['ONESHOP_STORES_JSON'],
           ['ONESHOP_APP_ID', 'ONESHOP_SECRET'],
         ],
         optionalEnvNames: [
+          'ONESHOP_API_BASE_URL',
           'ONESHOP_ACCOUNT',
           'ONESHOP_STORE_NAME',
           'ONESHOP_SYNC_ENABLED',
@@ -1313,6 +1314,7 @@ export class ReportsService {
           'SHOPLINE_MERCHANT_ID',
           'SHOPLINE_SYNC_ENABLED',
           'SHOPLINE_SYNC_JOB_TOKEN',
+          'SHOPLINE_ADMIN_API_BASE_URL',
           'SHOPLINE_ADMIN_API_VERSION',
           'SHOPLINE_PAYMENTS_SYNC_ENABLED',
         ],
@@ -1322,7 +1324,7 @@ export class ReportsService {
           '確認 webhook 可用性，以及兩年以上 archived orders 匯出流程。',
         ],
         nextAction:
-          '先從 Cloud Run 執行 Shopline Payments 帳務同步；成功後再開 SHOPLINE_PAYMENTS_SYNC_ENABLED 讓排程一併同步。',
+          '先看 /integrations/shopline/payments/readiness；Payments Admin API 成功後，再從 Cloud Run 執行 Shopline Payments 帳務同步並開 SHOPLINE_PAYMENTS_SYNC_ENABLED。',
       }),
       this.buildConnectorReadiness({
         key: 'ecpay-einvoice',

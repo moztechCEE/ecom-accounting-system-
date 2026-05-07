@@ -52,6 +52,22 @@ class PreviewQueryDto {
 
 class PaymentsQueryDto extends PreviewQueryDto {
   @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateMin?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateMax?: string;
+
+  @IsOptional()
   @IsString()
   maxPages?: string;
 
@@ -159,11 +175,16 @@ export class ShoplineController {
     return this.shoplineService.previewPaymentBalance();
   }
 
+  @Get('payments/readiness')
+  async paymentReadiness() {
+    return this.shoplineService.getPaymentsReadiness();
+  }
+
   @Get('payments/billing-records')
   async paymentBillingRecords(@Query() query: PaymentsQueryDto) {
     return this.shoplineService.previewPaymentBillingRecords({
-      since: query.since ? new Date(query.since) : undefined,
-      until: query.until ? new Date(query.until) : undefined,
+      since: this.resolveQueryDate(query.since, query.startDate, query.dateMin),
+      until: this.resolveQueryDate(query.until, query.endDate, query.dateMax),
       limit: query.limit,
       maxPages: query.maxPages,
       pageInfo: query.pageInfo,
@@ -178,8 +199,8 @@ export class ShoplineController {
   @Get('payments/transactions')
   async paymentTransactions(@Query() query: PaymentsQueryDto) {
     return this.shoplineService.previewPaymentTransactions({
-      since: query.since ? new Date(query.since) : undefined,
-      until: query.until ? new Date(query.until) : undefined,
+      since: this.resolveQueryDate(query.since, query.startDate, query.dateMin),
+      until: this.resolveQueryDate(query.until, query.endDate, query.dateMax),
       limit: query.limit,
       maxPages: query.maxPages,
       pageInfo: query.pageInfo,
@@ -193,8 +214,8 @@ export class ShoplineController {
   @Get('payments/payouts')
   async paymentPayouts(@Query() query: PaymentsQueryDto) {
     return this.shoplineService.previewPaymentPayouts({
-      since: query.since ? new Date(query.since) : undefined,
-      until: query.until ? new Date(query.until) : undefined,
+      since: this.resolveQueryDate(query.since, query.startDate, query.dateMin),
+      until: this.resolveQueryDate(query.until, query.endDate, query.dateMax),
       limit: query.limit,
       maxPages: query.maxPages,
       pageInfo: query.pageInfo,
@@ -278,5 +299,10 @@ export class ShoplineController {
     @Body() payload: any,
   ) {
     return this.shoplineService.handleWebhook(topic || 'unknown', payload);
+  }
+
+  private resolveQueryDate(...values: Array<string | undefined>) {
+    const value = values.find((item) => item);
+    return value ? new Date(value) : undefined;
   }
 }

@@ -909,12 +909,23 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
       headers['User-Agent'] = store.handle;
     }
 
-    const response = await fetch(`${this.getAdminBaseUrl(store)}${path}`, {
+    const url = `${this.getAdminBaseUrl(store)}${path}`;
+    const response = await fetch(url, {
       method: 'GET',
       headers,
+      redirect: 'manual',
     });
 
     const bodyText = await response.text();
+    const location = response.headers.get('location');
+
+    if (response.status >= 300 && response.status < 400) {
+      throw new BadGatewayException(
+        `SHOPLINE Payments API redirected ${response.status}${
+          location ? ` to ${location}` : ''
+        }. Check SHOPLINE_ADMIN_API_BASE_URL / SHOPLINE_HANDLE and confirm the store has SHOPLINE Payments OpenAPI enabled with read_payment scope.`,
+      );
+    }
 
     if (!response.ok) {
       throw new BadGatewayException(
@@ -951,10 +962,14 @@ export class ShoplineHttpAdapter implements ISalesChannelAdapter {
       const preview = this.redactSensitiveText(bodyText, context.store)
         .replace(/\s+/g, ' ')
         .slice(0, 240);
+      const hint =
+        context.source === 'SHOPLINE Payments API'
+          ? ' Check SHOPLINE_ADMIN_API_BASE_URL / SHOPLINE_HANDLE and read_payment scope.'
+          : '';
       throw new BadGatewayException(
         `${context.source} returned non-JSON response ${context.status} (${context.contentType || 'unknown content-type'}): ${
           preview || error.message
-        }`,
+        }${hint}`,
       );
     }
   }
