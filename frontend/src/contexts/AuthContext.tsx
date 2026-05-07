@@ -60,7 +60,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (data: LoginRequest) => {
     const response = await authService.login(data)
-    ensureDefaultEntityId()
+    if (data.entityId?.trim()) {
+      localStorage.setItem('entityId', data.entityId.trim())
+    } else {
+      ensureDefaultEntityId()
+    }
     setUser(response.user)
     webSocketService.connect()
   }

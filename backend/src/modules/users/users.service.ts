@@ -556,6 +556,7 @@ export class UsersService {
     userId: string,
     password: string,
     options?: {
+      email?: string;
       mustChangePassword?: boolean;
       clearPasswordResetToken?: boolean;
     },
@@ -563,6 +564,10 @@ export class UsersService {
     const data: Prisma.UserUpdateInput = {
       passwordHash: await bcrypt.hash(password, this.SALT_ROUNDS),
     };
+
+    if (options?.email) {
+      data.email = options.email;
+    }
 
     if (typeof options?.mustChangePassword !== 'undefined') {
       data.mustChangePassword = options.mustChangePassword;

@@ -1,7 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Form, Input, Button, message, Typography, Divider, Checkbox, Space, Modal } from 'antd'
-import { UserOutlined, LockOutlined, GoogleOutlined, GithubOutlined, WindowsOutlined } from '@ant-design/icons'
+import { Form, Input, Button, message, Typography, Divider, Checkbox, Modal, Select } from 'antd'
+import { ApartmentOutlined, UserOutlined, LockOutlined, GoogleOutlined, GithubOutlined, WindowsOutlined } from '@ant-design/icons'
 import { motion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
 import { authService } from '../services/auth.service'
@@ -17,7 +17,18 @@ const LoginPage: React.FC = () => {
   const [passwordStrength, setPasswordStrength] = React.useState(0)
   const [forgotOpen, setForgotOpen] = React.useState(false)
   const [forgotLoading, setForgotLoading] = React.useState(false)
+  const [loginEntities, setLoginEntities] = React.useState<Array<{ id: string; name: string; loginCode: string }>>([])
   const [forgotForm] = Form.useForm<{ email: string }>()
+
+  React.useEffect(() => {
+    authService.getLoginEntities()
+      .then((entities) => {
+        setLoginEntities(entities)
+      })
+      .catch(() => {
+        setLoginEntities([])
+      })
+  }, [])
 
   const checkPasswordStrength = (password: string) => {
     let strength = 0
@@ -28,10 +39,16 @@ const LoginPage: React.FC = () => {
     setPasswordStrength(strength)
   }
 
-  const onFinish = async (values: LoginRequest) => {
+  const onFinish = async (values: LoginRequest & { loginId?: string }) => {
     setLoading(true)
+    const loginId = values.loginId?.trim() || values.email?.trim() || ''
     const cleanValues = {
-      email: values.email.trim(),
+      ...(loginId.includes('@')
+        ? { email: loginId.toLowerCase() }
+        : {
+            entityId: values.entityId?.trim(),
+            employeeNo: loginId,
+          }),
       password: values.password.trim()
     }
     try {
@@ -132,19 +149,39 @@ const LoginPage: React.FC = () => {
           layout="vertical"
           size="large"
           className="space-y-4"
-          initialValues={{ remember: true }}
+          initialValues={{
+            remember: true,
+            entityId:
+              localStorage.getItem('entityId') ||
+              window.__APP_CONFIG__?.defaultEntityId ||
+              import.meta.env.VITE_DEFAULT_ENTITY_ID ||
+              'tw-entity-001',
+          }}
         >
           <Form.Item
-            name="email"
-            rules={[
-              { required: true, message: '請輸入電子郵件' },
-              { type: 'email', message: '請輸入有效的電子郵件' },
-            ]}
+            name="entityId"
+            rules={[{ required: true, message: '請選擇事業別' }]}
+            className="mb-4"
+          >
+            <Select
+              suffixIcon={<ApartmentOutlined className="text-gray-400 text-lg" />}
+              placeholder="選擇事業別"
+              className="!h-12 !rounded-xl hover:!border-blue-400 focus:!border-blue-500 transition-colors"
+              options={loginEntities.map((entity) => ({
+                label: `${entity.loginCode}｜${entity.name}`,
+                value: entity.id,
+              }))}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="loginId"
+            rules={[{ required: true, message: '請輸入員工代碼' }]}
             className="mb-4"
           >
             <Input 
               prefix={<UserOutlined className="text-gray-400 text-lg" />} 
-              placeholder="電子郵件" 
+              placeholder="員工代碼，例如 0001"
               className="!h-12 !rounded-xl hover:!border-blue-400 focus:!border-blue-500 transition-colors"
             />
           </Form.Item>

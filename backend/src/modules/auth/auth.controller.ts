@@ -44,6 +44,17 @@ export class AuthController {
    * 使用者登入
    */
   @Public()
+  @Get('login-entities')
+  @ApiOperation({ summary: '取得登入頁可選事業別' })
+  @ApiResponse({ status: 200, description: '成功取得登入事業別列表' })
+  async getLoginEntities() {
+    return this.authService.getLoginEntities();
+  }
+
+  /**
+   * 使用者登入
+   */
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '使用者登入' })

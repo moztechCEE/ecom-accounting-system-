@@ -6,7 +6,6 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import * as crypto from 'crypto';
 import { AttendanceIntegrationService } from '../attendance/services/integration.service';
 import { BalanceService } from '../attendance/services/balance.service';
 import { LeaveService } from '../attendance/services/leave.service';
@@ -24,6 +23,8 @@ const DEFAULT_PAYROLL_POLICY = {
   twHealthInsuranceRate: 0.015,
   cnSocialInsuranceRate: 0.105,
 } as const;
+
+const DEFAULT_EMPLOYEE_INITIAL_PASSWORD = 'qwer1234';
 
 const EMPLOYEE_ONBOARDING_DOC_TYPES = [
   'ID_FRONT',
@@ -278,7 +279,41 @@ export class PayrollService {
   }
 
   private generateTemporaryPassword() {
-    return `Temp!${crypto.randomBytes(6).toString('base64url')}`;
+    return DEFAULT_EMPLOYEE_INITIAL_PASSWORD;
+  }
+
+  private async generateNextEmployeeNo() {
+    const employees = await this.prisma.employee.findMany({
+      select: { employeeNo: true },
+    });
+
+    const maxNumber = employees.reduce((max, employee) => {
+      const employeeNo = employee.employeeNo.trim();
+      if (!/^\d+$/.test(employeeNo)) {
+        return max;
+      }
+
+      const numeric = Number(employeeNo);
+      return Number.isFinite(numeric) ? Math.max(max, numeric) : max;
+    }, 0);
+
+    return String(maxNumber + 1).padStart(4, '0');
+  }
+
+  async getNextEmployeeNo() {
+    return {
+      employeeNo: await this.generateNextEmployeeNo(),
+    };
+  }
+
+  private generateEmployeeLoginEmail(entityId: string, employeeNo: string) {
+    const normalizedEntity = entityId
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    return `${normalizedEntity || 'entity'}.${employeeNo}@employees.example`;
   }
 
   private normalizeInputDate(value: Date | string, fieldName: string) {
@@ -929,7 +964,7 @@ export class PayrollService {
     data: {
       entityId?: string;
       userId?: string | null;
-      employeeNo: string;
+      employeeNo?: string;
       name: string;
       departmentId?: string;
       hireDate: string | Date;
@@ -957,7 +992,7 @@ export class PayrollService {
       throw new NotFoundException('Entity not found');
     }
 
-    const employeeNo = data.employeeNo.trim();
+    const employeeNo = data.employeeNo?.trim() || await this.generateNextEmployeeNo();
     if (!employeeNo) {
       throw new BadRequestException('Employee number is required');
     }
@@ -1033,7 +1068,25 @@ export class PayrollService {
       newData: this.serializeEmployee(employee),
     });
 
-    return this.serializeEmployee(employee);
+    if (data.userId) {
+      return this.serializeEmployee(employee);
+    }
+
+    const loginAccount = await this.createEmployeeLoginAccount(
+      employee.id,
+      userId,
+      {},
+    );
+
+    return {
+      ...loginAccount.employee,
+      initialLogin: {
+        employeeNo,
+        temporaryPassword: loginAccount.temporaryPassword,
+        entityId,
+        user: loginAccount.user,
+      },
+    };
   }
 
   async createEmployeeLoginAccount(
@@ -1077,7 +1130,9 @@ export class PayrollService {
       throw new ConflictException('Employee already has a linked login account');
     }
 
-    const email = dto.email.trim().toLowerCase();
+    const email =
+      dto.email?.trim().toLowerCase() ||
+      this.generateEmployeeLoginEmail(employee.entityId, employee.employeeNo);
     const password = dto.password?.trim() || this.generateTemporaryPassword();
     const defaultEmployeeRole = await this.prisma.role.findFirst({
       where: {
@@ -1104,16 +1159,7 @@ export class PayrollService {
       data: {
         userId: createdUser.id,
       },
-      include: {
-        department: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
+      include: this.buildEmployeeInclude(),
     });
 
     await this.auditLogService.record({
@@ -1126,7 +1172,7 @@ export class PayrollService {
     });
 
     return {
-      employee: updatedEmployee,
+      employee: this.serializeEmployee(updatedEmployee),
       user: createdUser,
       temporaryPassword: password,
       mustChangePassword: true,

@@ -125,6 +125,15 @@ export class PayrollController {
     return this.payrollService.getEmployees(req.user.id, entityId);
   }
 
+  @Get('employees/next-no')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'employees_admin', action: 'read' })
+  @ApiOperation({ summary: '取得下一個員工編號' })
+  @ApiResponse({ status: 200, description: '成功取得下一個員工編號' })
+  async getNextEmployeeNo() {
+    return this.payrollService.getNextEmployeeNo();
+  }
+
   @Get('employees/:id')
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'employees_admin', action: 'read' })
@@ -159,8 +168,8 @@ export class PayrollController {
   @Post('employees/:id/login-account')
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'employees_admin', action: 'update' })
-  @ApiOperation({ summary: '為員工建立並綁定登入帳號' })
-  @ApiResponse({ status: 201, description: '成功建立並綁定登入帳號' })
+  @ApiOperation({ summary: '為員工產生登入憑證' })
+  @ApiResponse({ status: 201, description: '成功產生登入憑證' })
   async createEmployeeLoginAccount(
     @Request() req: any,
     @Param('id') id: string,

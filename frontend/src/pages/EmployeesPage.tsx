@@ -35,14 +35,13 @@ import { motion } from "framer-motion";
 import dayjs from "dayjs";
 import { attendanceService } from "../services/attendance.service";
 import { payrollService } from "../services/payroll.service";
-import { usersService } from "../services/users.service";
 import { useAuth } from "../contexts/AuthContext";
 import { GlassCard } from "../components/ui/GlassCard";
 import {
   Department,
   Employee,
+  EmployeeCreateResult,
   EmployeeOnboardingDocument,
-  ManagedUser,
 } from "../types";
 import {
   AdminLeaveBalance,
@@ -181,13 +180,10 @@ const onboardingStatusMeta: Record<
 const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const { user } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(false);
-  const [usersLoading, setUsersLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [accountCreateOpen, setAccountCreateOpen] = useState(false);
-  const [accountCreateLoading, setAccountCreateLoading] = useState(false);
+  const [nextEmployeeNoLoading, setNextEmployeeNoLoading] = useState(false);
   const [documentActionLoading, setDocumentActionLoading] = useState<
     string | null
   >(null);
@@ -205,7 +201,6 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     null,
   );
   const [form] = Form.useForm();
-  const [accountForm] = Form.useForm();
 
   const fetchEmployees = async () => {
     setLoading(true);
@@ -216,19 +211,6 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       message.error(getErrorMessage(error, "載入員工失敗"));
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchUsers = async () => {
-    setUsersLoading(true);
-    try {
-      const result = await usersService.list(1, 100);
-      setUsers(result.items.filter((item) => item.isActive));
-    } catch (error) {
-      setUsers([]);
-      message.error(getErrorMessage(error, "載入使用者失敗"));
-    } finally {
-      setUsersLoading(false);
     }
   };
 
@@ -243,9 +225,23 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
 
   useEffect(() => {
     void fetchEmployees();
-    void fetchUsers();
     void fetchReviewQueue();
   }, []);
+
+  const prepareCreateEmployeeForm = async () => {
+    form.resetFields();
+    form.setFieldsValue(buildFormValues(null));
+    setCreateOpen(true);
+    setNextEmployeeNoLoading(true);
+    try {
+      const result = await payrollService.getNextEmployeeNo();
+      form.setFieldValue("employeeNo", result.employeeNo);
+    } catch (error) {
+      message.error(getErrorMessage(error, "取得下一個員工代碼失敗"));
+    } finally {
+      setNextEmployeeNoLoading(false);
+    }
+  };
 
   const buildFormValues = (employee?: Employee | null) => ({
     employeeNo: employee?.employeeNo,
@@ -295,17 +291,34 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
-      await payrollService.createEmployee({
+      const createdEmployee = await payrollService.createEmployee({
         ...values,
+        employeeNo: undefined,
         hireDate: values.hireDate.toISOString(),
         nationalId: values.nationalId,
         mailingAddress: values.mailingAddress,
         compensationSettings: values.compensationSettings,
-      });
+      }) as EmployeeCreateResult;
       message.success("員工建立成功");
       setCreateOpen(false);
       form.resetFields();
       void Promise.all([fetchEmployees(), fetchReviewQueue()]);
+
+      if (createdEmployee.initialLogin) {
+        Modal.success({
+          title: "員工代碼與首次登入密碼已建立",
+          content: (
+            <div className="space-y-2">
+              <p>員工：{createdEmployee.name}</p>
+              <p>員工代碼：{createdEmployee.initialLogin.employeeNo}</p>
+              <p>首次登入密碼：{createdEmployee.initialLogin.temporaryPassword}</p>
+              <p className="text-slate-500">
+                員工登入時選擇對應事業別，輸入員工代碼與此密碼；第一次登入後會要求修改密碼。
+              </p>
+            </div>
+          ),
+        });
+      }
     } catch (error) {
       if ((error as any)?.errorFields) {
         return;
@@ -342,55 +355,6 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       }
 
       message.error(getErrorMessage(error, "員工更新失敗"));
-    }
-  };
-
-  const handleCreateLoginAccount = async () => {
-    if (!selectedEmployee) {
-      return;
-    }
-
-    try {
-      const values = await accountForm.validateFields();
-      setAccountCreateLoading(true);
-      const result = await payrollService.createEmployeeLoginAccount(
-        selectedEmployee.id,
-        {
-          email: values.email,
-          password: values.password || undefined,
-        },
-      );
-
-      message.success("登入帳號建立成功");
-      setAccountCreateOpen(false);
-      accountForm.resetFields();
-      form.setFieldValue("userId", result.user.id);
-      setSelectedEmployee(result.employee);
-      await Promise.all([fetchEmployees(), fetchUsers()]);
-      await fetchReviewQueue();
-      await refreshSingleEmployee(result.employee.id);
-
-      Modal.success({
-        title: "登入帳號已建立",
-        content: (
-          <div className="space-y-2">
-            <p>員工：{result.employee.name}</p>
-            <p>登入信箱：{result.user.email}</p>
-            <p>臨時密碼：{result.temporaryPassword}</p>
-            <p className="text-slate-500">
-              這位員工第一次登入後，系統會要求先修改密碼。
-            </p>
-          </div>
-        ),
-      });
-    } catch (error) {
-      if ((error as any)?.errorFields) {
-        return;
-      }
-
-      message.error(getErrorMessage(error, "建立登入帳號失敗"));
-    } finally {
-      setAccountCreateLoading(false);
     }
   };
 
@@ -496,19 +460,14 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     { title: "員工編號", dataIndex: "employeeNo", key: "employeeNo" },
     { title: "姓名", dataIndex: "name", key: "name" },
     {
-      title: "登入帳號",
+      title: "首次登入",
       dataIndex: "user",
       key: "user",
       render: (linkedUser: Employee["user"]) =>
         linkedUser ? (
-          <div className="flex flex-col">
-            <span>{linkedUser.name}</span>
-            <span className="text-xs text-gray-400">
-              {linkedUser.email || "-"}
-            </span>
-          </div>
+          <Tag color="green">已產生憑證</Tag>
         ) : (
-          <Tag color="default">未綁定</Tag>
+          <Tag color="default">尚未產生</Tag>
         ),
     },
     {
@@ -586,158 +545,58 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     ? employees.find((employee) => employee.userId === user.id)
     : null;
 
-  const availableUserOptions = users.map((item) => ({
-    label: `${item.name} (${item.email})`,
-    value: item.id,
-  }));
-
-  return (
-    <div className="glass-card p-6">
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <Title level={4} className="!mb-1 !font-light">
-            員工名單
-          </Title>
-          <Text className="text-gray-500">
-            在這裡建立員工、綁定登入帳號與維護到職資訊，後續請假、打卡與薪資流程都會直接沿用。
-          </Text>
-        </div>
-        <div className="flex shrink-0 items-center">
-          <Button
-            type="primary"
-            size="large"
-            icon={<PlusOutlined />}
-            className="h-12 rounded-2xl px-6 shadow-[0_14px_32px_rgba(26,115,232,0.22)]"
-            onClick={() => {
-              form.resetFields();
-              form.setFieldsValue(buildFormValues(null));
-              setCreateOpen(true);
-            }}
-          >
-            新增員工
-          </Button>
-        </div>
-      </div>
-
-      {!currentUserEmployee && user ? (
-        <Alert
-          type="warning"
-          showIcon
-          className="mb-6"
-          message="目前登入帳號尚未綁定員工資料"
-          description="這會讓「我的請假」、「我的薪資單」、「打卡儀表板」等員工頁面看起來像沒功能。請在員工資料中把對應使用者綁上去。"
-        />
-      ) : null}
-
-      <div className="rounded-2xl border border-white/30 bg-white/45 px-4 py-3 text-xs leading-6 text-slate-500 shadow-[0_10px_30px_rgba(148,163,184,0.08)]">
-        建議先建立部門，再新增員工與綁定登入帳號；若需要處理假別或額度，可切換上方頁籤接續設定。
-      </div>
-
-      {reviewQueue.length > 0 ? (
-        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 shadow-[0_10px_30px_rgba(245,158,11,0.08)]">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <div className="font-medium text-amber-900">入職文件待核實</div>
-              <div className="text-xs text-amber-700">
-                目前有 {reviewQueue.length} 位員工至少 1 份文件待核實。
-              </div>
-            </div>
-          </div>
-          <div className="space-y-2">
-            {reviewQueue.slice(0, 6).map((item) => (
-              <div
-                key={item.employeeId}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-100 bg-white/80 px-3 py-3"
-              >
-                <div>
-                  <div className="font-medium text-slate-800">
-                    {item.employeeName} ({item.employeeNo})
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    {item.departmentName || "未分配部門"} · 待核實：
-                    {item.documents
-                      .filter((document) => document.status === "UPLOADED")
-                      .map(
-                        (document) =>
-                          onboardingDocDefinitions.find(
-                            (definition) => definition.docType === document.docType,
-                          )?.label || document.docType,
-                      )
-                      .join("、")}
-                  </div>
-                </div>
-                <Button
-                  type="link"
-                  onClick={() => {
-                    const matchedEmployee = employees.find(
-                      (employee) => employee.id === item.employeeId,
-                    );
-                    if (matchedEmployee) {
-                      setSelectedEmployee(matchedEmployee);
-                      form.setFieldsValue(buildFormValues(matchedEmployee));
-                      setEditOpen(true);
-                      void refreshSingleEmployee(matchedEmployee.id).catch(
-                        () => null,
-                      );
-                    }
-                  }}
-                >
-                  前往核實
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <Table
-        rowKey="id"
-        loading={loading}
-        columns={columns}
-        dataSource={employees}
-        scroll={{ x: 1000 }}
-        className="mt-6"
-      />
-
-      <Modal
-        title="新增員工"
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        onOk={() => void handleCreate()}
+  const renderCompensationFields = () => (
+    <div className="space-y-5">
+      <Form.Item
+        name="salaryBaseOriginal"
+        label="本薪"
+        rules={[{ required: true }]}
       >
-        <Form form={form} layout="vertical">
+        <InputNumber className="w-full" min={0} />
+      </Form.Item>
+      <Divider orientation="left">固定給付項目（管理者輸入）</Divider>
+      <div className="grid gap-4 md:grid-cols-2">
+        {fixedAdditionFields.map((field) => (
           <Form.Item
-            name="employeeNo"
-            label="員工編號"
-            rules={[{ required: true }]}
+            key={field.key}
+            name={["compensationSettings", field.key]}
+            label={field.label}
           >
-            <Input />
+            <InputNumber className="w-full" min={0} />
+          </Form.Item>
+        ))}
+      </div>
+      <Divider orientation="left">固定扣除項目（管理者輸入）</Divider>
+      <div className="grid gap-4 md:grid-cols-2">
+        {fixedDeductionFields.map((field) => (
+          <Form.Item
+            key={field.key}
+            name={["compensationSettings", field.key]}
+            label={field.label}
+          >
+            <InputNumber className="w-full" min={0} />
+          </Form.Item>
+        ))}
+      </div>
+    </div>
+  );
+
+  const getEmployeeFormTabs = (mode: "create" | "edit") => [
+    {
+      key: "basic",
+      label: "基本",
+      children: (
+        <div className="grid gap-4 md:grid-cols-2">
+          <Form.Item label="員工代碼" name="employeeNo">
+            <Input
+              readOnly
+              disabled={mode === "create" && nextEmployeeNoLoading}
+              placeholder={mode === "create" ? "系統會依全員工流水號自動產生" : undefined}
+            />
           </Form.Item>
           <Form.Item name="name" label="姓名" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="nationalId" label="身分證字號">
-            <Input placeholder="例如 A123456789" />
-          </Form.Item>
-          <Form.Item name="mailingAddress" label="通訊地址">
-            <Input.TextArea rows={2} placeholder="請輸入員工通訊地址" />
-          </Form.Item>
-          <Form.Item name="userId" label="綁定登入帳號">
-            <Select
-              allowClear
-              loading={usersLoading}
-              showSearch
-              optionFilterProp="label"
-              options={availableUserOptions}
-              placeholder="選擇要綁定的使用者"
-            />
-          </Form.Item>
-          <Alert
-            type="info"
-            showIcon
-            className="mb-4"
-            message="如果還沒有登入帳號，請先建立員工後，再到編輯視窗直接建立登入帳號。"
-          />
           <Form.Item name="departmentId" label="部門">
             <Select
               allowClear
@@ -754,140 +613,46 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           >
             <DatePicker className="w-full" />
           </Form.Item>
-          <Form.Item
-            name="salaryBaseOriginal"
-            label="本薪"
-            rules={[{ required: true }]}
-          >
-            <InputNumber className="w-full" min={0} />
-          </Form.Item>
-          <Divider orientation="left">固定給付項目（管理者輸入）</Divider>
-          {fixedAdditionFields.map((field) => (
-            <Form.Item
-              key={field.key}
-              name={["compensationSettings", field.key]}
-              label={field.label}
-            >
-              <InputNumber className="w-full" min={0} />
+        </div>
+      ),
+    },
+    {
+      key: "profile",
+      label: "職員資訊",
+      children: (
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Form.Item name="nationalId" label="身分證字號">
+              <Input placeholder="例如 A123456789" />
             </Form.Item>
-          ))}
-          <Divider orientation="left">固定扣除項目（管理者輸入）</Divider>
-          {fixedDeductionFields.map((field) => (
-            <Form.Item
-              key={field.key}
-              name={["compensationSettings", field.key]}
-              label={field.label}
-            >
-              <InputNumber className="w-full" min={0} />
+            <Form.Item name="mailingAddress" label="通訊地址">
+              <Input placeholder="請輸入員工通訊地址" />
             </Form.Item>
-          ))}
+          </div>
           <Alert
             type="info"
             showIcon
-            message="入職文件會在建立員工後於編輯視窗上傳與核實"
+            message="新增完成後，系統會自動產生登入憑證。員工第一次登入時會自行填入信箱，作為忘記密碼的重設信箱。"
           />
-        </Form>
-      </Modal>
-
-      <Modal
-        title="編輯員工"
-        open={editOpen}
-        onCancel={() => setEditOpen(false)}
-        onOk={() => void handleUpdate()}
-      >
-        <Form form={form} layout="vertical">
-          <Form.Item name="name" label="姓名" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="nationalId" label="身分證字號">
-            <Input placeholder="例如 A123456789" />
-          </Form.Item>
-          <Form.Item name="mailingAddress" label="通訊地址">
-            <Input.TextArea rows={2} placeholder="請輸入員工通訊地址" />
-          </Form.Item>
-          <Form.Item name="userId" label="綁定登入帳號">
-            <Select
-              allowClear
-              loading={usersLoading}
-              showSearch
-              optionFilterProp="label"
-              options={availableUserOptions}
-              placeholder="選擇要綁定的使用者"
-            />
-          </Form.Item>
-          {!selectedEmployee?.userId ? (
-            <Alert
-              type="warning"
-              showIcon
-              className="mb-4"
-              message="目前尚未建立登入帳號"
-              description={
-                <div className="flex flex-wrap items-center gap-3">
-                  <span>你可以直接在這裡替這位員工建立一組登入帳號與臨時密碼。</span>
-                  <Button
-                    type="primary"
-                    size="small"
-                    onClick={() => {
-                      accountForm.setFieldsValue({
-                        email: "",
-                        password: "",
-                      });
-                      setAccountCreateOpen(true);
-                    }}
-                  >
-                    建立登入帳號
-                  </Button>
-                </div>
-              }
-            />
-          ) : null}
-          <Form.Item name="departmentId" label="部門">
-            <Select
-              allowClear
-              options={departments.map((department) => ({
-                label: department.name,
-                value: department.id,
-              }))}
-            />
-          </Form.Item>
-          <Form.Item
-            name="hireDate"
-            label="到職日"
-            rules={[{ required: true }]}
-          >
-            <DatePicker className="w-full" />
-          </Form.Item>
-          <Form.Item
-            name="salaryBaseOriginal"
-            label="本薪"
-            rules={[{ required: true }]}
-          >
-            <InputNumber className="w-full" min={0} />
-          </Form.Item>
-          <Divider orientation="left">固定給付項目（管理者輸入）</Divider>
-          {fixedAdditionFields.map((field) => (
-            <Form.Item
-              key={field.key}
-              name={["compensationSettings", field.key]}
-              label={field.label}
-            >
-              <InputNumber className="w-full" min={0} />
-            </Form.Item>
-          ))}
-          <Divider orientation="left">固定扣除項目（管理者輸入）</Divider>
-          {fixedDeductionFields.map((field) => (
-            <Form.Item
-              key={field.key}
-              name={["compensationSettings", field.key]}
-              label={field.label}
-            >
-              <InputNumber className="w-full" min={0} />
-            </Form.Item>
-          ))}
-          <Form.Item name="isActive" label="狀態" valuePropName="checked">
-            <Switch checkedChildren="在職" unCheckedChildren="離職" />
-          </Form.Item>
-          <Divider orientation="left">入職文件</Divider>
+        </div>
+      ),
+    },
+    {
+      key: "payroll",
+      label: "薪資支付事項",
+      children: renderCompensationFields(),
+    },
+    {
+      key: "onboarding",
+      label: "新增資訊",
+      children:
+        mode === "create" ? (
+          <Alert
+            type="info"
+            showIcon
+            message="入職文件會在建立員工後於編輯視窗上傳與核實。"
+          />
+        ) : (
           <div className="space-y-3">
             {onboardingDocDefinitions.map(({ docType, label }) => {
               const document =
@@ -980,45 +745,170 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
               );
             })}
           </div>
+        ),
+    },
+    {
+      key: "settings",
+      label: "其他設定",
+      children: (
+        <div className="space-y-4">
+          {mode === "edit" ? (
+            <>
+              <Form.Item name="terminateDate" label="離職日">
+                <DatePicker className="w-full" />
+              </Form.Item>
+              <Form.Item name="isActive" label="狀態" valuePropName="checked">
+                <Switch checkedChildren="在職" unCheckedChildren="離職" />
+              </Form.Item>
+            </>
+          ) : null}
+          <Alert
+            type={mode === "create" ? "success" : "info"}
+            showIcon
+            message={
+              mode === "create"
+                ? "新增員工後會自動產生員工代碼與首次密碼 qwer1234。"
+                : "員工自己的信箱會在第一次登入改密碼時填寫。"
+            }
+          />
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <div className="glass-card p-6">
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <Title level={4} className="!mb-1 !font-light">
+            員工名單
+          </Title>
+          <Text className="text-gray-500">
+            在這裡建立員工、維護到職資訊與薪資設定；員工代碼與首次登入憑證會由系統自動產生。
+          </Text>
+        </div>
+        <div className="flex shrink-0 items-center">
+          <Button
+            type="primary"
+            size="large"
+            icon={<PlusOutlined />}
+            className="h-12 rounded-2xl px-6 shadow-[0_14px_32px_rgba(26,115,232,0.22)]"
+            onClick={() => void prepareCreateEmployeeForm()}
+          >
+            新增員工
+          </Button>
+        </div>
+      </div>
+
+      {!currentUserEmployee && user ? (
+        <Alert
+          type="warning"
+          showIcon
+          className="mb-6"
+          message="目前登入者尚未有對應員工資料"
+          description="這會讓「我的請假」、「我的薪資單」、「打卡儀表板」等員工頁面看起來像沒功能。請確認目前使用者是否已有員工資料。"
+        />
+      ) : null}
+
+      <div className="rounded-2xl border border-white/30 bg-white/45 px-4 py-3 text-xs leading-6 text-slate-500 shadow-[0_10px_30px_rgba(148,163,184,0.08)]">
+        建議先建立部門，再新增員工；系統會自動產生員工代碼與首次登入密碼。若需要處理假別或額度，可切換上方頁籤接續設定。
+      </div>
+
+      {reviewQueue.length > 0 ? (
+        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 shadow-[0_10px_30px_rgba(245,158,11,0.08)]">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="font-medium text-amber-900">入職文件待核實</div>
+              <div className="text-xs text-amber-700">
+                目前有 {reviewQueue.length} 位員工至少 1 份文件待核實。
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {reviewQueue.slice(0, 6).map((item) => (
+              <div
+                key={item.employeeId}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-100 bg-white/80 px-3 py-3"
+              >
+                <div>
+                  <div className="font-medium text-slate-800">
+                    {item.employeeName} ({item.employeeNo})
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {item.departmentName || "未分配部門"} · 待核實：
+                    {item.documents
+                      .filter((document) => document.status === "UPLOADED")
+                      .map(
+                        (document) =>
+                          onboardingDocDefinitions.find(
+                            (definition) => definition.docType === document.docType,
+                          )?.label || document.docType,
+                      )
+                      .join("、")}
+                  </div>
+                </div>
+                <Button
+                  type="link"
+                  onClick={() => {
+                    const matchedEmployee = employees.find(
+                      (employee) => employee.id === item.employeeId,
+                    );
+                    if (matchedEmployee) {
+                      setSelectedEmployee(matchedEmployee);
+                      form.setFieldsValue(buildFormValues(matchedEmployee));
+                      setEditOpen(true);
+                      void refreshSingleEmployee(matchedEmployee.id).catch(
+                        () => null,
+                      );
+                    }
+                  }}
+                >
+                  前往核實
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <Table
+        rowKey="id"
+        loading={loading}
+        columns={columns}
+        dataSource={employees}
+        scroll={{ x: 1000 }}
+        className="mt-6"
+      />
+
+      <Modal
+        title="新增員工"
+        open={createOpen}
+        onCancel={() => setCreateOpen(false)}
+        onOk={() => void handleCreate()}
+        width={920}
+      >
+        <Form form={form} layout="vertical">
+          <Tabs
+            tabPosition="left"
+            items={getEmployeeFormTabs("create")}
+            className="employee-editor-menu-tabs"
+          />
         </Form>
       </Modal>
 
       <Modal
-        title="建立登入帳號"
-        open={accountCreateOpen}
-        onCancel={() => setAccountCreateOpen(false)}
-        onOk={() => void handleCreateLoginAccount()}
-        confirmLoading={accountCreateLoading}
-        okText="建立帳號"
+        title="編輯員工"
+        open={editOpen}
+        onCancel={() => setEditOpen(false)}
+        onOk={() => void handleUpdate()}
+        width={920}
       >
-        <Form form={accountForm} layout="vertical">
-          <Form.Item
-            name="email"
-            label="登入信箱"
-            rules={[
-              { required: true, message: "請輸入電子郵件" },
-              { type: "email", message: "請輸入有效的電子郵件" },
-            ]}
-          >
-            <Input placeholder="例如 user@company.com" />
-          </Form.Item>
-          <Form.Item
-            name="password"
-            label="臨時密碼"
-            extra="可留白，系統會自動產生一組臨時密碼。"
-            rules={[
-              {
-                validator: async (_, value) => {
-                  if (!value || String(value).length >= 8) {
-                    return;
-                  }
-                  throw new Error("密碼至少需要 8 碼");
-                },
-              },
-            ]}
-          >
-            <Input.Password placeholder="留白則自動產生" />
-          </Form.Item>
+        <Form form={form} layout="vertical">
+          <Tabs
+            tabPosition="left"
+            items={getEmployeeFormTabs("edit")}
+            className="employee-editor-menu-tabs"
+          />
         </Form>
       </Modal>
     </div>
@@ -1925,7 +1815,7 @@ const EmployeesPage: React.FC = () => {
                 Step 2
               </div>
               <div className="mt-2 text-sm font-medium text-slate-700">
-                新增員工並綁帳號
+                產生員工代碼
               </div>
             </div>
             <div className="rounded-2xl border border-white/35 bg-white/55 px-4 py-4">

@@ -73,7 +73,9 @@ export interface User {
 }
 
 export interface LoginRequest {
-  email: string;
+  email?: string;
+  entityId?: string;
+  employeeNo?: string;
   password: string;
 }
 
@@ -87,6 +89,15 @@ export interface EmployeeLoginAccountResult {
   user: ManagedUser;
   temporaryPassword: string;
   mustChangePassword: boolean;
+}
+
+export interface EmployeeCreateResult extends Employee {
+  initialLogin?: {
+    employeeNo: string;
+    temporaryPassword: string;
+    entityId: string;
+    user: ManagedUser;
+  };
 }
 
 export interface Account {

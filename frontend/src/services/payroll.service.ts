@@ -2,6 +2,7 @@ import api from "./api";
 import {
   AuditLogEntry,
   Employee,
+  EmployeeCreateResult,
   EmployeeOnboardingDocument,
   EmployeeLoginAccountResult,
   Department,
@@ -48,7 +49,7 @@ export const payrollService = {
   },
 
   createEmployee: async (data: Partial<Employee>) => {
-    const response = await api.post<Employee>("/payroll/employees", data);
+    const response = await api.post<EmployeeCreateResult>("/payroll/employees", data);
     return response.data;
   },
 
@@ -65,9 +66,16 @@ export const payrollService = {
     return response.data;
   },
 
+  getNextEmployeeNo: async () => {
+    const response = await api.get<{ employeeNo: string }>(
+      "/payroll/employees/next-no",
+    );
+    return response.data;
+  },
+
   createEmployeeLoginAccount: async (
     id: string,
-    data: { email: string; password?: string },
+    data: { email?: string; password?: string },
   ) => {
     const response = await api.post<EmployeeLoginAccountResult>(
       `/payroll/employees/${id}/login-account`,

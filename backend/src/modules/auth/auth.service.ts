@@ -13,6 +13,7 @@ import * as crypto from 'crypto';
 import * as OTPAuth from 'otpauth';
 import { AuthMailService } from './auth-mail.service';
 import { UsersService } from '../users/users.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -38,6 +39,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly authMailService: AuthMailService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -101,7 +103,18 @@ export class AuthService {
       throw new BadRequestException('New password must be different');
     }
 
+    const normalizedRecoveryEmail = dto.email?.trim().toLowerCase();
+    if (normalizedRecoveryEmail && normalizedRecoveryEmail !== user.email) {
+      const existingEmailUser = await this.usersService.findForAuthByEmail(
+        normalizedRecoveryEmail,
+      );
+      if (existingEmailUser && existingEmailUser.id !== userId) {
+        throw new ConflictException('Email already exists');
+      }
+    }
+
     await this.usersService.updatePassword(userId, dto.newPassword, {
+      email: normalizedRecoveryEmail,
       mustChangePassword: false,
       clearPasswordResetToken: true,
     });
@@ -168,12 +181,16 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
     const emailInput = (email ?? '').trim();
+    const employeeNoInput = (loginDto.employeeNo ?? '').trim();
+    const entityIdInput = (loginDto.entityId ?? '').trim();
     const normalizedEmail = emailInput.toLowerCase();
 
     // 尋找使用者
-    const user = await this.usersService.findForAuthByEmail(normalizedEmail);
+    const user = employeeNoInput
+      ? await this.findUserForEmployeeLogin(entityIdInput, employeeNoInput)
+      : await this.usersService.findForAuthByEmail(normalizedEmail);
     if (!user) {
-      this.logger.warn(`Login failed: user not found (${emailInput})`);
+      this.logger.warn(`Login failed: user not found (${emailInput || employeeNoInput})`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -195,17 +212,17 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
     if (!isPasswordValid) {
-      this.logger.warn(`Login failed: invalid password (${emailInput})`);
+      this.logger.warn(`Login failed: invalid password (${emailInput || employeeNoInput})`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     // 檢查使用者是否啟用
     if (!user.isActive) {
-      this.logger.warn(`Login failed: user disabled (${emailInput})`);
+      this.logger.warn(`Login failed: user disabled (${emailInput || employeeNoInput})`);
       throw new UnauthorizedException('User account is disabled');
     }
 
-    this.logger.log(`User logged in: ${normalizedEmail}`);
+    this.logger.log(`User logged in: ${normalizedEmail || employeeNoInput}`);
 
     // 產生 JWT token
     const token = await this.generateToken(user.id, user.email);
@@ -218,6 +235,60 @@ export class AuthService {
       },
       access_token: token,
     };
+  }
+
+  async getLoginEntities() {
+    const entities = await this.prisma.entity.findMany({
+      where: { isActive: true },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        country: true,
+        baseCurrency: true,
+      },
+    });
+
+    return entities.map((entity) => ({
+      ...entity,
+      loginCode: this.getEntityLoginCode(entity),
+    }));
+  }
+
+  private async findUserForEmployeeLogin(entityId: string, employeeNo: string) {
+    if (!entityId) {
+      throw new UnauthorizedException('Business entity is required');
+    }
+
+    const employee = await this.prisma.employee.findFirst({
+      where: {
+        entityId,
+        employeeNo,
+        isActive: true,
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    return employee?.user ?? null;
+  }
+
+  private getEntityLoginCode(entity: { id: string; name: string; country?: string | null }) {
+    const haystack = `${entity.id} ${entity.name} ${entity.country ?? ''}`.toLowerCase();
+    if (haystack.includes('moz') || entity.id === 'tw-entity-001' || entity.country === 'TW') {
+      return 'MOZ';
+    }
+
+    const asciiLetters = entity.name.match(/[A-Za-z]/g)?.join('');
+    if (asciiLetters) {
+      return asciiLetters.slice(0, 6).toUpperCase();
+    }
+
+    return entity.id
+      .replace(/[^A-Za-z0-9]/g, '')
+      .slice(0, 6)
+      .toUpperCase();
   }
 
   /**

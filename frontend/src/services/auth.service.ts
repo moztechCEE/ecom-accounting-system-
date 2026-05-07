@@ -48,6 +48,11 @@ export const authService = {
     }
   },
 
+  async getLoginEntities(): Promise<Array<{ id: string; name: string; country?: string; baseCurrency?: string; loginCode: string }>> {
+    const response = await api.get('/auth/login-entities')
+    return response.data
+  },
+
   async getCurrentUser(): Promise<User> {
     const response = await api.get<ManagedUser>('/users/me')
     return mapManagedUserToUser(response.data)
@@ -63,7 +68,7 @@ export const authService = {
     return response.data
   },
 
-  async changePassword(data: { currentPassword: string; newPassword: string }) {
+  async changePassword(data: { currentPassword: string; newPassword: string; email?: string }) {
     const response = await api.post('/auth/change-password', data)
     return response.data
   },

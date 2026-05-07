@@ -1,7 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Alert, Button, Form, Input, Typography, message } from 'antd'
-import { LockOutlined } from '@ant-design/icons'
+import { MailOutlined, LockOutlined } from '@ant-design/icons'
 import { motion } from 'framer-motion'
 import BrandMark from '../components/BrandMark'
 import { authService } from '../services/auth.service'
@@ -16,6 +16,7 @@ const ForcePasswordChangePage: React.FC = () => {
   const [form] = Form.useForm()
 
   const onFinish = async (values: {
+    email: string
     currentPassword: string
     newPassword: string
     confirmPassword: string
@@ -28,6 +29,7 @@ const ForcePasswordChangePage: React.FC = () => {
     setLoading(true)
     try {
       await authService.changePassword({
+        email: values.email.trim(),
         currentPassword: values.currentPassword.trim(),
         newPassword: values.newPassword.trim(),
       })
@@ -73,7 +75,7 @@ const ForcePasswordChangePage: React.FC = () => {
             首次登入請先修改密碼
           </Title>
           <Text className="text-gray-500 font-light">
-            為了帳號安全，請先把臨時密碼換成您自己的新密碼。
+            請先留下忘記密碼用的信箱，並把臨時密碼換成您自己的新密碼。
           </Text>
         </div>
 
@@ -85,6 +87,21 @@ const ForcePasswordChangePage: React.FC = () => {
         />
 
         <Form form={form} layout="vertical" onFinish={onFinish}>
+          <Form.Item
+            name="email"
+            label="信箱"
+            rules={[
+              { required: true, message: '請輸入信箱' },
+              { type: 'email', message: '請輸入有效的信箱' },
+            ]}
+          >
+            <Input
+              prefix={<MailOutlined className="text-gray-400" />}
+              placeholder="之後忘記密碼會寄到這裡"
+              className="!h-12 !rounded-xl"
+            />
+          </Form.Item>
+
           <Form.Item
             name="currentPassword"
             label="目前密碼"
