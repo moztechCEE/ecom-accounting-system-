@@ -14,6 +14,7 @@ import { JournalService } from '../accounting/services/journal.service';
 import { AuditLogService } from '../../common/audit/audit-log.service';
 import { UsersService } from '../users/users.service';
 import { CreateEmployeeLoginAccountDto } from './dto/create-employee-login-account.dto';
+import { Prisma } from '@prisma/client';
 import PDFDocument = require('pdfkit');
 
 const DEFAULT_PAYROLL_POLICY = {
@@ -714,6 +715,21 @@ export class PayrollService {
     }
 
     return { entityId: access.entityId };
+  }
+
+  private buildPayrollPeriodEmployeeWhere(
+    accessWhere: Prisma.EmployeeWhereInput,
+    periodStart: Date,
+    periodEnd: Date,
+  ): Prisma.EmployeeWhereInput {
+    return {
+      ...accessWhere,
+      hireDate: { lte: periodEnd },
+      OR: [
+        { terminateDate: { gte: periodStart } },
+        { terminateDate: null, isActive: true },
+      ],
+    };
   }
 
   private buildPayrollItemAccessWhere(access: {
@@ -2396,12 +2412,11 @@ export class PayrollService {
     }
 
     const employees = await this.prisma.employee.findMany({
-      where: {
-        ...this.buildEmployeeAccessWhere(access),
-        isActive: true,
-        hireDate: { lte: periodEnd },
-        OR: [{ terminateDate: null }, { terminateDate: { gte: periodStart } }],
-      },
+      where: this.buildPayrollPeriodEmployeeWhere(
+        this.buildEmployeeAccessWhere(access),
+        periodStart,
+        periodEnd,
+      ),
       select: {
         id: true,
         employeeNo: true,
@@ -2787,14 +2802,13 @@ export class PayrollService {
       },
     });
 
-    // 3. Get Active Employees
+    // 3. Get employees whose employment period overlaps the payroll period.
     const employees = await this.prisma.employee.findMany({
-      where: {
-        ...this.buildEmployeeAccessWhere(access),
-        isActive: true,
-        hireDate: { lte: periodEnd },
-        OR: [{ terminateDate: null }, { terminateDate: { gte: periodStart } }],
-      },
+      where: this.buildPayrollPeriodEmployeeWhere(
+        this.buildEmployeeAccessWhere(access),
+        periodStart,
+        periodEnd,
+      ),
     });
 
     this.logger.log(`Found ${employees.length} employees for payroll run`);
@@ -3825,12 +3839,11 @@ export class PayrollService {
     const periodStart = new Date(year, month - 1, 1);
     const periodEnd = new Date(year, month, 0, 23, 59, 59, 999);
     const employees = await this.prisma.employee.findMany({
-      where: {
-        entityId,
-        isActive: true,
-        hireDate: { lte: periodEnd },
-        OR: [{ terminateDate: null }, { terminateDate: { gte: periodStart } }],
-      },
+      where: this.buildPayrollPeriodEmployeeWhere(
+        { entityId },
+        periodStart,
+        periodEnd,
+      ),
       orderBy: { employeeNo: 'asc' },
     });
 

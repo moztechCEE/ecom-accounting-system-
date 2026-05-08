@@ -174,6 +174,7 @@ export class LeaveService {
       entityId: string;
       departmentId: string | null;
       hireDate: Date;
+      terminateDate?: Date | null;
       gender: string | null;
       userId: string | null;
       name: string;
@@ -292,6 +293,7 @@ export class LeaveService {
         id: employee.id,
         entityId: employee.entityId,
         hireDate: employee.hireDate,
+        terminateDate: employee.terminateDate,
         gender: employee.gender,
       },
       leaveType,
@@ -977,6 +979,7 @@ export class LeaveService {
       id: string;
       entityId: string;
       hireDate: Date;
+      terminateDate?: Date | null;
       gender?: string | null;
     };
     leaveType: LeaveType;
@@ -1002,6 +1005,8 @@ export class LeaveService {
     if (params.endAt <= params.startAt) {
       throw new BadRequestException('請假結束時間必須晚於開始時間');
     }
+
+    this.validateLeaveRequestWithinEmploymentPeriod(params.employee, params);
 
     if (!Number.isFinite(params.hours) || Number(params.hours) <= 0) {
       throw new BadRequestException('請假時數必須大於 0');
@@ -1062,6 +1067,35 @@ export class LeaveService {
     }
 
     return ruleContext;
+  }
+
+  private validateLeaveRequestWithinEmploymentPeriod(
+    employee: {
+      hireDate: Date;
+      terminateDate?: Date | null;
+    },
+    request: {
+      startAt: Date;
+      endAt: Date;
+    },
+  ) {
+    const hireDate = new Date(employee.hireDate);
+    hireDate.setHours(0, 0, 0, 0);
+
+    if (request.startAt < hireDate) {
+      throw new BadRequestException('請假日期早於員工到職日，無法建立請假申請');
+    }
+
+    if (!employee.terminateDate) {
+      return;
+    }
+
+    const terminateDate = new Date(employee.terminateDate);
+    terminateDate.setHours(23, 59, 59, 999);
+
+    if (request.endAt > terminateDate) {
+      throw new BadRequestException('請假日期晚於員工離職日，無法建立請假申請');
+    }
   }
 
   private async validateGenderSpecificLeaveRules(params: {
