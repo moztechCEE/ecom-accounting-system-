@@ -163,17 +163,20 @@ const getUserDataScopeValues = (user: ManagedUser) =>
   )
 
 const DataScopeFormGrid = () => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-    {DATA_SCOPE_FIELDS.map((field) => (
-      <Form.Item
-        key={field.key}
-        name={field.key}
-        label={field.label}
-        className="mb-0"
-      >
-        <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
-      </Form.Item>
-    ))}
+  <div className="mt-5">
+    <div className="mb-3 text-sm font-semibold text-slate-700">資料權限</div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {DATA_SCOPE_FIELDS.map((field) => (
+        <Form.Item
+          key={field.key}
+          name={field.key}
+          label={field.label}
+          className="mb-0"
+        >
+          <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
+        </Form.Item>
+      ))}
+    </div>
   </div>
 )
 

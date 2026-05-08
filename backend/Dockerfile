@@ -47,6 +47,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Prisma `generate` loads prisma.config.ts at image build time. Use a
+# non-secret placeholder here; Cloud Run provides the real value at runtime.
+ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres?schema=public"
+
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
