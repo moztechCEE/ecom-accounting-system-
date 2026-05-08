@@ -269,16 +269,16 @@ const EmployeeDashboardPage: React.FC = () => {
         {/* Left Column: Clock Widget & Actions */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           {/* Clock Widget */}
-          <GlassCard className="flex flex-col items-center justify-center py-12 w-full">
-            <div className="text-[80px] font-light tracking-wider text-slate-900/80 leading-none font-mono">
+          <GlassCard className="flex flex-col items-center justify-center py-8 w-full">
+            <div className="text-[64px] font-light tracking-wider text-slate-900/80 leading-none font-mono">
               {currentTime.format("HH:mm")}
-              <span className="text-4xl ml-3 text-slate-400">
+              <span className="text-3xl ml-3 text-slate-400">
                 {currentTime.format("ss")}
               </span>
             </div>
 
             {/* Location Status */}
-            <div className="mt-8">
+            <div className="mt-5">
               {location ? (
                 <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 text-green-600 text-sm font-medium border border-green-500/20">
                   <EnvironmentOutlined />
@@ -318,11 +318,13 @@ const EmployeeDashboardPage: React.FC = () => {
           <GlassButton
             variant="secondary"
             size="lg"
-            className="h-16 flex items-center justify-center gap-3"
+            className="h-14 flex items-center justify-center gap-3 !text-slate-700"
             onClick={openOvertimeModal}
           >
-            <PlusOutlined className="text-xl" />
-            <span className="text-lg font-medium">提出加班申請</span>
+            <PlusOutlined className="text-xl text-slate-600" />
+            <span className="text-lg font-medium text-slate-700">
+              提出加班申請
+            </span>
           </GlassButton>
         </div>
 
@@ -466,6 +468,7 @@ const EmployeeDashboardPage: React.FC = () => {
             <GlassInput
               label="加班日期"
               type="date"
+              className="!text-slate-800"
               value={overtimeForm.workDate}
               onChange={(event) =>
                 setOvertimeForm((prev) => ({
@@ -477,6 +480,7 @@ const EmployeeDashboardPage: React.FC = () => {
             <GlassInput
               label="申請分鐘數"
               type="number"
+              className="!text-slate-800"
               value={overtimeForm.requestedMinutes}
               onChange={(event) =>
                 setOvertimeForm((prev) => ({
@@ -488,6 +492,7 @@ const EmployeeDashboardPage: React.FC = () => {
           </div>
           <GlassTextarea
             label="加班原因"
+            className="!text-slate-800 placeholder:!text-slate-500"
             value={overtimeForm.reason}
             onChange={(event) =>
               setOvertimeForm((prev) => ({
