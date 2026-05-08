@@ -27,10 +27,8 @@ import {
   DisasterClosurePayPolicy,
   DisasterClosureScopeType,
   LeaveStatus,
-  LeaveType,
   OvertimeRequest,
   OvertimeRequestStatus,
-  SeniorityTier,
 } from "../../types/attendance";
 import { Department, Employee } from "../../types";
 import { GlassButton } from "../../components/ui/GlassButton";
@@ -46,22 +44,7 @@ type AdminTab =
   | "overtime"
   | "policies"
   | "closures"
-  | "types"
   | "balances";
-
-const emptyLeaveTypeForm = {
-  code: "",
-  name: "",
-  balanceResetPolicy: "CALENDAR_YEAR",
-  maxDaysPerYear: "",
-  paidPercentage: "100",
-  minNoticeHours: "0",
-  requiresDocument: "false",
-  allowCarryOver: "false",
-  isActive: "true",
-  carryOverLimitHours: "0",
-  seniorityTiers: [] as SeniorityTier[],
-};
 
 type PolicyScheduleForm = {
   assignmentScope: "department" | "employee";
@@ -115,46 +98,6 @@ const weekdayOptions = [
   { value: "5", label: "週五" },
   { value: "6", label: "週六" },
 ];
-
-const getSeniorityTiers = (leaveType?: LeaveType): SeniorityTier[] =>
-  Array.isArray(leaveType?.metadata?.seniorityTiers)
-    ? leaveType!.metadata!.seniorityTiers!
-    : [];
-
-const normalizeSeniorityTiers = (
-  tiers?: Array<
-    | {
-        minYears?: number | string | null;
-        maxYears?: number | string | null;
-        days?: number | string | null;
-      }
-    | null
-    | undefined
-  >,
-): SeniorityTier[] =>
-  (tiers || [])
-    .map((tier) => ({
-      minYears: Number(tier?.minYears),
-      maxYears:
-        tier?.maxYears === undefined ||
-        tier?.maxYears === null ||
-        tier?.maxYears === ""
-          ? undefined
-          : Number(tier.maxYears),
-      days: Number(tier?.days),
-    }))
-    .filter(
-      (tier) =>
-        Number.isFinite(tier.minYears) &&
-        Number.isFinite(tier.days) &&
-        (tier.maxYears === undefined || Number.isFinite(tier.maxYears)),
-    )
-    .sort((a, b) => a.minYears - b.minYears);
-
-const formatSeniorityTier = (tier: SeniorityTier) =>
-  tier.maxYears !== undefined
-    ? `${tier.minYears} - ${tier.maxYears} 年：${tier.days} 天`
-    : `${tier.minYears} 年以上：${tier.days} 天`;
 
 const formatHistoryAction = (action: string) => {
   const map: Record<string, string> = {
@@ -219,8 +162,9 @@ const AttendanceAdminPage: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState(dayjs().year());
   const [dailyData, setDailyData] = useState<any[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<AdminLeaveRequest[]>([]);
-  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
-  const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>([]);
+  const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>(
+    [],
+  );
   const [leaveBalances, setLeaveBalances] = useState<AdminLeaveBalance[]>([]);
   const [expandedBalanceEmployeeIds, setExpandedBalanceEmployeeIds] = useState<
     Set<string>
@@ -234,11 +178,6 @@ const AttendanceAdminPage: React.FC = () => {
   const [requestStatusFilter, setRequestStatusFilter] = useState<string>("");
   const [overtimeStatusFilter, setOvertimeStatusFilter] = useState<string>("");
   const [employeeFilter, setEmployeeFilter] = useState<string>("");
-  const [typeModalOpen, setTypeModalOpen] = useState(false);
-  const [editingLeaveType, setEditingLeaveType] = useState<LeaveType | null>(
-    null,
-  );
-  const [typeForm, setTypeForm] = useState(emptyLeaveTypeForm);
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<AttendancePolicy | null>(
     null,
@@ -293,29 +232,27 @@ const AttendanceAdminPage: React.FC = () => {
   const loadManagementData = async () => {
     try {
       setLoading(true);
-      const [requests, overtimeItems, types, balances, policies, closures] =
+      const [requests, overtimeItems, balances, policies, closures] =
         await Promise.all([
-        attendanceService.getAdminLeaveRequests({
-          year: selectedYear,
-          status: (requestStatusFilter as LeaveStatus | "") || "",
-          employeeId: employeeFilter || undefined,
-        }),
-        attendanceService.getAdminOvertimeRequests({
-          year: selectedYear,
-          status: overtimeStatusFilter || undefined,
-          employeeId: employeeFilter || undefined,
-        }),
-        attendanceService.getAdminLeaveTypes(),
-        attendanceService.getAdminLeaveBalances({
-          year: selectedYear,
-          employeeId: employeeFilter || undefined,
-        }),
-        attendanceService.getAdminPolicies(),
-        attendanceService.getDisasterClosures({ year: selectedYear }),
-      ]);
+          attendanceService.getAdminLeaveRequests({
+            year: selectedYear,
+            status: (requestStatusFilter as LeaveStatus | "") || "",
+            employeeId: employeeFilter || undefined,
+          }),
+          attendanceService.getAdminOvertimeRequests({
+            year: selectedYear,
+            status: overtimeStatusFilter || undefined,
+            employeeId: employeeFilter || undefined,
+          }),
+          attendanceService.getAdminLeaveBalances({
+            year: selectedYear,
+            employeeId: employeeFilter || undefined,
+          }),
+          attendanceService.getAdminPolicies(),
+          attendanceService.getDisasterClosures({ year: selectedYear }),
+        ]);
       setLeaveRequests(requests);
       setOvertimeRequests(overtimeItems);
-      setLeaveTypes(types);
       setLeaveBalances(balances);
       setPolicies(policies);
       setDisasterClosures(closures);
@@ -365,9 +302,6 @@ const AttendanceAdminPage: React.FC = () => {
   const managementStats = {
     pendingRequests: leaveRequests.filter(
       (request) => request.status === LeaveStatus.SUBMITTED,
-    ).length,
-    activeLeaveTypes: leaveTypes.filter(
-      (type) => (type as any).isActive !== false,
     ).length,
     trackedBalances: leaveBalances.length,
     disasterClosures: disasterClosures.filter((event) => event.isActive).length,
@@ -429,7 +363,9 @@ const AttendanceAdminPage: React.FC = () => {
 
     const nameMap = new Map<string, string>();
     if (closure.scopeType === "DEPARTMENT") {
-      departments.forEach((department) => nameMap.set(department.id, department.name));
+      departments.forEach((department) =>
+        nameMap.set(department.id, department.name),
+      );
     } else if (closure.scopeType === "EMPLOYEE") {
       employees.forEach((employee) =>
         nameMap.set(employee.id, `${employee.name} (${employee.employeeNo})`),
@@ -584,12 +520,6 @@ const AttendanceAdminPage: React.FC = () => {
     setRequestModalOpen(true);
   };
 
-  const openCreateLeaveType = () => {
-    setEditingLeaveType(null);
-    setTypeForm(emptyLeaveTypeForm);
-    setTypeModalOpen(true);
-  };
-
   const openCreatePolicy = () => {
     setEditingPolicy(null);
     setPolicyForm({
@@ -610,15 +540,12 @@ const AttendanceAdminPage: React.FC = () => {
       ipAllowList: Array.isArray(policy.ipAllowList)
         ? policy.ipAllowList.join("\n")
         : "",
-      geofence: policy.geofence
-        ? JSON.stringify(policy.geofence, null, 2)
-        : "",
+      geofence: policy.geofence ? JSON.stringify(policy.geofence, null, 2) : "",
       schedules:
         policy.schedules.length > 0
           ? policy.schedules.map((schedule) => ({
               assignmentScope: schedule.employeeId ? "employee" : "department",
-              assignmentId:
-                schedule.employeeId || schedule.departmentId || "",
+              assignmentId: schedule.employeeId || schedule.departmentId || "",
               weekday: String(schedule.weekday),
               shiftStart: schedule.shiftStart,
               shiftEnd: schedule.shiftEnd,
@@ -696,7 +623,9 @@ const AttendanceAdminPage: React.FC = () => {
   };
 
   const deletePolicy = async (policy: AttendancePolicy) => {
-    if (!window.confirm(`確認刪除政策「${policy.name}」？這會一起移除旗下班表。`)) {
+    if (
+      !window.confirm(`確認刪除政策「${policy.name}」？這會一起移除旗下班表。`)
+    ) {
       return;
     }
 
@@ -793,12 +722,18 @@ const AttendanceAdminPage: React.FC = () => {
       await Promise.all([loadManagementData(), loadAttendance()]);
     } catch (error: any) {
       console.error(error);
-      message.error(error?.response?.data?.message || "儲存特殊統一放假宣告失敗");
+      message.error(
+        error?.response?.data?.message || "儲存特殊統一放假宣告失敗",
+      );
     }
   };
 
   const deleteClosure = async (closure: DisasterClosureEvent) => {
-    if (!window.confirm(`確認停用「${closure.name}」？已產生的出勤摘要不會自動刪除。`)) {
+    if (
+      !window.confirm(
+        `確認停用「${closure.name}」？已產生的出勤摘要不會自動刪除。`,
+      )
+    ) {
       return;
     }
 
@@ -808,119 +743,9 @@ const AttendanceAdminPage: React.FC = () => {
       await loadManagementData();
     } catch (error: any) {
       console.error(error);
-      message.error(error?.response?.data?.message || "停用特殊統一放假宣告失敗");
-    }
-  };
-
-  const openEditLeaveType = (leaveType: LeaveType) => {
-    setEditingLeaveType(leaveType);
-    setTypeForm({
-      code: leaveType.code,
-      name: leaveType.name,
-      balanceResetPolicy: leaveType.balanceResetPolicy || "CALENDAR_YEAR",
-      maxDaysPerYear:
-        leaveType.maxDaysPerYear !== undefined
-          ? String(leaveType.maxDaysPerYear)
-          : "",
-      paidPercentage:
-        leaveType.paidPercentage !== undefined
-          ? String(leaveType.paidPercentage)
-          : "100",
-      minNoticeHours:
-        leaveType.minNoticeHours !== undefined
-          ? String(leaveType.minNoticeHours)
-          : "0",
-      requiresDocument: String(Boolean(leaveType.requiresDocument)),
-      allowCarryOver: String(Boolean(leaveType.allowCarryOver)),
-      isActive: String(leaveType.isActive !== false),
-      carryOverLimitHours:
-        leaveType.carryOverLimitHours !== undefined
-          ? String(leaveType.carryOverLimitHours)
-          : "0",
-      seniorityTiers: getSeniorityTiers(leaveType),
-    });
-    setTypeModalOpen(true);
-  };
-
-  const saveLeaveType = async () => {
-    try {
-      const payload = {
-        code: typeForm.code,
-        name: typeForm.name,
-        balanceResetPolicy: typeForm.balanceResetPolicy as
-          | "CALENDAR_YEAR"
-          | "HIRE_ANNIVERSARY"
-          | "NONE",
-        maxDaysPerYear:
-          typeForm.maxDaysPerYear !== ""
-            ? Number(typeForm.maxDaysPerYear)
-            : undefined,
-        paidPercentage:
-          typeForm.paidPercentage !== ""
-            ? Number(typeForm.paidPercentage)
-            : undefined,
-        minNoticeHours:
-          typeForm.minNoticeHours !== ""
-            ? Number(typeForm.minNoticeHours)
-            : undefined,
-        requiresDocument: typeForm.requiresDocument === "true",
-        allowCarryOver: typeForm.allowCarryOver === "true",
-        isActive: typeForm.isActive === "true",
-        carryOverLimitHours:
-          typeForm.carryOverLimitHours !== ""
-            ? Number(typeForm.carryOverLimitHours)
-            : undefined,
-        seniorityTiers:
-          typeForm.code.trim().toUpperCase() === "ANNUAL"
-            ? normalizeSeniorityTiers(typeForm.seniorityTiers)
-            : [],
-      };
-
-      if (editingLeaveType) {
-        await attendanceService.updateLeaveType(editingLeaveType.id, payload);
-        message.success("假別規則已更新");
-      } else {
-        await attendanceService.createLeaveType(payload);
-        message.success("假別規則已建立");
-      }
-
-      setTypeModalOpen(false);
-      await loadManagementData();
-    } catch (error) {
-      console.error(error);
-      message.error("儲存假別規則失敗");
-    }
-  };
-
-  const setLeaveTypeActive = async (leaveType: LeaveType, isActive: boolean) => {
-    const actionLabel = isActive ? "啟用" : "停用";
-    if (
-      !window.confirm(
-        `確認${actionLabel}假別「${leaveType.name}（${leaveType.code}）」？`,
-      )
-    ) {
-      return;
-    }
-
-    try {
-      await attendanceService.updateLeaveType(leaveType.id, {
-        code: leaveType.code,
-        name: leaveType.name,
-        balanceResetPolicy: leaveType.balanceResetPolicy || "CALENDAR_YEAR",
-        maxDaysPerYear: leaveType.maxDaysPerYear,
-        paidPercentage: leaveType.paidPercentage ?? 100,
-        minNoticeHours: leaveType.minNoticeHours ?? 0,
-        requiresDocument: leaveType.requiresDocument,
-        allowCarryOver: Boolean(leaveType.allowCarryOver),
-        carryOverLimitHours: leaveType.carryOverLimitHours ?? 0,
-        seniorityTiers: getSeniorityTiers(leaveType),
-        isActive,
-      });
-      message.success(`假別已${actionLabel}`);
-      await loadManagementData();
-    } catch (error: any) {
-      console.error(error);
-      message.error(error?.response?.data?.message || `${actionLabel}假別失敗`);
+      message.error(
+        error?.response?.data?.message || "停用特殊統一放假宣告失敗",
+      );
     }
   };
 
@@ -1104,17 +929,31 @@ const AttendanceAdminPage: React.FC = () => {
         </div>
 
         <div className="p-6">
-          {(activeTab === "requests" || activeTab === "overtime" || activeTab === "balances") && (
+          {(activeTab === "requests" ||
+            activeTab === "overtime" ||
+            activeTab === "balances") && (
             <div className="mb-6 flex flex-wrap gap-3">
               <div className="w-40">
                 {activeTab === "overtime" ? (
                   <GlassSelect
                     options={[
                       { value: "", label: "全部狀態" },
-                      { value: OvertimeRequestStatus.PENDING_MANAGER, label: "待主管初審" },
-                      { value: OvertimeRequestStatus.PENDING_FINAL, label: "待負責人覆核" },
-                      { value: OvertimeRequestStatus.APPROVED, label: "已核准" },
-                      { value: OvertimeRequestStatus.REJECTED, label: "已駁回" },
+                      {
+                        value: OvertimeRequestStatus.PENDING_MANAGER,
+                        label: "待主管初審",
+                      },
+                      {
+                        value: OvertimeRequestStatus.PENDING_FINAL,
+                        label: "待負責人覆核",
+                      },
+                      {
+                        value: OvertimeRequestStatus.APPROVED,
+                        label: "已核准",
+                      },
+                      {
+                        value: OvertimeRequestStatus.REJECTED,
+                        label: "已駁回",
+                      },
                     ]}
                     value={overtimeStatusFilter}
                     onChange={(event) =>
@@ -1280,7 +1119,9 @@ const AttendanceAdminPage: React.FC = () => {
                           {request.documents?.length ? (
                             <span>附件 {request.documents.length} 筆</span>
                           ) : null}
-                          {request.location ? <span>地點：{request.location}</span> : null}
+                          {request.location ? (
+                            <span>地點：{request.location}</span>
+                          ) : null}
                           {request.requiredDocsMet === false ? (
                             <span className="text-rose-500">附件未補齊</span>
                           ) : null}
@@ -1297,7 +1138,9 @@ const AttendanceAdminPage: React.FC = () => {
                             onClick={() => openRequestModal(request)}
                           >
                             <FileTextOutlined />
-                            {request.status === LeaveStatus.SUBMITTED ? "審核" : "詳情"}
+                            {request.status === LeaveStatus.SUBMITTED
+                              ? "審核"
+                              : "詳情"}
                           </GlassButton>
                           {request.status === LeaveStatus.SUBMITTED && (
                             <span className="text-xs text-slate-400">
@@ -1361,11 +1204,16 @@ const AttendanceAdminPage: React.FC = () => {
                       <td className="px-5 py-4 font-mono">
                         {dayjs(request.workDate).format("YYYY/MM/DD")}
                       </td>
-                      <td className="px-5 py-4">{request.requestedMinutes} 分鐘</td>
+                      <td className="px-5 py-4">
+                        {request.requestedMinutes} 分鐘
+                      </td>
                       <td className="px-5 py-4 max-w-[320px]">
                         <div className="truncate">{request.reason}</div>
                         <div className="mt-1 text-xs text-slate-400">
-                          送出：{dayjs(request.submittedAt).format("YYYY/MM/DD HH:mm")}
+                          送出：
+                          {dayjs(request.submittedAt).format(
+                            "YYYY/MM/DD HH:mm",
+                          )}
                         </div>
                       </td>
                       <td className="px-5 py-4">
@@ -1373,7 +1221,8 @@ const AttendanceAdminPage: React.FC = () => {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex flex-wrap gap-2">
-                          {request.status === OvertimeRequestStatus.PENDING_MANAGER ? (
+                          {request.status ===
+                          OvertimeRequestStatus.PENDING_MANAGER ? (
                             <>
                               <GlassButton
                                 variant="secondary"
@@ -1390,7 +1239,9 @@ const AttendanceAdminPage: React.FC = () => {
                                 <>
                                   <GlassInput
                                     value={reviewNote}
-                                    onChange={(event) => setReviewNote(event.target.value)}
+                                    onChange={(event) =>
+                                      setReviewNote(event.target.value)
+                                    }
                                     placeholder="初審備註（選填）"
                                   />
                                   <GlassButton
@@ -1408,7 +1259,10 @@ const AttendanceAdminPage: React.FC = () => {
                                     variant="danger"
                                     className="px-4 py-2 text-sm"
                                     onClick={() =>
-                                      void handleReviewOvertimeRequest(request.id, "reject")
+                                      void handleReviewOvertimeRequest(
+                                        request.id,
+                                        "reject",
+                                      )
                                     }
                                   >
                                     駁回
@@ -1416,7 +1270,8 @@ const AttendanceAdminPage: React.FC = () => {
                                 </>
                               ) : null}
                             </>
-                          ) : request.status === OvertimeRequestStatus.PENDING_FINAL ? (
+                          ) : request.status ===
+                            OvertimeRequestStatus.PENDING_FINAL ? (
                             <>
                               <GlassButton
                                 variant="secondary"
@@ -1433,7 +1288,9 @@ const AttendanceAdminPage: React.FC = () => {
                                 <>
                                   <GlassInput
                                     value={reviewNote}
-                                    onChange={(event) => setReviewNote(event.target.value)}
+                                    onChange={(event) =>
+                                      setReviewNote(event.target.value)
+                                    }
                                     placeholder="覆核備註（選填）"
                                   />
                                   <GlassButton
@@ -1451,7 +1308,10 @@ const AttendanceAdminPage: React.FC = () => {
                                     variant="danger"
                                     className="px-4 py-2 text-sm"
                                     onClick={() =>
-                                      void handleReviewOvertimeRequest(request.id, "reject")
+                                      void handleReviewOvertimeRequest(
+                                        request.id,
+                                        "reject",
+                                      )
                                     }
                                   >
                                     駁回
@@ -1485,99 +1345,6 @@ const AttendanceAdminPage: React.FC = () => {
                   )}
                 </tbody>
               </table>
-            </div>
-          )}
-
-          {activeTab === "types" && (
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              {leaveTypes.map((leaveType) => (
-                <GlassCard
-                  key={leaveType.id}
-                  className={`relative overflow-hidden ${
-                    leaveType.isActive === false ? "opacity-60" : ""
-                  }`}
-                >
-                  <div className="absolute right-4 top-4 flex flex-col items-end gap-2">
-                    <span className="rounded-full bg-white/30 px-3 py-1 text-[11px] font-semibold tracking-[0.2em] text-slate-500">
-                      {leaveType.code}
-                    </span>
-                    <span
-                      className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
-                        leaveType.isActive === false
-                          ? "bg-slate-100/80 text-slate-500"
-                          : "bg-emerald-100/80 text-emerald-700"
-                      }`}
-                    >
-                      {leaveType.isActive === false ? "已停用" : "啟用中"}
-                    </span>
-                  </div>
-                  <div className="pr-20">
-                    <div className="text-xl font-semibold text-slate-900">
-                      {leaveType.name}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-                      <span className="rounded-full bg-white/30 px-3 py-1">
-                        重算週期：
-                        {leaveType.balanceResetPolicy || "CALENDAR_YEAR"}
-                      </span>
-                      <span className="rounded-full bg-white/30 px-3 py-1">
-                        支薪比例：{leaveType.paidPercentage ?? 100}%
-                      </span>
-                      <span className="rounded-full bg-white/30 px-3 py-1">
-                        年度額度：{leaveType.maxDaysPerYear ?? "—"} 天
-                      </span>
-                      {getSeniorityTiers(leaveType).length > 0 ? (
-                        <span className="rounded-full bg-white/30 px-3 py-1">
-                          自訂級距：{getSeniorityTiers(leaveType).length} 段
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-4 text-sm leading-6 text-slate-500">
-                      {leaveType.requiresDocument ? "需附件" : "免附件"}
-                      ，通知提前 {leaveType.minNoticeHours ?? 0} 小時，
-                      {leaveType.allowCarryOver
-                        ? `可結轉，最多 ${leaveType.carryOverLimitHours ?? 0} 小時`
-                        : "不結轉"}
-                    </div>
-                    {getSeniorityTiers(leaveType).length > 0 ? (
-                      <div className="mt-3 rounded-2xl border border-sky-100/70 bg-sky-50/70 px-4 py-3 text-xs leading-6 text-sky-700">
-                        {getSeniorityTiers(leaveType)
-                          .map((tier) => formatSeniorityTier(tier))
-                          .join(" / ")}
-                      </div>
-                    ) : null}
-                    {leaveType.code === "ANNUAL" ? (
-                      <div className="mt-3 rounded-2xl border border-emerald-100/60 bg-emerald-50/70 px-4 py-3 text-xs leading-6 text-emerald-700">
-                        特休目前會依到職年資自動計算年度額度，未手動設定固定天數時，系統會套用標準年資級距。
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="mt-5 flex flex-wrap justify-end gap-2">
-                    <GlassButton
-                      variant="secondary"
-                      className="gap-2 px-4 py-2 text-sm"
-                      onClick={() => openEditLeaveType(leaveType)}
-                    >
-                      <EditOutlined />
-                      編輯規則
-                    </GlassButton>
-                    <GlassButton
-                      variant={
-                        leaveType.isActive === false ? "secondary" : "danger"
-                      }
-                      className="gap-2 px-4 py-2 text-sm"
-                      onClick={() =>
-                        void setLeaveTypeActive(
-                          leaveType,
-                          leaveType.isActive === false,
-                        )
-                      }
-                    >
-                      {leaveType.isActive === false ? "重新啟用" : "停用"}
-                    </GlassButton>
-                  </div>
-                </GlassCard>
-              ))}
             </div>
           )}
 
@@ -1701,7 +1468,9 @@ const AttendanceAdminPage: React.FC = () => {
           {activeTab === "policies" && (
             <div className="space-y-5">
               <GlassCard className="border border-sky-100/70 bg-sky-50/70">
-                <div className="text-sm font-semibold text-sky-900">班表與打卡政策</div>
+                <div className="text-sm font-semibold text-sky-900">
+                  班表與打卡政策
+                </div>
                 <div className="mt-2 text-sm leading-6 text-sky-800">
                   在這裡設定打卡照片要求、最早可打卡時間、遲到寬限，以及員工或部門的每週班表。打卡驗證與異常檢查會直接使用這裡的設定。
                 </div>
@@ -1709,7 +1478,10 @@ const AttendanceAdminPage: React.FC = () => {
 
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                 {policies.map((policy) => (
-                  <GlassCard key={policy.id} className="relative overflow-hidden">
+                  <GlassCard
+                    key={policy.id}
+                    className="relative overflow-hidden"
+                  >
                     <div className="absolute right-4 top-4 rounded-full bg-white/30 px-3 py-1 text-[11px] font-semibold tracking-[0.2em] text-slate-500 uppercase">
                       {policy.type}
                     </div>
@@ -1738,7 +1510,8 @@ const AttendanceAdminPage: React.FC = () => {
                             className="rounded-2xl border border-white/20 bg-white/25 px-4 py-3 text-sm text-slate-600"
                           >
                             <div className="font-medium text-slate-800">
-                              {formatWeekday(schedule.weekday)} · {schedule.shiftStart} - {schedule.shiftEnd}
+                              {formatWeekday(schedule.weekday)} ·{" "}
+                              {schedule.shiftStart} - {schedule.shiftEnd}
                             </div>
                             <div className="mt-1 text-xs text-slate-500">
                               {schedule.department?.name
@@ -1826,7 +1599,9 @@ const AttendanceAdminPage: React.FC = () => {
                           </div>
                           <div className="text-xs text-slate-400">
                             {row.employee.department?.name || "未分配部門"}
-                            {row.employee.employeeNo ? ` · ${row.employee.employeeNo}` : ""}
+                            {row.employee.employeeNo
+                              ? ` · ${row.employee.employeeNo}`
+                              : ""}
                           </div>
                         </td>
                         <td className="px-5 py-4">
@@ -1842,7 +1617,8 @@ const AttendanceAdminPage: React.FC = () => {
                                       : "bg-white/40 text-slate-600"
                                 }`}
                               >
-                                {balance.leaveType.name} {formatBalanceHours(balance.remainingHours)}
+                                {balance.leaveType.name}{" "}
+                                {formatBalanceHours(balance.remainingHours)}
                               </span>
                             ))}
                             {row.balances.length > 4 ? (
@@ -1869,13 +1645,27 @@ const AttendanceAdminPage: React.FC = () => {
                               <table className="w-full text-left">
                                 <thead>
                                   <tr className="border-b border-white/20 text-xs text-slate-500">
-                                    <th className="px-4 py-3 font-medium">假別</th>
-                                    <th className="px-4 py-3 font-medium">週期</th>
-                                    <th className="px-4 py-3 font-medium">應得</th>
-                                    <th className="px-4 py-3 font-medium">已用</th>
-                                    <th className="px-4 py-3 font-medium">待核</th>
-                                    <th className="px-4 py-3 font-medium">剩餘</th>
-                                    <th className="px-4 py-3 font-medium">調整</th>
+                                    <th className="px-4 py-3 font-medium">
+                                      假別
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                      週期
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                      應得
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                      已用
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                      待核
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                      剩餘
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                      調整
+                                    </th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1893,20 +1683,31 @@ const AttendanceAdminPage: React.FC = () => {
                                         </div>
                                       </td>
                                       <td className="px-4 py-3 text-xs text-slate-500">
-                                        {dayjs(balance.periodStart).format("YYYY/MM/DD")} 至{" "}
-                                        {dayjs(balance.periodEnd).format("YYYY/MM/DD")}
+                                        {dayjs(balance.periodStart).format(
+                                          "YYYY/MM/DD",
+                                        )}{" "}
+                                        至{" "}
+                                        {dayjs(balance.periodEnd).format(
+                                          "YYYY/MM/DD",
+                                        )}
                                       </td>
                                       <td className="px-4 py-3 font-mono">
-                                        {formatBalanceHours(balance.accruedHours)}
+                                        {formatBalanceHours(
+                                          balance.accruedHours,
+                                        )}
                                       </td>
                                       <td className="px-4 py-3 font-mono">
                                         {formatBalanceHours(balance.usedHours)}
                                       </td>
                                       <td className="px-4 py-3 font-mono">
-                                        {formatBalanceHours(balance.pendingHours)}
+                                        {formatBalanceHours(
+                                          balance.pendingHours,
+                                        )}
                                       </td>
                                       <td className="px-4 py-3 font-mono text-slate-900">
-                                        {formatBalanceHours(balance.remainingHours)}
+                                        {formatBalanceHours(
+                                          balance.remainingHours,
+                                        )}
                                       </td>
                                       <td className="px-4 py-3">
                                         <Tooltip title="調整年度額度與人工補正">
@@ -1977,9 +1778,7 @@ const AttendanceAdminPage: React.FC = () => {
       >
         <div className="space-y-5">
           <GlassCard className="border border-amber-100/70 bg-amber-50/70">
-            <div className="text-sm font-semibold text-amber-900">
-              建議用法
-            </div>
+            <div className="text-sm font-semibold text-amber-900">建議用法</div>
             <div className="mt-2 text-sm leading-6 text-amber-800">
               遇到國定假日補放、政府公告停班，或公司決定統一放假時，在這裡建立一筆宣告並選擇適用範圍。員工不用送假單；薪資會依你設定的不扣薪、不支薪或部分支薪規則自動帶入。
             </div>
@@ -1990,7 +1789,10 @@ const AttendanceAdminPage: React.FC = () => {
               label="宣告名稱"
               value={closureForm.name}
               onChange={(event) =>
-                setClosureForm((prev) => ({ ...prev, name: event.target.value }))
+                setClosureForm((prev) => ({
+                  ...prev,
+                  name: event.target.value,
+                }))
               }
               placeholder="例如：清明連假統一放假"
             />
@@ -2257,7 +2059,9 @@ const AttendanceAdminPage: React.FC = () => {
           <div className="rounded-3xl border border-white/20 bg-white/15 p-4">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="text-sm font-semibold text-slate-900">班表設定</div>
+                <div className="text-sm font-semibold text-slate-900">
+                  班表設定
+                </div>
                 <div className="text-xs text-slate-500">
                   每一筆班表都要指定到部門或員工。員工班表會優先覆蓋部門班表。
                 </div>
@@ -2327,7 +2131,11 @@ const AttendanceAdminPage: React.FC = () => {
                         ]}
                       />
                       <GlassSelect
-                        label={schedule.assignmentScope === "employee" ? "員工" : "部門"}
+                        label={
+                          schedule.assignmentScope === "employee"
+                            ? "員工"
+                            : "部門"
+                        }
                         value={schedule.assignmentId}
                         onChange={(event) =>
                           setPolicyForm((prev) => ({
@@ -2459,7 +2267,11 @@ const AttendanceAdminPage: React.FC = () => {
           setSelectedRequest(null);
           setReviewNote("");
         }}
-        title={selectedRequest?.status === LeaveStatus.SUBMITTED ? "審核假單" : "假單詳情"}
+        title={
+          selectedRequest?.status === LeaveStatus.SUBMITTED
+            ? "審核假單"
+            : "假單詳情"
+        }
         maxWidth="max-w-[880px]"
         footer={
           selectedRequest ? (
@@ -2535,7 +2347,9 @@ const AttendanceAdminPage: React.FC = () => {
                 <div className="mt-2 text-lg font-semibold text-slate-900">
                   {selectedRequest.leaveType?.name}
                 </div>
-                <div className="mt-2">{requestStatusBadge(selectedRequest.status)}</div>
+                <div className="mt-2">
+                  {requestStatusBadge(selectedRequest.status)}
+                </div>
               </div>
               <div className="rounded-2xl border border-white/20 bg-white/20 p-4">
                 <div className="text-xs font-semibold tracking-[0.2em] text-slate-400 uppercase">
@@ -2562,7 +2376,9 @@ const AttendanceAdminPage: React.FC = () => {
             </div>
 
             <div className="rounded-2xl border border-white/20 bg-white/20 p-4">
-              <div className="text-sm font-semibold text-slate-900">請假原因</div>
+              <div className="text-sm font-semibold text-slate-900">
+                請假原因
+              </div>
               <div className="mt-2 text-sm leading-6 text-slate-600">
                 {selectedRequest.reason || "未填寫原因"}
               </div>
@@ -2586,8 +2402,10 @@ const AttendanceAdminPage: React.FC = () => {
                             {document.fileName}
                           </div>
                           <div className="mt-1 text-xs text-slate-500">
-                            類型：{document.docType || "未指定"} ·
-                            上傳時間：{dayjs(document.uploadedAt).format("YYYY/MM/DD HH:mm")}
+                            類型：{document.docType || "未指定"} · 上傳時間：
+                            {dayjs(document.uploadedAt).format(
+                              "YYYY/MM/DD HH:mm",
+                            )}
                           </div>
                         </div>
                         {isExternalDocumentUrl(document.fileUrl) ? (
@@ -2600,7 +2418,9 @@ const AttendanceAdminPage: React.FC = () => {
                             開啟附件
                           </a>
                         ) : (
-                          <span className="text-xs text-slate-400">尚未附上外部連結</span>
+                          <span className="text-xs text-slate-400">
+                            尚未附上外部連結
+                          </span>
                         )}
                       </div>
                     </div>
@@ -2614,7 +2434,9 @@ const AttendanceAdminPage: React.FC = () => {
             </div>
 
             <div className="rounded-2xl border border-white/20 bg-white/20 p-4">
-              <div className="text-sm font-semibold text-slate-900">審核歷程</div>
+              <div className="text-sm font-semibold text-slate-900">
+                審核歷程
+              </div>
               <div className="mt-3 space-y-3">
                 {selectedRequest.histories?.length ? (
                   selectedRequest.histories.map((history) => (
@@ -2629,10 +2451,14 @@ const AttendanceAdminPage: React.FC = () => {
                           </div>
                           <div className="mt-1 text-xs text-slate-500">
                             {history.actor?.name || "系統"} ·{" "}
-                            {dayjs(history.createdAt).format("YYYY/MM/DD HH:mm")}
+                            {dayjs(history.createdAt).format(
+                              "YYYY/MM/DD HH:mm",
+                            )}
                           </div>
                         </div>
-                        {history.toStatus ? requestStatusBadge(history.toStatus) : null}
+                        {history.toStatus
+                          ? requestStatusBadge(history.toStatus)
+                          : null}
                       </div>
                       {history.note ? (
                         <div className="mt-3 text-sm leading-6 text-slate-600">
@@ -2659,273 +2485,6 @@ const AttendanceAdminPage: React.FC = () => {
             ) : null}
           </div>
         ) : null}
-      </GlassModal>
-
-      <GlassModal
-        isOpen={typeModalOpen}
-        onClose={() => setTypeModalOpen(false)}
-        title={editingLeaveType ? "編輯假別規則" : "新增假別規則"}
-        footer={
-          <>
-            <GlassButton
-              variant="secondary"
-              onClick={() => setTypeModalOpen(false)}
-            >
-              取消
-            </GlassButton>
-            <GlassButton onClick={() => void saveLeaveType()}>
-              {editingLeaveType ? "儲存更新" : "建立假別"}
-            </GlassButton>
-          </>
-        }
-      >
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {(typeForm.code || editingLeaveType?.code) === "ANNUAL" ? (
-            <div className="md:col-span-2 rounded-2xl border border-emerald-100/60 bg-emerald-50/70 px-4 py-3 text-xs leading-6 text-emerald-700">
-              特休假別若使用到職週年制，系統會依年資自動計算額度。若你另外填入固定年度額度，會優先採用固定值。
-            </div>
-          ) : null}
-          <GlassInput
-            label="假別代碼"
-            value={typeForm.code}
-            onChange={(event) =>
-              setTypeForm((prev) => ({ ...prev, code: event.target.value }))
-            }
-          />
-          <GlassInput
-            label="假別名稱"
-            value={typeForm.name}
-            onChange={(event) =>
-              setTypeForm((prev) => ({ ...prev, name: event.target.value }))
-            }
-          />
-          <GlassSelect
-            label="年度重算方式"
-            value={typeForm.balanceResetPolicy}
-            onChange={(event) =>
-              setTypeForm((prev) => ({
-                ...prev,
-                balanceResetPolicy: event.target.value,
-              }))
-            }
-            options={[
-              { value: "CALENDAR_YEAR", label: "曆年制" },
-              { value: "HIRE_ANNIVERSARY", label: "到職週年制" },
-              { value: "NONE", label: "無年度額度" },
-            ]}
-          />
-          <GlassInput
-            label="年度額度（天）"
-            type="number"
-            value={typeForm.maxDaysPerYear}
-            onChange={(event) =>
-              setTypeForm((prev) => ({
-                ...prev,
-                maxDaysPerYear: event.target.value,
-              }))
-            }
-          />
-          <GlassInput
-            label="支薪比例（%）"
-            type="number"
-            value={typeForm.paidPercentage}
-            onChange={(event) =>
-              setTypeForm((prev) => ({
-                ...prev,
-                paidPercentage: event.target.value,
-              }))
-            }
-          />
-          <GlassInput
-            label="最低提前時數"
-            type="number"
-            value={typeForm.minNoticeHours}
-            onChange={(event) =>
-              setTypeForm((prev) => ({
-                ...prev,
-                minNoticeHours: event.target.value,
-              }))
-            }
-          />
-          <GlassSelect
-            label="是否需附件"
-            value={typeForm.requiresDocument}
-            onChange={(event) =>
-              setTypeForm((prev) => ({
-                ...prev,
-                requiresDocument: event.target.value,
-              }))
-            }
-            options={[
-              { value: "false", label: "不需要" },
-              { value: "true", label: "需要" },
-            ]}
-          />
-          <GlassSelect
-            label="是否可結轉"
-            value={typeForm.allowCarryOver}
-            onChange={(event) =>
-              setTypeForm((prev) => ({
-                ...prev,
-                allowCarryOver: event.target.value,
-              }))
-            }
-            options={[
-              { value: "false", label: "不可結轉" },
-              { value: "true", label: "可結轉" },
-            ]}
-          />
-          <GlassSelect
-            label="假別狀態"
-            value={typeForm.isActive}
-            onChange={(event) =>
-              setTypeForm((prev) => ({
-                ...prev,
-                isActive: event.target.value,
-              }))
-            }
-            options={[
-              { value: "true", label: "啟用中" },
-              { value: "false", label: "停用" },
-            ]}
-          />
-          <div className="md:col-span-2">
-            <GlassInput
-              label="結轉上限（小時）"
-              type="number"
-              value={typeForm.carryOverLimitHours}
-              onChange={(event) =>
-                setTypeForm((prev) => ({
-                  ...prev,
-                  carryOverLimitHours: event.target.value,
-                }))
-              }
-            />
-          </div>
-          {(typeForm.code || editingLeaveType?.code) === "ANNUAL" ? (
-            <div className="md:col-span-2 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">
-                    自訂年資級距
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    沒有設定時，系統會採用內建的台灣標準特休級距。
-                  </div>
-                </div>
-                <GlassButton
-                  variant="secondary"
-                  className="gap-2 px-4 py-2 text-sm"
-                  onClick={() =>
-                    setTypeForm((prev) => ({
-                      ...prev,
-                      seniorityTiers: [
-                        ...prev.seniorityTiers,
-                        { minYears: 0, days: 0 },
-                      ],
-                    }))
-                  }
-                >
-                  <PlusOutlined />
-                  新增級距
-                </GlassButton>
-              </div>
-
-              <div className="space-y-3">
-                {typeForm.seniorityTiers.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 px-4 py-5 text-sm text-slate-400">
-                    目前沒有自訂級距。
-                  </div>
-                ) : null}
-
-                {typeForm.seniorityTiers.map((tier, index) => (
-                  <div
-                    key={`${tier.minYears}-${tier.maxYears ?? "open"}-${index}`}
-                    className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 md:grid-cols-[1fr_1fr_1fr_auto]"
-                  >
-                    <GlassInput
-                      label="起始年資"
-                      type="number"
-                      value={String(tier.minYears)}
-                      onChange={(event) =>
-                        setTypeForm((prev) => ({
-                          ...prev,
-                          seniorityTiers: prev.seniorityTiers.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  minYears: Number(event.target.value),
-                                }
-                              : item,
-                          ),
-                        }))
-                      }
-                    />
-                    <GlassInput
-                      label="結束年資"
-                      type="number"
-                      value={
-                        tier.maxYears === undefined ? "" : String(tier.maxYears)
-                      }
-                      placeholder="留空代表以上"
-                      onChange={(event) =>
-                        setTypeForm((prev) => ({
-                          ...prev,
-                          seniorityTiers: prev.seniorityTiers.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  maxYears:
-                                    event.target.value === ""
-                                      ? undefined
-                                      : Number(event.target.value),
-                                }
-                              : item,
-                          ),
-                        }))
-                      }
-                    />
-                    <GlassInput
-                      label="給假天數"
-                      type="number"
-                      value={String(tier.days)}
-                      onChange={(event) =>
-                        setTypeForm((prev) => ({
-                          ...prev,
-                          seniorityTiers: prev.seniorityTiers.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  days: Number(event.target.value),
-                                }
-                              : item,
-                          ),
-                        }))
-                      }
-                    />
-                    <div className="flex items-end">
-                      <GlassButton
-                        variant="danger"
-                        className="gap-2 px-4 py-3 text-sm"
-                        onClick={() =>
-                          setTypeForm((prev) => ({
-                            ...prev,
-                            seniorityTiers: prev.seniorityTiers.filter(
-                              (_, itemIndex) => itemIndex !== index,
-                            ),
-                          }))
-                        }
-                      >
-                        <DeleteOutlined />
-                        刪除
-                      </GlassButton>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
       </GlassModal>
 
       <GlassModal
