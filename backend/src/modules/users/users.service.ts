@@ -327,6 +327,66 @@ export class UsersService {
     }
   }
 
+  async updateLoginCredentials(
+    id: string,
+    dto: {
+      email?: string;
+      password?: string;
+      mustChangePassword?: boolean;
+    },
+  ) {
+    const normalizedEmail = dto.email?.trim().toLowerCase();
+    const password = dto.password?.trim();
+
+    if (
+      !normalizedEmail &&
+      typeof password === 'undefined' &&
+      typeof dto.mustChangePassword === 'undefined'
+    ) {
+      throw new BadRequestException('No login credential updates provided');
+    }
+
+    const data: Prisma.UserUpdateInput = {};
+
+    if (normalizedEmail) {
+      const existing = await this.prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: { id: true },
+      });
+
+      if (existing && existing.id !== id) {
+        throw new ConflictException(`Email ${normalizedEmail} already exists`);
+      }
+
+      data.email = normalizedEmail;
+    }
+
+    if (typeof password !== 'undefined') {
+      if (password.length < 8) {
+        throw new BadRequestException('Password must be at least 8 characters');
+      }
+
+      data.passwordHash = await bcrypt.hash(password, this.SALT_ROUNDS);
+    }
+
+    if (typeof dto.mustChangePassword !== 'undefined') {
+      data.mustChangePassword = dto.mustChangePassword;
+    }
+
+    try {
+      const updated = await this.prisma.user.update({
+        where: { id },
+        data,
+        include: USER_INCLUDE,
+      });
+
+      this.logger.log(`Updated login credentials for user ${id}`);
+      return this.sanitizeUser(updated as UserWithRelations);
+    } catch (error) {
+      this.handlePrismaError(error, `update login credentials for user ${id}`);
+    }
+  }
+
   /**
    * 停用使用者帳號
    */

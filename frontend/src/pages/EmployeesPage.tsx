@@ -26,6 +26,8 @@ import {
   DownloadOutlined,
   DeleteOutlined,
   EditOutlined,
+  LockOutlined,
+  MailOutlined,
   PlusOutlined,
   SettingOutlined,
   UploadOutlined,
@@ -161,8 +163,8 @@ const fixedAdditionFields = [
 ] as const;
 
 const fixedDeductionFields = [
-  { key: "laborInsuranceDeduction", label: "勞保扣照額" },
-  { key: "healthInsuranceDeduction", label: "健保扣照額" },
+  { key: "laborInsuranceDeduction", label: "勞保扣除額" },
+  { key: "healthInsuranceDeduction", label: "健保扣除額" },
   { key: "pensionSelfContribution", label: "個人自提 6%" },
   { key: "dependentInsurance", label: "家人加保" },
   { key: "salaryAdvance", label: "薪資預支" },
@@ -176,6 +178,8 @@ const onboardingStatusMeta: Record<
   UPLOADED: { color: "blue", label: "已上傳" },
   VERIFIED: { color: "green", label: "已核實" },
 };
+
+const DEFAULT_EMPLOYEE_INITIAL_PASSWORD = "qwer1234";
 
 const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const { user } = useAuth();
@@ -254,6 +258,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     terminateDate: employee?.terminateDate ? dayjs(employee.terminateDate) : null,
     salaryBaseOriginal: employee?.salaryBaseOriginal ?? 0,
     isActive: employee?.isActive ?? true,
+    loginEmail: employee?.user?.email || "",
+    loginPassword: employee ? "" : DEFAULT_EMPLOYEE_INITIAL_PASSWORD,
     compensationSettings: {
       ...compensationDefaults,
       ...(employee?.compensationSettings || {}),
@@ -291,14 +297,17 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
-      const createdEmployee = await payrollService.createEmployee({
-        ...values,
+      const { loginEmail, loginPassword, ...employeeValues } = values;
+      const createdEmployee = (await payrollService.createEmployee({
+        ...employeeValues,
         employeeNo: undefined,
-        hireDate: values.hireDate.toISOString(),
-        nationalId: values.nationalId,
-        mailingAddress: values.mailingAddress,
-        compensationSettings: values.compensationSettings,
-      }) as EmployeeCreateResult;
+        hireDate: employeeValues.hireDate.toISOString(),
+        nationalId: employeeValues.nationalId,
+        mailingAddress: employeeValues.mailingAddress,
+        compensationSettings: employeeValues.compensationSettings,
+        loginEmail: loginEmail?.trim() || undefined,
+        loginPassword: loginPassword?.trim() || undefined,
+      })) as EmployeeCreateResult;
       message.success("員工建立成功");
       setCreateOpen(false);
       form.resetFields();
@@ -335,15 +344,28 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
 
     try {
       const values = await form.validateFields();
+      const { loginEmail, loginPassword, ...employeeValues } = values;
+      const loginUpdates: { loginEmail?: string; loginPassword?: string } = {};
+      const normalizedLoginEmail = loginEmail?.trim() || "";
+      if (normalizedLoginEmail !== (selectedEmployee.user?.email || "")) {
+        loginUpdates.loginEmail = normalizedLoginEmail;
+      }
+      if (loginPassword?.trim()) {
+        loginUpdates.loginPassword = loginPassword.trim();
+      }
+
       await payrollService.updateEmployee(selectedEmployee.id, {
-        ...values,
-        hireDate: values.hireDate ? values.hireDate.toISOString() : undefined,
-        terminateDate: values.terminateDate
-          ? values.terminateDate.toISOString()
+        ...employeeValues,
+        ...loginUpdates,
+        hireDate: employeeValues.hireDate
+          ? employeeValues.hireDate.toISOString()
+          : undefined,
+        terminateDate: employeeValues.terminateDate
+          ? employeeValues.terminateDate.toISOString()
           : null,
-        nationalId: values.nationalId,
-        mailingAddress: values.mailingAddress,
-        compensationSettings: values.compensationSettings,
+        nationalId: employeeValues.nationalId,
+        mailingAddress: employeeValues.mailingAddress,
+        compensationSettings: employeeValues.compensationSettings,
       });
       message.success("員工更新成功");
       setEditOpen(false);
@@ -632,7 +654,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           <Alert
             type="info"
             showIcon
-            message="新增完成後，系統會自動產生登入憑證。員工第一次登入時會自行填入信箱，作為忘記密碼的重設信箱。"
+            message="新增完成後，系統會自動產生登入憑證；電子信箱與初始密碼可在其他設定調整。"
           />
         </div>
       ),
@@ -752,6 +774,38 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       label: "其他設定",
       children: (
         <div className="space-y-4">
+          <Divider orientation="left">登入資訊</Divider>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Form.Item
+              name="loginEmail"
+              label="登入電子信箱"
+              rules={[{ type: "email", message: "請輸入有效的電子信箱" }]}
+            >
+              <Input
+                prefix={<MailOutlined />}
+                placeholder={
+                  mode === "create"
+                    ? "可留空，系統會先產生內部登入信箱"
+                    : "請輸入員工登入電子信箱"
+                }
+              />
+            </Form.Item>
+            <Form.Item
+              name="loginPassword"
+              label={mode === "create" ? "初始登入密碼" : "重設登入密碼"}
+              rules={[
+                {
+                  min: 8,
+                  message: "密碼至少需要 8 個字元",
+                },
+              ]}
+            >
+              <Input.Password
+                prefix={<LockOutlined />}
+                placeholder={mode === "edit" ? "留空則不變更密碼" : undefined}
+              />
+            </Form.Item>
+          </div>
           {mode === "edit" ? (
             <>
               <Form.Item name="terminateDate" label="離職日">
@@ -767,8 +821,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
             showIcon
             message={
               mode === "create"
-                ? "新增員工後會自動產生員工代碼與首次密碼 qwer1234。"
-                : "員工自己的信箱會在第一次登入改密碼時填寫。"
+                ? `新增員工後會自動產生員工代碼；初始密碼預設為 ${DEFAULT_EMPLOYEE_INITIAL_PASSWORD}。`
+                : "密碼不會以明文保存；輸入新密碼後，員工下次登入會被要求修改密碼。"
             }
           />
         </div>
@@ -1504,6 +1558,16 @@ const LeaveBalancesTab = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
 
+  type EmployeeLeaveBalanceRow = {
+    id: string;
+    employee: AdminLeaveBalance["employee"];
+    balances: AdminLeaveBalance[];
+    totalAccruedHours: number;
+    totalUsedHours: number;
+    totalPendingHours: number;
+    totalRemainingHours: number;
+  };
+
   const loadReferenceData = async () => {
     try {
       const [employeeResult, leaveTypeResult] = await Promise.all([
@@ -1569,6 +1633,40 @@ const LeaveBalancesTab = () => {
     setModalOpen(true);
   };
 
+  const employeeBalanceRows = useMemo<EmployeeLeaveBalanceRow[]>(() => {
+    const grouped = new Map<string, EmployeeLeaveBalanceRow>();
+
+    for (const balance of balances) {
+      const row = grouped.get(balance.employee.id) || {
+        id: balance.employee.id,
+        employee: balance.employee,
+        balances: [],
+        totalAccruedHours: 0,
+        totalUsedHours: 0,
+        totalPendingHours: 0,
+        totalRemainingHours: 0,
+      };
+
+      row.balances.push(balance);
+      row.totalAccruedHours += balance.accruedHours;
+      row.totalUsedHours += balance.usedHours;
+      row.totalPendingHours += balance.pendingHours;
+      row.totalRemainingHours += balance.remainingHours;
+      grouped.set(balance.employee.id, row);
+    }
+
+    return Array.from(grouped.values())
+      .map((row) => ({
+        ...row,
+        balances: [...row.balances].sort((left, right) =>
+          left.leaveType.name.localeCompare(right.leaveType.name, "zh-Hant"),
+        ),
+      }))
+      .sort((left, right) =>
+        left.employee.name.localeCompare(right.employee.name, "zh-Hant"),
+      );
+  }, [balances]);
+
   const handleSave = async () => {
     if (!editingBalance) {
       return;
@@ -1593,19 +1691,7 @@ const LeaveBalancesTab = () => {
     }
   };
 
-  const columns = [
-    {
-      title: "員工",
-      key: "employee",
-      render: (_: unknown, record: AdminLeaveBalance) => (
-        <div className="flex flex-col">
-          <span className="font-medium">{record.employee.name}</span>
-          <span className="text-xs text-gray-400">
-            {record.employee.department?.name || "未分配部門"}
-          </span>
-        </div>
-      ),
-    },
+  const balanceDetailColumns = [
     {
       title: "假別",
       key: "leaveType",
@@ -1655,11 +1741,75 @@ const LeaveBalancesTab = () => {
         <Button
           type="text"
           icon={<EditOutlined />}
-          onClick={() => openEditor(record)}
+          onClick={(event) => {
+            event.stopPropagation();
+            openEditor(record);
+          }}
         >
           調整額度
         </Button>
       ),
+    },
+  ];
+
+  const columns = [
+    {
+      title: "員工",
+      key: "employee",
+      render: (_: unknown, record: EmployeeLeaveBalanceRow) => (
+        <div className="flex flex-col">
+          <span className="font-medium">{record.employee.name}</span>
+          <span className="text-xs text-gray-400">
+            {record.employee.department?.name || "未分配部門"}
+            {record.employee.employeeNo ? ` · ${record.employee.employeeNo}` : ""}
+          </span>
+        </div>
+      ),
+    },
+    {
+      title: "假別摘要",
+      key: "summary",
+      render: (_: unknown, record: EmployeeLeaveBalanceRow) => (
+        <Space wrap size={[6, 6]}>
+          {record.balances.slice(0, 5).map((balance) => (
+            <Tag
+              key={balance.id}
+              color={
+                balance.pendingHours > 0
+                  ? "orange"
+                  : balance.remainingHours < 0
+                    ? "red"
+                    : "blue"
+              }
+            >
+              {balance.leaveType.name} {formatHoursAsDays(balance.remainingHours)}
+            </Tag>
+          ))}
+          {record.balances.length > 5 ? (
+            <Tag color="default">+{record.balances.length - 5}</Tag>
+          ) : null}
+        </Space>
+      ),
+    },
+    {
+      title: "待核合計",
+      dataIndex: "totalPendingHours",
+      key: "totalPendingHours",
+      render: (value: number) => formatHoursAsDays(value),
+    },
+    {
+      title: "剩餘合計",
+      dataIndex: "totalRemainingHours",
+      key: "totalRemainingHours",
+      render: (value: number) => (
+        <span className="font-medium">{formatHoursAsDays(value)}</span>
+      ),
+    },
+    {
+      title: "假別數",
+      key: "leaveTypeCount",
+      render: (_: unknown, record: EmployeeLeaveBalanceRow) =>
+        `${record.balances.length} 個假別`,
     },
   ];
 
@@ -1670,7 +1820,7 @@ const LeaveBalancesTab = () => {
         showIcon
         className="mb-6"
         message="年度額度會在薪資計算時參與請假扣款邏輯"
-        description="新增員工後，如果要立即補發特休、補登結轉或人工修正額度，現在可以直接在這個頁籤完成。"
+        description="列表依員工彙總；展開員工列後，可以查看每個假別的應得、已用、待核、剩餘與人工調整。"
       />
 
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -1711,8 +1861,22 @@ const LeaveBalancesTab = () => {
         rowKey="id"
         loading={loading}
         columns={columns}
-        dataSource={balances}
-        scroll={{ x: 1200 }}
+        dataSource={employeeBalanceRows}
+        scroll={{ x: 900 }}
+        expandable={{
+          expandRowByClick: true,
+          expandedRowRender: (record) => (
+            <Table
+              rowKey="id"
+              size="small"
+              pagination={false}
+              columns={balanceDetailColumns}
+              dataSource={record.balances}
+              scroll={{ x: 900 }}
+            />
+          ),
+          rowExpandable: (record) => record.balances.length > 0,
+        }}
       />
 
       <Modal

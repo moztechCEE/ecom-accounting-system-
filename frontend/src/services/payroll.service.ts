@@ -48,12 +48,20 @@ export const payrollService = {
     return response.data;
   },
 
-  createEmployee: async (data: Partial<Employee>) => {
-    const response = await api.post<EmployeeCreateResult>("/payroll/employees", data);
+  createEmployee: async (
+    data: Partial<Employee> & { loginEmail?: string; loginPassword?: string },
+  ) => {
+    const response = await api.post<EmployeeCreateResult>(
+      "/payroll/employees",
+      data,
+    );
     return response.data;
   },
 
-  updateEmployee: async (id: string, data: Partial<Employee>) => {
+  updateEmployee: async (
+    id: string,
+    data: Partial<Employee> & { loginEmail?: string; loginPassword?: string },
+  ) => {
     const response = await api.patch<Employee>(
       `/payroll/employees/${id}`,
       data,

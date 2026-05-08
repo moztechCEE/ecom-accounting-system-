@@ -135,6 +135,7 @@ export class PayrollService {
           id: true,
           name: true,
           email: true,
+          mustChangePassword: true,
         },
       },
       compensationSettings: true,
@@ -280,6 +281,25 @@ export class PayrollService {
 
   private generateTemporaryPassword() {
     return DEFAULT_EMPLOYEE_INITIAL_PASSWORD;
+  }
+
+  private normalizeLoginEmail(value?: string | null, required = false) {
+    const email = value?.trim().toLowerCase();
+    if (!email) {
+      if (required) {
+        throw new BadRequestException('Login email is required');
+      }
+
+      return undefined;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequestException(
+        'Login email must be a valid email address',
+      );
+    }
+
+    return email;
   }
 
   private async generateNextEmployeeNo() {
@@ -974,6 +994,8 @@ export class PayrollService {
       nationalId?: string | null;
       mailingAddress?: string | null;
       compensationSettings?: Record<string, unknown> | null;
+      loginEmail?: string | null;
+      loginPassword?: string | null;
     },
   ) {
     const access = await this.getEmployeeDataAccessContext(userId, data.entityId);
@@ -1029,6 +1051,20 @@ export class PayrollService {
     const compensationSettings = this.normalizeCompensationSettings(
       data.compensationSettings,
     );
+    const loginEmail = this.normalizeLoginEmail(data.loginEmail);
+    const loginPassword = data.loginPassword?.trim() || undefined;
+    if (loginPassword && loginPassword.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters');
+    }
+    if (loginEmail) {
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email: loginEmail },
+        select: { id: true },
+      });
+      if (existingUser) {
+        throw new ConflictException(`Email ${loginEmail} already exists`);
+      }
+    }
 
     const employee = await this.prisma.employee.create({
       data: {
@@ -1075,7 +1111,10 @@ export class PayrollService {
     const loginAccount = await this.createEmployeeLoginAccount(
       employee.id,
       userId,
-      {},
+      {
+        email: loginEmail,
+        password: loginPassword,
+      },
     );
 
     return {
@@ -1131,9 +1170,13 @@ export class PayrollService {
     }
 
     const email =
-      dto.email?.trim().toLowerCase() ||
+      this.normalizeLoginEmail(dto.email) ||
       this.generateEmployeeLoginEmail(employee.entityId, employee.employeeNo);
     const password = dto.password?.trim() || this.generateTemporaryPassword();
+    if (password.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters');
+    }
+
     const defaultEmployeeRole = await this.prisma.role.findFirst({
       where: {
         OR: [
@@ -1194,6 +1237,8 @@ export class PayrollService {
       nationalId?: string | null;
       mailingAddress?: string | null;
       compensationSettings?: Record<string, unknown> | null;
+      loginEmail?: string | null;
+      loginPassword?: string | null;
     },
   ) {
     const employee = await this.prisma.employee.findUnique({
@@ -1283,6 +1328,26 @@ export class PayrollService {
       data.compensationSettings !== undefined
         ? this.normalizeCompensationSettings(data.compensationSettings)
         : undefined;
+
+    const hasLoginEmailUpdate = data.loginEmail !== undefined;
+    const loginPassword = data.loginPassword?.trim();
+    const hasLoginPasswordUpdate = Boolean(loginPassword);
+
+    if ((hasLoginEmailUpdate || hasLoginPasswordUpdate) && !employee.userId) {
+      throw new BadRequestException(
+        'Employee does not have a linked login account',
+      );
+    }
+
+    if (employee.userId && (hasLoginEmailUpdate || hasLoginPasswordUpdate)) {
+      await this.usersService.updateLoginCredentials(employee.userId, {
+        email: hasLoginEmailUpdate
+          ? this.normalizeLoginEmail(data.loginEmail, true)
+          : undefined,
+        password: hasLoginPasswordUpdate ? loginPassword : undefined,
+        mustChangePassword: hasLoginPasswordUpdate ? true : undefined,
+      });
+    }
 
     const updatedEmployee = await this.prisma.employee.update({
       where: { id },
@@ -3415,12 +3480,12 @@ export class PayrollService {
       {
         key: 'laborInsuranceDeduction' as const,
         type: 'LABOR_INSURANCE_DEDUCTION',
-        remark: '固定扣除：勞保扣照額',
+        remark: '固定扣除：勞保扣除額',
       },
       {
         key: 'healthInsuranceDeduction' as const,
         type: 'HEALTH_INSURANCE_DEDUCTION',
-        remark: '固定扣除：健保扣照額',
+        remark: '固定扣除：健保扣除額',
       },
       {
         key: 'pensionSelfContribution' as const,
