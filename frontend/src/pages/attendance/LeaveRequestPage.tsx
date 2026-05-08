@@ -309,14 +309,29 @@ const LeaveRequestPage: React.FC = () => {
   const buildLeaveRequestPayload = (draft: LeaveRequestDraft) => {
     const leaveType = leaveTypes.find((type) => type.id === draft.leaveTypeId);
     const funeralLeave = isFuneralLeaveType(leaveType);
-    const endDate = canCreateForEmployees ? draft.startDate : draft.endDate;
+    const hours = Number(draft.hours);
+    const adminStartAt = dayjs(draft.startDate)
+      .hour(9)
+      .minute(0)
+      .second(0)
+      .millisecond(0);
+    const adminEndAt = adminStartAt.add(
+      Math.max(1, Math.round(hours * 60)),
+      "minute",
+    );
+    const startAt = canCreateForEmployees
+      ? adminStartAt
+      : dayjs(`${draft.startDate} ${draft.startTime}`);
+    const endAt = canCreateForEmployees
+      ? adminEndAt
+      : dayjs(`${draft.endDate} ${draft.endTime}`);
 
     return {
       employeeId: canCreateForEmployees ? draft.employeeId : undefined,
       leaveTypeId: draft.leaveTypeId,
-      startAt: dayjs(`${draft.startDate} ${draft.startTime}`).toISOString(),
-      endAt: dayjs(`${endDate} ${draft.endTime}`).toISOString(),
-      hours: Number(draft.hours),
+      startAt: startAt.toISOString(),
+      endAt: endAt.toISOString(),
+      hours,
       reason: draft.reason,
       location: draft.location,
       funeralRelationship: funeralLeave ? draft.funeralRelationship : undefined,
@@ -355,8 +370,8 @@ const LeaveRequestPage: React.FC = () => {
             message.error(`第 ${index + 1} 筆請先選擇員工與假別`);
             return;
           }
-          if (!row.startDate || !row.startTime || !row.endTime) {
-            message.error(`第 ${index + 1} 筆請先填寫日期與起訖時間`);
+          if (!row.startDate) {
+            message.error(`第 ${index + 1} 筆請先填寫請假日期`);
             return;
           }
           if (!Number.isFinite(Number(row.hours)) || Number(row.hours) <= 0) {
@@ -671,28 +686,6 @@ const LeaveRequestPage: React.FC = () => {
                 : "不追蹤年度額度"
               : " "}
           </div>
-        </td>
-        <td className="w-[140px] px-3 py-4">
-          <label className={compactLabelClass}>開始時間</label>
-          <input
-            className={compactInputClass}
-            type="time"
-            value={row.startTime}
-            onChange={(event) =>
-              updateRequestRow(row.id, { startTime: event.target.value })
-            }
-          />
-        </td>
-        <td className="w-[140px] px-3 py-4">
-          <label className={compactLabelClass}>結束時間</label>
-          <input
-            className={compactInputClass}
-            type="time"
-            value={row.endTime}
-            onChange={(event) =>
-              updateRequestRow(row.id, { endTime: event.target.value })
-            }
-          />
         </td>
         <td className="w-[110px] px-3 py-4">
           <label className={compactLabelClass}>時數</label>
@@ -1077,18 +1070,16 @@ const LeaveRequestPage: React.FC = () => {
           {canCreateForEmployees ? (
             <div className="space-y-4">
               <div className="rounded-2xl border border-sky-100/70 bg-sky-50/70 px-4 py-3 text-sm leading-6 text-sky-800">
-                每一列會建立一張單日假單。請先選日期，系統會依該日期篩出仍在任職期間的員工；連續或不同日期請新增多列分別送出。
+                每一列會建立一張單日假單。請先選日期，系統會依該日期篩出仍在任職期間的員工；請假長度直接填小時即可。
               </div>
               <div className="max-w-full overflow-x-auto rounded-2xl border border-white/20 bg-white/10">
-                <table className="min-w-[1080px] w-full border-collapse text-left">
+                <table className="min-w-[900px] w-full border-collapse text-left">
                   <thead>
                     <tr className="border-b border-white/20 bg-white/30 text-sm text-slate-500">
                       <th className="px-3 py-3 text-center font-medium">#</th>
                       <th className="px-3 py-3 font-medium">日期</th>
                       <th className="px-3 py-3 font-medium">員工</th>
                       <th className="px-3 py-3 font-medium">假別</th>
-                      <th className="px-3 py-3 font-medium">開始時間</th>
-                      <th className="px-3 py-3 font-medium">結束時間</th>
                       <th className="px-3 py-3 font-medium">時數</th>
                       <th className="px-3 py-3 font-medium">原因 / 地點</th>
                       <th className="px-3 py-3 font-medium">附件 / 細節</th>
