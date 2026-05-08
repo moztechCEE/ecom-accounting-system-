@@ -615,6 +615,14 @@ const DashboardPage: React.FC = () => {
   const rangeLabel = getRangeModeLabel(rangeMode);
   const todayFinancial = todayManagementSummary?.summary;
   const rangeFinancial = rangeManagementSummary?.summary;
+  const selectedFinancial = rangeFinancial || todayFinancial;
+  const selectedNetProfit = selectedFinancial?.netProfit || 0;
+  const selectedRevenue = selectedFinancial?.revenue || 0;
+  const selectedNetMarginPct = selectedFinancial?.netMarginPct;
+  const selectedPeriodLabel =
+    rangeMode === "custom" && customRange?.[0] && customRange?.[1]
+      ? `${customRange[0].format("MM/DD")} - ${customRange[1].format("MM/DD")}`
+      : rangeLabel;
   const adConnector = connectorReadiness?.connectors.find((item) => item.key === "ad-spend") || null;
   const missingInvoiceCount =
     Number(invoiceSummary?.pendingCount || 0) + Number(invoiceSummary?.eligibleCount || 0);
@@ -959,7 +967,7 @@ const DashboardPage: React.FC = () => {
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">CEO Control Tower</div>
             <div className="mt-1 text-lg font-semibold text-slate-900">財務管制與營運風險</div>
             <div className="mt-1 text-sm text-slate-500">
-              今日淨利、現金流壓力、廣告花費與需要財務追蹤的異常集中在這裡。
+              所選期間淨利、廣告花費、目前現金流壓力與需要財務追蹤的異常集中在這裡。
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
@@ -974,22 +982,22 @@ const DashboardPage: React.FC = () => {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className={`rounded-2xl border px-5 py-4 ${
-            (todayFinancial?.netProfit || 0) < 0 ? "border-red-200 bg-red-50/70" : "border-emerald-100 bg-emerald-50/60"
+            selectedNetProfit < 0 ? "border-red-200 bg-red-50/70" : "border-emerald-100 bg-emerald-50/60"
           }`}>
             <div className="mb-3 flex items-center justify-between">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm">
                 <DollarOutlined />
               </div>
-              <Tag color={(todayFinancial?.netProfit || 0) < 0 ? "red" : "green"}>今天</Tag>
+              <Tag color={selectedNetProfit < 0 ? "red" : "green"}>{selectedPeriodLabel}</Tag>
             </div>
-            <div className="text-xs text-slate-500">今天淨利</div>
+            <div className="text-xs text-slate-500">{selectedPeriodLabel}淨利</div>
             <div className={`mt-1 text-2xl font-bold ${
-              (todayFinancial?.netProfit || 0) < 0 ? "text-red-700" : "text-slate-900"
+              selectedNetProfit < 0 ? "text-red-700" : "text-slate-900"
             }`}>
-              {fmtSignedMoney(todayFinancial?.netProfit || 0)}
+              {fmtSignedMoney(selectedNetProfit)}
             </div>
             <div className="mt-2 text-xs leading-5 text-slate-500">
-              營收 {fmtMoney(todayFinancial?.revenue || 0)} · 淨利率 {fmtPct(todayFinancial?.netMarginPct)}
+              營收 {fmtMoney(selectedRevenue)} · 淨利率 {fmtPct(selectedNetMarginPct)}
             </div>
           </div>
 
@@ -1024,10 +1032,10 @@ const DashboardPage: React.FC = () => {
               </div>
               <Tag color={cashRiskAmount > 0 ? "red" : "green"}>現金流</Tag>
             </div>
-            <div className="text-xs text-slate-500">現金流風險金額</div>
+            <div className="text-xs text-slate-500">目前現金流風險金額</div>
             <div className="mt-1 text-2xl font-bold text-slate-900">{fmtMoney(cashRiskAmount)}</div>
             <div className="mt-2 text-xs leading-5 text-slate-500">
-              逾期 AR {overdueAR} 筆 · 超收 {overpaidAR} 筆 · 待付款費用 {fmtMoney(payableExposure)}
+              未結狀態，不完全跟日期切換：逾期 AR {overdueAR} 筆 · 超收 {overpaidAR} 筆 · 待付款費用 {fmtMoney(payableExposure)}
             </div>
           </div>
 
