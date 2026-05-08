@@ -49,4 +49,29 @@ export class CreateUserDto {
   @IsString()
   @IsIn(['SELF', 'DEPARTMENT', 'ENTITY'])
   readonly payrollDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['SELF', 'DEPARTMENT', 'ENTITY'])
+  readonly accountingDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['SELF', 'DEPARTMENT', 'ENTITY'])
+  readonly inventoryDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['SELF', 'DEPARTMENT', 'ENTITY'])
+  readonly salesDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['SELF', 'DEPARTMENT', 'ENTITY'])
+  readonly purchasingDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['SELF', 'DEPARTMENT', 'ENTITY'])
+  readonly bankingDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
 }

@@ -34,7 +34,15 @@ type UserWithRelations = Prisma.UserGetPayload<{
 
 type PrismaClientOrTx = PrismaService | Prisma.TransactionClient;
 type DataAccessScope = 'SELF' | 'DEPARTMENT' | 'ENTITY';
-type DataAccessModule = 'employees' | 'attendance' | 'payroll';
+type DataAccessModule =
+  | 'employees'
+  | 'attendance'
+  | 'payroll'
+  | 'accounting'
+  | 'inventory'
+  | 'sales'
+  | 'purchasing'
+  | 'banking';
 
 type UserDataAccessContext = {
   scope: DataAccessScope;
@@ -57,11 +65,23 @@ export class UsersService {
 
   private readonly dataScopeFields: Record<
     DataAccessModule,
-    'employeeDataScope' | 'attendanceDataScope' | 'payrollDataScope'
+    | 'employeeDataScope'
+    | 'attendanceDataScope'
+    | 'payrollDataScope'
+    | 'accountingDataScope'
+    | 'inventoryDataScope'
+    | 'salesDataScope'
+    | 'purchasingDataScope'
+    | 'bankingDataScope'
   > = {
     employees: 'employeeDataScope',
     attendance: 'attendanceDataScope',
     payroll: 'payrollDataScope',
+    accounting: 'accountingDataScope',
+    inventory: 'inventoryDataScope',
+    sales: 'salesDataScope',
+    purchasing: 'purchasingDataScope',
+    banking: 'bankingDataScope',
   };
 
   private normalizeDataScope(value?: string | null): DataAccessScope {
@@ -212,6 +232,11 @@ export class UsersService {
       employeeDataScope,
       attendanceDataScope,
       payrollDataScope,
+      accountingDataScope,
+      inventoryDataScope,
+      salesDataScope,
+      purchasingDataScope,
+      bankingDataScope,
     } = dto;
 
     const existing = await this.prisma.user.findUnique({
@@ -238,6 +263,11 @@ export class UsersService {
             employeeDataScope: this.normalizeDataScope(employeeDataScope),
             attendanceDataScope: this.normalizeDataScope(attendanceDataScope),
             payrollDataScope: this.normalizeDataScope(payrollDataScope),
+            accountingDataScope: this.normalizeDataScope(accountingDataScope),
+            inventoryDataScope: this.normalizeDataScope(inventoryDataScope),
+            salesDataScope: this.normalizeDataScope(salesDataScope),
+            purchasingDataScope: this.normalizeDataScope(purchasingDataScope),
+            bankingDataScope: this.normalizeDataScope(bankingDataScope),
           },
         });
 
@@ -259,7 +289,10 @@ export class UsersService {
       this.logger.log(`Created user ${normalizedEmail}`);
       return result;
     } catch (error) {
-      this.handlePrismaError(error, `create user with email ${normalizedEmail}`);
+      this.handlePrismaError(
+        error,
+        `create user with email ${normalizedEmail}`,
+      );
     }
   }
 
@@ -275,13 +308,26 @@ export class UsersService {
       employeeDataScope,
       attendanceDataScope,
       payrollDataScope,
+      accountingDataScope,
+      inventoryDataScope,
+      salesDataScope,
+      purchasingDataScope,
+      bankingDataScope,
     } = dto;
 
     if (
       typeof name === 'undefined' &&
       typeof isActive === 'undefined' &&
       typeof password === 'undefined' &&
-      typeof mustChangePassword === 'undefined'
+      typeof mustChangePassword === 'undefined' &&
+      typeof employeeDataScope === 'undefined' &&
+      typeof attendanceDataScope === 'undefined' &&
+      typeof payrollDataScope === 'undefined' &&
+      typeof accountingDataScope === 'undefined' &&
+      typeof inventoryDataScope === 'undefined' &&
+      typeof salesDataScope === 'undefined' &&
+      typeof purchasingDataScope === 'undefined' &&
+      typeof bankingDataScope === 'undefined'
     ) {
       throw new BadRequestException('No updates provided');
     }
@@ -311,6 +357,21 @@ export class UsersService {
     }
     if (typeof payrollDataScope !== 'undefined') {
       data.payrollDataScope = this.normalizeDataScope(payrollDataScope);
+    }
+    if (typeof accountingDataScope !== 'undefined') {
+      data.accountingDataScope = this.normalizeDataScope(accountingDataScope);
+    }
+    if (typeof inventoryDataScope !== 'undefined') {
+      data.inventoryDataScope = this.normalizeDataScope(inventoryDataScope);
+    }
+    if (typeof salesDataScope !== 'undefined') {
+      data.salesDataScope = this.normalizeDataScope(salesDataScope);
+    }
+    if (typeof purchasingDataScope !== 'undefined') {
+      data.purchasingDataScope = this.normalizeDataScope(purchasingDataScope);
+    }
+    if (typeof bankingDataScope !== 'undefined') {
+      data.bankingDataScope = this.normalizeDataScope(bankingDataScope);
     }
 
     try {
@@ -445,7 +506,11 @@ export class UsersService {
   /**
    * 更新 2FA 設定
    */
-  async updateTwoFactorConfig(userId: string, secret: string, enabled: boolean) {
+  async updateTwoFactorConfig(
+    userId: string,
+    secret: string,
+    enabled: boolean,
+  ) {
     try {
       return await this.prisma.user.update({
         where: { id: userId },
@@ -487,6 +552,11 @@ export class UsersService {
         employeeDataScope: true,
         attendanceDataScope: true,
         payrollDataScope: true,
+        accountingDataScope: true,
+        inventoryDataScope: true,
+        salesDataScope: true,
+        purchasingDataScope: true,
+        bankingDataScope: true,
         employee: {
           select: {
             id: true,
@@ -518,10 +588,12 @@ export class UsersService {
     const noAccess =
       scope === 'SELF'
         ? !user.employee?.id ||
-          (Boolean(requestedEntityId) && requestedEntityId !== user.employee?.entityId)
+          (Boolean(requestedEntityId) &&
+            requestedEntityId !== user.employee?.entityId)
         : scope === 'DEPARTMENT'
           ? !user.employee?.departmentId ||
-            (Boolean(requestedEntityId) && requestedEntityId !== user.employee?.entityId)
+            (Boolean(requestedEntityId) &&
+              requestedEntityId !== user.employee?.entityId)
           : false;
 
     return {

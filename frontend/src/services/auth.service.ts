@@ -27,6 +27,11 @@ const mapManagedUserToUser = (managed: ManagedUser): User => {
     employeeDataScope: managed.employeeDataScope,
     attendanceDataScope: managed.attendanceDataScope,
     payrollDataScope: managed.payrollDataScope,
+    accountingDataScope: managed.accountingDataScope,
+    inventoryDataScope: managed.inventoryDataScope,
+    salesDataScope: managed.salesDataScope,
+    purchasingDataScope: managed.purchasingDataScope,
+    bankingDataScope: managed.bankingDataScope,
     roles: Array.from(roleSet),
     permissions: Array.from(permissionSet),
   }
@@ -34,7 +39,10 @@ const mapManagedUserToUser = (managed: ManagedUser): User => {
 
 export const authService = {
   async login(data: LoginRequest): Promise<LoginResponse> {
-    const response = await api.post<{ access_token: string; user: { id: string; email: string; name: string } }>('/auth/login', data)
+    const response = await api.post<{
+      access_token: string
+      user: { id: string; email: string; name: string }
+    }>('/auth/login', data)
     const token = response.data.access_token
     if (token) {
       localStorage.setItem('access_token', token)
@@ -48,7 +56,15 @@ export const authService = {
     }
   },
 
-  async getLoginEntities(): Promise<Array<{ id: string; name: string; country?: string; baseCurrency?: string; loginCode: string }>> {
+  async getLoginEntities(): Promise<
+    Array<{
+      id: string
+      name: string
+      country?: string
+      baseCurrency?: string
+      loginCode: string
+    }>
+  > {
     const response = await api.get('/auth/login-entities')
     return response.data
   },
@@ -59,7 +75,9 @@ export const authService = {
   },
 
   async get2FASetup() {
-    const response = await api.get<{ secret: string; otpauthUrl: string }>('/auth/2fa/setup')
+    const response = await api.get<{ secret: string; otpauthUrl: string }>(
+      '/auth/2fa/setup',
+    )
     return response.data
   },
 
@@ -68,7 +86,11 @@ export const authService = {
     return response.data
   },
 
-  async changePassword(data: { currentPassword: string; newPassword: string; email?: string }) {
+  async changePassword(data: {
+    currentPassword: string
+    newPassword: string
+    email?: string
+  }) {
     const response = await api.post('/auth/change-password', data)
     return response.data
   },
@@ -82,7 +104,6 @@ export const authService = {
     const response = await api.post('/auth/password-reset/confirm', data)
     return response.data
   },
-
 
   logout() {
     localStorage.removeItem('access_token')

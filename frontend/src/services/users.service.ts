@@ -9,6 +9,11 @@ export interface CreateUserPayload {
   employeeDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
   attendanceDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
   payrollDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  accountingDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  inventoryDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  salesDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  purchasingDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  bankingDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
 }
 
 export interface UpdateUserPayload {
@@ -18,6 +23,11 @@ export interface UpdateUserPayload {
   employeeDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
   attendanceDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
   payrollDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  accountingDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  inventoryDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  salesDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  purchasingDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
+  bankingDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY'
 }
 
 export const usersService = {
@@ -39,7 +49,9 @@ export const usersService = {
   },
 
   async setRoles(id: string, roleIds: string[]): Promise<ManagedUser> {
-    const response = await api.put<ManagedUser>(`/users/${id}/roles`, { roleIds })
+    const response = await api.put<ManagedUser>(`/users/${id}/roles`, {
+      roleIds,
+    })
     return response.data
   },
 

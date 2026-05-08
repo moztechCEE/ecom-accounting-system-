@@ -44,6 +44,11 @@ export interface ManagedUser {
   employeeDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   attendanceDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   payrollDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  accountingDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  inventoryDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  salesDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  purchasingDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  bankingDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   createdAt?: string;
   updatedAt?: string;
   roles: UserRoleLink[];
@@ -68,6 +73,11 @@ export interface User {
   employeeDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   attendanceDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   payrollDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  accountingDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  inventoryDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  salesDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  purchasingDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  bankingDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   roles: string[];
   permissions: string[];
 }

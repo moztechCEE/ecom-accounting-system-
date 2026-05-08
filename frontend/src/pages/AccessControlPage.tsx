@@ -17,25 +17,44 @@ import {
   message,
   Tooltip,
 } from 'antd'
-import { 
-  UserOutlined, 
-  SafetyCertificateOutlined, 
-  KeyOutlined, 
-  PlusOutlined, 
-  EditOutlined, 
+import {
+  UserOutlined,
+  SafetyCertificateOutlined,
+  KeyOutlined,
+  PlusOutlined,
+  EditOutlined,
   DeleteOutlined,
   SettingOutlined,
-  SearchOutlined
+  SearchOutlined,
 } from '@ant-design/icons'
 import { motion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
-import { usersService, CreateUserPayload, UpdateUserPayload } from '../services/users.service'
-import { rolesService, CreateRolePayload, UpdateRolePayload } from '../services/roles.service'
+import {
+  usersService,
+  CreateUserPayload,
+  UpdateUserPayload,
+} from '../services/users.service'
+import {
+  rolesService,
+  CreateRolePayload,
+  UpdateRolePayload,
+} from '../services/roles.service'
 import { permissionsService } from '../services/permissions.service'
-import { ManagedUser, PaginatedResult, Permission, Role, RolePermissionLink, UserRoleLink } from '../types'
+import {
+  ManagedUser,
+  PaginatedResult,
+  Permission,
+  Role,
+  RolePermissionLink,
+  UserRoleLink,
+} from '../types'
 import { GlassCard } from '../components/ui/GlassCard'
 import { GlassButton } from '../components/ui/GlassButton'
-import { getResourceName, getActionName, getRoleName } from '../constants/translations'
+import {
+  getResourceName,
+  getActionName,
+  getRoleName,
+} from '../constants/translations'
 import { hasPermission, isAdminUser } from '../utils/access'
 
 type TableColumn<T> = {
@@ -60,6 +79,103 @@ const DATA_SCOPE_OPTIONS = [
 const DATA_SCOPE_LABEL_MAP = Object.fromEntries(
   DATA_SCOPE_OPTIONS.map((item) => [item.value, item.label]),
 )
+type DataScopeKey =
+  | 'employeeDataScope'
+  | 'attendanceDataScope'
+  | 'payrollDataScope'
+  | 'accountingDataScope'
+  | 'inventoryDataScope'
+  | 'salesDataScope'
+  | 'purchasingDataScope'
+  | 'bankingDataScope'
+
+const DATA_SCOPE_FIELDS: Array<{
+  key: DataScopeKey
+  label: string
+  shortLabel: string
+  color: string
+}> = [
+  {
+    key: 'employeeDataScope',
+    label: '員工資料範圍',
+    shortLabel: '員工',
+    color: 'blue',
+  },
+  {
+    key: 'attendanceDataScope',
+    label: '考勤資料範圍',
+    shortLabel: '考勤',
+    color: 'gold',
+  },
+  {
+    key: 'payrollDataScope',
+    label: '薪資資料範圍',
+    shortLabel: '薪資',
+    color: 'purple',
+  },
+  {
+    key: 'accountingDataScope',
+    label: '會計資料範圍',
+    shortLabel: '會計',
+    color: 'cyan',
+  },
+  {
+    key: 'inventoryDataScope',
+    label: '庫存資料範圍',
+    shortLabel: '庫存',
+    color: 'green',
+  },
+  {
+    key: 'salesDataScope',
+    label: '銷售資料範圍',
+    shortLabel: '銷售',
+    color: 'magenta',
+  },
+  {
+    key: 'purchasingDataScope',
+    label: '採購資料範圍',
+    shortLabel: '採購',
+    color: 'volcano',
+  },
+  {
+    key: 'bankingDataScope',
+    label: '銀行資料範圍',
+    shortLabel: '銀行',
+    color: 'geekblue',
+  },
+]
+
+const DEFAULT_DATA_SCOPE_VALUES = DATA_SCOPE_FIELDS.reduce(
+  (values, field) => ({
+    ...values,
+    [field.key]: 'SELF',
+  }),
+  {} as Record<DataScopeKey, 'SELF'>,
+)
+
+const getUserDataScopeValues = (user: ManagedUser) =>
+  DATA_SCOPE_FIELDS.reduce(
+    (values, field) => ({
+      ...values,
+      [field.key]: user[field.key] || 'SELF',
+    }),
+    {} as Record<DataScopeKey, 'SELF' | 'DEPARTMENT' | 'ENTITY'>,
+  )
+
+const DataScopeFormGrid = () => (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+    {DATA_SCOPE_FIELDS.map((field) => (
+      <Form.Item
+        key={field.key}
+        name={field.key}
+        label={field.label}
+        className="mb-0"
+      >
+        <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
+      </Form.Item>
+    ))}
+  </div>
+)
 
 type UsersTabProps = {
   availableRoles: Role[]
@@ -83,7 +199,9 @@ type PermissionsTabProps = {
 
 const getErrorMessage = (error: unknown): string => {
   if (error && typeof error === 'object') {
-    const withResponse = error as { response?: { data?: { message?: string } } }
+    const withResponse = error as {
+      response?: { data?: { message?: string } }
+    }
     const responseMessage = withResponse.response?.data?.message
     if (typeof responseMessage === 'string' && responseMessage.trim()) {
       return responseMessage
@@ -175,9 +293,13 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
       const payload: UpdateUserPayload = {
         name: values.name,
         isActive: values.isActive,
-        employeeDataScope: values.employeeDataScope,
-        attendanceDataScope: values.attendanceDataScope,
-        payrollDataScope: values.payrollDataScope,
+        ...DATA_SCOPE_FIELDS.reduce(
+          (scopes, field) => ({
+            ...scopes,
+            [field.key]: values[field.key],
+          }),
+          {} as Pick<UpdateUserPayload, DataScopeKey>,
+        ),
       }
 
       if (values.password) {
@@ -227,7 +349,9 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
       dataIndex: 'isActive',
       key: 'status',
       render: (_value: any, record: ManagedUser) => (
-        <Tag color={record.isActive ? 'green' : 'red'}>{record.isActive ? '啟用' : '停用'}</Tag>
+        <Tag color={record.isActive ? 'green' : 'red'}>
+          {record.isActive ? '啟用' : '停用'}
+        </Tag>
       ),
     },
     {
@@ -235,9 +359,12 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
       key: 'scopes',
       render: (_value: any, record: ManagedUser) => (
         <Space wrap size={[4, 4]}>
-          <Tag color="blue">員工 {DATA_SCOPE_LABEL_MAP[record.employeeDataScope || 'SELF']}</Tag>
-          <Tag color="gold">考勤 {DATA_SCOPE_LABEL_MAP[record.attendanceDataScope || 'SELF']}</Tag>
-          <Tag color="purple">薪資 {DATA_SCOPE_LABEL_MAP[record.payrollDataScope || 'SELF']}</Tag>
+          {DATA_SCOPE_FIELDS.map((field) => (
+            <Tag key={field.key} color={field.color}>
+              {field.shortLabel}{' '}
+              {DATA_SCOPE_LABEL_MAP[record[field.key] || 'SELF']}
+            </Tag>
+          ))}
         </Space>
       ),
     },
@@ -253,7 +380,9 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
               onClick={() => {
                 setSelectedUser(record)
                 assignForm.setFieldsValue({
-                  roleIds: record.roles?.map((link: UserRoleLink) => link.roleId) || [],
+                  roleIds:
+                    record.roles?.map((link: UserRoleLink) => link.roleId) ||
+                    [],
                 })
                 setAssignOpen(true)
               }}
@@ -269,9 +398,7 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
                   name: record.name,
                   isActive: record.isActive,
                   password: undefined,
-                  employeeDataScope: record.employeeDataScope || 'SELF',
-                  attendanceDataScope: record.attendanceDataScope || 'SELF',
-                  payrollDataScope: record.payrollDataScope || 'SELF',
+                  ...getUserDataScopeValues(record),
                 })
                 setEditOpen(true)
               }}
@@ -322,7 +449,7 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
           pageSize: meta.limit,
           total: meta.total,
           showSizeChanger: false,
-          className: 'p-4'
+          className: 'p-4',
         }}
         onChange={(pagination: any) => {
           const currentPage = pagination.current ?? 1
@@ -338,36 +465,51 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
         onOk={handleCreate}
         destroyOnClose
         okText="建立"
-        width={500}
+        width={820}
       >
         <Form
           layout="vertical"
           form={createForm}
           initialValues={{
             roleIds: [],
-            employeeDataScope: 'SELF',
-            attendanceDataScope: 'SELF',
-            payrollDataScope: 'SELF',
+            ...DEFAULT_DATA_SCOPE_VALUES,
           }}
           className="pt-4"
         >
           <div className="bg-gray-50 p-4 rounded-lg mb-4 border border-gray-100">
-            <Form.Item name="name" label="姓名" rules={[{ required: true, message: '請輸入姓名' }]}>
+            <Form.Item
+              name="name"
+              label="姓名"
+              rules={[{ required: true, message: '請輸入姓名' }]}
+            >
               <Input placeholder="輸入使用者姓名" className="rounded-md" />
             </Form.Item>
             <Form.Item
               name="email"
               label="電子郵件"
-              rules={[{ required: true, message: '請輸入電子郵件' }, { type: 'email', message: '電子郵件格式不正確' }]}
+              rules={[
+                { required: true, message: '請輸入電子郵件' },
+                { type: 'email', message: '電子郵件格式不正確' },
+              ]}
             >
-              <Input placeholder="例如 user@example.com" className="rounded-md" />
+              <Input
+                placeholder="例如 user@example.com"
+                className="rounded-md"
+              />
             </Form.Item>
             <Form.Item
               name="password"
               label="初始密碼"
-              rules={[{ required: true, message: '請輸入密碼' }, { min: 8, message: '密碼至少 8 碼' }]}
+              rules={[
+                { required: true, message: '請輸入密碼' },
+                { min: 8, message: '密碼至少 8 碼' },
+              ]}
             >
-              <Input.Password placeholder="至少 8 碼" autoComplete="new-password" className="rounded-md" />
+              <Input.Password
+                placeholder="至少 8 碼"
+                autoComplete="new-password"
+                className="rounded-md"
+              />
             </Form.Item>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
@@ -383,17 +525,7 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
                 className="rounded-md"
               />
             </Form.Item>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-              <Form.Item name="employeeDataScope" label="員工資料範圍" className="mb-0">
-                <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
-              </Form.Item>
-              <Form.Item name="attendanceDataScope" label="考勤資料範圍" className="mb-0">
-                <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
-              </Form.Item>
-              <Form.Item name="payrollDataScope" label="薪資資料範圍" className="mb-0">
-                <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
-              </Form.Item>
-            </div>
+            <DataScopeFormGrid />
           </div>
         </Form>
       </Modal>
@@ -429,14 +561,23 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
         onCancel={() => setEditOpen(false)}
         onOk={handleEditUser}
         okText="儲存"
-        width={500}
+        width={820}
       >
         <Form form={editForm} layout="vertical" className="pt-4">
           <div className="bg-gray-50 p-4 rounded-lg mb-4 border border-gray-100">
-            <Form.Item name="name" label="姓名" rules={[{ required: true, message: '請輸入姓名' }]}>
+            <Form.Item
+              name="name"
+              label="姓名"
+              rules={[{ required: true, message: '請輸入姓名' }]}
+            >
               <Input className="rounded-md" />
             </Form.Item>
-            <Form.Item name="isActive" label="帳號狀態" valuePropName="checked" className="mb-0">
+            <Form.Item
+              name="isActive"
+              label="帳號狀態"
+              valuePropName="checked"
+              className="mb-0"
+            >
               <Switch checkedChildren="啟用" unCheckedChildren="停用" />
             </Form.Item>
           </div>
@@ -448,19 +589,12 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
               extra="若不需變更密碼，請留白"
               className="mb-0"
             >
-              <Input.Password autoComplete="new-password" className="rounded-md" />
+              <Input.Password
+                autoComplete="new-password"
+                className="rounded-md"
+              />
             </Form.Item>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-              <Form.Item name="employeeDataScope" label="員工資料範圍">
-                <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
-              </Form.Item>
-              <Form.Item name="attendanceDataScope" label="考勤資料範圍">
-                <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
-              </Form.Item>
-              <Form.Item name="payrollDataScope" label="薪資資料範圍" className="mb-0">
-                <Select options={DATA_SCOPE_OPTIONS} className="rounded-md" />
-              </Form.Item>
-            </div>
+            <DataScopeFormGrid />
           </div>
         </Form>
       </Modal>
@@ -531,7 +665,10 @@ const RolesTab = ({
     if (!selectedRole) return
     try {
       const values = await permissionsForm.validateFields()
-      await rolesService.setPermissions(selectedRole.id, values.permissionIds ?? [])
+      await rolesService.setPermissions(
+        selectedRole.id,
+        values.permissionIds ?? [],
+      )
       message.success('角色權限已更新')
       setPermissionOpen(false)
       await reloadRoles()
@@ -553,25 +690,26 @@ const RolesTab = ({
   )
 
   const columns: TableColumn<Role>[] = [
-    { 
-      title: '代碼', 
-      dataIndex: 'code', 
+    {
+      title: '代碼',
+      dataIndex: 'code',
       key: 'code',
-      render: (value: string) => <Text code>{value}</Text>
+      render: (value: string) => <Text code>{value}</Text>,
     },
-    { 
-      title: '名稱', 
-      dataIndex: 'name', 
+    {
+      title: '名稱',
+      dataIndex: 'name',
       key: 'name',
       render: (value: string, record: Role) => (
         <span className="font-medium">{value || getRoleName(record.code)}</span>
-      )
+      ),
     },
     {
       title: '階層',
       dataIndex: 'hierarchyLevel',
       key: 'hierarchyLevel',
-      render: (value: any) => (typeof value === 'number' ? <Tag>{value}</Tag> : '—'),
+      render: (value: any) =>
+        typeof value === 'number' ? <Tag>{value}</Tag> : '—',
     },
     {
       title: '權限數量',
@@ -609,7 +747,9 @@ const RolesTab = ({
                 setSelectedRole(record)
                 permissionsForm.setFieldsValue({
                   permissionIds:
-                    record.permissions?.map((item: RolePermissionLink) => item.permissionId) || [],
+                    record.permissions?.map(
+                      (item: RolePermissionLink) => item.permissionId,
+                    ) || [],
                 })
                 setPermissionOpen(true)
               }}
@@ -617,12 +757,16 @@ const RolesTab = ({
           </Tooltip>
           <Popconfirm
             title="確認刪除此角色？"
-            onConfirm={() => handleDelete(record)
-            }
+            onConfirm={() => handleDelete(record)}
             disabled={record.code === 'SUPER_ADMIN'}
           >
             <Tooltip title="刪除">
-              <Button type="text" danger disabled={record.code === 'SUPER_ADMIN'} icon={<DeleteOutlined />} />
+              <Button
+                type="text"
+                danger
+                disabled={record.code === 'SUPER_ADMIN'}
+                icon={<DeleteOutlined />}
+              />
             </Tooltip>
           </Popconfirm>
         </Space>
@@ -668,20 +812,40 @@ const RolesTab = ({
             <Form.Item
               name="code"
               label="角色代碼"
-              rules={[{ required: true, message: '請輸入角色代碼' }, { pattern: /^[A-Z_]+$/, message: '僅允許大寫英文字與底線' }]}
+              rules={[
+                { required: true, message: '請輸入角色代碼' },
+                { pattern: /^[A-Z_]+$/, message: '僅允許大寫英文字與底線' },
+              ]}
             >
               <Input placeholder="例如 FINANCE_ADMIN" className="rounded-md" />
             </Form.Item>
-            <Form.Item name="name" label="角色名稱" rules={[{ required: true, message: '請輸入角色名稱' }]}>
+            <Form.Item
+              name="name"
+              label="角色名稱"
+              rules={[{ required: true, message: '請輸入角色名稱' }]}
+            >
               <Input placeholder="顯示名稱" className="rounded-md" />
             </Form.Item>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
             <Form.Item name="description" label="描述">
-              <Input.TextArea rows={3} placeholder="簡短說明" className="rounded-md" />
+              <Input.TextArea
+                rows={3}
+                placeholder="簡短說明"
+                className="rounded-md"
+              />
             </Form.Item>
-            <Form.Item name="hierarchyLevel" label="階層 (數字愈小代表權限愈高)" className="mb-0">
-              <InputNumber min={1} style={{ width: '100%' }} placeholder="預設為 3" className="rounded-md" />
+            <Form.Item
+              name="hierarchyLevel"
+              label="階層 (數字愈小代表權限愈高)"
+              className="mb-0"
+            >
+              <InputNumber
+                min={1}
+                style={{ width: '100%' }}
+                placeholder="預設為 3"
+                className="rounded-md"
+              />
             </Form.Item>
           </div>
         </Form>
@@ -700,11 +864,18 @@ const RolesTab = ({
             <Form.Item
               name="code"
               label="角色代碼"
-              rules={[{ required: true, message: '請輸入角色代碼' }, { pattern: /^[A-Z_]+$/, message: '僅允許大寫英文字與底線' }]}
+              rules={[
+                { required: true, message: '請輸入角色代碼' },
+                { pattern: /^[A-Z_]+$/, message: '僅允許大寫英文字與底線' },
+              ]}
             >
               <Input className="rounded-md" />
             </Form.Item>
-            <Form.Item name="name" label="角色名稱" rules={[{ required: true, message: '請輸入角色名稱' }]}>
+            <Form.Item
+              name="name"
+              label="角色名稱"
+              rules={[{ required: true, message: '請輸入角色名稱' }]}
+            >
               <Input className="rounded-md" />
             </Form.Item>
           </div>
@@ -713,7 +884,12 @@ const RolesTab = ({
               <Input.TextArea rows={3} className="rounded-md" />
             </Form.Item>
             <Form.Item name="hierarchyLevel" label="階層" className="mb-0">
-              <InputNumber min={1} style={{ width: '100%' }} placeholder="預設為 3" className="rounded-md" />
+              <InputNumber
+                min={1}
+                style={{ width: '100%' }}
+                placeholder="預設為 3"
+                className="rounded-md"
+              />
             </Form.Item>
           </div>
         </Form>
@@ -755,10 +931,19 @@ const PermissionsTab = ({
 }: PermissionsTabProps) => {
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
-  const [selectedPermission, setSelectedPermission] = useState<Permission | null>(null)
+  const [selectedPermission, setSelectedPermission] =
+    useState<Permission | null>(null)
 
-  const [createForm] = Form.useForm<{ resource: string; action: string; description?: string }>()
-  const [editForm] = Form.useForm<{ resource?: string; action?: string; description?: string }>()
+  const [createForm] = Form.useForm<{
+    resource: string
+    action: string
+    description?: string
+  }>()
+  const [editForm] = Form.useForm<{
+    resource?: string
+    action?: string
+    description?: string
+  }>()
 
   const handleCreate = async () => {
     try {
@@ -806,24 +991,24 @@ const PermissionsTab = ({
   }
 
   const columns: TableColumn<Permission>[] = [
-    { 
-      title: '資源', 
-      dataIndex: 'resource', 
+    {
+      title: '資源',
+      dataIndex: 'resource',
       key: 'resource',
       render: (value: string) => (
         <Space>
           <span className="font-medium">{getResourceName(value)}</span>
-          <Text type="secondary" className="text-xs">({value})</Text>
+          <Text type="secondary" className="text-xs">
+            ({value})
+          </Text>
         </Space>
-      )
+      ),
     },
-    { 
-      title: '操作', 
-      dataIndex: 'action', 
+    {
+      title: '操作',
+      dataIndex: 'action',
       key: 'action',
-      render: (value: string) => (
-        <Tag color="blue">{getActionName(value)}</Tag>
-      )
+      render: (value: string) => <Tag color="blue">{getActionName(value)}</Tag>,
     },
     { title: '描述', dataIndex: 'description', key: 'description' },
     {
@@ -846,7 +1031,10 @@ const PermissionsTab = ({
               }}
             />
           </Tooltip>
-          <Popconfirm title="確認刪除此權限？" onConfirm={() => handleDelete(record)}>
+          <Popconfirm
+            title="確認刪除此權限？"
+            onConfirm={() => handleDelete(record)}
+          >
             <Tooltip title="刪除">
               <Button type="text" danger icon={<DeleteOutlined />} />
             </Tooltip>
@@ -890,16 +1078,28 @@ const PermissionsTab = ({
       >
         <Form layout="vertical" form={createForm} className="pt-4">
           <div className="bg-gray-50 p-4 rounded-lg mb-4 border border-gray-100">
-            <Form.Item name="resource" label="資源" rules={[{ required: true, message: '請輸入資源名稱' }]}>
+            <Form.Item
+              name="resource"
+              label="資源"
+              rules={[{ required: true, message: '請輸入資源名稱' }]}
+            >
               <Input placeholder="例如 users" className="rounded-md" />
             </Form.Item>
-            <Form.Item name="action" label="操作" rules={[{ required: true, message: '請輸入操作名稱' }]}>
+            <Form.Item
+              name="action"
+              label="操作"
+              rules={[{ required: true, message: '請輸入操作名稱' }]}
+            >
               <Input placeholder="例如 create" className="rounded-md" />
             </Form.Item>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
             <Form.Item name="description" label="描述" className="mb-0">
-              <Input.TextArea rows={3} placeholder="可選" className="rounded-md" />
+              <Input.TextArea
+                rows={3}
+                placeholder="可選"
+                className="rounded-md"
+              />
             </Form.Item>
           </div>
         </Form>
@@ -915,10 +1115,18 @@ const PermissionsTab = ({
       >
         <Form layout="vertical" form={editForm} className="pt-4">
           <div className="bg-gray-50 p-4 rounded-lg mb-4 border border-gray-100">
-            <Form.Item name="resource" label="資源" rules={[{ required: true, message: '請輸入資源名稱' }]}>
+            <Form.Item
+              name="resource"
+              label="資源"
+              rules={[{ required: true, message: '請輸入資源名稱' }]}
+            >
               <Input className="rounded-md" />
             </Form.Item>
-            <Form.Item name="action" label="操作" rules={[{ required: true, message: '請輸入操作名稱' }]}>
+            <Form.Item
+              name="action"
+              label="操作"
+              rules={[{ required: true, message: '請輸入操作名稱' }]}
+            >
               <Input className="rounded-md" />
             </Form.Item>
           </div>
@@ -987,14 +1195,16 @@ const AccessControlPage: React.FC = () => {
   }
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
       className="space-y-8"
     >
       <div>
-        <Title level={2} className="!mb-1 !font-light">帳號與權限管理</Title>
+        <Title level={2} className="!mb-1 !font-light">
+          帳號與權限管理
+        </Title>
         <Text className="text-gray-500">管理系統使用者、角色與權限設定</Text>
       </div>
 
