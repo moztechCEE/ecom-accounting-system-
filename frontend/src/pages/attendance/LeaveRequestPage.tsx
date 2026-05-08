@@ -527,6 +527,12 @@ const LeaveRequestPage: React.FC = () => {
     (option) => option.value === formData.funeralRelationship,
   );
 
+  const compactInputClass =
+    "w-full rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white";
+  const compactSelectClass = `${compactInputClass} appearance-none`;
+  const compactLabelClass =
+    "mb-1 block text-[11px] font-medium tracking-wide text-slate-500";
+
   const renderRequestRow = (row: LeaveRequestDraft, index: number) => {
     const rowLeaveTypes = getAvailableLeaveTypesForEmployee(row.employeeId);
     const rowLeaveType = rowLeaveTypes.find(
@@ -537,35 +543,22 @@ const LeaveRequestPage: React.FC = () => {
     const rowFuneralRule = funeralRelationshipOptions.find(
       (option) => option.value === row.funeralRelationship,
     );
+    const employee = getEmployeeById(row.employeeId);
+    const requiresDocument =
+      Boolean(rowLeaveType?.requiresDocument) && row.documents.length === 0;
 
     return (
-      <div
+      <tr
         key={row.id}
-        className="space-y-4 rounded-2xl border border-white/20 bg-white/10 p-4"
+        className="border-b border-white/20 align-top transition-colors hover:bg-white/20"
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold text-slate-900">
-              申請項目 {index + 1}
-            </div>
-            <div className="text-xs text-slate-500">
-              每一列會建立一張獨立假單，可選不同員工與不同假別。
-            </div>
-          </div>
-          <GlassButton
-            variant="danger"
-            className="gap-2 px-4 py-2 text-sm"
-            disabled={requestRows.length <= 1}
-            onClick={() => removeRequestRow(row.id)}
-          >
-            <DeleteOutlined />
-            移除
-          </GlassButton>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <GlassSelect
-            label="申請員工"
+        <td className="w-12 px-3 py-4 text-center text-sm font-semibold text-slate-500">
+          {index + 1}
+        </td>
+        <td className="w-[190px] px-3 py-4">
+          <label className={compactLabelClass}>員工</label>
+          <select
+            className={compactSelectClass}
             value={row.employeeId}
             onChange={(event) =>
               updateRequestRow(row.id, {
@@ -573,129 +566,88 @@ const LeaveRequestPage: React.FC = () => {
                 leaveTypeId: "",
               })
             }
-            options={[{ value: "", label: "請選擇員工" }, ...employeeOptions]}
-          />
-          <GlassSelect
-            label="假別"
+          >
+            <option value="">請選擇員工</option>
+            {employeeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <div className="mt-1 min-h-4 truncate text-xs text-slate-400">
+            {(employee as any)?.department?.name || " "}
+          </div>
+        </td>
+        <td className="w-[170px] px-3 py-4">
+          <label className={compactLabelClass}>假別</label>
+          <select
+            className={compactSelectClass}
             value={row.leaveTypeId}
             onChange={(event) =>
               updateRequestRow(row.id, { leaveTypeId: event.target.value })
             }
-            options={[
-              { value: "", label: "請選擇假別" },
-              ...rowLeaveTypes.map((type) => ({
-                value: type.id,
-                label: type.name,
-              })),
-            ]}
-          />
-        </div>
-
-        {rowLeaveType ? (
-          <div className="rounded-2xl border border-white/20 bg-white/20 p-4 text-sm text-slate-600">
-            <div className="font-medium text-slate-800 mb-1">
-              {rowLeaveType.name}
-            </div>
-            <div>
-              支薪比例：{rowLeaveType.paidPercentage ?? 100}%
-              {rowLeaveBalance
-                ? `，剩餘額度：${formatHours(rowLeaveBalance.remainingHours)}`
-                : "，此假別不追蹤年度額度"}
-            </div>
-            <div className="mt-2 text-xs text-slate-500">
-              最低提前時數：{rowLeaveType.minNoticeHours ?? 0} 小時
-              {rowLeaveType.requiresDocument
-                ? "，此假別需附件"
-                : "，此假別免附件"}
-            </div>
+          >
+            <option value="">請選擇假別</option>
+            {rowLeaveTypes.map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+          </select>
+          <div className="mt-1 min-h-4 truncate text-xs text-slate-400">
+            {rowLeaveType
+              ? rowLeaveBalance
+                ? `剩餘 ${formatHours(rowLeaveBalance.remainingHours)}`
+                : "不追蹤年度額度"
+              : " "}
           </div>
-        ) : null}
-
-        {rowIsFuneral ? (
-          <div className="space-y-4 rounded-2xl border border-amber-200/60 bg-amber-50/70 p-4">
-            <GlassSelect
-              label="與亡者關係"
-              value={row.funeralRelationship}
+        </td>
+        <td className="w-[220px] px-3 py-4">
+          <label className={compactLabelClass}>開始</label>
+          <div className="grid grid-cols-[1.45fr_1fr] gap-2">
+            <input
+              className={compactInputClass}
+              type="date"
+              value={row.startDate}
               onChange={(event) =>
-                updateRequestRow(row.id, {
-                  funeralRelationship: event.target.value,
-                })
+                updateRequestRow(row.id, { startDate: event.target.value })
               }
-              options={[
-                { value: "", label: "請選擇關係" },
-                ...funeralRelationshipOptions.map(({ value, label }) => ({
-                  value,
-                  label,
-                })),
-              ]}
             />
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <GlassInput
-                label="亡者姓名"
-                value={row.deceasedName}
-                onChange={(event) =>
-                  updateRequestRow(row.id, { deceasedName: event.target.value })
-                }
-              />
-              <GlassInput
-                label="死亡日期"
-                type="date"
-                value={row.deceasedDate}
-                onChange={(event) =>
-                  updateRequestRow(row.id, { deceasedDate: event.target.value })
-                }
-              />
-            </div>
-            {rowFuneralRule ? (
-              <div className="rounded-xl bg-white/70 px-4 py-3 text-sm text-amber-900">
-                本次事件法定上限：{rowFuneralRule.days} 天（
-                {rowFuneralRule.days * 8} 小時）。
-              </div>
-            ) : null}
+            <input
+              className={compactInputClass}
+              type="time"
+              value={row.startTime}
+              onChange={(event) =>
+                updateRequestRow(row.id, { startTime: event.target.value })
+              }
+            />
           </div>
-        ) : null}
-
-        <div className="grid grid-cols-2 gap-4">
-          <GlassInput
-            label="開始日期"
-            type="date"
-            value={row.startDate}
-            onChange={(event) =>
-              updateRequestRow(row.id, { startDate: event.target.value })
-            }
-          />
-          <GlassInput
-            label="開始時間"
-            type="time"
-            value={row.startTime}
-            onChange={(event) =>
-              updateRequestRow(row.id, { startTime: event.target.value })
-            }
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <GlassInput
-            label="結束日期"
-            type="date"
-            value={row.endDate}
-            onChange={(event) =>
-              updateRequestRow(row.id, { endDate: event.target.value })
-            }
-          />
-          <GlassInput
-            label="結束時間"
-            type="time"
-            value={row.endTime}
-            onChange={(event) =>
-              updateRequestRow(row.id, { endTime: event.target.value })
-            }
-          />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <GlassInput
-            label="請假時數"
+        </td>
+        <td className="w-[220px] px-3 py-4">
+          <label className={compactLabelClass}>結束</label>
+          <div className="grid grid-cols-[1.45fr_1fr] gap-2">
+            <input
+              className={compactInputClass}
+              type="date"
+              value={row.endDate}
+              onChange={(event) =>
+                updateRequestRow(row.id, { endDate: event.target.value })
+              }
+            />
+            <input
+              className={compactInputClass}
+              type="time"
+              value={row.endTime}
+              onChange={(event) =>
+                updateRequestRow(row.id, { endTime: event.target.value })
+              }
+            />
+          </div>
+        </td>
+        <td className="w-[110px] px-3 py-4">
+          <label className={compactLabelClass}>時數</label>
+          <input
+            className={compactInputClass}
             type="number"
             value={row.hours}
             min={0.5}
@@ -704,95 +656,171 @@ const LeaveRequestPage: React.FC = () => {
               updateRequestRow(row.id, { hours: Number(event.target.value) })
             }
           />
-          <GlassInput
-            label="地點（選填）"
+        </td>
+        <td className="w-[210px] px-3 py-4">
+          <label className={compactLabelClass}>原因</label>
+          <input
+            className={compactInputClass}
+            value={row.reason}
+            placeholder="請假原因"
+            onChange={(event) =>
+              updateRequestRow(row.id, { reason: event.target.value })
+            }
+          />
+          <input
+            className={`${compactInputClass} mt-2`}
             value={row.location}
+            placeholder="地點（選填）"
             onChange={(event) =>
               updateRequestRow(row.id, { location: event.target.value })
             }
           />
-        </div>
-
-        <GlassTextarea
-          label="請假原因"
-          value={row.reason}
-          onChange={(event) =>
-            updateRequestRow(row.id, { reason: event.target.value })
-          }
-          rows={3}
-        />
-
-        <div className="space-y-3 rounded-2xl border border-white/20 bg-white/10 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium text-slate-800">附件資料</div>
-              <div className="text-xs text-slate-500">
-                若此列假別需要附件，至少新增一筆附件名稱。
-              </div>
-            </div>
-            <GlassButton
-              variant="secondary"
-              className="gap-2 px-4 py-2 text-sm"
-              onClick={() => addRowDocument(row.id)}
-            >
-              <PaperClipOutlined />
-              新增附件
-            </GlassButton>
-          </div>
-
-          {rowLeaveType?.requiresDocument && row.documents.length === 0 ? (
-            <Alert type="warning" showIcon message="此列假別送出前需要附件" />
-          ) : null}
-
-          {row.documents.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-white/30 px-4 py-5 text-center text-sm text-slate-400">
-              尚未新增附件
-            </div>
-          ) : null}
-
-          {row.documents.map((document, documentIndex) => (
-            <div
-              key={`${row.id}-${documentIndex}`}
-              className="grid grid-cols-1 gap-3 rounded-xl border border-white/20 bg-white/20 p-4 md:grid-cols-[1fr_1fr_auto]"
-            >
-              <GlassInput
-                label="附件名稱"
-                value={document.fileName || ""}
-                onChange={(event) =>
-                  updateRowDocument(
-                    row.id,
-                    documentIndex,
-                    "fileName",
-                    event.target.value,
-                  )
+        </td>
+        <td className="w-[230px] px-3 py-4">
+          <details className="group rounded-xl border border-white/30 bg-white/40 px-3 py-2 text-sm">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-medium text-slate-700">
+              <span>附件 / 細節</span>
+              <span
+                className={
+                  requiresDocument
+                    ? "rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700"
+                    : "rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500"
                 }
-              />
-              <GlassInput
-                label="附件連結（選填）"
-                value={document.fileUrl || ""}
-                onChange={(event) =>
-                  updateRowDocument(
-                    row.id,
-                    documentIndex,
-                    "fileUrl",
-                    event.target.value,
-                  )
-                }
-              />
-              <div className="flex items-end">
-                <GlassButton
-                  variant="danger"
-                  className="gap-2 px-4 py-3 text-sm"
-                  onClick={() => removeRowDocument(row.id, documentIndex)}
+              >
+                {row.documents.length} 件
+              </span>
+            </summary>
+
+            <div className="mt-3 space-y-3">
+              {rowLeaveType ? (
+                <div className="rounded-lg bg-white/60 px-3 py-2 text-xs leading-5 text-slate-500">
+                  支薪 {rowLeaveType.paidPercentage ?? 100}% / 提前{" "}
+                  {rowLeaveType.minNoticeHours ?? 0} 小時
+                  {rowLeaveType.requiresDocument ? " / 需附件" : " / 免附件"}
+                </div>
+              ) : null}
+
+              {requiresDocument ? (
+                <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  此列假別送出前需要附件
+                </div>
+              ) : null}
+
+              {rowIsFuneral ? (
+                <div className="space-y-2 rounded-lg bg-amber-50/80 p-3">
+                  <select
+                    className={compactSelectClass}
+                    value={row.funeralRelationship}
+                    onChange={(event) =>
+                      updateRequestRow(row.id, {
+                        funeralRelationship: event.target.value,
+                      })
+                    }
+                  >
+                    <option value="">請選擇與亡者關係</option>
+                    {funeralRelationshipOptions.map(({ value, label }) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      className={compactInputClass}
+                      value={row.deceasedName}
+                      placeholder="亡者姓名"
+                      onChange={(event) =>
+                        updateRequestRow(row.id, {
+                          deceasedName: event.target.value,
+                        })
+                      }
+                    />
+                    <input
+                      className={compactInputClass}
+                      type="date"
+                      value={row.deceasedDate}
+                      onChange={(event) =>
+                        updateRequestRow(row.id, {
+                          deceasedDate: event.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  {rowFuneralRule ? (
+                    <div className="text-xs text-amber-800">
+                      法定上限：{rowFuneralRule.days} 天（
+                      {rowFuneralRule.days * 8} 小時）
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {row.documents.map((document, documentIndex) => (
+                <div
+                  key={`${row.id}-${documentIndex}`}
+                  className="space-y-2 rounded-lg border border-white/30 bg-white/40 p-2"
                 >
-                  <DeleteOutlined />
-                  刪除
-                </GlassButton>
-              </div>
+                  <input
+                    className={compactInputClass}
+                    value={document.fileName || ""}
+                    placeholder="附件名稱"
+                    onChange={(event) =>
+                      updateRowDocument(
+                        row.id,
+                        documentIndex,
+                        "fileName",
+                        event.target.value,
+                      )
+                    }
+                  />
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <input
+                      className={compactInputClass}
+                      value={document.fileUrl || ""}
+                      placeholder="附件連結（選填）"
+                      onChange={(event) =>
+                        updateRowDocument(
+                          row.id,
+                          documentIndex,
+                          "fileUrl",
+                          event.target.value,
+                        )
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="rounded-xl border border-rose-200 bg-rose-50 px-3 text-rose-600 transition hover:bg-rose-100"
+                      onClick={() => removeRowDocument(row.id, documentIndex)}
+                    >
+                      <DeleteOutlined />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/60 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-white"
+                onClick={() => addRowDocument(row.id)}
+              >
+                <PaperClipOutlined />
+                新增附件
+              </button>
             </div>
-          ))}
-        </div>
-      </div>
+          </details>
+        </td>
+        <td className="w-[90px] px-3 py-4 text-center">
+          <button
+            type="button"
+            className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={requestRows.length <= 1}
+            onClick={() => removeRequestRow(row.id)}
+            title="移除這列"
+          >
+            <DeleteOutlined />
+          </button>
+        </td>
+      </tr>
     );
   };
 
@@ -972,6 +1000,7 @@ const LeaveRequestPage: React.FC = () => {
         isOpen={isModalVisible}
         onClose={() => setIsModalVisible(false)}
         title="新增請假申請"
+        maxWidth={canCreateForEmployees ? "max-w-[1320px]" : undefined}
         footer={
           <>
             <GlassButton
@@ -994,9 +1023,28 @@ const LeaveRequestPage: React.FC = () => {
           {canCreateForEmployees ? (
             <div className="space-y-4">
               <div className="rounded-2xl border border-sky-100/70 bg-sky-50/70 px-4 py-3 text-sm leading-6 text-sky-800">
-                每一列會建立一張獨立假單。可一次送出多位員工，也可針對不同員工選不同假別。
+                每一列會建立一張獨立假單。可一次送出多位員工，也可針對不同員工選不同假別；附件與喪假細節收在每列右側展開區。
               </div>
-              {requestRows.map((row, index) => renderRequestRow(row, index))}
+              <div className="overflow-x-auto rounded-2xl border border-white/20 bg-white/10">
+                <table className="min-w-[1260px] w-full border-collapse text-left">
+                  <thead>
+                    <tr className="border-b border-white/20 bg-white/30 text-sm text-slate-500">
+                      <th className="px-3 py-3 text-center font-medium">#</th>
+                      <th className="px-3 py-3 font-medium">員工</th>
+                      <th className="px-3 py-3 font-medium">假別</th>
+                      <th className="px-3 py-3 font-medium">開始</th>
+                      <th className="px-3 py-3 font-medium">結束</th>
+                      <th className="px-3 py-3 font-medium">時數</th>
+                      <th className="px-3 py-3 font-medium">原因 / 地點</th>
+                      <th className="px-3 py-3 font-medium">附件 / 細節</th>
+                      <th className="px-3 py-3 text-center font-medium">
+                        操作
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>{requestRows.map(renderRequestRow)}</tbody>
+                </table>
+              </div>
               <GlassButton
                 variant="secondary"
                 className="gap-2"
