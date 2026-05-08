@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Alert, message } from "antd";
 import { motion } from "framer-motion";
 import {
@@ -10,6 +10,9 @@ import {
   PaperClipOutlined,
 } from "@ant-design/icons";
 import { attendanceService } from "../../services/attendance.service";
+import { payrollService } from "../../services/payroll.service";
+import { useAuth } from "../../contexts/AuthContext";
+import { hasPermission } from "../../utils/access";
 import {
   LeaveBalance,
   LeaveRequest,
@@ -24,6 +27,7 @@ import { GlassModal } from "../../components/ui/GlassModal";
 import { GlassInput } from "../../components/ui/GlassInput";
 import { GlassSelect } from "../../components/ui/GlassSelect";
 import { GlassTextarea } from "../../components/ui/GlassTextarea";
+import { Employee } from "../../types";
 
 const emptyDocument = (): LeaveRequestDocumentInput => ({
   fileName: "",
@@ -57,15 +61,20 @@ const isFuneralLeaveType = (leaveType?: LeaveType) =>
   );
 
 const LeaveRequestPage: React.FC = () => {
+  const { user } = useAuth();
+  const canCreateForEmployees = hasPermission(user, "attendance_admin:update");
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [employeeLinkMissing, setEmployeeLinkMissing] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
+    employeeId: "",
     leaveTypeId: "",
     startDate: "",
     startTime: "",
@@ -82,6 +91,7 @@ const LeaveRequestPage: React.FC = () => {
 
   const resetForm = () =>
     setFormData({
+      employeeId: selectedEmployeeId,
       leaveTypeId: "",
       startDate: "",
       startTime: "",
@@ -98,10 +108,51 @@ const LeaveRequestPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [canCreateForEmployees, selectedEmployeeId]);
 
   const loadData = async () => {
     try {
+      if (canCreateForEmployees) {
+        const employeeResult = await payrollService.getEmployees(1, 500);
+        const employeeList = employeeResult.items;
+        const nextEmployeeId =
+          selectedEmployeeId &&
+          employeeList.some((item) => item.id === selectedEmployeeId)
+            ? selectedEmployeeId
+            : employeeList[0]?.id || "";
+
+        setEmployees(employeeList);
+        setSelectedEmployeeId(nextEmployeeId);
+        setFormData((prev) => ({
+          ...prev,
+          employeeId: employeeList.some((item) => item.id === prev.employeeId)
+            ? prev.employeeId
+            : nextEmployeeId,
+        }));
+
+        const [requestsData, typesData, balancesData] = await Promise.all([
+          nextEmployeeId
+            ? attendanceService.getAdminLeaveRequests({
+                year: dayjs().year(),
+                employeeId: nextEmployeeId,
+              })
+            : Promise.resolve([]),
+          attendanceService.getAdminLeaveTypes(),
+          nextEmployeeId
+            ? attendanceService.getAdminLeaveBalances({
+                year: dayjs().year(),
+                employeeId: nextEmployeeId,
+              })
+            : Promise.resolve([]),
+        ]);
+
+        setRequests(requestsData);
+        setLeaveTypes(typesData);
+        setLeaveBalances(balancesData);
+        setEmployeeLinkMissing(false);
+        return;
+      }
+
       const [requestsData, typesData, balancesData] = await Promise.all([
         attendanceService.getLeaveRequests(),
         attendanceService.getLeaveTypes(),
@@ -174,6 +225,11 @@ const LeaveRequestPage: React.FC = () => {
   const handleSubmit = async () => {
     try {
       setLoading(true);
+      const targetEmployeeId = formData.employeeId || selectedEmployeeId;
+      if (canCreateForEmployees && !targetEmployeeId) {
+        message.error("請先選擇申請員工");
+        return;
+      }
 
       // Combine date and time
       const startAt = dayjs(
@@ -184,6 +240,7 @@ const LeaveRequestPage: React.FC = () => {
       ).toISOString();
 
       await attendanceService.createLeaveRequest({
+        employeeId: canCreateForEmployees ? targetEmployeeId : undefined,
         leaveTypeId: formData.leaveTypeId,
         startAt,
         endAt,
@@ -278,6 +335,31 @@ const LeaveRequestPage: React.FC = () => {
     return `${hours} 小時`;
   };
 
+  const employeeOptions = useMemo(
+    () =>
+      employees.map((employee) => ({
+        value: employee.id,
+        label: `${employee.name} (${employee.employeeNo})`,
+      })),
+    [employees],
+  );
+  const selectedEmployee = employees.find(
+    (employee) => employee.id === selectedEmployeeId,
+  );
+  const availableLeaveTypes = useMemo(
+    () =>
+      leaveTypes.filter(
+        (type) =>
+          type.isActive !== false &&
+          (!canCreateForEmployees ||
+            selectedEmployee?.gender === "FEMALE" ||
+            !(
+              type.code?.trim().toUpperCase() === "MENSTRUAL" ||
+              type.name?.trim() === "生理假"
+            )),
+      ),
+    [canCreateForEmployees, leaveTypes, selectedEmployee?.gender],
+  );
   const annualBalance =
     leaveBalances.find((balance) => balance.leaveType.code === "ANNUAL") ||
     leaveBalances[0];
@@ -285,7 +367,7 @@ const LeaveRequestPage: React.FC = () => {
     (sum, balance) => sum + balance.usedHours,
     0,
   );
-  const selectedLeaveType = leaveTypes.find(
+  const selectedLeaveType = availableLeaveTypes.find(
     (type) => type.id === formData.leaveTypeId,
   );
   const selectedLeaveBalance = leaveBalances.find(
@@ -309,18 +391,50 @@ const LeaveRequestPage: React.FC = () => {
           <h1 className="text-2xl font-semibold text-slate-900 mb-1">
             請假管理
           </h1>
-          <p className="text-slate-500 text-sm">查看您的假單紀錄與剩餘額度</p>
+          <p className="text-slate-500 text-sm">
+            {canCreateForEmployees
+              ? "替員工建立請假申請，並查看對應假單紀錄與剩餘額度"
+              : "查看您的假單紀錄與剩餘額度"}
+          </p>
         </div>
         <GlassButton
-          onClick={() => setIsModalVisible(true)}
+          onClick={() => {
+            resetForm();
+            setIsModalVisible(true);
+          }}
           className="flex items-center gap-2"
+          disabled={
+            (!canCreateForEmployees && employeeLinkMissing) ||
+            (canCreateForEmployees && !selectedEmployeeId)
+          }
         >
           <PlusOutlined />
           <span>新增請假申請</span>
         </GlassButton>
       </div>
 
-      {employeeLinkMissing ? (
+      {canCreateForEmployees ? (
+        <GlassCard className="grid gap-4 md:grid-cols-[minmax(0,360px)_1fr] md:items-end">
+          <GlassSelect
+            label="查看 / 代申員工"
+            value={selectedEmployeeId}
+            onChange={(event) => {
+              setSelectedEmployeeId(event.target.value);
+              setFormData((prev) => ({
+                ...prev,
+                employeeId: event.target.value,
+                leaveTypeId: "",
+              }));
+            }}
+            options={[{ value: "", label: "請選擇員工" }, ...employeeOptions]}
+          />
+          <div className="text-sm leading-6 text-slate-500">
+            高階管理員可以在這裡替指定員工送出請假申請；一般職員不會看到此選項，只能申請自己的假別。
+          </div>
+        </GlassCard>
+      ) : null}
+
+      {!canCreateForEmployees && employeeLinkMissing ? (
         <Alert
           type="warning"
           showIcon
@@ -387,6 +501,9 @@ const LeaveRequestPage: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-white/20 text-slate-500 text-sm border-b border-white/10">
+                {canCreateForEmployees ? (
+                  <th className="p-4 font-medium">員工</th>
+                ) : null}
                 <th className="p-4 font-medium">假別</th>
                 <th className="p-4 font-medium">期間</th>
                 <th className="p-4 font-medium">時數</th>
@@ -400,6 +517,18 @@ const LeaveRequestPage: React.FC = () => {
                   key={request.id}
                   className="border-b border-white/10 hover:bg-white/10 transition-colors"
                 >
+                  {canCreateForEmployees ? (
+                    <td className="p-4">
+                      <div className="font-medium text-slate-800">
+                        {(request as any).employee?.name ||
+                          selectedEmployee?.name ||
+                          "-"}
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        {(request as any).employee?.department?.name || ""}
+                      </div>
+                    </td>
+                  ) : null}
                   <td className="p-4">
                     <span className="font-medium text-slate-800">
                       {request.leaveType?.name || "未知"}
@@ -425,7 +554,10 @@ const LeaveRequestPage: React.FC = () => {
               ))}
               {requests.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-400">
+                  <td
+                    colSpan={canCreateForEmployees ? 6 : 5}
+                    className="p-8 text-center text-slate-400"
+                  >
                     尚無申請紀錄
                   </td>
                 </tr>
@@ -459,6 +591,23 @@ const LeaveRequestPage: React.FC = () => {
         }
       >
         <div className="space-y-8">
+          {canCreateForEmployees ? (
+            <GlassSelect
+              label="申請員工"
+              name="employeeId"
+              value={formData.employeeId || selectedEmployeeId}
+              onChange={(event) => {
+                setSelectedEmployeeId(event.target.value);
+                setFormData((prev) => ({
+                  ...prev,
+                  employeeId: event.target.value,
+                  leaveTypeId: "",
+                }));
+              }}
+              options={[{ value: "", label: "請選擇員工" }, ...employeeOptions]}
+            />
+          ) : null}
+
           <GlassSelect
             label="假別"
             name="leaveTypeId"
@@ -466,7 +615,10 @@ const LeaveRequestPage: React.FC = () => {
             onChange={handleInputChange}
             options={[
               { value: "", label: "請選擇假別" },
-              ...leaveTypes.map((t) => ({ value: t.id, label: t.name })),
+              ...availableLeaveTypes.map((t) => ({
+                value: t.id,
+                label: t.name,
+              })),
             ]}
           />
 

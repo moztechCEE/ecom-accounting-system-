@@ -33,6 +33,10 @@ class LeaveRequestDocumentDto {
 }
 
 export class CreateLeaveRequestDto {
+  @IsOptional()
+  @IsString()
+  employeeId?: string;
+
   @IsNotEmpty()
   @IsString()
   leaveTypeId: string;

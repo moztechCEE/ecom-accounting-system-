@@ -166,6 +166,60 @@ export class LeaveService {
     );
   }
 
+  private async resolveLeaveRequestEmployee(
+    userId: string,
+    dto: CreateLeaveRequestDto,
+    actorEmployee: {
+      id: string;
+      entityId: string;
+      departmentId: string | null;
+      hireDate: Date;
+      gender: string | null;
+      userId: string | null;
+      name: string;
+    } | null,
+  ) {
+    const requestedEmployeeId = dto.employeeId?.trim();
+    if (!requestedEmployeeId) {
+      return actorEmployee;
+    }
+
+    if (actorEmployee?.id === requestedEmployeeId) {
+      return actorEmployee;
+    }
+
+    const canCreateForEmployees = await this.usersService.hasPermission(
+      userId,
+      'attendance_admin',
+      'update',
+    );
+    if (!canCreateForEmployees) {
+      throw new BadRequestException('一般職員僅能替自己提出請假申請');
+    }
+
+    const targetEmployee = await this.prisma.employee.findUnique({
+      where: { id: requestedEmployeeId },
+    });
+    if (!targetEmployee) {
+      throw new BadRequestException('Employee record not found');
+    }
+
+    const access = await this.getAdminAccessContext(
+      userId,
+      targetEmployee.entityId,
+    );
+    const canAccessEmployee =
+      !access.noAccess &&
+      (access.scope === 'ENTITY' ||
+        (access.scope === 'DEPARTMENT' &&
+          access.departmentId === targetEmployee.departmentId));
+    if (!canAccessEmployee) {
+      throw new BadRequestException('Employee record not found');
+    }
+
+    return targetEmployee;
+  }
+
   async initializeEmployeeLeaveSetup(
     actorUserId: string,
     employee: {
@@ -204,9 +258,14 @@ export class LeaveService {
   }
 
   async createLeaveRequest(userId: string, dto: CreateLeaveRequestDto) {
-    const employee = await this.prisma.employee.findUnique({
+    const actorEmployee = await this.prisma.employee.findUnique({
       where: { userId },
     });
+    const employee = await this.resolveLeaveRequestEmployee(
+      userId,
+      dto,
+      actorEmployee,
+    );
     if (!employee) {
       throw new BadRequestException('Employee record not found for this user');
     }
@@ -327,17 +386,19 @@ export class LeaveService {
     });
 
     // Notify Employee
-    await this.notificationService.create({
-      userId: userId,
-      title: 'Leave Request Submitted',
-      message: `Your leave request for ${dto.hours} hours has been submitted.`,
-      type: 'LEAVE_REQUEST',
-      category: 'ATTENDANCE',
-      data: { entityId: employee.entityId },
-    });
+    if (employee.userId) {
+      await this.notificationService.create({
+        userId: employee.userId,
+        title: 'Leave Request Submitted',
+        message: `Your leave request for ${dto.hours} hours has been submitted.`,
+        type: 'LEAVE_REQUEST',
+        category: 'ATTENDANCE',
+        data: { entityId: employee.entityId },
+      });
+    }
 
     await this.notifyLeaveApprovers({
-      requesterUserId: userId,
+      requesterUserId: employee.userId || userId,
       entityId: employee.entityId,
       employeeName: employee.name,
       leaveTypeName: leaveType.name,

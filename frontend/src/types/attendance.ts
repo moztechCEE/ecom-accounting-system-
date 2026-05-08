@@ -46,6 +46,7 @@ export interface ClockOutDto {
 }
 
 export interface CreateLeaveRequestDto {
+  employeeId?: string;
   leaveTypeId: string;
   startAt: string;
   endAt: string;
