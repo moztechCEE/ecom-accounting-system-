@@ -60,6 +60,40 @@ const isFuneralLeaveType = (leaveType?: LeaveType) =>
       leaveType.name?.trim() === "喪假"),
   );
 
+type LeaveRequestDraft = {
+  id: string;
+  employeeId: string;
+  leaveTypeId: string;
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+  hours: number;
+  reason: string;
+  location: string;
+  funeralRelationship: string;
+  deceasedName: string;
+  deceasedDate: string;
+  documents: LeaveRequestDocumentInput[];
+};
+
+const createLeaveRequestDraft = (employeeId = ""): LeaveRequestDraft => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  employeeId,
+  leaveTypeId: "",
+  startDate: "",
+  startTime: "",
+  endDate: "",
+  endTime: "",
+  hours: 0,
+  reason: "",
+  location: "",
+  funeralRelationship: "",
+  deceasedName: "",
+  deceasedDate: "",
+  documents: [],
+});
+
 const LeaveRequestPage: React.FC = () => {
   const { user } = useAuth();
   const canCreateForEmployees = hasPermission(user, "attendance_admin:update");
@@ -68,9 +102,11 @@ const LeaveRequestPage: React.FC = () => {
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [employeeLinkMissing, setEmployeeLinkMissing] = useState(false);
+  const [requestRows, setRequestRows] = useState<LeaveRequestDraft[]>([
+    createLeaveRequestDraft(),
+  ]);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -91,7 +127,7 @@ const LeaveRequestPage: React.FC = () => {
 
   const resetForm = () =>
     setFormData({
-      employeeId: selectedEmployeeId,
+      employeeId: "",
       leaveTypeId: "",
       startDate: "",
       startTime: "",
@@ -108,42 +144,24 @@ const LeaveRequestPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [canCreateForEmployees, selectedEmployeeId]);
+  }, [canCreateForEmployees]);
 
   const loadData = async () => {
     try {
       if (canCreateForEmployees) {
         const employeeResult = await payrollService.getEmployees(1, 500);
         const employeeList = employeeResult.items;
-        const nextEmployeeId =
-          selectedEmployeeId &&
-          employeeList.some((item) => item.id === selectedEmployeeId)
-            ? selectedEmployeeId
-            : employeeList[0]?.id || "";
 
         setEmployees(employeeList);
-        setSelectedEmployeeId(nextEmployeeId);
-        setFormData((prev) => ({
-          ...prev,
-          employeeId: employeeList.some((item) => item.id === prev.employeeId)
-            ? prev.employeeId
-            : nextEmployeeId,
-        }));
 
         const [requestsData, typesData, balancesData] = await Promise.all([
-          nextEmployeeId
-            ? attendanceService.getAdminLeaveRequests({
-                year: dayjs().year(),
-                employeeId: nextEmployeeId,
-              })
-            : Promise.resolve([]),
+          attendanceService.getAdminLeaveRequests({
+            year: dayjs().year(),
+          }),
           attendanceService.getAdminLeaveTypes(),
-          nextEmployeeId
-            ? attendanceService.getAdminLeaveBalances({
-                year: dayjs().year(),
-                employeeId: nextEmployeeId,
-              })
-            : Promise.resolve([]),
+          attendanceService.getAdminLeaveBalances({
+            year: dayjs().year(),
+          }),
         ]);
 
         setRequests(requestsData);
@@ -222,12 +240,130 @@ const LeaveRequestPage: React.FC = () => {
     }));
   };
 
+  const updateRequestRow = (
+    rowId: string,
+    patch: Partial<LeaveRequestDraft>,
+  ) => {
+    setRequestRows((current) =>
+      current.map((row) => (row.id === rowId ? { ...row, ...patch } : row)),
+    );
+  };
+
+  const addRequestRow = () => {
+    setRequestRows((current) => [...current, createLeaveRequestDraft()]);
+  };
+
+  const removeRequestRow = (rowId: string) => {
+    setRequestRows((current) =>
+      current.length <= 1 ? current : current.filter((row) => row.id !== rowId),
+    );
+  };
+
+  const addRowDocument = (rowId: string) => {
+    setRequestRows((current) =>
+      current.map((row) =>
+        row.id === rowId
+          ? { ...row, documents: [...row.documents, emptyDocument()] }
+          : row,
+      ),
+    );
+  };
+
+  const updateRowDocument = (
+    rowId: string,
+    index: number,
+    field: keyof LeaveRequestDocumentInput,
+    value: string,
+  ) => {
+    setRequestRows((current) =>
+      current.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              documents: row.documents.map((document, documentIndex) =>
+                documentIndex === index
+                  ? { ...document, [field]: value }
+                  : document,
+              ),
+            }
+          : row,
+      ),
+    );
+  };
+
+  const removeRowDocument = (rowId: string, index: number) => {
+    setRequestRows((current) =>
+      current.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              documents: row.documents.filter(
+                (_, documentIndex) => documentIndex !== index,
+              ),
+            }
+          : row,
+      ),
+    );
+  };
+
+  const buildLeaveRequestPayload = (draft: LeaveRequestDraft) => {
+    const leaveType = leaveTypes.find((type) => type.id === draft.leaveTypeId);
+    const funeralLeave = isFuneralLeaveType(leaveType);
+
+    return {
+      employeeId: canCreateForEmployees ? draft.employeeId : undefined,
+      leaveTypeId: draft.leaveTypeId,
+      startAt: dayjs(`${draft.startDate} ${draft.startTime}`).toISOString(),
+      endAt: dayjs(`${draft.endDate} ${draft.endTime}`).toISOString(),
+      hours: Number(draft.hours),
+      reason: draft.reason,
+      location: draft.location,
+      funeralRelationship: funeralLeave ? draft.funeralRelationship : undefined,
+      deceasedName: funeralLeave ? draft.deceasedName : undefined,
+      deceasedDate: funeralLeave ? draft.deceasedDate : undefined,
+      funeralEventKey: funeralLeave
+        ? [
+            draft.funeralRelationship,
+            draft.deceasedName.trim(),
+            draft.deceasedDate,
+          ].join(":")
+        : undefined,
+      documents: draft.documents
+        .map((document) => ({
+          fileName: document.fileName?.trim() || "",
+          fileUrl: document.fileUrl?.trim() || undefined,
+          docType: document.docType?.trim() || undefined,
+        }))
+        .filter((document) => document.fileName),
+    };
+  };
+
   const handleSubmit = async () => {
     try {
       setLoading(true);
-      const targetEmployeeId = formData.employeeId || selectedEmployeeId;
-      if (canCreateForEmployees && !targetEmployeeId) {
-        message.error("請先選擇申請員工");
+
+      if (canCreateForEmployees) {
+        if (requestRows.length === 0) {
+          message.error("請至少新增一筆請假資料");
+          return;
+        }
+
+        for (let index = 0; index < requestRows.length; index += 1) {
+          const row = requestRows[index];
+          if (!row.employeeId || !row.leaveTypeId) {
+            message.error(`第 ${index + 1} 筆請先選擇員工與假別`);
+            return;
+          }
+
+          await attendanceService.createLeaveRequest(
+            buildLeaveRequestPayload(row),
+          );
+        }
+
+        message.success(`已送出 ${requestRows.length} 筆請假申請`);
+        setIsModalVisible(false);
+        setRequestRows([createLeaveRequestDraft()]);
+        void loadData();
         return;
       }
 
@@ -240,7 +376,6 @@ const LeaveRequestPage: React.FC = () => {
       ).toISOString();
 
       await attendanceService.createLeaveRequest({
-        employeeId: canCreateForEmployees ? targetEmployeeId : undefined,
         leaveTypeId: formData.leaveTypeId,
         startAt,
         endAt,
@@ -343,26 +478,40 @@ const LeaveRequestPage: React.FC = () => {
       })),
     [employees],
   );
-  const selectedEmployee = employees.find(
-    (employee) => employee.id === selectedEmployeeId,
-  );
+  const getEmployeeById = (employeeId: string) =>
+    employees.find((employee) => employee.id === employeeId);
+  const getAvailableLeaveTypesForEmployee = (employeeId?: string) => {
+    const employee = employeeId ? getEmployeeById(employeeId) : undefined;
+    return leaveTypes.filter(
+      (type) =>
+        type.isActive !== false &&
+        (!canCreateForEmployees ||
+          employee?.gender === "FEMALE" ||
+          !(
+            type.code?.trim().toUpperCase() === "MENSTRUAL" ||
+            type.name?.trim() === "生理假"
+          )),
+    );
+  };
   const availableLeaveTypes = useMemo(
-    () =>
-      leaveTypes.filter(
-        (type) =>
-          type.isActive !== false &&
-          (!canCreateForEmployees ||
-            selectedEmployee?.gender === "FEMALE" ||
-            !(
-              type.code?.trim().toUpperCase() === "MENSTRUAL" ||
-              type.name?.trim() === "生理假"
-            )),
-      ),
-    [canCreateForEmployees, leaveTypes, selectedEmployee?.gender],
+    () => leaveTypes.filter((type) => type.isActive !== false),
+    [leaveTypes],
   );
+  const getLeaveBalanceForRow = (row: LeaveRequestDraft) =>
+    leaveBalances.find(
+      (balance) =>
+        balance.leaveType.id === row.leaveTypeId &&
+        (!canCreateForEmployees ||
+          (balance as any).employee?.id === row.employeeId),
+    );
   const annualBalance =
     leaveBalances.find((balance) => balance.leaveType.code === "ANNUAL") ||
     leaveBalances[0];
+  const annualRemainingHours = canCreateForEmployees
+    ? leaveBalances
+        .filter((balance) => balance.leaveType.code === "ANNUAL")
+        .reduce((sum, balance) => sum + balance.remainingHours, 0)
+    : annualBalance?.remainingHours;
   const usedHours = leaveBalances.reduce(
     (sum, balance) => sum + balance.usedHours,
     0,
@@ -377,6 +526,275 @@ const LeaveRequestPage: React.FC = () => {
   const selectedFuneralRule = funeralRelationshipOptions.find(
     (option) => option.value === formData.funeralRelationship,
   );
+
+  const renderRequestRow = (row: LeaveRequestDraft, index: number) => {
+    const rowLeaveTypes = getAvailableLeaveTypesForEmployee(row.employeeId);
+    const rowLeaveType = rowLeaveTypes.find(
+      (type) => type.id === row.leaveTypeId,
+    );
+    const rowLeaveBalance = getLeaveBalanceForRow(row);
+    const rowIsFuneral = isFuneralLeaveType(rowLeaveType);
+    const rowFuneralRule = funeralRelationshipOptions.find(
+      (option) => option.value === row.funeralRelationship,
+    );
+
+    return (
+      <div
+        key={row.id}
+        className="space-y-4 rounded-2xl border border-white/20 bg-white/10 p-4"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-slate-900">
+              申請項目 {index + 1}
+            </div>
+            <div className="text-xs text-slate-500">
+              每一列會建立一張獨立假單，可選不同員工與不同假別。
+            </div>
+          </div>
+          <GlassButton
+            variant="danger"
+            className="gap-2 px-4 py-2 text-sm"
+            disabled={requestRows.length <= 1}
+            onClick={() => removeRequestRow(row.id)}
+          >
+            <DeleteOutlined />
+            移除
+          </GlassButton>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <GlassSelect
+            label="申請員工"
+            value={row.employeeId}
+            onChange={(event) =>
+              updateRequestRow(row.id, {
+                employeeId: event.target.value,
+                leaveTypeId: "",
+              })
+            }
+            options={[{ value: "", label: "請選擇員工" }, ...employeeOptions]}
+          />
+          <GlassSelect
+            label="假別"
+            value={row.leaveTypeId}
+            onChange={(event) =>
+              updateRequestRow(row.id, { leaveTypeId: event.target.value })
+            }
+            options={[
+              { value: "", label: "請選擇假別" },
+              ...rowLeaveTypes.map((type) => ({
+                value: type.id,
+                label: type.name,
+              })),
+            ]}
+          />
+        </div>
+
+        {rowLeaveType ? (
+          <div className="rounded-2xl border border-white/20 bg-white/20 p-4 text-sm text-slate-600">
+            <div className="font-medium text-slate-800 mb-1">
+              {rowLeaveType.name}
+            </div>
+            <div>
+              支薪比例：{rowLeaveType.paidPercentage ?? 100}%
+              {rowLeaveBalance
+                ? `，剩餘額度：${formatHours(rowLeaveBalance.remainingHours)}`
+                : "，此假別不追蹤年度額度"}
+            </div>
+            <div className="mt-2 text-xs text-slate-500">
+              最低提前時數：{rowLeaveType.minNoticeHours ?? 0} 小時
+              {rowLeaveType.requiresDocument
+                ? "，此假別需附件"
+                : "，此假別免附件"}
+            </div>
+          </div>
+        ) : null}
+
+        {rowIsFuneral ? (
+          <div className="space-y-4 rounded-2xl border border-amber-200/60 bg-amber-50/70 p-4">
+            <GlassSelect
+              label="與亡者關係"
+              value={row.funeralRelationship}
+              onChange={(event) =>
+                updateRequestRow(row.id, {
+                  funeralRelationship: event.target.value,
+                })
+              }
+              options={[
+                { value: "", label: "請選擇關係" },
+                ...funeralRelationshipOptions.map(({ value, label }) => ({
+                  value,
+                  label,
+                })),
+              ]}
+            />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <GlassInput
+                label="亡者姓名"
+                value={row.deceasedName}
+                onChange={(event) =>
+                  updateRequestRow(row.id, { deceasedName: event.target.value })
+                }
+              />
+              <GlassInput
+                label="死亡日期"
+                type="date"
+                value={row.deceasedDate}
+                onChange={(event) =>
+                  updateRequestRow(row.id, { deceasedDate: event.target.value })
+                }
+              />
+            </div>
+            {rowFuneralRule ? (
+              <div className="rounded-xl bg-white/70 px-4 py-3 text-sm text-amber-900">
+                本次事件法定上限：{rowFuneralRule.days} 天（
+                {rowFuneralRule.days * 8} 小時）。
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-2 gap-4">
+          <GlassInput
+            label="開始日期"
+            type="date"
+            value={row.startDate}
+            onChange={(event) =>
+              updateRequestRow(row.id, { startDate: event.target.value })
+            }
+          />
+          <GlassInput
+            label="開始時間"
+            type="time"
+            value={row.startTime}
+            onChange={(event) =>
+              updateRequestRow(row.id, { startTime: event.target.value })
+            }
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <GlassInput
+            label="結束日期"
+            type="date"
+            value={row.endDate}
+            onChange={(event) =>
+              updateRequestRow(row.id, { endDate: event.target.value })
+            }
+          />
+          <GlassInput
+            label="結束時間"
+            type="time"
+            value={row.endTime}
+            onChange={(event) =>
+              updateRequestRow(row.id, { endTime: event.target.value })
+            }
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <GlassInput
+            label="請假時數"
+            type="number"
+            value={row.hours}
+            min={0.5}
+            step={0.5}
+            onChange={(event) =>
+              updateRequestRow(row.id, { hours: Number(event.target.value) })
+            }
+          />
+          <GlassInput
+            label="地點（選填）"
+            value={row.location}
+            onChange={(event) =>
+              updateRequestRow(row.id, { location: event.target.value })
+            }
+          />
+        </div>
+
+        <GlassTextarea
+          label="請假原因"
+          value={row.reason}
+          onChange={(event) =>
+            updateRequestRow(row.id, { reason: event.target.value })
+          }
+          rows={3}
+        />
+
+        <div className="space-y-3 rounded-2xl border border-white/20 bg-white/10 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium text-slate-800">附件資料</div>
+              <div className="text-xs text-slate-500">
+                若此列假別需要附件，至少新增一筆附件名稱。
+              </div>
+            </div>
+            <GlassButton
+              variant="secondary"
+              className="gap-2 px-4 py-2 text-sm"
+              onClick={() => addRowDocument(row.id)}
+            >
+              <PaperClipOutlined />
+              新增附件
+            </GlassButton>
+          </div>
+
+          {rowLeaveType?.requiresDocument && row.documents.length === 0 ? (
+            <Alert type="warning" showIcon message="此列假別送出前需要附件" />
+          ) : null}
+
+          {row.documents.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-white/30 px-4 py-5 text-center text-sm text-slate-400">
+              尚未新增附件
+            </div>
+          ) : null}
+
+          {row.documents.map((document, documentIndex) => (
+            <div
+              key={`${row.id}-${documentIndex}`}
+              className="grid grid-cols-1 gap-3 rounded-xl border border-white/20 bg-white/20 p-4 md:grid-cols-[1fr_1fr_auto]"
+            >
+              <GlassInput
+                label="附件名稱"
+                value={document.fileName || ""}
+                onChange={(event) =>
+                  updateRowDocument(
+                    row.id,
+                    documentIndex,
+                    "fileName",
+                    event.target.value,
+                  )
+                }
+              />
+              <GlassInput
+                label="附件連結（選填）"
+                value={document.fileUrl || ""}
+                onChange={(event) =>
+                  updateRowDocument(
+                    row.id,
+                    documentIndex,
+                    "fileUrl",
+                    event.target.value,
+                  )
+                }
+              />
+              <div className="flex items-end">
+                <GlassButton
+                  variant="danger"
+                  className="gap-2 px-4 py-3 text-sm"
+                  onClick={() => removeRowDocument(row.id, documentIndex)}
+                >
+                  <DeleteOutlined />
+                  刪除
+                </GlassButton>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <motion.div
@@ -400,39 +818,19 @@ const LeaveRequestPage: React.FC = () => {
         <GlassButton
           onClick={() => {
             resetForm();
+            setRequestRows([createLeaveRequestDraft()]);
             setIsModalVisible(true);
           }}
           className="flex items-center gap-2"
           disabled={
             (!canCreateForEmployees && employeeLinkMissing) ||
-            (canCreateForEmployees && !selectedEmployeeId)
+            (canCreateForEmployees && employees.length === 0)
           }
         >
           <PlusOutlined />
           <span>新增請假申請</span>
         </GlassButton>
       </div>
-
-      {canCreateForEmployees ? (
-        <GlassCard className="grid gap-4 md:grid-cols-[minmax(0,360px)_1fr] md:items-end">
-          <GlassSelect
-            label="查看 / 代申員工"
-            value={selectedEmployeeId}
-            onChange={(event) => {
-              setSelectedEmployeeId(event.target.value);
-              setFormData((prev) => ({
-                ...prev,
-                employeeId: event.target.value,
-                leaveTypeId: "",
-              }));
-            }}
-            options={[{ value: "", label: "請選擇員工" }, ...employeeOptions]}
-          />
-          <div className="text-sm leading-6 text-slate-500">
-            高階管理員可以在這裡替指定員工送出請假申請；一般職員不會看到此選項，只能申請自己的假別。
-          </div>
-        </GlassCard>
-      ) : null}
 
       {!canCreateForEmployees && employeeLinkMissing ? (
         <Alert
@@ -453,12 +851,16 @@ const LeaveRequestPage: React.FC = () => {
             特休剩餘
           </div>
           <div className="text-3xl font-semibold text-slate-800 mb-1">
-            {annualBalance ? formatHours(annualBalance.remainingHours) : "--"}
+            {annualRemainingHours !== undefined
+              ? formatHours(annualRemainingHours)
+              : "--"}
           </div>
           <div className="text-xs text-slate-400">
-            {annualBalance
-              ? `有效期至 ${dayjs(annualBalance.periodEnd).format("YYYY/MM/DD")}`
-              : "尚未建立年度額度"}
+            {canCreateForEmployees
+              ? "全部員工當年度特休剩餘合計"
+              : annualBalance
+                ? `有效期至 ${dayjs(annualBalance.periodEnd).format("YYYY/MM/DD")}`
+                : "尚未建立年度額度"}
           </div>
         </GlassCard>
 
@@ -520,9 +922,7 @@ const LeaveRequestPage: React.FC = () => {
                   {canCreateForEmployees ? (
                     <td className="p-4">
                       <div className="font-medium text-slate-800">
-                        {(request as any).employee?.name ||
-                          selectedEmployee?.name ||
-                          "-"}
+                        {(request as any).employee?.name || "-"}
                       </div>
                       <div className="text-xs text-slate-400">
                         {(request as any).employee?.department?.name || ""}
@@ -592,261 +992,271 @@ const LeaveRequestPage: React.FC = () => {
       >
         <div className="space-y-8">
           {canCreateForEmployees ? (
-            <GlassSelect
-              label="申請員工"
-              name="employeeId"
-              value={formData.employeeId || selectedEmployeeId}
-              onChange={(event) => {
-                setSelectedEmployeeId(event.target.value);
-                setFormData((prev) => ({
-                  ...prev,
-                  employeeId: event.target.value,
-                  leaveTypeId: "",
-                }));
-              }}
-              options={[{ value: "", label: "請選擇員工" }, ...employeeOptions]}
-            />
-          ) : null}
-
-          <GlassSelect
-            label="假別"
-            name="leaveTypeId"
-            value={formData.leaveTypeId}
-            onChange={handleInputChange}
-            options={[
-              { value: "", label: "請選擇假別" },
-              ...availableLeaveTypes.map((t) => ({
-                value: t.id,
-                label: t.name,
-              })),
-            ]}
-          />
-
-          {selectedLeaveType && (
-            <div className="rounded-2xl border border-white/20 bg-white/20 p-4 text-sm text-slate-600">
-              <div className="font-medium text-slate-800 mb-1">
-                {selectedLeaveType.name}
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-sky-100/70 bg-sky-50/70 px-4 py-3 text-sm leading-6 text-sky-800">
+                每一列會建立一張獨立假單。可一次送出多位員工，也可針對不同員工選不同假別。
               </div>
-              <div>
-                支薪比例：{selectedLeaveType.paidPercentage ?? 100}%
-                {selectedLeaveBalance
-                  ? `，剩餘額度：${formatHours(selectedLeaveBalance.remainingHours)}`
-                  : "，此假別不追蹤年度額度"}
-              </div>
-              <div className="mt-2 text-xs text-slate-500">
-                最低提前時數：{selectedLeaveType.minNoticeHours ?? 0} 小時
-                {selectedLeaveType.requiresDocument
-                  ? "，此假別需附件"
-                  : "，此假別免附件"}
-              </div>
-              {selectedLeaveType.documentExamples ? (
-                <div className="mt-1 text-xs text-slate-500">
-                  附件參考：{selectedLeaveType.documentExamples}
-                </div>
-              ) : null}
+              {requestRows.map((row, index) => renderRequestRow(row, index))}
+              <GlassButton
+                variant="secondary"
+                className="gap-2"
+                onClick={addRequestRow}
+              >
+                <PlusOutlined />
+                新增一列
+              </GlassButton>
             </div>
-          )}
-
-          {selectedLeaveTypeIsFuneral ? (
-            <div className="space-y-4 rounded-2xl border border-amber-200/60 bg-amber-50/70 p-4">
-              <div>
-                <div className="text-sm font-semibold text-amber-900">
-                  喪假法定額度
-                </div>
-                <div className="mt-1 text-xs leading-5 text-amber-800">
-                  請選擇與亡者關係，系統會自動套用 8 / 6 / 3
-                  天上限；同一喪亡事件可分次申請，附件可使用訃聞或死亡證明。
-                </div>
-              </div>
+          ) : (
+            <>
               <GlassSelect
-                label="與亡者關係"
-                name="funeralRelationship"
-                value={formData.funeralRelationship}
+                label="假別"
+                name="leaveTypeId"
+                value={formData.leaveTypeId}
                 onChange={handleInputChange}
                 options={[
-                  { value: "", label: "請選擇關係" },
-                  ...funeralRelationshipOptions.map(({ value, label }) => ({
-                    value,
-                    label,
+                  { value: "", label: "請選擇假別" },
+                  ...availableLeaveTypes.map((t) => ({
+                    value: t.id,
+                    label: t.name,
                   })),
                 ]}
               />
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <GlassInput
-                  label="亡者姓名"
-                  name="deceasedName"
-                  value={formData.deceasedName}
-                  onChange={handleInputChange}
-                  placeholder="用於同一事件分次累計"
-                />
-                <GlassInput
-                  label="死亡日期"
-                  type="date"
-                  name="deceasedDate"
-                  value={formData.deceasedDate}
-                  onChange={handleInputChange}
-                />
-              </div>
-              {selectedFuneralRule ? (
-                <div className="rounded-xl bg-white/70 px-4 py-3 text-sm text-amber-900">
-                  本次事件法定上限：{selectedFuneralRule.days} 天（
-                  {selectedFuneralRule.days * 8}{" "}
-                  小時）。若分次申請，系統會以「關係 + 亡者姓名 +
-                  死亡日期」累計。
+
+              {selectedLeaveType && (
+                <div className="rounded-2xl border border-white/20 bg-white/20 p-4 text-sm text-slate-600">
+                  <div className="font-medium text-slate-800 mb-1">
+                    {selectedLeaveType.name}
+                  </div>
+                  <div>
+                    支薪比例：{selectedLeaveType.paidPercentage ?? 100}%
+                    {selectedLeaveBalance
+                      ? `，剩餘額度：${formatHours(selectedLeaveBalance.remainingHours)}`
+                      : "，此假別不追蹤年度額度"}
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    最低提前時數：{selectedLeaveType.minNoticeHours ?? 0} 小時
+                    {selectedLeaveType.requiresDocument
+                      ? "，此假別需附件"
+                      : "，此假別免附件"}
+                  </div>
+                  {selectedLeaveType.documentExamples ? (
+                    <div className="mt-1 text-xs text-slate-500">
+                      附件參考：{selectedLeaveType.documentExamples}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              {selectedLeaveTypeIsFuneral ? (
+                <div className="space-y-4 rounded-2xl border border-amber-200/60 bg-amber-50/70 p-4">
+                  <div>
+                    <div className="text-sm font-semibold text-amber-900">
+                      喪假法定額度
+                    </div>
+                    <div className="mt-1 text-xs leading-5 text-amber-800">
+                      請選擇與亡者關係，系統會自動套用 8 / 6 / 3
+                      天上限；同一喪亡事件可分次申請，附件可使用訃聞或死亡證明。
+                    </div>
+                  </div>
+                  <GlassSelect
+                    label="與亡者關係"
+                    name="funeralRelationship"
+                    value={formData.funeralRelationship}
+                    onChange={handleInputChange}
+                    options={[
+                      { value: "", label: "請選擇關係" },
+                      ...funeralRelationshipOptions.map(({ value, label }) => ({
+                        value,
+                        label,
+                      })),
+                    ]}
+                  />
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <GlassInput
+                      label="亡者姓名"
+                      name="deceasedName"
+                      value={formData.deceasedName}
+                      onChange={handleInputChange}
+                      placeholder="用於同一事件分次累計"
+                    />
+                    <GlassInput
+                      label="死亡日期"
+                      type="date"
+                      name="deceasedDate"
+                      value={formData.deceasedDate}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  {selectedFuneralRule ? (
+                    <div className="rounded-xl bg-white/70 px-4 py-3 text-sm text-amber-900">
+                      本次事件法定上限：{selectedFuneralRule.days} 天（
+                      {selectedFuneralRule.days * 8}{" "}
+                      小時）。若分次申請，系統會以「關係 + 亡者姓名 +
+                      死亡日期」累計。
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
-            </div>
-          ) : null}
 
-          <div className="grid grid-cols-2 gap-4">
-            <GlassInput
-              label="開始日期"
-              type="date"
-              name="startDate"
-              value={formData.startDate}
-              onChange={handleInputChange}
-            />
-            <GlassInput
-              label="開始時間"
-              type="time"
-              name="startTime"
-              value={formData.startTime}
-              onChange={handleInputChange}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <GlassInput
-              label="結束日期"
-              type="date"
-              name="endDate"
-              value={formData.endDate}
-              onChange={handleInputChange}
-            />
-            <GlassInput
-              label="結束時間"
-              type="time"
-              name="endTime"
-              value={formData.endTime}
-              onChange={handleInputChange}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <GlassInput
-              label="請假時數"
-              type="number"
-              name="hours"
-              value={formData.hours}
-              onChange={handleInputChange}
-              min={0.5}
-              step={0.5}
-            />
-            <GlassInput
-              label="地點 (選填)"
-              type="text"
-              name="location"
-              value={formData.location}
-              onChange={handleInputChange}
-              placeholder="例如：台北辦公室"
-            />
-          </div>
-
-          <GlassTextarea
-            label="請假原因"
-            name="reason"
-            value={formData.reason}
-            onChange={handleInputChange}
-            placeholder="請說明請假原因..."
-            rows={4}
-          />
-
-          <div className="space-y-3 rounded-2xl border border-white/20 bg-white/10 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-medium text-slate-800">
-                  附件資料
-                </div>
-                <div className="text-xs text-slate-500">
-                  若假別需要附件，至少新增一筆附件名稱；若已有雲端檔案連結，也可以一併填入。
-                </div>
+              <div className="grid grid-cols-2 gap-4">
+                <GlassInput
+                  label="開始日期"
+                  type="date"
+                  name="startDate"
+                  value={formData.startDate}
+                  onChange={handleInputChange}
+                />
+                <GlassInput
+                  label="開始時間"
+                  type="time"
+                  name="startTime"
+                  value={formData.startTime}
+                  onChange={handleInputChange}
+                />
               </div>
-              <GlassButton
-                variant="secondary"
-                className="flex items-center gap-2 px-4 py-2 text-sm"
-                onClick={addDocument}
-              >
-                <PaperClipOutlined />
-                新增附件
-              </GlassButton>
-            </div>
 
-            {selectedLeaveType?.requiresDocument &&
-            formData.documents.length === 0 ? (
-              <Alert
-                type="warning"
-                showIcon
-                message="此假別送出前需要附件"
-                description="至少新增一筆附件名稱；若尚未上傳正式檔案，可先填附件名稱與說明連結。"
+              <div className="grid grid-cols-2 gap-4">
+                <GlassInput
+                  label="結束日期"
+                  type="date"
+                  name="endDate"
+                  value={formData.endDate}
+                  onChange={handleInputChange}
+                />
+                <GlassInput
+                  label="結束時間"
+                  type="time"
+                  name="endTime"
+                  value={formData.endTime}
+                  onChange={handleInputChange}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <GlassInput
+                  label="請假時數"
+                  type="number"
+                  name="hours"
+                  value={formData.hours}
+                  onChange={handleInputChange}
+                  min={0.5}
+                  step={0.5}
+                />
+                <GlassInput
+                  label="地點 (選填)"
+                  type="text"
+                  name="location"
+                  value={formData.location}
+                  onChange={handleInputChange}
+                  placeholder="例如：台北辦公室"
+                />
+              </div>
+
+              <GlassTextarea
+                label="請假原因"
+                name="reason"
+                value={formData.reason}
+                onChange={handleInputChange}
+                placeholder="請說明請假原因..."
+                rows={4}
               />
-            ) : null}
 
-            {formData.documents.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-white/30 px-4 py-6 text-center text-sm text-slate-400">
-                尚未新增附件
-              </div>
-            ) : null}
-
-            {formData.documents.map((document, index) => (
-              <div
-                key={`${document.fileName}-${index}`}
-                className="grid grid-cols-1 gap-3 rounded-xl border border-white/20 bg-white/20 p-4"
-              >
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <GlassInput
-                    label="附件名稱"
-                    value={document.fileName || ""}
-                    onChange={(event) =>
-                      handleDocumentChange(
-                        index,
-                        "fileName",
-                        event.target.value,
-                      )
-                    }
-                    placeholder="例如：診斷證明、婚假證明"
-                  />
-                  <GlassInput
-                    label="附件類型"
-                    value={document.docType || ""}
-                    onChange={(event) =>
-                      handleDocumentChange(index, "docType", event.target.value)
-                    }
-                    placeholder="例如：medical_note"
-                  />
-                </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
-                  <GlassInput
-                    label="附件連結（選填）"
-                    value={document.fileUrl || ""}
-                    onChange={(event) =>
-                      handleDocumentChange(index, "fileUrl", event.target.value)
-                    }
-                    placeholder="例如：https://drive.google.com/..."
-                  />
-                  <div className="flex items-end">
-                    <GlassButton
-                      variant="danger"
-                      className="flex items-center gap-2 px-4 py-3 text-sm"
-                      onClick={() => removeDocument(index)}
-                    >
-                      <DeleteOutlined />
-                      刪除
-                    </GlassButton>
+              <div className="space-y-3 rounded-2xl border border-white/20 bg-white/10 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-slate-800">
+                      附件資料
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      若假別需要附件，至少新增一筆附件名稱；若已有雲端檔案連結，也可以一併填入。
+                    </div>
                   </div>
+                  <GlassButton
+                    variant="secondary"
+                    className="flex items-center gap-2 px-4 py-2 text-sm"
+                    onClick={addDocument}
+                  >
+                    <PaperClipOutlined />
+                    新增附件
+                  </GlassButton>
                 </div>
+
+                {selectedLeaveType?.requiresDocument &&
+                formData.documents.length === 0 ? (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message="此假別送出前需要附件"
+                    description="至少新增一筆附件名稱；若尚未上傳正式檔案，可先填附件名稱與說明連結。"
+                  />
+                ) : null}
+
+                {formData.documents.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-white/30 px-4 py-6 text-center text-sm text-slate-400">
+                    尚未新增附件
+                  </div>
+                ) : null}
+
+                {formData.documents.map((document, index) => (
+                  <div
+                    key={`${document.fileName}-${index}`}
+                    className="grid grid-cols-1 gap-3 rounded-xl border border-white/20 bg-white/20 p-4"
+                  >
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <GlassInput
+                        label="附件名稱"
+                        value={document.fileName || ""}
+                        onChange={(event) =>
+                          handleDocumentChange(
+                            index,
+                            "fileName",
+                            event.target.value,
+                          )
+                        }
+                        placeholder="例如：診斷證明、婚假證明"
+                      />
+                      <GlassInput
+                        label="附件類型"
+                        value={document.docType || ""}
+                        onChange={(event) =>
+                          handleDocumentChange(
+                            index,
+                            "docType",
+                            event.target.value,
+                          )
+                        }
+                        placeholder="例如：medical_note"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+                      <GlassInput
+                        label="附件連結（選填）"
+                        value={document.fileUrl || ""}
+                        onChange={(event) =>
+                          handleDocumentChange(
+                            index,
+                            "fileUrl",
+                            event.target.value,
+                          )
+                        }
+                        placeholder="例如：https://drive.google.com/..."
+                      />
+                      <div className="flex items-end">
+                        <GlassButton
+                          variant="danger"
+                          className="flex items-center gap-2 px-4 py-3 text-sm"
+                          onClick={() => removeDocument(index)}
+                        >
+                          <DeleteOutlined />
+                          刪除
+                        </GlassButton>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       </GlassModal>
     </motion.div>
