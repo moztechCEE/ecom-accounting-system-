@@ -20,6 +20,7 @@ import dayjs from "dayjs";
 import { attendanceService } from "../../services/attendance.service";
 import { payrollService } from "../../services/payroll.service";
 import {
+  AdminAttendanceRecord,
   AdminLeaveBalance,
   AdminLeaveRequest,
   AttendancePolicy,
@@ -40,6 +41,7 @@ import { GlassTextarea } from "../../components/ui/GlassTextarea";
 
 type AdminTab =
   | "attendance"
+  | "records"
   | "requests"
   | "overtime"
   | "policies"
@@ -159,8 +161,17 @@ const AttendanceAdminPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>("requests");
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(dayjs());
+  const [recordStartDate, setRecordStartDate] = useState(
+    dayjs().startOf("month").format("YYYY-MM-DD"),
+  );
+  const [recordEndDate, setRecordEndDate] = useState(
+    dayjs().format("YYYY-MM-DD"),
+  );
   const [selectedYear, setSelectedYear] = useState(dayjs().year());
   const [dailyData, setDailyData] = useState<any[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<
+    AdminAttendanceRecord[]
+  >([]);
   const [leaveRequests, setLeaveRequests] = useState<AdminLeaveRequest[]>([]);
   const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>(
     [],
@@ -178,6 +189,9 @@ const AttendanceAdminPage: React.FC = () => {
   const [requestStatusFilter, setRequestStatusFilter] = useState<string>("");
   const [overtimeStatusFilter, setOvertimeStatusFilter] = useState<string>("");
   const [employeeFilter, setEmployeeFilter] = useState<string>("");
+  const [selectedLeaveRequestIds, setSelectedLeaveRequestIds] = useState<
+    Set<string>
+  >(new Set());
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<AttendancePolicy | null>(
     null,
@@ -209,6 +223,21 @@ const AttendanceAdminPage: React.FC = () => {
   useEffect(() => {
     void loadManagementData();
   }, [selectedYear, requestStatusFilter, overtimeStatusFilter, employeeFilter]);
+
+  useEffect(() => {
+    void loadAttendanceRecords();
+  }, [recordStartDate, recordEndDate, employeeFilter]);
+
+  useEffect(() => {
+    setSelectedLeaveRequestIds((current) => {
+      const availableIds = new Set(
+        leaveRequests
+          .filter((request) => request.status === LeaveStatus.SUBMITTED)
+          .map((request) => request.id),
+      );
+      return new Set([...current].filter((id) => availableIds.has(id)));
+    });
+  }, [leaveRequests]);
 
   useEffect(() => {
     void loadReferenceData();
@@ -264,6 +293,23 @@ const AttendanceAdminPage: React.FC = () => {
     }
   };
 
+  const loadAttendanceRecords = async () => {
+    try {
+      setLoading(true);
+      const result = await attendanceService.getAdminAttendanceRecords({
+        startDate: recordStartDate,
+        endDate: recordEndDate,
+        employeeId: employeeFilter || undefined,
+      });
+      setAttendanceRecords(result);
+    } catch (error: any) {
+      console.error(error);
+      message.error(error?.response?.data?.message || "無法載入出勤紀錄");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadReferenceData = async () => {
     try {
       const [employeeResult, departmentResult] = await Promise.all([
@@ -279,18 +325,27 @@ const AttendanceAdminPage: React.FC = () => {
   };
 
   const employeeOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    [...leaveRequests, ...leaveBalances].forEach((item: any) => {
-      if (item.employee?.id) {
-        map.set(item.employee.id, item.employee.name);
-      }
-    });
-
     return [
       { value: "", label: "全部員工" },
-      ...Array.from(map.entries()).map(([value, label]) => ({ value, label })),
+      ...employees.map((employee) => ({
+        value: employee.id,
+        label: `${employee.name} (${employee.employeeNo})`,
+      })),
     ];
-  }, [leaveRequests, leaveBalances]);
+  }, [employees]);
+
+  const pendingLeaveRequests = useMemo(
+    () =>
+      leaveRequests.filter(
+        (request) => request.status === LeaveStatus.SUBMITTED,
+      ),
+    [leaveRequests],
+  );
+  const allPendingLeaveRequestsSelected =
+    pendingLeaveRequests.length > 0 &&
+    pendingLeaveRequests.every((request) =>
+      selectedLeaveRequestIds.has(request.id),
+    );
 
   const attendanceStats = {
     total: dailyData.length,
@@ -486,6 +541,62 @@ const AttendanceAdminPage: React.FC = () => {
     } catch (error: any) {
       console.error(error);
       message.error(error?.response?.data?.message || "更新假單狀態失敗");
+    }
+  };
+
+  const toggleLeaveRequestSelection = (requestId: string) => {
+    setSelectedLeaveRequestIds((current) => {
+      const next = new Set(current);
+      if (next.has(requestId)) {
+        next.delete(requestId);
+      } else {
+        next.add(requestId);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllPendingLeaveRequests = () => {
+    setSelectedLeaveRequestIds((current) => {
+      const next = new Set(current);
+      if (allPendingLeaveRequestsSelected) {
+        pendingLeaveRequests.forEach((request) => next.delete(request.id));
+      } else {
+        pendingLeaveRequests.forEach((request) => next.add(request.id));
+      }
+      return next;
+    });
+  };
+
+  const handleBulkApproveRequests = async () => {
+    const selectedIds = pendingLeaveRequests
+      .filter((request) => selectedLeaveRequestIds.has(request.id))
+      .map((request) => request.id);
+
+    if (selectedIds.length === 0) {
+      message.warning("請先勾選要核准的待審假單");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await Promise.all(
+        selectedIds.map((id) =>
+          attendanceService.updateLeaveStatus(
+            id,
+            LeaveStatus.APPROVED,
+            "批次核准",
+          ),
+        ),
+      );
+      message.success(`已批次核准 ${selectedIds.length} 筆假單`);
+      setSelectedLeaveRequestIds(new Set());
+      await loadManagementData();
+    } catch (error: any) {
+      console.error(error);
+      message.error(error?.response?.data?.message || "批次核准假單失敗");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -781,6 +892,7 @@ const AttendanceAdminPage: React.FC = () => {
 
   const tabs: { key: AdminTab; label: string; icon: React.ReactNode }[] = [
     { key: "attendance", label: "每日出勤", icon: <DashboardOutlined /> },
+    { key: "records", label: "查詢出勤", icon: <FileTextOutlined /> },
     { key: "requests", label: "假單審核", icon: <CheckCircleOutlined /> },
     { key: "overtime", label: "加班審核", icon: <ClockCircleOutlined /> },
     { key: "policies", label: "班表政策", icon: <ClockCircleOutlined /> },
@@ -844,6 +956,7 @@ const AttendanceAdminPage: React.FC = () => {
               className="h-12 gap-2 text-sm text-slate-800"
               onClick={() => {
                 void loadAttendance();
+                void loadAttendanceRecords();
                 void loadManagementData();
               }}
             >
@@ -929,6 +1042,43 @@ const AttendanceAdminPage: React.FC = () => {
         </div>
 
         <div className="p-6">
+          {activeTab === "records" && (
+            <div className="mb-6 flex flex-wrap items-end gap-3">
+              <div className="w-44">
+                <GlassInput
+                  label="開始日期"
+                  type="date"
+                  value={recordStartDate}
+                  onChange={(event) => setRecordStartDate(event.target.value)}
+                />
+              </div>
+              <div className="w-44">
+                <GlassInput
+                  label="結束日期"
+                  type="date"
+                  value={recordEndDate}
+                  onChange={(event) => setRecordEndDate(event.target.value)}
+                />
+              </div>
+              <div className="w-56">
+                <GlassSelect
+                  label="員工"
+                  options={employeeOptions}
+                  value={employeeFilter}
+                  onChange={(event) => setEmployeeFilter(event.target.value)}
+                />
+              </div>
+              <GlassButton
+                variant="secondary"
+                className="h-12 gap-2 px-5 text-sm"
+                onClick={() => void loadAttendanceRecords()}
+              >
+                <ReloadOutlined />
+                查詢
+              </GlassButton>
+            </div>
+          )}
+
           {(activeTab === "requests" ||
             activeTab === "overtime" ||
             activeTab === "balances") && (
@@ -1075,101 +1225,230 @@ const AttendanceAdminPage: React.FC = () => {
             </div>
           )}
 
-          {activeTab === "requests" && (
-            <div className="overflow-x-auto rounded-3xl border border-white/20 bg-white/20">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-white/20 text-sm text-slate-500">
-                    <th className="px-5 py-4 font-medium">員工</th>
-                    <th className="px-5 py-4 font-medium">假別</th>
-                    <th className="px-5 py-4 font-medium">期間</th>
-                    <th className="px-5 py-4 font-medium">時數</th>
-                    <th className="px-5 py-4 font-medium">原因</th>
-                    <th className="px-5 py-4 font-medium">狀態</th>
-                    <th className="px-5 py-4 font-medium">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leaveRequests.map((request) => (
-                    <tr
-                      key={request.id}
-                      className="border-b border-white/10 text-sm text-slate-700"
-                    >
-                      <td className="px-5 py-4">
-                        <div className="font-medium text-slate-900">
-                          {request.employee.name}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          {request.employee.department?.name || "未分配部門"}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">{request.leaveType?.name}</td>
-                      <td className="px-5 py-4">
-                        <div>
-                          {dayjs(request.startAt).format("YYYY/MM/DD HH:mm")}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          至 {dayjs(request.endAt).format("YYYY/MM/DD HH:mm")}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 font-mono">{request.hours}</td>
-                      <td className="px-5 py-4 max-w-[280px]">
-                        <div className="truncate">{request.reason || "—"}</div>
-                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-400">
-                          {request.documents?.length ? (
-                            <span>附件 {request.documents.length} 筆</span>
-                          ) : null}
-                          {request.location ? (
-                            <span>地點：{request.location}</span>
-                          ) : null}
-                          {request.requiredDocsMet === false ? (
-                            <span className="text-rose-500">附件未補齊</span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        {requestStatusBadge(request.status)}
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex flex-wrap gap-2">
-                          <GlassButton
-                            variant="secondary"
-                            className="gap-2 px-4 py-2 text-sm"
-                            onClick={() => openRequestModal(request)}
-                          >
-                            <FileTextOutlined />
-                            {request.status === LeaveStatus.SUBMITTED
-                              ? "審核"
-                              : "詳情"}
-                          </GlassButton>
-                          {request.status === LeaveStatus.SUBMITTED && (
-                            <span className="text-xs text-slate-400">
-                              待主管處理
-                            </span>
-                          )}
-                          {request.status !== LeaveStatus.SUBMITTED && (
-                            <span className="text-xs text-slate-400">
-                              {request.reviewer?.name
-                                ? `處理人：${request.reviewer.name}`
-                                : "已處理"}
-                            </span>
-                          )}
-                        </div>
-                      </td>
+          {activeTab === "records" && (
+            <div className="space-y-5">
+              <div className="overflow-x-auto rounded-3xl border border-white/20 bg-white/20">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-white/20 text-sm text-slate-500">
+                      <th className="px-5 py-4 font-medium">出勤日期</th>
+                      <th className="px-5 py-4 font-medium">員工</th>
+                      <th className="px-5 py-4 font-medium">上班打卡</th>
+                      <th className="px-5 py-4 font-medium">下班打卡</th>
+                      <th className="px-5 py-4 font-medium">出勤時數</th>
+                      <th className="px-5 py-4 font-medium">加班分鐘</th>
+                      <th className="px-5 py-4 font-medium">狀態</th>
+                      <th className="px-5 py-4 font-medium">摘要</th>
                     </tr>
-                  ))}
-                  {leaveRequests.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="px-5 py-10 text-center text-sm text-slate-400"
+                  </thead>
+                  <tbody>
+                    {attendanceRecords.map((record) => (
+                      <tr
+                        key={record.id}
+                        className="border-b border-white/10 text-sm text-slate-700"
                       >
-                        目前沒有符合條件的假單
-                      </td>
+                        <td className="px-5 py-4 font-mono text-slate-900">
+                          {dayjs(record.workDate).format("YYYY/MM/DD")}
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="font-medium text-slate-900">
+                            {record.employee?.name || "未綁定員工"}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {record.employee?.department?.name || "未分配部門"}
+                            {record.employee?.employeeNo
+                              ? ` · ${record.employee.employeeNo}`
+                              : ""}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 font-mono">
+                          {record.clockInTime
+                            ? dayjs(record.clockInTime).format("HH:mm:ss")
+                            : "-"}
+                        </td>
+                        <td className="px-5 py-4 font-mono">
+                          {record.clockOutTime
+                            ? dayjs(record.clockOutTime).format("HH:mm:ss")
+                            : "-"}
+                        </td>
+                        <td className="px-5 py-4">
+                          {record.workedMinutes
+                            ? `${(record.workedMinutes / 60).toFixed(1)} 小時`
+                            : "-"}
+                        </td>
+                        <td className="px-5 py-4">
+                          {record.overtimeMinutes || 0} 分鐘
+                        </td>
+                        <td className="px-5 py-4">
+                          {attendanceStatusBadge(record.status)}
+                        </td>
+                        <td className="px-5 py-4 max-w-[260px]">
+                          <div className="truncate text-slate-500">
+                            {record.anomalyReason || "—"}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {attendanceRecords.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={8}
+                          className="px-5 py-10 text-center text-sm text-slate-400"
+                        >
+                          目前沒有符合條件的出勤紀錄
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "requests" && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/20 bg-white/20 px-4 py-3">
+                <div className="text-sm text-slate-500">
+                  已勾選{" "}
+                  <span className="font-semibold text-slate-900">
+                    {selectedLeaveRequestIds.size}
+                  </span>{" "}
+                  筆待審假單
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <GlassButton
+                    variant="secondary"
+                    className="px-4 py-2 text-sm"
+                    disabled={pendingLeaveRequests.length === 0}
+                    onClick={toggleAllPendingLeaveRequests}
+                  >
+                    {allPendingLeaveRequestsSelected ? "取消全選" : "全選待審"}
+                  </GlassButton>
+                  <GlassButton
+                    className="px-4 py-2 text-sm"
+                    disabled={selectedLeaveRequestIds.size === 0 || loading}
+                    onClick={() => void handleBulkApproveRequests()}
+                  >
+                    批次核准放行
+                  </GlassButton>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-3xl border border-white/20 bg-white/20">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-white/20 text-sm text-slate-500">
+                      <th className="w-12 px-5 py-4 font-medium">
+                        <input
+                          type="checkbox"
+                          checked={allPendingLeaveRequestsSelected}
+                          disabled={pendingLeaveRequests.length === 0}
+                          onChange={toggleAllPendingLeaveRequests}
+                        />
+                      </th>
+                      <th className="px-5 py-4 font-medium">員工</th>
+                      <th className="px-5 py-4 font-medium">假別</th>
+                      <th className="px-5 py-4 font-medium">期間</th>
+                      <th className="px-5 py-4 font-medium">時數</th>
+                      <th className="px-5 py-4 font-medium">原因</th>
+                      <th className="px-5 py-4 font-medium">狀態</th>
+                      <th className="px-5 py-4 font-medium">操作</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {leaveRequests.map((request) => (
+                      <tr
+                        key={request.id}
+                        className="border-b border-white/10 text-sm text-slate-700"
+                      >
+                        <td className="px-5 py-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedLeaveRequestIds.has(request.id)}
+                            disabled={request.status !== LeaveStatus.SUBMITTED}
+                            onChange={() =>
+                              toggleLeaveRequestSelection(request.id)
+                            }
+                          />
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="font-medium text-slate-900">
+                            {request.employee.name}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {request.employee.department?.name || "未分配部門"}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">{request.leaveType?.name}</td>
+                        <td className="px-5 py-4">
+                          <div>
+                            {dayjs(request.startAt).format("YYYY/MM/DD HH:mm")}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            至 {dayjs(request.endAt).format("YYYY/MM/DD HH:mm")}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 font-mono">{request.hours}</td>
+                        <td className="px-5 py-4 max-w-[280px]">
+                          <div className="truncate">
+                            {request.reason || "—"}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-400">
+                            {request.documents?.length ? (
+                              <span>附件 {request.documents.length} 筆</span>
+                            ) : null}
+                            {request.location ? (
+                              <span>地點：{request.location}</span>
+                            ) : null}
+                            {request.requiredDocsMet === false ? (
+                              <span className="text-rose-500">附件未補齊</span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          {requestStatusBadge(request.status)}
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex flex-wrap gap-2">
+                            <GlassButton
+                              variant="secondary"
+                              className="gap-2 px-4 py-2 text-sm"
+                              onClick={() => openRequestModal(request)}
+                            >
+                              <FileTextOutlined />
+                              {request.status === LeaveStatus.SUBMITTED
+                                ? "審核"
+                                : "詳情"}
+                            </GlassButton>
+                            {request.status === LeaveStatus.SUBMITTED && (
+                              <span className="text-xs text-slate-400">
+                                待主管處理
+                              </span>
+                            )}
+                            {request.status !== LeaveStatus.SUBMITTED && (
+                              <span className="text-xs text-slate-400">
+                                {request.reviewer?.name
+                                  ? `處理人：${request.reviewer.name}`
+                                  : "已處理"}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {leaveRequests.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={8}
+                          className="px-5 py-10 text-center text-sm text-slate-400"
+                        >
+                          目前沒有符合條件的假單
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { ClockInDto } from '../dto/clock-in.dto';
 import { ClockOutDto } from '../dto/clock-out.dto';
@@ -33,7 +37,10 @@ export class AttendanceService {
     }
 
     const now = new Date();
-    const schedule = await this.scheduleService.getScheduleForDate(employee.id, now);
+    const schedule = await this.scheduleService.getScheduleForDate(
+      employee.id,
+      now,
+    );
     const policy = this.policyService.resolvePolicy(schedule?.policy);
 
     if (policy?.requiresPhoto && !dto.photoUrl) {
@@ -59,7 +66,9 @@ export class AttendanceService {
         policy.geofence,
       );
       if (!isWithinFence) {
-        throw new ForbiddenException('You are outside the allowed clock-in area.');
+        throw new ForbiddenException(
+          'You are outside the allowed clock-in area.',
+        );
       }
     }
 
@@ -113,7 +122,9 @@ export class AttendanceService {
         clockInTime: record.timestamp,
         breakMinutes: schedule?.breakMinutes ?? 0,
         status:
-          schedule && record.timestamp > schedule.lateThreshold ? 'late' : 'pending',
+          schedule && record.timestamp > schedule.lateThreshold
+            ? 'late'
+            : 'pending',
       },
       create: {
         entityId: employee.entityId,
@@ -122,7 +133,9 @@ export class AttendanceService {
         clockInTime: record.timestamp,
         breakMinutes: schedule?.breakMinutes ?? 0,
         status:
-          schedule && record.timestamp > schedule.lateThreshold ? 'late' : 'pending',
+          schedule && record.timestamp > schedule.lateThreshold
+            ? 'late'
+            : 'pending',
       },
     });
 
@@ -138,7 +151,10 @@ export class AttendanceService {
     }
 
     const now = new Date();
-    const schedule = await this.scheduleService.getScheduleForDate(employee.id, now);
+    const schedule = await this.scheduleService.getScheduleForDate(
+      employee.id,
+      now,
+    );
     const policy = this.policyService.resolvePolicy(schedule?.policy);
 
     if (policy?.requiresPhoto && !dto.photoUrl) {
@@ -158,7 +174,9 @@ export class AttendanceService {
         policy.geofence,
       );
       if (!isWithinFence) {
-        throw new ForbiddenException('You are outside the allowed clock-out area.');
+        throw new ForbiddenException(
+          'You are outside the allowed clock-out area.',
+        );
       }
     }
 
@@ -222,7 +240,9 @@ export class AttendanceService {
     if (schedule && record.timestamp > schedule.shiftEndAt) {
       overtimeMinutes = Math.max(
         0,
-        Math.floor((record.timestamp.getTime() - schedule.shiftEndAt.getTime()) / 60000),
+        Math.floor(
+          (record.timestamp.getTime() - schedule.shiftEndAt.getTime()) / 60000,
+        ),
       );
     }
 
@@ -239,12 +259,11 @@ export class AttendanceService {
         workedMinutes: workedMinutes,
         breakMinutes,
         overtimeMinutes,
-        status:
-          summary?.clockInTime
-            ? summary.status === 'late'
-              ? 'late'
-              : 'completed'
-            : 'missing_clock',
+        status: summary?.clockInTime
+          ? summary.status === 'late'
+            ? 'late'
+            : 'completed'
+          : 'missing_clock',
       },
       create: {
         entityId: employee.entityId,
@@ -261,6 +280,30 @@ export class AttendanceService {
     return record;
   }
 
+  private buildAttendanceAccessWhere(access: {
+    scope: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+    entityId: string;
+    employeeId: string | null;
+    departmentId: string | null;
+    noAccess: boolean;
+  }) {
+    if (access.noAccess) {
+      return { employeeId: '__no_access__' };
+    }
+
+    if (access.scope === 'SELF') {
+      return { employeeId: access.employeeId || '__no_access__' };
+    }
+
+    if (access.scope === 'DEPARTMENT') {
+      return {
+        employee: { departmentId: access.departmentId || '__no_access__' },
+      };
+    }
+
+    return {};
+  }
+
   async getDailySummaries(userId: string, date: Date) {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
@@ -275,17 +318,49 @@ export class AttendanceService {
           gte: startOfDay,
           lte: endOfDay,
         },
-        ...(access.noAccess
-          ? { employeeId: '__no_access__' }
-          : access.scope === 'SELF'
-            ? { employeeId: access.employeeId || '__no_access__' }
-            : access.scope === 'DEPARTMENT'
-              ? { employee: { departmentId: access.departmentId || '__no_access__' } }
-              : {}),
+        ...this.buildAttendanceAccessWhere(access),
       },
       include: {
-        employee: true,
+        employee: { include: { department: true } },
       },
+      orderBy: [{ employee: { employeeNo: 'asc' } }],
+    });
+  }
+
+  async getAttendanceRecords(
+    userId: string,
+    filters: {
+      startDate?: Date;
+      endDate?: Date;
+      employeeId?: string;
+    },
+  ) {
+    const access = await this.getAdminAccessContext(userId);
+    const startDate = filters.startDate
+      ? new Date(filters.startDate)
+      : new Date();
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = filters.endDate ? new Date(filters.endDate) : new Date();
+    endDate.setHours(23, 59, 59, 999);
+
+    if (endDate < startDate) {
+      throw new BadRequestException('查詢結束日不可早於開始日');
+    }
+
+    return this.prisma.attendanceDailySummary.findMany({
+      where: {
+        entityId: access.entityId,
+        workDate: {
+          gte: startDate,
+          lte: endDate,
+        },
+        ...(filters.employeeId ? { employeeId: filters.employeeId } : {}),
+        ...this.buildAttendanceAccessWhere(access),
+      },
+      include: {
+        employee: { include: { department: true } },
+      },
+      orderBy: [{ workDate: 'desc' }, { employee: { employeeNo: 'asc' } }],
     });
   }
 }

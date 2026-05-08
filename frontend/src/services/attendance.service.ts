@@ -5,6 +5,7 @@ import {
   CreateLeaveRequestDto,
   LeaveRequest,
   AttendanceRecord,
+  AdminAttendanceRecord,
   LeaveType,
   LeaveBalance,
   AdminLeaveRequest,
@@ -48,7 +49,9 @@ export const attendanceService = {
   },
 
   getMyOvertimeRequests: async (): Promise<OvertimeRequest[]> => {
-    const response = await api.get<OvertimeRequest[]>("/attendance/overtime-requests");
+    const response = await api.get<OvertimeRequest[]>(
+      "/attendance/overtime-requests",
+    );
     return response.data;
   },
 
@@ -69,8 +72,22 @@ export const attendanceService = {
     return response.data;
   },
 
+  getAdminAttendanceRecords: async (params: {
+    startDate: string;
+    endDate: string;
+    employeeId?: string;
+  }): Promise<AdminAttendanceRecord[]> => {
+    const response = await api.get<AdminAttendanceRecord[]>(
+      "/attendance/admin/attendance-records",
+      { params },
+    );
+    return response.data;
+  },
+
   getAdminPolicies: async (): Promise<AttendancePolicy[]> => {
-    const response = await api.get<AttendancePolicy[]>("/attendance/admin/policies");
+    const response = await api.get<AttendancePolicy[]>(
+      "/attendance/admin/policies",
+    );
     return response.data;
   },
 

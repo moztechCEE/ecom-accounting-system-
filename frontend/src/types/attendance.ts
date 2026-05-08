@@ -263,6 +263,29 @@ export interface AttendanceRecord {
   method: AttendanceMethod;
 }
 
+export interface AdminAttendanceRecord {
+  id: string;
+  workDate: string;
+  clockInTime?: string | null;
+  clockOutTime?: string | null;
+  workedMinutes?: number | null;
+  breakMinutes?: number | null;
+  overtimeMinutes?: number | null;
+  lateMinutes?: number | null;
+  earlyLeaveMinutes?: number | null;
+  status: string;
+  anomalyReason?: string | null;
+  employee?: {
+    id: string;
+    employeeNo?: string;
+    name: string;
+    department?: {
+      id: string;
+      name: string;
+    } | null;
+  };
+}
+
 export const OvertimeRequestStatus = {
   PENDING_MANAGER: "pending_manager",
   PENDING_FINAL: "pending_final",

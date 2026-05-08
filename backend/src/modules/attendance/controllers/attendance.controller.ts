@@ -60,9 +60,28 @@ export class AttendanceController {
   @Get('admin/daily-summary')
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
-  async getDailySummary(@Request() req: any, @Query('date') dateString: string) {
+  async getDailySummary(
+    @Request() req: any,
+    @Query('date') dateString: string,
+  ) {
     const date = dateString ? new Date(dateString) : new Date();
     return this.attendanceService.getDailySummaries(req.user.id, date);
+  }
+
+  @Get('admin/attendance-records')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
+  async getAttendanceRecords(
+    @Request() req: any,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('employeeId') employeeId?: string,
+  ) {
+    return this.attendanceService.getAttendanceRecords(req.user.id, {
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      employeeId,
+    });
   }
 
   @Get('admin/policies')
