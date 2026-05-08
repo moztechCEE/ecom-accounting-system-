@@ -272,7 +272,11 @@ Dashboard 最終不應只是展示業績，而是要主動揭露營運風險。
   - `act_1010503451002666`：MOZTECH US shopify，歸入 MOZTECH / US。
   - `act_938172323581797`：MOZTECH 墨子科技，歸入 MOZTECH / TW。
 - `backend/scripts/configure-meta-ads-secrets.sh` 已補強：新增或更新 token 版本後，會自動把 Cloud Run runtime service account 加到該 Secret 的 `roles/secretmanager.secretAccessor`，避免之後重複部署失敗。
-- 尚未完成：需登入後呼叫 `GET /integrations/meta-ads/readiness` 確認 token 是否具備 `ads_read` 且能讀到 `act_...` 帳戶；需補廣告發票 / 收據與扣款信用卡 / 銀行帳戶 mapping，才能完成 AP 與銀行扣款對帳。
+- 已用正式 Cloud Run backend 驗證 `GET /integrations/meta-ads/readiness`：`ready=true`、`configuredAccountCount=4`、`readableAccountCount=17`。
+- 已正式同步 `2026-01-01` 到 `2026-05-08` 的 Meta daily spend，寫入 `Expense / ExpenseItem` 共 256 筆，`sourceModule=meta_ads`。
+- `2026-05-01` 到 `2026-05-08` 的 management summary 已可按日看到 Meta 廣告費，合計約 `NT$180,904`；Meta 當日與近幾日數字可能會持續校正，因此每日排程會回刷最近 7 天。
+- Cloud Run backend 已設定 `META_ADS_SYNC_ENABLED=true`，revision `ecom-accounting-backend-00343-wgp` 100% 流量，會每日同步最近 7 天 Meta spend。
+- 尚未完成：需補廣告發票 / 收據與扣款信用卡 / 銀行帳戶 mapping，才能完成 AP 與銀行扣款對帳。
 
 必補能力：
 

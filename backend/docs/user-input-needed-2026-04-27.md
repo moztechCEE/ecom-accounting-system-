@@ -190,11 +190,14 @@
   - 2026-05-08 實際修復：`META_ADS_ACCESS_TOKEN` 已建立 Secret 並掛到 Cloud Run；Cloud Run runtime service account 已在 Secret 層級取得 `roles/secretmanager.secretAccessor`。
   - 2026-05-08 已依 Meta Ads Manager 截圖設定 `META_ADS_ACCOUNTS_JSON` / `META_ADS_ACCOUNT_IDS`：`bonson`、`MOZTECH US`、`MOZTECH US shopify`、`MOZTECH 墨子科技` 四個帳戶先歸入 MOZTECH，並以 US / TW market 區分。
   - 設定腳本已補強，之後更新 token 時會自動補 Cloud Run runtime service account 的 Secret Accessor 權限。
+  - 2026-05-08 已驗證 Meta API 與系統 connector 可讀金額；已同步 `2026-01-01` 到 `2026-05-08` daily spend 共 256 筆進 `Expense / ExpenseItem`。
+  - 2026-05-01 到 2026-05-08 的 dashboard management summary 已回傳每日廣告費，區間合計約 `NT$180,904`。
+  - Cloud Run 已開啟 `META_ADS_SYNC_ENABLED=true`，每日回刷最近 7 天，處理 Meta 當日 / 近幾日花費校正。
   - CEO Dashboard 已先把廣告花費放入第一層管制區；若系統內已有廣告相關費用或已付款費用申請，會先以描述 / 科目線索彙總成 `adSpendAmount`。
   - 若尚未提供 Meta / Google / TikTok API 與 mapping，Dashboard 會顯示「待串接」，不會假造平台花費。
 - 暫停原因：
-  - Meta API 讀取 spend 的程式入口與 Secret 掛載已補上，但還需要確認 token 能讀到廣告帳戶。
-  - 沒有帳戶 mapping、廣告發票 / 收據來源與扣款帳戶前，可以匯入 spend，但還不能完成 AP / 銀行扣款對帳與 ROAS / 現金流聯動。
+  - Meta API 讀取 spend 的程式入口、Secret 掛載、帳戶 mapping、每日 spend 匯入與每日排程已補上。
+  - 沒有廣告發票 / 收據來源與扣款帳戶前，可以匯入 spend，但還不能完成 AP / 銀行扣款對帳與 ROAS / 現金流聯動。
   - Google Ads / TikTok Ads 尚未接入。
 - MCP 使用原則：
   - MCP 可以用來協助開發、測試、讀取你授權的工具或瀏覽器資料。
