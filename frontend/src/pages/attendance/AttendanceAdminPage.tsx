@@ -6,12 +6,14 @@ import {
   ClockCircleOutlined,
   DashboardOutlined,
   DeleteOutlined,
+  DownOutlined,
   EditOutlined,
   FileAddOutlined,
   FileTextOutlined,
   PlusOutlined,
   PaperClipOutlined,
   ReloadOutlined,
+  RightOutlined,
   SettingOutlined,
   TeamOutlined,
   WarningOutlined,
@@ -193,6 +195,25 @@ const closurePayPolicyLabel = (
   return "不扣薪";
 };
 
+const formatBalanceHours = (hours?: number | null) => {
+  const value = Number(hours || 0);
+  if (value % 8 === 0) {
+    return `${value / 8} 天`;
+  }
+
+  return `${value} 小時`;
+};
+
+type EmployeeLeaveBalanceRow = {
+  id: string;
+  employee: AdminLeaveBalance["employee"];
+  balances: AdminLeaveBalance[];
+  totalAccruedHours: number;
+  totalUsedHours: number;
+  totalPendingHours: number;
+  totalRemainingHours: number;
+};
+
 const AttendanceAdminPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>("requests");
   const [loading, setLoading] = useState(false);
@@ -203,6 +224,9 @@ const AttendanceAdminPage: React.FC = () => {
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>([]);
   const [leaveBalances, setLeaveBalances] = useState<AdminLeaveBalance[]>([]);
+  const [expandedBalanceEmployeeIds, setExpandedBalanceEmployeeIds] = useState<
+    Set<string>
+  >(new Set());
   const [policies, setPolicies] = useState<AttendancePolicy[]>([]);
   const [disasterClosures, setDisasterClosures] = useState<
     DisasterClosureEvent[]
@@ -352,6 +376,52 @@ const AttendanceAdminPage: React.FC = () => {
     remainingAnnualHours: leaveBalances
       .filter((balance) => balance.leaveType.code === "ANNUAL")
       .reduce((sum, balance) => sum + balance.remainingHours, 0),
+  };
+
+  const employeeBalanceRows = useMemo<EmployeeLeaveBalanceRow[]>(() => {
+    const grouped = new Map<string, EmployeeLeaveBalanceRow>();
+
+    for (const balance of leaveBalances) {
+      const row = grouped.get(balance.employee.id) || {
+        id: balance.employee.id,
+        employee: balance.employee,
+        balances: [],
+        totalAccruedHours: 0,
+        totalUsedHours: 0,
+        totalPendingHours: 0,
+        totalRemainingHours: 0,
+      };
+
+      row.balances.push(balance);
+      row.totalAccruedHours += balance.accruedHours;
+      row.totalUsedHours += balance.usedHours;
+      row.totalPendingHours += balance.pendingHours;
+      row.totalRemainingHours += balance.remainingHours;
+      grouped.set(balance.employee.id, row);
+    }
+
+    return Array.from(grouped.values())
+      .map((row) => ({
+        ...row,
+        balances: [...row.balances].sort((left, right) =>
+          left.leaveType.name.localeCompare(right.leaveType.name, "zh-Hant"),
+        ),
+      }))
+      .sort((left, right) =>
+        left.employee.name.localeCompare(right.employee.name, "zh-Hant"),
+      );
+  }, [leaveBalances]);
+
+  const toggleBalanceEmployee = (employeeId: string) => {
+    setExpandedBalanceEmployeeIds((current) => {
+      const next = new Set(current);
+      if (next.has(employeeId)) {
+        next.delete(employeeId);
+      } else {
+        next.add(employeeId);
+      }
+      return next;
+    });
   };
 
   const formatClosureScopeTargets = (closure: DisasterClosureEvent) => {
@@ -1749,63 +1819,143 @@ const AttendanceAdminPage: React.FC = () => {
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-white/20 text-sm text-slate-500">
+                    <th className="w-12 px-5 py-4 font-medium"></th>
                     <th className="px-5 py-4 font-medium">員工</th>
-                    <th className="px-5 py-4 font-medium">假別</th>
-                    <th className="px-5 py-4 font-medium">週期</th>
-                    <th className="px-5 py-4 font-medium">應得</th>
-                    <th className="px-5 py-4 font-medium">已用</th>
-                    <th className="px-5 py-4 font-medium">待核</th>
-                    <th className="px-5 py-4 font-medium">剩餘</th>
-                    <th className="px-5 py-4 font-medium">調整</th>
+                    <th className="px-5 py-4 font-medium">假別摘要</th>
+                    <th className="px-5 py-4 font-medium">待核合計</th>
+                    <th className="px-5 py-4 font-medium">剩餘合計</th>
+                    <th className="px-5 py-4 font-medium">假別數</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {leaveBalances.map((balance) => (
-                    <tr
-                      key={balance.id}
-                      className="border-b border-white/10 text-sm text-slate-700"
-                    >
-                      <td className="px-5 py-4">
-                        <div className="font-medium text-slate-900">
-                          {balance.employee.name}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          {balance.employee.department?.name || "未分配部門"}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">{balance.leaveType.name}</td>
-                      <td className="px-5 py-4 text-xs text-slate-500">
-                        {dayjs(balance.periodStart).format("YYYY/MM/DD")} 至{" "}
-                        {dayjs(balance.periodEnd).format("YYYY/MM/DD")}
-                      </td>
-                      <td className="px-5 py-4 font-mono">
-                        {balance.accruedHours}
-                      </td>
-                      <td className="px-5 py-4 font-mono">
-                        {balance.usedHours}
-                      </td>
-                      <td className="px-5 py-4 font-mono">
-                        {balance.pendingHours}
-                      </td>
-                      <td className="px-5 py-4 font-mono text-slate-900">
-                        {balance.remainingHours}
-                      </td>
-                      <td className="px-5 py-4">
-                        <Tooltip title="調整年度額度與人工補正">
-                          <button
-                            className="rounded-xl bg-white/30 p-2 text-slate-500 transition-colors hover:bg-white/50 hover:text-slate-900"
-                            onClick={() => openBalanceEditor(balance)}
-                          >
-                            <EditOutlined />
-                          </button>
-                        </Tooltip>
-                      </td>
-                    </tr>
+                  {employeeBalanceRows.map((row) => (
+                    <React.Fragment key={row.id}>
+                      <tr
+                        className="cursor-pointer border-b border-white/10 text-sm text-slate-700 transition-colors hover:bg-white/15"
+                        onClick={() => toggleBalanceEmployee(row.id)}
+                      >
+                        <td className="px-5 py-4 text-slate-500">
+                          {expandedBalanceEmployeeIds.has(row.id) ? (
+                            <DownOutlined />
+                          ) : (
+                            <RightOutlined />
+                          )}
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="font-medium text-slate-900">
+                            {row.employee.name}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {row.employee.department?.name || "未分配部門"}
+                            {row.employee.employeeNo ? ` · ${row.employee.employeeNo}` : ""}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex max-w-[520px] flex-wrap gap-2">
+                            {row.balances.slice(0, 4).map((balance) => (
+                              <span
+                                key={balance.id}
+                                className={`rounded-full px-3 py-1 text-xs ${
+                                  balance.pendingHours > 0
+                                    ? "bg-amber-100/70 text-amber-700"
+                                    : balance.remainingHours < 0
+                                      ? "bg-rose-100/70 text-rose-700"
+                                      : "bg-white/40 text-slate-600"
+                                }`}
+                              >
+                                {balance.leaveType.name} {formatBalanceHours(balance.remainingHours)}
+                              </span>
+                            ))}
+                            {row.balances.length > 4 ? (
+                              <span className="rounded-full bg-white/30 px-3 py-1 text-xs text-slate-500">
+                                +{row.balances.length - 4}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 font-mono">
+                          {formatBalanceHours(row.totalPendingHours)}
+                        </td>
+                        <td className="px-5 py-4 font-mono text-slate-900">
+                          {formatBalanceHours(row.totalRemainingHours)}
+                        </td>
+                        <td className="px-5 py-4 text-slate-500">
+                          {row.balances.length} 個假別
+                        </td>
+                      </tr>
+                      {expandedBalanceEmployeeIds.has(row.id) ? (
+                        <tr className="border-b border-white/10 bg-white/10">
+                          <td colSpan={6} className="px-5 py-4">
+                            <div className="overflow-x-auto rounded-2xl border border-white/20 bg-white/20">
+                              <table className="w-full text-left">
+                                <thead>
+                                  <tr className="border-b border-white/20 text-xs text-slate-500">
+                                    <th className="px-4 py-3 font-medium">假別</th>
+                                    <th className="px-4 py-3 font-medium">週期</th>
+                                    <th className="px-4 py-3 font-medium">應得</th>
+                                    <th className="px-4 py-3 font-medium">已用</th>
+                                    <th className="px-4 py-3 font-medium">待核</th>
+                                    <th className="px-4 py-3 font-medium">剩餘</th>
+                                    <th className="px-4 py-3 font-medium">調整</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {row.balances.map((balance) => (
+                                    <tr
+                                      key={balance.id}
+                                      className="border-b border-white/10 text-sm text-slate-700 last:border-b-0"
+                                    >
+                                      <td className="px-4 py-3">
+                                        <div className="font-medium text-slate-800">
+                                          {balance.leaveType.name}
+                                        </div>
+                                        <div className="text-xs text-slate-400">
+                                          {balance.leaveType.code}
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-3 text-xs text-slate-500">
+                                        {dayjs(balance.periodStart).format("YYYY/MM/DD")} 至{" "}
+                                        {dayjs(balance.periodEnd).format("YYYY/MM/DD")}
+                                      </td>
+                                      <td className="px-4 py-3 font-mono">
+                                        {formatBalanceHours(balance.accruedHours)}
+                                      </td>
+                                      <td className="px-4 py-3 font-mono">
+                                        {formatBalanceHours(balance.usedHours)}
+                                      </td>
+                                      <td className="px-4 py-3 font-mono">
+                                        {formatBalanceHours(balance.pendingHours)}
+                                      </td>
+                                      <td className="px-4 py-3 font-mono text-slate-900">
+                                        {formatBalanceHours(balance.remainingHours)}
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <Tooltip title="調整年度額度與人工補正">
+                                          <button
+                                            className="rounded-xl bg-white/30 p-2 text-slate-500 transition-colors hover:bg-white/50 hover:text-slate-900"
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              openBalanceEditor(balance);
+                                            }}
+                                          >
+                                            <EditOutlined />
+                                          </button>
+                                        </Tooltip>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </React.Fragment>
                   ))}
-                  {leaveBalances.length === 0 && (
+                  {employeeBalanceRows.length === 0 && (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={6}
                         className="px-5 py-10 text-center text-sm text-slate-400"
                       >
                         目前沒有這個年度的額度帳本
