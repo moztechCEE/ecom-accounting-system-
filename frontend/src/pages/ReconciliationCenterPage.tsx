@@ -79,6 +79,12 @@ const severityColor = (severity: ReconciliationCenterItem['severity']) => {
   return 'green'
 }
 
+const exceptionSeverityColor = (severity: 'critical' | 'warning' | 'info') => {
+  if (severity === 'critical') return '#dc2626'
+  if (severity === 'warning') return '#d97706'
+  return '#2563eb'
+}
+
 const clearBlockerLabels: Record<string, string> = {
   already_has_reconciliation_journal: '已建立核銷分錄',
   missing_order: '找不到對應訂單',
@@ -183,6 +189,7 @@ const ReconciliationCenterPage: React.FC = () => {
   const completionRate = center?.summary.completionRate || 0
   const exceptionAmount = center?.summary.exceptionAmount || 0
   const pendingAmount = center?.summary.pendingPayoutAmount || 0
+  const exceptionBreakdown = center?.summary.exceptionBreakdown || []
 
   const handleSyncCore = async () => {
     setSyncing(true)
@@ -499,6 +506,39 @@ const ReconciliationCenterPage: React.FC = () => {
                 : '這些單需要優先處理：可能是缺綠界手續費、缺發票、金額不符、逾期未收或尚未產生會計分錄。'
         }
       />
+
+      {activeBucket === 'exceptions' && exceptionBreakdown.length ? (
+        <Card className="rounded-3xl border-0 shadow-sm" bodyStyle={{ padding: 24 }}>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">異常原因拆解</div>
+              <div className="text-xs text-slate-400">
+                同一筆訂單可能同時缺發票、手續費與分錄，所以原因數會大於異常筆數。
+              </div>
+            </div>
+            <Text type="secondary">優先處理紅色項目，再處理黃色項目。</Text>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {exceptionBreakdown.slice(0, 8).map((item) => (
+              <div
+                key={item.code}
+                className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-slate-900">{item.label}</span>
+                  <span
+                    className="rounded-full px-2 py-0.5 text-xs font-semibold text-white"
+                    style={{ background: exceptionSeverityColor(item.severity) }}
+                  >
+                    {item.count}
+                  </span>
+                </div>
+                <div className="mt-2 text-xs leading-5 text-slate-500">{item.description}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <Segmented

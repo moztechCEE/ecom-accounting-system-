@@ -852,12 +852,23 @@ export class ReconciliationService {
     limit?: number,
   ) {
     const normalizedLimit = Math.min(Math.max(Number(limit || 300), 20), 500);
+    const effectiveEndDate = endDate || new Date();
+    const effectiveStartDate =
+      startDate ||
+      (!endDate
+        ? new Date(effectiveEndDate.getTime() - 30 * 24 * 60 * 60 * 1000)
+        : undefined);
     const [receivables, audit] = await Promise.all([
-      this.arService.getReceivableMonitor(entityId, undefined, startDate, endDate),
+      this.arService.getReceivableMonitor(
+        entityId,
+        undefined,
+        effectiveStartDate,
+        effectiveEndDate,
+      ),
       this.reportsService.getOrderReconciliationAudit(
         entityId,
-        startDate,
-        endDate,
+        effectiveStartDate,
+        effectiveEndDate,
         normalizedLimit,
       ),
     ]);
@@ -891,6 +902,7 @@ export class ReconciliationService {
 
     const totalCount = items.length;
     const clearedCount = buckets.cleared.count;
+    const exceptionBreakdown = this.buildCenterExceptionBreakdown(items);
     const summary = {
       totalCount,
       pendingPayoutCount: buckets.pending_payout.count,
@@ -906,6 +918,7 @@ export class ReconciliationService {
       feeTotal: this.sumCenterItems(items, 'feeTotal'),
       completionRate: totalCount ? Math.round((clearedCount / totalCount) * 100) : 0,
       lastGeneratedAt: new Date().toISOString(),
+      exceptionBreakdown,
     };
 
     const priorityItems = items
@@ -923,8 +936,8 @@ export class ReconciliationService {
     return {
       entityId,
       range: {
-        startDate: startDate?.toISOString() || null,
-        endDate: endDate?.toISOString() || null,
+        startDate: effectiveStartDate?.toISOString() || null,
+        endDate: effectiveEndDate?.toISOString() || null,
       },
       summary,
       buckets,
@@ -966,10 +979,20 @@ export class ReconciliationService {
   }
 
   private classifyReconciliationQueueItem(item: any, auditItem?: any) {
+    const anomalyCodes = Array.from(
+      new Set([
+        ...(auditItem?.anomalyCodes || []),
+        ...(item.warningCodes || []),
+      ]),
+    );
+    const anomalyMessages = [
+      ...(auditItem?.anomalyMessages || []),
+      ...this.describeCenterWarningMessages(item.warningCodes || []),
+    ];
     const hasException =
       auditItem?.severity === 'critical' ||
       auditItem?.severity === 'warning' ||
-      (item.warningCodes || []).some((code) =>
+      anomalyCodes.some((code) =>
         [
           'missing_fee',
           'missing_journal',
@@ -996,13 +1019,12 @@ export class ReconciliationService {
       nextAction = '不需處理。';
     } else if (hasException) {
       bucket = 'exceptions';
-      reason =
-        auditItem?.anomalyMessages?.[0] ||
-        (item.warningCodes || []).join('、') ||
-        '這筆訂單有資料缺口，需要人工確認。';
-      nextAction =
-        auditItem?.recommendation ||
-        '先補綠界撥款/手續費或發票狀態，再重新同步。';
+      reason = this.pickCenterExceptionReason(
+        anomalyCodes,
+        anomalyMessages,
+        item.settlementDiagnostic,
+      );
+      nextAction = this.buildCenterNextAction(anomalyCodes, auditItem?.recommendation);
     } else if (Number(item.paidAmount || 0) > 0 || item.reconciledFlag) {
       bucket = 'ready_to_clear';
       reason = '已看到收款或撥款資料，可以進入核銷檢查。';
@@ -1044,14 +1066,209 @@ export class ReconciliationService {
       settlementPhase: item.settlementPhase || null,
       settlementPhaseLabel: item.settlementPhaseLabel || null,
       collectionOwnerLabel: item.collectionOwnerLabel || null,
-      severity: bucket === 'exceptions' ? auditItem?.severity || 'warning' : 'healthy',
+      severity:
+        bucket === 'exceptions'
+          ? this.resolveCenterSeverity(anomalyCodes, auditItem?.severity)
+          : 'healthy',
       reason,
       nextAction,
-      anomalyCodes: auditItem?.anomalyCodes || item.warningCodes || [],
-      anomalyMessages: auditItem?.anomalyMessages || [],
+      anomalyCodes,
+      anomalyMessages,
       providerTradeNo: auditItem?.providerTradeNo || null,
       providerPaymentId: auditItem?.providerPaymentId || null,
     };
+  }
+
+  private buildCenterExceptionBreakdown(items: any[]) {
+    const counts = new Map<string, number>();
+
+    for (const item of items) {
+      if (item.bucket !== 'exceptions') continue;
+      for (const code of item.anomalyCodes || []) {
+        counts.set(code, (counts.get(code) || 0) + 1);
+      }
+    }
+
+    return Array.from(counts.entries())
+      .map(([code, count]) => ({
+        code,
+        count,
+        ...this.describeCenterExceptionCode(code),
+      }))
+      .sort((left, right) => {
+        const severityRank = { critical: 3, warning: 2, info: 1 };
+        return (
+          (severityRank[right.severity] || 0) -
+            (severityRank[left.severity] || 0) ||
+          right.count - left.count
+        );
+      });
+  }
+
+  private describeCenterExceptionCode(code: string) {
+    const descriptions: Record<
+      string,
+      { label: string; severity: 'critical' | 'warning' | 'info'; description: string }
+    > = {
+      missing_invoice_after_payment: {
+        label: '已付款但缺正式發票',
+        severity: 'critical',
+        description: '訂單已付款或已對帳，但尚未匹配到電子發票。',
+      },
+      order_payment_mismatch: {
+        label: '訂單與收款金額不一致',
+        severity: 'critical',
+        description: '平台訂單金額與付款總額不同，需先確認退款、折讓或重複付款。',
+      },
+      reconciled_without_invoice: {
+        label: '已核銷但缺發票',
+        severity: 'critical',
+        description: '款項已核銷，但稅務發票資料尚未完成閉環。',
+      },
+      invoice_total_mismatch: {
+        label: '發票總額不符',
+        severity: 'critical',
+        description: '發票總額與訂單總額不同。',
+      },
+      invoice_tax_mismatch: {
+        label: '發票稅額不符',
+        severity: 'critical',
+        description: '電子發票稅額與含稅金額推估值不同。',
+      },
+      missing_fee: {
+        label: '缺實際手續費',
+        severity: 'warning',
+        description: '已有收款，但尚未回填金流或平台實際扣費。',
+      },
+      invoice_pending: {
+        label: '發票待匹配',
+        severity: 'warning',
+        description: '已有收款，但系統尚未找到可連結的發票紀錄。',
+      },
+      missing_journal: {
+        label: '缺會計分錄',
+        severity: 'warning',
+        description: '款項/發票資料尚未產生對應會計分錄。',
+      },
+      missing_ar: {
+        label: '缺 AR 應收立帳',
+        severity: 'warning',
+        description: '訂單尚未建立完整應收帳款追蹤紀錄。',
+      },
+      invoice_issued_unposted: {
+        label: '已開發票未入帳',
+        severity: 'warning',
+        description: '已有發票號碼，但尚未建立會計分錄。',
+      },
+      missing_invoice_record: {
+        label: '訂單標示有發票但缺紀錄',
+        severity: 'warning',
+        description: '平台旗標顯示已開發票，但本系統沒有發票明細。',
+      },
+      overpaid_receivable: {
+        label: '收款大於訂單',
+        severity: 'warning',
+        description: '收款總額高於訂單金額，可能是重複付款、合併款或資料歸戶問題。',
+      },
+      order_tax_mismatch: {
+        label: '訂單稅額口徑不一致',
+        severity: 'info',
+        description: '平台訂單稅額與台灣 5% 內含稅推估值不同，通常需用電子發票確認。',
+      },
+      fee_mismatch: {
+        label: '手續費淨額不符',
+        severity: 'warning',
+        description: '付款淨額與手續費拆分後的金額不同。',
+      },
+      fee_backfill_needed: {
+        label: '手續費待回填',
+        severity: 'warning',
+        description: '付款看起來已扣費，但手續費欄位尚未補齊。',
+      },
+    };
+
+    return (
+      descriptions[code] || {
+        label: code,
+        severity: 'warning' as const,
+        description: '系統偵測到未分類資料缺口，需要檢查原始資料。',
+      }
+    );
+  }
+
+  private describeCenterWarningMessages(codes: string[]) {
+    return Array.from(new Set(codes || [])).map((code) => {
+      const description = this.describeCenterExceptionCode(code);
+      return description.description;
+    });
+  }
+
+  private pickCenterExceptionReason(
+    codes: string[],
+    messages: string[],
+    settlementDiagnostic?: string | null,
+  ) {
+    const priority = [
+      'missing_invoice_after_payment',
+      'order_payment_mismatch',
+      'reconciled_without_invoice',
+      'invoice_total_mismatch',
+      'invoice_tax_mismatch',
+      'invoice_pending',
+      'missing_fee',
+      'missing_journal',
+      'missing_ar',
+      'overpaid_receivable',
+      'invoice_issued_unposted',
+      'order_tax_mismatch',
+    ];
+    const firstCode = priority.find((code) => codes.includes(code)) || codes[0];
+    if (firstCode) {
+      const description = this.describeCenterExceptionCode(firstCode);
+      return description.description;
+    }
+    return messages[0] || settlementDiagnostic || '這筆訂單有資料缺口，需要人工確認。';
+  }
+
+  private buildCenterNextAction(codes: string[], auditRecommendation?: string | null) {
+    if (
+      codes.some((code) =>
+        ['missing_invoice_after_payment', 'invoice_pending', 'reconciled_without_invoice'].includes(
+          code,
+        ),
+      )
+    ) {
+      return '先同步或匯入電子發票，確認發票號碼能回連訂單。';
+    }
+    if (codes.includes('missing_fee') || codes.includes('fee_backfill_needed')) {
+      return '先補平台/綠界撥款與手續費資料，再重新跑自動核銷。';
+    }
+    if (codes.includes('missing_journal') || codes.includes('missing_ar')) {
+      return '補齊 AR 與會計分錄後，再確認是否可核銷。';
+    }
+    if (codes.includes('overpaid_receivable') || codes.includes('order_payment_mismatch')) {
+      return '核對是否重複收款、合併付款、退款或折讓，再決定沖銷方式。';
+    }
+    return auditRecommendation || '先補綠界撥款/手續費或發票狀態，再重新同步。';
+  }
+
+  private resolveCenterSeverity(codes: string[], auditSeverity?: string) {
+    if (auditSeverity === 'critical') return 'critical';
+    if (
+      codes.some((code) =>
+        [
+          'missing_invoice_after_payment',
+          'order_payment_mismatch',
+          'reconciled_without_invoice',
+          'invoice_total_mismatch',
+          'invoice_tax_mismatch',
+        ].includes(code),
+      )
+    ) {
+      return 'critical';
+    }
+    if (codes.length > 0) return 'warning';
+    return 'healthy';
   }
 
   private sumCenterItems(items: any[], field: string) {

@@ -78,6 +78,13 @@ export type ReconciliationCenterResponse = {
     feeTotal: number
     completionRate: number
     lastGeneratedAt: string
+    exceptionBreakdown?: Array<{
+      code: string
+      label: string
+      count: number
+      severity: 'critical' | 'warning' | 'info'
+      description: string
+    }>
   }
   buckets: Record<ReconciliationBucketKey, ReconciliationCenterBucket>
   priorityItems: ReconciliationCenterItem[]
