@@ -39,6 +39,18 @@ unset META_ADS_ACCESS_TOKEN
 
 read -rp "Optional Meta Ad Account IDs, comma separated, e.g. act_123,act_456 (Enter to skip): " META_ADS_ACCOUNT_IDS
 
+RUNTIME_SERVICE_ACCOUNT="$(gcloud run services describe "${SERVICE}" \
+  --project "${PROJECT_ID}" \
+  --region "${REGION}" \
+  --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null || true)"
+
+if [[ -n "${RUNTIME_SERVICE_ACCOUNT}" ]]; then
+  gcloud secrets add-iam-policy-binding "${SECRET_NAME}" \
+    --project "${PROJECT_ID}" \
+    --member "serviceAccount:${RUNTIME_SERVICE_ACCOUNT}" \
+    --role "roles/secretmanager.secretAccessor" >/dev/null
+fi
+
 UPDATE_ENV_VARS="META_ADS_API_VERSION=${API_VERSION},META_ADS_DEFAULT_CURRENCY=${DEFAULT_CURRENCY}"
 if [[ -n "${META_ADS_ACCOUNT_IDS// }" ]]; then
   UPDATE_ENV_VARS="${UPDATE_ENV_VARS},META_ADS_ACCOUNT_IDS=${META_ADS_ACCOUNT_IDS}"

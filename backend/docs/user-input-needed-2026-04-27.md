@@ -187,10 +187,13 @@
   - 2026-05-08 已新增 Meta Ads connector 後端入口：`GET /integrations/meta-ads/readiness`、`GET /integrations/meta-ads/ad-accounts`、`GET /integrations/meta-ads/insights`、`POST /integrations/meta-ads/sync`。
   - `POST /integrations/meta-ads/sync` 會把 Meta spend 以 `sourceModule=meta_ads` 寫入 `Expense / ExpenseItem`，科目代號暫用 `6118 廣告費`；CEO Dashboard 既有 management summary 會把這些列入廣告費。
   - 已新增本機安全設定腳本：`backend/scripts/configure-meta-ads-secrets.sh`，用隱藏輸入把 token 放入 Secret Manager，並掛到 Cloud Run backend。
+  - 2026-05-08 實際修復：`META_ADS_ACCESS_TOKEN` 已建立 Secret 並掛到 Cloud Run；Cloud Run runtime service account 已在 Secret 層級取得 `roles/secretmanager.secretAccessor`。
+  - 2026-05-08 已依 Meta Ads Manager 截圖設定 `META_ADS_ACCOUNTS_JSON` / `META_ADS_ACCOUNT_IDS`：`bonson`、`MOZTECH US`、`MOZTECH US shopify`、`MOZTECH 墨子科技` 四個帳戶先歸入 MOZTECH，並以 US / TW market 區分。
+  - 設定腳本已補強，之後更新 token 時會自動補 Cloud Run runtime service account 的 Secret Accessor 權限。
   - CEO Dashboard 已先把廣告花費放入第一層管制區；若系統內已有廣告相關費用或已付款費用申請，會先以描述 / 科目線索彙總成 `adSpendAmount`。
   - 若尚未提供 Meta / Google / TikTok API 與 mapping，Dashboard 會顯示「待串接」，不會假造平台花費。
 - 暫停原因：
-  - Meta API 讀取 spend 的程式入口已補上，但還需要把 token 安全放入 Secret Manager，並確認 token 能讀到廣告帳戶。
+  - Meta API 讀取 spend 的程式入口與 Secret 掛載已補上，但還需要確認 token 能讀到廣告帳戶。
   - 沒有帳戶 mapping、廣告發票 / 收據來源與扣款帳戶前，可以匯入 spend，但還不能完成 AP / 銀行扣款對帳與 ROAS / 現金流聯動。
   - Google Ads / TikTok Ads 尚未接入。
 - MCP 使用原則：

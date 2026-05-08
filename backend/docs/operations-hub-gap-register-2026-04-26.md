@@ -264,7 +264,15 @@ Dashboard 最終不應只是展示業績，而是要主動揭露營運風險。
 - `insights` 會從 Meta Marketing API 讀取 daily spend，可用 `account` 或 `campaign` level 預覽。
 - `sync` 會把 daily account spend 寫入 `Expense / ExpenseItem`，`sourceModule=meta_ads`、科目代號 `6118 廣告費`，讓 CEO Dashboard 的廣告花費可以吃到 API 匯入資料。
 - `reports/connector-readiness` 的 `ad-spend` 已改為會檢查 `META_ADS_ACCESS_TOKEN`，並顯示 `META_ADS_ACCOUNT_IDS` / `META_ADS_ACCOUNTS_JSON` / `META_ADS_SYNC_ENABLED` 等設定狀態。
-- 尚未完成：Meta token 需安全放入 Secret Manager；需確認 `ads_read` 與可讀取的 `act_...` 帳戶；需補廣告發票 / 收據與扣款信用卡 / 銀行帳戶 mapping，才能完成 AP 與銀行扣款對帳。
+- Meta token 已由使用者用隱藏輸入放入 Secret Manager `META_ADS_ACCESS_TOKEN`，並掛到 Cloud Run backend revision `ecom-accounting-backend-00339-7j8`。
+- 部署時曾因 Cloud Run runtime service account `ecom-accounting-rt@moztech-main-db.iam.gserviceaccount.com` 沒有讀取新 Secret 的權限而失敗；已在 Secret 層級授予 `roles/secretmanager.secretAccessor`，不需開整個 project 層級權限。
+- 2026-05-08 已依 Meta Ads Manager 截圖加入廣告帳戶 mapping，並部署到 Cloud Run backend revision `ecom-accounting-backend-00341-zj4`：
+  - `act_412541399921576`：bonson / Ads Manager selected account，歸入 MOZTECH / TW。
+  - `act_1375134063493419`：MOZTECH US，歸入 MOZTECH / US。
+  - `act_1010503451002666`：MOZTECH US shopify，歸入 MOZTECH / US。
+  - `act_938172323581797`：MOZTECH 墨子科技，歸入 MOZTECH / TW。
+- `backend/scripts/configure-meta-ads-secrets.sh` 已補強：新增或更新 token 版本後，會自動把 Cloud Run runtime service account 加到該 Secret 的 `roles/secretmanager.secretAccessor`，避免之後重複部署失敗。
+- 尚未完成：需登入後呼叫 `GET /integrations/meta-ads/readiness` 確認 token 是否具備 `ads_read` 且能讀到 `act_...` 帳戶；需補廣告發票 / 收據與扣款信用卡 / 銀行帳戶 mapping，才能完成 AP 與銀行扣款對帳。
 
 必補能力：
 
