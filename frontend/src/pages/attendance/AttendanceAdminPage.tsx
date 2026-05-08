@@ -8,13 +8,11 @@ import {
   DeleteOutlined,
   DownOutlined,
   EditOutlined,
-  FileAddOutlined,
   FileTextOutlined,
   PlusOutlined,
   PaperClipOutlined,
   ReloadOutlined,
   RightOutlined,
-  SettingOutlined,
   TeamOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
@@ -962,14 +960,11 @@ const AttendanceAdminPage: React.FC = () => {
     { key: "overtime", label: "加班審核", icon: <ClockCircleOutlined /> },
     { key: "policies", label: "班表政策", icon: <ClockCircleOutlined /> },
     { key: "closures", label: "統一放假", icon: <WarningOutlined /> },
-    { key: "types", label: "假別規則", icon: <SettingOutlined /> },
     { key: "balances", label: "年度額度", icon: <CalendarOutlined /> },
   ];
 
   const primaryAction =
-    activeTab === "overtime"
-      ? null
-      : activeTab === "policies"
+    activeTab === "policies"
       ? {
           label: "新增班表政策",
           icon: <ClockCircleOutlined />,
@@ -981,11 +976,7 @@ const AttendanceAdminPage: React.FC = () => {
             icon: <WarningOutlined />,
             onClick: openCreateClosure,
           }
-      : {
-          label: "新增假別規則",
-          icon: <FileAddOutlined />,
-          onClick: openCreateLeaveType,
-        };
+        : null;
 
   return (
     <div className="space-y-8 animate-[fadeInUp_0.4s_ease-out]">
@@ -1001,7 +992,7 @@ const AttendanceAdminPage: React.FC = () => {
               考勤後臺
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-500">
-              這個工作台把每日出勤、假單審核、假別規則與年度額度整合在一起。主管與人資可以在同一個後臺快速切換日常巡檢、審核與規則維護，不需要再來回翻頁找按鈕。
+              這個工作台把每日出勤、假單審核、班表政策、統一放假與年度額度整合在一起。主管與人資可以在同一個後臺快速切換日常巡檢、審核與規則維護。
             </p>
           </div>
         </GlassCard>
@@ -1044,14 +1035,14 @@ const AttendanceAdminPage: React.FC = () => {
               </GlassButton>
             ) : (
               <GlassCard className="flex h-12 items-center justify-center border border-white/25 bg-white/20 text-xs text-slate-500">
-                加班申請由員工送出，這裡負責審核
+                此頁以清單檢視與審核操作為主
               </GlassCard>
             )}
           </div>
         </GlassCard>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <GlassCard className="relative overflow-hidden">
           <div className="absolute right-4 top-4 text-slate-300">
             <ClockCircleOutlined className="text-4xl" />
@@ -1062,18 +1053,6 @@ const AttendanceAdminPage: React.FC = () => {
           </div>
           <div className="mt-3 text-xs text-slate-400">
             主管未處理的請假單數量
-          </div>
-        </GlassCard>
-        <GlassCard className="relative overflow-hidden">
-          <div className="absolute right-4 top-4 text-emerald-300">
-            <CheckCircleOutlined className="text-4xl" />
-          </div>
-          <div className="text-sm text-slate-500">啟用中假別</div>
-          <div className="mt-2 text-3xl font-semibold text-slate-900">
-            {managementStats.activeLeaveTypes}
-          </div>
-          <div className="mt-3 text-xs text-slate-400">
-            正在參與額度與薪資規則的假別
           </div>
         </GlassCard>
         <GlassCard className="relative overflow-hidden">
