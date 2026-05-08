@@ -309,12 +309,13 @@ const LeaveRequestPage: React.FC = () => {
   const buildLeaveRequestPayload = (draft: LeaveRequestDraft) => {
     const leaveType = leaveTypes.find((type) => type.id === draft.leaveTypeId);
     const funeralLeave = isFuneralLeaveType(leaveType);
+    const endDate = canCreateForEmployees ? draft.startDate : draft.endDate;
 
     return {
       employeeId: canCreateForEmployees ? draft.employeeId : undefined,
       leaveTypeId: draft.leaveTypeId,
       startAt: dayjs(`${draft.startDate} ${draft.startTime}`).toISOString(),
-      endAt: dayjs(`${draft.endDate} ${draft.endTime}`).toISOString(),
+      endAt: dayjs(`${endDate} ${draft.endTime}`).toISOString(),
       hours: Number(draft.hours),
       reason: draft.reason,
       location: draft.location,
@@ -352,6 +353,22 @@ const LeaveRequestPage: React.FC = () => {
           const row = requestRows[index];
           if (!row.employeeId || !row.leaveTypeId) {
             message.error(`第 ${index + 1} 筆請先選擇員工與假別`);
+            return;
+          }
+          if (!row.startDate || !row.startTime || !row.endTime) {
+            message.error(`第 ${index + 1} 筆請先填寫日期與起訖時間`);
+            return;
+          }
+          if (!Number.isFinite(Number(row.hours)) || Number(row.hours) <= 0) {
+            message.error(`第 ${index + 1} 筆請假時數必須大於 0`);
+            return;
+          }
+          const rowEmployee = getEmployeeById(row.employeeId);
+          if (
+            !rowEmployee ||
+            !isEmployeeSelectableOnDate(rowEmployee, row.startDate)
+          ) {
+            message.error(`第 ${index + 1} 筆員工不在該日期的任職期間內`);
             return;
           }
 
@@ -470,16 +487,38 @@ const LeaveRequestPage: React.FC = () => {
     return `${hours} 小時`;
   };
 
-  const employeeOptions = useMemo(
-    () =>
-      employees.map((employee) => ({
-        value: employee.id,
-        label: `${employee.name} (${employee.employeeNo})`,
-      })),
-    [employees],
-  );
   const getEmployeeById = (employeeId: string) =>
     employees.find((employee) => employee.id === employeeId);
+  const isEmployeeSelectableOnDate = (employee: Employee, date?: string) => {
+    if (!date) {
+      return false;
+    }
+
+    const selectedDate = dayjs(date).startOf("day");
+    if (!selectedDate.isValid()) {
+      return false;
+    }
+
+    if (employee.hireDate && selectedDate.isBefore(dayjs(employee.hireDate))) {
+      return false;
+    }
+
+    if (employee.terminateDate) {
+      return (
+        selectedDate.valueOf() <=
+        dayjs(employee.terminateDate).endOf("day").valueOf()
+      );
+    }
+
+    return employee.isActive !== false;
+  };
+  const getEmployeeOptionsForDate = (date?: string) =>
+    employees
+      .filter((employee) => isEmployeeSelectableOnDate(employee, date))
+      .map((employee) => ({
+        value: employee.id,
+        label: `${employee.name} (${employee.employeeNo})`,
+      }));
   const getAvailableLeaveTypesForEmployee = (employeeId?: string) => {
     const employee = employeeId ? getEmployeeById(employeeId) : undefined;
     return leaveTypes.filter(
@@ -534,7 +573,10 @@ const LeaveRequestPage: React.FC = () => {
     "mb-1 block text-[11px] font-medium tracking-wide text-slate-500";
 
   const renderRequestRow = (row: LeaveRequestDraft, index: number) => {
-    const rowLeaveTypes = getAvailableLeaveTypesForEmployee(row.employeeId);
+    const rowEmployeeOptions = getEmployeeOptionsForDate(row.startDate);
+    const rowLeaveTypes = row.employeeId
+      ? getAvailableLeaveTypesForEmployee(row.employeeId)
+      : [];
     const rowLeaveType = rowLeaveTypes.find(
       (type) => type.id === row.leaveTypeId,
     );
@@ -555,11 +597,34 @@ const LeaveRequestPage: React.FC = () => {
         <td className="w-12 px-3 py-4 text-center text-sm font-semibold text-slate-500">
           {index + 1}
         </td>
+        <td className="w-[160px] px-3 py-4">
+          <label className={compactLabelClass}>請假日期</label>
+          <input
+            className={compactInputClass}
+            type="date"
+            value={row.startDate}
+            onChange={(event) => {
+              const nextDate = event.target.value;
+              const employeeStillSelectable =
+                employee && isEmployeeSelectableOnDate(employee, nextDate);
+              updateRequestRow(row.id, {
+                startDate: nextDate,
+                endDate: nextDate,
+                employeeId: employeeStillSelectable ? row.employeeId : "",
+                leaveTypeId: employeeStillSelectable ? row.leaveTypeId : "",
+              });
+            }}
+          />
+          <div className="mt-1 min-h-4 text-xs text-slate-400">
+            先選日期再選員工
+          </div>
+        </td>
         <td className="w-[190px] px-3 py-4">
           <label className={compactLabelClass}>員工</label>
           <select
-            className={compactSelectClass}
+            className={`${compactSelectClass} disabled:cursor-not-allowed disabled:opacity-60`}
             value={row.employeeId}
+            disabled={!row.startDate}
             onChange={(event) =>
               updateRequestRow(row.id, {
                 employeeId: event.target.value,
@@ -567,8 +632,10 @@ const LeaveRequestPage: React.FC = () => {
               })
             }
           >
-            <option value="">請選擇員工</option>
-            {employeeOptions.map((option) => (
+            <option value="">
+              {row.startDate ? "請選擇員工" : "請先選日期"}
+            </option>
+            {rowEmployeeOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -581,13 +648,16 @@ const LeaveRequestPage: React.FC = () => {
         <td className="w-[170px] px-3 py-4">
           <label className={compactLabelClass}>假別</label>
           <select
-            className={compactSelectClass}
+            className={`${compactSelectClass} disabled:cursor-not-allowed disabled:opacity-60`}
             value={row.leaveTypeId}
+            disabled={!row.employeeId}
             onChange={(event) =>
               updateRequestRow(row.id, { leaveTypeId: event.target.value })
             }
           >
-            <option value="">請選擇假別</option>
+            <option value="">
+              {row.employeeId ? "請選擇假別" : "請先選員工"}
+            </option>
             {rowLeaveTypes.map((type) => (
               <option key={type.id} value={type.id}>
                 {type.name}
@@ -602,47 +672,27 @@ const LeaveRequestPage: React.FC = () => {
               : " "}
           </div>
         </td>
-        <td className="w-[220px] px-3 py-4">
-          <label className={compactLabelClass}>開始</label>
-          <div className="grid grid-cols-[1.45fr_1fr] gap-2">
-            <input
-              className={compactInputClass}
-              type="date"
-              value={row.startDate}
-              onChange={(event) =>
-                updateRequestRow(row.id, { startDate: event.target.value })
-              }
-            />
-            <input
-              className={compactInputClass}
-              type="time"
-              value={row.startTime}
-              onChange={(event) =>
-                updateRequestRow(row.id, { startTime: event.target.value })
-              }
-            />
-          </div>
+        <td className="w-[140px] px-3 py-4">
+          <label className={compactLabelClass}>開始時間</label>
+          <input
+            className={compactInputClass}
+            type="time"
+            value={row.startTime}
+            onChange={(event) =>
+              updateRequestRow(row.id, { startTime: event.target.value })
+            }
+          />
         </td>
-        <td className="w-[220px] px-3 py-4">
-          <label className={compactLabelClass}>結束</label>
-          <div className="grid grid-cols-[1.45fr_1fr] gap-2">
-            <input
-              className={compactInputClass}
-              type="date"
-              value={row.endDate}
-              onChange={(event) =>
-                updateRequestRow(row.id, { endDate: event.target.value })
-              }
-            />
-            <input
-              className={compactInputClass}
-              type="time"
-              value={row.endTime}
-              onChange={(event) =>
-                updateRequestRow(row.id, { endTime: event.target.value })
-              }
-            />
-          </div>
+        <td className="w-[140px] px-3 py-4">
+          <label className={compactLabelClass}>結束時間</label>
+          <input
+            className={compactInputClass}
+            type="time"
+            value={row.endTime}
+            onChange={(event) =>
+              updateRequestRow(row.id, { endTime: event.target.value })
+            }
+          />
         </td>
         <td className="w-[110px] px-3 py-4">
           <label className={compactLabelClass}>時數</label>
@@ -1027,17 +1077,18 @@ const LeaveRequestPage: React.FC = () => {
           {canCreateForEmployees ? (
             <div className="space-y-4">
               <div className="rounded-2xl border border-sky-100/70 bg-sky-50/70 px-4 py-3 text-sm leading-6 text-sky-800">
-                每一列會建立一張獨立假單。可一次送出多位員工，也可針對不同員工選不同假別；附件與喪假細節收在每列右側展開區。
+                每一列會建立一張單日假單。請先選日期，系統會依該日期篩出仍在任職期間的員工；連續或不同日期請新增多列分別送出。
               </div>
               <div className="max-w-full overflow-x-auto rounded-2xl border border-white/20 bg-white/10">
-                <table className="min-w-[1180px] w-full border-collapse text-left">
+                <table className="min-w-[1080px] w-full border-collapse text-left">
                   <thead>
                     <tr className="border-b border-white/20 bg-white/30 text-sm text-slate-500">
                       <th className="px-3 py-3 text-center font-medium">#</th>
+                      <th className="px-3 py-3 font-medium">日期</th>
                       <th className="px-3 py-3 font-medium">員工</th>
                       <th className="px-3 py-3 font-medium">假別</th>
-                      <th className="px-3 py-3 font-medium">開始</th>
-                      <th className="px-3 py-3 font-medium">結束</th>
+                      <th className="px-3 py-3 font-medium">開始時間</th>
+                      <th className="px-3 py-3 font-medium">結束時間</th>
                       <th className="px-3 py-3 font-medium">時數</th>
                       <th className="px-3 py-3 font-medium">原因 / 地點</th>
                       <th className="px-3 py-3 font-medium">附件 / 細節</th>
