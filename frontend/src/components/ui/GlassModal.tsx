@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { GlassButton } from './GlassButton';
+import React, { useEffect } from "react";
+import { createPortal } from "react-dom";
+import { GlassButton } from "./GlassButton";
 
 interface GlassModalProps {
   isOpen: boolean;
@@ -11,37 +11,37 @@ interface GlassModalProps {
   maxWidth?: string;
 }
 
-export const GlassModal: React.FC<GlassModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  title, 
-  children, 
+export const GlassModal: React.FC<GlassModalProps> = ({
+  isOpen,
+  onClose,
+  title,
+  children,
   footer,
-  maxWidth = 'max-w-[720px]'
+  maxWidth = "max-w-[720px]",
 }) => {
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     };
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 md:p-4">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
-      
+
       {/* Modal Content */}
-      <div 
+      <div
         className={`
           relative 
           w-full 
@@ -51,7 +51,7 @@ export const GlassModal: React.FC<GlassModalProps> = ({
           border border-white/30 
           rounded-3xl 
           shadow-[0_8px_32px_rgba(0,0,0,0.15)] 
-          p-8
+          p-5 md:p-8
           flex flex-col
           max-h-[90vh]
           animate-[fadeInUp_0.3s_ease-out]
@@ -60,12 +60,22 @@ export const GlassModal: React.FC<GlassModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold text-slate-900">{title}</h2>
-          <button 
+          <button
             onClick={onClose}
             className="p-2 rounded-full hover:bg-black/5 transition-colors text-slate-500"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -83,6 +93,6 @@ export const GlassModal: React.FC<GlassModalProps> = ({
         )}
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };

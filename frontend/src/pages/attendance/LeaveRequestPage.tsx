@@ -1000,7 +1000,11 @@ const LeaveRequestPage: React.FC = () => {
         isOpen={isModalVisible}
         onClose={() => setIsModalVisible(false)}
         title="新增請假申請"
-        maxWidth={canCreateForEmployees ? "max-w-[1320px]" : undefined}
+        maxWidth={
+          canCreateForEmployees
+            ? "max-w-[calc(100vw-1.5rem)] 2xl:max-w-[1280px]"
+            : undefined
+        }
         footer={
           <>
             <GlassButton
@@ -1025,8 +1029,8 @@ const LeaveRequestPage: React.FC = () => {
               <div className="rounded-2xl border border-sky-100/70 bg-sky-50/70 px-4 py-3 text-sm leading-6 text-sky-800">
                 每一列會建立一張獨立假單。可一次送出多位員工，也可針對不同員工選不同假別；附件與喪假細節收在每列右側展開區。
               </div>
-              <div className="overflow-x-auto rounded-2xl border border-white/20 bg-white/10">
-                <table className="min-w-[1260px] w-full border-collapse text-left">
+              <div className="max-w-full overflow-x-auto rounded-2xl border border-white/20 bg-white/10">
+                <table className="min-w-[1180px] w-full border-collapse text-left">
                   <thead>
                     <tr className="border-b border-white/20 bg-white/30 text-sm text-slate-500">
                       <th className="px-3 py-3 text-center font-medium">#</th>
