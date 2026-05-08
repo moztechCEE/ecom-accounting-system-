@@ -76,6 +76,7 @@ const payrollItemLabelMap: Record<string, string> = {
   SALARY_ADVANCE: '薪資預支',
   DISASTER_CLOSURE_DEDUCTION: '統一放假扣款',
   ANNUAL_LEAVE_OVERUSE_DEDUCTION: '特休超用扣款',
+  ANNUAL_LEAVE_UNUSED_PAYOUT: '剩餘特休變現',
   INS_EMP_LABOR: '勞保扣款（舊制）',
   INS_EMP_HEALTH: '健保扣款（舊制）',
   INS_EMP_SOCIAL: '社保扣款（舊制）',

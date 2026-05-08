@@ -336,6 +336,14 @@ export class PayrollService {
     return `${normalizedEntity || 'entity'}.${employeeNo}@employees.example`;
   }
 
+  private shouldSettlePreviousYearAnnualLeave(payDate?: Date) {
+    if (!payDate) {
+      return false;
+    }
+
+    return payDate.getMonth() === 1 && payDate.getDate() === 5;
+  }
+
   private normalizeInputDate(value: Date | string, fieldName: string) {
     const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
     if (Number.isNaN(date.getTime())) {
@@ -2722,6 +2730,7 @@ export class PayrollService {
           employee.id,
           periodStart,
           periodEnd,
+          payDate,
         );
 
         // Save items
@@ -3252,6 +3261,7 @@ export class PayrollService {
     employeeId: string,
     periodStart: Date,
     periodEnd: Date,
+    payDate?: Date,
   ) {
     this.logger.log(`Calculating payroll for employee ${employeeId}`);
 
@@ -3471,6 +3481,23 @@ export class PayrollService {
           type: 'ANNUAL_LEAVE_OVERUSE_DEDUCTION',
           amount: -Math.round(annualLeaveAdjustment.excessHours * hourlyRate),
           remark: annualLeaveAdjustment.note,
+        });
+      }
+    }
+
+    if (this.shouldSettlePreviousYearAnnualLeave(payDate)) {
+      const settlementYear = payDate!.getFullYear() - 1;
+      const annualLeavePayout =
+        await this.balanceService.getAnnualLeaveUnusedPayout(
+          employee.id,
+          settlementYear,
+        );
+
+      if (annualLeavePayout?.remainingHours) {
+        items.push({
+          type: 'ANNUAL_LEAVE_UNUSED_PAYOUT',
+          amount: Math.round(annualLeavePayout.remainingHours * hourlyRate),
+          remark: annualLeavePayout.note,
         });
       }
     }

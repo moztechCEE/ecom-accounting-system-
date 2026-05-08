@@ -33,6 +33,15 @@ type AnnualLeaveTerminationAdjustment = {
   note?: string;
 };
 
+type AnnualLeaveUnusedPayout = {
+  settlementYear: number;
+  remainingHours: number;
+  remainingDays: number;
+  periodStart: Date;
+  periodEnd: Date;
+  note: string;
+};
+
 const DEFAULT_TW_ANNUAL_LEAVE_TIERS: SeniorityTier[] = [
   { minYears: 0.5, maxYears: 1, days: 3 },
   { minYears: 1, maxYears: 2, days: 7 },
@@ -339,6 +348,70 @@ export class BalanceService {
         excessHours > 0
           ? `曆年制離職結算：按 ${serviceMonths} 個月比例可得 ${vestedDays} 天，已請特休 ${usedDays} 天，超休 ${excessDays} 天需轉事假扣薪。`
           : undefined,
+    };
+  }
+
+  async getAnnualLeaveUnusedPayout(
+    employeeId: string,
+    settlementYear: number,
+  ): Promise<AnnualLeaveUnusedPayout | null> {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: {
+        id: true,
+        entityId: true,
+        hireDate: true,
+        country: true,
+      },
+    });
+
+    if (!employee || employee.country !== 'TW') {
+      return null;
+    }
+
+    const annualLeaveType = await this.prisma.leaveType.findFirst({
+      where: {
+        entityId: employee.entityId,
+        isActive: true,
+        OR: [
+          { code: 'ANNUAL' },
+          { name: '特休' },
+          { name: '特別休假' },
+        ],
+      },
+    });
+
+    if (!annualLeaveType) {
+      return null;
+    }
+
+    const referenceDate = new Date(settlementYear, 11, 31, 12, 0, 0, 0);
+    const balance = await this.ensureBalanceForDate(
+      {
+        id: employee.id,
+        entityId: employee.entityId,
+        hireDate: employee.hireDate,
+      },
+      annualLeaveType,
+      referenceDate,
+    );
+    const remainingHours = this.roundTo(
+      Math.max(0, this.calculateRemainingHours(balance).toNumber()),
+    );
+
+    if (remainingHours <= 0) {
+      return null;
+    }
+
+    const remainingDays = this.roundTo(remainingHours / 8);
+
+    return {
+      settlementYear,
+      remainingHours,
+      remainingDays,
+      periodStart: balance.periodStart,
+      periodEnd: balance.periodEnd,
+      note: `${settlementYear} 年度剩餘特休 ${remainingDays} 天（${remainingHours} 小時）於 2/5 薪資結算變現。`,
     };
   }
 
