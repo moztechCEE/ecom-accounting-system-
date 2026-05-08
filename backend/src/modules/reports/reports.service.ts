@@ -1405,14 +1405,27 @@ export class ReportsService {
         label: '廣告費 Meta / Google / TikTok',
         category: 'expense',
         envNames: [],
-        credentialGroups: [],
-        optionalEnvNames: [],
+        credentialGroups: [['META_ADS_ACCESS_TOKEN']],
+        optionalEnvNames: [
+          'META_ADS_ACCOUNT_IDS',
+          'META_ADS_ACCOUNTS_JSON',
+          'META_ADS_API_VERSION',
+          'META_ADS_DEFAULT_CURRENCY',
+          'META_ADS_SYNC_ENABLED',
+          'META_ADS_SYNC_JOB_TOKEN',
+          'GOOGLE_ADS_CUSTOMER_ID',
+          'TIKTOK_ADVERTISER_IDS',
+        ],
         externalNeeds: [
-          '提供 Meta / Google Ads / TikTok Ads API 權限與帳戶對品牌 / 通路 mapping。',
+          ...(!this.hasConfig('META_ADS_ACCOUNT_IDS') &&
+          !this.hasConfig('META_ADS_ACCOUNTS_JSON')
+            ? ['提供 Meta Ad Account ID，或設定 META_ADS_ACCOUNTS_JSON 做品牌 / 通路 mapping。']
+            : []),
           '提供廣告發票或收據來源，以及扣款信用卡 / 銀行帳戶。',
+          'Google Ads / TikTok Ads 尚未接入；目前此 connector 先支援 Meta Ads。',
         ],
         nextAction:
-          '先定義廣告帳戶 mapping 與報表來源，再建立 connector 與 AP / 銀行扣款 matching。',
+          'Meta token 放入 Secret Manager 後，先呼叫 /integrations/meta-ads/readiness，再同步 spend 到 Expense；之後補 AP / 銀行扣款 matching。',
       }),
     ];
 

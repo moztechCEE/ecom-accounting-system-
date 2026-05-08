@@ -251,6 +251,21 @@ Dashboard 最終不應只是展示業績，而是要主動揭露營運風險。
 - Google Ads
 - TikTok Ads
 
+2026-05-08 Meta Ads connector 更新：
+
+- 已新增 Meta Ads 後端 connector，不會把 token 寫入 repo：
+  - `GET /integrations/meta-ads/connection-info`
+  - `GET /integrations/meta-ads/readiness`
+  - `GET /integrations/meta-ads/ad-accounts`
+  - `GET /integrations/meta-ads/insights`
+  - `POST /integrations/meta-ads/sync`
+  - `POST /integrations/meta-ads/sync/auto`
+- `readiness` 會檢查 `META_ADS_ACCESS_TOKEN` 是否設定，並嘗試讀取可用 ad accounts。
+- `insights` 會從 Meta Marketing API 讀取 daily spend，可用 `account` 或 `campaign` level 預覽。
+- `sync` 會把 daily account spend 寫入 `Expense / ExpenseItem`，`sourceModule=meta_ads`、科目代號 `6118 廣告費`，讓 CEO Dashboard 的廣告花費可以吃到 API 匯入資料。
+- `reports/connector-readiness` 的 `ad-spend` 已改為會檢查 `META_ADS_ACCESS_TOKEN`，並顯示 `META_ADS_ACCOUNT_IDS` / `META_ADS_ACCOUNTS_JSON` / `META_ADS_SYNC_ENABLED` 等設定狀態。
+- 尚未完成：Meta token 需安全放入 Secret Manager；需確認 `ads_read` 與可讀取的 `act_...` 帳戶；需補廣告發票 / 收據與扣款信用卡 / 銀行帳戶 mapping，才能完成 AP 與銀行扣款對帳。
+
 必補能力：
 
 - 廣告花費 API 匯入

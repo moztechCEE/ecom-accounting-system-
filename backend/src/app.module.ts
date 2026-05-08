@@ -41,6 +41,7 @@ import { AttendanceModule } from './modules/attendance/attendance.module';
 import { ShopifyIntegrationModule } from './modules/integration/shopify/shopify.module';
 import { OneShopIntegrationModule } from './modules/integration/one-shop/one-shop.module';
 import { ShoplineIntegrationModule } from './modules/integration/shopline/shopline.module';
+import { MetaAdsIntegrationModule } from './modules/integration/meta-ads/meta-ads.module';
 import { PurchaseModule } from './modules/purchase/purchase.module';
 import { AssemblyModule } from './modules/assembly/assembly.module';
 
@@ -111,6 +112,7 @@ import { AssemblyModule } from './modules/assembly/assembly.module';
     ShopifyIntegrationModule,
     OneShopIntegrationModule,
     ShoplineIntegrationModule,
+    MetaAdsIntegrationModule,
     NotificationModule,
     AiModule,
     AttendanceModule,

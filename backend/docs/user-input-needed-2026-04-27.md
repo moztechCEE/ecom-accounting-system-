@@ -164,18 +164,35 @@
 - 需要你提供 / 開通：
   - Meta / Facebook / Instagram 廣告帳號與 API 權限。
   - Meta 建議使用 Business Manager 的 System User access token，並授權至少 `ads_read`；若系統需讀取 Business 資產清單 / 廣告帳號清單，通常還需要 `business_management`。
-  - Meta Ad Account ID，格式通常為 `act_<ad_account_id>`；若有多個廣告帳號，需提供每個帳號對應品牌 / 平台規則。
+  - Meta token 需放入 Secret Manager 的 `META_ADS_ACCESS_TOKEN`，不可寫入 repo、文件或前端。
+  - Meta Ad Account ID，格式通常為 `act_<ad_account_id>`；若有多個廣告帳號，需提供每個帳號對應品牌 / 平台規則，可用 `META_ADS_ACCOUNT_IDS` 或 `META_ADS_ACCOUNTS_JSON`。
+  - 建議 `META_ADS_ACCOUNTS_JSON` 格式：
+    ```json
+    [
+      {
+        "accountId": "act_1234567890",
+        "name": "MOZTECH Meta Ads",
+        "brand": "MOZTECH",
+        "platform": "Meta",
+        "currency": "TWD"
+      }
+    ]
+    ```
   - Google Ads 帳號與 API 權限。
   - TikTok Ads 帳號與 API 權限。
   - 廣告帳戶與品牌 / 通路對應。
   - 廣告發票或收據來源，以及扣款信用卡 / 銀行帳戶。
 - 目前系統狀態：
   - 費用報銷與 AP 模組已有基礎。
-  - 廣告平台 connector 尚未形成正式資料流。
+  - 2026-05-08 已新增 Meta Ads connector 後端入口：`GET /integrations/meta-ads/readiness`、`GET /integrations/meta-ads/ad-accounts`、`GET /integrations/meta-ads/insights`、`POST /integrations/meta-ads/sync`。
+  - `POST /integrations/meta-ads/sync` 會把 Meta spend 以 `sourceModule=meta_ads` 寫入 `Expense / ExpenseItem`，科目代號暫用 `6118 廣告費`；CEO Dashboard 既有 management summary 會把這些列入廣告費。
+  - 已新增本機安全設定腳本：`backend/scripts/configure-meta-ads-secrets.sh`，用隱藏輸入把 token 放入 Secret Manager，並掛到 Cloud Run backend。
   - CEO Dashboard 已先把廣告花費放入第一層管制區；若系統內已有廣告相關費用或已付款費用申請，會先以描述 / 科目線索彙總成 `adSpendAmount`。
   - 若尚未提供 Meta / Google / TikTok API 與 mapping，Dashboard 會顯示「待串接」，不會假造平台花費。
 - 暫停原因：
-  - 沒有廣告平台 API 權限、帳戶 mapping、發票 / 收據來源與扣款帳戶前，只能彙總內部費用資料，不能完成自動對帳與 ROAS / 現金流聯動。
+  - Meta API 讀取 spend 的程式入口已補上，但還需要把 token 安全放入 Secret Manager，並確認 token 能讀到廣告帳戶。
+  - 沒有帳戶 mapping、廣告發票 / 收據來源與扣款帳戶前，可以匯入 spend，但還不能完成 AP / 銀行扣款對帳與 ROAS / 現金流聯動。
+  - Google Ads / TikTok Ads 尚未接入。
 - MCP 使用原則：
   - MCP 可以用來協助開發、測試、讀取你授權的工具或瀏覽器資料。
   - 但正式每日日結 / 月結的廣告費同步，不應只靠 MCP 或人工瀏覽器操作；正式流程應做成 Cloud Run connector + Secret Manager + Cloud Scheduler，才能穩定排程、留紀錄、錯誤重跑與被財務稽核。
