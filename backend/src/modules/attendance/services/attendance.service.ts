@@ -57,18 +57,21 @@ export class AttendanceService {
     let isWithinIpRange = true;
 
     if (policy?.geofence) {
-      if (!dto.latitude || !dto.longitude) {
-        throw new ForbiddenException('Location data is required by policy.');
-      }
-      isWithinFence = this.gpsStrategy.validate(
-        dto.latitude,
-        dto.longitude,
-        policy.geofence,
-      );
-      if (!isWithinFence) {
-        throw new ForbiddenException(
-          'You are outside the allowed clock-in area.',
+      const hasCoordinates =
+        typeof dto.latitude === 'number' && typeof dto.longitude === 'number';
+      if (!hasCoordinates) {
+        isWithinFence = false;
+      } else {
+        isWithinFence = this.gpsStrategy.validate(
+          dto.latitude,
+          dto.longitude,
+          policy.geofence,
         );
+        if (!isWithinFence) {
+          throw new ForbiddenException(
+            'You are outside the allowed clock-in area.',
+          );
+        }
       }
     }
 
@@ -165,18 +168,21 @@ export class AttendanceService {
     let isWithinIpRange = true;
 
     if (policy?.geofence) {
-      if (!dto.latitude || !dto.longitude) {
-        throw new ForbiddenException('Location data is required by policy.');
-      }
-      isWithinFence = this.gpsStrategy.validate(
-        dto.latitude,
-        dto.longitude,
-        policy.geofence,
-      );
-      if (!isWithinFence) {
-        throw new ForbiddenException(
-          'You are outside the allowed clock-out area.',
+      const hasCoordinates =
+        typeof dto.latitude === 'number' && typeof dto.longitude === 'number';
+      if (!hasCoordinates) {
+        isWithinFence = false;
+      } else {
+        isWithinFence = this.gpsStrategy.validate(
+          dto.latitude,
+          dto.longitude,
+          policy.geofence,
         );
+        if (!isWithinFence) {
+          throw new ForbiddenException(
+            'You are outside the allowed clock-out area.',
+          );
+        }
       }
     }
 

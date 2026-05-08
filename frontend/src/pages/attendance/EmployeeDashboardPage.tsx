@@ -269,24 +269,12 @@ const EmployeeDashboardPage: React.FC = () => {
         {/* Left Column: Clock Widget & Actions */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           {/* Clock Widget */}
-          <GlassCard className="flex flex-col items-center justify-center py-8 w-full">
-            <div className="text-[64px] font-light tracking-wider text-slate-900/80 leading-none font-mono">
+          <GlassCard className="flex h-[210px] w-full flex-col items-center justify-center !p-5">
+            <div className="text-[56px] font-light tracking-wider text-slate-900/80 leading-none font-mono md:text-[60px]">
               {currentTime.format("HH:mm")}
-              <span className="text-3xl ml-3 text-slate-400">
+              <span className="ml-3 text-2xl text-slate-400 md:text-3xl">
                 {currentTime.format("ss")}
               </span>
-            </div>
-
-            {/* Location Status */}
-            <div className="mt-5">
-              {location ? (
-                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 text-green-600 text-sm font-medium border border-green-500/20">
-                  <EnvironmentOutlined />
-                  <span>
-                    已定位: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
-                  </span>
-                </div>
-              ) : null}
             </div>
           </GlassCard>
 
@@ -295,23 +283,23 @@ const EmployeeDashboardPage: React.FC = () => {
             <GlassButton
               variant="primary"
               size="lg"
-              className="h-24 flex items-center justify-center gap-4 hover:scale-[1.02] transition-transform"
+              className="flex h-20 items-center justify-center gap-3 transition-transform hover:scale-[1.02]"
               onClick={handleClockIn}
               disabled={loading}
             >
-              <LoginOutlined className="text-3xl" />
-              <span className="text-2xl font-medium">上班打卡</span>
+              <LoginOutlined className="text-2xl" />
+              <span className="text-xl font-medium">上班打卡</span>
             </GlassButton>
 
             <GlassButton
               variant="orange"
               size="lg"
-              className="h-24 flex items-center justify-center gap-4 hover:scale-[1.02] transition-transform"
+              className="flex h-20 items-center justify-center gap-3 transition-transform hover:scale-[1.02]"
               onClick={handleClockOut}
               disabled={loading}
             >
-              <LogoutOutlined className="text-3xl" />
-              <span className="text-2xl font-medium">下班打卡</span>
+              <LogoutOutlined className="text-2xl" />
+              <span className="text-xl font-medium">下班打卡</span>
             </GlassButton>
           </div>
 
