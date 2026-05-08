@@ -6,6 +6,7 @@ type EmployeeRecord = {
   id: string;
   entityId: string;
   hireDate: Date;
+  gender?: string | null;
 };
 
 type BalancePeriod = {
@@ -58,7 +59,7 @@ export class BalanceService {
   async getLeaveTypesForUser(userId: string) {
     const employee = await this.prisma.employee.findUnique({
       where: { userId },
-      select: { entityId: true },
+      select: { entityId: true, gender: true },
     });
 
     if (!employee) {
@@ -69,6 +70,9 @@ export class BalanceService {
       where: {
         entityId: employee.entityId,
         isActive: true,
+        ...(employee.gender === 'FEMALE'
+          ? {}
+          : { NOT: { OR: [{ code: 'MENSTRUAL' }, { name: '生理假' }] } }),
       },
       orderBy: [{ code: 'asc' }],
     });
@@ -81,6 +85,7 @@ export class BalanceService {
         id: true,
         entityId: true,
         hireDate: true,
+        gender: true,
       },
     });
 
@@ -92,6 +97,9 @@ export class BalanceService {
       where: {
         entityId: employee.entityId,
         isActive: true,
+        ...(employee.gender === 'FEMALE'
+          ? {}
+          : { NOT: { OR: [{ code: 'MENSTRUAL' }, { name: '生理假' }] } }),
       },
       orderBy: [{ code: 'asc' }],
     });
@@ -106,6 +114,7 @@ export class BalanceService {
           id: employee.id,
           entityId: employee.entityId,
           hireDate: employee.hireDate,
+          gender: employee.gender,
         },
         leaveType,
         this.resolveReferenceDateForYear(employee.hireDate, leaveType, year),
@@ -124,15 +133,21 @@ export class BalanceService {
       orderBy: [{ periodStart: 'desc' }, { leaveTypeId: 'asc' }],
     });
 
-    return balances.map((balance) => ({
-      ...balance,
-      remainingHours: this.calculateRemainingHours(balance).toNumber(),
-      accruedHours: Number(balance.accruedHours),
-      usedHours: Number(balance.usedHours),
-      carryOverHours: Number(balance.carryOverHours),
-      pendingHours: Number(balance.pendingHours),
-      manualAdjustmentHours: Number(balance.manualAdjustmentHours),
-    }));
+    return balances
+      .filter(
+        (balance) =>
+          employee.gender === 'FEMALE' ||
+          !this.isMenstrualLeaveType(balance.leaveType),
+      )
+      .map((balance) => ({
+        ...balance,
+        remainingHours: this.calculateRemainingHours(balance).toNumber(),
+        accruedHours: Number(balance.accruedHours),
+        usedHours: Number(balance.usedHours),
+        carryOverHours: Number(balance.carryOverHours),
+        pendingHours: Number(balance.pendingHours),
+        manualAdjustmentHours: Number(balance.manualAdjustmentHours),
+      }));
   }
 
   async reserveLeaveHours(params: {
@@ -301,11 +316,7 @@ export class BalanceService {
       where: {
         entityId: employee.entityId,
         isActive: true,
-        OR: [
-          { code: 'ANNUAL' },
-          { name: '特休' },
-          { name: '特別休假' },
-        ],
+        OR: [{ code: 'ANNUAL' }, { name: '特休' }, { name: '特別休假' }],
       },
     });
 
@@ -373,11 +384,7 @@ export class BalanceService {
       where: {
         entityId: employee.entityId,
         isActive: true,
-        OR: [
-          { code: 'ANNUAL' },
-          { name: '特休' },
-          { name: '特別休假' },
-        ],
+        OR: [{ code: 'ANNUAL' }, { name: '特休' }, { name: '特別休假' }],
       },
     });
 
@@ -421,6 +428,13 @@ export class BalanceService {
       (leaveType.maxDaysPerYear !== null ||
         this.isAnnualLeaveType(leaveType) ||
         this.getSeniorityTiers(leaveType).length > 0)
+    );
+  }
+
+  private isMenstrualLeaveType(leaveType: LeaveType) {
+    return (
+      leaveType.code.trim().toUpperCase() === 'MENSTRUAL' ||
+      leaveType.name.trim() === '生理假'
     );
   }
 

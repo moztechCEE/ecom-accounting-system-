@@ -1390,6 +1390,7 @@ model Employee {
   userId        String?   @unique @map("user_id")
   employeeNo    String    @map("employee_no")
   name          String
+  gender        String?
   nationalId    String?   @map("national_id")
   mailingAddress String?  @map("mailing_address")
   country       String // TW, CN

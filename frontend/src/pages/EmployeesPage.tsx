@@ -123,7 +123,9 @@ const formatSeniorityTier = (tier: SeniorityTier) =>
     : `${tier.minYears} 年以上：${tier.days} 天`;
 
 const isAnnualLeaveType = (leaveType: Pick<LeaveType, "code" | "name">) =>
-  String(leaveType.code || "").trim().toUpperCase() === "ANNUAL" ||
+  String(leaveType.code || "")
+    .trim()
+    .toUpperCase() === "ANNUAL" ||
   ["特休", "特別休假"].includes(String(leaveType.name || "").trim());
 
 const onboardingDocDefinitions: Array<{
@@ -250,12 +252,15 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const buildFormValues = (employee?: Employee | null) => ({
     employeeNo: employee?.employeeNo,
     name: employee?.name,
+    gender: employee?.gender || undefined,
     userId: employee?.userId || undefined,
     nationalId: employee?.nationalId || "",
     mailingAddress: employee?.mailingAddress || "",
     departmentId: employee?.departmentId || undefined,
     hireDate: employee?.hireDate ? dayjs(employee.hireDate) : undefined,
-    terminateDate: employee?.terminateDate ? dayjs(employee.terminateDate) : null,
+    terminateDate: employee?.terminateDate
+      ? dayjs(employee.terminateDate)
+      : null,
     salaryBaseOriginal: employee?.salaryBaseOriginal ?? 0,
     isActive: employee?.isActive ?? true,
     loginEmail: employee?.user?.email || "",
@@ -273,7 +278,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     ...employee,
     onboardingDocuments: onboardingDocDefinitions.map(({ docType, label }) => {
       const existing =
-        employee.onboardingDocuments?.find((document) => document.docType === docType) ||
+        employee.onboardingDocuments?.find(
+          (document) => document.docType === docType,
+        ) ||
         ({
           id: `${employee.id}:${docType}`,
           docType,
@@ -320,7 +327,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
             <div className="space-y-2">
               <p>員工：{createdEmployee.name}</p>
               <p>員工代碼：{createdEmployee.initialLogin.employeeNo}</p>
-              <p>首次登入密碼：{createdEmployee.initialLogin.temporaryPassword}</p>
+              <p>
+                首次登入密碼：{createdEmployee.initialLogin.temporaryPassword}
+              </p>
               <p className="text-slate-500">
                 員工登入時選擇對應事業別，輸入員工代碼與此密碼；第一次登入後會要求修改密碼。
               </p>
@@ -390,11 +399,12 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
 
     try {
       setDocumentActionLoading(docType);
-      const nextDocument = await payrollService.uploadEmployeeOnboardingDocument(
-        selectedEmployee.id,
-        docType,
-        file,
-      );
+      const nextDocument =
+        await payrollService.uploadEmployeeOnboardingDocument(
+          selectedEmployee.id,
+          docType,
+          file,
+        );
       const nextEmployee = replaceSelectedEmployeeDocument(
         selectedEmployee,
         nextDocument,
@@ -502,12 +512,20 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           ).length || 0;
         return (
           <Space wrap size={[4, 4]}>
-            <Tag color={verifiedCount === onboardingDocDefinitions.length ? "green" : "default"}>
+            <Tag
+              color={
+                verifiedCount === onboardingDocDefinitions.length
+                  ? "green"
+                  : "default"
+              }
+            >
               {verifiedCount}/{onboardingDocDefinitions.length} 已核實
             </Tag>
             {record.onboardingDocuments?.some(
               (document) => document.status === "UPLOADED",
-            ) ? <Tag color="blue">待覆核</Tag> : null}
+            ) ? (
+              <Tag color="blue">待覆核</Tag>
+            ) : null}
           </Space>
         );
       },
@@ -613,11 +631,25 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
             <Input
               readOnly
               disabled={mode === "create" && nextEmployeeNoLoading}
-              placeholder={mode === "create" ? "系統會依全員工流水號自動產生" : undefined}
+              placeholder={
+                mode === "create" ? "系統會依全員工流水號自動產生" : undefined
+              }
             />
           </Form.Item>
           <Form.Item name="name" label="姓名" rules={[{ required: true }]}>
             <Input />
+          </Form.Item>
+          <Form.Item
+            name="gender"
+            label="性別"
+            rules={[{ required: true, message: "請選擇性別" }]}
+          >
+            <Select
+              options={[
+                { label: "男", value: "MALE" },
+                { label: "女", value: "FEMALE" },
+              ]}
+            />
           </Form.Item>
           <Form.Item name="departmentId" label="部門">
             <Select
@@ -680,7 +712,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
               const document =
                 selectedEmployee?.onboardingDocuments?.find(
                   (item) => item.docType === docType,
-                ) || ({
+                ) ||
+                ({
                   id: `${selectedEmployee?.id || "employee"}:${docType}`,
                   docType,
                   status: "PENDING",
@@ -719,7 +752,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                       icon={<DownloadOutlined />}
                       disabled={!document.fileName}
                       loading={documentActionLoading === docType}
-                      onClick={() => void handleDownloadOnboardingDocument(docType)}
+                      onClick={() =>
+                        void handleDownloadOnboardingDocument(docType)
+                      }
                     >
                       下載
                     </Button>
@@ -895,7 +930,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                       .map(
                         (document) =>
                           onboardingDocDefinitions.find(
-                            (definition) => definition.docType === document.docType,
+                            (definition) =>
+                              definition.docType === document.docType,
                           )?.label || document.docType,
                       )
                       .join("、")}
@@ -1260,10 +1296,9 @@ const LeaveTypesTab = () => {
           values.carryOverLimitHours === undefined
             ? undefined
             : Number(values.carryOverLimitHours),
-        seniorityTiers:
-          annualLeaveRule
-            ? normalizeSeniorityTiers(values.seniorityTiers)
-            : [],
+        seniorityTiers: annualLeaveRule
+          ? normalizeSeniorityTiers(values.seniorityTiers)
+          : [],
       };
 
       if (editingLeaveType) {
@@ -1283,6 +1318,34 @@ const LeaveTypesTab = () => {
       }
 
       message.error(getErrorMessage(error, "儲存假別規則失敗"));
+    }
+  };
+
+  const handleToggleLeaveType = async (record: LeaveType) => {
+    const isCurrentlyActive = record.isActive !== false;
+    try {
+      await attendanceService.updateLeaveType(record.id, {
+        code: record.code,
+        name: record.name,
+        balanceResetPolicy: record.balanceResetPolicy,
+        maxDaysPerYear: record.maxDaysPerYear,
+        paidPercentage: record.paidPercentage,
+        minNoticeHours: record.minNoticeHours,
+        requiresDocument: record.requiresDocument,
+        allowCarryOver: record.allowCarryOver,
+        carryOverLimitHours: record.carryOverLimitHours,
+        seniorityTiers: getSeniorityTiers(record),
+        isActive: !isCurrentlyActive,
+      });
+      message.success(`假別規則已${isCurrentlyActive ? "停用" : "啟用"}`);
+      void fetchLeaveTypes();
+    } catch (error) {
+      message.error(
+        getErrorMessage(
+          error,
+          `${isCurrentlyActive ? "停用" : "啟用"}假別規則失敗`,
+        ),
+      );
     }
   };
 
@@ -1351,16 +1414,37 @@ const LeaveTypesTab = () => {
       ),
     },
     {
+      title: "狀態",
+      dataIndex: "isActive",
+      key: "isActive",
+      render: (isActive?: boolean) => (
+        <Tag color={isActive === false ? "default" : "green"}>
+          {isActive === false ? "已停用" : "啟用中"}
+        </Tag>
+      ),
+    },
+    {
       title: "操作",
       key: "actions",
       render: (_: unknown, record: LeaveType) => (
-        <Button
-          type="text"
-          icon={<EditOutlined />}
-          onClick={() => openEdit(record)}
-        >
-          編輯
-        </Button>
+        <Space>
+          <Button
+            type="text"
+            icon={<EditOutlined />}
+            onClick={() => openEdit(record)}
+          >
+            編輯
+          </Button>
+          <Popconfirm
+            title={`確認${record.isActive === false ? "啟用" : "停用"}假別規則？`}
+            description="停用後員工不能再新增此假別申請，歷史假單與額度資料會保留。"
+            onConfirm={() => void handleToggleLeaveType(record)}
+          >
+            <Button danger={record.isActive !== false} type="text">
+              {record.isActive === false ? "啟用" : "停用"}
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -1761,7 +1845,9 @@ const LeaveBalancesTab = () => {
           <span className="font-medium">{record.employee.name}</span>
           <span className="text-xs text-gray-400">
             {record.employee.department?.name || "未分配部門"}
-            {record.employee.employeeNo ? ` · ${record.employee.employeeNo}` : ""}
+            {record.employee.employeeNo
+              ? ` · ${record.employee.employeeNo}`
+              : ""}
           </span>
         </div>
       ),
@@ -1782,7 +1868,8 @@ const LeaveBalancesTab = () => {
                     : "blue"
               }
             >
-              {balance.leaveType.name} {formatHoursAsDays(balance.remainingHours)}
+              {balance.leaveType.name}{" "}
+              {formatHoursAsDays(balance.remainingHours)}
             </Tag>
           ))}
           {record.balances.length > 5 ? (

@@ -122,6 +122,11 @@ type FuneralLeaveDetails = {
   eventKey: string;
 };
 
+type LeaveRequestRuleContext = {
+  menstrualSickHours?: number;
+  sickLeaveType?: LeaveType;
+};
+
 const FUNERAL_LEAVE_RELATIONSHIP_RULES: Record<
   FuneralLeaveRelationship,
   { label: string; days: number }
@@ -150,7 +155,10 @@ export class LeaveService {
     private readonly usersService: UsersService,
   ) {}
 
-  private async getAdminAccessContext(userId: string, requestedEntityId?: string) {
+  private async getAdminAccessContext(
+    userId: string,
+    requestedEntityId?: string,
+  ) {
     return this.usersService.getDataAccessContext(
       userId,
       'attendance',
@@ -164,6 +172,7 @@ export class LeaveService {
       id: string;
       entityId: string;
       hireDate: Date;
+      gender?: string | null;
     },
   ) {
     const leaveTypes = await this.ensureDefaultLeaveTypes(
@@ -175,7 +184,8 @@ export class LeaveService {
     for (const leaveType of leaveTypes) {
       if (
         !leaveType.isActive ||
-        !this.balanceService.leaveTypeUsesBalance(leaveType)
+        !this.balanceService.leaveTypeUsesBalance(leaveType) ||
+        !this.employeeCanUseLeaveType(employee, leaveType)
       ) {
         continue;
       }
@@ -185,6 +195,7 @@ export class LeaveService {
           id: employee.id,
           entityId: employee.entityId,
           hireDate: employee.hireDate,
+          gender: employee.gender,
         },
         leaveType,
         referenceDate,
@@ -217,11 +228,12 @@ export class LeaveService {
     const documents = this.normalizeLeaveRequestDocuments(dto.documents);
     const funeralDetails = this.resolveFuneralLeaveDetails(leaveType, dto);
 
-    await this.validateLeaveRequestPayload({
+    const ruleContext = await this.validateLeaveRequestPayload({
       employee: {
         id: employee.id,
         entityId: employee.entityId,
         hireDate: employee.hireDate,
+        gender: employee.gender,
       },
       leaveType,
       startAt,
@@ -236,11 +248,26 @@ export class LeaveService {
         id: employee.id,
         entityId: employee.entityId,
         hireDate: employee.hireDate,
+        gender: employee.gender,
       },
       leaveType,
       referenceDate: startAt,
       hours: dto.hours,
     });
+
+    if (ruleContext.sickLeaveType && ruleContext.menstrualSickHours) {
+      await this.balanceService.reserveLeaveHours({
+        employee: {
+          id: employee.id,
+          entityId: employee.entityId,
+          hireDate: employee.hireDate,
+          gender: employee.gender,
+        },
+        leaveType: ruleContext.sickLeaveType,
+        referenceDate: startAt,
+        hours: ruleContext.menstrualSickHours,
+      });
+    }
 
     const leaveRequest = await this.prisma.leaveRequest.create({
       data: {
@@ -257,6 +284,7 @@ export class LeaveService {
         metadata: this.buildLeaveRequestMetadata(
           documents.length,
           funeralDetails,
+          ruleContext,
         ),
         documents:
           documents.length > 0
@@ -283,6 +311,7 @@ export class LeaveService {
             metadata: this.buildLeaveRequestMetadata(
               documents.length,
               funeralDetails,
+              ruleContext,
             ),
           },
         },
@@ -346,7 +375,8 @@ export class LeaveService {
     const canAccessRequest =
       !access.noAccess &&
       (access.scope === 'ENTITY' ||
-        (access.scope === 'SELF' && access.employeeId === existingRequest.employeeId) ||
+        (access.scope === 'SELF' &&
+          access.employeeId === existingRequest.employeeId) ||
         (access.scope === 'DEPARTMENT' &&
           access.departmentId === existingRequest.employee.departmentId));
     if (!canAccessRequest) {
@@ -374,6 +404,7 @@ export class LeaveService {
         id: existingRequest.employee.id,
         entityId: existingRequest.entityId,
         hireDate: existingRequest.employee.hireDate,
+        gender: existingRequest.employee.gender,
       },
       leaveType: existingRequest.leaveType,
       referenceDate: existingRequest.startAt,
@@ -381,6 +412,30 @@ export class LeaveService {
       fromStatus: existingRequest.status,
       toStatus: status,
     });
+
+    const menstrualSickHours = this.getMenstrualSickHoursFromMetadata(
+      existingRequest.metadata,
+    );
+    if (menstrualSickHours > 0) {
+      const sickLeaveType = await this.findSickLeaveType(
+        existingRequest.entityId,
+      );
+      if (sickLeaveType) {
+        await this.balanceService.reconcileLeaveRequestStatus({
+          employee: {
+            id: existingRequest.employee.id,
+            entityId: existingRequest.entityId,
+            hireDate: existingRequest.employee.hireDate,
+            gender: existingRequest.employee.gender,
+          },
+          leaveType: sickLeaveType,
+          referenceDate: existingRequest.startAt,
+          hours: new Prisma.Decimal(menstrualSickHours),
+          fromStatus: existingRequest.status,
+          toStatus: status,
+        });
+      }
+    }
 
     const request = await this.prisma.leaveRequest.update({
       where: { id: requestId },
@@ -503,7 +558,11 @@ export class LeaveService {
           : access.scope === 'SELF'
             ? { employeeId: access.employeeId || '__no_access__' }
             : access.scope === 'DEPARTMENT'
-              ? { employee: { departmentId: access.departmentId || '__no_access__' } }
+              ? {
+                  employee: {
+                    departmentId: access.departmentId || '__no_access__',
+                  },
+                }
               : {}),
       },
       include: {
@@ -691,6 +750,7 @@ export class LeaveService {
             id: true,
             entityId: true,
             hireDate: true,
+            gender: true,
           },
         }),
         this.prisma.leaveType.findMany({
@@ -706,6 +766,10 @@ export class LeaveService {
         for (const leaveType of leaveTypes.filter((type) =>
           this.balanceService.leaveTypeUsesBalance(type),
         )) {
+          if (!this.employeeCanUseLeaveType(employee, leaveType)) {
+            continue;
+          }
+
           await this.balanceService.ensureBalanceForDate(
             employee,
             leaveType,
@@ -730,7 +794,11 @@ export class LeaveService {
           : access.scope === 'SELF'
             ? { employeeId: access.employeeId || '__no_access__' }
             : access.scope === 'DEPARTMENT'
-              ? { employee: { departmentId: access.departmentId || '__no_access__' } }
+              ? {
+                  employee: {
+                    departmentId: access.departmentId || '__no_access__',
+                  },
+                }
               : {}),
       },
       include: {
@@ -744,20 +812,24 @@ export class LeaveService {
       orderBy: [{ periodStart: 'desc' }, { employeeId: 'asc' }],
     });
 
-    return balances.map((balance) => ({
-      ...balance,
-      remainingHours:
-        Number(balance.accruedHours) +
-        Number(balance.carryOverHours) +
-        Number(balance.manualAdjustmentHours) -
-        Number(balance.usedHours) -
-        Number(balance.pendingHours),
-      accruedHours: Number(balance.accruedHours),
-      usedHours: Number(balance.usedHours),
-      carryOverHours: Number(balance.carryOverHours),
-      pendingHours: Number(balance.pendingHours),
-      manualAdjustmentHours: Number(balance.manualAdjustmentHours),
-    }));
+    return balances
+      .filter((balance) =>
+        this.employeeCanUseLeaveType(balance.employee, balance.leaveType),
+      )
+      .map((balance) => ({
+        ...balance,
+        remainingHours:
+          Number(balance.accruedHours) +
+          Number(balance.carryOverHours) +
+          Number(balance.manualAdjustmentHours) -
+          Number(balance.usedHours) -
+          Number(balance.pendingHours),
+        accruedHours: Number(balance.accruedHours),
+        usedHours: Number(balance.usedHours),
+        carryOverHours: Number(balance.carryOverHours),
+        pendingHours: Number(balance.pendingHours),
+        manualAdjustmentHours: Number(balance.manualAdjustmentHours),
+      }));
   }
 
   async adjustLeaveBalance(
@@ -785,7 +857,8 @@ export class LeaveService {
     const canAccessBalance =
       !access.noAccess &&
       (access.scope === 'ENTITY' ||
-        (access.scope === 'SELF' && access.employeeId === existing.employeeId) ||
+        (access.scope === 'SELF' &&
+          access.employeeId === existing.employeeId) ||
         (access.scope === 'DEPARTMENT' &&
           access.departmentId === existing.employee?.departmentId));
     if (!canAccessBalance || existing.entityId !== access.entityId) {
@@ -843,6 +916,7 @@ export class LeaveService {
       id: string;
       entityId: string;
       hireDate: Date;
+      gender?: string | null;
     };
     leaveType: LeaveType;
     startAt: Date;
@@ -856,7 +930,7 @@ export class LeaveService {
       checksum?: string;
     }>;
     funeralDetails?: FuneralLeaveDetails | null;
-  }) {
+  }): Promise<LeaveRequestRuleContext> {
     if (
       Number.isNaN(params.startAt.getTime()) ||
       Number.isNaN(params.endAt.getTime())
@@ -898,6 +972,8 @@ export class LeaveService {
       await this.validateFuneralLeaveLimit(params);
     }
 
+    const ruleContext = await this.validateGenderSpecificLeaveRules(params);
+
     const overlappingRequest = await this.prisma.leaveRequest.findFirst({
       where: {
         employeeId: params.employee.id,
@@ -923,6 +999,116 @@ export class LeaveService {
     if (overlappingRequest) {
       throw new BadRequestException('此時段已有請假單正在審核或已核准');
     }
+
+    return ruleContext;
+  }
+
+  private async validateGenderSpecificLeaveRules(params: {
+    employee: {
+      id: string;
+      entityId: string;
+      hireDate: Date;
+      gender?: string | null;
+    };
+    leaveType: LeaveType;
+    startAt: Date;
+    hours: number;
+  }): Promise<LeaveRequestRuleContext> {
+    if (!this.isMenstrualLeaveType(params.leaveType)) {
+      return {};
+    }
+
+    if (params.employee.gender !== 'FEMALE') {
+      throw new BadRequestException('生理假僅適用於女性員工');
+    }
+
+    const requestedHours = Number(params.hours);
+    const monthStart = new Date(
+      params.startAt.getFullYear(),
+      params.startAt.getMonth(),
+      1,
+    );
+    const monthEnd = new Date(
+      params.startAt.getFullYear(),
+      params.startAt.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
+    const yearStart = new Date(params.startAt.getFullYear(), 0, 1);
+    const yearEnd = new Date(
+      params.startAt.getFullYear(),
+      11,
+      31,
+      23,
+      59,
+      59,
+      999,
+    );
+
+    const [monthlyAggregate, yearlyAggregate] = await Promise.all([
+      this.prisma.leaveRequest.aggregate({
+        where: {
+          employeeId: params.employee.id,
+          leaveTypeId: params.leaveType.id,
+          status: {
+            in: [
+              LeaveStatus.SUBMITTED,
+              LeaveStatus.UNDER_REVIEW,
+              LeaveStatus.APPROVED,
+            ],
+          },
+          startAt: { gte: monthStart, lte: monthEnd },
+        },
+        _sum: { hours: true },
+      }),
+      this.prisma.leaveRequest.aggregate({
+        where: {
+          employeeId: params.employee.id,
+          leaveTypeId: params.leaveType.id,
+          status: {
+            in: [
+              LeaveStatus.SUBMITTED,
+              LeaveStatus.UNDER_REVIEW,
+              LeaveStatus.APPROVED,
+            ],
+          },
+          startAt: { gte: yearStart, lte: yearEnd },
+        },
+        _sum: { hours: true },
+      }),
+    ]);
+
+    const monthlyUsedHours = Number(monthlyAggregate._sum.hours || 0);
+    if (monthlyUsedHours + requestedHours > 8) {
+      throw new BadRequestException(
+        `生理假每月最多 1 天，當月尚餘 ${this.formatHoursAsDays(
+          Math.max(0, 8 - monthlyUsedHours),
+        )}。`,
+      );
+    }
+
+    const yearlyUsedHours = Number(yearlyAggregate._sum.hours || 0);
+    const sickAppliedBefore = Math.max(0, yearlyUsedHours - 24);
+    const sickAppliedAfter = Math.max(0, yearlyUsedHours + requestedHours - 24);
+    const menstrualSickHours = sickAppliedAfter - sickAppliedBefore;
+
+    if (menstrualSickHours <= 0) {
+      return {};
+    }
+
+    const sickLeaveType = await this.findSickLeaveType(
+      params.employee.entityId,
+    );
+    if (!sickLeaveType) {
+      throw new BadRequestException(
+        '找不到病假規則，無法計算第 4 天後生理假併入病假額度',
+      );
+    }
+
+    return { menstrualSickHours, sickLeaveType };
   }
 
   private resolveFuneralLeaveDetails(
@@ -1022,6 +1208,7 @@ export class LeaveService {
   private buildLeaveRequestMetadata(
     documentCount: number,
     funeralDetails?: FuneralLeaveDetails | null,
+    ruleContext?: LeaveRequestRuleContext,
   ): Prisma.InputJsonValue | undefined {
     const metadata: Record<string, unknown> = {};
 
@@ -1041,9 +1228,39 @@ export class LeaveService {
       };
     }
 
+    if (ruleContext?.menstrualSickHours) {
+      metadata.menstrual = {
+        sickBalanceAppliedHours: ruleContext.menstrualSickHours,
+      };
+    }
+
     return Object.keys(metadata).length > 0
       ? (metadata as Prisma.InputJsonObject)
       : undefined;
+  }
+
+  private getMenstrualSickHoursFromMetadata(metadata: Prisma.JsonValue | null) {
+    if (
+      typeof metadata !== 'object' ||
+      metadata === null ||
+      Array.isArray(metadata)
+    ) {
+      return 0;
+    }
+
+    const menstrual = (metadata as { menstrual?: unknown }).menstrual;
+    if (
+      typeof menstrual !== 'object' ||
+      menstrual === null ||
+      Array.isArray(menstrual)
+    ) {
+      return 0;
+    }
+
+    const value = (menstrual as { sickBalanceAppliedHours?: unknown })
+      .sickBalanceAppliedHours;
+    const hours = Number(value || 0);
+    return Number.isFinite(hours) && hours > 0 ? hours : 0;
   }
 
   private getFuneralEventKey(metadata: Prisma.JsonValue | null) {
@@ -1072,6 +1289,39 @@ export class LeaveService {
       leaveType.code.trim().toUpperCase() === 'FUNERAL' ||
       leaveType.name.trim() === '喪假'
     );
+  }
+
+  private isSickLeaveType(leaveType: LeaveType) {
+    return (
+      leaveType.code.trim().toUpperCase() === 'SICK' ||
+      leaveType.name.trim() === '病假'
+    );
+  }
+
+  private isMenstrualLeaveType(leaveType: LeaveType) {
+    return (
+      leaveType.code.trim().toUpperCase() === 'MENSTRUAL' ||
+      leaveType.name.trim() === '生理假'
+    );
+  }
+
+  private employeeCanUseLeaveType(
+    employee: { gender?: string | null },
+    leaveType: LeaveType,
+  ) {
+    return (
+      !this.isMenstrualLeaveType(leaveType) || employee.gender === 'FEMALE'
+    );
+  }
+
+  private findSickLeaveType(entityId: string) {
+    return this.prisma.leaveType.findFirst({
+      where: {
+        entityId,
+        OR: [{ code: 'SICK' }, { name: '病假' }],
+      },
+      orderBy: [{ isActive: 'desc' }, { code: 'asc' }],
+    });
   }
 
   private formatHoursAsDays(hours: number) {
@@ -1218,6 +1468,28 @@ export class LeaveService {
       });
 
       if (existing) {
+        if (
+          this.isSystemDefaultLeaveType(existing.metadata) &&
+          (template.code === 'SICK' || template.code === 'MENSTRUAL')
+        ) {
+          await this.prisma.leaveType.update({
+            where: { id: existing.id },
+            data: {
+              balanceResetPolicy: template.balanceResetPolicy,
+              maxDaysPerYear:
+                template.maxDaysPerYear !== undefined
+                  ? new Prisma.Decimal(template.maxDaysPerYear)
+                  : null,
+              paidPercentage:
+                template.paidPercentage !== undefined
+                  ? new Prisma.Decimal(template.paidPercentage)
+                  : existing.paidPercentage,
+              minNoticeHours: template.minNoticeHours,
+              requiresDocument: template.requiresDocument,
+            },
+          });
+        }
+
         if (
           template.code === 'ANNUAL' &&
           existing.balanceResetPolicy === 'HIRE_ANNIVERSARY' &&

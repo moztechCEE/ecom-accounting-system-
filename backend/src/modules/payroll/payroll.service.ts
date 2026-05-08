@@ -84,7 +84,9 @@ export class PayrollService {
     return Number(value);
   }
 
-  private isEmployeeOnboardingDocType(value: string): value is (typeof EMPLOYEE_ONBOARDING_DOC_TYPES)[number] {
+  private isEmployeeOnboardingDocType(
+    value: string,
+  ): value is (typeof EMPLOYEE_ONBOARDING_DOC_TYPES)[number] {
     return (EMPLOYEE_ONBOARDING_DOC_TYPES as readonly string[]).includes(value);
   }
 
@@ -106,7 +108,9 @@ export class PayrollService {
     };
   }
 
-  private normalizeCompensationSettings(input?: Record<string, unknown> | null) {
+  private normalizeCompensationSettings(
+    input?: Record<string, unknown> | null,
+  ) {
     const defaults = this.getDefaultCompensationSettings();
     const normalized = { ...defaults };
 
@@ -302,6 +306,23 @@ export class PayrollService {
     return email;
   }
 
+  private normalizeEmployeeGender(value?: string | null, allowEmpty = false) {
+    const gender = value?.trim().toUpperCase();
+    if (!gender) {
+      if (allowEmpty) {
+        return null;
+      }
+
+      throw new BadRequestException('Employee gender is required');
+    }
+
+    if (gender !== 'MALE' && gender !== 'FEMALE') {
+      throw new BadRequestException('Employee gender must be MALE or FEMALE');
+    }
+
+    return gender;
+  }
+
   private async generateNextEmployeeNo() {
     const employees = await this.prisma.employee.findMany({
       select: { employeeNo: true },
@@ -345,7 +366,8 @@ export class PayrollService {
   }
 
   private normalizeInputDate(value: Date | string, fieldName: string) {
-    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+    const date =
+      value instanceof Date ? new Date(value.getTime()) : new Date(value);
     if (Number.isNaN(date.getTime())) {
       throw new BadRequestException(`${fieldName}格式不正確`);
     }
@@ -389,7 +411,11 @@ export class PayrollService {
 
   private closureAppliesToEmployee(
     closure: { scopeType: string; scopeIds: unknown },
-    employee: { id: string; departmentId?: string | null; location?: string | null },
+    employee: {
+      id: string;
+      departmentId?: string | null;
+      location?: string | null;
+    },
   ) {
     if (closure.scopeType === 'ENTITY') {
       return true;
@@ -397,7 +423,9 @@ export class PayrollService {
 
     const scopeIds = this.scopeIdsFromJson(closure.scopeIds);
     if (closure.scopeType === 'DEPARTMENT') {
-      return Boolean(employee.departmentId && scopeIds.includes(employee.departmentId));
+      return Boolean(
+        employee.departmentId && scopeIds.includes(employee.departmentId),
+      );
     }
     if (closure.scopeType === 'EMPLOYEE') {
       return scopeIds.includes(employee.id);
@@ -409,7 +437,11 @@ export class PayrollService {
   }
 
   private buildWeekdaySet(values: number[]) {
-    return new Set(values.filter((value) => Number.isInteger(value) && value >= 0 && value <= 6));
+    return new Set(
+      values.filter(
+        (value) => Number.isInteger(value) && value >= 0 && value <= 6,
+      ),
+    );
   }
 
   private async buildPayslipPdfBuffer(params: {
@@ -656,15 +688,13 @@ export class PayrollService {
     );
   }
 
-  private buildEmployeeAccessWhere(
-    access: {
-      scope: 'SELF' | 'DEPARTMENT' | 'ENTITY';
-      entityId: string;
-      employeeId: string | null;
-      departmentId: string | null;
-      noAccess: boolean;
-    },
-  ) {
+  private buildEmployeeAccessWhere(access: {
+    scope: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+    entityId: string;
+    employeeId: string | null;
+    departmentId: string | null;
+    noAccess: boolean;
+  }) {
     if (access.noAccess) {
       return { id: '__no_access__', entityId: access.entityId };
     }
@@ -686,14 +716,12 @@ export class PayrollService {
     return { entityId: access.entityId };
   }
 
-  private buildPayrollItemAccessWhere(
-    access: {
-      scope: 'SELF' | 'DEPARTMENT' | 'ENTITY';
-      employeeId: string | null;
-      departmentId: string | null;
-      noAccess: boolean;
-    },
-  ) {
+  private buildPayrollItemAccessWhere(access: {
+    scope: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+    employeeId: string | null;
+    departmentId: string | null;
+    noAccess: boolean;
+  }) {
     if (access.noAccess) {
       return { employeeId: '__no_access__' };
     }
@@ -718,7 +746,9 @@ export class PayrollService {
     noAccess: boolean;
   }) {
     if (access.noAccess || access.scope !== 'ENTITY') {
-      throw new ForbiddenException('目前帳號僅能查看限定範圍資料，無法執行此管理操作');
+      throw new ForbiddenException(
+        '目前帳號僅能查看限定範圍資料，無法執行此管理操作',
+      );
     }
   }
 
@@ -874,7 +904,10 @@ export class PayrollService {
       isActive?: boolean;
     },
   ) {
-    const access = await this.getEmployeeDataAccessContext(userId, data.entityId);
+    const access = await this.getEmployeeDataAccessContext(
+      userId,
+      data.entityId,
+    );
     this.ensureEntityWideAccess(access);
     const entityId = access.entityId;
     const name = data.name?.trim();
@@ -932,7 +965,10 @@ export class PayrollService {
       throw new NotFoundException('Department not found');
     }
 
-    const access = await this.getEmployeeDataAccessContext(userId, department.entityId);
+    const access = await this.getEmployeeDataAccessContext(
+      userId,
+      department.entityId,
+    );
     this.ensureEntityWideAccess(access);
     if (access.entityId !== department.entityId) {
       throw new NotFoundException('Department not found');
@@ -994,6 +1030,7 @@ export class PayrollService {
       userId?: string | null;
       employeeNo?: string;
       name: string;
+      gender?: string | null;
       departmentId?: string;
       hireDate: string | Date;
       salaryBaseOriginal: number;
@@ -1006,7 +1043,10 @@ export class PayrollService {
       loginPassword?: string | null;
     },
   ) {
-    const access = await this.getEmployeeDataAccessContext(userId, data.entityId);
+    const access = await this.getEmployeeDataAccessContext(
+      userId,
+      data.entityId,
+    );
     this.ensureEntityWideAccess(access);
     const entityId = access.entityId;
     const entity = await this.prisma.entity.findUnique({
@@ -1022,7 +1062,8 @@ export class PayrollService {
       throw new NotFoundException('Entity not found');
     }
 
-    const employeeNo = data.employeeNo?.trim() || await this.generateNextEmployeeNo();
+    const employeeNo =
+      data.employeeNo?.trim() || (await this.generateNextEmployeeNo());
     if (!employeeNo) {
       throw new BadRequestException('Employee number is required');
     }
@@ -1031,6 +1072,7 @@ export class PayrollService {
     if (!name) {
       throw new BadRequestException('Employee name is required');
     }
+    const gender = this.normalizeEmployeeGender(data.gender);
 
     const existingEmployee = await this.prisma.employee.findFirst({
       where: {
@@ -1080,6 +1122,7 @@ export class PayrollService {
         userId: data.userId || null,
         employeeNo,
         name,
+        gender,
         nationalId: data.nationalId?.trim() || null,
         mailingAddress: data.mailingAddress?.trim() || null,
         country: entity.country,
@@ -1102,6 +1145,7 @@ export class PayrollService {
       id: employee.id,
       entityId: employee.entityId,
       hireDate: employee.hireDate,
+      gender: employee.gender,
     });
 
     await this.auditLogService.record({
@@ -1174,7 +1218,9 @@ export class PayrollService {
     }
 
     if (employee.userId) {
-      throw new ConflictException('Employee already has a linked login account');
+      throw new ConflictException(
+        'Employee already has a linked login account',
+      );
     }
 
     const email =
@@ -1236,6 +1282,7 @@ export class PayrollService {
     data: {
       userId?: string | null;
       name?: string;
+      gender?: string | null;
       departmentId?: string | null;
       hireDate?: string | Date;
       salaryBaseOriginal?: number;
@@ -1258,7 +1305,10 @@ export class PayrollService {
       throw new NotFoundException('Employee not found');
     }
 
-    const access = await this.getEmployeeDataAccessContext(userId, employee.entityId);
+    const access = await this.getEmployeeDataAccessContext(
+      userId,
+      employee.entityId,
+    );
     const visibleEmployee = await this.prisma.employee.findFirst({
       where: {
         id: employee.id,
@@ -1285,6 +1335,10 @@ export class PayrollService {
         throw new BadRequestException('Employee name is required');
       }
       updateData.name = name;
+    }
+
+    if (data.gender !== undefined) {
+      updateData.gender = this.normalizeEmployeeGender(data.gender, true);
     }
 
     if (data.departmentId !== undefined) {
@@ -1784,7 +1838,11 @@ export class PayrollService {
       throw new NotFoundException('Employee profile not found');
     }
 
-    return this.downloadEmployeeOnboardingDocument(userId, employee.id, docType);
+    return this.downloadEmployeeOnboardingDocument(
+      userId,
+      employee.id,
+      docType,
+    );
   }
 
   async getOnboardingReviewQueue(userId: string) {
@@ -2321,7 +2379,10 @@ export class PayrollService {
     },
     userId: string,
   ) {
-    const access = await this.getPayrollDataAccessContext(userId, data.entityId);
+    const access = await this.getPayrollDataAccessContext(
+      userId,
+      data.entityId,
+    );
     const entityId = access.entityId;
     const periodStart = this.startOfDay(
       this.normalizeInputDate(data.periodStart, '計薪期間開始日'),
@@ -2458,7 +2519,10 @@ export class PayrollService {
         }),
       ]);
 
-    const summaryByEmployeeDate = new Map<string, (typeof dailySummaries)[number]>();
+    const summaryByEmployeeDate = new Map<
+      string,
+      (typeof dailySummaries)[number]
+    >();
     for (const summary of dailySummaries) {
       summaryByEmployeeDate.set(
         `${summary.employeeId}:${this.dateKey(summary.workDate)}`,
@@ -2473,8 +2537,10 @@ export class PayrollService {
     for (const leaveRequest of leaveRequests) {
       const leaveStart = this.startOfDay(leaveRequest.startAt);
       const leaveEnd = this.startOfDay(leaveRequest.endAt);
-      const effectiveStart = leaveStart > periodStart ? leaveStart : periodStart;
-      const effectiveEnd = leaveEnd < periodEnd ? leaveEnd : this.startOfDay(periodEnd);
+      const effectiveStart =
+        leaveStart > periodStart ? leaveStart : periodStart;
+      const effectiveEnd =
+        leaveEnd < periodEnd ? leaveEnd : this.startOfDay(periodEnd);
       const dates = this.enumerateDates(effectiveStart, effectiveEnd);
       for (const date of dates) {
         const key = `${leaveRequest.employeeId}:${this.dateKey(date)}`;
@@ -2493,7 +2559,8 @@ export class PayrollService {
 
     for (const schedule of schedules) {
       if (schedule.employeeId) {
-        const current = employeeWeekdays.get(schedule.employeeId) ?? new Set<number>();
+        const current =
+          employeeWeekdays.get(schedule.employeeId) ?? new Set<number>();
         current.add(schedule.weekday);
         employeeWeekdays.set(schedule.employeeId, current);
         continue;
@@ -2521,7 +2588,10 @@ export class PayrollService {
         .map((closure) => this.dateKey(closure.closureDate)),
     );
 
-    const periodWorkdayCount = this.enumerateDates(periodStart, periodEnd).filter(
+    const periodWorkdayCount = this.enumerateDates(
+      periodStart,
+      periodEnd,
+    ).filter(
       (date) =>
         globalWeekdaySet.has(date.getDay()) &&
         !entityWideClosureDates.has(this.dateKey(date)),
@@ -2545,7 +2615,8 @@ export class PayrollService {
           ? this.startOfDay(employee.hireDate)
           : periodStart;
       const employeeEnd =
-        employee.terminateDate && this.endOfDay(employee.terminateDate) < periodEnd
+        employee.terminateDate &&
+        this.endOfDay(employee.terminateDate) < periodEnd
           ? this.endOfDay(employee.terminateDate)
           : periodEnd;
 
@@ -2612,7 +2683,9 @@ export class PayrollService {
 
         if (
           summary.status === 'disaster_closure' ||
-          (summary.clockInTime && summary.clockOutTime && summary.status !== 'missing_clock')
+          (summary.clockInTime &&
+            summary.clockOutTime &&
+            summary.status !== 'missing_clock')
         ) {
           continue;
         }
@@ -2665,7 +2738,10 @@ export class PayrollService {
     },
     userId: string,
   ) {
-    const access = await this.getPayrollDataAccessContext(userId, data.entityId);
+    const access = await this.getPayrollDataAccessContext(
+      userId,
+      data.entityId,
+    );
     const entityId = access.entityId;
     const periodStart = this.startOfDay(
       this.normalizeInputDate(data.periodStart, '計薪期間開始日'),
@@ -3310,7 +3386,9 @@ export class PayrollService {
     });
 
     const compensationSettings = employee.compensationSettings
-      ? this.normalizeCompensationSettings(employee.compensationSettings as Record<string, unknown>)
+      ? this.normalizeCompensationSettings(
+          employee.compensationSettings as Record<string, unknown>,
+        )
       : null;
 
     const fixedAdditionItems = [
@@ -3451,16 +3529,14 @@ export class PayrollService {
       }
 
       const policyLabel =
-        payPolicy === 'UNPAID'
-          ? '不支薪'
-          : `部分支薪 ${paidPercentage}%`;
+        payPolicy === 'UNPAID' ? '不支薪' : `部分支薪 ${paidPercentage}%`;
 
       items.push({
         type: 'DISASTER_CLOSURE_DEDUCTION',
         amount: -deductionAmount,
-        remark: `統一放假 ${closure.name} ${new Date(
-          closure.closureDate,
-        ).toISOString().slice(0, 10)} (${policyLabel})`,
+        remark: `統一放假 ${closure.name} ${new Date(closure.closureDate)
+          .toISOString()
+          .slice(0, 10)} (${policyLabel})`,
       });
     }
 

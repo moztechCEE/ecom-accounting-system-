@@ -41,9 +41,9 @@ export interface ManagedUser {
   name: string;
   isActive: boolean;
   mustChangePassword?: boolean;
-  employeeDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
-  attendanceDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
-  payrollDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+  employeeDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  attendanceDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  payrollDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   createdAt?: string;
   updatedAt?: string;
   roles: UserRoleLink[];
@@ -65,9 +65,9 @@ export interface User {
   name: string;
   avatar?: string;
   mustChangePassword?: boolean;
-  employeeDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
-  attendanceDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
-  payrollDataScope?: 'SELF' | 'DEPARTMENT' | 'ENTITY';
+  employeeDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  attendanceDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  payrollDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   roles: string[];
   permissions: string[];
 }
@@ -284,6 +284,7 @@ export interface Employee {
   userId?: string | null;
   employeeNo: string;
   name: string;
+  gender?: "MALE" | "FEMALE" | null;
   nationalId?: string | null;
   mailingAddress?: string | null;
   departmentId?: string;
