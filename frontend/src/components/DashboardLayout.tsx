@@ -1,14 +1,20 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Avatar, Dropdown, Space, Typography, Input, Drawer, Button, Grid } from 'antd'
+import {
+  Layout,
+  Menu,
+  Avatar,
+  Dropdown,
+  Space,
+  Typography,
+  Input,
+  Button,
+  Grid,
+} from 'antd'
 import {
   DashboardOutlined,
   FileTextOutlined,
   ShoppingOutlined,
-  DollarOutlined,
-  BankOutlined,
-  AuditOutlined,
-  TeamOutlined,
   SettingOutlined,
   LogoutOutlined,
   UserOutlined,
@@ -17,10 +23,6 @@ import {
   LeftOutlined,
   RightOutlined,
   ClockCircleOutlined,
-  BoxPlotOutlined,
-  ShopOutlined,
-  ToolOutlined,
-  ReconciliationOutlined,
 } from '@ant-design/icons'
 import { AnimatePresence, motion } from 'framer-motion'
 import { GlassDrawer } from './ui/GlassDrawer'
@@ -59,149 +61,174 @@ const DashboardLayout: React.FC = () => {
       onClick: () => navigate('/dashboard'),
     },
     {
-      key: '/reconciliation',
-      icon: <AuditOutlined />,
-      label: '對帳中心',
-      hidden: !canAccess(['banking:read', 'reports:read', 'accounts:read']),
-      onClick: () => navigate('/reconciliation'),
-    },
-    {
-      key: 'accounting',
-      icon: <FileTextOutlined />,
-      label: '會計管理',
-      hidden: !canAccess(['accounts:read', 'journal_entries:read']),
-      children: [
-        { key: '/accounting/workbench', label: '會計工作台', onClick: () => navigate('/accounting/workbench') },
-        { key: '/accounting/workbench?focus=missing-invoices', label: '缺發票處理', onClick: () => navigate('/accounting/workbench?focus=missing-invoices') },
-        { key: '/accounting/accounts', label: '會計科目', onClick: () => navigate('/accounting/accounts') },
-        { key: '/accounting/journals', label: '會計分錄', onClick: () => navigate('/accounting/journals') },
-        { key: '/accounting/periods', label: '會計期間', onClick: () => navigate('/accounting/periods') },
-      ],
-    },
-    {
-      key: 'sales',
+      key: 'operations',
       icon: <ShoppingOutlined />,
-      label: '銷售管理',
-      hidden: !canAccess(['sales_orders:read']),
+      label: '營運管理',
       children: [
-        { key: '/sales/orders', label: '銷售訂單', onClick: () => navigate('/sales/orders') },
-        { key: '/sales/customers', label: '客戶管理', onClick: () => navigate('/sales/customers') },
+        {
+          key: '/sales/orders',
+          label: '銷售訂單',
+          hidden: !canAccess(['sales_orders:read']),
+          onClick: () => navigate('/sales/orders'),
+        },
+        {
+          key: '/sales/customers',
+          label: '客戶管理',
+          hidden: !canAccess(['sales_orders:read']),
+          onClick: () => navigate('/sales/customers'),
+        },
+        {
+          key: '/purchasing/orders',
+          label: '採購訂單',
+          hidden: !canAccess(['purchase_orders:read']),
+          onClick: () => navigate('/purchasing/orders'),
+        },
+        {
+          key: '/vendors',
+          label: '供應商管理',
+          hidden: !canAccess(['purchase_orders:read', 'accounts:read']),
+          onClick: () => navigate('/vendors'),
+        },
+        {
+          key: '/inventory/products',
+          label: '產品與庫存',
+          hidden: !canAccess(['inventory:read']),
+          onClick: () => navigate('/inventory/products'),
+        },
+        {
+          key: '/manufacturing/assembly',
+          label: '組裝工單',
+          hidden: !canAccess(['inventory:read']),
+          onClick: () => navigate('/manufacturing/assembly'),
+        },
       ],
     },
     {
-      key: 'inventory',
-      icon: <BoxPlotOutlined />,
-      label: '庫存管理',
-      hidden: !canAccess(['inventory:read']),
-      children: [
-        { key: '/inventory/products', label: '產品與庫存', onClick: () => navigate('/inventory/products') },
-      ],
-    },
-    {
-      key: 'purchasing',
-      icon: <ShopOutlined />,
-      label: '採購管理',
-      hidden: !canAccess(['purchase_orders:read']),
-      children: [
-        { key: '/purchasing/orders', label: '採購訂單', onClick: () => navigate('/purchasing/orders') },
-        { key: '/vendors', label: '供應商管理', onClick: () => navigate('/vendors') },
-      ],
-    },
-    {
-      key: 'manufacturing',
-      icon: <ToolOutlined />,
-      label: '製造管理',
-      hidden: !canAccess(['inventory:read']),
-      children: [
-        { key: '/manufacturing/assembly', label: '組裝工單', onClick: () => navigate('/manufacturing/assembly') },
-      ],
-    },
-    {
-      key: 'ar',
-      icon: <DollarOutlined />,
-      label: '應收帳款',
-      hidden: !canAccess(['sales_orders:read', 'accounts:read']),
-      children: [
-        { key: '/ar/invoices', label: '應收帳款', onClick: () => navigate('/sales/invoices') },
-        { key: '/ar/payments', label: '收款記錄' },
-      ],
-    },
-    {
-      key: 'ap',
-      icon: <DollarOutlined />,
-      label: '應付帳款',
-      hidden: !canAccess(['purchase_orders:read', 'accounts:read']),
-      children: [
-        { key: '/vendors', label: '供應商管理', onClick: () => navigate('/vendors') },
-        { key: '/ap/payable', label: '費用付款', onClick: () => navigate('/ap/payable') },
-        { key: '/ap/expenses', label: '費用申請', onClick: () => navigate('/ap/expenses') },
-        { key: '/ap/expense-review', label: '費用審核中心', onClick: () => navigate('/ap/expense-review') },
-      ],
-    },
-    {
-      key: 'banking',
-      icon: <BankOutlined />,
-      label: '銀行管理',
-      hidden: !canAccess(['banking:read']),
-      onClick: () => navigate('/banking'),
-    },
-    // 新增：財務對帳群組（2026-04）
-    {
-      key: 'finance',
-      icon: <ReconciliationOutlined />,
-      label: '財務對帳',
-      hidden: !canAccess(['banking:read', 'reports:read']),
-      children: [
-        { key: '/reconciliation', label: '電商對帳中心', onClick: () => navigate('/reconciliation') },
-        { key: '/reconciliation/ecpay', label: '綠界撥款追蹤', onClick: () => navigate('/reconciliation') },
-        { key: '/ar/invoices', label: '應收帳款', onClick: () => navigate('/sales/invoices') },
-        { key: '/banking', label: '銀行對帳', onClick: () => navigate('/banking') },
-      ],
-    },
-    {
-      key: 'attendance',
-      icon: <ClockCircleOutlined />,
-      label: '考勤管理',
-      hidden: !canAccess(['attendance_self:read', 'leave_self:read']),
-      children: [
-        { key: '/attendance/dashboard', label: '打卡儀表板', onClick: () => navigate('/attendance/dashboard') },
-        { key: '/attendance/leaves', label: '請假申請', onClick: () => navigate('/attendance/leaves') },
-      ],
-    },
-    {
-      key: 'payroll',
-      icon: <TeamOutlined />,
-      label: '考勤後臺',
-      hidden:
-        !canAccess([
-          'employees_admin:read',
-          'attendance_admin:read',
-          'payroll_admin:read',
-          'payroll_self:read',
-        ]),
-      children: [
-        { key: '/payroll/employees', label: '員工與部門', onClick: () => navigate('/payroll/employees') },
-        { key: '/attendance/admin', label: '總覽與審核', onClick: () => navigate('/attendance/admin') },
-        { key: '/payroll/runs', label: '薪資計算', onClick: () => navigate('/payroll/runs') },
-      ],
-    },
-    {
-      key: '/reports',
+      key: 'finance-accounting',
       icon: <FileTextOutlined />,
-      label: '報表中心',
-      hidden: !canAccess(['reports:read']),
-      onClick: () => navigate('/reports'),
+      label: '財務會計',
+      children: [
+        {
+          key: '/accounting/workbench',
+          label: '會計工作台',
+          hidden: !canAccess(['accounts:read', 'journal_entries:read']),
+          onClick: () => navigate('/accounting/workbench'),
+        },
+        {
+          key: '/accounting/workbench?focus=missing-invoices',
+          label: '缺發票處理',
+          hidden: !canAccess(['accounts:read', 'journal_entries:read']),
+          onClick: () =>
+            navigate('/accounting/workbench?focus=missing-invoices'),
+        },
+        {
+          key: '/accounting/accounts',
+          label: '會計科目',
+          hidden: !canAccess(['accounts:read']),
+          onClick: () => navigate('/accounting/accounts'),
+        },
+        {
+          key: '/accounting/journals',
+          label: '會計分錄',
+          hidden: !canAccess(['journal_entries:read']),
+          onClick: () => navigate('/accounting/journals'),
+        },
+        {
+          key: '/accounting/periods',
+          label: '會計期間',
+          hidden: !canAccess(['accounts:read']),
+          onClick: () => navigate('/accounting/periods'),
+        },
+        {
+          key: '/sales/invoices',
+          label: '應收帳款',
+          hidden: !canAccess(['sales_orders:read', 'accounts:read']),
+          onClick: () => navigate('/sales/invoices'),
+        },
+        {
+          key: '/ap/payable',
+          label: '費用付款',
+          hidden: !canAccess(['purchase_orders:read', 'accounts:read']),
+          onClick: () => navigate('/ap/payable'),
+        },
+        {
+          key: '/ap/expenses',
+          label: '費用申請',
+          hidden: !canAccess(['purchase_orders:read', 'accounts:read']),
+          onClick: () => navigate('/ap/expenses'),
+        },
+        {
+          key: '/ap/expense-review',
+          label: '費用審核中心',
+          hidden: !canAccess(['purchase_orders:read', 'accounts:read']),
+          onClick: () => navigate('/ap/expense-review'),
+        },
+        {
+          key: '/banking',
+          label: '銀行管理',
+          hidden: !canAccess(['banking:read']),
+          onClick: () => navigate('/banking'),
+        },
+        {
+          key: '/reconciliation',
+          label: '對帳中心',
+          hidden: !canAccess(['banking:read', 'reports:read', 'accounts:read']),
+          onClick: () => navigate('/reconciliation'),
+        },
+        {
+          key: '/reports',
+          label: '報表中心',
+          hidden: !canAccess(['reports:read']),
+          onClick: () => navigate('/reports'),
+        },
+      ],
+    },
+    {
+      key: 'hr-attendance',
+      icon: <ClockCircleOutlined />,
+      label: '人資與考勤',
+      children: [
+        {
+          key: '/attendance/dashboard',
+          label: '打卡儀表板',
+          hidden: !canAccess(['attendance_self:read']),
+          onClick: () => navigate('/attendance/dashboard'),
+        },
+        {
+          key: '/attendance/leaves',
+          label: '請假申請',
+          hidden: !canAccess(['leave_self:read']),
+          onClick: () => navigate('/attendance/leaves'),
+        },
+        {
+          key: '/payroll/employees',
+          label: '員工與部門',
+          hidden: !canAccess(['employees_admin:read']),
+          onClick: () => navigate('/payroll/employees'),
+        },
+        {
+          key: '/attendance/admin',
+          label: '總覽與審核',
+          hidden: !canAccess(['attendance_admin:read']),
+          onClick: () => navigate('/attendance/admin'),
+        },
+        {
+          key: '/payroll/runs',
+          label: '薪資計算',
+          hidden: !canAccess(['payroll_self:read', 'payroll_admin:read']),
+          onClick: () => navigate('/payroll/runs'),
+        },
+      ],
     },
     {
       key: 'admin',
       icon: <SettingOutlined />,
       label: '系統管理',
-      hidden:
-        !(
-          isAdminUser(user) ||
-          hasPermission(user, 'access_control:read') ||
-          hasPermission(user, 'access_control:update')
-        ),
+      hidden: !(
+        isAdminUser(user) ||
+        hasPermission(user, 'access_control:read') ||
+        hasPermission(user, 'access_control:update')
+      ),
       children: [
         {
           key: '/admin/access-control',
@@ -212,6 +239,11 @@ const DashboardLayout: React.FC = () => {
           key: '/admin/reimbursement-items',
           label: '報銷項目管理',
           onClick: () => navigate('/admin/reimbursement-items'),
+        },
+        {
+          key: '/admin/settings',
+          label: '系統設定',
+          onClick: () => navigate('/admin/settings'),
         },
       ],
     },
@@ -259,7 +291,8 @@ const DashboardLayout: React.FC = () => {
     return undefined
   }
 
-  const currentMenuLabel = resolveMenuLabel(visibleMenuItems, location.pathname) ?? '儀表板'
+  const currentMenuLabel =
+    resolveMenuLabel(visibleMenuItems, location.pathname) ?? '儀表板'
 
   const userMenuItems = [
     {
@@ -292,20 +325,29 @@ const DashboardLayout: React.FC = () => {
     <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
       <CommandPalette />
       <AICopilotWidget />
-      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      
+      <SettingsDrawer
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
+
       {/* Floating Orbs Background */}
-      <div className="orb fixed w-[600px] h-[600px] rounded-full blur-[100px] -z-10 animate-float" 
-           style={{ top: '-10%', left: '-10%', background: '#E0C3FC' }} />
-      <div className="orb fixed w-[600px] h-[600px] rounded-full blur-[100px] -z-10 animate-float-delayed" 
-           style={{ top: '40%', right: '-10%', background: '#8EC5FC' }} />
-      <div className="orb fixed w-[600px] h-[600px] rounded-full blur-[100px] -z-10 animate-float-slow" 
-           style={{ bottom: '-10%', left: '20%', background: '#FFDEE9' }} />
+      <div
+        className="orb fixed w-[600px] h-[600px] rounded-full blur-[100px] -z-10 animate-float"
+        style={{ top: '-10%', left: '-10%', background: '#E0C3FC' }}
+      />
+      <div
+        className="orb fixed w-[600px] h-[600px] rounded-full blur-[100px] -z-10 animate-float-delayed"
+        style={{ top: '40%', right: '-10%', background: '#8EC5FC' }}
+      />
+      <div
+        className="orb fixed w-[600px] h-[600px] rounded-full blur-[100px] -z-10 animate-float-slow"
+        style={{ bottom: '-10%', left: '20%', background: '#FFDEE9' }}
+      />
 
       {!isMobile ? (
-        <Sider 
-          collapsible 
-          collapsed={collapsed} 
+        <Sider
+          collapsible
+          collapsed={collapsed}
           onCollapse={setCollapsed}
           width={260}
           trigger={null}
@@ -336,21 +378,29 @@ const DashboardLayout: React.FC = () => {
                 )}
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div
+              className="flex-1 overflow-y-auto overflow-x-hidden"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
               <Menu
                 theme="light"
                 mode="inline"
                 selectedKeys={[location.pathname]}
-                defaultOpenKeys={['accounting', 'sales', 'ar', 'ap', 'admin']}
+                defaultOpenKeys={[
+                  'operations',
+                  'finance-accounting',
+                  'hr-attendance',
+                  'admin',
+                ]}
                 items={visibleMenuItems}
                 className="px-2 bg-transparent border-none"
               />
             </div>
-            <div 
+            <div
               className="shrink-0 h-12 flex items-center justify-center cursor-pointer transition-colors hover:bg-black/5"
-              style={{ 
+              style={{
                 borderTop: '1px solid rgba(0, 0, 0, 0.06)',
-                color: 'var(--text-primary)'
+                color: 'var(--text-primary)',
               }}
               onClick={() => setCollapsed(!collapsed)}
             >
@@ -382,7 +432,12 @@ const DashboardLayout: React.FC = () => {
             theme="light"
             mode="inline"
             selectedKeys={[location.pathname]}
-            defaultOpenKeys={['accounting', 'sales', 'ar', 'ap', 'admin']}
+            defaultOpenKeys={[
+              'operations',
+              'finance-accounting',
+              'hr-attendance',
+              'admin',
+            ]}
             items={visibleMenuItems}
             className="px-2 bg-transparent border-none"
             onClick={() => setMobileMenuOpen(false)}
@@ -390,43 +445,81 @@ const DashboardLayout: React.FC = () => {
         </GlassDrawer>
       )}
 
-      <Layout style={{ 
-        marginLeft: isMobile ? 0 : (collapsed ? 112 : 292), 
-        transition: 'all 0.2s', 
-        background: 'transparent' 
-      }}>
-        <Header className="sticky top-0 z-50 flex justify-between items-center px-4 md:px-8 my-2 md:my-4 mx-2 md:mx-6 rounded-2xl glass-panel" style={{ height: '64px', padding: isMobile ? '0 16px' : '0 24px' }}>
+      <Layout
+        style={{
+          marginLeft: isMobile ? 0 : collapsed ? 112 : 292,
+          transition: 'all 0.2s',
+          background: 'transparent',
+        }}
+      >
+        <Header
+          className="sticky top-0 z-50 flex justify-between items-center px-4 md:px-8 my-2 md:my-4 mx-2 md:mx-6 rounded-2xl glass-panel"
+          style={{ height: '64px', padding: isMobile ? '0 16px' : '0 24px' }}
+        >
           <div className="flex items-center gap-4 md:gap-8">
             {isMobile && (
-              <Button 
-                type="text" 
-                icon={<MenuOutlined />} 
+              <Button
+                type="text"
+                icon={<MenuOutlined />}
                 onClick={() => setMobileMenuOpen(true)}
                 style={{ fontSize: '18px', width: 40, height: 40 }}
               />
             )}
-            <Title level={4} style={{ margin: 0, fontWeight: 500, color: 'var(--text-primary)', fontSize: isMobile ? '1.1rem' : undefined }}>
+            <Title
+              level={4}
+              style={{
+                margin: 0,
+                fontWeight: 500,
+                color: 'var(--text-primary)',
+                fontSize: isMobile ? '1.1rem' : undefined,
+              }}
+            >
               {currentMenuLabel}
             </Title>
             <div className="hidden md:block">
-              <Input 
-                prefix={<SearchOutlined style={{ color: 'var(--text-primary)', opacity: 0.5 }} />} 
-                placeholder="搜尋..." 
+              <Input
+                prefix={
+                  <SearchOutlined
+                    style={{ color: 'var(--text-primary)', opacity: 0.5 }}
+                  />
+                }
+                placeholder="搜尋..."
                 className="glass-input !rounded-full !w-64"
               />
             </div>
           </div>
           <div className="flex items-center gap-3 md:gap-6">
             <NotificationCenter />
-            <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" trigger={['click']}>
+            <Dropdown
+              menu={{ items: userMenuItems }}
+              placement="bottomRight"
+              trigger={['click']}
+            >
               <Space className="cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 p-2 rounded-xl transition-colors">
-                <Avatar icon={<UserOutlined />} src={user?.avatar} className="bg-gradient-to-br from-blue-500 to-purple-600" />
-                {!isMobile && <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{user?.name || user?.email}</span>}
+                <Avatar
+                  icon={<UserOutlined />}
+                  src={user?.avatar}
+                  className="bg-gradient-to-br from-blue-500 to-purple-600"
+                />
+                {!isMobile && (
+                  <span
+                    className="font-medium"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    {user?.name || user?.email}
+                  </span>
+                )}
               </Space>
             </Dropdown>
           </div>
         </Header>
-        <Content style={{ margin: isMobile ? '0 8px 16px' : '0 24px 24px', padding: 0, minHeight: 280 }}>
+        <Content
+          style={{
+            margin: isMobile ? '0 8px 16px' : '0 24px 24px',
+            padding: 0,
+            minHeight: 280,
+          }}
+        >
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
