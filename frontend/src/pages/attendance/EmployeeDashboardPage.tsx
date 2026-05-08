@@ -31,7 +31,6 @@ const EmployeeDashboardPage: React.FC = () => {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(
     null,
   );
-  const [locationError, setLocationError] = useState<string | null>(null);
   const [employeeLinkMissing, setEmployeeLinkMissing] = useState(false);
   const [lastAction, setLastAction] = useState<{
     type: string;
@@ -109,15 +108,11 @@ const EmployeeDashboardPage: React.FC = () => {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
           });
-          setLocationError(null);
         },
         (error) => {
           console.error("Error getting location:", error);
-          setLocationError("無法獲取位置資訊，請確認瀏覽器權限");
         },
       );
-    } else {
-      setLocationError("您的瀏覽器不支援地理定位");
     }
   }, []);
 
@@ -291,12 +286,7 @@ const EmployeeDashboardPage: React.FC = () => {
                     已定位: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
                   </span>
                 </div>
-              ) : (
-                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/10 text-orange-600 text-sm font-medium border border-orange-500/20">
-                  <WarningOutlined />
-                  <span>{locationError || "正在獲取位置資訊..."}</span>
-                </div>
-              )}
+              ) : null}
             </div>
           </GlassCard>
 
