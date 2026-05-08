@@ -3299,6 +3299,294 @@ export class ReportsService {
     };
   }
 
+  async getAdPerformanceSummary(
+    entityId: string,
+    groupBy: ManagementSummaryGroupBy,
+    startDate?: Date,
+    endDate?: Date,
+  ) {
+    const orderDateFilter = this.buildDateFilter(startDate, endDate);
+    const expenseDateFilter = this.buildDateFilter(startDate, endDate);
+
+    const [orders, adExpenses] = await Promise.all([
+      this.prisma.salesOrder.findMany({
+        where: {
+          entityId,
+          status: {
+            notIn: ['cancelled', 'refunded'],
+          },
+          ...(orderDateFilter ? { orderDate: orderDateFilter } : {}),
+          channel: {
+            code: 'SHOPIFY',
+          },
+        },
+        orderBy: {
+          orderDate: 'asc',
+        },
+        select: {
+          id: true,
+          orderDate: true,
+          notes: true,
+          totalGrossOriginal: true,
+          customerId: true,
+          items: {
+            select: {
+              qty: true,
+              unitPriceOriginal: true,
+              discountOriginal: true,
+              taxAmountOriginal: true,
+              product: {
+                select: {
+                  sku: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.expense.findMany({
+        where: {
+          entityId,
+          sourceModule: 'meta_ads',
+          ...(expenseDateFilter ? { expenseDate: expenseDateFilter } : {}),
+        },
+        orderBy: {
+          expenseDate: 'asc',
+        },
+        select: {
+          id: true,
+          expenseDate: true,
+          totalAmountOriginal: true,
+          description: true,
+          sourceId: true,
+          items: {
+            select: {
+              description: true,
+              amountOriginal: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    type AdPerformanceBucket = {
+      key: string;
+      label: string;
+      startDate: string;
+      endDate: string;
+      brand: string;
+      revenue: number;
+      adSpend: number;
+      orderIds: Set<string>;
+      customerIds: Set<string>;
+    };
+
+    type BrandPerformanceBucket = {
+      brand: string;
+      revenue: number;
+      adSpend: number;
+      orderIds: Set<string>;
+      customerIds: Set<string>;
+    };
+
+    const periodBrandMap = new Map<string, AdPerformanceBucket>();
+    const brandMap = new Map<string, BrandPerformanceBucket>();
+
+    const getPeriodBrandBucket = (date: Date, brandInput: string) => {
+      const periodDescriptor = this.resolvePeriodDescriptor(date, groupBy);
+      const brand = this.resolveCommerceBrand(brandInput);
+      const key = `${periodDescriptor.key}::${brand}`;
+      const existing = periodBrandMap.get(key);
+      if (existing) {
+        return existing;
+      }
+
+      const bucket = {
+        key: periodDescriptor.key,
+        label: periodDescriptor.label,
+        startDate: periodDescriptor.startDate.toISOString(),
+        endDate: periodDescriptor.endDate.toISOString(),
+        brand,
+        revenue: 0,
+        adSpend: 0,
+        orderIds: new Set<string>(),
+        customerIds: new Set<string>(),
+      };
+      periodBrandMap.set(key, bucket);
+      return bucket;
+    };
+
+    const getBrandBucket = (brandInput: string) => {
+      const brand = this.resolveCommerceBrand(brandInput);
+      const existing = brandMap.get(brand);
+      if (existing) {
+        return existing;
+      }
+      const bucket = {
+        brand,
+        revenue: 0,
+        adSpend: 0,
+        orderIds: new Set<string>(),
+        customerIds: new Set<string>(),
+      };
+      brandMap.set(brand, bucket);
+      return bucket;
+    };
+
+    const addRevenue = (
+      date: Date,
+      brandInput: string,
+      amount: number,
+      orderId: string,
+      customerId?: string | null,
+    ) => {
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return;
+      }
+      const periodBucket = getPeriodBrandBucket(date, brandInput);
+      const brandBucket = getBrandBucket(brandInput);
+      periodBucket.revenue += amount;
+      periodBucket.orderIds.add(orderId);
+      brandBucket.revenue += amount;
+      brandBucket.orderIds.add(orderId);
+      if (customerId) {
+        periodBucket.customerIds.add(customerId);
+        brandBucket.customerIds.add(customerId);
+      }
+    };
+
+    const addAdSpend = (date: Date, brandInput: string, amount: number) => {
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return;
+      }
+      const periodBucket = getPeriodBrandBucket(date, brandInput);
+      const brandBucket = getBrandBucket(brandInput);
+      periodBucket.adSpend += amount;
+      brandBucket.adSpend += amount;
+    };
+
+    for (const order of orders) {
+      if (order.items.length) {
+        for (const item of order.items) {
+          const qty = Number(item.qty || 0);
+          const itemRevenue = Number(
+            (
+              Number(item.unitPriceOriginal || 0) * qty -
+              Number(item.discountOriginal || 0) +
+              Number(item.taxAmountOriginal || 0)
+            ).toFixed(2),
+          );
+          const brand = this.resolveKnownProductBrand(
+            [item.product?.name, item.product?.sku].filter(Boolean).join(' '),
+            this.resolveShopifyOrderBrand(order.notes),
+          );
+          addRevenue(
+            order.orderDate,
+            brand,
+            itemRevenue,
+            order.id,
+            order.customerId,
+          );
+        }
+      } else {
+        addRevenue(
+          order.orderDate,
+          this.resolveShopifyOrderBrand(order.notes),
+          Number(order.totalGrossOriginal || 0),
+          order.id,
+          order.customerId,
+        );
+      }
+    }
+
+    for (const expense of adExpenses) {
+      const descriptionText = [
+        expense.description,
+        expense.sourceId,
+        ...expense.items.map((item) => item.description || ''),
+      ].join(' ');
+      const accountId = this.extractMetaAdsAccountId(descriptionText);
+      const brand = this.resolveMetaAdsBrand(accountId, descriptionText);
+      const spend =
+        expense.items.length > 0
+          ? expense.items.reduce(
+              (sum, item) => sum + Number(item.amountOriginal || 0),
+              0,
+            )
+          : Number(expense.totalAmountOriginal || 0);
+      addAdSpend(expense.expenseDate, brand, spend);
+    }
+
+    const formatRoas = (revenue: number, adSpend: number) =>
+      adSpend > 0 ? Number((revenue / adSpend).toFixed(4)) : null;
+    const formatPercent = (part: number, total: number) =>
+      total > 0 ? Number(((part / total) * 100).toFixed(2)) : 0;
+
+    const periods = Array.from(periodBrandMap.values())
+      .map((period) => ({
+        key: period.key,
+        label: period.label,
+        startDate: period.startDate,
+        endDate: period.endDate,
+        brand: period.brand,
+        revenue: Number(period.revenue.toFixed(2)),
+        adSpend: Number(period.adSpend.toFixed(2)),
+        roas: formatRoas(period.revenue, period.adSpend),
+        orderCount: period.orderIds.size,
+        customerCount: period.customerIds.size,
+      }))
+      .sort((left, right) =>
+        left.startDate === right.startDate
+          ? left.brand.localeCompare(right.brand)
+          : left.startDate.localeCompare(right.startDate),
+      );
+
+    const totalRevenue = Array.from(brandMap.values()).reduce(
+      (sum, brand) => sum + brand.revenue,
+      0,
+    );
+    const totalAdSpend = Array.from(brandMap.values()).reduce(
+      (sum, brand) => sum + brand.adSpend,
+      0,
+    );
+    const brands = Array.from(brandMap.values())
+      .map((brand) => ({
+        brand: brand.brand,
+        revenue: Number(brand.revenue.toFixed(2)),
+        adSpend: Number(brand.adSpend.toFixed(2)),
+        roas: formatRoas(brand.revenue, brand.adSpend),
+        orderCount: brand.orderIds.size,
+        customerCount: brand.customerIds.size,
+        revenueShare: formatPercent(brand.revenue, totalRevenue),
+        adSpendShare: formatPercent(brand.adSpend, totalAdSpend),
+      }))
+      .sort((left, right) => right.adSpend - left.adSpend);
+
+    return {
+      entityId,
+      groupBy,
+      range: {
+        startDate: startDate?.toISOString() || null,
+        endDate: endDate?.toISOString() || null,
+      },
+      summary: {
+        revenue: Number(totalRevenue.toFixed(2)),
+        adSpend: Number(totalAdSpend.toFixed(2)),
+        roas: formatRoas(totalRevenue, totalAdSpend),
+        brandCount: brands.length,
+        orderCount: new Set(orders.map((order) => order.id)).size,
+        expenseCount: adExpenses.length,
+        salesSource: 'SHOPIFY',
+        adSource: 'META_ADS',
+        attributionNote:
+          '這是會計口徑的 blended ROAS：Shopify 品牌營收除以 Meta 每日花費，不等於 Meta Pixel 歸因 ROAS。',
+      },
+      brands,
+      periods,
+    };
+  }
+
   /**
    * 損益表 (Income Statement / P&L)
    * 已在 AccountingModule 實作，這裡提供增強版
@@ -3855,6 +4143,84 @@ export class ReportsService {
     }
 
     return this.resolveCommerceBrand(fallbackBrand);
+  }
+
+  private resolveKnownProductBrand(
+    productText?: string | null,
+    fallbackBrand?: string,
+  ) {
+    const normalized = (productText || '').trim();
+    if (/bonson|邦生/i.test(normalized)) return 'BONSON';
+    if (/moztech|墨子/i.test(normalized)) return 'MOZTECH';
+    if (/airity/i.test(normalized)) return 'AIRITY';
+    if (/moritek/i.test(normalized)) return 'MORITEK';
+    return this.resolveCommerceBrand(fallbackBrand);
+  }
+
+  private resolveShopifyOrderBrand(notes?: string | null) {
+    const text = notes || '';
+    if (/bonson|邦生/i.test(text)) return 'BONSON';
+    if (/moztech|墨子/i.test(text)) return 'MOZTECH';
+    return 'MOZTECH';
+  }
+
+  private extractMetaAdsAccountId(text: string) {
+    const match = text.match(/act_\d+|\b\d{8,}\b/);
+    if (!match) {
+      return '';
+    }
+    return match[0].startsWith('act_') ? match[0] : `act_${match[0]}`;
+  }
+
+  private resolveMetaAdsBrand(accountId: string, text: string) {
+    const normalizedAccountId = accountId.trim();
+    if (normalizedAccountId === 'act_412541399921576') return 'BONSON';
+
+    const configuredBrand = this.getMetaAdsConfiguredBrand(normalizedAccountId);
+    if (configuredBrand) {
+      return configuredBrand;
+    }
+
+    if (/bonson|邦生/i.test(text)) return 'BONSON';
+    if (/moztech|墨子/i.test(text)) return 'MOZTECH';
+
+    const brandMatch = text.match(/brand=([^;\s]+)/i);
+    if (brandMatch?.[1]) {
+      return this.resolveCommerceBrand(brandMatch[1]);
+    }
+
+    return '未分類品牌';
+  }
+
+  private getMetaAdsConfiguredBrand(accountId: string) {
+    const raw = (
+      this.configService.get<string>('META_ADS_ACCOUNTS_JSON', '') || ''
+    ).trim();
+    if (!raw) {
+      return '';
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      const accounts = Array.isArray(parsed) ? parsed : parsed?.accounts;
+      if (!Array.isArray(accounts)) {
+        return '';
+      }
+
+      const matched = accounts.find((account) => {
+        const value = String(
+          account?.accountId || account?.account_id || account?.id || '',
+        ).trim();
+        if (!value) {
+          return false;
+        }
+        const normalized = value.startsWith('act_') ? value : `act_${value}`;
+        return normalized === accountId;
+      });
+      return typeof matched?.brand === 'string' ? matched.brand.trim() : '';
+    } catch {
+      return '';
+    }
   }
 
   private resolveCommerceBrand(value?: string | null) {

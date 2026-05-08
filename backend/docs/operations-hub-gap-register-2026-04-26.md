@@ -266,14 +266,16 @@ Dashboard 最終不應只是展示業績，而是要主動揭露營運風險。
 - `reports/connector-readiness` 的 `ad-spend` 已改為會檢查 `META_ADS_ACCESS_TOKEN`，並顯示 `META_ADS_ACCOUNT_IDS` / `META_ADS_ACCOUNTS_JSON` / `META_ADS_SYNC_ENABLED` 等設定狀態。
 - Meta token 已由使用者用隱藏輸入放入 Secret Manager `META_ADS_ACCESS_TOKEN`，並掛到 Cloud Run backend revision `ecom-accounting-backend-00339-7j8`。
 - 部署時曾因 Cloud Run runtime service account `ecom-accounting-rt@moztech-main-db.iam.gserviceaccount.com` 沒有讀取新 Secret 的權限而失敗；已在 Secret 層級授予 `roles/secretmanager.secretAccessor`，不需開整個 project 層級權限。
-- 2026-05-08 已依 Meta Ads Manager 截圖加入廣告帳戶 mapping，並部署到 Cloud Run backend revision `ecom-accounting-backend-00341-zj4`：
-  - `act_412541399921576`：bonson / Ads Manager selected account，歸入 MOZTECH / TW。
+- 2026-05-08 已依 Meta Ads Manager 截圖加入廣告帳戶 mapping，並部署到 Cloud Run backend；後續依營運歸屬修正 bonson 帳戶為 BONSON：
+  - `act_412541399921576`：bonson / Ads Manager selected account，歸入 BONSON / TW。
   - `act_1375134063493419`：MOZTECH US，歸入 MOZTECH / US。
   - `act_1010503451002666`：MOZTECH US shopify，歸入 MOZTECH / US。
   - `act_938172323581797`：MOZTECH 墨子科技，歸入 MOZTECH / TW。
 - `backend/scripts/configure-meta-ads-secrets.sh` 已補強：新增或更新 token 版本後，會自動把 Cloud Run runtime service account 加到該 Secret 的 `roles/secretmanager.secretAccessor`，避免之後重複部署失敗。
 - 已用正式 Cloud Run backend 驗證 `GET /integrations/meta-ads/readiness`：`ready=true`、`configuredAccountCount=4`、`readableAccountCount=17`。
 - 已正式同步 `2026-01-01` 到 `2026-05-08` 的 Meta daily spend，寫入 `Expense / ExpenseItem` 共 256 筆，`sourceModule=meta_ads`。
+- 2026-05-08 進一步追溯測試：Meta API 回覆最早只能查近 37 個月，因此以目前日期可回填到 `2023-04-08`；已同步 `2023-04-08` 到 `2026-05-08`，共 `2087` 筆非零 spend，每日資料已進 `Expense / ExpenseItem`，區間合計約 `NT$41,593,881`。
+- 已新增 `GET /reports/ad-performance-summary`，用 Meta daily spend + Shopify 訂單品牌營收產出會計口徑 blended ROAS。正式 Cloud Run 已驗證 `2026-01-01` 到 `2026-05-08` 可回 `adSpend=NT$3,403,986`、Shopify revenue `NT$4,711,195`、整體 ROAS `1.384`；其中 MOZTECH ROAS `2.1967`，BONSON 目前只有 Meta 花費、尚未在已同步 Shopify 訂單中辨識到 BONSON 營收。
 - `2026-05-01` 到 `2026-05-08` 的 management summary 已可按日看到 Meta 廣告費，合計約 `NT$180,904`；Meta 當日與近幾日數字可能會持續校正，因此每日排程會回刷最近 7 天。
 - Cloud Run backend 已設定 `META_ADS_SYNC_ENABLED=true`，revision `ecom-accounting-backend-00343-wgp` 100% 流量，會每日同步最近 7 天 Meta spend。
 - 尚未完成：需補廣告發票 / 收據與扣款信用卡 / 銀行帳戶 mapping，才能完成 AP 與銀行扣款對帳。

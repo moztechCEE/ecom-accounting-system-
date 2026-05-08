@@ -397,6 +397,31 @@ export class ReportsController {
     );
   }
 
+  @Get('ad-performance-summary')
+  @ApiOperation({ summary: 'Meta 廣告花費與 Shopify 品牌業績效益比' })
+  @ApiResponse({ status: 200, description: '成功取得廣告效益比彙整資料' })
+  @ApiQuery({ name: 'entityId', required: true })
+  @ApiQuery({
+    name: 'groupBy',
+    required: true,
+    enum: ['year', 'quarter', 'month', 'week', 'day'],
+  })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  async getAdPerformanceSummary(
+    @Query('entityId') entityId: string,
+    @Query('groupBy') groupBy: 'year' | 'quarter' | 'month' | 'week' | 'day',
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getAdPerformanceSummary(
+      entityId,
+      groupBy,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
   @Get(':id/export')
   @ApiOperation({ summary: '匯出報表 (Excel/PDF)' })
   @ApiResponse({ status: 200, description: '成功匯出報表' })

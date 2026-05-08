@@ -188,9 +188,11 @@
   - `POST /integrations/meta-ads/sync` 會把 Meta spend 以 `sourceModule=meta_ads` 寫入 `Expense / ExpenseItem`，科目代號暫用 `6118 廣告費`；CEO Dashboard 既有 management summary 會把這些列入廣告費。
   - 已新增本機安全設定腳本：`backend/scripts/configure-meta-ads-secrets.sh`，用隱藏輸入把 token 放入 Secret Manager，並掛到 Cloud Run backend。
   - 2026-05-08 實際修復：`META_ADS_ACCESS_TOKEN` 已建立 Secret 並掛到 Cloud Run；Cloud Run runtime service account 已在 Secret 層級取得 `roles/secretmanager.secretAccessor`。
-  - 2026-05-08 已依 Meta Ads Manager 截圖設定 `META_ADS_ACCOUNTS_JSON` / `META_ADS_ACCOUNT_IDS`：`bonson`、`MOZTECH US`、`MOZTECH US shopify`、`MOZTECH 墨子科技` 四個帳戶先歸入 MOZTECH，並以 US / TW market 區分。
+  - 2026-05-08 已依 Meta Ads Manager 截圖設定 `META_ADS_ACCOUNTS_JSON` / `META_ADS_ACCOUNT_IDS`：`bonson` 歸入 BONSON，`MOZTECH US`、`MOZTECH US shopify`、`MOZTECH 墨子科技` 歸入 MOZTECH，並以 US / TW market 區分。
   - 設定腳本已補強，之後更新 token 時會自動補 Cloud Run runtime service account 的 Secret Accessor 權限。
   - 2026-05-08 已驗證 Meta API 與系統 connector 可讀金額；已同步 `2026-01-01` 到 `2026-05-08` daily spend 共 256 筆進 `Expense / ExpenseItem`。
+  - 2026-05-08 已追溯同步到 Meta API 允許的最早日期 `2023-04-08`，共 `2087` 筆 daily spend；Meta API 回覆更早資料超過近 37 個月限制，若要補 `2023-04-08` 以前需從 Meta Ads Manager 匯出歷史檔再匯入。
+  - 已新增 `GET /reports/ad-performance-summary`：把 Meta spend 與 Shopify 品牌營收合併成 blended ROAS。正式 Cloud Run 已驗證 `2026-01-01` 到 `2026-05-08` 回傳整體 ROAS `1.384`、MOZTECH ROAS `2.1967`；BONSON 目前有廣告花費但未在已同步 Shopify 訂單中辨識到 BONSON 營收。
   - 2026-05-01 到 2026-05-08 的 dashboard management summary 已回傳每日廣告費，區間合計約 `NT$180,904`。
   - Cloud Run 已開啟 `META_ADS_SYNC_ENABLED=true`，每日回刷最近 7 天，處理 Meta 當日 / 近幾日花費校正。
   - CEO Dashboard 已先把廣告花費放入第一層管制區；若系統內已有廣告相關費用或已付款費用申請，會先以描述 / 科目線索彙總成 `adSpendAmount`。
