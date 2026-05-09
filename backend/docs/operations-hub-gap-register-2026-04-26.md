@@ -280,6 +280,20 @@ Dashboard 最終不應只是展示業績，而是要主動揭露營運風險。
 - Cloud Run backend 已設定 `META_ADS_SYNC_ENABLED=true`，revision `ecom-accounting-backend-00343-wgp` 100% 流量，會每日同步最近 7 天 Meta spend。
 - 尚未完成：需補廣告發票 / 收據與扣款信用卡 / 銀行帳戶 mapping，才能完成 AP 與銀行扣款對帳。
 
+2026-05-09 Google Ads connector 開發更新：
+
+- 從使用者 Google Ads 後台截圖可先辨識帳戶 customer ID：`621-562-1647`，系統設定時需寫成 `6215621647`。
+- 已新增 Google Ads 後端 connector，不會把 token 寫入 repo：
+  - `GET /integrations/google-ads/connection-info`
+  - `GET /integrations/google-ads/readiness`
+  - `GET /integrations/google-ads/insights`
+  - `POST /integrations/google-ads/sync`
+  - `POST /integrations/google-ads/sync/auto`
+- `insights` 會用 Google Ads API GAQL 查詢 `segments.date` 與 `metrics.cost_micros`，可用 `account` 或 `campaign` level 預覽每日 spend。
+- `sync` 會把 daily account spend 寫入 `Expense / ExpenseItem`，`sourceModule=google_ads`、科目代號 `6118 廣告費`，CEO Dashboard 既有 management summary 會把這些列入廣告費。
+- 已新增 `backend/scripts/configure-google-ads-secrets.sh`：用隱藏輸入把 `GOOGLE_ADS_DEVELOPER_TOKEN`、`GOOGLE_ADS_CLIENT_ID`、`GOOGLE_ADS_CLIENT_SECRET`、`GOOGLE_ADS_REFRESH_TOKEN` 放入 Secret Manager，並自動補 Cloud Run runtime service account 的 Secret Accessor 權限。
+- 尚未完成：需要使用者從 Google Ads「API 中心」取得 developer token，並從 Google Cloud OAuth 流程取得 refresh token；未提供前無法實測 Google Ads spend 金額。
+
 必補能力：
 
 - 廣告花費 API 匯入

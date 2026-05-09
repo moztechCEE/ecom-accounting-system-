@@ -178,7 +178,12 @@
       }
     ]
     ```
-  - Google Ads 帳號與 API 權限。
+  - Google Ads 帳號與 API 權限：
+    - `GOOGLE_ADS_DEVELOPER_TOKEN`：Google Ads 後台「工具與設定 > API 中心」取得。
+    - `GOOGLE_ADS_CLIENT_ID` / `GOOGLE_ADS_CLIENT_SECRET`：Google Cloud Console OAuth client。
+    - `GOOGLE_ADS_REFRESH_TOKEN`：用上述 OAuth client 授權 Google Ads scope 後取得。
+    - `GOOGLE_ADS_CUSTOMER_ID` / `GOOGLE_ADS_CUSTOMER_IDS`：目前截圖帳戶為 `6215621647`。
+    - 若透過 MCC / manager account 授權，還需 `GOOGLE_ADS_LOGIN_CUSTOMER_ID`。
   - TikTok Ads 帳號與 API 權限。
   - 廣告帳戶與品牌 / 通路對應。
   - 廣告發票或收據來源，以及扣款信用卡 / 銀行帳戶。
@@ -197,10 +202,11 @@
   - Cloud Run 已開啟 `META_ADS_SYNC_ENABLED=true`，每日回刷最近 7 天，處理 Meta 當日 / 近幾日花費校正。
   - CEO Dashboard 已先把廣告花費放入第一層管制區；若系統內已有廣告相關費用或已付款費用申請，會先以描述 / 科目線索彙總成 `adSpendAmount`。
   - 若尚未提供 Meta / Google / TikTok API 與 mapping，Dashboard 會顯示「待串接」，不會假造平台花費。
+  - 2026-05-09 已新增 Google Ads connector 程式入口：`GET /integrations/google-ads/readiness`、`GET /integrations/google-ads/insights`、`POST /integrations/google-ads/sync`，並新增 Secret Manager 設定腳本 `backend/scripts/configure-google-ads-secrets.sh`。
 - 暫停原因：
   - Meta API 讀取 spend 的程式入口、Secret 掛載、帳戶 mapping、每日 spend 匯入與每日排程已補上。
   - 沒有廣告發票 / 收據來源與扣款帳戶前，可以匯入 spend，但還不能完成 AP / 銀行扣款對帳與 ROAS / 現金流聯動。
-  - Google Ads / TikTok Ads 尚未接入。
+  - Google Ads 程式入口已接入，但尚缺 developer token / OAuth refresh token，未能實測與正式同步；TikTok Ads 尚未接入。
 - MCP 使用原則：
   - MCP 可以用來協助開發、測試、讀取你授權的工具或瀏覽器資料。
   - 但正式每日日結 / 月結的廣告費同步，不應只靠 MCP 或人工瀏覽器操作；正式流程應做成 Cloud Run connector + Secret Manager + Cloud Scheduler，才能穩定排程、留紀錄、錯誤重跑與被財務稽核。

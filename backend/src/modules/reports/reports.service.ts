@@ -1405,7 +1405,15 @@ export class ReportsService {
         label: '廣告費 Meta / Google / TikTok',
         category: 'expense',
         envNames: [],
-        credentialGroups: [['META_ADS_ACCESS_TOKEN']],
+        credentialGroups: [
+          ['META_ADS_ACCESS_TOKEN'],
+          [
+            'GOOGLE_ADS_DEVELOPER_TOKEN',
+            'GOOGLE_ADS_CLIENT_ID',
+            'GOOGLE_ADS_CLIENT_SECRET',
+            'GOOGLE_ADS_REFRESH_TOKEN',
+          ],
+        ],
         optionalEnvNames: [
           'META_ADS_ACCOUNT_IDS',
           'META_ADS_ACCOUNTS_JSON',
@@ -1414,6 +1422,13 @@ export class ReportsService {
           'META_ADS_SYNC_ENABLED',
           'META_ADS_SYNC_JOB_TOKEN',
           'GOOGLE_ADS_CUSTOMER_ID',
+          'GOOGLE_ADS_CUSTOMER_IDS',
+          'GOOGLE_ADS_ACCOUNTS_JSON',
+          'GOOGLE_ADS_LOGIN_CUSTOMER_ID',
+          'GOOGLE_ADS_API_VERSION',
+          'GOOGLE_ADS_DEFAULT_CURRENCY',
+          'GOOGLE_ADS_SYNC_ENABLED',
+          'GOOGLE_ADS_SYNC_JOB_TOKEN',
           'TIKTOK_ADVERTISER_IDS',
         ],
         externalNeeds: [
@@ -1421,11 +1436,16 @@ export class ReportsService {
           !this.hasConfig('META_ADS_ACCOUNTS_JSON')
             ? ['提供 Meta Ad Account ID，或設定 META_ADS_ACCOUNTS_JSON 做品牌 / 通路 mapping。']
             : []),
+          ...(!this.hasConfig('GOOGLE_ADS_CUSTOMER_ID') &&
+          !this.hasConfig('GOOGLE_ADS_CUSTOMER_IDS') &&
+          !this.hasConfig('GOOGLE_ADS_ACCOUNTS_JSON')
+            ? ['提供 Google Ads customer ID，或設定 GOOGLE_ADS_ACCOUNTS_JSON 做品牌 / 通路 mapping。']
+            : []),
           '提供廣告發票或收據來源，以及扣款信用卡 / 銀行帳戶。',
-          'Google Ads / TikTok Ads 尚未接入；目前此 connector 先支援 Meta Ads。',
+          'TikTok Ads 尚未接入；Google Ads 與 Meta Ads 可先同步 daily spend。',
         ],
         nextAction:
-          'Meta token 放入 Secret Manager 後，先呼叫 /integrations/meta-ads/readiness，再同步 spend 到 Expense；之後補 AP / 銀行扣款 matching。',
+          'Meta / Google token 放入 Secret Manager 後，先呼叫 readiness，再同步 spend 到 Expense；之後補 AP / 銀行扣款 matching。',
       }),
     ];
 

@@ -42,6 +42,7 @@ import { ShopifyIntegrationModule } from './modules/integration/shopify/shopify.
 import { OneShopIntegrationModule } from './modules/integration/one-shop/one-shop.module';
 import { ShoplineIntegrationModule } from './modules/integration/shopline/shopline.module';
 import { MetaAdsIntegrationModule } from './modules/integration/meta-ads/meta-ads.module';
+import { GoogleAdsIntegrationModule } from './modules/integration/google-ads/google-ads.module';
 import { PurchaseModule } from './modules/purchase/purchase.module';
 import { AssemblyModule } from './modules/assembly/assembly.module';
 
@@ -113,6 +114,7 @@ import { AssemblyModule } from './modules/assembly/assembly.module';
     OneShopIntegrationModule,
     ShoplineIntegrationModule,
     MetaAdsIntegrationModule,
+    GoogleAdsIntegrationModule,
     NotificationModule,
     AiModule,
     AttendanceModule,
