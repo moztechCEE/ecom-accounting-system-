@@ -203,6 +203,7 @@
   - CEO Dashboard 已先把廣告花費放入第一層管制區；若系統內已有廣告相關費用或已付款費用申請，會先以描述 / 科目線索彙總成 `adSpendAmount`。
   - 若尚未提供 Meta / Google / TikTok API 與 mapping，Dashboard 會顯示「待串接」，不會假造平台花費。
   - 2026-05-09 已新增 Google Ads connector 程式入口：`GET /integrations/google-ads/readiness`、`GET /integrations/google-ads/insights`、`POST /integrations/google-ads/sync`，並新增 Secret Manager 設定腳本 `backend/scripts/configure-google-ads-secrets.sh`。
+  - 2026-05-09 已完成 Cloud Run backend 部署，revision `ecom-accounting-backend-00350-5sh`，正式 API 已確認 Google Ads `connection-info` / `readiness` 回 200；目前只缺 Google Ads API 憑證，因此 readiness 會顯示 `ready=false`。
 - 暫停原因：
   - Meta API 讀取 spend 的程式入口、Secret 掛載、帳戶 mapping、每日 spend 匯入與每日排程已補上。
   - 沒有廣告發票 / 收據來源與扣款帳戶前，可以匯入 spend，但還不能完成 AP / 銀行扣款對帳與 ROAS / 現金流聯動。
