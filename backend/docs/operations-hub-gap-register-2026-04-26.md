@@ -314,6 +314,7 @@ Dashboard 最終不應只是展示業績，而是要主動揭露營運風險。
 - 2026-05-11 Google Ads 品牌 mapping 更新：Cloud Run `GOOGLE_ADS_ACCOUNTS_JSON` 已設定 `8052579705 => MOZTECH`（使用者確認 MOZTECH 全球獨立站目前用此帳戶）、`8602556100 => BONSON`、`8672054842 => MORITEK`、`5801010919 => MOZTECH`。
 - 2026-05-11 已重新同步 `2026-04-12` 到 `2026-05-11` Google Ads daily spend，`fetched=72`、`synced=72`、`created=0`、`updated=72`，讓既有 `Expense / ExpenseItem` 帶入 brand / platform 描述。
 - 2026-05-11 已修正並部署 Cloud Run revision `ecom-accounting-backend-00366-z76`：`GET /reports/ad-performance-summary` 的廣告花費來源從只看 `meta_ads` 改為合併 `meta_ads + google_ads`，並依 Google Ads customer ID 解析品牌。正式 API 已驗證同區間 `adSpend=NT$1,927,783.01`，品牌拆分為 `MOZTECH=NT$1,221,124.60`、`BONSON=NT$703,230.34`、`MORITEK=NT$3,428.07`；`adSource` 已改為 `META_ADS + GOOGLE_ADS`。
+- 2026-05-11 已修正並部署 Cloud Run revision `ecom-accounting-backend-00368-7tc`：`GET /reports/ad-performance-summary` 的營收來源從只看 Shopify 改為合併 Shopify + Shopline + 1Shop，避免 BONSON 主要營收在 Shopline / 1Shop 時 ROAS 顯示為 0。正式 API 已驗證 `2026-04-12` 到 `2026-05-11` 回傳 `salesSource=SHOPIFY + SHOPLINE + 1SHOP`、整體 `revenue=NT$3,454,888`、`adSpend=NT$1,928,246.65`、`ROAS=1.7917`；品牌拆分為 `MOZTECH revenue=NT$2,085,083 / adSpend=NT$1,221,528.49 / ROAS=1.7069`、`BONSON revenue=NT$999,594 / adSpend=NT$703,290.09 / ROAS=1.4213`、`MORITEK adSpend=NT$3,428.07`。
 - 尚未完成：Google Ads 已可同步 spend，但廣告發票 / 收據、扣款信用卡 / 銀行帳戶 mapping 尚未補齊；因此目前可做費用與 ROAS 分析，尚不能完整做 AP / 銀行扣款核銷。
 
 必補能力：

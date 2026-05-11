@@ -3325,6 +3325,7 @@ export class ReportsService {
     startDate?: Date,
     endDate?: Date,
   ) {
+    const stores = this.getOneShopStores();
     const orderDateFilter = this.buildDateFilter(startDate, endDate);
     const expenseDateFilter = this.buildDateFilter(startDate, endDate);
 
@@ -3336,9 +3337,6 @@ export class ReportsService {
             notIn: ['cancelled', 'refunded'],
           },
           ...(orderDateFilter ? { orderDate: orderDateFilter } : {}),
-          channel: {
-            code: 'SHOPIFY',
-          },
         },
         orderBy: {
           orderDate: 'asc',
@@ -3349,6 +3347,12 @@ export class ReportsService {
           notes: true,
           totalGrossOriginal: true,
           customerId: true,
+          channel: {
+            select: {
+              code: true,
+              name: true,
+            },
+          },
           items: {
             select: {
               qty: true,
@@ -3490,6 +3494,12 @@ export class ReportsService {
     };
 
     for (const order of orders) {
+      const source = this.resolveSourceContext({
+        channelCode: order.channel?.code,
+        channelName: order.channel?.name,
+        notes: order.notes,
+        stores,
+      });
       if (order.items.length) {
         for (const item of order.items) {
           const qty = Number(item.qty || 0);
@@ -3502,7 +3512,7 @@ export class ReportsService {
           );
           const brand = this.resolveKnownProductBrand(
             [item.product?.name, item.product?.sku].filter(Boolean).join(' '),
-            this.resolveShopifyOrderBrand(order.notes),
+            source.brand,
           );
           addRevenue(
             order.orderDate,
@@ -3515,7 +3525,7 @@ export class ReportsService {
       } else {
         addRevenue(
           order.orderDate,
-          this.resolveShopifyOrderBrand(order.notes),
+          source.brand,
           Number(order.totalGrossOriginal || 0),
           order.id,
           order.customerId,
@@ -3608,10 +3618,10 @@ export class ReportsService {
         brandCount: brands.length,
         orderCount: new Set(orders.map((order) => order.id)).size,
         expenseCount: adExpenses.length,
-        salesSource: 'SHOPIFY',
+        salesSource: 'SHOPIFY + SHOPLINE + 1SHOP',
         adSource: 'META_ADS + GOOGLE_ADS',
         attributionNote:
-          '這是會計口徑的 blended ROAS：Shopify 品牌營收除以 Meta 與 Google Ads 每日花費，不等於廣告平台歸因 ROAS。',
+          '這是會計口徑的 blended ROAS：電商品牌營收除以 Meta 與 Google Ads 每日花費，不等於廣告平台歸因 ROAS。',
       },
       brands,
       periods,

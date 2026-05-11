@@ -211,6 +211,7 @@
   - 2026-05-11 使用者確認 Google Ads 品牌歸屬：`8052579705` 是 MOZTECH 全球獨立站目前使用帳戶，`8602556100` 是 BONSON，`8672054842` 是 MORITEK，`5801010919` 歸 MOZTECH。Cloud Run `GOOGLE_ADS_ACCOUNTS_JSON` 已依此設定。
   - 2026-05-11 已重新同步 `2026-04-12` 到 `2026-05-11` Google Ads daily spend，`fetched=72`、`synced=72`、`created=0`、`updated=72`，讓既有費用列補上 brand / platform 描述。
   - 2026-05-11 Cloud Run revision `ecom-accounting-backend-00366-z76` 已驗證 `GET /reports/ad-performance-summary` 合併 Meta Ads + Google Ads，且 `adSource` 顯示 `META_ADS + GOOGLE_ADS`。正式 API 驗證同區間 `adSpend=NT$1,927,783.01`，其中 `MOZTECH=NT$1,221,124.60`、`BONSON=NT$703,230.34`、`MORITEK=NT$3,428.07`。
+  - 2026-05-11 Cloud Run revision `ecom-accounting-backend-00368-7tc` 已修正 ROAS 營收端：不再只抓 Shopify，而是合併 Shopify + Shopline + 1Shop。正式 API 驗證 `2026-04-12` 到 `2026-05-11` 回傳 `salesSource=SHOPIFY + SHOPLINE + 1SHOP`、整體 `revenue=NT$3,454,888`、`adSpend=NT$1,928,246.65`、`ROAS=1.7917`；BONSON 已可看到 `revenue=NT$999,594`、`adSpend=NT$703,290.09`、`ROAS=1.4213`，不再因 BONSON 營收在 Shopline / 1Shop 而顯示為 0。
 - 暫停原因：
   - Meta API 讀取 spend 的程式入口、Secret 掛載、帳戶 mapping、每日 spend 匯入與每日排程已補上。
   - 沒有廣告發票 / 收據來源與扣款帳戶前，可以匯入 spend，但還不能完成 AP / 銀行扣款對帳與 ROAS / 現金流聯動。
