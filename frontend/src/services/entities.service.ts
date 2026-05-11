@@ -23,6 +23,10 @@ export type EntityPayload = {
   contactEmail?: string
   contactPhone?: string
   isActive?: boolean
+  adminName?: string
+  adminEmail?: string
+  adminEmployeeNo?: string
+  adminPassword?: string
 }
 
 export async function listEntities(params?: { isActive?: boolean }): Promise<Entity[]> {

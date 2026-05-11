@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsBoolean, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsBoolean,
+  IsOptional,
+  IsEmail,
+  MinLength,
+} from 'class-validator';
 
 export class CreateEntityDto {
   @ApiProperty({ example: '900324', description: '登入使用的事業代號（唯一）' })
@@ -67,4 +74,41 @@ export class CreateEntityDto {
   @IsString()
   @IsOptional()
   contactPhone?: string;
+
+  @ApiProperty({
+    example: '公司管理員',
+    description: '首位公司管理員姓名',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  adminName?: string;
+
+  @ApiProperty({
+    example: 'admin@example.com',
+    description: '首位公司管理員登入信箱',
+    required: false,
+  })
+  @IsEmail()
+  @IsOptional()
+  adminEmail?: string;
+
+  @ApiProperty({
+    example: '0001',
+    description: '首位公司管理員員工代號',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  adminEmployeeNo?: string;
+
+  @ApiProperty({
+    example: 'TempPass123',
+    description: '首位公司管理員初始密碼',
+    required: false,
+  })
+  @IsString()
+  @MinLength(8)
+  @IsOptional()
+  adminPassword?: string;
 }

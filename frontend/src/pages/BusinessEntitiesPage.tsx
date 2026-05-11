@@ -65,6 +65,10 @@ const BusinessEntitiesPage: React.FC = () => {
       contactEmail: '',
       contactPhone: '',
       isActive: true,
+      adminName: '',
+      adminEmail: '',
+      adminEmployeeNo: '0001',
+      adminPassword: '',
     })
     setModalOpen(true)
   }
@@ -81,6 +85,10 @@ const BusinessEntitiesPage: React.FC = () => {
       contactEmail: entity.contactEmail || '',
       contactPhone: entity.contactPhone || '',
       isActive: entity.isActive ?? true,
+      adminName: '',
+      adminEmail: '',
+      adminEmployeeNo: '',
+      adminPassword: '',
     })
     setModalOpen(true)
   }
@@ -99,6 +107,10 @@ const BusinessEntitiesPage: React.FC = () => {
         contactEmail: values.contactEmail?.trim() || undefined,
         contactPhone: values.contactPhone?.trim() || undefined,
         isActive: values.isActive ?? true,
+        adminName: values.adminName?.trim() || undefined,
+        adminEmail: values.adminEmail?.trim().toLowerCase() || undefined,
+        adminEmployeeNo: values.adminEmployeeNo?.trim() || undefined,
+        adminPassword: values.adminPassword?.trim() || undefined,
       }
 
       setSaving(true)
@@ -265,6 +277,36 @@ const BusinessEntitiesPage: React.FC = () => {
           <Form.Item label="地址" name="address">
             <Input placeholder="選填" />
           </Form.Item>
+          <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+            <div className="mb-3">
+              <div className="font-semibold text-slate-900">首位公司管理員</div>
+              <div className="text-sm text-slate-500">
+                填寫後會建立該公司的 ADMIN 帳號並自動綁定員工資料；對方首次登入後即可維護員工與部門。
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Form.Item label="管理員姓名" name="adminName">
+                <Input placeholder="例如 王小明" />
+              </Form.Item>
+              <Form.Item
+                label="管理員信箱"
+                name="adminEmail"
+                rules={[{ type: 'email', message: '請輸入有效信箱' }]}
+              >
+                <Input placeholder="例如 admin@example.com" />
+              </Form.Item>
+              <Form.Item label="管理員員工代號" name="adminEmployeeNo">
+                <Input placeholder="例如 0001" />
+              </Form.Item>
+              <Form.Item
+                label="初始密碼"
+                name="adminPassword"
+                rules={[{ min: 8, message: '密碼至少 8 碼' }]}
+              >
+                <Input.Password placeholder="至少 8 碼，首次登入會要求更改" />
+              </Form.Item>
+            </div>
+          </div>
         </Form>
       </Modal>
     </div>
