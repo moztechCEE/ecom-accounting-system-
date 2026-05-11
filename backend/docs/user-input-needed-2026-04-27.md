@@ -121,6 +121,8 @@
   - 一般 orders / customers / Payment 草稿資料已進系統；Payments API 程式已補上，但 Cloud Run 實測 Payments Admin API 目前被 302 redirect。剩餘缺口是確認正確 Payments Admin OpenAPI host / version / `read_payment` / Payments OpenAPI 啟用狀態、兩年以上 archived orders 匯出、webhook topic 與簽章驗證、商品 / 分類 / 庫存主檔同步、Shopline invoice 欄位正式回寫。
 - 品牌 / 平台歸屬確認：
   - 使用者已確認 `萬魔未來工學院` 是平台，不是商品品牌。
+  - 2026-05-11 使用者補充正式營收歸屬規則：Shopify 帳號對應 MOZTECH 業績；Shopline 對應 BONSON 業績；1Shop 團購平台會混合 MORITEK、BONSON、MOZTECH、AIRITY，需依商品 / SKU / 品牌欄位拆分。
+  - 2026-05-11 程式已同步此規則：Shopify / Shopline 先用通路固定品牌，1Shop 才用商品名稱 / SKU 判斷品牌，避免 `萬魔未來工學院` 這種平台名稱被誤當品牌。
   - 若要精準統計品牌貢獻，需讓商品主檔、SKU 或商品名稱有穩定品牌欄位 / 前綴，例如 `BONSON｜商品名`、`MOZTECH｜商品名`，或後續建立正式商品品牌欄位。
 - Shopline Payment 對帳檔確認：
   - 2026-05-06 使用者提供 2026-04 的 Payout / Reserve / Unsettled account consolidated statement。
@@ -212,6 +214,7 @@
   - 2026-05-11 已重新同步 `2026-04-12` 到 `2026-05-11` Google Ads daily spend，`fetched=72`、`synced=72`、`created=0`、`updated=72`，讓既有費用列補上 brand / platform 描述。
   - 2026-05-11 Cloud Run revision `ecom-accounting-backend-00366-z76` 已驗證 `GET /reports/ad-performance-summary` 合併 Meta Ads + Google Ads，且 `adSource` 顯示 `META_ADS + GOOGLE_ADS`。正式 API 驗證同區間 `adSpend=NT$1,927,783.01`，其中 `MOZTECH=NT$1,221,124.60`、`BONSON=NT$703,230.34`、`MORITEK=NT$3,428.07`。
   - 2026-05-11 Cloud Run revision `ecom-accounting-backend-00368-7tc` 已修正 ROAS 營收端：不再只抓 Shopify，而是合併 Shopify + Shopline + 1Shop。正式 API 驗證 `2026-04-12` 到 `2026-05-11` 回傳 `salesSource=SHOPIFY + SHOPLINE + 1SHOP`、整體 `revenue=NT$3,454,888`、`adSpend=NT$1,928,246.65`、`ROAS=1.7917`；BONSON 已可看到 `revenue=NT$999,594`、`adSpend=NT$703,290.09`、`ROAS=1.4213`，不再因 BONSON 營收在 Shopline / 1Shop 而顯示為 0。
+  - 2026-05-11 Cloud Run revision `ecom-accounting-backend-00370-w7r` 已套用正式通路歸屬：Shopify 固定歸 MOZTECH、Shopline 固定歸 BONSON、1Shop 才依商品 / SKU 拆 MORITEK / BONSON / MOZTECH / AIRITY。正式 API 驗證同區間 `ad-performance-summary` 回 `BONSON revenue=NT$1,000,584`、`adSpend=NT$703,290.09`、`ROAS=1.4227`。
 - 暫停原因：
   - Meta API 讀取 spend 的程式入口、Secret 掛載、帳戶 mapping、每日 spend 匯入與每日排程已補上。
   - 沒有廣告發票 / 收據來源與扣款帳戶前，可以匯入 spend，但還不能完成 AP / 銀行扣款對帳與 ROAS / 現金流聯動。

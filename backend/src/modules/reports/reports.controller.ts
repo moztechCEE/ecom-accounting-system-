@@ -398,7 +398,7 @@ export class ReportsController {
   }
 
   @Get('ad-performance-summary')
-  @ApiOperation({ summary: 'Meta 廣告花費與 Shopify 品牌業績效益比' })
+  @ApiOperation({ summary: 'Meta / Google 廣告花費與電商品牌業績效益比' })
   @ApiResponse({ status: 200, description: '成功取得廣告效益比彙整資料' })
   @ApiQuery({ name: 'entityId', required: true })
   @ApiQuery({

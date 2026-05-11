@@ -3184,9 +3184,9 @@ export class ReportsService {
         );
         const productSku = item.product?.sku || 'UNMAPPED';
         const productName = item.product?.name || '未建商品';
-        const inferredBrand = this.resolveProductBrand(
-          productName,
-          source.brand,
+        const inferredBrand = this.resolveRevenueBrandForLine(
+          source,
+          [productName, productSku].filter(Boolean).join(' '),
         );
         const productKey = `${inferredBrand}::${productSku}`;
         const product =
@@ -3510,9 +3510,9 @@ export class ReportsService {
               Number(item.taxAmountOriginal || 0)
             ).toFixed(2),
           );
-          const brand = this.resolveKnownProductBrand(
+          const brand = this.resolveRevenueBrandForLine(
+            source,
             [item.product?.name, item.product?.sku].filter(Boolean).join(' '),
-            source.brand,
           );
           addRevenue(
             order.orderDate,
@@ -4157,7 +4157,7 @@ export class ReportsService {
         meta.storeName || meta.storeHandle || params.channelName || 'Shopline';
       return {
         label: storeName,
-        brand: this.resolveCommerceBrand(storeName),
+        brand: 'BONSON',
         channelCode,
       };
     }
@@ -4196,6 +4196,19 @@ export class ReportsService {
     if (/airity/i.test(normalized)) return 'AIRITY';
     if (/moritek/i.test(normalized)) return 'MORITEK';
     return this.resolveCommerceBrand(fallbackBrand);
+  }
+
+  private resolveRevenueBrandForLine(
+    source: { brand: string; channelCode?: string | null },
+    productText?: string | null,
+  ) {
+    const channelCode = (source.channelCode || '').trim().toUpperCase();
+
+    if (channelCode === 'SHOPIFY' || channelCode === 'SHOPLINE') {
+      return this.resolveCommerceBrand(source.brand);
+    }
+
+    return this.resolveKnownProductBrand(productText, source.brand);
   }
 
   private resolveShopifyOrderBrand(notes?: string | null) {
