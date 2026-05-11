@@ -452,6 +452,19 @@ export class PayrollController {
     return this.payrollService.approvePayrollRun(id, req.user.id);
   }
 
+  @Post('runs/:id/unapprove')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'payroll_admin', action: 'update' })
+  @ApiOperation({ summary: '取消薪資批次確定並退回草稿' })
+  @ApiResponse({ status: 200, description: '成功取消確定薪資批次' })
+  async unapprovePayrollRun(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: { reason?: string },
+  ) {
+    return this.payrollService.unapprovePayrollRun(id, req.user.id, dto);
+  }
+
   @Post('runs/:id/post')
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'payroll_admin', action: 'update' })

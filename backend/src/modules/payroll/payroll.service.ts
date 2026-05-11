@@ -3021,6 +3021,93 @@ export class PayrollService {
     return this.getPayrollRunById(userId, id);
   }
 
+  async unapprovePayrollRun(
+    id: string,
+    userId: string,
+    data?: { reason?: string },
+  ) {
+    const run = await this.prisma.payrollRun.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        entityId: true,
+        status: true,
+        approvedBy: true,
+        approvedAt: true,
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException('Payroll run not found');
+    }
+
+    if (run.status !== 'approved') {
+      throw new BadRequestException(
+        '只有已確定且尚未產生會計憑證的薪資批次可以取消確定',
+      );
+    }
+
+    const existingJournal = await this.prisma.journalEntry.findFirst({
+      where: {
+        sourceModule: 'payroll',
+        sourceId: id,
+      },
+      select: { id: true },
+    });
+
+    if (existingJournal) {
+      throw new BadRequestException(
+        '此薪資批次已產生會計憑證，請先依會計沖回流程處理後再修正',
+      );
+    }
+
+    await this.prisma.payrollRun.update({
+      where: { id },
+      data: {
+        status: 'draft',
+        approvedBy: null,
+        approvedAt: null,
+      },
+    });
+
+    const existingApproval = await this.prisma.approvalRequest.findFirst({
+      where: {
+        type: 'payroll_run',
+        refId: id,
+      },
+      select: { id: true },
+    });
+
+    if (existingApproval) {
+      await this.prisma.approvalRequest.update({
+        where: { id: existingApproval.id },
+        data: {
+          status: 'pending',
+          approverId: null,
+          approvedAt: null,
+        },
+      });
+    }
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'payroll_runs',
+      recordId: id,
+      action: 'UNAPPROVE',
+      oldData: {
+        status: run.status,
+        approvedBy: run.approvedBy,
+        approvedAt: run.approvedAt,
+      },
+      newData: {
+        status: 'draft',
+        reason: data?.reason || null,
+      },
+    });
+
+    return this.getPayrollRunById(userId, id);
+  }
+
   async postPayrollRun(id: string, userId: string) {
     const run = await this.prisma.payrollRun.findUnique({
       where: { id },

@@ -315,6 +315,14 @@ export const payrollService = {
     return response.data;
   },
 
+  unapprovePayrollRun: async (id: string, data?: { reason?: string }) => {
+    const response = await api.post<PayrollRun>(
+      `/payroll/runs/${id}/unapprove`,
+      data ?? {},
+    );
+    return response.data;
+  },
+
   postPayrollRun: async (id: string) => {
     const response = await api.post<PayrollRun>(`/payroll/runs/${id}/post`);
     return response.data;
