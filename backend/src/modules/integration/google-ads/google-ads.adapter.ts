@@ -13,6 +13,8 @@ export type GoogleAdsAccountConfig = {
   platform?: string;
   currency?: string;
   entityId?: string;
+  managerCustomerId?: string;
+  loginCustomerId?: string;
 };
 
 export type GoogleAdsInsight = {
@@ -37,6 +39,14 @@ type GoogleAdsSearchResponse = {
     campaign?: {
       id?: string;
       name?: string;
+    };
+    customerClient?: {
+      id?: string;
+      clientCustomer?: string;
+      descriptiveName?: string;
+      manager?: boolean;
+      status?: string;
+      currencyCode?: string;
     };
     segments?: {
       date?: string;
@@ -158,10 +168,11 @@ export class GoogleAdsAdapter {
     pageSize?: string | number;
     maxPages?: string | number;
   }) {
-    const accounts = this.resolveAccounts(params.customerIds);
+    const accounts = await this.expandManagerAccounts(
+      this.resolveAccounts(params.customerIds),
+    );
     const rows: GoogleAdsInsight[] = [];
     const level = params.level || 'account';
-    const pageSize = Math.min(Math.max(Number(params.pageSize || 1000), 1), 10000);
     const maxPages = Math.min(Math.max(Number(params.maxPages || 20), 1), 100);
 
     for (const account of accounts) {
@@ -170,8 +181,8 @@ export class GoogleAdsAdapter {
       do {
         const response = await this.search(account.customerId, {
           query: this.buildSpendQuery(params.since, params.until, level),
-          pageSize,
           pageToken,
+          loginCustomerId: account.loginCustomerId || account.managerCustomerId,
         });
         const pageRows = Array.isArray(response.results) ? response.results : [];
         rows.push(
@@ -196,6 +207,40 @@ export class GoogleAdsAdapter {
     }
 
     return rows;
+  }
+
+  async listCustomerClients(customerId: string) {
+    const normalizedCustomerId = this.normalizeCustomerId(customerId);
+    const response = await this.search(normalizedCustomerId, {
+      query: [
+        'SELECT',
+        [
+          'customer_client.client_customer',
+          'customer_client.id',
+          'customer_client.descriptive_name',
+          'customer_client.manager',
+          'customer_client.status',
+          'customer_client.currency_code',
+        ].join(', '),
+        'FROM customer_client',
+        "WHERE customer_client.status != 'CANCELED'",
+        'ORDER BY customer_client.id',
+      ].join(' '),
+    });
+
+    return (response.results || [])
+      .map((row) => row.customerClient)
+      .filter(Boolean)
+      .map((client) => ({
+        customerId: this.normalizeCustomerId(
+          client?.id || client?.clientCustomer || '',
+        ),
+        name: client?.descriptiveName || undefined,
+        manager: Boolean(client?.manager),
+        status: client?.status || undefined,
+        currency: client?.currencyCode || undefined,
+      }))
+      .filter((client) => Boolean(client.customerId));
   }
 
   async listAccessibleCustomers() {
@@ -269,7 +314,7 @@ export class GoogleAdsAdapter {
 
   private async search(
     customerId: string,
-    body: { query: string; pageSize: number; pageToken?: string },
+    body: { query: string; pageToken?: string; loginCustomerId?: string },
   ) {
     const accessToken = await this.fetchAccessToken();
     const url = `${this.apiBaseUrl.replace(/\/$/, '')}/${this.apiVersion}/customers/${this.normalizeCustomerId(customerId)}/googleAds:search`;
@@ -283,15 +328,18 @@ export class GoogleAdsAdapter {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'developer-token': this.assertDeveloperToken(),
-          ...(this.getLoginCustomerId()
-            ? { 'login-customer-id': this.getLoginCustomerId() }
+          ...(this.resolveLoginCustomerId(body.loginCustomerId)
+            ? {
+                'login-customer-id': this.resolveLoginCustomerId(
+                  body.loginCustomerId,
+                ),
+              }
             : {}),
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
         body: JSON.stringify({
           query: body.query,
-          pageSize: body.pageSize,
           ...(body.pageToken ? { pageToken: body.pageToken } : {}),
         }),
       });
@@ -313,6 +361,62 @@ export class GoogleAdsAdapter {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private async expandManagerAccounts(accounts: GoogleAdsAccountConfig[]) {
+    const expanded: GoogleAdsAccountConfig[] = [];
+    const seen = new Set<string>();
+
+    for (const account of accounts) {
+      const normalizedAccount = {
+        ...account,
+        customerId: this.normalizeCustomerId(account.customerId),
+        managerCustomerId: this.normalizeCustomerId(
+          account.managerCustomerId || '',
+        ),
+        loginCustomerId: this.normalizeCustomerId(account.loginCustomerId || ''),
+      };
+      let clients: Awaited<ReturnType<typeof this.listCustomerClients>> = [];
+      try {
+        clients = await this.listCustomerClients(normalizedAccount.customerId);
+      } catch {
+        clients = [];
+      }
+
+      const self = clients.find(
+        (client) => client.customerId === normalizedAccount.customerId,
+      );
+      if (self?.manager) {
+        const childAccounts = clients.filter(
+          (client) =>
+            client.customerId !== normalizedAccount.customerId &&
+            !client.manager &&
+            client.status !== 'CANCELED',
+        );
+
+        for (const child of childAccounts) {
+          if (seen.has(child.customerId)) continue;
+          seen.add(child.customerId);
+          expanded.push({
+            ...normalizedAccount,
+            customerId: child.customerId,
+            name: child.name || normalizedAccount.name,
+            currency: child.currency || normalizedAccount.currency,
+            managerCustomerId: normalizedAccount.customerId,
+            loginCustomerId:
+              normalizedAccount.loginCustomerId || normalizedAccount.customerId,
+          });
+        }
+        continue;
+      }
+
+      if (!seen.has(normalizedAccount.customerId)) {
+        seen.add(normalizedAccount.customerId);
+        expanded.push(normalizedAccount);
+      }
+    }
+
+    return expanded;
   }
 
   private async fetchAccessToken() {
@@ -412,6 +516,10 @@ export class GoogleAdsAdapter {
     );
   }
 
+  private resolveLoginCustomerId(value?: string) {
+    return this.normalizeCustomerId(value || this.getLoginCustomerId());
+  }
+
   private formatApiError(error: GoogleAdsApiError | undefined, fallback: string) {
     const details = error?.details
       ?.flatMap((detail) => detail.errors || [])
@@ -449,6 +557,12 @@ export class GoogleAdsAdapter {
       platform: this.optionalString(item.platform),
       currency: this.optionalString(item.currency),
       entityId: this.optionalString(item.entityId || item.entity_id),
+      managerCustomerId: this.optionalString(
+        item.managerCustomerId || item.manager_customer_id,
+      ),
+      loginCustomerId: this.optionalString(
+        item.loginCustomerId || item.login_customer_id,
+      ),
     };
   }
 

@@ -293,13 +293,25 @@ Dashboard 最終不應只是展示業績，而是要主動揭露營運風險。
 - `sync` 會把 daily account spend 寫入 `Expense / ExpenseItem`，`sourceModule=google_ads`、科目代號 `6118 廣告費`，CEO Dashboard 既有 management summary 會把這些列入廣告費。
 - 已新增 `backend/scripts/configure-google-ads-secrets.sh`：用隱藏輸入把 `GOOGLE_ADS_DEVELOPER_TOKEN`、`GOOGLE_ADS_CLIENT_ID`、`GOOGLE_ADS_CLIENT_SECRET`、`GOOGLE_ADS_REFRESH_TOKEN` 放入 Secret Manager，並自動補 Cloud Run runtime service account 的 Secret Accessor 權限。
 - 已部署到 Cloud Run backend revision `ecom-accounting-backend-00350-5sh`，100% 流量。正式 API 已驗證 Google Ads 路由存在：`connection-info` / `readiness` 回 200。
-- 2026-05-11 已把 Google Ads developer token、OAuth client、OAuth refresh token、customer ID `6215621647` 放入 Secret Manager 並掛到 Cloud Run backend；新版診斷部署到 `ecom-accounting-backend-00356-d66`。
-- 正式 API 現況：`connection-info` 顯示 developer token / OAuth / configured account 都已設定，但 `readiness.ready=false`，原因不是缺環境變數，而是 Google Ads 權限：
-  - `accessibleCustomers=["2332244535"]`
-  - `inaccessibleConfiguredAccounts=["6215621647"]`
-  - Google Ads 回 `USER_PERMISSION_DENIED`：目前 OAuth token 所屬 Google 帳號沒有 `621-562-1647` 的 API 存取權。
-- 已測試疑似 manager ID `1056623719` 作為 `login-customer-id`，Google 回 `CUSTOMER_NOT_FOUND`；因此目前不是單純漏填 manager header。
-- 尚未完成：需要用真正能管理 `621-562-1647` 的 Google 帳號重新產生 `GOOGLE_ADS_REFRESH_TOKEN`，或提供正確 MCC / manager customer ID 並確認該 OAuth 使用者在 manager/client 帳戶都有權限；完成前無法同步 Google Ads spend 金額。
+- 2026-05-11 已改用可管理 Google Ads 的 OAuth 帳號重新授權，並更新 `GOOGLE_ADS_CLIENT_ID` / `GOOGLE_ADS_CLIENT_SECRET` / `GOOGLE_ADS_REFRESH_TOKEN` Secret 版本；Secret 值不得寫入 repo。
+- 2026-05-11 正式診斷確認 `6215621647` 是 Google Ads manager account，底下可讀 client accounts 包含：
+  - `8052579705`：MOZTECH 墨子科技，TWD。
+  - `8602556100`：bonson 邦生，TWD。
+  - `5801010919`：MOZTECH Official，目前測試區間無 spend。
+  - `8672054842`：moritek，目前測試區間無 spend。
+- 已修正 Google Ads connector：
+  - Google Ads API v21 不接受 `pageSize`，已移除 search request 的 `pageSize`。
+  - 若設定的是 manager account，connector 會自動查 `customer_client` 並展開非 manager client account。
+  - 查 client spend 時會自動帶入 manager 作為 `login-customer-id`，避免 `REQUESTED_METRICS_FOR_MANAGER` / `USER_PERMISSION_DENIED`。
+- Cloud Run backend 已部署 revision `ecom-accounting-backend-00360-s7v`，100% 流量。
+- 正式 API 已驗證 Google Ads 可抓 spend：
+  - `GET /integrations/google-ads/readiness` 回 `ready=true`，`insightProbe.count=16`，`spendTotal=263363.63`。
+  - `GET /integrations/google-ads/insights?since=2026-05-01&until=2026-05-09&level=account` 回 `count=18`、Google Ads spend 合計 `NT$341,789.47`，包含 MOZTECH 墨子科技與 bonson 邦生每日資料。
+  - `POST /integrations/google-ads/sync` 已先同步 `2026-05-01` 到 `2026-05-09`，寫入 `Expense / ExpenseItem` 18 筆。
+  - 已再補最近 30 天 `2026-04-12` 到 `2026-05-11`，`fetched=72`、`synced=72`、`created=54`、`updated=18`，`sourceModule=google_ads`。
+- `GET /reports/management-summary?entityId=tw-entity-001&groupBy=day&startDate=2026-04-12T00:00:00%2B08:00&endDate=2026-05-11T23:59:59%2B08:00` 已確認 Dashboard summary 可讀到每日廣告費；目前區間 `adSpendAmount=NT$1,926,620.23`、`adSpendCount=130`，此數字包含已存在的 Meta Ads 與新同步的 Google Ads。
+- Cloud Run 已開啟 `GOOGLE_ADS_SYNC_ENABLED=true` 並部署 revision `ecom-accounting-backend-00361-khw`；正式 readiness 再驗證 `ready=true`，每日排程會回刷最近 7 天 Google Ads spend。
+- 尚未完成：Google Ads 已可同步 spend，但廣告發票 / 收據、扣款信用卡 / 銀行帳戶 mapping 尚未補齊；因此目前可做費用與 ROAS 分析，尚不能完整做 AP / 銀行扣款核銷。
 
 必補能力：
 
