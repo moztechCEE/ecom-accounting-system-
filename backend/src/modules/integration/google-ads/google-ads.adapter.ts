@@ -56,6 +56,18 @@ type GoogleAdsSearchResponse = {
   };
 };
 
+type GoogleAdsApiError = {
+  message?: string;
+  status?: string;
+  details?: Array<{
+    errors?: Array<{
+      errorCode?: Record<string, string>;
+      message?: string;
+    }>;
+    requestId?: string;
+  }>;
+};
+
 @Injectable()
 export class GoogleAdsAdapter {
   private readonly apiBaseUrl: string;
@@ -186,6 +198,50 @@ export class GoogleAdsAdapter {
     return rows;
   }
 
+  async listAccessibleCustomers() {
+    const accessToken = await this.fetchAccessToken();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const response = await fetch(
+        `${this.apiBaseUrl.replace(/\/$/, '')}/${this.apiVersion}/customers:listAccessibleCustomers`,
+        {
+          method: 'GET',
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'developer-token': this.assertDeveloperToken(),
+            Accept: 'application/json',
+          },
+        },
+      );
+      const parsed = (await response.json().catch(() => ({}))) as
+        | { resourceNames?: string[]; error?: GoogleAdsApiError }
+        | Record<string, unknown>;
+      if (!response.ok || parsed.error) {
+        throw new BadGatewayException(
+          `Google Ads accessible customers request failed: ${this.formatApiError(parsed.error, response.statusText)}`,
+        );
+      }
+      const resourceNames = Array.isArray(parsed.resourceNames)
+        ? parsed.resourceNames
+        : [];
+      return resourceNames
+        .map((resourceName) => this.normalizeCustomerId(resourceName))
+        .filter(Boolean);
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        throw new BadGatewayException(
+          'Google Ads accessible customers request timed out',
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   normalizeCustomerId(value: string) {
     return String(value || '').replace(/[^0-9]/g, '');
   }
@@ -245,7 +301,7 @@ export class GoogleAdsAdapter {
       if (!response.ok || (parsed as GoogleAdsSearchResponse).error) {
         const error = (parsed as GoogleAdsSearchResponse).error;
         throw new BadGatewayException(
-          `Google Ads API request failed: ${error?.message || response.statusText}`,
+          `Google Ads API request failed: ${this.formatApiError(error, response.statusText)}`,
         );
       }
       return parsed as GoogleAdsSearchResponse;
@@ -354,6 +410,25 @@ export class GoogleAdsAdapter {
     return this.normalizeCustomerId(
       this.config.get<string>('GOOGLE_ADS_LOGIN_CUSTOMER_ID', '') || '',
     );
+  }
+
+  private formatApiError(error: GoogleAdsApiError | undefined, fallback: string) {
+    const details = error?.details
+      ?.flatMap((detail) => detail.errors || [])
+      .map((item) => {
+        const code = item.errorCode
+          ? Object.values(item.errorCode).filter(Boolean).join('/')
+          : '';
+        return [code, item.message].filter(Boolean).join(': ');
+      })
+      .filter(Boolean);
+    return [
+      error?.message || fallback,
+      error?.status ? `status=${error.status}` : null,
+      details?.length ? `details=${details.join(' | ')}` : null,
+    ]
+      .filter(Boolean)
+      .join('; ');
   }
 
   private normalizeAccountConfig(input: unknown): GoogleAdsAccountConfig | null {

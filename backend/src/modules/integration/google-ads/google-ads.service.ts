@@ -42,7 +42,15 @@ export class GoogleAdsService {
       spendTotal: number;
       message?: string;
     } | null = null;
+    let accessibleCustomers: string[] = [];
+    let accessibleCustomersError: string | null = null;
     if (!missing.length) {
+      try {
+        accessibleCustomers = await this.adapter.listAccessibleCustomers();
+      } catch (error: any) {
+        accessibleCustomersError =
+          error?.message || 'Google Ads accessible customers probe failed';
+      }
       try {
         const { since, until } = this.resolveRange(undefined, undefined);
         const rows = await this.adapter.fetchInsights({ since, until });
@@ -71,6 +79,15 @@ export class GoogleAdsService {
       configuredAccountCount: info.configuredAccounts.length,
       configuredAccounts: info.configuredAccounts,
       loginCustomerId: info.loginCustomerId || null,
+      accessibleCustomers,
+      inaccessibleConfiguredAccounts: info.configuredAccounts
+        .map((account) => account.customerId)
+        .filter(
+          (customerId) =>
+            accessibleCustomers.length > 0 &&
+            !accessibleCustomers.includes(customerId),
+        ),
+      accessibleCustomersError,
       insightProbe,
       nextAction:
         missing.length === 0

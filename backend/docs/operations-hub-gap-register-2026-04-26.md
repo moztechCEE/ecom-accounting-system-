@@ -293,8 +293,13 @@ Dashboard 最終不應只是展示業績，而是要主動揭露營運風險。
 - `sync` 會把 daily account spend 寫入 `Expense / ExpenseItem`，`sourceModule=google_ads`、科目代號 `6118 廣告費`，CEO Dashboard 既有 management summary 會把這些列入廣告費。
 - 已新增 `backend/scripts/configure-google-ads-secrets.sh`：用隱藏輸入把 `GOOGLE_ADS_DEVELOPER_TOKEN`、`GOOGLE_ADS_CLIENT_ID`、`GOOGLE_ADS_CLIENT_SECRET`、`GOOGLE_ADS_REFRESH_TOKEN` 放入 Secret Manager，並自動補 Cloud Run runtime service account 的 Secret Accessor 權限。
 - 已部署到 Cloud Run backend revision `ecom-accounting-backend-00350-5sh`，100% 流量。正式 API 已驗證 Google Ads 路由存在：`connection-info` / `readiness` 回 200。
-- 目前 readiness 正確顯示 `ready=false`，缺 `GOOGLE_ADS_DEVELOPER_TOKEN`、OAuth client / refresh token、以及 `GOOGLE_ADS_CUSTOMER_ID or GOOGLE_ADS_ACCOUNTS_JSON`。這表示部署與路由已完成，但尚未掛入 Google Ads 憑證。
-- 尚未完成：需要使用者從 Google Ads「API 中心」取得 developer token，並從 Google Cloud OAuth 流程取得 refresh token；未提供前無法實測 Google Ads spend 金額。
+- 2026-05-11 已把 Google Ads developer token、OAuth client、OAuth refresh token、customer ID `6215621647` 放入 Secret Manager 並掛到 Cloud Run backend；新版診斷部署到 `ecom-accounting-backend-00356-d66`。
+- 正式 API 現況：`connection-info` 顯示 developer token / OAuth / configured account 都已設定，但 `readiness.ready=false`，原因不是缺環境變數，而是 Google Ads 權限：
+  - `accessibleCustomers=["2332244535"]`
+  - `inaccessibleConfiguredAccounts=["6215621647"]`
+  - Google Ads 回 `USER_PERMISSION_DENIED`：目前 OAuth token 所屬 Google 帳號沒有 `621-562-1647` 的 API 存取權。
+- 已測試疑似 manager ID `1056623719` 作為 `login-customer-id`，Google 回 `CUSTOMER_NOT_FOUND`；因此目前不是單純漏填 manager header。
+- 尚未完成：需要用真正能管理 `621-562-1647` 的 Google 帳號重新產生 `GOOGLE_ADS_REFRESH_TOKEN`，或提供正確 MCC / manager customer ID 並確認該 OAuth 使用者在 manager/client 帳戶都有權限；完成前無法同步 Google Ads spend 金額。
 
 必補能力：
 
