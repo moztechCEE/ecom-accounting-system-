@@ -40,14 +40,20 @@ const SalesAnalytics: React.FC<{
   onCustomRangeChange: (value: [Dayjs | null, Dayjs | null] | null) => void
 }> = ({ orders, ecommerceHistory, rangeLabel, quickRange, customRange, onQuickRangeChange, onCustomRangeChange }) => {
   const filteredOrders = orders
-  const revenueTotal = filteredOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0)
+  const hasHistorySummary = Boolean(ecommerceHistory?.summary)
+  const revenueTotal = hasHistorySummary
+    ? Number(ecommerceHistory?.summary.revenue || 0)
+    : filteredOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0)
+  const orderTotal = hasHistorySummary
+    ? Number(ecommerceHistory?.summary.orderCount || 0)
+    : filteredOrders.length
   const completedOrders = filteredOrders.filter((order) => order.status === 'completed').length
   const paidLikeOrders = filteredOrders.filter((order) => {
     const totalAmount = Number(order.totalAmount || 0)
     const paidAmount = Number(order.paidAmountOriginal || 0)
     return totalAmount > 0 && paidAmount >= totalAmount
   }).length
-  const averageOrderValue = filteredOrders.length ? revenueTotal / filteredOrders.length : 0
+  const averageOrderValue = orderTotal ? revenueTotal / orderTotal : 0
   const paidRate = filteredOrders.length ? (paidLikeOrders / filteredOrders.length) * 100 : 0
   const feeTotal = filteredOrders.reduce(
     (sum, order) => sum + Number(order.feeGatewayOriginal || 0) + Number(order.feePlatformOriginal || 0),
@@ -56,6 +62,17 @@ const SalesAnalytics: React.FC<{
   const netRevenue = filteredOrders.reduce((sum, order) => sum + Number(order.amountNetOriginal || 0), 0)
 
   const trendData = useMemo(() => {
+    if (ecommerceHistory?.periods?.length) {
+      return ecommerceHistory.periods.map((period) => ({
+        name: period.label,
+        revenue: Number(period.revenue || 0),
+        orders: Number(period.orderCount || 0),
+        average: Number(period.orderCount || 0)
+          ? Number((Number(period.revenue || 0) / Number(period.orderCount || 0)).toFixed(0))
+          : 0,
+      }))
+    }
+
     const buckets = new Map<string, { name: string; revenue: number; orders: number }>()
 
     filteredOrders.forEach((order) => {
@@ -73,7 +90,7 @@ const SalesAnalytics: React.FC<{
       ...item,
       average: item.orders ? Number((item.revenue / item.orders).toFixed(0)) : 0,
     }))
-  }, [filteredOrders, rangeLabel])
+  }, [ecommerceHistory, filteredOrders, rangeLabel])
 
   const platformMix = useMemo(() => {
     if (ecommerceHistory?.brands?.length) {
@@ -198,7 +215,8 @@ const SalesAnalytics: React.FC<{
                 valueStyle={{ fontWeight: 600 }}
               />
               <div className="mt-1 text-xs text-slate-500">
-                {filteredOrders.length} 筆訂單
+                {orderTotal.toLocaleString()} 筆訂單
+                {hasHistorySummary && filteredOrders.length ? ` · 列表顯示 ${filteredOrders.length} 筆` : ''}
               </div>
             </Card>
           </motion.div>
@@ -215,7 +233,7 @@ const SalesAnalytics: React.FC<{
                 valueStyle={{ fontWeight: 600 }}
               />
               <div className="mt-1 text-xs text-slate-500">
-                已付款 {paidLikeOrders} 筆 / 已完成 {completedOrders} 筆
+                依目前列表：已付款 {paidLikeOrders} 筆 / 已完成 {completedOrders} 筆
               </div>
             </Card>
           </motion.div>

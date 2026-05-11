@@ -3,6 +3,16 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 type ManagementSummaryGroupBy = 'year' | 'quarter' | 'month' | 'week' | 'day';
+type CommerceSourceBrandRule = {
+  channelCode?: string;
+  brand?: string;
+  label?: string;
+  storeName?: string;
+  storeHandle?: string;
+  storeAccount?: string;
+  shopDomain?: string;
+  account?: string;
+};
 
 /**
  * 報表服務
@@ -4127,9 +4137,12 @@ export class ReportsService {
     const meta = this.extractMetadata(params.notes);
 
     if (channelCode === 'SHOPIFY') {
+      const rule = this.resolveCommerceSourceBrandRule(channelCode, meta, {
+        channelName: params.channelName,
+      });
       return {
-        label: 'MOZTECH 官網',
-        brand: 'MOZTECH',
+        label: rule?.label || 'MOZTECH 官網',
+        brand: rule?.brand || 'MOZTECH',
         channelCode,
       };
     }
@@ -4155,9 +4168,13 @@ export class ReportsService {
     if (channelCode === 'SHOPLINE') {
       const storeName =
         meta.storeName || meta.storeHandle || params.channelName || 'Shopline';
+      const rule = this.resolveCommerceSourceBrandRule(channelCode, meta, {
+        channelName: params.channelName,
+        storeName,
+      });
       return {
-        label: storeName,
-        brand: 'BONSON',
+        label: rule?.label || storeName,
+        brand: rule?.brand || 'BONSON',
         channelCode,
       };
     }
@@ -4209,6 +4226,94 @@ export class ReportsService {
     }
 
     return this.resolveKnownProductBrand(productText, source.brand);
+  }
+
+  private resolveCommerceSourceBrandRule(
+    channelCode: string,
+    meta: Record<string, string>,
+    fallback?: { channelName?: string | null; storeName?: string | null },
+  ) {
+    const normalizedChannel = channelCode.trim().toUpperCase();
+    const identifiers = [
+      meta.storeName,
+      meta.storeHandle,
+      meta.storeAccount,
+      meta.shopDomain,
+      fallback?.storeName,
+      fallback?.channelName,
+    ]
+      .map((value) => this.normalizeRuleIdentifier(value))
+      .filter(Boolean);
+
+    const rules = this.getCommerceSourceBrandRules();
+    const matched = rules.find((rule) => {
+      if (
+        rule.channelCode &&
+        rule.channelCode.trim().toUpperCase() !== normalizedChannel
+      ) {
+        return false;
+      }
+
+      const ruleIdentifiers = [
+        rule.storeName,
+        rule.storeHandle,
+        rule.storeAccount,
+        rule.shopDomain,
+        rule.account,
+        rule.label,
+      ]
+        .map((value) => this.normalizeRuleIdentifier(value))
+        .filter(Boolean);
+
+      if (!ruleIdentifiers.length) {
+        return true;
+      }
+
+      return ruleIdentifiers.some((identifier) =>
+        identifiers.includes(identifier),
+      );
+    });
+
+    if (!matched?.brand) {
+      return null;
+    }
+
+    return {
+      brand: this.resolveCommerceBrand(matched.brand),
+      label: matched.label?.trim() || fallback?.storeName || fallback?.channelName || '',
+    };
+  }
+
+  private getCommerceSourceBrandRules(): CommerceSourceBrandRule[] {
+    const raw = (
+      this.configService.get<string>('COMMERCE_SOURCE_BRANDS_JSON', '') ||
+      this.configService.get<string>('SALES_CHANNEL_BRANDS_JSON', '') ||
+      ''
+    ).trim();
+
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      const rules = Array.isArray(parsed) ? parsed : parsed?.accounts || parsed?.rules;
+      if (!Array.isArray(rules)) {
+        return [];
+      }
+      return rules.filter((rule) => rule && typeof rule === 'object');
+    } catch {
+      return [];
+    }
+  }
+
+  private normalizeRuleIdentifier(value?: string | null) {
+    return (value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, '')
+      .replace(/\.myshopify\.com$/, '')
+      .replace(/\.myshopline\.com$/, '');
   }
 
   private resolveShopifyOrderBrand(notes?: string | null) {

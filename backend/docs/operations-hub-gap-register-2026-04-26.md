@@ -153,6 +153,14 @@
 
 Dashboard 最終不應只是展示業績，而是要主動揭露營運風險。
 
+2026-05-11 銷售儀錶板區間修正：
+
+- 使用者發現「過去 7 天 / 過去一個月 / 過去一年」顯示的總營收、平均客單與圖表看起來相同。
+- 實際排查結果：正式後端 `GET /reports/ecommerce-history` 會依日期區間回傳不同資料；2026-05-11 驗證 `過去 7 天`、`過去一個月`、`過去一年` 分別回傳不同 revenue / orderCount。
+- 真正問題在前端：銷售訂單頁為了效能只抓 `limit=300` 筆明細，但儀錶板卡片與趨勢圖也拿這 300 筆去重算，因此大區間會被「最新 300 筆」限制住。
+- 已修正 `SalesAnalytics`：總營收、訂單數、平均客單與趨勢圖優先使用 `ecommerceHistory.summary` / `ecommerceHistory.periods`，訂單列表仍維持 300 筆作為明細預覽。
+- 品牌歸屬也同步抽成後端可設定規則：`COMMERCE_SOURCE_BRANDS_JSON` / `SALES_CHANNEL_BRANDS_JSON` 可依 Shopify / Shopline 帳號、handle、domain 指定品牌與顯示名稱。現行正式規則為 Shopify = MOZTECH、Shopline = BONSON；未來若新增 MORITEK 的 Shopify / Shopline 帳號，只需新增對應 rule，不需要改程式。
+
 必補指標：
 
 - 總業績

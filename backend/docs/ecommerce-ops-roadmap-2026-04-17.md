@@ -120,6 +120,8 @@
 - CEO Dashboard 已新增「財務管制與營運風險」區塊，把今日淨利、廣告花費、現金流風險與財務異常追蹤放在第一層；今日淨利改抓當日 management summary，不再用 30 天趨勢資料代替。
 - Management summary 會從已入帳費用與已付款費用申請中辨識廣告相關費用，先提供可用的廣告花費數字；若 Meta / Google / TikTok connector 尚未串接，Dashboard 會明確顯示待串接與下一步資料需求。
 - CEO Dashboard 已補上快速圖表層：30 天營收 / 淨利 / 淨入帳 / 廣告費趨勢、通路與品牌淨入帳占比、風險優先排序與異常 aging，讓 CEO 不只看到 KPI，也能快速判斷哪個趨勢或哪個阻塞需要立即處理。
+- 銷售訂單頁的智慧銷售儀錶板已修正區間統計來源：卡片與趨勢圖使用 `/reports/ecommerce-history` 的完整區間 summary / periods，不再用銷售明細 API 的 `limit=300` 最新列表推算，所以過去 7 天、過去一個月、過去一年應顯示不同總數。
+- 多品牌 Shopify / Shopline 歸屬已改成可設定規則：Cloud Run 可用 `COMMERCE_SOURCE_BRANDS_JSON` 設定帳號 / domain / handle 對應品牌。現行設定為 Shopify 對 MOZTECH、Shopline 對 BONSON；未來 MORITEK 若新增 Shopify 或 Shopline 帳號，補一條規則即可納入報表。
 
 待補：
 

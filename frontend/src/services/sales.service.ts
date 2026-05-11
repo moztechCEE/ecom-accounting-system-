@@ -240,7 +240,7 @@ const resolveOrderSource = (order: SalesOrderApiResponse) => {
     return {
       sourceLabel: storeName,
       sourcePlatform: storeName,
-      sourceBrand: resolveCommerceBrand(order, storeName),
+      sourceBrand: 'BONSON',
       channelCode,
     }
   }
