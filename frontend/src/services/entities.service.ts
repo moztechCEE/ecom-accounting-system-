@@ -2,9 +2,26 @@ import api from './api'
 
 export type Entity = {
   id: string
+  loginCode: string
   name: string
   country?: string
   baseCurrency?: string
+  isActive?: boolean
+  taxId?: string
+  address?: string
+  contactEmail?: string
+  contactPhone?: string
+}
+
+export type EntityPayload = {
+  loginCode: string
+  name: string
+  country: string
+  baseCurrency: string
+  taxId?: string
+  address?: string
+  contactEmail?: string
+  contactPhone?: string
   isActive?: boolean
 }
 
@@ -16,6 +33,21 @@ export async function listEntities(params?: { isActive?: boolean }): Promise<Ent
 
   const url = query.toString() ? `/entities?${query.toString()}` : '/entities'
   const response = await api.get<Entity[]>(url)
+  return response.data
+}
+
+export async function createEntity(data: EntityPayload): Promise<Entity> {
+  const response = await api.post<Entity>('/entities', data)
+  return response.data
+}
+
+export async function updateEntity(id: string, data: Partial<EntityPayload>): Promise<Entity> {
+  const response = await api.put<Entity>(`/entities/${id}`, data)
+  return response.data
+}
+
+export async function deactivateEntity(id: string): Promise<Entity> {
+  const response = await api.delete<Entity>(`/entities/${id}`)
   return response.data
 }
 

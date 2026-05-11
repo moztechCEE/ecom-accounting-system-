@@ -16,6 +16,8 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { EntitiesService } from './entities.service';
 import { CreateEntityDto } from './dto/create-entity.dto';
 import { UpdateEntityDto } from './dto/update-entity.dto';
@@ -48,6 +50,8 @@ export class EntitiesController {
   }
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: '建立新公司實體' })
   @ApiResponse({ status: 201, description: '實體建立成功' })
   async create(@Body() createEntityDto: CreateEntityDto) {
@@ -55,6 +59,8 @@ export class EntitiesController {
   }
 
   @Put(':id')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: '更新公司實體' })
   @ApiResponse({ status: 200, description: '實體更新成功' })
   async update(
@@ -65,6 +71,8 @@ export class EntitiesController {
   }
 
   @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: '刪除公司實體' })
   @ApiResponse({ status: 200, description: '實體刪除成功' })
   async remove(@Param('id') id: string) {

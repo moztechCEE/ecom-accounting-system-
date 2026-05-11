@@ -44,6 +44,7 @@ export class SeederService implements OnModuleInit {
       update: {},
       create: {
         id: 'tw-entity-001',
+        loginCode: '900324',
         name: '台灣公司',
         country: 'TW',
         baseCurrency: 'TWD',
@@ -59,6 +60,7 @@ export class SeederService implements OnModuleInit {
       update: {},
       create: {
         id: 'cn-entity-001',
+        loginCode: '900325',
         name: '大陸公司',
         country: 'CN',
         baseCurrency: 'CNY',

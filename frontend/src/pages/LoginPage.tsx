@@ -9,6 +9,11 @@ import { LoginRequest } from '../types'
 import BrandMark from '../components/BrandMark'
 
 const { Title, Text } = Typography
+const PLATFORM_ADMIN_LOGIN_IDS = new Set([
+  'moztecheason@gmail.com',
+  's7896629@gmail.com',
+  'forever200656@gmail.com',
+])
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate()
@@ -17,7 +22,7 @@ const LoginPage: React.FC = () => {
   const [passwordStrength, setPasswordStrength] = React.useState(0)
   const [forgotOpen, setForgotOpen] = React.useState(false)
   const [forgotLoading, setForgotLoading] = React.useState(false)
-  const [loginEntities, setLoginEntities] = React.useState<Array<{ id: string; name: string; loginCode: string }>>([])
+  const [loginEntities, setLoginEntities] = React.useState<Array<{ id: string; loginCode: string }>>([])
   const [forgotForm] = Form.useForm<{ email: string }>()
 
   React.useEffect(() => {
@@ -42,8 +47,12 @@ const LoginPage: React.FC = () => {
   const onFinish = async (values: LoginRequest & { loginId?: string }) => {
     setLoading(true)
     const loginId = values.loginId?.trim() || values.email?.trim() || ''
+    const normalizedLoginId = loginId.toLowerCase()
+    const isPlatformAdminLogin = PLATFORM_ADMIN_LOGIN_IDS.has(normalizedLoginId)
     const cleanValues = {
-      ...(loginId.includes('@')
+      ...(isPlatformAdminLogin
+        ? { platformLoginId: normalizedLoginId }
+        : loginId.includes('@')
         ? { email: loginId.toLowerCase() }
         : {
             entityId: values.entityId?.trim(),
@@ -160,15 +169,16 @@ const LoginPage: React.FC = () => {
         >
           <Form.Item
             name="entityId"
-            rules={[{ required: true, message: '請選擇事業別' }]}
             className="mb-4"
           >
             <Select
               suffixIcon={<ApartmentOutlined className="text-gray-400 text-lg" />}
-              placeholder="選擇事業別"
+              placeholder="事業代號，例如 900324"
+              showSearch
+              optionFilterProp="label"
               className="!h-12 !rounded-xl hover:!border-blue-400 focus:!border-blue-500 transition-colors"
               options={loginEntities.map((entity) => ({
-                label: `${entity.loginCode}｜${entity.name}`,
+                label: entity.loginCode,
                 value: entity.id,
               }))}
             />
@@ -181,7 +191,7 @@ const LoginPage: React.FC = () => {
           >
             <Input 
               prefix={<UserOutlined className="text-gray-400 text-lg" />} 
-              placeholder="員工代碼，例如 0001"
+              placeholder="員工代碼 / 最高權限帳號"
               className="!h-12 !rounded-xl hover:!border-blue-400 focus:!border-blue-500 transition-colors"
             />
           </Form.Item>

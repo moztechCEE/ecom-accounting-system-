@@ -183,19 +183,23 @@ export class AuthService {
     const emailInput = (email ?? '').trim();
     const employeeNoInput = (loginDto.employeeNo ?? '').trim();
     const entityIdInput = (loginDto.entityId ?? '').trim();
+    const platformLoginIdInput = (loginDto.platformLoginId ?? '').trim();
     const normalizedEmail = emailInput.toLowerCase();
+    const loginIdentifier = emailInput || employeeNoInput || platformLoginIdInput;
 
     // 尋找使用者
-    const user = employeeNoInput
+    const user = platformLoginIdInput
+      ? await this.findUserForPlatformAdminLogin(platformLoginIdInput)
+      : employeeNoInput
       ? await this.findUserForEmployeeLogin(entityIdInput, employeeNoInput)
       : await this.usersService.findForAuthByEmail(normalizedEmail);
     if (!user) {
-      this.logger.warn(`Login failed: user not found (${emailInput || employeeNoInput})`);
+      this.logger.warn(`Login failed: user not found (${loginIdentifier})`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (!user.passwordHash) {
-      this.logger.warn(`Login failed: missing password hash (${normalizedEmail})`);
+      this.logger.warn(`Login failed: missing password hash (${loginIdentifier})`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -212,17 +216,17 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
     if (!isPasswordValid) {
-      this.logger.warn(`Login failed: invalid password (${emailInput || employeeNoInput})`);
+      this.logger.warn(`Login failed: invalid password (${loginIdentifier})`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     // 檢查使用者是否啟用
     if (!user.isActive) {
-      this.logger.warn(`Login failed: user disabled (${emailInput || employeeNoInput})`);
+      this.logger.warn(`Login failed: user disabled (${loginIdentifier})`);
       throw new UnauthorizedException('User account is disabled');
     }
 
-    this.logger.log(`User logged in: ${normalizedEmail || employeeNoInput}`);
+    this.logger.log(`User logged in: ${normalizedEmail || employeeNoInput || platformLoginIdInput}`);
 
     // 產生 JWT token
     const token = await this.generateToken(user.id, user.email);
@@ -240,19 +244,14 @@ export class AuthService {
   async getLoginEntities() {
     const entities = await this.prisma.entity.findMany({
       where: { isActive: true },
-      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      orderBy: [{ loginCode: 'asc' }, { id: 'asc' }],
       select: {
         id: true,
-        name: true,
-        country: true,
-        baseCurrency: true,
+        loginCode: true,
       },
     });
 
-    return entities.map((entity) => ({
-      ...entity,
-      loginCode: this.getEntityLoginCode(entity),
-    }));
+    return entities;
   }
 
   private async findUserForEmployeeLogin(entityId: string, employeeNo: string) {
@@ -274,21 +273,53 @@ export class AuthService {
     return employee?.user ?? null;
   }
 
-  private getEntityLoginCode(entity: { id: string; name: string; country?: string | null }) {
-    const haystack = `${entity.id} ${entity.name} ${entity.country ?? ''}`.toLowerCase();
-    if (haystack.includes('moz') || entity.id === 'tw-entity-001' || entity.country === 'TW') {
-      return 'MOZ';
+  private async findUserForPlatformAdminLogin(loginId: string) {
+    const normalizedLoginId = loginId.trim().toLowerCase();
+    const allowedLoginIds = this.getPlatformAdminLoginIds();
+
+    if (!allowedLoginIds.has(normalizedLoginId)) {
+      return null;
     }
 
-    const asciiLetters = entity.name.match(/[A-Za-z]/g)?.join('');
-    if (asciiLetters) {
-      return asciiLetters.slice(0, 6).toUpperCase();
+    const user = await this.prisma.user.findFirst({
+      where: {
+        isActive: true,
+        OR: [
+          { email: { equals: normalizedLoginId, mode: 'insensitive' } },
+          { email: { startsWith: `${normalizedLoginId}@`, mode: 'insensitive' } },
+          { name: { equals: loginId.trim(), mode: 'insensitive' } },
+        ],
+      },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+
+    const isPlatformAdmin = user?.roles.some(
+      (userRole) => userRole.role?.code === 'SUPER_ADMIN',
+    );
+    if (!isPlatformAdmin) {
+      return null;
     }
 
-    return entity.id
-      .replace(/[^A-Za-z0-9]/g, '')
-      .slice(0, 6)
-      .toUpperCase();
+    return user;
+  }
+
+  private getPlatformAdminLoginIds() {
+    const configuredLoginIds =
+      this.configService.get<string>('PLATFORM_ADMIN_LOGIN_IDS') ||
+      'moztecheason@gmail.com,s7896629@gmail.com,forever200656@gmail.com';
+
+    return new Set(
+      configuredLoginIds
+        .split(',')
+        .map((loginId) => loginId.trim().toLowerCase())
+        .filter(Boolean),
+    );
   }
 
   /**

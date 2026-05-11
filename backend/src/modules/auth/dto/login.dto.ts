@@ -3,7 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class LoginDto {
   @ApiProperty({ example: 'user@example.com', description: '使用者 Email', required: false })
-  @ValidateIf((dto: LoginDto) => !dto.employeeNo)
+  @ValidateIf((dto: LoginDto) => !dto.employeeNo && !dto.platformLoginId)
   @IsEmail()
   email?: string;
 
@@ -13,9 +13,14 @@ export class LoginDto {
   entityId?: string;
 
   @ApiProperty({ example: '0001', description: '員工代碼', required: false })
-  @ValidateIf((dto: LoginDto) => !dto.email)
+  @ValidateIf((dto: LoginDto) => !dto.email && !dto.platformLoginId)
   @IsString()
   employeeNo?: string;
+
+  @ApiProperty({ example: 'eason', description: '平台最高權限登入帳號', required: false })
+  @IsOptional()
+  @IsString()
+  platformLoginId?: string;
 
   @ApiProperty({ example: 'SecureP@ssw0rd', description: '密碼' })
   @IsString()

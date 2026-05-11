@@ -59,9 +59,6 @@ export const authService = {
   async getLoginEntities(): Promise<
     Array<{
       id: string
-      name: string
-      country?: string
-      baseCurrency?: string
       loginCode: string
     }>
   > {

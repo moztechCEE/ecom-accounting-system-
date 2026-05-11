@@ -86,6 +86,7 @@ export interface LoginRequest {
   email?: string;
   entityId?: string;
   employeeNo?: string;
+  platformLoginId?: string;
   password: string;
 }
 

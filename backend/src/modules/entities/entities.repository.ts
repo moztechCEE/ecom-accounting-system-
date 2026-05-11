@@ -14,7 +14,7 @@ export class EntitiesRepository {
   async findAll(isActive?: boolean) {
     return this.prisma.entity.findMany({
       where: isActive !== undefined ? { isActive } : undefined,
-      orderBy: { name: 'asc' },
+      orderBy: [{ loginCode: 'asc' }, { name: 'asc' }],
     });
   }
 
@@ -25,9 +25,9 @@ export class EntitiesRepository {
   }
 
   async findByCode(code: string) {
-    // Entity 模型沒有 code 欄位，改用 name 或 id 查找
-    // 這裡先返回第一個符合條件的 entity
-    return this.prisma.entity.findFirst();
+    return this.prisma.entity.findUnique({
+      where: { loginCode: code },
+    });
   }
 
   async create(data: CreateEntityDto) {

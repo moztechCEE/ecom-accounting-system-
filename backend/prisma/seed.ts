@@ -27,6 +27,7 @@ async function main() {
     update: {},
     create: {
       id: 'tw-entity-001',
+      loginCode: '900324',
       name: '台灣公司',
       country: 'TW',
       baseCurrency: 'TWD',
@@ -42,6 +43,7 @@ async function main() {
     update: {},
     create: {
       id: 'cn-entity-001',
+      loginCode: '900325',
       name: '大陸公司',
       country: 'CN',
       baseCurrency: 'CNY',
@@ -491,6 +493,40 @@ async function main() {
   }
 
   console.log(`✅ Ensured admin user: ${adminUser.email} (name: ${adminUser.name}, roles: SUPER_ADMIN, ADMIN)\n`);
+
+  const platformAdminEmails = [
+    'moztecheason@gmail.com',
+    's7896629@gmail.com',
+    'forever200656@gmail.com',
+  ];
+
+  for (const platformAdminEmail of platformAdminEmails) {
+    const platformAdmin = await prisma.user.upsert({
+      where: { email: platformAdminEmail },
+      update: {},
+      create: {
+        email: platformAdminEmail,
+        name: platformAdminEmail.split('@')[0],
+        passwordHash,
+      },
+    });
+
+    for (const role of [superAdminRole, adminRole].filter(Boolean)) {
+      await prisma.userRole.upsert({
+        where: {
+          userId_roleId: {
+            userId: platformAdmin.id,
+            roleId: role!.id,
+          },
+        },
+        update: {},
+        create: {
+          userId: platformAdmin.id,
+          roleId: role!.id,
+        },
+      });
+    }
+  }
 
   // ============================================
   // 5. 建立會計科目表（台灣公司）

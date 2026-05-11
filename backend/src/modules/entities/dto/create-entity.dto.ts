@@ -2,10 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsBoolean, IsOptional } from 'class-validator';
 
 export class CreateEntityDto {
-  @ApiProperty({ example: 'tw-entity-001', description: '實體代碼（唯一）' })
+  @ApiProperty({ example: '900324', description: '登入使用的事業代號（唯一）' })
   @IsString()
   @IsNotEmpty()
-  code: string;
+  loginCode: string;
 
   @ApiProperty({ example: '台灣總公司', description: '實體名稱' })
   @IsString()
@@ -40,4 +40,31 @@ export class CreateEntityDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiProperty({
+    example: '台北市信義區信義路五段7號',
+    description: '公司地址',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  address?: string;
+
+  @ApiProperty({
+    example: 'ops@example.com',
+    description: '聯絡信箱',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  contactEmail?: string;
+
+  @ApiProperty({
+    example: '+886-2-2345-6789',
+    description: '聯絡電話',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  contactPhone?: string;
 }

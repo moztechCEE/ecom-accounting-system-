@@ -30,6 +30,7 @@ import AccountsPayablePage from './pages/AccountsPayablePage'
 import ReimbursementItemsAdminPage from './pages/ReimbursementItemsAdminPage'
 import ImportPage from './pages/ImportPage'
 import SystemSettingsPage from './pages/SystemSettingsPage'
+import BusinessEntitiesPage from './pages/BusinessEntitiesPage'
 import EmployeeDashboardPage from './pages/attendance/EmployeeDashboardPage'
 import LeaveRequestPage from './pages/attendance/LeaveRequestPage'
 import AttendanceAdminPage from './pages/attendance/AttendanceAdminPage'
@@ -73,6 +74,7 @@ const App: React.FC = () => {
                 <Route path="ap/expense-review" element={<ExpenseReviewCenterPage />} />
                 <Route path="ap/payable" element={<AccountsPayablePage />} />
                 <Route path="admin/access-control" element={<PermissionRoute anyPermissions={['access_control:read', 'access_control:update']}><AccessControlPage /></PermissionRoute>} />
+                <Route path="admin/entities" element={<BusinessEntitiesPage />} />
                 <Route path="admin/reimbursement-items" element={<ReimbursementItemsAdminPage />} />
                 <Route path="admin/settings" element={<SystemSettingsPage />} />
                 

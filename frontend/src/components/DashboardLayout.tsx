@@ -236,6 +236,12 @@ const DashboardLayout: React.FC = () => {
           onClick: () => navigate('/admin/access-control'),
         },
         {
+          key: '/admin/entities',
+          label: '事業代號管理',
+          hidden: !(user?.roles ?? []).includes('SUPER_ADMIN'),
+          onClick: () => navigate('/admin/entities'),
+        },
+        {
           key: '/admin/reimbursement-items',
           label: '報銷項目管理',
           onClick: () => navigate('/admin/reimbursement-items'),

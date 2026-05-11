@@ -161,6 +161,7 @@ model AuditLog {
 // 公司實體（支援多公司營運）
 model Entity {
   id           String  @id @default(uuid())
+  loginCode    String  @unique @map("login_code")
   name         String
   country      String // TW, CN, US, etc.
   baseCurrency String  @map("base_currency") // TWD, CNY, USD
