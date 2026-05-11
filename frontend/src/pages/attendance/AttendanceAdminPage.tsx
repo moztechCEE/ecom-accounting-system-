@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { message, Tooltip } from "antd";
 import {
-  CalendarOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   DashboardOutlined,
@@ -215,7 +214,6 @@ const AttendanceAdminPage: React.FC = () => {
     carryOverHours: "",
     manualAdjustmentHours: "",
   });
-
   useEffect(() => {
     void loadAttendance();
   }, [selectedDate]);
@@ -261,7 +259,7 @@ const AttendanceAdminPage: React.FC = () => {
   const loadManagementData = async () => {
     try {
       setLoading(true);
-      const [requests, overtimeItems, balances, policies, closures] =
+      const [requests, overtimeItems, policies, closures] =
         await Promise.all([
           attendanceService.getAdminLeaveRequests({
             year: selectedYear,
@@ -273,16 +271,11 @@ const AttendanceAdminPage: React.FC = () => {
             status: overtimeStatusFilter || undefined,
             employeeId: employeeFilter || undefined,
           }),
-          attendanceService.getAdminLeaveBalances({
-            year: selectedYear,
-            employeeId: employeeFilter || undefined,
-          }),
           attendanceService.getAdminPolicies(),
           attendanceService.getDisasterClosures({ year: selectedYear }),
         ]);
       setLeaveRequests(requests);
       setOvertimeRequests(overtimeItems);
-      setLeaveBalances(balances);
       setPolicies(policies);
       setDisasterClosures(closures);
     } catch (error) {
@@ -358,11 +351,12 @@ const AttendanceAdminPage: React.FC = () => {
     pendingRequests: leaveRequests.filter(
       (request) => request.status === LeaveStatus.SUBMITTED,
     ).length,
-    trackedBalances: leaveBalances.length,
+    pendingOvertimeRequests: overtimeRequests.filter(
+      (request) =>
+        request.status === OvertimeRequestStatus.PENDING_MANAGER ||
+        request.status === OvertimeRequestStatus.PENDING_FINAL,
+    ).length,
     disasterClosures: disasterClosures.filter((event) => event.isActive).length,
-    remainingAnnualHours: leaveBalances
-      .filter((balance) => balance.leaveType.code === "ANNUAL")
-      .reduce((sum, balance) => sum + balance.remainingHours, 0),
   };
 
   const employeeBalanceRows = useMemo<EmployeeLeaveBalanceRow[]>(() => {
@@ -883,7 +877,20 @@ const AttendanceAdminPage: React.FC = () => {
       });
       message.success("年度額度已更新");
       setBalanceModalOpen(false);
-      await loadManagementData();
+      setLeaveBalances((current) =>
+        current.map((balance) =>
+          balance.id === editingBalance.id
+            ? {
+                ...balance,
+                accruedHours: Number(balanceForm.accruedHours || 0),
+                carryOverHours: Number(balanceForm.carryOverHours || 0),
+                manualAdjustmentHours: Number(
+                  balanceForm.manualAdjustmentHours || 0,
+                ),
+              }
+            : balance,
+        ),
+      );
     } catch (error) {
       console.error(error);
       message.error("更新額度失敗");
@@ -897,7 +904,6 @@ const AttendanceAdminPage: React.FC = () => {
     { key: "overtime", label: "加班審核", icon: <ClockCircleOutlined /> },
     { key: "policies", label: "班表政策", icon: <ClockCircleOutlined /> },
     { key: "closures", label: "統一放假", icon: <WarningOutlined /> },
-    { key: "balances", label: "年度額度", icon: <CalendarOutlined /> },
   ];
 
   const primaryAction =
@@ -929,7 +935,7 @@ const AttendanceAdminPage: React.FC = () => {
               考勤後臺
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-500">
-              這個工作台把每日出勤、假單審核、班表政策、統一放假與年度額度整合在一起。主管與人資可以在同一個後臺快速切換日常巡檢、審核與規則維護。
+              這個工作台把每日出勤、假單審核、加班審核、班表政策與統一放假整合在一起。主管與人資可以在同一個後臺快速切換日常巡檢與審核流程。
             </p>
           </div>
         </GlassCard>
@@ -995,28 +1001,26 @@ const AttendanceAdminPage: React.FC = () => {
         </GlassCard>
         <GlassCard className="relative overflow-hidden">
           <div className="absolute right-4 top-4 text-sky-300">
-            <CalendarOutlined className="text-4xl" />
+            <CheckCircleOutlined className="text-4xl" />
           </div>
-          <div className="text-sm text-slate-500">
-            {selectedYear} 年額度帳本
-          </div>
+          <div className="text-sm text-slate-500">待審核加班</div>
           <div className="mt-2 text-3xl font-semibold text-slate-900">
-            {managementStats.trackedBalances}
+            {managementStats.pendingOvertimeRequests}
           </div>
           <div className="mt-3 text-xs text-slate-400">
-            已建立的員工假別年度額度
+            等待主管或負責人放行的加班單
           </div>
         </GlassCard>
         <GlassCard className="relative overflow-hidden">
           <div className="absolute right-4 top-4 text-orange-300">
             <WarningOutlined className="text-4xl" />
           </div>
-          <div className="text-sm text-slate-500">全體特休餘額</div>
+          <div className="text-sm text-slate-500">啟用中放假宣告</div>
           <div className="mt-2 text-3xl font-semibold text-slate-900">
-            {(managementStats.remainingAnnualHours / 8).toFixed(1)} 天
+            {managementStats.disasterClosures}
           </div>
           <div className="mt-3 text-xs text-slate-400">
-            當年度已建立額度帳本的特休總剩餘量
+            會影響出勤摘要與薪資扣款的特殊日期
           </div>
         </GlassCard>
       </div>
@@ -1079,9 +1083,7 @@ const AttendanceAdminPage: React.FC = () => {
             </div>
           )}
 
-          {(activeTab === "requests" ||
-            activeTab === "overtime" ||
-            activeTab === "balances") && (
+          {(activeTab === "requests" || activeTab === "overtime") && (
             <div className="mb-6 flex flex-wrap gap-3">
               <div className="w-40">
                 {activeTab === "overtime" ? (
