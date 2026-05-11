@@ -3368,7 +3368,9 @@ export class ReportsService {
       this.prisma.expense.findMany({
         where: {
           entityId,
-          sourceModule: 'meta_ads',
+          sourceModule: {
+            in: ['meta_ads', 'google_ads'],
+          },
           ...(expenseDateFilter ? { expenseDate: expenseDateFilter } : {}),
         },
         orderBy: {
@@ -3380,6 +3382,7 @@ export class ReportsService {
           totalAmountOriginal: true,
           description: true,
           sourceId: true,
+          sourceModule: true,
           items: {
             select: {
               description: true,
@@ -3526,8 +3529,16 @@ export class ReportsService {
         expense.sourceId,
         ...expense.items.map((item) => item.description || ''),
       ].join(' ');
-      const accountId = this.extractMetaAdsAccountId(descriptionText);
-      const brand = this.resolveMetaAdsBrand(accountId, descriptionText);
+      const brand =
+        expense.sourceModule === 'google_ads'
+          ? this.resolveGoogleAdsBrand(
+              this.extractGoogleAdsCustomerId(descriptionText),
+              descriptionText,
+            )
+          : this.resolveMetaAdsBrand(
+              this.extractMetaAdsAccountId(descriptionText),
+              descriptionText,
+            );
       const spend =
         expense.items.length > 0
           ? expense.items.reduce(
@@ -3598,9 +3609,9 @@ export class ReportsService {
         orderCount: new Set(orders.map((order) => order.id)).size,
         expenseCount: adExpenses.length,
         salesSource: 'SHOPIFY',
-        adSource: 'META_ADS',
+        adSource: 'META_ADS + GOOGLE_ADS',
         attributionNote:
-          '這是會計口徑的 blended ROAS：Shopify 品牌營收除以 Meta 每日花費，不等於 Meta Pixel 歸因 ROAS。',
+          '這是會計口徑的 blended ROAS：Shopify 品牌營收除以 Meta 與 Google Ads 每日花費，不等於廣告平台歸因 ROAS。',
       },
       brands,
       periods,
@@ -4212,6 +4223,34 @@ export class ReportsService {
     return '未分類品牌';
   }
 
+  private extractGoogleAdsCustomerId(text: string) {
+    const explicit = text.match(/customer=(\d{6,})/i);
+    if (explicit?.[1]) {
+      return explicit[1];
+    }
+
+    const sourceId = text.match(/\b(\d{8,})(?=[:;\s]|$)/);
+    return sourceId?.[1] || '';
+  }
+
+  private resolveGoogleAdsBrand(customerId: string, text: string) {
+    const configuredBrand = this.getGoogleAdsConfiguredBrand(customerId);
+    if (configuredBrand) {
+      return configuredBrand;
+    }
+
+    if (/bonson|邦生/i.test(text)) return 'BONSON';
+    if (/moztech|墨子/i.test(text)) return 'MOZTECH';
+    if (/moritek/i.test(text)) return 'MORITEK';
+
+    const brandMatch = text.match(/brand=([^;\s]+)/i);
+    if (brandMatch?.[1]) {
+      return this.resolveCommerceBrand(brandMatch[1]);
+    }
+
+    return '未分類品牌';
+  }
+
   private getMetaAdsConfiguredBrand(accountId: string) {
     const raw = (
       this.configService.get<string>('META_ADS_ACCOUNTS_JSON', '') || ''
@@ -4236,6 +4275,34 @@ export class ReportsService {
         }
         const normalized = value.startsWith('act_') ? value : `act_${value}`;
         return normalized === accountId;
+      });
+      return typeof matched?.brand === 'string' ? matched.brand.trim() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  private getGoogleAdsConfiguredBrand(customerId: string) {
+    const raw = (
+      this.configService.get<string>('GOOGLE_ADS_ACCOUNTS_JSON', '') || ''
+    ).trim();
+    if (!raw || !customerId) {
+      return '';
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      const accounts = Array.isArray(parsed) ? parsed : parsed?.accounts;
+      if (!Array.isArray(accounts)) {
+        return '';
+      }
+
+      const normalizedCustomerId = String(customerId).replace(/[^0-9]/g, '');
+      const matched = accounts.find((account) => {
+        const value = String(
+          account?.customerId || account?.customer_id || account?.id || '',
+        ).replace(/[^0-9]/g, '');
+        return value === normalizedCustomerId;
       });
       return typeof matched?.brand === 'string' ? matched.brand.trim() : '';
     } catch {

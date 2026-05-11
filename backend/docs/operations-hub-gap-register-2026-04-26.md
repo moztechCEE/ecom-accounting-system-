@@ -311,6 +311,9 @@ Dashboard 最終不應只是展示業績，而是要主動揭露營運風險。
   - 已再補最近 30 天 `2026-04-12` 到 `2026-05-11`，`fetched=72`、`synced=72`、`created=54`、`updated=18`，`sourceModule=google_ads`。
 - `GET /reports/management-summary?entityId=tw-entity-001&groupBy=day&startDate=2026-04-12T00:00:00%2B08:00&endDate=2026-05-11T23:59:59%2B08:00` 已確認 Dashboard summary 可讀到每日廣告費；目前區間 `adSpendAmount=NT$1,926,620.23`、`adSpendCount=130`，此數字包含已存在的 Meta Ads 與新同步的 Google Ads。
 - Cloud Run 已開啟 `GOOGLE_ADS_SYNC_ENABLED=true` 並部署 revision `ecom-accounting-backend-00361-khw`；正式 readiness 再驗證 `ready=true`，每日排程會回刷最近 7 天 Google Ads spend。
+- 2026-05-11 Google Ads 品牌 mapping 更新：Cloud Run `GOOGLE_ADS_ACCOUNTS_JSON` 已設定 `8052579705 => MOZTECH`（使用者確認 MOZTECH 全球獨立站目前用此帳戶）、`8602556100 => BONSON`、`8672054842 => MORITEK`、`5801010919 => MOZTECH`。
+- 2026-05-11 已重新同步 `2026-04-12` 到 `2026-05-11` Google Ads daily spend，`fetched=72`、`synced=72`、`created=0`、`updated=72`，讓既有 `Expense / ExpenseItem` 帶入 brand / platform 描述。
+- 2026-05-11 已修正並部署 Cloud Run revision `ecom-accounting-backend-00366-z76`：`GET /reports/ad-performance-summary` 的廣告花費來源從只看 `meta_ads` 改為合併 `meta_ads + google_ads`，並依 Google Ads customer ID 解析品牌。正式 API 已驗證同區間 `adSpend=NT$1,927,783.01`，品牌拆分為 `MOZTECH=NT$1,221,124.60`、`BONSON=NT$703,230.34`、`MORITEK=NT$3,428.07`；`adSource` 已改為 `META_ADS + GOOGLE_ADS`。
 - 尚未完成：Google Ads 已可同步 spend，但廣告發票 / 收據、扣款信用卡 / 銀行帳戶 mapping 尚未補齊；因此目前可做費用與 ROAS 分析，尚不能完整做 AP / 銀行扣款核銷。
 
 必補能力：

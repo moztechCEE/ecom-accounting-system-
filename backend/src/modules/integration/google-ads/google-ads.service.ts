@@ -72,6 +72,17 @@ export class GoogleAdsService {
       }
     }
 
+    const inaccessibleConfiguredAccounts =
+      insightProbe?.success === true
+        ? []
+        : info.configuredAccounts
+            .map((account) => account.customerId)
+            .filter(
+              (customerId) =>
+                accessibleCustomers.length > 0 &&
+                !accessibleCustomers.includes(customerId),
+            );
+
     return {
       ready: missing.length === 0 && insightProbe?.success !== false,
       missing,
@@ -80,15 +91,13 @@ export class GoogleAdsService {
       configuredAccounts: info.configuredAccounts,
       loginCustomerId: info.loginCustomerId || null,
       accessibleCustomers,
-      inaccessibleConfiguredAccounts: info.configuredAccounts
-        .map((account) => account.customerId)
-        .filter(
-          (customerId) =>
-            accessibleCustomers.length > 0 &&
-            !accessibleCustomers.includes(customerId),
-        ),
+      inaccessibleConfiguredAccounts,
       accessibleCustomersError,
       insightProbe,
+      accessNote:
+        insightProbe?.success === true
+          ? 'Google Ads 子帳戶已透過 manager account 查詢成功；listAccessibleCustomers 只會列出 OAuth 直接可見的客戶或管理帳戶。'
+          : null,
       nextAction:
         missing.length === 0
           ? '可先用 /integrations/google-ads/insights 預覽 spend，再用 /integrations/google-ads/sync 寫入 Expense。'
