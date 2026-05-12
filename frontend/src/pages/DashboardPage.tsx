@@ -728,11 +728,24 @@ const DashboardPage: React.FC = () => {
   const adSpendAmount = rangeFinancial?.adSpendAmount || 0;
   const adSpendCount = rangeFinancial?.adSpendCount || 0;
   const adSpendTracked = adSpendCount > 0;
+  const historicalAdSpendCount = managementSummary?.summary?.adSpendCount || 0;
+  const hasHistoricalAdSpend = historicalAdSpendCount > 0;
   const adSpendCanSyncDaily = Boolean(adConnector?.internallyConfigured);
-  const adSpendNeedsSetup = !adSpendTracked && !adSpendCanSyncDaily;
-  const adSpendStatusLabel = adSpendTracked ? "已入費用" : adSpendCanSyncDaily ? "本區間 0" : "待串接";
+  const adSpendCanShowAmount = adSpendTracked || adSpendCanSyncDaily || hasHistoricalAdSpend;
+  const adSpendNeedsSetup = !adSpendCanShowAmount;
+  const adSpendNeedsSecretCheck = !adSpendTracked && hasHistoricalAdSpend && !adSpendCanSyncDaily;
+  const adSpendNeedsAttention = adSpendNeedsSetup || adSpendNeedsSecretCheck;
+  const adSpendStatusLabel = adSpendTracked
+    ? "已入費用"
+    : adSpendNeedsSecretCheck
+      ? "需檢查 Secret"
+      : adSpendCanSyncDaily || hasHistoricalAdSpend
+        ? "本區間 0"
+        : "待串接";
   const adSpendHelper = adSpendTracked
     ? `${adSpendCount} 筆廣告相關費用；Meta / Google 已可納入每日費用，TikTok 與扣款核銷可再補齊。`
+    : adSpendNeedsSecretCheck
+      ? `系統已有 ${historicalAdSpendCount} 筆歷史廣告費，但目前 connector readiness 沒讀到完整 Meta / Google 憑證；請檢查 Cloud Run Secret 掛載。`
     : adSpendCanSyncDaily
       ? "Meta / Google 憑證已在系統設定內；目前選取區間尚未寫入廣告費，若要補歷史資料請執行同步。"
       : adConnector?.nextAction || "請提供廣告平台 API、帳戶 mapping 與扣款來源。";
@@ -749,7 +762,7 @@ const DashboardPage: React.FC = () => {
     financialAuditIssueCount +
     overdueAR +
     overpaidAR +
-    (adSpendNeedsSetup ? 1 : 0);
+    (adSpendNeedsAttention ? 1 : 0);
   const criticalCount = criticalInventory + criticalAnomalies + overdueAR + overpaidAR;
   const financeOptionRows = [
     {
@@ -791,11 +804,11 @@ const DashboardPage: React.FC = () => {
     {
       key: "ad-spend",
       title: "廣告費串接",
-      count: adSpendNeedsSetup ? 1 : 0,
+      count: adSpendNeedsAttention ? 1 : 0,
       helper: adSpendHelper,
       actionLabel: "看串接準備",
       path: "/accounting/workbench?focus=connector-readiness",
-      tone: adSpendNeedsSetup ? "warning" : "healthy",
+      tone: adSpendNeedsAttention ? "warning" : "healthy",
     },
   ];
   const riskPriorityRows = [
@@ -836,9 +849,9 @@ const DashboardPage: React.FC = () => {
     },
     {
       label: "廣告串接",
-      count: adSpendNeedsSetup ? 1 : 0,
+      count: adSpendNeedsAttention ? 1 : 0,
       color: "#4f46e5",
-      helper: "廣告費尚未形成自動對帳鏈。",
+      helper: adSpendNeedsSecretCheck ? "已有歷史廣告費，但目前正式環境憑證狀態需確認。" : "廣告費尚未形成自動對帳鏈。",
       path: "/accounting/workbench?focus=connector-readiness",
     },
   ]
@@ -1038,19 +1051,19 @@ const DashboardPage: React.FC = () => {
           </div>
 
           <div className={`rounded-2xl border px-5 py-4 ${
-            adSpendNeedsSetup ? "border-amber-200 bg-amber-50/70" : "border-slate-100 bg-white/60"
+            adSpendNeedsAttention ? "border-amber-200 bg-amber-50/70" : "border-slate-100 bg-white/60"
           }`}>
             <div className="mb-3 flex items-center justify-between">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-indigo-700 shadow-sm">
                 <CreditCardOutlined />
               </div>
-              <Tag color={adSpendTracked ? "blue" : adSpendNeedsSetup ? "gold" : "green"}>
+              <Tag color={adSpendTracked ? "blue" : adSpendNeedsAttention ? "gold" : "green"}>
                 {adSpendStatusLabel}
               </Tag>
             </div>
             <div className="text-xs text-slate-500">{rangeLabel}廣告花費</div>
             <div className="mt-1 text-2xl font-bold text-slate-900">
-              {adSpendTracked || adSpendCanSyncDaily ? fmtMoney(adSpendAmount) : "待串接"}
+              {adSpendCanShowAmount ? fmtMoney(adSpendAmount) : "待串接"}
             </div>
             <div className="mt-2 text-xs leading-5 text-slate-500">
               {adSpendHelper}
@@ -1087,7 +1100,7 @@ const DashboardPage: React.FC = () => {
             <div className="text-xs text-slate-500">財務異常追蹤</div>
             <div className="mt-1 text-2xl font-bold text-slate-900">{financeWatchCount} 項</div>
             <div className="mt-2 text-xs leading-5 text-slate-500">
-              缺發票 {missingInvoiceCount} · 訂單稽核 {financialAuditIssueCount} · 廣告費 {adSpendNeedsSetup ? "待補" : "可追"}
+              缺發票 {missingInvoiceCount} · 訂單稽核 {financialAuditIssueCount} · 廣告費 {adSpendNeedsAttention ? "需確認" : "可追"}
             </div>
           </div>
         </div>
