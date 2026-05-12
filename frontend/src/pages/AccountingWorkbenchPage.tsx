@@ -883,6 +883,38 @@ const AccountingWorkbenchPage: React.FC = () => {
     downloadTextFile(`connector-requirements-${dayjs().format('YYYYMMDD-HHmmss')}.csv`, `\ufeff${csv}`)
     message.success('已匯出串接待補資料 CSV')
   }
+
+  const handleDownloadShoplinePaymentsTemplate = () => {
+    const headers = [
+      '訂單號碼',
+      '交易序號',
+      '交易金額',
+      '應收手續費',
+      '交易淨額',
+      '交易完成時間',
+      '結帳記錄時間',
+      '支付方式',
+      '交易詳情',
+    ]
+    const sample = [
+      'SL-ORDER-12345',
+      'shoplinepay-txn-12345',
+      '1280',
+      '38',
+      '1242',
+      '2026-05-12 14:30:00',
+      '2026-05-15 09:00:00',
+      'SHOPLINE Payments',
+      'payment',
+    ]
+    const csv = [headers, sample]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n')
+
+    downloadTextFile('shopline-payments-statement-template.csv', `\ufeff${csv}`)
+    message.success('已下載 Shopline Payments 對帳單匯入範本')
+  }
+
   const auditedOrderCount =
     Number(auditSummary?.auditedOrderCount || 0) ||
     Number(dataCompleteness?.totals.orders || 0)
@@ -1916,6 +1948,12 @@ const AccountingWorkbenchPage: React.FC = () => {
                 匯入 Shopline Payments 對帳單
               </Button>
             </Upload>
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={handleDownloadShoplinePaymentsTemplate}
+            >
+              下載 Shopline 對帳範本
+            </Button>
             <Button
               icon={<AuditOutlined />}
               onClick={() => navigate('/reports')}

@@ -197,6 +197,10 @@ export class ShoplineService {
   }
 
   async previewPaymentBalance() {
+    if (!this.allowPaymentsOpenApiAttempt()) {
+      return this.shoplinePaymentsUnavailableResponse('balance');
+    }
+
     const balances = await this.adapter.fetchPaymentBalance();
 
     return {
@@ -235,6 +239,19 @@ export class ShoplineService {
       };
     });
 
+    if (!this.allowPaymentsOpenApiAttempt()) {
+      return {
+        ready: false,
+        officialUnavailable: true,
+        configured,
+        requiredScope: 'read_payment',
+        message:
+          'Shopline 官方已確認 SHOPLINE Payments Admin OpenAPI / read_payment 目前不對外開放；撥款、手續費、保留款與未結算帳務需下載對帳單後匯入。',
+        nextAction:
+          '一般 Shopline 訂單 / 顧客繼續用 OpenAPI 自動同步；Payments 帳務請在會計工作台匯入 Shopline Payments 對帳單，走 shoplinepay 對帳流程。',
+      };
+    }
+
     if (!stores.length) {
       return {
         ready: false,
@@ -271,6 +288,10 @@ export class ShoplineService {
   }
 
   async previewPaymentBillingRecords(params: ShoplinePaymentQueryParams) {
+    if (!this.allowPaymentsOpenApiAttempt()) {
+      return this.shoplinePaymentsUnavailableResponse('balance_transactions');
+    }
+
     const query = this.resolvePaymentsQuery(params, 3);
     const records = await this.adapter.fetchPaymentBillingRecords({
       ...query,
@@ -290,6 +311,10 @@ export class ShoplineService {
   }
 
   async previewPaymentTransactions(params: ShoplinePaymentQueryParams) {
+    if (!this.allowPaymentsOpenApiAttempt()) {
+      return this.shoplinePaymentsUnavailableResponse('transactions');
+    }
+
     const query = this.resolvePaymentsQuery(params, 6);
     const transactions = await this.adapter.fetchPaymentStoreTransactions({
       ...query,
@@ -308,6 +333,10 @@ export class ShoplineService {
   }
 
   async previewPaymentPayouts(params: ShoplinePaymentQueryParams) {
+    if (!this.allowPaymentsOpenApiAttempt()) {
+      return this.shoplinePaymentsUnavailableResponse('payouts');
+    }
+
     const query = this.resolvePaymentsQuery(params, 3);
     const payouts = await this.adapter.fetchPaymentPayouts({
       ...query,
@@ -478,6 +507,20 @@ export class ShoplineService {
     userId?: string | null;
   }) {
     await this.assertEntityExists(params.entityId);
+
+    if (!this.allowPaymentsOpenApiAttempt()) {
+      return {
+        success: true,
+        skipped: true,
+        fetched: 0,
+        imported: 0,
+        provider: 'shoplinepay',
+        officialUnavailable: true,
+        message:
+          'Shopline 官方已確認 Payments Admin OpenAPI 不對外開放；請改從會計工作台匯入 Shopline Payments 對帳單。',
+      };
+    }
+
     const query = this.resolvePaymentsQuery(
       {
         since: params.since,
@@ -1427,6 +1470,27 @@ export class ShoplineService {
       return 'na';
     }
     return date.toISOString().slice(0, 10);
+  }
+
+  private allowPaymentsOpenApiAttempt() {
+    return (
+      this.config.get<string>('SHOPLINE_PAYMENTS_OPENAPI_OVERRIDE', 'false') ===
+      'true'
+    );
+  }
+
+  private shoplinePaymentsUnavailableResponse(endpoint: string) {
+    return {
+      success: false,
+      skipped: true,
+      officialUnavailable: true,
+      endpoint,
+      requiredScope: 'read_payment',
+      message:
+        'Shopline 官方已確認 SHOPLINE Payments Admin OpenAPI / read_payment 目前不對外開放；此端點不再主動呼叫遠端 API，避免 302 redirect 被誤判為 token 或 host 設定錯誤。',
+      nextAction:
+        '請從 SHOPLINE 後台下載 Payments 對帳單，於會計工作台匯入 Shopline Payments 對帳單，走 shoplinepay provider payout 對帳流程。',
+    };
   }
 
   private async resolveSyncUserId(preferredUserId?: string | null) {

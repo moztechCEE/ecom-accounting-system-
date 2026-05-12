@@ -48,7 +48,6 @@ import {
   arService,
   ReceivableMonitorResponse,
 } from "../services/ar.service";
-import api from "../services/api";
 import { apService } from "../services/ap.service";
 import { bankingService } from "../services/banking.service";
 import { salesService } from "../services/sales.service";
@@ -428,6 +427,10 @@ const DashboardPage: React.FC = () => {
         setInvoiceQueue(invoiceQueueData);
         setAudit(auditData);
         setReceivableMonitor(receivableMonitorData);
+        setFinance((prev) => ({
+          ...prev,
+          arOutstanding: receivableMonitorData.summary?.outstandingAmount ?? prev.arOutstanding,
+        }));
         setManagementSummary(mgmtSummaryData);
         setRangeManagementSummary(rangeMgmtSummaryData);
         setTodayManagementSummary(todayMgmtSummaryData);
@@ -476,7 +479,7 @@ const DashboardPage: React.FC = () => {
     };
   }, [rangeMode, customRange, refreshToken]);
 
-  // 財務快覽資料：使用共用 API baseURL，避免正式站打到 frontend origin 的 /api
+  // 財務快覽資料：跟著目前日期範圍計算，避免卡片混用全歷史快照。
   useEffect(() => {
     const entityId = localStorage.getItem('entityId')?.trim() ?? ''
     const { since, until } = resolveRange(rangeMode, DASHBOARD_TZ, customRange)
@@ -492,8 +495,7 @@ const DashboardPage: React.FC = () => {
 
     const fetchFinance = async () => {
       try {
-        const [arRes, apRes, bankRes] = await Promise.allSettled([
-          api.get('/ar/summary', { params: { entityId } }).then((response) => response.data),
+        const [apRes, bankRes] = await Promise.allSettled([
           apService.getInvoices(entityId).then((invoices) => ({
             outstanding: invoices
               .filter((invoice) => !['paid', 'void', 'cancelled'].includes(String(invoice.status || '').toLowerCase()))
@@ -510,7 +512,7 @@ const DashboardPage: React.FC = () => {
         ])
 
         setFinance((prev) => ({
-          arOutstanding: arRes.status === 'fulfilled' ? (arRes.value?.outstanding ?? prev.arOutstanding) : prev.arOutstanding,
+          arOutstanding: prev.arOutstanding,
           apOutstanding: apRes.status === 'fulfilled' ? (apRes.value?.outstanding ?? prev.apOutstanding) : prev.apOutstanding,
           inTransit: prev.inTransit, // from reconciliation endpoint
           bankBalance: bankRes.status === 'fulfilled' ? (bankRes.value?.balance ?? prev.bankBalance) : prev.bankBalance,
@@ -726,7 +728,14 @@ const DashboardPage: React.FC = () => {
   const adSpendAmount = rangeFinancial?.adSpendAmount || 0;
   const adSpendCount = rangeFinancial?.adSpendCount || 0;
   const adSpendTracked = adSpendCount > 0;
-  const adSpendConnectorIncomplete = adConnector?.status !== "ready";
+  const adSpendCanSyncDaily = Boolean(adConnector?.internallyConfigured);
+  const adSpendNeedsSetup = !adSpendTracked && !adSpendCanSyncDaily;
+  const adSpendStatusLabel = adSpendTracked ? "已入費用" : adSpendCanSyncDaily ? "本區間 0" : "待串接";
+  const adSpendHelper = adSpendTracked
+    ? `${adSpendCount} 筆廣告相關費用；Meta / Google 已可納入每日費用，TikTok 與扣款核銷可再補齊。`
+    : adSpendCanSyncDaily
+      ? "Meta / Google 憑證已在系統設定內；目前選取區間尚未寫入廣告費，若要補歷史資料請執行同步。"
+      : adConnector?.nextAction || "請提供廣告平台 API、帳戶 mapping 與扣款來源。";
   const payableExposure = Math.max(
     Number(finance.apOutstanding || 0),
     Number(executive?.expenses?.approvedUnpaidAmount || 0),
@@ -740,7 +749,7 @@ const DashboardPage: React.FC = () => {
     financialAuditIssueCount +
     overdueAR +
     overpaidAR +
-    (adSpendConnectorIncomplete && !adSpendTracked ? 1 : 0);
+    (adSpendNeedsSetup ? 1 : 0);
   const criticalCount = criticalInventory + criticalAnomalies + overdueAR + overpaidAR;
   const financeOptionRows = [
     {
@@ -782,13 +791,11 @@ const DashboardPage: React.FC = () => {
     {
       key: "ad-spend",
       title: "廣告費串接",
-      count: adSpendConnectorIncomplete && !adSpendTracked ? 1 : 0,
-      helper: adSpendTracked
-        ? "已有內部費用資料，後續可補 Meta / Google / TikTok 自動匯入。"
-        : "尚缺廣告 API、帳戶 mapping、發票 / 收據與扣款來源。",
+      count: adSpendNeedsSetup ? 1 : 0,
+      helper: adSpendHelper,
       actionLabel: "看串接準備",
       path: "/accounting/workbench?focus=connector-readiness",
-      tone: adSpendConnectorIncomplete && !adSpendTracked ? "warning" : "healthy",
+      tone: adSpendNeedsSetup ? "warning" : "healthy",
     },
   ];
   const riskPriorityRows = [
@@ -829,7 +836,7 @@ const DashboardPage: React.FC = () => {
     },
     {
       label: "廣告串接",
-      count: adSpendConnectorIncomplete && !adSpendTracked ? 1 : 0,
+      count: adSpendNeedsSetup ? 1 : 0,
       color: "#4f46e5",
       helper: "廣告費尚未形成自動對帳鏈。",
       path: "/accounting/workbench?focus=connector-readiness",
@@ -1031,24 +1038,22 @@ const DashboardPage: React.FC = () => {
           </div>
 
           <div className={`rounded-2xl border px-5 py-4 ${
-            adSpendConnectorIncomplete && !adSpendTracked ? "border-amber-200 bg-amber-50/70" : "border-slate-100 bg-white/60"
+            adSpendNeedsSetup ? "border-amber-200 bg-amber-50/70" : "border-slate-100 bg-white/60"
           }`}>
             <div className="mb-3 flex items-center justify-between">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-indigo-700 shadow-sm">
                 <CreditCardOutlined />
               </div>
-              <Tag color={adSpendTracked ? "blue" : adSpendConnectorIncomplete ? "gold" : "green"}>
-                {adSpendTracked ? "已入費用" : adSpendConnectorIncomplete ? "待串接" : "已設定"}
+              <Tag color={adSpendTracked ? "blue" : adSpendNeedsSetup ? "gold" : "green"}>
+                {adSpendStatusLabel}
               </Tag>
             </div>
             <div className="text-xs text-slate-500">{rangeLabel}廣告花費</div>
             <div className="mt-1 text-2xl font-bold text-slate-900">
-              {adSpendTracked ? fmtMoney(adSpendAmount) : "待串接"}
+              {adSpendTracked || adSpendCanSyncDaily ? fmtMoney(adSpendAmount) : "待串接"}
             </div>
             <div className="mt-2 text-xs leading-5 text-slate-500">
-              {adSpendTracked
-                ? `${adSpendCount} 筆廣告相關費用；Meta / Google / TikTok API 仍可補自動化。`
-                : adConnector?.nextAction || "請提供廣告平台 API、帳戶 mapping 與扣款來源。"}
+              {adSpendHelper}
             </div>
           </div>
 
@@ -1082,7 +1087,7 @@ const DashboardPage: React.FC = () => {
             <div className="text-xs text-slate-500">財務異常追蹤</div>
             <div className="mt-1 text-2xl font-bold text-slate-900">{financeWatchCount} 項</div>
             <div className="mt-2 text-xs leading-5 text-slate-500">
-              缺發票 {missingInvoiceCount} · 訂單稽核 {financialAuditIssueCount} · 廣告串接 {adSpendConnectorIncomplete && !adSpendTracked ? "待補" : "可追"}
+              缺發票 {missingInvoiceCount} · 訂單稽核 {financialAuditIssueCount} · 廣告費 {adSpendNeedsSetup ? "待補" : "可追"}
             </div>
           </div>
         </div>
