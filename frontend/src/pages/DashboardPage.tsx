@@ -53,6 +53,7 @@ import { bankingService } from "../services/banking.service";
 import { salesService } from "../services/sales.service";
 import {
   dashboardService,
+  AdPerformanceSummary,
   ConnectorReadiness,
   DashboardExecutiveOverview,
   DashboardOperationsHub,
@@ -133,6 +134,9 @@ const fmtMoney = (n: number) =>
 const fmtSignedMoney = (n: number) => `${n < 0 ? "-" : ""}${fmtMoney(Math.abs(n))}`;
 
 const fmtPct = (n: number | null | undefined) => `${Number(n || 0).toFixed(1)}%`;
+
+const fmtRoas = (n: number | null | undefined) =>
+  n == null ? "—" : `${Number(n || 0).toFixed(2)}x`;
 
 const fmtCompact = (n: number) => {
   const value = Number(n || 0);
@@ -320,6 +324,7 @@ const DashboardPage: React.FC = () => {
   const [managementSummary, setManagementSummary] = useState<ManagementSummary | null>(null)
   const [rangeManagementSummary, setRangeManagementSummary] = useState<ManagementSummary | null>(null)
   const [todayManagementSummary, setTodayManagementSummary] = useState<ManagementSummary | null>(null)
+  const [adPerformance, setAdPerformance] = useState<AdPerformanceSummary | null>(null)
   const [connectorReadiness, setConnectorReadiness] = useState<ConnectorReadiness | null>(null)
   const [financeOptionsOpen, setFinanceOptionsOpen] = useState(false)
 
@@ -362,6 +367,7 @@ const DashboardPage: React.FC = () => {
           mgmtSummaryData,
           rangeMgmtSummaryData,
           todayMgmtSummaryData,
+          adPerformanceData,
           connectorReadinessData,
         ] = await Promise.all([
           dashboardService.getSalesOverview({
@@ -414,6 +420,12 @@ const DashboardPage: React.FC = () => {
             startDate: todayStart,
             endDate: todayEnd,
           }),
+          dashboardService.getAdPerformanceSummary({
+            entityId: storedEntityId,
+            groupBy: rangeMode === 'all' || rangeMode === 'last1y' ? 'month' : 'day',
+            startDate: since,
+            endDate: until,
+          }).catch(() => null),
           dashboardService.getConnectorReadiness({
             entityId: storedEntityId,
           }),
@@ -434,6 +446,7 @@ const DashboardPage: React.FC = () => {
         setManagementSummary(mgmtSummaryData);
         setRangeManagementSummary(rangeMgmtSummaryData);
         setTodayManagementSummary(todayMgmtSummaryData);
+        setAdPerformance(adPerformanceData);
         setConnectorReadiness(connectorReadinessData);
 
         // 30天走勢圖 — 真實日報資料
@@ -702,6 +715,32 @@ const DashboardPage: React.FC = () => {
       net: b.payoutNet,
       color: getChannelColor(b.key),
     }))
+  const platformRevenueRows = performanceBuckets
+    .filter(b => !PAYMENT_GATEWAY_PATTERN.test(b.key || ''))
+    .map((bucket) => ({
+      key: bucket.key,
+      label: bucket.label,
+      gross: Number(bucket.gross || 0),
+      payoutNet: Number(bucket.payoutNet || 0),
+      feeTotal: Number(bucket.feeTotal || 0),
+      orderCount: Number(bucket.orderCount || 0),
+      paymentCount: Number(bucket.paymentCount || 0),
+      color: getChannelColor(`${bucket.key} ${bucket.label}`),
+    }))
+    .sort((left, right) => right.gross - left.gross)
+  const topPlatformRevenueRows = platformRevenueRows.slice(0, 5)
+  const adPerformanceRows = (adPerformance?.brands || [])
+    .map((brand) => ({
+      brand: brand.brand,
+      revenue: Number(brand.revenue || 0),
+      adSpend: Number(brand.adSpend || 0),
+      roas: brand.roas,
+      orderCount: Number(brand.orderCount || 0),
+      revenueShare: Number(brand.revenueShare || 0),
+      adSpendShare: Number(brand.adSpendShare || 0),
+    }))
+    .sort((left, right) => right.adSpend - left.adSpend)
+  const topAdPerformanceRows = adPerformanceRows.slice(0, 5)
   const channelPieData = (() => {
     const sorted = platformContribs
       .filter((item) => item.net > 0)
@@ -1104,6 +1143,107 @@ const DashboardPage: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ── 平台營收與廣告效益：第一屏就能看到通路與投放是否對得上 ── */}
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Platform Revenue</div>
+              <div className="mt-1 text-lg font-semibold text-slate-900">各平台營收情況</div>
+              <div className="mt-1 text-sm text-slate-500">
+                {selectedPeriodLabel}的 Shopify、Shopline、1Shop 等銷售通路，直接看營收、訂單與實際淨入帳。
+              </div>
+            </div>
+            <Tag className="rounded-full bg-slate-100 text-slate-500 border-slate-200 text-xs">
+              {platformRevenueRows.length} 個通路
+            </Tag>
+          </div>
+
+          {topPlatformRevenueRows.length > 0 ? (
+            <div className="space-y-3">
+              {topPlatformRevenueRows.map((row) => {
+                const netRate = row.gross > 0 ? (row.payoutNet / row.gross) * 100 : 0
+                return (
+                  <div key={row.key} className="rounded-2xl border border-slate-100 bg-white/65 px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <span className="mt-1 h-3 w-3 shrink-0 rounded-full" style={{ background: row.color }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0 truncate text-sm font-semibold text-slate-900">{row.label}</div>
+                          <div className="text-base font-bold text-slate-900">{fmtMoney(row.gross)}</div>
+                        </div>
+                        <div className="mt-2 grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
+                          <div>訂單 {row.orderCount.toLocaleString("zh-TW")} 筆</div>
+                          <div>淨入帳 {fmtMoney(row.payoutNet)}</div>
+                          <div>淨入帳率 {fmtPct(netRate)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="flex h-[180px] items-center justify-center rounded-2xl border border-dashed border-slate-200 text-sm text-slate-400">
+              目前區間尚無平台營收資料
+            </div>
+          )}
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Ad Efficiency</div>
+              <div className="mt-1 text-lg font-semibold text-slate-900">廣告花費與營業額對照</div>
+              <div className="mt-1 text-sm text-slate-500">
+                以品牌對齊 Meta / Google 花費與 Shopify、Shopline、1Shop 營收，先看會計口徑 ROAS。
+              </div>
+            </div>
+            <Tag className="rounded-full bg-amber-50 text-amber-700 border-amber-100 text-xs">
+              {adPerformance?.summary?.adSource || "Meta / Google"}
+            </Tag>
+          </div>
+
+          {topAdPerformanceRows.length > 0 ? (
+            <div className="space-y-3">
+              {topAdPerformanceRows.map((row) => (
+                <div key={row.brand} className="rounded-2xl border border-slate-100 bg-white/65 px-4 py-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">{row.brand}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        營收占比 {fmtPct(row.revenueShare)} · 廣告占比 {fmtPct(row.adSpendShare)}
+                      </div>
+                    </div>
+                    <Tag color={row.roas && row.roas >= 2 ? "green" : row.roas && row.roas >= 1 ? "gold" : "red"}>
+                      ROAS {fmtRoas(row.roas)}
+                    </Tag>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
+                    <div>
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">營業額</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900">{fmtMoney(row.revenue)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">廣告費</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900">{fmtMoney(row.adSpend)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">訂單</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900">{row.orderCount.toLocaleString("zh-TW")} 筆</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex h-[180px] items-center justify-center rounded-2xl border border-dashed border-slate-200 text-sm text-slate-400">
+              目前區間尚無廣告效益資料
+            </div>
+          )}
+        </motion.div>
       </div>
 
       {/* ── CEO 快速圖表：趨勢、占比、風險 ── */}

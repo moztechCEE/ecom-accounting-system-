@@ -366,6 +366,52 @@ export type ManagementSummary = {
   periods: ManagementSummaryPeriod[];
 };
 
+export type AdPerformanceBrand = {
+  brand: string;
+  revenue: number;
+  adSpend: number;
+  roas: number | null;
+  orderCount: number;
+  customerCount: number;
+  revenueShare: number;
+  adSpendShare: number;
+};
+
+export type AdPerformancePeriod = {
+  key: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  brand: string;
+  revenue: number;
+  adSpend: number;
+  roas: number | null;
+  orderCount: number;
+  customerCount: number;
+};
+
+export type AdPerformanceSummary = {
+  entityId: string;
+  groupBy: ManagementSummaryGroupBy;
+  range: {
+    startDate: string | null;
+    endDate: string | null;
+  };
+  summary: {
+    revenue: number;
+    adSpend: number;
+    roas: number | null;
+    brandCount: number;
+    orderCount: number;
+    expenseCount: number;
+    salesSource: string;
+    adSource: string;
+    attributionNote: string;
+  };
+  brands: AdPerformanceBrand[];
+  periods: AdPerformancePeriod[];
+};
+
 export type EcommerceHistoryPeriod = {
   key: string;
   label: string;
@@ -685,6 +731,29 @@ export const dashboardService = {
 
     const response = await api.get<EcommerceHistory>(
       `/reports/ecommerce-history?${query.toString()}`,
+    );
+    return response.data;
+  },
+
+  async getAdPerformanceSummary(params?: {
+    entityId?: string;
+    groupBy?: ManagementSummaryGroupBy;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<AdPerformanceSummary> {
+    const query = new URLSearchParams();
+    query.set("entityId", params?.entityId?.trim() || DEFAULT_ENTITY_ID);
+    query.set("groupBy", params?.groupBy || "day");
+    if (params?.startDate) {
+      query.set("startDate", params.startDate);
+    }
+    if (params?.endDate) {
+      query.set("endDate", params.endDate);
+    }
+    query.set("_ts", String(Date.now()));
+
+    const response = await api.get<AdPerformanceSummary>(
+      `/reports/ad-performance-summary?${query.toString()}`,
     );
     return response.data;
   },
