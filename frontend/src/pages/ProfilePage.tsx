@@ -190,6 +190,7 @@ const ProfilePage: React.FC = () => {
                     id: `${employeeProfile.id}:${docType}`,
                     docType,
                     status: 'PENDING',
+                    isRequired: false,
                   } as EmployeeOnboardingDocument)
                 const statusMeta = onboardingStatusMeta[document.status]
 
@@ -197,7 +198,10 @@ const ProfilePage: React.FC = () => {
                   <div key={docType} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <div className="font-medium text-slate-800">{label}</div>
+                        <div className="flex flex-wrap items-center gap-2 font-medium text-slate-800">
+                          <span>{label}</span>
+                          {document.isRequired ? <Tag color="red">必填</Tag> : null}
+                        </div>
                         <div className="text-xs text-slate-500">{document.fileName || '尚未上傳'}</div>
                       </div>
                       <Tag color={statusMeta.color}>{statusMeta.label}</Tag>

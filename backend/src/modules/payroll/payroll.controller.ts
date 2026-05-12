@@ -228,6 +228,28 @@ export class PayrollController {
     );
   }
 
+  @Patch('employees/:id/onboarding-documents/:docType/requirement')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'employees_admin', action: 'update' })
+  @ApiOperation({ summary: '更新員工入職文件必填設定' })
+  @ApiResponse({ status: 200, description: '成功更新員工入職文件必填設定' })
+  async updateEmployeeOnboardingDocumentRequirement(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('docType') docType: string,
+    @Body()
+    body: {
+      isRequired: boolean;
+    },
+  ) {
+    return this.payrollService.updateEmployeeOnboardingDocumentRequirement(
+      req.user.id,
+      id,
+      docType,
+      Boolean(body.isRequired),
+    );
+  }
+
   @Get('employees/:id/onboarding-documents/:docType/download')
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'employees_admin', action: 'read' })

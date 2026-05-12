@@ -9,6 +9,7 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
+  Segmented,
   Select,
   Space,
   Switch,
@@ -285,6 +286,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           id: `${employee.id}:${docType}`,
           docType,
           status: "PENDING",
+          isRequired: false,
         } as EmployeeOnboardingDocument);
 
       return docType === nextDocument.docType ? nextDocument : existing;
@@ -488,6 +490,41 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     }
   };
 
+  const handleUpdateOnboardingDocumentRequirement = async (
+    docType: EmployeeOnboardingDocument["docType"],
+    isRequired: boolean,
+  ) => {
+    if (!selectedEmployee) {
+      return;
+    }
+
+    try {
+      setDocumentActionLoading(docType);
+      const nextDocument =
+        await payrollService.updateEmployeeOnboardingDocumentRequirement(
+          selectedEmployee.id,
+          docType,
+          isRequired,
+        );
+      const nextEmployee = replaceSelectedEmployeeDocument(
+        selectedEmployee,
+        nextDocument,
+      );
+      setSelectedEmployee(nextEmployee);
+      setEmployees((prev) =>
+        prev.map((employee) =>
+          employee.id === nextEmployee.id ? nextEmployee : employee,
+        ),
+      );
+      void fetchReviewQueue();
+      message.success(isRequired ? "已設為必填項目" : "已設為非必填項目");
+    } catch (error) {
+      message.error(getErrorMessage(error, "更新必填設定失敗"));
+    } finally {
+      setDocumentActionLoading(null);
+    }
+  };
+
   const columns = [
     { title: "員工編號", dataIndex: "employeeNo", key: "employeeNo" },
     { title: "姓名", dataIndex: "name", key: "name" },
@@ -508,18 +545,21 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       render: (_: unknown, record: Employee) => {
         const verifiedCount =
           record.onboardingDocuments?.filter(
-            (document) => document.status === "VERIFIED",
+            (document) => document.isRequired && document.status === "VERIFIED",
           ).length || 0;
+        const requiredCount =
+          record.onboardingDocuments?.filter((document) => document.isRequired)
+            .length || 0;
         return (
           <Space wrap size={[4, 4]}>
             <Tag
               color={
-                verifiedCount === onboardingDocDefinitions.length
+                requiredCount > 0 && verifiedCount === requiredCount
                   ? "green"
                   : "default"
               }
             >
-              {verifiedCount}/{onboardingDocDefinitions.length} 已核實
+              必填 {verifiedCount}/{requiredCount} 已核實
             </Tag>
             {record.onboardingDocuments?.some(
               (document) => document.status === "UPLOADED",
@@ -717,6 +757,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                   id: `${selectedEmployee?.id || "employee"}:${docType}`,
                   docType,
                   status: "PENDING",
+                  isRequired: false,
                 } as EmployeeOnboardingDocument);
               const statusMeta = onboardingStatusMeta[document.status];
 
@@ -726,13 +767,38 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                   className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-slate-800">{label}</div>
+                    <div className="min-w-[180px]">
+                      <div className="flex flex-wrap items-center gap-2 font-medium text-slate-800">
+                        <span>{label}</span>
+                        {document.isRequired ? (
+                          <Tag color="red">必填</Tag>
+                        ) : (
+                          <Tag>非必填</Tag>
+                        )}
+                      </div>
                       <div className="text-xs text-slate-500">
                         {document.fileName || "尚未上傳"}
                       </div>
                     </div>
-                    <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-slate-500">必填項目</span>
+                      <Segmented
+                        size="small"
+                        value={document.isRequired ? "yes" : "no"}
+                        options={[
+                          { label: "是", value: "yes" },
+                          { label: "否", value: "no" },
+                        ]}
+                        disabled={documentActionLoading === docType}
+                        onChange={(value) =>
+                          void handleUpdateOnboardingDocumentRequirement(
+                            docType,
+                            value === "yes",
+                          )
+                        }
+                      />
+                      <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
+                    </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Upload

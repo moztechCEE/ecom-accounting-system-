@@ -138,6 +138,18 @@ export const payrollService = {
     return response.data;
   },
 
+  updateEmployeeOnboardingDocumentRequirement: async (
+    employeeId: string,
+    docType: EmployeeOnboardingDocument["docType"],
+    isRequired: boolean,
+  ) => {
+    const response = await api.patch<EmployeeOnboardingDocument>(
+      `/payroll/employees/${employeeId}/onboarding-documents/${docType}/requirement`,
+      { isRequired },
+    );
+    return response.data;
+  },
+
   downloadEmployeeOnboardingDocument: async (
     employeeId: string,
     docType: EmployeeOnboardingDocument["docType"],

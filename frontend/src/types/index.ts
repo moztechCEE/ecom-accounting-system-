@@ -334,6 +334,7 @@ export interface EmployeeOnboardingDocument {
   id: string;
   docType: "ID_FRONT" | "ID_BACK" | "HEALTH_CHECK";
   status: "PENDING" | "UPLOADED" | "VERIFIED";
+  isRequired?: boolean;
   fileName?: string | null;
   mimeType?: string | null;
   fileSize?: number;

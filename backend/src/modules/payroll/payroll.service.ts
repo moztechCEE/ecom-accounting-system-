@@ -149,6 +149,7 @@ export class PayrollService {
           id: true,
           docType: true,
           status: true,
+          isRequired: true,
           fileName: true,
           mimeType: true,
           fileSize: true,
@@ -199,6 +200,7 @@ export class PayrollService {
         id: `${employee.id}:${docType}`,
         docType,
         status: 'PENDING',
+        isRequired: false,
         fileName: null,
         mimeType: null,
         fileSize: undefined,
@@ -1532,6 +1534,7 @@ export class PayrollService {
         id: true,
         docType: true,
         status: true,
+        isRequired: true,
         fileName: true,
         mimeType: true,
         fileSize: true,
@@ -1618,6 +1621,7 @@ export class PayrollService {
         id: `${employeeId}:${docType}`,
         docType,
         status: 'PENDING',
+        isRequired: false,
         fileName: null,
         mimeType: null,
         fileSize: undefined,
@@ -1655,6 +1659,7 @@ export class PayrollService {
               id: true,
               docType: true,
               status: true,
+              isRequired: true,
               fileName: true,
               mimeType: true,
               fileSize: true,
@@ -1679,6 +1684,7 @@ export class PayrollService {
               id: true,
               docType: true,
               status: true,
+              isRequired: true,
               fileName: true,
               mimeType: true,
               fileSize: true,
@@ -1708,6 +1714,95 @@ export class PayrollService {
     });
 
     return nextDocument;
+  }
+
+  async updateEmployeeOnboardingDocumentRequirement(
+    actorUserId: string,
+    employeeId: string,
+    docType: string,
+    isRequired: boolean,
+  ) {
+    if (!this.isEmployeeOnboardingDocType(docType)) {
+      throw new BadRequestException('不支援的入職文件類型');
+    }
+
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { id: true, entityId: true },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const access = await this.getEmployeeDataAccessContext(
+      actorUserId,
+      employee.entityId,
+    );
+    const visibleEmployee = await this.prisma.employee.findFirst({
+      where: {
+        id: employee.id,
+        ...this.buildEmployeeAccessWhere(access),
+      },
+      select: { id: true },
+    });
+    if (!visibleEmployee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const existing = await this.prisma.employeeOnboardingDocument.findUnique({
+      where: {
+        employeeId_docType: {
+          employeeId,
+          docType,
+        },
+      },
+      select: {
+        id: true,
+        isRequired: true,
+      },
+    });
+
+    const document = await this.prisma.employeeOnboardingDocument.upsert({
+      where: {
+        employeeId_docType: {
+          employeeId,
+          docType,
+        },
+      },
+      create: {
+        employeeId,
+        docType,
+        status: 'PENDING',
+        isRequired,
+      },
+      update: {
+        isRequired,
+      },
+      select: {
+        id: true,
+        docType: true,
+        status: true,
+        isRequired: true,
+        fileName: true,
+        mimeType: true,
+        fileSize: true,
+        uploadedAt: true,
+        verifiedAt: true,
+        verifiedBy: true,
+      },
+    });
+
+    await this.auditLogService.record({
+      userId: actorUserId,
+      tableName: 'employee_onboarding_documents',
+      recordId: document.id,
+      action: 'UPDATE',
+      oldData: existing ? { isRequired: existing.isRequired } : null,
+      newData: { isRequired: document.isRequired },
+    });
+
+    return document;
   }
 
   async downloadEmployeeOnboardingDocument(
@@ -1877,6 +1972,7 @@ export class PayrollService {
             id: true,
             docType: true,
             status: true,
+            isRequired: true,
             fileName: true,
             mimeType: true,
             fileSize: true,

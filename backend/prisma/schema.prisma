@@ -1465,6 +1465,7 @@ model EmployeeOnboardingDocument {
   employeeId     String    @map("employee_id")
   docType        String    @map("doc_type") // ID_FRONT, ID_BACK, HEALTH_CHECK
   status         String    @default("PENDING") // PENDING, UPLOADED, VERIFIED
+  isRequired     Boolean   @default(false) @map("is_required")
   fileName       String?   @map("file_name")
   mimeType       String?   @map("mime_type")
   fileSize       Int?      @map("file_size")
