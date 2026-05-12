@@ -1999,6 +1999,92 @@ export class PayrollService {
     return runs.map((run) => this.serializePayrollRun(run));
   }
 
+  async getEmployeeSalaryRows(userId: string, entityId?: string) {
+    const access = await this.getPayrollDataAccessContext(userId, entityId);
+    const itemWhere = this.buildPayrollItemAccessWhere(access);
+
+    const runs = await this.prisma.payrollRun.findMany({
+      where: {
+        entityId: access.entityId,
+        ...(itemWhere ? { items: { some: itemWhere } } : {}),
+      },
+      include: {
+        items: itemWhere
+          ? {
+              where: itemWhere,
+              include: {
+                employee: {
+                  select: {
+                    id: true,
+                    employeeNo: true,
+                    name: true,
+                    department: { select: { name: true } },
+                  },
+                },
+              },
+            }
+          : {
+              include: {
+                employee: {
+                  select: {
+                    id: true,
+                    employeeNo: true,
+                    name: true,
+                    department: { select: { name: true } },
+                  },
+                },
+              },
+            },
+      },
+      orderBy: [{ payDate: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    return runs.flatMap((run) => {
+      const grouped = new Map<string, typeof run.items>();
+
+      for (const item of run.items) {
+        grouped.set(item.employeeId, [
+          ...(grouped.get(item.employeeId) ?? []),
+          item,
+        ]);
+      }
+
+      return Array.from(grouped.entries()).map(([employeeId, items]) => {
+        const employee = items[0]?.employee;
+        const grossAmount = items
+          .filter((item) => this.toNumber(item.amountBase) > 0)
+          .reduce((sum, item) => sum + this.toNumber(item.amountBase), 0);
+        const deductionAmount = Math.abs(
+          items
+            .filter((item) => this.toNumber(item.amountBase) < 0)
+            .reduce((sum, item) => sum + this.toNumber(item.amountBase), 0),
+        );
+        const netAmount = items.reduce(
+          (sum, item) => sum + this.toNumber(item.amountBase),
+          0,
+        );
+
+        return {
+          id: `${run.id}:${employeeId}`,
+          payrollRunId: run.id,
+          employeeId,
+          payrollMonth: run.periodEnd.toISOString(),
+          bookName: `${run.periodEnd.toISOString().slice(0, 7).replace('-', '')}薪資`,
+          periodStart: run.periodStart,
+          periodEnd: run.periodEnd,
+          payDate: run.payDate,
+          status: run.status,
+          departmentName: employee?.department?.name ?? null,
+          employeeNo: employee?.employeeNo ?? '',
+          employeeName: employee?.name ?? '',
+          grossAmount,
+          deductionAmount,
+          netAmount,
+        };
+      });
+    });
+  }
+
   async getLegacyPayrolls(
     userId: string,
     entityId?: string,

@@ -373,6 +373,24 @@ export interface PayrollRun {
   items?: PayrollItem[];
 }
 
+export interface PayrollEmployeeSalaryRow {
+  id: string;
+  payrollRunId: string;
+  employeeId: string;
+  payrollMonth: string;
+  bookName: string;
+  periodStart: string;
+  periodEnd: string;
+  payDate: string;
+  status: string;
+  departmentName?: string | null;
+  employeeNo: string;
+  employeeName: string;
+  grossAmount: number;
+  deductionAmount: number;
+  netAmount: number;
+}
+
 export interface PayrollRunPrecheckIssue {
   employeeId: string;
   employeeNo: string;

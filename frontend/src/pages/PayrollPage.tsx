@@ -39,6 +39,7 @@ import { payrollService } from '../services/payroll.service'
 import {
   AuditLogEntry,
   BankAccount,
+  PayrollEmployeeSalaryRow,
   PayrollItem,
   PayrollRun,
   PayrollRunPrecheckIssue,
@@ -93,8 +94,10 @@ type PayrollRunCreatePayload = {
 const PayrollPage: React.FC = () => {
   const { user } = useAuth()
   const [adminRuns, setAdminRuns] = useState<PayrollRun[]>([])
+  const [employeeSalaryRows, setEmployeeSalaryRows] = useState<PayrollEmployeeSalaryRow[]>([])
   const [myRuns, setMyRuns] = useState<PayrollRun[]>([])
   const [loadingAdmin, setLoadingAdmin] = useState(false)
+  const [loadingEmployeeSalaries, setLoadingEmployeeSalaries] = useState(false)
   const [loadingMine, setLoadingMine] = useState(false)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -141,6 +144,24 @@ const PayrollPage: React.FC = () => {
     }
   }
 
+  const fetchEmployeeSalaryRows = async () => {
+    if (!canReviewPayroll) {
+      setEmployeeSalaryRows([])
+      return
+    }
+
+    setLoadingEmployeeSalaries(true)
+    try {
+      const rows = await payrollService.getEmployeeSalaryRows()
+      setEmployeeSalaryRows(Array.isArray(rows) ? rows : [])
+    } catch (error) {
+      message.error('載入職員薪資失敗')
+      setEmployeeSalaryRows([])
+    } finally {
+      setLoadingEmployeeSalaries(false)
+    }
+  }
+
   const fetchMyRuns = async () => {
     setLoadingMine(true)
     try {
@@ -172,6 +193,7 @@ const PayrollPage: React.FC = () => {
 
   useEffect(() => {
     fetchAdminRuns()
+    fetchEmployeeSalaryRows()
     fetchMyRuns()
     fetchBankAccounts()
   }, [canReviewPayroll, canManagePayroll])
@@ -302,6 +324,7 @@ const PayrollPage: React.FC = () => {
       const updated = await payrollService.approvePayrollRun(runId)
       message.success('薪資批次已確定')
       syncRunIntoLists(updated)
+      fetchEmployeeSalaryRows()
       fetchMyRuns()
     } catch (error: any) {
       message.error(error?.response?.data?.message || '確定薪資失敗')
@@ -326,6 +349,7 @@ const PayrollPage: React.FC = () => {
           })
           message.success('薪資批次已退回草稿')
           syncRunIntoLists(updated)
+          fetchEmployeeSalaryRows()
           fetchMyRuns()
         } catch (error: any) {
           message.error(error?.response?.data?.message || '取消確定失敗')
@@ -342,6 +366,7 @@ const PayrollPage: React.FC = () => {
       const updated = await payrollService.postPayrollRun(runId)
       message.success('薪資批次已產生會計憑證')
       syncRunIntoLists(updated)
+      fetchEmployeeSalaryRows()
       fetchMyRuns()
     } catch (error: any) {
       message.error(error?.response?.data?.message || '產生會計憑證失敗')
@@ -371,8 +396,9 @@ const PayrollPage: React.FC = () => {
         bankAccountId: values.bankAccountId,
         paidAt: values.paidAt?.toISOString(),
       })
-      message.success('薪資已標記為完成發薪')
+      message.success('薪資付款憑證已建立並完成發薪')
       syncRunIntoLists(updated)
+      fetchEmployeeSalaryRows()
       setPayModalOpen(false)
       payForm.resetFields()
       fetchMyRuns()
@@ -489,6 +515,14 @@ const PayrollPage: React.FC = () => {
     }
   }
 
+  const handleDownloadEmployeePayslipPdf = async (row: PayrollEmployeeSalaryRow) => {
+    try {
+      await payrollService.downloadPayrollRunPdf(row.payrollRunId, row.employeeId)
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '列印員工薪資單失敗')
+    }
+  }
+
   const adminColumns = [
     {
       title: '歸屬年月',
@@ -594,10 +628,85 @@ const PayrollPage: React.FC = () => {
               loading={actionLoadingId === record.id}
               onClick={() => openPayModal(record)}
             >
-              發薪
+              付款憑證
             </Button>
           ) : null}
         </Space>
+      ),
+    },
+  ]
+
+  const employeeSalaryColumns = [
+    {
+      title: '歸屬年月',
+      key: 'payrollMonth',
+      render: (_: unknown, row: PayrollEmployeeSalaryRow) =>
+        `${dayjs(row.periodEnd).format('YYYY/MM')} -1`,
+    },
+    {
+      title: '薪資帳簿名稱',
+      dataIndex: 'bookName',
+      key: 'bookName',
+    },
+    {
+      title: '對象期間',
+      key: 'period',
+      render: (_: unknown, row: PayrollEmployeeSalaryRow) =>
+        `${dayjs(row.periodStart).format('YYYY/MM/DD')} ~ ${dayjs(row.periodEnd).format('YYYY/MM/DD')}`,
+    },
+    {
+      title: '部門名稱',
+      dataIndex: 'departmentName',
+      key: 'departmentName',
+      render: (value?: string | null) => value || '未分配',
+    },
+    {
+      title: '職員編碼',
+      dataIndex: 'employeeNo',
+      key: 'employeeNo',
+    },
+    {
+      title: '職員姓名',
+      dataIndex: 'employeeName',
+      key: 'employeeName',
+    },
+    {
+      title: '支付總額',
+      dataIndex: 'grossAmount',
+      key: 'grossAmount',
+      align: 'right' as const,
+      render: (value: number) => value.toLocaleString(),
+    },
+    {
+      title: '扣除總額',
+      dataIndex: 'deductionAmount',
+      key: 'deductionAmount',
+      align: 'right' as const,
+      render: (value: number) => value.toLocaleString(),
+    },
+    {
+      title: '實支付額',
+      dataIndex: 'netAmount',
+      key: 'netAmount',
+      align: 'right' as const,
+      render: (value: number) => value.toLocaleString(),
+    },
+    {
+      title: '狀態',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status: string) => {
+        const meta = statusMetaMap[status] ?? { label: status, color: 'default' }
+        return <Tag color={meta.color}>{meta.label}</Tag>
+      },
+    },
+    {
+      title: '列印',
+      key: 'print',
+      render: (_: unknown, row: PayrollEmployeeSalaryRow) => (
+        <Button type="link" icon={<PrinterOutlined />} onClick={() => handleDownloadEmployeePayslipPdf(row)}>
+          列印
+        </Button>
       ),
     },
   ]
@@ -815,6 +924,27 @@ const PayrollPage: React.FC = () => {
     </div>
   )
 
+  const employeeSalaryPanel = (
+    <div className="space-y-8">
+      <Alert
+        type="info"
+        showIcon
+        message="管理員可以依資料權限查詢職員薪資"
+        description="列表會依薪資批次拆成每位員工一列，方便核對支付總額、扣除總額與實支付額；列印會下載該員工該期薪資單。"
+      />
+      <Card className="glass-card" bordered={false}>
+        <Table
+          rowKey="id"
+          loading={loadingEmployeeSalaries}
+          columns={employeeSalaryColumns}
+          dataSource={employeeSalaryRows}
+          pagination={{ pageSize: 10 }}
+          scroll={{ x: 1280 }}
+        />
+      </Card>
+    </div>
+  )
+
   const myPanel = (
     <div className="space-y-8">
       {myRunsError ? <Alert type="info" showIcon message="個人薪資單尚未啟用" description={myRunsError} /> : null}
@@ -873,6 +1003,7 @@ const PayrollPage: React.FC = () => {
   const tabItems = canReviewPayroll
     ? [
         { key: 'admin', label: '月薪資台帳', children: adminPanel },
+        { key: 'employee-salaries', label: '查詢職員薪資', children: employeeSalaryPanel },
         { key: 'mine', label: '我的薪資單', children: myPanel },
       ]
     : [{ key: 'mine', label: '我的薪資單', children: myPanel }]
@@ -1065,7 +1196,7 @@ const PayrollPage: React.FC = () => {
                     loading={actionLoadingId === selectedRun.id}
                     onClick={() => openPayModal(selectedRun)}
                   >
-                    標記已發薪
+                    建立付款憑證並發薪
                   </Button>
                 ) : null}
                 {detailScope === 'mine' ? (
@@ -1209,14 +1340,14 @@ const PayrollPage: React.FC = () => {
       </Modal>
 
       <Modal
-        title="完成薪資發放"
+        title="建立薪資付款憑證"
         open={payModalOpen}
         onCancel={() => {
           setPayModalOpen(false)
           payForm.resetFields()
         }}
         onOk={handlePayRun}
-        okText="確認發薪"
+        okText="建立付款憑證"
         confirmLoading={Boolean(selectedRun && actionLoadingId === selectedRun.id)}
       >
         <Form form={payForm} layout="vertical">
@@ -1241,7 +1372,7 @@ const PayrollPage: React.FC = () => {
             <DatePicker showTime className="w-full" />
           </Form.Item>
           <Text type="secondary" className="text-xs">
-            系統會同步建立薪資付款分錄，借記應付薪資、貸記銀行存款。
+            系統會同步建立薪資付款會計憑證，借記應付薪資、貸記銀行存款。
           </Text>
         </Form>
       </Modal>

@@ -337,6 +337,18 @@ export class PayrollController {
     return this.payrollService.getPayrollRuns(req.user.id, entityId);
   }
 
+  @Get('employee-salaries')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
+  @ApiOperation({ summary: '查詢職員薪資明細列表' })
+  @ApiResponse({ status: 200, description: '成功取得職員薪資明細列表' })
+  async getEmployeeSalaryRows(
+    @Request() req: any,
+    @Query('entityId') entityId?: string,
+  ) {
+    return this.payrollService.getEmployeeSalaryRows(req.user.id, entityId);
+  }
+
   @Get('runs/:id')
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'payroll_admin', action: 'read' })

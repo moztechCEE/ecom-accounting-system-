@@ -10,6 +10,7 @@ import {
   PayrollRunPrecheckResult,
   PaginatedResult,
   BankAccount,
+  PayrollEmployeeSalaryRow,
   PayrollSettings,
 } from "../types";
 import { resolveEntityId } from "./entities.service";
@@ -268,6 +269,21 @@ export const payrollService = {
   getPayrollRunAuditLogs: async (id: string) => {
     const response = await api.get<AuditLogEntry[]>(`/payroll/runs/${id}/audit-logs`);
     return response.data;
+  },
+
+  getEmployeeSalaryRows: async () => {
+    const response = await api.get<PayrollEmployeeSalaryRow[]>(
+      "/payroll/employee-salaries",
+    );
+    return response.data;
+  },
+
+  downloadPayrollRunPdf: async (id: string, employeeId: string) => {
+    const response = await api.get<Blob>(`/payroll/runs/${id}/pdf`, {
+      params: { employeeId },
+      responseType: "blob",
+    });
+    triggerFileDownload(response.data, `payslip-${employeeId}-${id}.pdf`);
   },
 
   getMyPayrollRuns: async () => {
