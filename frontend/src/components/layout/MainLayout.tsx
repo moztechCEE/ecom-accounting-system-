@@ -5,9 +5,15 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 
 const { Content } = Layout
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'mainSidebarCollapsed'
 
 const MainLayout: React.FC = () => {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true
+    }
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) !== 'false'
+  })
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [drawerVisible, setDrawerVisible] = useState(false)
   
@@ -31,6 +37,15 @@ const MainLayout: React.FC = () => {
 
     return () => window.removeEventListener('resize', handleResize)
   }, [])
+
+  useEffect(() => {
+    if (!isMobile) {
+      window.localStorage.setItem(
+        SIDEBAR_COLLAPSED_STORAGE_KEY,
+        collapsed ? 'true' : 'false',
+      )
+    }
+  }, [collapsed, isMobile])
 
   return (
     <Layout className="min-h-screen bg-[#f8fafc]">

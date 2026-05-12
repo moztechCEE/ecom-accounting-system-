@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Outlet, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import {
   Layout,
@@ -37,9 +37,15 @@ import { hasAnyPermission, hasPermission, isAdminUser } from '../utils/access'
 const { Header, Sider, Content } = Layout
 const { Title } = Typography
 const { useBreakpoint } = Grid
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'dashboardSidebarCollapsed'
 
 const DashboardLayout: React.FC = () => {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true
+    }
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) !== 'false'
+  })
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const navigate = useNavigate()
@@ -54,6 +60,15 @@ const DashboardLayout: React.FC = () => {
   const canAccess = (permissions: string[] = []) =>
     permissions.length === 0 || hasAnyPermission(user, permissions)
   const searchValue = searchParams.get('q') ?? ''
+
+  useEffect(() => {
+    if (!isMobile) {
+      window.localStorage.setItem(
+        SIDEBAR_COLLAPSED_STORAGE_KEY,
+        collapsed ? 'true' : 'false',
+      )
+    }
+  }, [collapsed, isMobile])
 
   const handleGlobalSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextValue = event.target.value
