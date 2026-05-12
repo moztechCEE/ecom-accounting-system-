@@ -90,7 +90,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.tz.setDefault(DASHBOARD_TZ);
 
-type RangeMode = "all" | "today" | "yesterday" | "last7d" | "custom";
+type RangeMode = "all" | "today" | "yesterday" | "last7d" | "last30d" | "last1y" | "custom";
 type CustomRange = [Dayjs, Dayjs] | null;
 type RangeValue = [Dayjs | null, Dayjs | null] | null;
 
@@ -154,6 +154,10 @@ function getRangeModeLabel(mode: RangeMode) {
       return "昨日";
     case "last7d":
       return "近 7 天";
+    case "last30d":
+      return "近 30 天";
+    case "last1y":
+      return "近 1 年";
     case "custom":
       return "自訂區間";
     default:
@@ -181,6 +185,18 @@ function resolveRange(
   if (mode === "last7d") {
     const end = dayjs().tz(timezone).endOf("day");
     const start = end.subtract(6, "day").startOf("day");
+    return { since: start.toISOString(), until: end.toISOString() };
+  }
+
+  if (mode === "last30d") {
+    const end = dayjs().tz(timezone).endOf("day");
+    const start = end.subtract(29, "day").startOf("day");
+    return { since: start.toISOString(), until: end.toISOString() };
+  }
+
+  if (mode === "last1y") {
+    const end = dayjs().tz(timezone).endOf("day");
+    const start = end.subtract(1, "year").add(1, "day").startOf("day");
     return { since: start.toISOString(), until: end.toISOString() };
   }
 
@@ -389,7 +405,7 @@ const DashboardPage: React.FC = () => {
           }),
           dashboardService.getManagementSummary({
             entityId: storedEntityId,
-            groupBy: rangeMode === 'all' ? 'month' : 'day',
+            groupBy: rangeMode === 'all' || rangeMode === 'last1y' ? 'month' : 'day',
             startDate: since,
             endDate: until,
           }),
@@ -463,6 +479,16 @@ const DashboardPage: React.FC = () => {
   // 財務快覽資料：使用共用 API baseURL，避免正式站打到 frontend origin 的 /api
   useEffect(() => {
     const entityId = localStorage.getItem('entityId')?.trim() ?? ''
+    const { since, until } = resolveRange(rangeMode, DASHBOARD_TZ, customRange)
+    const inSelectedRange = (dateValue?: string | null) => {
+      if (!since && !until) return true
+      if (!dateValue) return false
+      const value = dayjs(dateValue)
+      if (!value.isValid()) return false
+      if (since && value.isBefore(dayjs(since))) return false
+      if (until && value.isAfter(dayjs(until))) return false
+      return true
+    }
 
     const fetchFinance = async () => {
       try {
@@ -471,6 +497,7 @@ const DashboardPage: React.FC = () => {
           apService.getInvoices(entityId).then((invoices) => ({
             outstanding: invoices
               .filter((invoice) => !['paid', 'void', 'cancelled'].includes(String(invoice.status || '').toLowerCase()))
+              .filter((invoice) => inSelectedRange(invoice.invoiceDate || invoice.dueDate))
               .reduce(
                 (sum, invoice) =>
                   sum + Math.max(0, Number(invoice.amountOriginal || 0) - Number(invoice.paidAmountOriginal || 0)),
@@ -494,7 +521,7 @@ const DashboardPage: React.FC = () => {
     }
 
     fetchFinance()
-  }, [refreshToken])
+  }, [rangeMode, customRange, refreshToken])
 
   const handleCustomRangeChange = (value: RangeValue) => {
     if (!value || !value[0] || !value[1]) {
@@ -871,6 +898,8 @@ const DashboardPage: React.FC = () => {
               <Radio.Button value="today">今天</Radio.Button>
               <Radio.Button value="yesterday">昨天</Radio.Button>
               <Radio.Button value="last7d">近 7 天</Radio.Button>
+              <Radio.Button value="last30d">近 30 天</Radio.Button>
+              <Radio.Button value="last1y">近 1 年</Radio.Button>
               <Radio.Button value="all">全部</Radio.Button>
               <Radio.Button value="custom">自訂</Radio.Button>
             </Radio.Group>

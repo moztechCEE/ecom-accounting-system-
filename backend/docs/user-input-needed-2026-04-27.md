@@ -97,7 +97,7 @@
 - 需要你提供：
   - 若未來增加第二間 Shopline 店，需提供每店的 token / handle / 名稱 / merchant id。
   - webhook 是否已開通；可訂閱哪些 topic。
-  - Shopline API token 是否已勾選 `read_payment` 權限；若未勾，Payments API 會無法查帳務。
+  - Shopline Payments 月對帳單 / payout statement 的固定下載流程與欄位格式；官方已確認 Payments Admin OpenAPI / `read_payment` 未對外開放，不能再把此項目當成可自行開通的 API 缺口。
   - 若要補兩年以上資料，需確認 archived orders 匯出流程可用。
 - 目前系統狀態：
   - 2026-05-05 更新：使用者已提供 Shopline `access_token`；不可寫入 repo。已放入 GCP Secret Manager 並掛到 Cloud Run backend。
@@ -111,14 +111,14 @@
   - 2026-05-05 更新：已用一般 OpenAPI 依 30 天區間回補 `2024-05-05` 到 `2026-05-05`。Cloud Run summary 顯示 SHOPLINE 已進 `SalesOrder` 4689 筆，總額 9,250,001；Payment 4687 筆，gross/net 8,488,187。
   - 2026-05-05 更新：已建立 Cloud Scheduler `ecom-accounting-shopline-auto-sync`，每 20 分鐘呼叫 `POST /integrations/shopline/sync/auto`；`SHOPLINE_SYNC_ENABLED=true`，lookback 240 分鐘。手動驗證 auto sync 成功抓到最近 4 小時 56 筆訂單與 63 筆顧客事件。
   - 2026-05-06 更新：再檢查 Cloud Run 設定，Shopline token / handle / merchant id / sync enabled 都已掛上；手動觸發排程回應 HTTP 201，最近排程記錄可正常完成增量同步。
-  - 2026-05-06 更新：官方文件確認 SHOPLINE Payments 有 Admin OpenAPI 可查帳務與提款：`balance_transactions.json`、`transactions.json`、`payouts.json`、`balance.json`，需要 `read_payment` 權限。
-  - 2026-05-06 更新：後端已補上 Payments 只讀預覽端點與 `sync/payments/billing-records` 匯入端點，會把 `balance_transactions.json` 的帳務明細轉成 `shoplinepay` provider payout rows。
-  - 2026-05-07 更新：Cloud Run 實測一般 Shopline OpenAPI 仍可用，但 Payments Admin OpenAPI 回 HTML / redirect，尚未回有效 JSON。後端已補 `GET /integrations/shopline/payments/readiness` 與明確錯誤訊息，下一次部署後可直接看到是 admin base URL / handle / version / `read_payment` 權限 / Shopline Payments OpenAPI 啟用問題。
-  - 2026-05-08 更新：上述診斷已部署到 Cloud Run revision `ecom-accounting-backend-00322-ww8`。`payments/readiness` 顯示一般設定完整，但 `https://onemorefuture.myshopline.com/admin/openapi/v20260301` 會 302 redirect 到 `https://www.shopline.com`，需向 Shopline 確認 Payments Admin OpenAPI 的正確 host / version / `read_payment` 權限或服務啟用狀態。
+  - 2026-05-06 歷史判斷：曾依文件補上 Payments 只讀預覽端點與 `sync/payments/billing-records` 匯入端點，規劃把 `balance_transactions.json` 帳務明細轉成 `shoplinepay` provider payout rows；此方向已在 2026-05-12 被官方回覆修正，不再作為正式主流程。
+  - 2026-05-07 歷史判斷：Cloud Run 實測一般 Shopline OpenAPI 仍可用，但 Payments Admin OpenAPI 回 HTML / redirect，尚未回有效 JSON。後端曾補 `GET /integrations/shopline/payments/readiness` 與明確錯誤訊息；此診斷保留，但不再追成 token / host 問題。
+  - 2026-05-08 歷史判斷：上述診斷已部署到 Cloud Run revision `ecom-accounting-backend-00322-ww8`。`payments/readiness` 顯示一般設定完整，但 `https://onemorefuture.myshopline.com/admin/openapi/v20260301` 會 302 redirect 到 `https://www.shopline.com`；2026-05-12 已確認根因是 Payments Admin OpenAPI 不對外開放。
+  - 2026-05-12 更新：Shopline 官方 / 客服回覆目前 SHOPLINE Payments Admin OpenAPI / `read_payment` 未對外開放使用，不能透過 OpenAPI 撈取 Payments 帳務資料。此缺口正式改為「Shopline Payments 對帳單匯入」流程：一般 orders / customers 繼續 API 同步；撥款、手續費、保留款、未結算帳務、退款 / 爭議等 Payments 帳務需下載官方對帳單後匯入系統。
   - Shopline Adapter / Service / Controller 已存在。
   - 訂單、顧客、Payment 草稿同步骨架已存在。
 - 暫停原因：
-  - 一般 orders / customers / Payment 草稿資料已進系統；Payments API 程式已補上，但 Cloud Run 實測 Payments Admin API 目前被 302 redirect。剩餘缺口是確認正確 Payments Admin OpenAPI host / version / `read_payment` / Payments OpenAPI 啟用狀態、兩年以上 archived orders 匯出、webhook topic 與簽章驗證、商品 / 分類 / 庫存主檔同步、Shopline invoice 欄位正式回寫。
+  - 一般 orders / customers / Payment 草稿資料已進系統；Shopline 官方已確認 Payments Admin OpenAPI / `read_payment` 目前未對外開放，因此不再等待 API 開通。剩餘缺口改為建立 Shopline Payments 對帳單匯入 parser / UI、兩年以上 archived orders 匯出、webhook topic 與簽章驗證、商品 / 分類 / 庫存主檔同步、Shopline invoice 欄位正式回寫。
 - 品牌 / 平台歸屬確認：
   - 使用者已確認 `萬魔未來工學院` 是平台，不是商品品牌。
   - 2026-05-11 使用者補充正式營收歸屬規則：Shopify 帳號對應 MOZTECH 業績；Shopline 對應 BONSON 業績；1Shop 團購平台會混合 MORITEK、BONSON、MOZTECH、AIRITY，需依商品 / SKU / 品牌欄位拆分。

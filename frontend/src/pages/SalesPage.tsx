@@ -84,12 +84,15 @@ const SalesPage: React.FC = () => {
     setLoading(true)
     try {
       const rangePayload = resolveRangePayload()
+      const entityId = localStorage.getItem('entityId')?.trim() || 'tw-entity-001'
       const [orderData, historyData] = await Promise.all([
         salesService.findAll({
+          entityId,
           ...rangePayload,
-          limit: 300,
+          limit: quickRange === 'lastYear' ? 500 : 300,
         }),
         dashboardService.getEcommerceHistory({
+          entityId,
           ...rangePayload,
           groupBy: quickRange === 'lastYear' ? 'month' : 'day',
         }),

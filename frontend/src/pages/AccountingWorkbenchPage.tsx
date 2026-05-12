@@ -68,7 +68,6 @@ import { salesService } from '../services/sales.service'
 import { apService } from '../services/ap.service'
 import { reconciliationService } from '../services/reconciliation.service'
 import { invoicingService, InvoiceProviderReadiness } from '../services/invoicing.service'
-import { shoplineService } from '../services/shopline.service'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -409,7 +408,7 @@ const AccountingWorkbenchPage: React.FC = () => {
         try {
           const workbook = XLSX.read(reader.result, { type: 'array', cellDates: false })
           const sheetName =
-            workbook.SheetNames.find((name) => /invoice|發票|settlement|capture|撥款|請款/i.test(name)) ||
+            workbook.SheetNames.find((name) => /帳務明細|帳戶收支|收支明細|balance|transaction|invoice|發票|settlement|capture|撥款|請款/i.test(name)) ||
             workbook.SheetNames[0]
           const worksheet = workbook.Sheets[sheetName]
           if (!worksheet) {
@@ -757,30 +756,33 @@ const AccountingWorkbenchPage: React.FC = () => {
     }
   }
 
-  const handleSyncShoplinePayments = async () => {
+  const handleImportShoplinePaymentStatement = async (file: File) => {
     setSyncingShoplinePayments(true)
     try {
-      const result = await shoplineService.syncPaymentBillingRecords({
-        entityId,
-        since: startDate,
-        until: endDate,
-        maxPages: 20,
-      })
-
-      if (result.skipped) {
-        message.info(result.message || 'Shopline Payments 目前沒有可匯入的帳務明細')
-      } else {
-        message.success(
-          `Shopline Payments 帳務同步完成：抓到 ${result.fetched || 0} 筆，可匯入 ${result.importable || result.recordCount || 0} 筆，已匹配 ${result.matchedCount || 0} 筆，待確認 ${result.unmatchedCount || 0} 筆，無效 ${result.invalidCount || 0} 筆`,
-          6,
-        )
+      const rows = await parseSpreadsheetRows(file)
+      if (!rows.length) {
+        message.warning('這份 Shopline Payments 對帳單沒有可匯入的資料列')
+        return
       }
 
+      const result = await reconciliationService.importProviderPayouts({
+        entityId,
+        provider: 'shoplinepay',
+        sourceType: 'statement',
+        fileName: file.name,
+        rows,
+        notes: 'Shopline Payments 對帳單手動匯入；官方未開放 Payments Admin OpenAPI',
+      })
+
+      message.success(
+        `Shopline Payments 對帳單匯入完成：${result.recordCount} 筆，已匹配 ${result.matchedCount} 筆，待確認 ${result.unmatchedCount} 筆，無效 ${result.invalidCount} 筆`,
+        6,
+      )
       await fetchWorkbench()
     } catch (error: any) {
       message.error(
         error?.response?.data?.message ||
-          '同步 Shopline Payments 帳務失敗，請確認 token 是否具備 read_payment 權限',
+          '匯入 Shopline Payments 對帳單失敗，請確認檔案包含訂單號碼、交易序號、交易金額、手續費與交易時間欄位',
       )
     } finally {
       setSyncingShoplinePayments(false)
@@ -1899,13 +1901,21 @@ const AccountingWorkbenchPage: React.FC = () => {
             >
               補跑 1Shop 團購閉環
             </Button>
-            <Button
-              icon={<ReloadOutlined />}
-              loading={syncingShoplinePayments}
-              onClick={handleSyncShoplinePayments}
+            <Upload
+              accept=".xlsx,.xls,.csv"
+              showUploadList={false}
+              beforeUpload={(file) => {
+                void handleImportShoplinePaymentStatement(file)
+                return false
+              }}
             >
-              同步 Shopline Payments 帳務
-            </Button>
+              <Button
+                icon={<UploadOutlined />}
+                loading={syncingShoplinePayments}
+              >
+                匯入 Shopline Payments 對帳單
+              </Button>
+            </Upload>
             <Button
               icon={<AuditOutlined />}
               onClick={() => navigate('/reports')}

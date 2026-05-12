@@ -1324,17 +1324,14 @@ export class ReportsService {
           'SHOPLINE_MERCHANT_ID',
           'SHOPLINE_SYNC_ENABLED',
           'SHOPLINE_SYNC_JOB_TOKEN',
-          'SHOPLINE_ADMIN_API_BASE_URL',
-          'SHOPLINE_ADMIN_API_VERSION',
-          'SHOPLINE_PAYMENTS_SYNC_ENABLED',
         ],
         jsonEnvName: 'SHOPLINE_STORES_JSON',
         externalNeeds: [
-          '確認 Shopline token 已勾選 read_payment，否則 SHOPLINE Payments 帳務 API 會無法查詢。',
+          'Shopline 官方已確認 SHOPLINE Payments Admin OpenAPI / read_payment 目前不對外開放；撥款、手續費、保留款與未結算帳務需下載對帳單後匯入。',
           '確認 webhook 可用性，以及兩年以上 archived orders 匯出流程。',
         ],
         nextAction:
-          '先看 /integrations/shopline/payments/readiness；Payments Admin API 成功後，再從 Cloud Run 執行 Shopline Payments 帳務同步並開 SHOPLINE_PAYMENTS_SYNC_ENABLED。',
+          '一般 Shopline 訂單 / 顧客繼續用 OpenAPI 自動同步；Shopline Payments 對帳改走月結 / 撥款 / 未結算對帳單匯入，匯入後進 shoplinepay 對帳流程。',
       }),
       this.buildConnectorReadiness({
         key: 'ecpay-einvoice',

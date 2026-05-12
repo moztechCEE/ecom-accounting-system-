@@ -1,6 +1,6 @@
 # SHOPLINE OpenAPI 串接說明
 
-最後更新：2026-05-06
+最後更新：2026-05-12
 
 ## 本系統目前已完成
 
@@ -11,25 +11,16 @@
   - `GET /api/v1/integrations/shopline/agents`
   - `GET /api/v1/integrations/shopline/preview/orders`
   - `GET /api/v1/integrations/shopline/preview/customers`
-  - `GET /api/v1/integrations/shopline/payments/balance`
-  - `GET /api/v1/integrations/shopline/payments/billing-records`
-  - `GET /api/v1/integrations/shopline/payments/transactions`
-  - `GET /api/v1/integrations/shopline/payments/payouts`
   - `POST /api/v1/integrations/shopline/sync/orders`
   - `POST /api/v1/integrations/shopline/sync/customers`
-  - `POST /api/v1/integrations/shopline/sync/payments/billing-records`
   - `POST /api/v1/integrations/shopline/sync/auto`
   - `GET /api/v1/integrations/shopline/summary`
   - `POST /api/v1/integrations/shopline/webhook`
 - 已接入 `SalesOrder`
 - 已接入 `Customer`
 - 已可從 `order_payment` 產生 `Payment` 草稿資料
-- 已接入 SHOPLINE Payments Admin OpenAPI 只讀查詢：
-  - 帳戶餘額：`/payments/store/balance.json`
-  - 帳務 / 帳單明細：`/payments/store/balance_transactions.json`
-  - 付款 / 退款 / 爭議交易：`/payments/store/transactions.json`
-  - 提款紀錄：`/payments/store/payouts.json`
-- 已可把 `balance_transactions.json` 的 `PAYMENT / REFUND / CHARGEBACK` 明細轉成 `shoplinepay` provider payout import rows，進入既有付款匹配、手續費回填、淨額回填流程。
+- SHOPLINE Payments Admin OpenAPI / `read_payment` 經 Shopline 官方回覆目前不對外開放；撥款、手續費、保留款與未結算帳務改走 Shopline Payments 對帳單匯入 `shoplinepay` provider payout 流程。
+- 已可把 Shopline Payments 逐筆帳務明細欄位轉成 `shoplinepay` provider payout import rows，進入既有付款匹配、手續費回填、淨額回填流程。
 - 已可把 `待付款 / 待撥款 / 待對帳` 狀態送進 Dashboard 對帳視角
 - Dashboard reports bucket 已預留 `Shopline 業績`
 - 2026-05-05 已驗證 BONSON Shopline 店：
@@ -45,9 +36,8 @@
 
 ## 這一版尚未完成
 
-- SHOPLINE Payments API 已接程式，但仍需在 Cloud Run 上實測目前 token 是否已具備 `read_payment` 權限。
-- `sync/payments/billing-records` 會把 API 明細送進既有對帳匯入器；是否自動建立核銷分錄仍受既有對帳規則控制，不會在未確認的情況下無條件關帳。
-- `SHOPLINE_PAYMENTS_SYNC_ENABLED` 預設仍為 `false`；確認 Cloud Run 實測成功後，才建議打開讓 `sync/auto` 一併拉 Payments 帳務。
+- Shopline Payments 對帳單匯入流程仍需補完整前台入口、欄位預覽、錯誤列下載與匯入後對帳結果回報。
+- `sync/payments/billing-records` 不再作為正式主流程；保留程式診斷用途時，UI / 串接準備不得再把它列為可自行開通的 API。
 - webhook 目前已可觸發增量同步，但尚未補簽章驗證與 topic 細緻處理
 - 兩年以上或已封存訂單仍需另接 Shopline archived orders 非同步匯出流程
 - 尚未接 Shopline 商品主檔 / 分類 / 庫存主檔 API；目前只會從訂單明細建立最小商品資料。
@@ -65,19 +55,14 @@
 ## 補資料方式
 
 1. Shopline 撥款 / settlement / 手續費
-   - 2026-05-06 已依官方 Admin REST API 補上正式 connector：
-     - `GET https://{handle}.myshopline.com/admin/openapi/{version}/payments/store/balance_transactions.json`
-     - `GET https://{handle}.myshopline.com/admin/openapi/{version}/payments/store/transactions.json`
-     - `GET https://{handle}.myshopline.com/admin/openapi/{version}/payments/store/payouts.json`
-     - `GET https://{handle}.myshopline.com/admin/openapi/{version}/payments/store/balance.json`
-   - 這些 API 需要 `read_payment` 權限；若 token 權限不足，會在 Cloud Run 實測時回 401 / 權限錯誤。
-   - 對帳主流程優先使用 `balance_transactions.json?is_settlement_details=true`，因為它能提供帳務明細、訂單 / 交易識別、交易金額、淨額、手續費、結算批次與記帳時間。
-   - `transactions.json` 用於補查支付 / 退款 / 爭議交易狀態；`payouts.json` 用於提款批次與銀行入帳區間核對；`balance.json` 用於 CEO / 財務 Dashboard 餘額監控。
+   - 2026-05-12 已依 Shopline 官方回覆修正：SHOPLINE Payments Admin OpenAPI / `read_payment` 目前不對外開放，因此不能透過 OpenAPI 自動取得 Payments 帳務資料。
+   - 正式補資料方式改為下載 Shopline Payments 後台對帳單，再匯入系統的 `shoplinepay` provider payout 流程。
+   - 匯入資料需包含訂單號碼、交易序號、交易類型、支付方式、交易金額、交易手續費、交易淨額、交易完成時間、結帳 / 結算時間與結算狀態。
    - 2026-05-06 檢查使用者提供的 Shopline Payment 月綜合對帳單：
      - `Payout account` / `Reserve account` / `Unsettled account` 都有 `帳單總覽` 與 `帳戶收支明細`。
      - 可用逐筆欄位包含：`交易狀態`、`訂單號碼`、`交易序號`、`支付標籤`、`類型`、`幣別`、`金額`、`手續費`、`實際收款金額`、`交易時間`、`結帳時間`。
      - 已將系統 provider payout 匯入器擴充為支援 `shoplinepay` provider，這些欄位可映射到現有 Payment matching / 實際手續費 / 淨額回填流程。
-     - 但本次三份檔案的 `帳戶收支明細` 並不是完整月內逐筆交易：Payout 只有提款手續費一列，Reserve 空白，Unsettled 只有一筆 4/30 付款。若要逐筆核銷所有 Shopline 訂單，仍需匯出完整交易明細或 payout API。
+     - 但本次三份檔案的 `帳戶收支明細` 並不是完整月內逐筆交易：Payout 只有提款手續費一列，Reserve 空白，Unsettled 只有一筆 4/30 付款。若要逐筆核銷所有 Shopline 訂單，仍需匯出完整交易明細。
    - 2026-05-06 後續檢查 `帳務明細查詢.xlsx`：
      - 這份是可用的 Shopline Payment 逐筆帳務明細，共 1009 筆資料列。
      - 欄位包含：`商戶id`、`結算批次號`、`訂單號碼`、`交易序號`、`交易類型`、`交易詳情`、`支付方式`、`交易金額`、`交易手續費`、`應收手續費`、`交易淨額`、`交易完成時間`、`結帳記錄時間`、`結算狀態`。
@@ -96,14 +81,12 @@
 
 - 一般 OpenAPI Base URL：
   - `https://open.shopline.io/v1`
-- SHOPLINE Payments Admin OpenAPI Base URL：
-  - `https://{handle}.myshopline.com/admin/openapi/{version}`
-  - 預設版本：`v20260301`，可用 `SHOPLINE_ADMIN_API_VERSION` 覆寫。
 - 驗證方式：
   - `Authorization: Bearer <access_token>`
   - `User-Agent: <handle code>`
-- Payments API 權限：
-  - `read_payment`
+- Payments 帳務限制：
+  - Shopline 官方已確認 SHOPLINE Payments Admin OpenAPI / `read_payment` 目前不對外開放。
+  - 本系統只將一般 OpenAPI 用於訂單 / 顧客 / 商品等資料；Payments 帳務以後台對帳單匯入為準。
 - 官方標準 rate limit：
   - `20 requests / second`
 - API 時區：
@@ -124,8 +107,6 @@ SHOPLINE_SYNC_ENABLED="false"
 SHOPLINE_SYNC_LOOKBACK_MINUTES="180"
 SHOPLINE_SYNC_PER_PAGE="50"
 SHOPLINE_SYNC_JOB_TOKEN=""
-SHOPLINE_ADMIN_API_VERSION="v20260301"
-SHOPLINE_PAYMENTS_SYNC_ENABLED="false"
 ```
 
 多店建議用：
@@ -206,27 +187,9 @@ curl -X POST \
   }'
 ```
 
-### 7. 預覽 SHOPLINE Payments 帳務明細
+### 7. 匯入 SHOPLINE Payments 對帳單
 
-```bash
-curl -H "Authorization: Bearer <token>" \
-  "https://<backend>/api/v1/integrations/shopline/payments/billing-records?since=2026-05-01T00:00:00.000Z&until=2026-05-06T00:00:00.000Z&maxPages=1&isSettlementDetails=true"
-```
-
-### 8. 匯入 SHOPLINE Payments 帳務明細進對帳流程
-
-```bash
-curl -X POST \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  https://<backend>/api/v1/integrations/shopline/sync/payments/billing-records \
-  -d '{
-    "entityId": "tw-entity-001",
-    "since": "2026-05-01T00:00:00.000Z",
-    "until": "2026-05-06T00:00:00.000Z",
-    "maxPages": "20"
-  }'
-```
+目前 Shopline 官方未開放 Payments Admin OpenAPI。請從 Shopline Payments 後台下載帳務明細或月結對帳單，透過會計工作台的 provider payout 匯入流程選擇 `shoplinepay`，匯入後再由對帳中心處理匹配、手續費回填、淨額回填與銀行核銷。
 
 ## 下一步
 
@@ -235,6 +198,5 @@ curl -X POST \
 3. 驗證 `orders / customers / transactions` 三段同步
 4. 接 Cloud Scheduler
 5. 補 webhook topic 簽章驗證
-6. 從 Cloud Run 實測 `payments/billing-records` 是否具備 `read_payment`
-7. 若成功，開啟 `SHOPLINE_PAYMENTS_SYNC_ENABLED=true`，讓排程一併同步 Payments 帳務
-8. 把 payout / reconciliation 結果接到 CEO Dashboard / 財務異常隊列
+6. 補 Shopline Payments 對帳單匯入前台：欄位預覽、錯誤列下載、匯入結果摘要
+7. 把 payout / reconciliation 結果接到 CEO Dashboard / 財務異常隊列
