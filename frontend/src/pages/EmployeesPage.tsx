@@ -22,7 +22,6 @@ import {
 import {
   ApartmentOutlined,
   CalendarOutlined,
-  CheckCircleOutlined,
   DownloadOutlined,
   DeleteOutlined,
   EditOutlined,
@@ -428,48 +427,6 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     return false;
   };
 
-  const handleUpdateOnboardingDocumentStatus = async (
-    docType: EmployeeOnboardingDocument["docType"],
-    status: EmployeeOnboardingDocument["status"],
-    clearFile = false,
-  ) => {
-    if (!selectedEmployee) {
-      return;
-    }
-
-    try {
-      setDocumentActionLoading(docType);
-      const nextDocument =
-        await payrollService.updateEmployeeOnboardingDocumentStatus(
-          selectedEmployee.id,
-          docType,
-          { status, clearFile },
-        );
-      const nextEmployee = replaceSelectedEmployeeDocument(
-        selectedEmployee,
-        nextDocument,
-      );
-      setSelectedEmployee(nextEmployee);
-      setEmployees((prev) =>
-        prev.map((employee) =>
-          employee.id === nextEmployee.id ? nextEmployee : employee,
-        ),
-      );
-      void fetchReviewQueue();
-      message.success(
-        clearFile
-          ? "文件已清除"
-          : status === "VERIFIED"
-            ? "文件已標記為已核實"
-            : "文件狀態已更新",
-      );
-    } catch (error) {
-      message.error(getErrorMessage(error, "更新文件狀態失敗"));
-    } finally {
-      setDocumentActionLoading(null);
-    }
-  };
-
   const handleDownloadOnboardingDocument = async (
     docType: EmployeeOnboardingDocument["docType"],
   ) => {
@@ -828,45 +785,6 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                       }
                     >
                       下載
-                    </Button>
-                    <Button
-                      icon={<CheckCircleOutlined />}
-                      disabled={document.status === "PENDING"}
-                      loading={documentActionLoading === docType}
-                      onClick={() =>
-                        void handleUpdateOnboardingDocumentStatus(
-                          docType,
-                          "VERIFIED",
-                        )
-                      }
-                    >
-                      標記已核實
-                    </Button>
-                    <Button
-                      disabled={document.status !== "VERIFIED"}
-                      loading={documentActionLoading === docType}
-                      onClick={() =>
-                        void handleUpdateOnboardingDocumentStatus(
-                          docType,
-                          "UPLOADED",
-                        )
-                      }
-                    >
-                      改回已上傳
-                    </Button>
-                    <Button
-                      danger
-                      disabled={!document.fileName}
-                      loading={documentActionLoading === docType}
-                      onClick={() =>
-                        void handleUpdateOnboardingDocumentStatus(
-                          docType,
-                          "PENDING",
-                          true,
-                        )
-                      }
-                    >
-                      清除
                     </Button>
                   </div>
                 </div>
