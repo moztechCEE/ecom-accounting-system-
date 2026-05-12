@@ -56,14 +56,22 @@ export class UsersController {
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'access_control', action: 'read' })
   @ApiOperation({ summary: '查詢所有使用者（帳號與權限管理）' })
-  async listUsers(@Query('page') page = '1', @Query('limit') limit = '25') {
+  async listUsers(
+    @CurrentUser('id') userId: string,
+    @Query('page') page = '1',
+    @Query('limit') limit = '25',
+    @Query('systemAdmins') systemAdmins: 'exclude' | 'only' | 'include' = 'exclude',
+  ) {
     const pageNumber = Math.max(1, Number.parseInt(page, 10) || 1);
     const limitNumber = Math.min(
       100,
       Math.max(1, Number.parseInt(limit, 10) || 25),
     );
 
-    return this.usersService.findAll(pageNumber, limitNumber);
+    return this.usersService.findAll(pageNumber, limitNumber, {
+      requesterId: userId,
+      systemAdmins,
+    });
   }
 
   /**

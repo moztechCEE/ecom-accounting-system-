@@ -26,6 +26,8 @@ import {
   DeleteOutlined,
   SettingOutlined,
   SearchOutlined,
+  EyeInvisibleOutlined,
+  EyeOutlined,
 } from '@ant-design/icons'
 import { motion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
@@ -55,7 +57,7 @@ import {
   getActionName,
   getRoleName,
 } from '../constants/translations'
-import { hasPermission, isAdminUser } from '../utils/access'
+import { hasPermission, hasRole, isAdminUser } from '../utils/access'
 
 type TableColumn<T> = {
   title: React.ReactNode
@@ -182,6 +184,7 @@ const DataScopeFormGrid = () => (
 
 type UsersTabProps = {
   availableRoles: Role[]
+  canManageDataScopes: boolean
 }
 
 type RolesTabProps = {
@@ -219,8 +222,17 @@ const getErrorMessage = (error: unknown): string => {
   return '操作失敗，請稍後再試'
 }
 
-const UsersTab = ({ availableRoles }: UsersTabProps) => {
+const isManagedUserSuperAdmin = (record: ManagedUser) =>
+  Boolean(
+    record.roles?.some(
+      (link) =>
+        link.role?.code === 'SUPER_ADMIN' || link.role?.name === 'SUPER_ADMIN',
+    ),
+  )
+
+const UsersTab = ({ availableRoles, canManageDataScopes }: UsersTabProps) => {
   const [users, setUsers] = useState<ManagedUser[]>([])
+  const [systemAdminUsers, setSystemAdminUsers] = useState<ManagedUser[]>([])
   const [meta, setMeta] = useState<PaginatedResult<ManagedUser>['meta']>({
     total: 0,
     page: 1,
@@ -228,6 +240,9 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
     totalPages: 1,
   })
   const [loading, setLoading] = useState(false)
+  const [loadingSystemAdmins, setLoadingSystemAdmins] = useState(false)
+  const [showDataScopes, setShowDataScopes] = useState(false)
+  const [showSystemAdmins, setShowSystemAdmins] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [assignOpen, setAssignOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -236,12 +251,18 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
   const [createForm] = Form.useForm<CreateUserPayload>()
   const [assignForm] = Form.useForm<{ roleIds: string[] }>()
   const [editForm] = Form.useForm<UpdateUserPayload & { password?: string }>()
+  const assignableRoles = useMemo(
+    () => availableRoles.filter((role) => role.code !== 'SUPER_ADMIN'),
+    [availableRoles],
+  )
 
   const fetchUsers = useCallback(
     async (page = 1, limit = meta.limit) => {
       setLoading(true)
       try {
-        const result = await usersService.list(page, limit)
+        const result = await usersService.list(page, limit, {
+          systemAdmins: 'exclude',
+        })
         setUsers(result.items)
         setMeta(result.meta)
       } catch (error) {
@@ -257,10 +278,42 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
     fetchUsers()
   }, [fetchUsers])
 
+  const fetchSystemAdmins = useCallback(async () => {
+    if (!canManageDataScopes) {
+      setSystemAdminUsers([])
+      return
+    }
+
+    setLoadingSystemAdmins(true)
+    try {
+      const result = await usersService.list(1, 50, { systemAdmins: 'only' })
+      setSystemAdminUsers(result.items)
+    } catch (error) {
+      message.error(getErrorMessage(error))
+      setSystemAdminUsers([])
+    } finally {
+      setLoadingSystemAdmins(false)
+    }
+  }, [canManageDataScopes])
+
+  useEffect(() => {
+    if (showSystemAdmins) {
+      fetchSystemAdmins()
+    }
+  }, [fetchSystemAdmins, showSystemAdmins])
+
   const handleCreate = async () => {
     try {
       const values = await createForm.validateFields()
-      await usersService.create(values)
+      const payload = canManageDataScopes
+        ? values
+        : ({
+            email: values.email,
+            name: values.name,
+            password: values.password,
+            roleIds: values.roleIds,
+          } satisfies CreateUserPayload)
+      await usersService.create(payload)
       message.success('使用者建立成功')
       setCreateOpen(false)
       createForm.resetFields()
@@ -296,13 +349,15 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
       const payload: UpdateUserPayload = {
         name: values.name,
         isActive: values.isActive,
-        ...DATA_SCOPE_FIELDS.reduce(
-          (scopes, field) => ({
-            ...scopes,
-            [field.key]: values[field.key],
-          }),
-          {} as Pick<UpdateUserPayload, DataScopeKey>,
-        ),
+        ...(canManageDataScopes
+          ? DATA_SCOPE_FIELDS.reduce(
+              (scopes, field) => ({
+                ...scopes,
+                [field.key]: values[field.key],
+              }),
+              {} as Pick<UpdateUserPayload, DataScopeKey>,
+            )
+          : {}),
       }
 
       if (values.password) {
@@ -357,25 +412,35 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
         </Tag>
       ),
     },
-    {
-      title: '資料範圍',
-      key: 'scopes',
-      render: (_value: any, record: ManagedUser) => (
-        <Space wrap size={[4, 4]}>
-          {DATA_SCOPE_FIELDS.map((field) => (
-            <Tag key={field.key} color={field.color}>
-              {field.shortLabel}{' '}
-              {DATA_SCOPE_LABEL_MAP[record[field.key] || 'SELF']}
-            </Tag>
-          ))}
-        </Space>
-      ),
-    },
+    ...(canManageDataScopes && showDataScopes
+      ? [
+          {
+            title: '資料範圍',
+            key: 'scopes',
+            render: (_value: any, record: ManagedUser) => (
+              <Space wrap size={[4, 4]}>
+                {DATA_SCOPE_FIELDS.map((field) => (
+                  <Tag key={field.key} color={field.color}>
+                    {field.shortLabel}{' '}
+                    {DATA_SCOPE_LABEL_MAP[record[field.key] || 'SELF']}
+                  </Tag>
+                ))}
+              </Space>
+            ),
+          },
+        ]
+      : []),
     {
       title: '操作',
       key: 'actions',
       render: (_value: any, record: ManagedUser) => (
         <Space size="small">
+          {isManagedUserSuperAdmin(record) ? (
+            <Text type="secondary" className="text-xs">
+              最高權限帳號不在此處調整
+            </Text>
+          ) : (
+            <>
           <Tooltip title="設定角色">
             <Button
               type="text"
@@ -421,7 +486,37 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
               啟用
             </Button>
           )}
+            </>
+          )}
         </Space>
+      ),
+    },
+  ]
+
+  const systemAdminColumns: TableColumn<ManagedUser>[] = [
+    { title: '姓名', dataIndex: 'name', key: 'name' },
+    { title: '電子郵件', dataIndex: 'email', key: 'email' },
+    {
+      title: '角色',
+      key: 'roles',
+      render: (_value: any, record: ManagedUser) => (
+        <Space wrap>
+          {record.roles?.map((userRole: UserRoleLink) => (
+            <Tag key={userRole.roleId} color="blue">
+              {userRole.role?.name || getRoleName(userRole.role?.code || '')}
+            </Tag>
+          ))}
+        </Space>
+      ),
+    },
+    {
+      title: '狀態',
+      dataIndex: 'isActive',
+      key: 'status',
+      render: (_value: any, record: ManagedUser) => (
+        <Tag color={record.isActive ? 'green' : 'red'}>
+          {record.isActive ? '啟用' : '停用'}
+        </Tag>
       ),
     },
   ]
@@ -440,6 +535,48 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
           新增使用者
         </GlassButton>
       </div>
+
+      {canManageDataScopes ? (
+        <div className="mb-4 rounded-2xl border border-slate-200/70 bg-white/55 p-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-800">
+                最高權限與資料範圍
+              </div>
+              <Text className="text-xs text-slate-500">
+                一般使用者列表不顯示最高權限帳號；資料範圍預設隱藏，只有最高權限管理員可以展開檢視與調整。
+              </Text>
+            </div>
+            <Space wrap>
+              <Button
+                icon={showSystemAdmins ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                onClick={() => setShowSystemAdmins((current) => !current)}
+              >
+                {showSystemAdmins ? '隱藏最高權限帳號' : '查看最高權限帳號'}
+              </Button>
+              <Button
+                icon={showDataScopes ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                onClick={() => setShowDataScopes((current) => !current)}
+              >
+                {showDataScopes ? '隱藏資料範圍' : '展開資料範圍'}
+              </Button>
+            </Space>
+          </div>
+
+          {showSystemAdmins ? (
+            <div className="mt-4">
+              <Table
+                rowKey="id"
+                loading={loadingSystemAdmins}
+                columns={systemAdminColumns}
+                dataSource={systemAdminUsers}
+                pagination={false}
+                size="small"
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <Table
         rowKey="id"
@@ -475,7 +612,7 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
           form={createForm}
           initialValues={{
             roleIds: [],
-            ...DEFAULT_DATA_SCOPE_VALUES,
+            ...(canManageDataScopes ? DEFAULT_DATA_SCOPE_VALUES : {}),
           }}
           className="pt-4"
         >
@@ -520,7 +657,7 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
               <Select
                 mode="multiple"
                 placeholder="選擇角色"
-                options={availableRoles.map((role: Role) => ({
+                options={assignableRoles.map((role: Role) => ({
                   label: role.name || getRoleName(role.code),
                   value: role.id,
                 }))}
@@ -528,7 +665,7 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
                 className="rounded-md"
               />
             </Form.Item>
-            <DataScopeFormGrid />
+            {canManageDataScopes ? <DataScopeFormGrid /> : null}
           </div>
         </Form>
       </Modal>
@@ -547,7 +684,7 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
               <Select
                 mode="multiple"
                 placeholder="選擇角色"
-                options={availableRoles.map((role: Role) => ({
+                options={assignableRoles.map((role: Role) => ({
                   label: role.name || getRoleName(role.code),
                   value: role.id,
                 }))}
@@ -597,7 +734,7 @@ const UsersTab = ({ availableRoles }: UsersTabProps) => {
                 className="rounded-md"
               />
             </Form.Item>
-            <DataScopeFormGrid />
+            {canManageDataScopes ? <DataScopeFormGrid /> : null}
           </div>
         </Form>
       </Modal>
@@ -1150,6 +1287,7 @@ const AccessControlPage: React.FC = () => {
     isAdminUser(user) ||
     hasPermission(user, 'access_control:read') ||
     hasPermission(user, 'access_control:update')
+  const canManageDataScopes = hasRole(user, 'SUPER_ADMIN')
 
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
@@ -1224,7 +1362,12 @@ const AccessControlPage: React.FC = () => {
                 使用者
               </span>
             ),
-            children: <UsersTab availableRoles={roles} />,
+            children: (
+              <UsersTab
+                availableRoles={roles}
+                canManageDataScopes={canManageDataScopes}
+              />
+            ),
           },
           {
             key: 'roles',

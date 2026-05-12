@@ -31,9 +31,13 @@ export interface UpdateUserPayload {
 }
 
 export const usersService = {
-  async list(page = 1, limit = 25): Promise<PaginatedResult<ManagedUser>> {
+  async list(
+    page = 1,
+    limit = 25,
+    options?: { systemAdmins?: 'exclude' | 'only' | 'include' },
+  ): Promise<PaginatedResult<ManagedUser>> {
     const response = await api.get<PaginatedResult<ManagedUser>>('/users', {
-      params: { page, limit },
+      params: { page, limit, ...options },
     })
     return response.data
   },

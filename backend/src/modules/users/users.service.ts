@@ -179,17 +179,38 @@ export class UsersService {
   /**
    * 分頁取得使用者清單
    */
-  async findAll(page: number, limit: number) {
+  async findAll(
+    page: number,
+    limit: number,
+    options?: {
+      requesterId?: string;
+      systemAdmins?: 'exclude' | 'only' | 'include';
+    },
+  ) {
     const skip = (page - 1) * limit;
+    const requesterIsSuperAdmin = options?.requesterId
+      ? await this.userHasRole(options.requesterId, 'SUPER_ADMIN')
+      : false;
+    const requestedSystemAdminMode = options?.systemAdmins ?? 'exclude';
+    const systemAdminMode = requesterIsSuperAdmin
+      ? requestedSystemAdminMode
+      : 'exclude';
+    const where: Prisma.UserWhereInput =
+      systemAdminMode === 'include'
+        ? {}
+        : systemAdminMode === 'only'
+          ? { roles: { some: { role: { code: 'SUPER_ADMIN' } } } }
+          : { roles: { none: { role: { code: 'SUPER_ADMIN' } } } };
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
+        where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: USER_INCLUDE,
       }),
-      this.prisma.user.count(),
+      this.prisma.user.count({ where }),
     ]);
 
     return {
@@ -201,6 +222,38 @@ export class UsersService {
         totalPages: Math.max(1, Math.ceil(total / limit)),
       },
     };
+  }
+
+  private async userHasRole(userId: string, roleCode: string) {
+    const role = await this.prisma.userRole.findFirst({
+      where: {
+        userId,
+        role: {
+          code: roleCode,
+        },
+      },
+      select: { userId: true },
+    });
+
+    return Boolean(role);
+  }
+
+  private async ensureNoSystemAdminRoleIds(roleIds: string[]) {
+    if (roleIds.length === 0) {
+      return;
+    }
+
+    const systemRoles = await this.prisma.role.findMany({
+      where: {
+        id: { in: roleIds },
+        code: 'SUPER_ADMIN',
+      },
+      select: { id: true },
+    });
+
+    if (systemRoles.length > 0) {
+      throw new BadRequestException('最高權限角色不在一般使用者管理中指派');
+    }
   }
 
   /**
@@ -238,6 +291,8 @@ export class UsersService {
       purchasingDataScope,
       bankingDataScope,
     } = dto;
+
+    await this.ensureNoSystemAdminRoleIds(roleIds);
 
     const existing = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
@@ -300,6 +355,10 @@ export class UsersService {
    * 更新使用者資訊
    */
   async updateUser(id: string, dto: UpdateUserDto) {
+    if (await this.userHasRole(id, 'SUPER_ADMIN')) {
+      throw new BadRequestException('最高權限帳號不在一般使用者管理中調整');
+    }
+
     const {
       name,
       isActive,
@@ -452,6 +511,10 @@ export class UsersService {
    * 停用使用者帳號
    */
   async deactivateUser(id: string) {
+    if (await this.userHasRole(id, 'SUPER_ADMIN')) {
+      throw new BadRequestException('最高權限帳號不在一般使用者管理中停用');
+    }
+
     try {
       const updated = await this.prisma.user.update({
         where: { id },
@@ -470,6 +533,12 @@ export class UsersService {
    * 設定使用者角色
    */
   async setUserRoles(userId: string, roleIds: string[]) {
+    if (await this.userHasRole(userId, 'SUPER_ADMIN')) {
+      throw new BadRequestException('最高權限帳號不在一般使用者管理中調整角色');
+    }
+
+    await this.ensureNoSystemAdminRoleIds(roleIds);
+
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.findUnique({ where: { id: userId } });
