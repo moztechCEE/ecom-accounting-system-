@@ -185,6 +185,7 @@ export class UsersService {
     options?: {
       requesterId?: string;
       systemAdmins?: 'exclude' | 'only' | 'include';
+      search?: string;
     },
   ) {
     const skip = (page - 1) * limit;
@@ -195,12 +196,36 @@ export class UsersService {
     const systemAdminMode = requesterIsSuperAdmin
       ? requestedSystemAdminMode
       : 'exclude';
-    const where: Prisma.UserWhereInput =
+    const systemAdminWhere: Prisma.UserWhereInput =
       systemAdminMode === 'include'
         ? {}
         : systemAdminMode === 'only'
           ? { roles: { some: { role: { code: 'SUPER_ADMIN' } } } }
           : { roles: { none: { role: { code: 'SUPER_ADMIN' } } } };
+    const search = options?.search?.trim();
+    const searchWhere: Prisma.UserWhereInput | undefined = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { email: { contains: search, mode: 'insensitive' } },
+            {
+              roles: {
+                some: {
+                  role: {
+                    OR: [
+                      { code: { contains: search, mode: 'insensitive' } },
+                      { name: { contains: search, mode: 'insensitive' } },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        }
+      : undefined;
+    const where: Prisma.UserWhereInput = searchWhere
+      ? { AND: [systemAdminWhere, searchWhere] }
+      : systemAdminWhere;
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({

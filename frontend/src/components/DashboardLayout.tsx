@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { Outlet, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import {
   Layout,
   Menu,
@@ -44,6 +44,7 @@ const DashboardLayout: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { user, logout } = useAuth()
   const screens = useBreakpoint()
 
@@ -52,6 +53,23 @@ const DashboardLayout: React.FC = () => {
   const isMobile = !screens.md
   const canAccess = (permissions: string[] = []) =>
     permissions.length === 0 || hasAnyPermission(user, permissions)
+  const searchValue = searchParams.get('q') ?? ''
+
+  const handleGlobalSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.value
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        if (nextValue.trim()) {
+          next.set('q', nextValue)
+        } else {
+          next.delete('q')
+        }
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   const menuItems = [
     {
@@ -491,6 +509,9 @@ const DashboardLayout: React.FC = () => {
                 }
                 placeholder="搜尋..."
                 className="glass-input !rounded-full !w-64"
+                value={searchValue}
+                onChange={handleGlobalSearchChange}
+                allowClear
               />
             </div>
           </div>

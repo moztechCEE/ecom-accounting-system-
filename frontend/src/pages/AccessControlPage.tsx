@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Button,
   Form,
@@ -25,9 +26,10 @@ import {
   EditOutlined,
   DeleteOutlined,
   SettingOutlined,
-  SearchOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
+  DownOutlined,
+  UpOutlined,
 } from '@ant-design/icons'
 import { motion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
@@ -185,6 +187,7 @@ const DataScopeFormGrid = () => (
 type UsersTabProps = {
   availableRoles: Role[]
   canManageDataScopes: boolean
+  searchKeyword: string
 }
 
 type RolesTabProps = {
@@ -230,7 +233,11 @@ const isManagedUserSuperAdmin = (record: ManagedUser) =>
     ),
   )
 
-const UsersTab = ({ availableRoles, canManageDataScopes }: UsersTabProps) => {
+const UsersTab = ({
+  availableRoles,
+  canManageDataScopes,
+  searchKeyword,
+}: UsersTabProps) => {
   const [users, setUsers] = useState<ManagedUser[]>([])
   const [systemAdminUsers, setSystemAdminUsers] = useState<ManagedUser[]>([])
   const [meta, setMeta] = useState<PaginatedResult<ManagedUser>['meta']>({
@@ -241,8 +248,8 @@ const UsersTab = ({ availableRoles, canManageDataScopes }: UsersTabProps) => {
   })
   const [loading, setLoading] = useState(false)
   const [loadingSystemAdmins, setLoadingSystemAdmins] = useState(false)
-  const [showDataScopes, setShowDataScopes] = useState(false)
   const [showSystemAdmins, setShowSystemAdmins] = useState(false)
+  const [expandedScopeRowKeys, setExpandedScopeRowKeys] = useState<React.Key[]>([])
   const [createOpen, setCreateOpen] = useState(false)
   const [assignOpen, setAssignOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -262,6 +269,7 @@ const UsersTab = ({ availableRoles, canManageDataScopes }: UsersTabProps) => {
       try {
         const result = await usersService.list(page, limit, {
           systemAdmins: 'exclude',
+          search: searchKeyword,
         })
         setUsers(result.items)
         setMeta(result.meta)
@@ -271,12 +279,12 @@ const UsersTab = ({ availableRoles, canManageDataScopes }: UsersTabProps) => {
         setLoading(false)
       }
     },
-    [meta.limit],
+    [meta.limit, searchKeyword],
   )
 
   useEffect(() => {
-    fetchUsers()
-  }, [fetchUsers])
+    fetchUsers(1)
+  }, [fetchUsers, searchKeyword])
 
   const fetchSystemAdmins = useCallback(async () => {
     if (!canManageDataScopes) {
@@ -286,7 +294,10 @@ const UsersTab = ({ availableRoles, canManageDataScopes }: UsersTabProps) => {
 
     setLoadingSystemAdmins(true)
     try {
-      const result = await usersService.list(1, 50, { systemAdmins: 'only' })
+      const result = await usersService.list(1, 50, {
+        systemAdmins: 'only',
+        search: searchKeyword,
+      })
       setSystemAdminUsers(result.items)
     } catch (error) {
       message.error(getErrorMessage(error))
@@ -294,7 +305,7 @@ const UsersTab = ({ availableRoles, canManageDataScopes }: UsersTabProps) => {
     } finally {
       setLoadingSystemAdmins(false)
     }
-  }, [canManageDataScopes])
+  }, [canManageDataScopes, searchKeyword])
 
   useEffect(() => {
     if (showSystemAdmins) {
@@ -412,21 +423,29 @@ const UsersTab = ({ availableRoles, canManageDataScopes }: UsersTabProps) => {
         </Tag>
       ),
     },
-    ...(canManageDataScopes && showDataScopes
+    ...(canManageDataScopes
       ? [
           {
             title: '資料範圍',
-            key: 'scopes',
-            render: (_value: any, record: ManagedUser) => (
-              <Space wrap size={[4, 4]}>
-                {DATA_SCOPE_FIELDS.map((field) => (
-                  <Tag key={field.key} color={field.color}>
-                    {field.shortLabel}{' '}
-                    {DATA_SCOPE_LABEL_MAP[record[field.key] || 'SELF']}
-                  </Tag>
-                ))}
-              </Space>
-            ),
+            key: 'scopeToggle',
+            render: (_value: any, record: ManagedUser) => {
+              const expanded = expandedScopeRowKeys.includes(record.id)
+              return (
+                <Button
+                  type="text"
+                  icon={expanded ? <UpOutlined /> : <DownOutlined />}
+                  onClick={() => {
+                    setExpandedScopeRowKeys((current) =>
+                      expanded
+                        ? current.filter((key) => key !== record.id)
+                        : [...current, record.id],
+                    )
+                  }}
+                >
+                  {expanded ? '收合' : '展開'}
+                </Button>
+              )
+            },
           },
         ]
       : []),
@@ -521,6 +540,28 @@ const UsersTab = ({ availableRoles, canManageDataScopes }: UsersTabProps) => {
     },
   ]
 
+  const allUserRowKeys = useMemo(() => users.map((item) => item.id), [users])
+  const allScopesExpanded =
+    allUserRowKeys.length > 0 &&
+    allUserRowKeys.every((key) => expandedScopeRowKeys.includes(key))
+  const toggleAllScopes = () => {
+    setExpandedScopeRowKeys(allScopesExpanded ? [] : allUserRowKeys)
+  }
+  const renderDataScopes = (record: ManagedUser) => (
+    <div className="rounded-2xl border border-slate-200/70 bg-white/60 px-5 py-4">
+      <div className="mb-3 text-sm font-semibold text-slate-700">
+        {record.name} 的資料範圍
+      </div>
+      <Space wrap size={[8, 8]}>
+        {DATA_SCOPE_FIELDS.map((field) => (
+          <Tag key={field.key} color={field.color} className="!px-3 !py-1">
+            {field.shortLabel} {DATA_SCOPE_LABEL_MAP[record[field.key] || 'SELF']}
+          </Tag>
+        ))}
+      </Space>
+    </div>
+  )
+
   return (
     <GlassCard className="p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
@@ -544,7 +585,7 @@ const UsersTab = ({ availableRoles, canManageDataScopes }: UsersTabProps) => {
                 最高權限與資料範圍
               </div>
               <Text className="text-xs text-slate-500">
-                一般使用者列表不顯示最高權限帳號；資料範圍預設隱藏，只有最高權限管理員可以展開檢視與調整。
+                一般使用者列表不顯示最高權限帳號；資料範圍可用每列箭頭展開，也可以一次展開或收合所有使用者。
               </Text>
             </div>
             <Space wrap>
@@ -555,10 +596,10 @@ const UsersTab = ({ availableRoles, canManageDataScopes }: UsersTabProps) => {
                 {showSystemAdmins ? '隱藏最高權限帳號' : '查看最高權限帳號'}
               </Button>
               <Button
-                icon={showDataScopes ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-                onClick={() => setShowDataScopes((current) => !current)}
+                icon={allScopesExpanded ? <UpOutlined /> : <DownOutlined />}
+                onClick={toggleAllScopes}
               >
-                {showDataScopes ? '隱藏資料範圍' : '展開資料範圍'}
+                {allScopesExpanded ? '全部收合資料範圍' : '全員展開資料範圍'}
               </Button>
             </Space>
           </div>
@@ -584,6 +625,16 @@ const UsersTab = ({ availableRoles, canManageDataScopes }: UsersTabProps) => {
         columns={columns}
         dataSource={users}
         scroll={{ x: 800 }}
+        expandable={
+          canManageDataScopes
+            ? {
+                expandedRowKeys: expandedScopeRowKeys,
+                expandedRowRender: renderDataScopes,
+                expandIcon: () => null,
+                onExpandedRowsChange: (keys) => setExpandedScopeRowKeys([...keys]),
+              }
+            : undefined
+        }
         pagination={{
           current: meta.page,
           pageSize: meta.limit,
@@ -1283,6 +1334,8 @@ const PermissionsTab = ({
 
 const AccessControlPage: React.FC = () => {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  const searchKeyword = searchParams.get('q')?.trim() ?? ''
   const canAccessControl =
     isAdminUser(user) ||
     hasPermission(user, 'access_control:read') ||
@@ -1366,6 +1419,7 @@ const AccessControlPage: React.FC = () => {
               <UsersTab
                 availableRoles={roles}
                 canManageDataScopes={canManageDataScopes}
+                searchKeyword={searchKeyword}
               />
             ),
           },

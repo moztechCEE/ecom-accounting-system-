@@ -61,6 +61,7 @@ export class UsersController {
     @Query('page') page = '1',
     @Query('limit') limit = '25',
     @Query('systemAdmins') systemAdmins: 'exclude' | 'only' | 'include' = 'exclude',
+    @Query('q') search = '',
   ) {
     const pageNumber = Math.max(1, Number.parseInt(page, 10) || 1);
     const limitNumber = Math.min(
@@ -71,6 +72,7 @@ export class UsersController {
     return this.usersService.findAll(pageNumber, limitNumber, {
       requesterId: userId,
       systemAdmins,
+      search,
     });
   }
 
