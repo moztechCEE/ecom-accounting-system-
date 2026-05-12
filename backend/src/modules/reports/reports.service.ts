@@ -14,6 +14,9 @@ type CommerceSourceBrandRule = {
   account?: string;
 };
 
+const AD_EXPENSE_SOURCE_MODULES = ['meta_ads', 'google_ads'];
+const DEFAULT_REPORT_TIME_ZONE = 'Asia/Taipei';
+
 /**
  * 報表服務
  *
@@ -2664,6 +2667,7 @@ export class ReportsService {
     const orderDateFilter = this.buildDateFilter(startDate, endDate);
     const paymentDateFilter = this.buildDateFilter(startDate, endDate);
     const expenseDateFilter = this.buildDateFilter(startDate, endDate);
+    const expenseDateWhere = this.buildExpenseDateWhere(startDate, endDate);
     const arDateFilter = this.buildDateFilter(startDate, endDate);
 
     const [orders, payments, expenses, expenseRequests, arInvoices] =
@@ -2712,12 +2716,13 @@ export class ReportsService {
         this.prisma.expense.findMany({
           where: {
             entityId,
-            ...(expenseDateFilter ? { expenseDate: expenseDateFilter } : {}),
+            ...expenseDateWhere,
           },
           select: {
             expenseDate: true,
             totalAmountOriginal: true,
             description: true,
+            sourceModule: true,
             items: {
               select: {
                 accountCode: true,
@@ -2898,6 +2903,7 @@ export class ReportsService {
       period.expenseCount += 1;
       const matchingAdItems = expense.items.filter((item) =>
         this.isAdvertisingSpend([
+          expense.sourceModule,
           expense.description,
           item.description,
           item.accountCode,
@@ -2909,7 +2915,9 @@ export class ReportsService {
           0,
         );
         period.adSpendCount += matchingAdItems.length;
-      } else if (this.isAdvertisingSpend([expense.description])) {
+      } else if (
+        this.isAdvertisingSpend([expense.sourceModule, expense.description])
+      ) {
         period.adSpendAmount += Number(expense.totalAmountOriginal || 0);
         period.adSpendCount += 1;
       }
@@ -3334,7 +3342,10 @@ export class ReportsService {
   ) {
     const stores = this.getOneShopStores();
     const orderDateFilter = this.buildDateFilter(startDate, endDate);
-    const expenseDateFilter = this.buildDateFilter(startDate, endDate);
+    const adExpenseDateFilter = this.buildDateOnlySourceFilter(
+      startDate,
+      endDate,
+    );
 
     const [orders, adExpenses] = await Promise.all([
       this.prisma.salesOrder.findMany({
@@ -3380,9 +3391,11 @@ export class ReportsService {
         where: {
           entityId,
           sourceModule: {
-            in: ['meta_ads', 'google_ads'],
+            in: AD_EXPENSE_SOURCE_MODULES,
           },
-          ...(expenseDateFilter ? { expenseDate: expenseDateFilter } : {}),
+          ...(adExpenseDateFilter
+            ? { expenseDate: adExpenseDateFilter }
+            : {}),
         },
         orderBy: {
           expenseDate: 'asc',
@@ -3745,6 +3758,83 @@ export class ReportsService {
     return Object.keys(filter).length ? filter : null;
   }
 
+  private buildExpenseDateWhere(startDate?: Date, endDate?: Date) {
+    const regularExpenseDateFilter = this.buildDateFilter(startDate, endDate);
+    const adExpenseDateFilter = this.buildDateOnlySourceFilter(
+      startDate,
+      endDate,
+    );
+
+    if (!regularExpenseDateFilter && !adExpenseDateFilter) {
+      return {};
+    }
+
+    return {
+      OR: [
+        {
+          sourceModule: {
+            in: AD_EXPENSE_SOURCE_MODULES,
+          },
+          ...(adExpenseDateFilter
+            ? { expenseDate: adExpenseDateFilter }
+            : {}),
+        },
+        {
+          OR: [
+            {
+              sourceModule: null,
+            },
+            {
+              sourceModule: {
+                notIn: AD_EXPENSE_SOURCE_MODULES,
+              },
+            },
+          ],
+          ...(regularExpenseDateFilter
+            ? { expenseDate: regularExpenseDateFilter }
+            : {}),
+        },
+      ],
+    };
+  }
+
+  private buildDateOnlySourceFilter(startDate?: Date, endDate?: Date) {
+    const filter: { gte?: Date; lte?: Date } = {};
+    const timeZone = this.getReportTimeZone();
+
+    if (startDate) {
+      filter.gte = new Date(
+        `${this.formatDateInTimeZone(startDate, timeZone)}T00:00:00.000Z`,
+      );
+    }
+    if (endDate) {
+      filter.lte = new Date(
+        `${this.formatDateInTimeZone(endDate, timeZone)}T23:59:59.999Z`,
+      );
+    }
+
+    return Object.keys(filter).length ? filter : null;
+  }
+
+  private getReportTimeZone() {
+    return (
+      this.configService.get<string>('REPORT_TIME_ZONE') ||
+      this.configService.get<string>('TZ') ||
+      DEFAULT_REPORT_TIME_ZONE
+    );
+  }
+
+  private formatDateInTimeZone(date: Date, timeZone: string) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+    const partMap = new Map(parts.map((part) => [part.type, part.value]));
+    return `${partMap.get('year')}-${partMap.get('month')}-${partMap.get('day')}`;
+  }
+
   private buildDashboardBuckets(
     stores: Array<{ account: string; storeName?: string }>,
   ) {
@@ -4025,6 +4115,8 @@ export class ReportsService {
     }
 
     return [
+      /meta_ads/,
+      /google_ads/,
       /facebook/,
       /instagram/,
       /\bmeta\b/,
