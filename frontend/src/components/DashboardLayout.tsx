@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { Outlet, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import {
   Layout,
@@ -20,8 +20,8 @@ import {
   UserOutlined,
   SearchOutlined,
   MenuOutlined,
-  LeftOutlined,
-  RightOutlined,
+  DownOutlined,
+  UpOutlined,
   ClockCircleOutlined,
 } from '@ant-design/icons'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -37,15 +37,9 @@ import { hasAnyPermission, hasPermission, isAdminUser } from '../utils/access'
 const { Header, Sider, Content } = Layout
 const { Title } = Typography
 const { useBreakpoint } = Grid
-const SIDEBAR_COLLAPSED_STORAGE_KEY = 'dashboardSidebarCollapsed'
 
 const DashboardLayout: React.FC = () => {
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window === 'undefined') {
-      return true
-    }
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) !== 'false'
-  })
+  const [openMenuKeys, setOpenMenuKeys] = useState<string[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const navigate = useNavigate()
@@ -60,15 +54,6 @@ const DashboardLayout: React.FC = () => {
   const canAccess = (permissions: string[] = []) =>
     permissions.length === 0 || hasAnyPermission(user, permissions)
   const searchValue = searchParams.get('q') ?? ''
-
-  useEffect(() => {
-    if (!isMobile) {
-      window.localStorage.setItem(
-        SIDEBAR_COLLAPSED_STORAGE_KEY,
-        collapsed ? 'true' : 'false',
-      )
-    }
-  }, [collapsed, isMobile])
 
   const handleGlobalSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextValue = event.target.value
@@ -314,6 +299,12 @@ const DashboardLayout: React.FC = () => {
       .filter(Boolean)
 
   const visibleMenuItems = filterMenuItems(menuItems)
+  const expandableMenuKeys = visibleMenuItems
+    .filter((item) => item.children?.length)
+    .map((item) => String(item.key))
+  const allMenuGroupsOpen =
+    expandableMenuKeys.length > 0 &&
+    expandableMenuKeys.every((key) => openMenuKeys.includes(key))
 
   const resolveMenuLabel = (items: any[], path: string): string | undefined => {
     for (const item of items) {
@@ -385,9 +376,6 @@ const DashboardLayout: React.FC = () => {
 
       {!isMobile ? (
         <Sider
-          collapsible
-          collapsed={collapsed}
-          onCollapse={setCollapsed}
           width={260}
           trigger={null}
           className="floating-sidebar"
@@ -407,14 +395,12 @@ const DashboardLayout: React.FC = () => {
                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/30 shadow-lg">
                   <BrandMark className="w-7 h-7" alt="System logo" />
                 </div>
-                {!collapsed && (
-                  <div
-                    className="max-w-[160px] text-sm font-semibold leading-tight tracking-wide"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
-                    AI 電子商務營運中樞
-                  </div>
-                )}
+                <div
+                  className="max-w-[160px] text-sm font-semibold leading-tight tracking-wide"
+                  style={{ color: 'var(--text-primary)' }}
+                >
+                  AI 電子商務營運中樞
+                </div>
               </div>
             </div>
             <div
@@ -425,12 +411,8 @@ const DashboardLayout: React.FC = () => {
                 theme="light"
                 mode="inline"
                 selectedKeys={[location.pathname]}
-                defaultOpenKeys={[
-                  'operations',
-                  'finance-accounting',
-                  'hr-attendance',
-                  'admin',
-                ]}
+                openKeys={openMenuKeys}
+                onOpenChange={(keys) => setOpenMenuKeys(keys.map(String))}
                 items={visibleMenuItems}
                 className="px-2 bg-transparent border-none"
               />
@@ -441,9 +423,14 @@ const DashboardLayout: React.FC = () => {
                 borderTop: '1px solid rgba(0, 0, 0, 0.06)',
                 color: 'var(--text-primary)',
               }}
-              onClick={() => setCollapsed(!collapsed)}
+              onClick={() =>
+                setOpenMenuKeys(allMenuGroupsOpen ? [] : expandableMenuKeys)
+              }
             >
-              {collapsed ? <RightOutlined /> : <LeftOutlined />}
+              <span className="flex items-center gap-2 text-sm font-medium">
+                {allMenuGroupsOpen ? <UpOutlined /> : <DownOutlined />}
+                {allMenuGroupsOpen ? '收合選單' : '展開選單'}
+              </span>
             </div>
           </div>
         </Sider>
@@ -471,12 +458,8 @@ const DashboardLayout: React.FC = () => {
             theme="light"
             mode="inline"
             selectedKeys={[location.pathname]}
-            defaultOpenKeys={[
-              'operations',
-              'finance-accounting',
-              'hr-attendance',
-              'admin',
-            ]}
+            openKeys={openMenuKeys}
+            onOpenChange={(keys) => setOpenMenuKeys(keys.map(String))}
             items={visibleMenuItems}
             className="px-2 bg-transparent border-none"
             onClick={() => setMobileMenuOpen(false)}
@@ -486,7 +469,7 @@ const DashboardLayout: React.FC = () => {
 
       <Layout
         style={{
-          marginLeft: isMobile ? 0 : collapsed ? 112 : 292,
+          marginLeft: isMobile ? 0 : 292,
           transition: 'all 0.2s',
           background: 'transparent',
         }}
