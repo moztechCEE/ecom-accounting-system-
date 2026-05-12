@@ -188,6 +188,12 @@ const AttendanceAdminPage: React.FC = () => {
   const [requestStatusFilter, setRequestStatusFilter] = useState<string>("");
   const [overtimeStatusFilter, setOvertimeStatusFilter] = useState<string>("");
   const [employeeFilter, setEmployeeFilter] = useState<string>("");
+  const [recordEmployeeStatusFilter, setRecordEmployeeStatusFilter] = useState<
+    "ALL" | "ACTIVE" | "TERMINATED"
+  >("ALL");
+  const [recordAttendanceTypeFilter, setRecordAttendanceTypeFilter] = useState<
+    "ALL" | "INTERNAL" | "EXTERNAL"
+  >("ALL");
   const [selectedLeaveRequestIds, setSelectedLeaveRequestIds] = useState<
     Set<string>
   >(new Set());
@@ -224,7 +230,13 @@ const AttendanceAdminPage: React.FC = () => {
 
   useEffect(() => {
     void loadAttendanceRecords();
-  }, [recordStartDate, recordEndDate, employeeFilter]);
+  }, [
+    recordStartDate,
+    recordEndDate,
+    employeeFilter,
+    recordEmployeeStatusFilter,
+    recordAttendanceTypeFilter,
+  ]);
 
   useEffect(() => {
     setSelectedLeaveRequestIds((current) => {
@@ -293,6 +305,8 @@ const AttendanceAdminPage: React.FC = () => {
         startDate: recordStartDate,
         endDate: recordEndDate,
         employeeId: employeeFilter || undefined,
+        employeeStatus: recordEmployeeStatusFilter,
+        attendanceType: recordAttendanceTypeFilter,
       });
       setAttendanceRecords(result);
     } catch (error: any) {
@@ -322,7 +336,9 @@ const AttendanceAdminPage: React.FC = () => {
       { value: "", label: "全部員工" },
       ...employees.map((employee) => ({
         value: employee.id,
-        label: `${employee.name} (${employee.employeeNo})`,
+        label: `${employee.name} (${employee.employeeNo}) · ${
+          employee.isActive ? "在職" : "離職"
+        } · ${employee.attendanceType === "EXTERNAL" ? "外勤" : "內勤"}`,
       })),
     ];
   }, [employees]);
@@ -1072,6 +1088,38 @@ const AttendanceAdminPage: React.FC = () => {
                   onChange={(event) => setEmployeeFilter(event.target.value)}
                 />
               </div>
+              <div className="w-44">
+                <GlassSelect
+                  label="在職類型"
+                  options={[
+                    { value: "ALL", label: "全部" },
+                    { value: "ACTIVE", label: "在職員工" },
+                    { value: "TERMINATED", label: "離職員工" },
+                  ]}
+                  value={recordEmployeeStatusFilter}
+                  onChange={(event) =>
+                    setRecordEmployeeStatusFilter(
+                      event.target.value as "ALL" | "ACTIVE" | "TERMINATED",
+                    )
+                  }
+                />
+              </div>
+              <div className="w-44">
+                <GlassSelect
+                  label="出勤類型"
+                  options={[
+                    { value: "ALL", label: "全部" },
+                    { value: "INTERNAL", label: "內勤" },
+                    { value: "EXTERNAL", label: "外勤" },
+                  ]}
+                  value={recordAttendanceTypeFilter}
+                  onChange={(event) =>
+                    setRecordAttendanceTypeFilter(
+                      event.target.value as "ALL" | "INTERNAL" | "EXTERNAL",
+                    )
+                  }
+                />
+              </div>
               <GlassButton
                 variant="secondary"
                 className="h-12 gap-2 px-5 text-sm"
@@ -1261,6 +1309,15 @@ const AttendanceAdminPage: React.FC = () => {
                             {record.employee?.employeeNo
                               ? ` · ${record.employee.employeeNo}`
                               : ""}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-400">
+                            {record.employee?.isActive === false
+                              ? "離職"
+                              : "在職"}
+                            {" · "}
+                            {record.employee?.attendanceType === "EXTERNAL"
+                              ? "外勤"
+                              : "內勤"}
                           </div>
                         </td>
                         <td className="px-5 py-4 font-mono">

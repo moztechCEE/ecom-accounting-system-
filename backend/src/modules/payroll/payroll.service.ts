@@ -326,6 +326,13 @@ export class PayrollService {
     return gender;
   }
 
+  private normalizeEmployeeAttendanceType(value?: string | null) {
+    const attendanceType = String(value || 'INTERNAL')
+      .trim()
+      .toUpperCase();
+    return attendanceType === 'EXTERNAL' ? 'EXTERNAL' : 'INTERNAL';
+  }
+
   private async generateNextEmployeeNo() {
     const employees = await this.prisma.employee.findMany({
       select: { employeeNo: true },
@@ -1054,6 +1061,7 @@ export class PayrollService {
       salaryBaseOriginal: number;
       isActive?: boolean;
       location?: string;
+      attendanceType?: string | null;
       nationalId?: string | null;
       mailingAddress?: string | null;
       compensationSettings?: Record<string, unknown> | null;
@@ -1145,6 +1153,9 @@ export class PayrollService {
         mailingAddress: data.mailingAddress?.trim() || null,
         country: entity.country,
         location: data.location?.trim() || null,
+        attendanceType: this.normalizeEmployeeAttendanceType(
+          data.attendanceType,
+        ),
         departmentId: data.departmentId || null,
         hireDate: new Date(data.hireDate),
         salaryBaseOriginal,
@@ -1306,6 +1317,7 @@ export class PayrollService {
       salaryBaseOriginal?: number;
       isActive?: boolean;
       location?: string | null;
+      attendanceType?: string | null;
       terminateDate?: string | Date | null;
       nationalId?: string | null;
       mailingAddress?: string | null;
@@ -1388,6 +1400,12 @@ export class PayrollService {
 
     if (data.location !== undefined) {
       updateData.location = data.location?.trim() || null;
+    }
+
+    if (data.attendanceType !== undefined) {
+      updateData.attendanceType = this.normalizeEmployeeAttendanceType(
+        data.attendanceType,
+      );
     }
 
     if (data.nationalId !== undefined) {

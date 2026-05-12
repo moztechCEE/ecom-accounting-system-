@@ -298,6 +298,7 @@ export interface Employee {
   gender?: "MALE" | "FEMALE" | null;
   nationalId?: string | null;
   mailingAddress?: string | null;
+  attendanceType?: "INTERNAL" | "EXTERNAL";
   departmentId?: string;
   departmentName?: string;
   salaryBaseOriginal: number;

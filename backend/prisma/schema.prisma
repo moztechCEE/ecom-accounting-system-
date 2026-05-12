@@ -1401,6 +1401,7 @@ model Employee {
   mailingAddress String?  @map("mailing_address")
   country       String // TW, CN
   location      String?
+  attendanceType String   @default("INTERNAL") @map("attendance_type") // INTERNAL, EXTERNAL
   departmentId  String?   @map("department_id")
   hireDate      DateTime  @map("hire_date")
   terminateDate DateTime? @map("terminate_date")

@@ -258,6 +258,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     nationalId: employee?.nationalId || "",
     mailingAddress: employee?.mailingAddress || "",
     departmentId: employee?.departmentId || undefined,
+    attendanceType: employee?.attendanceType || "INTERNAL",
     hireDate: employee?.hireDate ? dayjs(employee.hireDate) : undefined,
     terminateDate: employee?.terminateDate
       ? dayjs(employee.terminateDate)
@@ -698,6 +699,14 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                 label: department.name,
                 value: department.id,
               }))}
+            />
+          </Form.Item>
+          <Form.Item name="attendanceType" label="出勤類型">
+            <Select
+              options={[
+                { label: "內勤", value: "INTERNAL" },
+                { label: "外勤", value: "EXTERNAL" },
+              ]}
             />
           </Form.Item>
           <Form.Item

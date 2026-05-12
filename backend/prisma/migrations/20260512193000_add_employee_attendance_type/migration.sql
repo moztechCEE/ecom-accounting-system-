@@ -1,0 +1,2 @@
+ALTER TABLE "employees"
+  ADD COLUMN "attendance_type" TEXT NOT NULL DEFAULT 'INTERNAL';

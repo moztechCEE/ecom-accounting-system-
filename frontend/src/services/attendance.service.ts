@@ -76,6 +76,8 @@ export const attendanceService = {
     startDate: string;
     endDate: string;
     employeeId?: string;
+    employeeStatus?: "ALL" | "ACTIVE" | "TERMINATED";
+    attendanceType?: "ALL" | "INTERNAL" | "EXTERNAL";
   }): Promise<AdminAttendanceRecord[]> => {
     const response = await api.get<AdminAttendanceRecord[]>(
       "/attendance/admin/attendance-records",

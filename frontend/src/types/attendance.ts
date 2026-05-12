@@ -279,6 +279,9 @@ export interface AdminAttendanceRecord {
     id: string;
     employeeNo?: string;
     name: string;
+    isActive?: boolean;
+    attendanceType?: "INTERNAL" | "EXTERNAL";
+    terminateDate?: string | null;
     department?: {
       id: string;
       name: string;

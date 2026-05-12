@@ -339,6 +339,8 @@ export class AttendanceService {
       startDate?: Date;
       endDate?: Date;
       employeeId?: string;
+      employeeStatus?: string;
+      attendanceType?: string;
     },
   ) {
     const access = await this.getAdminAccessContext(userId);
@@ -353,6 +355,32 @@ export class AttendanceService {
       throw new BadRequestException('查詢結束日不可早於開始日');
     }
 
+    const employeeWhere: Record<string, any> = {};
+    const normalizedEmployeeStatus = String(filters.employeeStatus || 'ALL')
+      .trim()
+      .toUpperCase();
+    if (normalizedEmployeeStatus === 'ACTIVE') {
+      employeeWhere.isActive = true;
+    } else if (normalizedEmployeeStatus === 'TERMINATED') {
+      employeeWhere.isActive = false;
+    }
+
+    const normalizedAttendanceType = String(filters.attendanceType || 'ALL')
+      .trim()
+      .toUpperCase();
+    if (
+      normalizedAttendanceType === 'INTERNAL' ||
+      normalizedAttendanceType === 'EXTERNAL'
+    ) {
+      employeeWhere.attendanceType = normalizedAttendanceType;
+    }
+
+    const accessWhere = this.buildAttendanceAccessWhere(access);
+    const accessEmployeeWhere =
+      'employee' in accessWhere && accessWhere.employee
+        ? accessWhere.employee
+        : {};
+
     return this.prisma.attendanceDailySummary.findMany({
       where: {
         entityId: access.entityId,
@@ -361,7 +389,12 @@ export class AttendanceService {
           lte: endDate,
         },
         ...(filters.employeeId ? { employeeId: filters.employeeId } : {}),
-        ...this.buildAttendanceAccessWhere(access),
+        ...(Object.keys({ ...accessEmployeeWhere, ...employeeWhere }).length
+          ? { employee: { ...accessEmployeeWhere, ...employeeWhere } }
+          : {}),
+        ...('employeeId' in accessWhere
+          ? { employeeId: accessWhere.employeeId }
+          : {}),
       },
       include: {
         employee: { include: { department: true } },

@@ -76,11 +76,15 @@ export class AttendanceController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('employeeId') employeeId?: string,
+    @Query('employeeStatus') employeeStatus?: string,
+    @Query('attendanceType') attendanceType?: string,
   ) {
     return this.attendanceService.getAttendanceRecords(req.user.id, {
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       employeeId,
+      employeeStatus,
+      attendanceType,
     });
   }
 
