@@ -9,7 +9,6 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
-  Segmented,
   Select,
   Space,
   Switch,
@@ -546,22 +545,31 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       render: (_: unknown, record: Employee) => {
         const verifiedCount =
           record.onboardingDocuments?.filter(
-            (document) => document.isRequired && document.status === "VERIFIED",
+            (document) => document.status === "VERIFIED",
           ).length || 0;
         const requiredCount =
           record.onboardingDocuments?.filter((document) => document.isRequired)
             .length || 0;
+        const requiredVerifiedCount =
+          record.onboardingDocuments?.filter(
+            (document) => document.isRequired && document.status === "VERIFIED",
+          ).length || 0;
         return (
           <Space wrap size={[4, 4]}>
             <Tag
               color={
-                requiredCount > 0 && verifiedCount === requiredCount
+                verifiedCount === onboardingDocDefinitions.length
                   ? "green"
                   : "default"
               }
             >
-              必填 {verifiedCount}/{requiredCount} 已核實
+              {verifiedCount}/{onboardingDocDefinitions.length} 已核實
             </Tag>
+            {requiredCount > 0 ? (
+              <Tag color={requiredVerifiedCount === requiredCount ? "green" : "red"}>
+                必填 {requiredVerifiedCount}/{requiredCount}
+              </Tag>
+            ) : null}
             {record.onboardingDocuments?.some(
               (document) => document.status === "UPLOADED",
             ) ? (
@@ -776,38 +784,13 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                   className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="min-w-[180px]">
-                      <div className="flex flex-wrap items-center gap-2 font-medium text-slate-800">
-                        <span>{label}</span>
-                        {document.isRequired ? (
-                          <Tag color="red">必填</Tag>
-                        ) : (
-                          <Tag>非必填</Tag>
-                        )}
-                      </div>
+                    <div>
+                      <div className="font-medium text-slate-800">{label}</div>
                       <div className="text-xs text-slate-500">
                         {document.fileName || "尚未上傳"}
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-slate-500">必填項目</span>
-                      <Segmented
-                        size="small"
-                        value={document.isRequired ? "yes" : "no"}
-                        options={[
-                          { label: "是", value: "yes" },
-                          { label: "否", value: "no" },
-                        ]}
-                        disabled={documentActionLoading === docType}
-                        onChange={(value) =>
-                          void handleUpdateOnboardingDocumentRequirement(
-                            docType,
-                            value === "yes",
-                          )
-                        }
-                      />
-                      <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
-                    </div>
+                    <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Upload
@@ -823,6 +806,19 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                         上傳
                       </Button>
                     </Upload>
+                    <Button
+                      type={document.isRequired ? "primary" : "default"}
+                      danger={document.isRequired}
+                      loading={documentActionLoading === docType}
+                      onClick={() =>
+                        void handleUpdateOnboardingDocumentRequirement(
+                          docType,
+                          !document.isRequired,
+                        )
+                      }
+                    >
+                      {document.isRequired ? "取消必填" : "設為必填"}
+                    </Button>
                     <Button
                       icon={<DownloadOutlined />}
                       disabled={!document.fileName}
