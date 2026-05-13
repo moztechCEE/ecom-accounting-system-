@@ -1151,7 +1151,6 @@ export class PayrollService {
     }
 
     await this.ensureDepartmentInEntity(data.departmentId, entityId);
-    await this.ensureUserAssignable(data.userId);
 
     const salaryBaseOriginal = Number(data.salaryBaseOriginal);
     if (!Number.isFinite(salaryBaseOriginal) || salaryBaseOriginal < 0) {
@@ -1168,23 +1167,35 @@ export class PayrollService {
     );
     const loginEmail = this.normalizeLoginEmail(data.loginEmail);
     const loginPassword = data.loginPassword?.trim() || undefined;
-    if (loginPassword && loginPassword.length < 8) {
-      throw new BadRequestException('Password must be at least 8 characters');
-    }
-    if (loginEmail) {
+
+    let linkedUserId = data.userId || null;
+    if (linkedUserId) {
+      await this.ensureUserAssignable(linkedUserId);
+    } else if (loginEmail) {
       const existingUser = await this.prisma.user.findUnique({
         where: { email: loginEmail },
         select: { id: true },
       });
       if (existingUser) {
-        throw new ConflictException(`Email ${loginEmail} already exists`);
+        await this.ensureUserAssignable(existingUser.id);
+        linkedUserId = existingUser.id;
       }
+    }
+
+    if (loginEmail) {
+      // An existing, unbound login email is treated as an account-to-employee
+      // binding. Only validate the password when we will create a new login.
+      if (!linkedUserId && loginPassword && loginPassword.length < 8) {
+        throw new BadRequestException('Password must be at least 8 characters');
+      }
+    } else if (loginPassword && loginPassword.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters');
     }
 
     const employee = await this.prisma.employee.create({
       data: {
         entityId,
-        userId: data.userId || null,
+        userId: linkedUserId,
         employeeNo,
         name,
         gender,
@@ -1248,7 +1259,7 @@ export class PayrollService {
       newData: this.serializeEmployee(employeeWithOnboardingDocuments),
     });
 
-    if (data.userId) {
+    if (linkedUserId) {
       return this.serializeEmployee(employeeWithOnboardingDocuments);
     }
 
