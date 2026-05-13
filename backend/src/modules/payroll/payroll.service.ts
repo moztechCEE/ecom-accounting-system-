@@ -132,6 +132,38 @@ export class PayrollService {
     return normalized;
   }
 
+  private normalizeOnboardingRequirements(
+    input?:
+      | Record<string, unknown>
+      | Array<{ docType?: string; isRequired?: unknown }>
+      | null,
+  ) {
+    const normalized = Object.fromEntries(
+      EMPLOYEE_ONBOARDING_DOC_TYPES.map((docType) => [docType, false]),
+    ) as Record<(typeof EMPLOYEE_ONBOARDING_DOC_TYPES)[number], boolean>;
+
+    if (!input) {
+      return normalized;
+    }
+
+    if (Array.isArray(input)) {
+      for (const item of input) {
+        if (item?.docType && this.isEmployeeOnboardingDocType(item.docType)) {
+          normalized[item.docType] = Boolean(item.isRequired);
+        }
+      }
+      return normalized;
+    }
+
+    for (const [docType, isRequired] of Object.entries(input)) {
+      if (this.isEmployeeOnboardingDocType(docType)) {
+        normalized[docType] = Boolean(isRequired);
+      }
+    }
+
+    return normalized;
+  }
+
   private buildEmployeeInclude() {
     return {
       department: true,
@@ -1065,6 +1097,10 @@ export class PayrollService {
       nationalId?: string | null;
       mailingAddress?: string | null;
       compensationSettings?: Record<string, unknown> | null;
+      onboardingRequirements?:
+        | Record<string, unknown>
+        | Array<{ docType?: string; isRequired?: unknown }>
+        | null;
       loginEmail?: string | null;
       loginPassword?: string | null;
     },
@@ -1127,6 +1163,9 @@ export class PayrollService {
     const compensationSettings = this.normalizeCompensationSettings(
       data.compensationSettings,
     );
+    const onboardingRequirements = this.normalizeOnboardingRequirements(
+      data.onboardingRequirements,
+    );
     const loginEmail = this.normalizeLoginEmail(data.loginEmail);
     const loginPassword = data.loginPassword?.trim() || undefined;
     if (loginPassword && loginPassword.length < 8) {
@@ -1170,6 +1209,30 @@ export class PayrollService {
       include: this.buildEmployeeInclude(),
     });
 
+    const requiredOnboardingDocuments = Object.entries(onboardingRequirements)
+      .filter(([, isRequired]) => isRequired)
+      .map(([docType]) => ({
+        employeeId: employee.id,
+        docType,
+        status: 'PENDING',
+        isRequired: true,
+      }));
+
+    if (requiredOnboardingDocuments.length > 0) {
+      await this.prisma.employeeOnboardingDocument.createMany({
+        data: requiredOnboardingDocuments,
+        skipDuplicates: true,
+      });
+    }
+
+    const employeeWithOnboardingDocuments =
+      requiredOnboardingDocuments.length > 0
+        ? await this.prisma.employee.findUniqueOrThrow({
+            where: { id: employee.id },
+            include: this.buildEmployeeInclude(),
+          })
+        : employee;
+
     await this.leaveService.initializeEmployeeLeaveSetup(userId, {
       id: employee.id,
       entityId: employee.entityId,
@@ -1182,11 +1245,11 @@ export class PayrollService {
       tableName: 'employees',
       recordId: employee.id,
       action: 'CREATE',
-      newData: this.serializeEmployee(employee),
+      newData: this.serializeEmployee(employeeWithOnboardingDocuments),
     });
 
     if (data.userId) {
-      return this.serializeEmployee(employee);
+      return this.serializeEmployee(employeeWithOnboardingDocuments);
     }
 
     const loginAccount = await this.createEmployeeLoginAccount(

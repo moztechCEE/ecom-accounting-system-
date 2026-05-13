@@ -192,6 +192,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const [documentActionLoading, setDocumentActionLoading] = useState<
     string | null
   >(null);
+  const [employeeFormActiveTab, setEmployeeFormActiveTab] = useState("basic");
   const [reviewQueue, setReviewQueue] = useState<
     Array<{
       employeeId: string;
@@ -236,6 +237,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const prepareCreateEmployeeForm = async () => {
     form.resetFields();
     form.setFieldsValue(buildFormValues(null));
+    setEmployeeFormActiveTab("basic");
     setCreateOpen(true);
     setNextEmployeeNoLoading(true);
     try {
@@ -265,11 +267,41 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     isActive: employee?.isActive ?? true,
     loginEmail: employee?.user?.email || "",
     loginPassword: employee ? "" : DEFAULT_EMPLOYEE_INITIAL_PASSWORD,
+    onboardingRequirements: onboardingDocDefinitions.reduce(
+      (acc, { docType }) => ({
+        ...acc,
+        [docType]:
+          employee?.onboardingDocuments?.find(
+            (document) => document.docType === docType,
+          )?.isRequired || false,
+      }),
+      {} as Record<EmployeeOnboardingDocument["docType"], boolean>,
+    ),
     compensationSettings: {
       ...compensationDefaults,
       ...(employee?.compensationSettings || {}),
     },
   });
+
+  const resolveEmployeeFormTabByField = (fieldName?: (string | number)[]) => {
+    const rootName = String(fieldName?.[0] || "");
+    if (["name", "gender", "departmentId", "attendanceType", "hireDate"].includes(rootName)) {
+      return "basic";
+    }
+    if (["nationalId", "mailingAddress"].includes(rootName)) {
+      return "profile";
+    }
+    if (["salaryBaseOriginal", "compensationSettings"].includes(rootName)) {
+      return "payroll";
+    }
+    if (rootName === "onboardingRequirements") {
+      return "onboarding";
+    }
+    if (["loginEmail", "loginPassword", "terminateDate", "isActive"].includes(rootName)) {
+      return "settings";
+    }
+    return "basic";
+  };
 
   const replaceSelectedEmployeeDocument = (
     employee: Employee,
@@ -305,7 +337,12 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
-      const { loginEmail, loginPassword, ...employeeValues } = values;
+      const {
+        loginEmail,
+        loginPassword,
+        onboardingRequirements,
+        ...employeeValues
+      } = values;
       const createdEmployee = (await payrollService.createEmployee({
         ...employeeValues,
         employeeNo: undefined,
@@ -313,6 +350,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         nationalId: employeeValues.nationalId,
         mailingAddress: employeeValues.mailingAddress,
         compensationSettings: employeeValues.compensationSettings,
+        onboardingRequirements,
         loginEmail: loginEmail?.trim() || undefined,
         loginPassword: loginPassword?.trim() || undefined,
       })) as EmployeeCreateResult;
@@ -340,6 +378,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       }
     } catch (error) {
       if ((error as any)?.errorFields) {
+        const firstError = (error as any).errorFields?.[0];
+        setEmployeeFormActiveTab(resolveEmployeeFormTabByField(firstError?.name));
+        message.warning("請先完成必填欄位，再送出新增員工資料");
         return;
       }
 
@@ -354,7 +395,12 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
 
     try {
       const values = await form.validateFields();
-      const { loginEmail, loginPassword, ...employeeValues } = values;
+      const {
+        loginEmail,
+        loginPassword,
+        onboardingRequirements: _onboardingRequirements,
+        ...employeeValues
+      } = values;
       const loginUpdates: { loginEmail?: string; loginPassword?: string } = {};
       const normalizedLoginEmail = loginEmail?.trim() || "";
       if (normalizedLoginEmail !== (selectedEmployee.user?.email || "")) {
@@ -383,6 +429,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       void Promise.all([fetchEmployees(), fetchReviewQueue()]);
     } catch (error) {
       if ((error as any)?.errorFields) {
+        const firstError = (error as any).errorFields?.[0];
+        setEmployeeFormActiveTab(resolveEmployeeFormTabByField(firstError?.name));
+        message.warning("請先完成必填欄位，再儲存員工資料");
         return;
       }
 
@@ -576,6 +625,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
             onClick={() => {
               setSelectedEmployee(record);
               form.setFieldsValue(buildFormValues(record));
+              setEmployeeFormActiveTab("basic");
               setEditOpen(true);
               void refreshSingleEmployee(record.id).catch(() => null);
             }}
@@ -713,16 +763,44 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     {
       key: "onboarding",
       label: "新增資訊",
-      children:
-        mode === "create" ? (
+      children: (
+        <div className="space-y-3">
+          {mode === "create" ? (
           <Alert
             type="info"
             showIcon
-            message="入職文件會在建立員工後於編輯視窗上傳與核實。"
+            message="可先設定身分證正面、身分證反面與體檢單是否必填；文件會在建立員工後於編輯視窗上傳與核實。"
           />
-        ) : (
-          <div className="space-y-3">
-            {onboardingDocDefinitions.map(({ docType, label }) => {
+          ) : null}
+          {onboardingDocDefinitions.map(({ docType, label }) => {
+            if (mode === "create") {
+              return (
+                <div
+                  key={docType}
+                  className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-slate-800">{label}</div>
+                      <div className="text-xs text-slate-500">
+                        建立員工後可再上傳文件；這裡只設定是否必填。
+                      </div>
+                    </div>
+                    <Form.Item
+                      name={["onboardingRequirements", docType]}
+                      valuePropName="checked"
+                      noStyle
+                    >
+                      <Switch
+                        checkedChildren="必填"
+                        unCheckedChildren="選填"
+                      />
+                    </Form.Item>
+                  </div>
+                </div>
+              );
+            }
+
               const document =
                 selectedEmployee?.onboardingDocuments?.find(
                   (item) => item.docType === docType,
@@ -790,8 +868,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                 </div>
               );
             })}
-          </div>
-        ),
+        </div>
+      ),
     },
     {
       key: "settings",
@@ -935,6 +1013,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                     if (matchedEmployee) {
                       setSelectedEmployee(matchedEmployee);
                       form.setFieldsValue(buildFormValues(matchedEmployee));
+                      setEmployeeFormActiveTab("onboarding");
                       setEditOpen(true);
                       void refreshSingleEmployee(matchedEmployee.id).catch(
                         () => null,
@@ -969,6 +1048,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         <Form form={form} layout="vertical">
           <Tabs
             tabPosition="left"
+            activeKey={employeeFormActiveTab}
+            onChange={setEmployeeFormActiveTab}
             items={getEmployeeFormTabs("create")}
             className="employee-editor-menu-tabs"
           />
@@ -985,6 +1066,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         <Form form={form} layout="vertical">
           <Tabs
             tabPosition="left"
+            activeKey={employeeFormActiveTab}
+            onChange={setEmployeeFormActiveTab}
             items={getEmployeeFormTabs("edit")}
             className="employee-editor-menu-tabs"
           />
