@@ -51,6 +51,7 @@ import {
 import { apService } from "../services/ap.service";
 import { bankingService } from "../services/banking.service";
 import { salesService } from "../services/sales.service";
+import { adIntegrationsService } from "../services/adIntegrations.service";
 import {
   dashboardService,
   AdPerformanceSummary,
@@ -298,6 +299,7 @@ const DashboardPage: React.FC = () => {
   const [customRange, setCustomRange] = useState<CustomRange>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const [syncingAdSpend, setSyncingAdSpend] = useState(false);
   const [syncingInvoiceStatuses, setSyncingInvoiceStatuses] = useState(false);
   const [overview, setOverview] = useState<DashboardSalesOverview | null>(null);
   const [executive, setExecutive] = useState<DashboardExecutiveOverview | null>(null);
@@ -559,6 +561,8 @@ const DashboardPage: React.FC = () => {
         shoplineOrdersResult,
         shoplineCustomersResult,
         shoplineTransactionsResult,
+        metaAdsResult,
+        googleAdsResult,
       ] = await Promise.all([
         shopifyService.syncOrders({ entityId: storedEntityId, since, until }),
         shopifyService.syncTransactions({
@@ -587,6 +591,40 @@ const DashboardPage: React.FC = () => {
           since,
           until,
         }),
+        adIntegrationsService.syncMetaAds({
+          entityId: storedEntityId,
+          since,
+          until,
+        }).catch((error) => ({
+          success: false,
+          fetched: 0,
+          synced: 0,
+          created: 0,
+          updated: 0,
+          skippedZeroSpend: 0,
+          expenseSourceModule: "meta_ads" as const,
+          message:
+            error?.response?.data?.message ||
+            error?.message ||
+            "Meta Ads 同步失敗",
+        })),
+        adIntegrationsService.syncGoogleAds({
+          entityId: storedEntityId,
+          since,
+          until,
+        }).catch((error) => ({
+          success: false,
+          fetched: 0,
+          synced: 0,
+          created: 0,
+          updated: 0,
+          skippedZeroSpend: 0,
+          expenseSourceModule: "google_ads" as const,
+          message:
+            error?.response?.data?.message ||
+            error?.message ||
+            "Google Ads 同步失敗",
+        })),
       ]);
 
       message.success(
@@ -604,6 +642,10 @@ const DashboardPage: React.FC = () => {
           shoplineCustomersResult.created + shoplineCustomersResult.updated
         } 筆、Shopline 金流 ${
           shoplineTransactionsResult.created + shoplineTransactionsResult.updated
+        } 筆、Meta 廣告費 ${
+          metaAdsResult.created + metaAdsResult.updated
+        } 筆、Google 廣告費 ${
+          googleAdsResult.created + googleAdsResult.updated
         } 筆`,
       );
       setRefreshToken((prev) => prev + 1);
@@ -611,6 +653,42 @@ const DashboardPage: React.FC = () => {
       message.error(error?.response?.data?.message || "同步失敗，請稍後再試");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleAdSpendSync = async () => {
+    const storedEntityId = localStorage.getItem("entityId")?.trim();
+    const { since, until } = resolveRange(rangeMode, DASHBOARD_TZ, customRange);
+    setSyncingAdSpend(true);
+    try {
+      const [metaAdsResult, googleAdsResult] = await Promise.all([
+        adIntegrationsService.syncMetaAds({
+          entityId: storedEntityId,
+          since,
+          until,
+        }),
+        adIntegrationsService.syncGoogleAds({
+          entityId: storedEntityId,
+          since,
+          until,
+        }),
+      ]);
+
+      const synced =
+        metaAdsResult.created +
+        metaAdsResult.updated +
+        googleAdsResult.created +
+        googleAdsResult.updated;
+      message.success(
+        synced > 0
+          ? `廣告費同步完成：寫入 / 更新 ${synced} 筆`
+          : "廣告費同步完成：本區間目前沒有平台回傳的花費",
+      );
+      setRefreshToken((prev) => prev + 1);
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "同步廣告費失敗");
+    } finally {
+      setSyncingAdSpend(false);
     }
   };
 
@@ -1107,6 +1185,17 @@ const DashboardPage: React.FC = () => {
             <div className="mt-2 text-xs leading-5 text-slate-500">
               {adSpendHelper}
             </div>
+            {adSpendCanSyncDaily && !adSpendTracked && (
+              <Button
+                size="small"
+                type="link"
+                className="mt-2 !px-0"
+                loading={syncingAdSpend}
+                onClick={handleAdSpendSync}
+              >
+                同步本區間廣告費
+              </Button>
+            )}
           </div>
 
           <div className={`rounded-2xl border px-5 py-4 ${
