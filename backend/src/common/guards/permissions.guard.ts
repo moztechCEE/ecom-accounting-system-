@@ -59,6 +59,14 @@ export class PermissionsGuard implements CanActivate {
       },
     });
 
+    if (
+      userRoles.some((userRole) =>
+        ['SUPER_ADMIN', 'ADMIN'].includes(userRole.role.code),
+      )
+    ) {
+      return true;
+    }
+
     // 收集所有權限
     const userPermissions: string[] = [];
     for (const userRole of userRoles) {

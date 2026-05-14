@@ -37,6 +37,7 @@ import dayjs from "dayjs";
 import { attendanceService } from "../services/attendance.service";
 import { payrollService } from "../services/payroll.service";
 import { useAuth } from "../contexts/AuthContext";
+import { hasPermission } from "../utils/access";
 import { GlassCard } from "../components/ui/GlassCard";
 import {
   Department,
@@ -193,6 +194,10 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     string | null
   >(null);
   const [employeeFormActiveTab, setEmployeeFormActiveTab] = useState("basic");
+  const [employeeSaveLoading, setEmployeeSaveLoading] = useState(false);
+  const [employeeSaveError, setEmployeeSaveError] = useState<string | null>(
+    null,
+  );
   const [reviewQueue, setReviewQueue] = useState<
     Array<{
       employeeId: string;
@@ -207,6 +212,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     null,
   );
   const [form] = Form.useForm();
+  const canManageEmployees = hasPermission(user, "employees_admin:update");
 
   const fetchEmployees = async () => {
     setLoading(true);
@@ -238,6 +244,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     form.resetFields();
     form.setFieldsValue(buildFormValues(null));
     setEmployeeFormActiveTab("basic");
+    setEmployeeSaveError(null);
     setCreateOpen(true);
     setNextEmployeeNoLoading(true);
     try {
@@ -335,6 +342,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   };
 
   const handleCreate = async () => {
+    setEmployeeSaveError(null);
+    setEmployeeSaveLoading(true);
     try {
       const values = await form.validateFields();
       const {
@@ -356,6 +365,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       })) as EmployeeCreateResult;
       message.success("員工建立成功");
       setCreateOpen(false);
+      setEmployeeSaveError(null);
       form.resetFields();
       void Promise.all([fetchEmployees(), fetchReviewQueue()]);
 
@@ -380,11 +390,16 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       if ((error as any)?.errorFields) {
         const firstError = (error as any).errorFields?.[0];
         setEmployeeFormActiveTab(resolveEmployeeFormTabByField(firstError?.name));
+        setEmployeeSaveError("請先完成必填欄位，再送出新增員工資料");
         message.warning("請先完成必填欄位，再送出新增員工資料");
         return;
       }
 
-      message.error(getErrorMessage(error, "員工建立失敗"));
+      const errorMessage = getErrorMessage(error, "員工建立失敗");
+      setEmployeeSaveError(errorMessage);
+      message.error(errorMessage);
+    } finally {
+      setEmployeeSaveLoading(false);
     }
   };
 
@@ -626,6 +641,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
               setSelectedEmployee(record);
               form.setFieldsValue(buildFormValues(record));
               setEmployeeFormActiveTab("basic");
+              setEmployeeSaveError(null);
               setEditOpen(true);
               void refreshSingleEmployee(record.id).catch(() => null);
             }}
@@ -943,17 +959,19 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
             在這裡建立員工、維護到職資訊與薪資設定；員工代碼與首次登入憑證會由系統自動產生。
           </Text>
         </div>
-        <div className="flex shrink-0 items-center">
-          <Button
-            type="primary"
-            size="large"
-            icon={<PlusOutlined />}
-            className="h-12 rounded-2xl px-6 shadow-[0_14px_32px_rgba(26,115,232,0.22)]"
-            onClick={() => void prepareCreateEmployeeForm()}
-          >
-            新增員工
-          </Button>
-        </div>
+        {canManageEmployees ? (
+          <div className="flex shrink-0 items-center">
+            <Button
+              type="primary"
+              size="large"
+              icon={<PlusOutlined />}
+              className="h-12 rounded-2xl px-6 shadow-[0_14px_32px_rgba(26,115,232,0.22)]"
+              onClick={() => void prepareCreateEmployeeForm()}
+            >
+              新增員工
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {!currentUserEmployee && user ? (
@@ -1014,6 +1032,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                       setSelectedEmployee(matchedEmployee);
                       form.setFieldsValue(buildFormValues(matchedEmployee));
                       setEmployeeFormActiveTab("onboarding");
+                      setEmployeeSaveError(null);
                       setEditOpen(true);
                       void refreshSingleEmployee(matchedEmployee.id).catch(
                         () => null,
@@ -1041,11 +1060,23 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       <Modal
         title="新增員工"
         open={createOpen}
-        onCancel={() => setCreateOpen(false)}
+        onCancel={() => {
+          setCreateOpen(false);
+          setEmployeeSaveError(null);
+        }}
         onOk={() => void handleCreate()}
+        confirmLoading={employeeSaveLoading}
         width={920}
       >
         <Form form={form} layout="vertical">
+          {employeeSaveError ? (
+            <Alert
+              type="error"
+              showIcon
+              className="mb-4"
+              message={employeeSaveError}
+            />
+          ) : null}
           <Tabs
             tabPosition="left"
             activeKey={employeeFormActiveTab}
