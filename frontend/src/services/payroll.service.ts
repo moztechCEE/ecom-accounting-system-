@@ -28,11 +28,12 @@ const triggerFileDownload = (blob: Blob, fallbackFilename: string) => {
 
 export const payrollService = {
   // Employees
-  getEmployees: async (page = 1, limit = 20) => {
+  getEmployees: async (page = 1, limit = 20, entityId?: string) => {
+    const effectiveEntityId = await resolveEntityId(entityId);
     const response = await api.get<PaginatedResult<Employee> | Employee[]>(
       "/payroll/employees",
       {
-        params: { page, limit },
+        params: { page, limit, entityId: effectiveEntityId },
       },
     );
     if (Array.isArray(response.data)) {
@@ -50,22 +51,40 @@ export const payrollService = {
   },
 
   createEmployee: async (
-    data: Partial<Employee> & { loginEmail?: string; loginPassword?: string },
+    data: Partial<Employee> & {
+      entityId?: string;
+      loginEmail?: string;
+      loginPassword?: string;
+    },
   ) => {
+    const effectiveEntityId = await resolveEntityId(data.entityId);
     const response = await api.post<EmployeeCreateResult>(
       "/payroll/employees",
-      data,
+      {
+        ...data,
+        entityId: effectiveEntityId,
+      },
     );
     return response.data;
   },
 
   updateEmployee: async (
     id: string,
-    data: Partial<Employee> & { loginEmail?: string; loginPassword?: string },
+    data: Partial<Employee> & {
+      entityId?: string;
+      loginEmail?: string;
+      loginPassword?: string;
+    },
   ) => {
+    const effectiveEntityId = data.entityId
+      ? await resolveEntityId(data.entityId)
+      : undefined;
     const response = await api.patch<Employee>(
       `/payroll/employees/${id}`,
-      data,
+      {
+        ...data,
+        ...(effectiveEntityId ? { entityId: effectiveEntityId } : {}),
+      },
     );
     return response.data;
   },

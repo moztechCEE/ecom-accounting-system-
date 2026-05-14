@@ -67,7 +67,16 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   const messageFromError =
     error instanceof Error && error.message ? error.message : null;
 
-  return messageFromResponse || messageFromError || fallback;
+  const rawMessage = messageFromResponse || messageFromError || fallback;
+  const translatedMessages: Record<string, string> = {
+    "Department not found":
+      "部門不存在或不屬於目前事業代號，請重新選擇部門後再送出。",
+    "Entity not found": "找不到目前事業代號，請重新登入或切換正確事業代號。",
+    "Current user is not linked to an employee record":
+      "目前登入帳號尚未綁定員工資料。",
+  };
+
+  return translatedMessages[rawMessage] || rawMessage;
 };
 
 const formatHoursAsDays = (hours?: number) => {
