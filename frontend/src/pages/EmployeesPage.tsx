@@ -183,6 +183,66 @@ const onboardingStatusMeta: Record<
 
 const DEFAULT_EMPLOYEE_INITIAL_PASSWORD = "qwer1234";
 
+const employeeFormFieldLabels: Record<string, string> = {
+  employeeNo: "員工代碼",
+  name: "姓名",
+  gender: "性別",
+  userId: "登入帳號",
+  nationalId: "身分證字號",
+  mailingAddress: "通訊地址",
+  departmentId: "部門",
+  attendanceType: "出勤類型",
+  hireDate: "到職日",
+  terminateDate: "離職日",
+  salaryBaseOriginal: "本薪",
+  loginEmail: "登入電子信箱",
+  loginPassword: "初始登入密碼",
+  isActive: "狀態",
+};
+
+const getEmployeeFormFieldLabel = (fieldName?: (string | number)[]) => {
+  const rootName = String(fieldName?.[0] || "");
+  if (rootName === "compensationSettings") {
+    const fieldKey = String(fieldName?.[1] || "");
+    return (
+      [...fixedAdditionFields, ...fixedDeductionFields].find(
+        (field) => field.key === fieldKey,
+      )?.label || "薪資支付事項"
+    );
+  }
+  if (rootName === "onboardingRequirements") {
+    const docType = fieldName?.[1];
+    return (
+      onboardingDocDefinitions.find(
+        (definition) => definition.docType === docType,
+      )?.label || "入職文件設定"
+    );
+  }
+  return employeeFormFieldLabels[rootName] || rootName || "欄位";
+};
+
+const getEmployeeValidationMessages = (error: unknown) => {
+  const errorFields = (error as any)?.errorFields;
+  if (!Array.isArray(errorFields)) {
+    return [];
+  }
+
+  return errorFields.map((field: any) => {
+    const label = getEmployeeFormFieldLabel(field.name);
+    const messageText = Array.isArray(field.errors)
+      ? field.errors.join("、")
+      : "";
+    const normalizedMessage = messageText
+      .replace(/'([^']+)' is required/g, "請填寫 $1")
+      .replace(/'([^']+)' is not a valid email/g, "請輸入有效的 $1")
+      .replace(/'([^']+)' must be at least (\d+) characters/g, "$1 至少需要 $2 個字元");
+
+    return normalizedMessage && !normalizedMessage.includes(label)
+      ? `${label}：${normalizedMessage}`
+      : normalizedMessage || `${label}：請確認欄位內容`;
+  });
+};
+
 const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const { user } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -198,6 +258,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const [employeeSaveError, setEmployeeSaveError] = useState<string | null>(
     null,
   );
+  const [employeeSaveErrorDetails, setEmployeeSaveErrorDetails] = useState<
+    string[]
+  >([]);
   const [reviewQueue, setReviewQueue] = useState<
     Array<{
       employeeId: string;
@@ -245,6 +308,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     form.setFieldsValue(buildFormValues(null));
     setEmployeeFormActiveTab("basic");
     setEmployeeSaveError(null);
+    setEmployeeSaveErrorDetails([]);
     setCreateOpen(true);
     setNextEmployeeNoLoading(true);
     try {
@@ -343,6 +407,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
 
   const handleCreate = async () => {
     setEmployeeSaveError(null);
+    setEmployeeSaveErrorDetails([]);
     setEmployeeSaveLoading(true);
     try {
       const values = await form.validateFields();
@@ -366,6 +431,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       message.success("員工建立成功");
       setCreateOpen(false);
       setEmployeeSaveError(null);
+      setEmployeeSaveErrorDetails([]);
       form.resetFields();
       void Promise.all([fetchEmployees(), fetchReviewQueue()]);
 
@@ -390,13 +456,16 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       if ((error as any)?.errorFields) {
         const firstError = (error as any).errorFields?.[0];
         setEmployeeFormActiveTab(resolveEmployeeFormTabByField(firstError?.name));
-        setEmployeeSaveError("請先完成必填欄位，再送出新增員工資料");
+        const validationMessages = getEmployeeValidationMessages(error);
+        setEmployeeSaveError("資料尚未完整，請修正下方紅字欄位後再送出");
+        setEmployeeSaveErrorDetails(validationMessages);
         message.warning("請先完成必填欄位，再送出新增員工資料");
         return;
       }
 
       const errorMessage = getErrorMessage(error, "員工建立失敗");
       setEmployeeSaveError(errorMessage);
+      setEmployeeSaveErrorDetails([]);
       message.error(errorMessage);
     } finally {
       setEmployeeSaveLoading(false);
@@ -409,6 +478,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     }
 
     try {
+      setEmployeeSaveError(null);
+      setEmployeeSaveErrorDetails([]);
       const values = await form.validateFields();
       const {
         loginEmail,
@@ -440,17 +511,25 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       });
       message.success("員工更新成功");
       setEditOpen(false);
+      setEmployeeSaveError(null);
+      setEmployeeSaveErrorDetails([]);
       form.resetFields();
       void Promise.all([fetchEmployees(), fetchReviewQueue()]);
     } catch (error) {
       if ((error as any)?.errorFields) {
         const firstError = (error as any).errorFields?.[0];
         setEmployeeFormActiveTab(resolveEmployeeFormTabByField(firstError?.name));
+        const validationMessages = getEmployeeValidationMessages(error);
+        setEmployeeSaveError("資料尚未完整，請修正下方紅字欄位後再儲存");
+        setEmployeeSaveErrorDetails(validationMessages);
         message.warning("請先完成必填欄位，再儲存員工資料");
         return;
       }
 
-      message.error(getErrorMessage(error, "員工更新失敗"));
+      const errorMessage = getErrorMessage(error, "員工更新失敗");
+      setEmployeeSaveError(errorMessage);
+      setEmployeeSaveErrorDetails([]);
+      message.error(errorMessage);
     }
   };
 
@@ -642,6 +721,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
               form.setFieldsValue(buildFormValues(record));
               setEmployeeFormActiveTab("basic");
               setEmployeeSaveError(null);
+              setEmployeeSaveErrorDetails([]);
               setEditOpen(true);
               void refreshSingleEmployee(record.id).catch(() => null);
             }}
@@ -692,6 +772,20 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       </div>
     </div>
   );
+
+  const renderEmployeeSaveError = () =>
+    employeeSaveError ? (
+      <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-600">
+        <div className="font-medium">{employeeSaveError}</div>
+        {employeeSaveErrorDetails.length > 0 ? (
+          <ul className="mb-0 mt-2 list-disc space-y-1 pl-5 text-sm">
+            {employeeSaveErrorDetails.map((detail) => (
+              <li key={detail}>{detail}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    ) : null;
 
   const getEmployeeFormTabs = (mode: "create" | "edit") => [
     {
@@ -1033,6 +1127,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                       form.setFieldsValue(buildFormValues(matchedEmployee));
                       setEmployeeFormActiveTab("onboarding");
                       setEmployeeSaveError(null);
+                      setEmployeeSaveErrorDetails([]);
                       setEditOpen(true);
                       void refreshSingleEmployee(matchedEmployee.id).catch(
                         () => null,
@@ -1063,20 +1158,14 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         onCancel={() => {
           setCreateOpen(false);
           setEmployeeSaveError(null);
+          setEmployeeSaveErrorDetails([]);
         }}
         onOk={() => void handleCreate()}
         confirmLoading={employeeSaveLoading}
         width={920}
       >
         <Form form={form} layout="vertical">
-          {employeeSaveError ? (
-            <Alert
-              type="error"
-              showIcon
-              className="mb-4"
-              message={employeeSaveError}
-            />
-          ) : null}
+          {renderEmployeeSaveError()}
           <Tabs
             tabPosition="left"
             activeKey={employeeFormActiveTab}
@@ -1090,11 +1179,16 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       <Modal
         title="編輯員工"
         open={editOpen}
-        onCancel={() => setEditOpen(false)}
+        onCancel={() => {
+          setEditOpen(false);
+          setEmployeeSaveError(null);
+          setEmployeeSaveErrorDetails([]);
+        }}
         onOk={() => void handleUpdate()}
         width={920}
       >
         <Form form={form} layout="vertical">
+          {renderEmployeeSaveError()}
           <Tabs
             tabPosition="left"
             activeKey={employeeFormActiveTab}
