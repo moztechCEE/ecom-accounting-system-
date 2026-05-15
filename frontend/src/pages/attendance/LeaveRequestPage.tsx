@@ -60,6 +60,53 @@ const isFuneralLeaveType = (leaveType?: LeaveType) =>
       leaveType.name?.trim() === "喪假"),
   );
 
+const authorizationManagedLeaveCodes = new Set([
+  "MARRIAGE",
+  "MATERNITY",
+  "PATERNITY",
+]);
+
+const authorizationManagedLeaveNames = new Set(["婚假", "產假", "陪產假"]);
+
+const isAuthorizationManagedLeaveType = (leaveType?: LeaveType) =>
+  Boolean(
+    leaveType &&
+      (authorizationManagedLeaveCodes.has(
+        leaveType.code?.trim().toUpperCase() || "",
+      ) ||
+        authorizationManagedLeaveNames.has(leaveType.name?.trim() || "")),
+  );
+
+const leaveTypeRequiresEmployeeAuthorization = (leaveType: LeaveType) =>
+  Boolean(leaveType.metadata?.requiresEmployeeAuthorization) ||
+  isAuthorizationManagedLeaveType(leaveType);
+
+const getAuthorizedEmployeeIds = (leaveType: LeaveType) =>
+  Array.isArray(leaveType.metadata?.authorizedEmployeeIds)
+    ? leaveType.metadata.authorizedEmployeeIds
+    : [];
+
+const employeeCanRequestLeaveType = (
+  employee: Employee | undefined,
+  leaveType: LeaveType,
+) => {
+  if (
+    (leaveType.code?.trim().toUpperCase() === "MENSTRUAL" ||
+      leaveType.name?.trim() === "生理假") &&
+    employee?.gender !== "FEMALE"
+  ) {
+    return false;
+  }
+
+  if (!leaveTypeRequiresEmployeeAuthorization(leaveType)) {
+    return true;
+  }
+
+  return Boolean(
+    employee && getAuthorizedEmployeeIds(leaveType).includes(employee.id),
+  );
+};
+
 type LeaveRequestDraft = {
   id: string;
   employeeId: string;
@@ -540,11 +587,7 @@ const LeaveRequestPage: React.FC = () => {
       (type) =>
         type.isActive !== false &&
         (!canCreateForEmployees ||
-          employee?.gender === "FEMALE" ||
-          !(
-            type.code?.trim().toUpperCase() === "MENSTRUAL" ||
-            type.name?.trim() === "生理假"
-          )),
+          employeeCanRequestLeaveType(employee, type)),
     );
   };
   const availableLeaveTypes = useMemo(
