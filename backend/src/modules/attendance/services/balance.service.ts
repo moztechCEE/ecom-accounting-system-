@@ -136,8 +136,10 @@ export class BalanceService {
     return balances
       .filter(
         (balance) =>
-          employee.gender === 'FEMALE' ||
-          !this.isMenstrualLeaveType(balance.leaveType),
+          balance.leaveType.isActive &&
+          this.leaveTypeUsesBalance(balance.leaveType) &&
+          (employee.gender === 'FEMALE' ||
+            !this.isMenstrualLeaveType(balance.leaveType)),
       )
       .map((balance) => ({
         ...balance,

@@ -137,6 +137,13 @@ const isAnnualLeaveType = (leaveType: Pick<LeaveType, "code" | "name">) =>
     .toUpperCase() === "ANNUAL" ||
   ["特休", "特別休假"].includes(String(leaveType.name || "").trim());
 
+const leaveTypeUsesAnnualBalance = (leaveType: LeaveType) =>
+  leaveType.isActive !== false &&
+  leaveType.balanceResetPolicy !== "NONE" &&
+  (leaveType.maxDaysPerYear !== undefined ||
+    isAnnualLeaveType(leaveType) ||
+    Boolean(leaveType.metadata?.seniorityTiers?.length));
+
 const onboardingDocDefinitions: Array<{
   docType: EmployeeOnboardingDocument["docType"];
   label: string;
@@ -1906,10 +1913,12 @@ const LeaveBalancesTab = () => {
 
   const leaveTypeOptions = useMemo(
     () =>
-      leaveTypes.map((leaveType) => ({
-        label: `${leaveType.name} (${leaveType.code})`,
-        value: leaveType.id,
-      })),
+      leaveTypes
+        .filter(leaveTypeUsesAnnualBalance)
+        .map((leaveType) => ({
+          label: `${leaveType.name} (${leaveType.code})`,
+          value: leaveType.id,
+        })),
     [leaveTypes],
   );
 

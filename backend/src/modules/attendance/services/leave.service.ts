@@ -877,6 +877,8 @@ export class LeaveService {
 
     return balances
       .filter((balance) =>
+        balance.leaveType.isActive &&
+        this.balanceService.leaveTypeUsesBalance(balance.leaveType) &&
         this.employeeCanUseLeaveType(balance.employee, balance.leaveType),
       )
       .map((balance) => ({
