@@ -70,6 +70,15 @@ export class UpsertLeaveTypeDto {
   isActive?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  requiresEmployeeAuthorization?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  authorizedEmployeeIds?: string[];
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   carryOverLimitHours?: number;

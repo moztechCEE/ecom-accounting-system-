@@ -23,6 +23,18 @@ type DefaultLeaveTypeTemplate = {
   requiresChildData?: boolean;
 };
 
+const AUTHORIZATION_MANAGED_LEAVE_CODES = new Set([
+  'MARRIAGE',
+  'MATERNITY',
+  'PATERNITY',
+]);
+
+const AUTHORIZATION_MANAGED_LEAVE_NAMES = new Set([
+  '婚假',
+  '產假',
+  '陪產假',
+]);
+
 const DEFAULT_TW_LEAVE_TYPES: DefaultLeaveTypeTemplate[] = [
   {
     code: 'SICK',
@@ -239,6 +251,7 @@ export class LeaveService {
     for (const leaveType of leaveTypes) {
       if (
         !leaveType.isActive ||
+        !this.balanceService.leaveTypeShowsInBalanceOverview(leaveType) ||
         !this.balanceService.leaveTypeUsesBalance(leaveType) ||
         !this.employeeCanUseLeaveType(employee, leaveType)
       ) {
@@ -281,6 +294,10 @@ export class LeaveService {
 
     if (!leaveType) {
       throw new BadRequestException('Leave type not found');
+    }
+
+    if (!this.employeeCanRequestLeaveType(employee, leaveType)) {
+      throw new BadRequestException('此假別需由管理員開放後才能申請');
     }
 
     const startAt = new Date(dto.startAt);
@@ -668,7 +685,16 @@ export class LeaveService {
       normalizedCode,
       normalizedName,
     );
-    const metadata = this.mergeLeaveTypeMetadata(undefined, dto.seniorityTiers);
+    const metadata = this.mergeLeaveTypeMetadata(
+      undefined,
+      dto.seniorityTiers,
+      {
+        requiresEmployeeAuthorization:
+          dto.requiresEmployeeAuthorization ??
+          this.isAuthorizationManagedLeaveType(normalizedCode, normalizedName),
+        authorizedEmployeeIds: dto.authorizedEmployeeIds,
+      },
+    );
 
     const leaveType = await this.prisma.leaveType.create({
       data: {
@@ -763,8 +789,20 @@ export class LeaveService {
             ? new Prisma.Decimal(dto.carryOverLimitHours)
             : existing.carryOverLimitHours,
         metadata:
-          dto.seniorityTiers !== undefined
-            ? this.mergeLeaveTypeMetadata(existing.metadata, dto.seniorityTiers)
+          dto.seniorityTiers !== undefined ||
+          dto.requiresEmployeeAuthorization !== undefined ||
+          dto.authorizedEmployeeIds !== undefined
+            ? this.mergeLeaveTypeMetadata(existing.metadata, dto.seniorityTiers, {
+                ...(dto.requiresEmployeeAuthorization !== undefined
+                  ? {
+                      requiresEmployeeAuthorization:
+                        dto.requiresEmployeeAuthorization,
+                    }
+                  : {}),
+                ...(dto.authorizedEmployeeIds !== undefined
+                  ? { authorizedEmployeeIds: dto.authorizedEmployeeIds }
+                  : {}),
+              })
             : existing.metadata,
       },
     });
@@ -826,8 +864,10 @@ export class LeaveService {
       ]);
 
       for (const employee of employees) {
-        for (const leaveType of leaveTypes.filter((type) =>
-          this.balanceService.leaveTypeUsesBalance(type),
+        for (const leaveType of leaveTypes.filter(
+          (type) =>
+            this.balanceService.leaveTypeShowsInBalanceOverview(type) &&
+            this.balanceService.leaveTypeUsesBalance(type),
         )) {
           if (!this.employeeCanUseLeaveType(employee, leaveType)) {
             continue;
@@ -878,6 +918,9 @@ export class LeaveService {
     return balances
       .filter((balance) =>
         balance.leaveType.isActive &&
+        this.balanceService.leaveTypeShowsInBalanceOverview(
+          balance.leaveType,
+        ) &&
         this.balanceService.leaveTypeUsesBalance(balance.leaveType) &&
         this.employeeCanUseLeaveType(balance.employee, balance.leaveType),
       )
@@ -1402,6 +1445,33 @@ export class LeaveService {
     );
   }
 
+  private isAuthorizationManagedLeaveType(code: string, name: string) {
+    return (
+      AUTHORIZATION_MANAGED_LEAVE_CODES.has(code.trim().toUpperCase()) ||
+      AUTHORIZATION_MANAGED_LEAVE_NAMES.has(name.trim())
+    );
+  }
+
+  private leaveTypeRequiresEmployeeAuthorization(leaveType: LeaveType) {
+    const metadata = this.getLeaveTypeMetadataObject(leaveType.metadata);
+
+    return (
+      metadata.requiresEmployeeAuthorization === true ||
+      (this.isAuthorizationManagedLeaveType(leaveType.code, leaveType.name) &&
+        metadata.requiresEmployeeAuthorization !== false)
+    );
+  }
+
+  private getAuthorizedEmployeeIds(leaveType: LeaveType) {
+    const metadata = this.getLeaveTypeMetadataObject(leaveType.metadata);
+
+    return Array.isArray(metadata.authorizedEmployeeIds)
+      ? metadata.authorizedEmployeeIds.filter(
+          (id): id is string => typeof id === 'string' && id.trim().length > 0,
+        )
+      : [];
+  }
+
   private employeeCanUseLeaveType(
     employee: { gender?: string | null },
     leaveType: LeaveType,
@@ -1409,6 +1479,21 @@ export class LeaveService {
     return (
       !this.isMenstrualLeaveType(leaveType) || employee.gender === 'FEMALE'
     );
+  }
+
+  private employeeCanRequestLeaveType(
+    employee: { id: string; gender?: string | null },
+    leaveType: LeaveType,
+  ) {
+    if (!this.employeeCanUseLeaveType(employee, leaveType)) {
+      return false;
+    }
+
+    if (!this.leaveTypeRequiresEmployeeAuthorization(leaveType)) {
+      return true;
+    }
+
+    return this.getAuthorizedEmployeeIds(leaveType).includes(employee.id);
   }
 
   private findSickLeaveType(entityId: string) {
@@ -1491,13 +1576,27 @@ export class LeaveService {
     seniorityTiers:
       | Array<{ minYears: number; maxYears?: number; days: number }>
       | undefined,
+    authorization?: {
+      requiresEmployeeAuthorization?: boolean;
+      authorizedEmployeeIds?: string[];
+    },
   ): Prisma.InputJsonValue | null {
-    const baseMetadata =
-      existingMetadata &&
-      typeof existingMetadata === 'object' &&
-      !Array.isArray(existingMetadata)
-        ? { ...(existingMetadata as Record<string, unknown>) }
-        : {};
+    const baseMetadata = this.getLeaveTypeMetadataObject(existingMetadata);
+
+    if (authorization?.requiresEmployeeAuthorization !== undefined) {
+      baseMetadata.requiresEmployeeAuthorization =
+        authorization.requiresEmployeeAuthorization;
+    }
+
+    if (authorization?.authorizedEmployeeIds !== undefined) {
+      baseMetadata.authorizedEmployeeIds = Array.from(
+        new Set(
+          authorization.authorizedEmployeeIds
+            .map((id) => id.trim())
+            .filter((id) => id.length > 0),
+        ),
+      );
+    }
 
     if (seniorityTiers === undefined) {
       return Object.keys(baseMetadata).length > 0
@@ -1531,6 +1630,14 @@ export class LeaveService {
 
     baseMetadata.seniorityTiers = normalizedTiers;
     return baseMetadata as Prisma.InputJsonValue;
+  }
+
+  private getLeaveTypeMetadataObject(
+    metadata: Prisma.JsonValue | null | undefined,
+  ) {
+    return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? { ...(metadata as Record<string, unknown>) }
+      : {};
   }
 
   private async ensureDefaultLeaveTypes(
@@ -1626,6 +1733,12 @@ export class LeaveService {
           metadata: {
             systemDefault: true,
             locale: entity.country,
+            ...(this.isAuthorizationManagedLeaveType(
+              template.code,
+              template.name,
+            )
+              ? { requiresEmployeeAuthorization: true }
+              : {}),
           },
         },
       });

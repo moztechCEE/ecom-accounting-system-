@@ -137,8 +137,57 @@ const isAnnualLeaveType = (leaveType: Pick<LeaveType, "code" | "name">) =>
     .toUpperCase() === "ANNUAL" ||
   ["特休", "特別休假"].includes(String(leaveType.name || "").trim());
 
+const managedLeaveBalanceCodes = new Set([
+  "ANNUAL",
+  "SICK",
+  "PERSONAL",
+  "FUNERAL",
+]);
+
+const managedLeaveBalanceNames = new Set([
+  "特休",
+  "特別休假",
+  "病假",
+  "事假",
+  "喪假",
+]);
+
+const leaveTypeShowsInBalanceOverview = (leaveType: LeaveType) =>
+  managedLeaveBalanceCodes.has(
+    String(leaveType.code || "")
+      .trim()
+      .toUpperCase(),
+  ) || managedLeaveBalanceNames.has(String(leaveType.name || "").trim());
+
+const authorizationManagedLeaveCodes = new Set([
+  "MARRIAGE",
+  "MATERNITY",
+  "PATERNITY",
+]);
+
+const authorizationManagedLeaveNames = new Set(["婚假", "產假", "陪產假"]);
+
+const isAuthorizationManagedLeaveType = (
+  leaveType: Pick<LeaveType, "code" | "name">,
+) =>
+  authorizationManagedLeaveCodes.has(
+    String(leaveType.code || "")
+      .trim()
+      .toUpperCase(),
+  ) || authorizationManagedLeaveNames.has(String(leaveType.name || "").trim());
+
+const leaveTypeRequiresEmployeeAuthorization = (leaveType: LeaveType) =>
+  Boolean(leaveType.metadata?.requiresEmployeeAuthorization) ||
+  isAuthorizationManagedLeaveType(leaveType);
+
+const getAuthorizedEmployeeIds = (leaveType: LeaveType) =>
+  Array.isArray(leaveType.metadata?.authorizedEmployeeIds)
+    ? leaveType.metadata.authorizedEmployeeIds
+    : [];
+
 const leaveTypeUsesAnnualBalance = (leaveType: LeaveType) =>
   leaveType.isActive !== false &&
+  leaveTypeShowsInBalanceOverview(leaveType) &&
   leaveType.balanceResetPolicy !== "NONE" &&
   (leaveType.maxDaysPerYear !== undefined ||
     isAnnualLeaveType(leaveType) ||
@@ -1405,6 +1454,7 @@ const DepartmentsTab = ({
 
 const LeaveTypesTab = () => {
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingLeaveType, setEditingLeaveType] = useState<LeaveType | null>(
@@ -1417,6 +1467,13 @@ const LeaveTypesTab = () => {
     code: leaveTypeCode,
     name: leaveTypeName,
   });
+  const isAuthorizationManagedRule = isAuthorizationManagedLeaveType({
+    code: leaveTypeCode,
+    name: leaveTypeName,
+  });
+  const requiresEmployeeAuthorization = Boolean(
+    Form.useWatch("requiresEmployeeAuthorization", form),
+  );
 
   useEffect(() => {
     if (
@@ -1427,11 +1484,24 @@ const LeaveTypesTab = () => {
     }
   }, [form, isAnnualLeaveRule]);
 
+  useEffect(() => {
+    if (
+      isAuthorizationManagedRule &&
+      form.getFieldValue("requiresEmployeeAuthorization") !== true
+    ) {
+      form.setFieldValue("requiresEmployeeAuthorization", true);
+    }
+  }, [form, isAuthorizationManagedRule]);
+
   const fetchLeaveTypes = async () => {
     setLoading(true);
     try {
-      const data = await attendanceService.getAdminLeaveTypes();
-      setLeaveTypes(data);
+      const [leaveTypeResult, employeeResult] = await Promise.all([
+        attendanceService.getAdminLeaveTypes(),
+        payrollService.getEmployees(1, 500),
+      ]);
+      setLeaveTypes(leaveTypeResult);
+      setEmployees(employeeResult.items);
     } catch (error) {
       message.error(getErrorMessage(error, "載入假別規則失敗"));
     } finally {
@@ -1442,6 +1512,15 @@ const LeaveTypesTab = () => {
   useEffect(() => {
     void fetchLeaveTypes();
   }, []);
+
+  const employeeOptions = useMemo(
+    () =>
+      employees.map((employee) => ({
+        label: `${employee.name} (${employee.employeeNo})`,
+        value: employee.id,
+      })),
+    [employees],
+  );
 
   const openCreate = () => {
     setEditingLeaveType(null);
@@ -1454,6 +1533,8 @@ const LeaveTypesTab = () => {
       allowCarryOver: false,
       carryOverLimitHours: 0,
       seniorityTiers: [],
+      requiresEmployeeAuthorization: false,
+      authorizedEmployeeIds: [],
     });
     setModalOpen(true);
   };
@@ -1469,6 +1550,9 @@ const LeaveTypesTab = () => {
       allowCarryOver: Boolean(leaveType.allowCarryOver),
       carryOverLimitHours: leaveType.carryOverLimitHours ?? 0,
       seniorityTiers: getSeniorityTiers(leaveType),
+      requiresEmployeeAuthorization:
+        leaveTypeRequiresEmployeeAuthorization(leaveType),
+      authorizedEmployeeIds: getAuthorizedEmployeeIds(leaveType),
     });
     setModalOpen(true);
   };
@@ -1512,6 +1596,12 @@ const LeaveTypesTab = () => {
         seniorityTiers: annualLeaveRule
           ? normalizeSeniorityTiers(values.seniorityTiers)
           : [],
+        requiresEmployeeAuthorization: Boolean(
+          values.requiresEmployeeAuthorization,
+        ),
+        authorizedEmployeeIds: Array.isArray(values.authorizedEmployeeIds)
+          ? values.authorizedEmployeeIds
+          : [],
       };
 
       if (editingLeaveType) {
@@ -1548,6 +1638,9 @@ const LeaveTypesTab = () => {
         allowCarryOver: record.allowCarryOver,
         carryOverLimitHours: record.carryOverLimitHours,
         seniorityTiers: getSeniorityTiers(record),
+        requiresEmployeeAuthorization:
+          leaveTypeRequiresEmployeeAuthorization(record),
+        authorizedEmployeeIds: getAuthorizedEmployeeIds(record),
         isActive: !isCurrentlyActive,
       });
       message.success(`假別規則已${isCurrentlyActive ? "停用" : "啟用"}`);
@@ -1621,6 +1714,11 @@ const LeaveTypesTab = () => {
           {getSeniorityTiers(record).length > 0 ? (
             <Tag color="processing">
               自訂級距 {getSeniorityTiers(record).length} 段
+            </Tag>
+          ) : null}
+          {leaveTypeRequiresEmployeeAuthorization(record) ? (
+            <Tag color="purple">
+              管理員開放 {getAuthorizedEmployeeIds(record).length} 人
             </Tag>
           ) : null}
         </Space>
@@ -1763,6 +1861,32 @@ const LeaveTypesTab = () => {
           >
             <Switch checkedChildren="需要" unCheckedChildren="不需要" />
           </Form.Item>
+          <Form.Item
+            name="requiresEmployeeAuthorization"
+            label="申請權限"
+            valuePropName="checked"
+          >
+            <Switch
+              checkedChildren="管理員開放"
+              unCheckedChildren="全員可申請"
+            />
+          </Form.Item>
+          {requiresEmployeeAuthorization ? (
+            <Form.Item
+              name="authorizedEmployeeIds"
+              label="可申請員工"
+              tooltip="只有被選取的員工會在請假申請中看到此假別。適合婚假、產假、陪產假這類偶發假別。"
+            >
+              <Select
+                mode="multiple"
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder="選擇要開放申請的員工"
+                options={employeeOptions}
+              />
+            </Form.Item>
+          ) : null}
           <Form.Item
             name="allowCarryOver"
             label="是否可結轉"

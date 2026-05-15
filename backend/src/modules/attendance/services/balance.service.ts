@@ -52,6 +52,33 @@ const DEFAULT_TW_ANNUAL_LEAVE_TIERS: SeniorityTier[] = [
   { minYears: 10, days: 16 },
 ];
 
+const MANAGED_LEAVE_BALANCE_CODES = new Set([
+  'ANNUAL',
+  'SICK',
+  'PERSONAL',
+  'FUNERAL',
+]);
+
+const MANAGED_LEAVE_BALANCE_NAMES = new Set([
+  '特休',
+  '特別休假',
+  '病假',
+  '事假',
+  '喪假',
+]);
+
+const AUTHORIZATION_MANAGED_LEAVE_CODES = new Set([
+  'MARRIAGE',
+  'MATERNITY',
+  'PATERNITY',
+]);
+
+const AUTHORIZATION_MANAGED_LEAVE_NAMES = new Set([
+  '婚假',
+  '產假',
+  '陪產假',
+]);
+
 @Injectable()
 export class BalanceService {
   constructor(private readonly prisma: PrismaService) {}
@@ -59,14 +86,14 @@ export class BalanceService {
   async getLeaveTypesForUser(userId: string) {
     const employee = await this.prisma.employee.findUnique({
       where: { userId },
-      select: { entityId: true, gender: true },
+      select: { id: true, entityId: true, gender: true },
     });
 
     if (!employee) {
       throw new BadRequestException('Employee record not found for this user');
     }
 
-    return this.prisma.leaveType.findMany({
+    const leaveTypes = await this.prisma.leaveType.findMany({
       where: {
         entityId: employee.entityId,
         isActive: true,
@@ -76,6 +103,10 @@ export class BalanceService {
       },
       orderBy: [{ code: 'asc' }],
     });
+
+    return leaveTypes.filter((leaveType) =>
+      this.employeeCanRequestLeaveType(employee, leaveType),
+    );
   }
 
   async getBalancesForUser(userId: string, year?: number) {
@@ -105,7 +136,10 @@ export class BalanceService {
     });
 
     for (const leaveType of leaveTypes) {
-      if (!this.leaveTypeUsesBalance(leaveType)) {
+      if (
+        !this.leaveTypeShowsInBalanceOverview(leaveType) ||
+        !this.leaveTypeUsesBalance(leaveType)
+      ) {
         continue;
       }
 
@@ -137,6 +171,7 @@ export class BalanceService {
       .filter(
         (balance) =>
           balance.leaveType.isActive &&
+          this.leaveTypeShowsInBalanceOverview(balance.leaveType) &&
           this.leaveTypeUsesBalance(balance.leaveType) &&
           (employee.gender === 'FEMALE' ||
             !this.isMenstrualLeaveType(balance.leaveType)),
@@ -426,10 +461,21 @@ export class BalanceService {
 
   leaveTypeUsesBalance(leaveType: LeaveType) {
     return (
+      !this.isAuthorizationManagedLeaveType(leaveType) &&
       leaveType.balanceResetPolicy !== 'NONE' &&
       (leaveType.maxDaysPerYear !== null ||
         this.isAnnualLeaveType(leaveType) ||
         this.getSeniorityTiers(leaveType).length > 0)
+    );
+  }
+
+  leaveTypeShowsInBalanceOverview(leaveType: LeaveType) {
+    const code = leaveType.code.trim().toUpperCase();
+    const name = leaveType.name.trim();
+
+    return (
+      MANAGED_LEAVE_BALANCE_CODES.has(code) ||
+      MANAGED_LEAVE_BALANCE_NAMES.has(name)
     );
   }
 
@@ -438,6 +484,59 @@ export class BalanceService {
       leaveType.code.trim().toUpperCase() === 'MENSTRUAL' ||
       leaveType.name.trim() === '生理假'
     );
+  }
+
+  private isAuthorizationManagedLeaveType(leaveType: LeaveType) {
+    const code = leaveType.code.trim().toUpperCase();
+    const name = leaveType.name.trim();
+
+    return (
+      AUTHORIZATION_MANAGED_LEAVE_CODES.has(code) ||
+      AUTHORIZATION_MANAGED_LEAVE_NAMES.has(name)
+    );
+  }
+
+  private getLeaveTypeMetadataObject(
+    metadata: Prisma.JsonValue | null | undefined,
+  ) {
+    return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  }
+
+  private leaveTypeRequiresEmployeeAuthorization(leaveType: LeaveType) {
+    const metadata = this.getLeaveTypeMetadataObject(leaveType.metadata);
+
+    return (
+      metadata.requiresEmployeeAuthorization === true ||
+      (this.isAuthorizationManagedLeaveType(leaveType) &&
+        metadata.requiresEmployeeAuthorization !== false)
+    );
+  }
+
+  private getAuthorizedEmployeeIds(leaveType: LeaveType) {
+    const metadata = this.getLeaveTypeMetadataObject(leaveType.metadata);
+
+    return Array.isArray(metadata.authorizedEmployeeIds)
+      ? metadata.authorizedEmployeeIds.filter(
+          (id): id is string => typeof id === 'string' && id.trim().length > 0,
+        )
+      : [];
+  }
+
+  private employeeCanRequestLeaveType(
+    employee: { id: string; gender?: string | null },
+    leaveType: LeaveType,
+  ) {
+    if (this.isMenstrualLeaveType(leaveType) && employee.gender !== 'FEMALE') {
+      return false;
+    }
+
+    if (!this.leaveTypeRequiresEmployeeAuthorization(leaveType)) {
+      return true;
+    }
+
+    return this.getAuthorizedEmployeeIds(leaveType).includes(employee.id);
   }
 
   private resolveBalancePeriod(

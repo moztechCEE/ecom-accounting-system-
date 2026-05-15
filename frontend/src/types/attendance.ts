@@ -194,6 +194,8 @@ export interface LeaveType {
     seniorityTiers?: SeniorityTier[];
     systemDefault?: boolean;
     locale?: string;
+    requiresEmployeeAuthorization?: boolean;
+    authorizedEmployeeIds?: string[];
   };
 }
 
