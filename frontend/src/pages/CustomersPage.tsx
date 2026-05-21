@@ -94,6 +94,7 @@ const CustomersPage: React.FC = () => {
         customer.taxId,
         customer.contactPerson,
         customer.address,
+        customer.summary,
         customer.primarySourceLabel,
         customer.primarySourceBrand,
         ...sourceLabels,
@@ -181,6 +182,11 @@ const CustomersPage: React.FC = () => {
           <div className="text-xs text-slate-400">
             {record.contactPerson ? `聯絡人：${record.contactPerson}` : '未填聯絡人'}
           </div>
+          {record.summary ? (
+            <div className="mt-1 line-clamp-2 text-xs text-slate-500">
+              摘要：{record.summary}
+            </div>
+          ) : null}
         </div>
       ),
     },
@@ -437,6 +443,15 @@ const CustomersPage: React.FC = () => {
           >
             <Input.TextArea rows={2} placeholder="發票、報價單或出貨聯絡可使用的地址" />
           </Form.Item>
+          <div className="mb-4 rounded-2xl bg-slate-50 p-4">
+            <div className="mb-3 text-sm font-semibold text-slate-900">摘要 / 員工備註</div>
+            <Form.Item name="summary" className="!mb-0">
+              <Input.TextArea
+                rows={4}
+                placeholder="記錄客戶背景、偏好、需求重點或內部交接注意事項"
+              />
+            </Form.Item>
+          </div>
           <div className="rounded-2xl bg-slate-50 p-4">
             <div className="mb-3 text-sm font-semibold text-slate-900">B2B 月結 / 應收條件</div>
             <Form.Item name="isMonthlyBilling" label="是否月結帳戶" valuePropName="checked">

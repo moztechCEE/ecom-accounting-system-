@@ -303,6 +303,7 @@ export class CustomerService {
       'taxId',
       'contactPerson',
       'address',
+      'summary',
       'statementEmail',
       'collectionOwner',
       'collectionNote',

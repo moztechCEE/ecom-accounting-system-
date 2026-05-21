@@ -12,6 +12,7 @@ export interface Customer {
   type: 'individual' | 'company'
   contactPerson?: string
   address?: string
+  summary?: string
   paymentTerms?: string
   paymentTermDays?: number
   isMonthlyBilling?: boolean

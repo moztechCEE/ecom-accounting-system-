@@ -357,6 +357,7 @@ model Customer {
   type             String   @default("individual") // individual, company
   contactPerson    String?  @map("contact_person")
   address          String?
+  summary          String?
   paymentTerms     String?  @map("payment_terms") // prepaid, net30, net45, custom
   paymentTermDays  Int      @default(0) @map("payment_term_days")
   isMonthlyBilling Boolean  @default(false) @map("is_monthly_billing")

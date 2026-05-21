@@ -686,6 +686,15 @@ const SalesQuotationsPage: React.FC = () => {
           <Form.Item name="address" label="地址" rules={[{ required: true, message: '請填入地址' }]}>
             <Input.TextArea rows={2} placeholder="發票、報價單或出貨聯絡可使用的地址" />
           </Form.Item>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="mb-3 text-sm font-semibold text-slate-900">摘要 / 員工備註</div>
+            <Form.Item name="summary" className="!mb-0">
+              <Input.TextArea
+                rows={4}
+                placeholder="記錄客戶背景、偏好、需求重點或內部交接注意事項"
+              />
+            </Form.Item>
+          </div>
         </Form>
       </Modal>
 
