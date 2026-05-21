@@ -403,6 +403,8 @@ export interface PayrollRunPrecheckIssue {
   scheduleSource: "employee" | "department" | "global" | "default";
   detail: string;
   summaryStatus?: string | null;
+  clockInTime?: string | null;
+  clockOutTime?: string | null;
 }
 
 export interface PayrollRunPrecheckResult {

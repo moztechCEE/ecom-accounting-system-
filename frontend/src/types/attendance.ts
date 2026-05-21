@@ -53,6 +53,7 @@ export interface CreateLeaveRequestDto {
   hours: number;
   reason?: string;
   location?: string;
+  adminBackfill?: boolean;
   funeralRelationship?: string;
   deceasedName?: string;
   deceasedDate?: string;

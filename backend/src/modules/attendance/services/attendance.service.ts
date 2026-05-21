@@ -10,8 +10,10 @@ import { ScheduleService } from './schedule.service';
 import { PolicyService } from './policy.service';
 import { GpsValidationStrategy } from '../strategies/gps-validation.strategy';
 import { IpValidationStrategy } from '../strategies/ip-validation.strategy';
-import { AttendanceEventType } from '@prisma/client';
+import { AttendanceEventType, AttendanceMethod } from '@prisma/client';
 import { UsersService } from '../../users/users.service';
+import { AuditLogService } from '../../../common/audit/audit-log.service';
+import { AdminAdjustAttendanceDto } from '../dto/admin-adjust-attendance.dto';
 
 @Injectable()
 export class AttendanceService {
@@ -22,6 +24,7 @@ export class AttendanceService {
     private readonly gpsStrategy: GpsValidationStrategy,
     private readonly ipStrategy: IpValidationStrategy,
     private readonly usersService: UsersService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   private async getAdminAccessContext(userId: string) {
@@ -401,5 +404,188 @@ export class AttendanceService {
       },
       orderBy: [{ workDate: 'desc' }, { employee: { employeeNo: 'asc' } }],
     });
+  }
+
+  async adjustAdminAttendance(
+    userId: string,
+    dto: AdminAdjustAttendanceDto,
+  ) {
+    const access = await this.getAdminAccessContext(userId);
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: dto.employeeId },
+      include: { department: true },
+    });
+
+    if (!employee || employee.entityId !== access.entityId) {
+      throw new BadRequestException('Employee record not found');
+    }
+
+    const canAccessEmployee =
+      !access.noAccess &&
+      (access.scope === 'ENTITY' ||
+        (access.scope === 'SELF' && access.employeeId === employee.id) ||
+        (access.scope === 'DEPARTMENT' &&
+          access.departmentId === employee.departmentId));
+    if (!canAccessEmployee) {
+      throw new BadRequestException('Employee record not found');
+    }
+
+    const workDate = new Date(dto.workDate);
+    if (Number.isNaN(workDate.getTime())) {
+      throw new BadRequestException('出勤日期格式不正確');
+    }
+    workDate.setHours(0, 0, 0, 0);
+
+    const clockInAt = dto.clockInAt ? new Date(dto.clockInAt) : null;
+    const clockOutAt = dto.clockOutAt ? new Date(dto.clockOutAt) : null;
+    if (!clockInAt && !clockOutAt) {
+      throw new BadRequestException('請至少提供上班或下班時間');
+    }
+    if (clockInAt && Number.isNaN(clockInAt.getTime())) {
+      throw new BadRequestException('上班時間格式不正確');
+    }
+    if (clockOutAt && Number.isNaN(clockOutAt.getTime())) {
+      throw new BadRequestException('下班時間格式不正確');
+    }
+    if (clockInAt && clockOutAt && clockOutAt <= clockInAt) {
+      throw new BadRequestException('下班時間必須晚於上班時間');
+    }
+
+    const [existingSummary, schedule] = await Promise.all([
+      this.prisma.attendanceDailySummary.findUnique({
+        where: {
+          entityId_employeeId_workDate: {
+            entityId: employee.entityId,
+            employeeId: employee.id,
+            workDate,
+          },
+        },
+      }),
+      this.scheduleService.getScheduleForDate(employee.id, workDate),
+    ]);
+
+    const nextClockInTime = clockInAt ?? existingSummary?.clockInTime ?? null;
+    const nextClockOutTime = clockOutAt ?? existingSummary?.clockOutTime ?? null;
+    const breakMinutes =
+      dto.breakMinutes ??
+      existingSummary?.breakMinutes ??
+      schedule?.breakMinutes ??
+      0;
+    const workedMinutes =
+      nextClockInTime && nextClockOutTime
+        ? Math.max(
+            0,
+            Math.floor(
+              (nextClockOutTime.getTime() - nextClockInTime.getTime()) / 60000,
+            ) - breakMinutes,
+          )
+        : 0;
+    const overtimeMinutes =
+      schedule && nextClockOutTime && nextClockOutTime > schedule.shiftEndAt
+        ? Math.max(
+            0,
+            Math.floor(
+              (nextClockOutTime.getTime() - schedule.shiftEndAt.getTime()) /
+                60000,
+            ),
+          )
+        : 0;
+
+    const isLate =
+      Boolean(schedule && nextClockInTime && nextClockInTime > schedule.lateThreshold);
+    const status =
+      nextClockInTime && nextClockOutTime
+        ? isLate
+          ? 'late'
+          : 'completed'
+        : 'missing_clock';
+    const anomalyReason =
+      status === 'missing_clock'
+        ? '管理員已補登部分打卡時間，仍需確認另一筆打卡。'
+        : null;
+    const note = dto.note?.trim() || '管理員補登出勤時間';
+
+    const updatedSummary = await this.prisma.$transaction(async (tx) => {
+      if (clockInAt) {
+        await tx.attendanceRecord.create({
+          data: {
+            entityId: employee.entityId,
+            employeeId: employee.id,
+            scheduleId: schedule?.id,
+            eventType: AttendanceEventType.CLOCK_IN,
+            method: AttendanceMethod.WEB,
+            timestamp: clockInAt,
+            notes: note,
+          },
+        });
+      }
+
+      if (clockOutAt) {
+        await tx.attendanceRecord.create({
+          data: {
+            entityId: employee.entityId,
+            employeeId: employee.id,
+            scheduleId: schedule?.id,
+            eventType: AttendanceEventType.CLOCK_OUT,
+            method: AttendanceMethod.WEB,
+            timestamp: clockOutAt,
+            notes: note,
+          },
+        });
+      }
+
+      return tx.attendanceDailySummary.upsert({
+        where: {
+          entityId_employeeId_workDate: {
+            entityId: employee.entityId,
+            employeeId: employee.id,
+            workDate,
+          },
+        },
+        update: {
+          clockInTime: nextClockInTime,
+          clockOutTime: nextClockOutTime,
+          breakMinutes,
+          workedMinutes,
+          overtimeMinutes,
+          status,
+          anomalyReason,
+        },
+        create: {
+          entityId: employee.entityId,
+          employeeId: employee.id,
+          workDate,
+          clockInTime: nextClockInTime,
+          clockOutTime: nextClockOutTime,
+          breakMinutes,
+          workedMinutes,
+          overtimeMinutes,
+          status,
+          anomalyReason,
+        },
+        include: {
+          employee: { include: { department: true } },
+        },
+      });
+    });
+
+    await this.auditLogService.record({
+      userId,
+      tableName: 'attendance_daily_summaries',
+      recordId: updatedSummary.id,
+      action: 'ADMIN_ADJUST',
+      oldData: existingSummary,
+      newData: {
+        clockInTime: nextClockInTime,
+        clockOutTime: nextClockOutTime,
+        breakMinutes,
+        workedMinutes,
+        overtimeMinutes,
+        status,
+        note,
+      },
+    });
+
+    return updatedSummary;
   }
 }

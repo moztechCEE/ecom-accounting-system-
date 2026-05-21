@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsNotEmpty,
@@ -81,6 +82,10 @@ export class CreateLeaveRequestDto {
   @IsOptional()
   @IsString()
   funeralEventKey?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  adminBackfill?: boolean;
 
   @IsOptional()
   @IsArray()

@@ -10,6 +10,8 @@ export interface Product {
   unit: string
   minStockLevel: number
   safetyStockLevel: number
+  salesPrice?: number
+  purchaseCost?: number
   movingAverageCost: number
   latestPurchasePrice: number
   inventorySnapshots?: any[]

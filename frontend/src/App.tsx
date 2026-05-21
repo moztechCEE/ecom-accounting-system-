@@ -16,6 +16,7 @@ import AccountingPeriodsPage from './pages/AccountingPeriodsPage'
 import AccountingWorkbenchPage from './pages/AccountingWorkbenchPage'
 import ReconciliationCenterPage from './pages/ReconciliationCenterPage'
 import SalesPage from './pages/SalesPage'
+import SalesQuotationsPage from './pages/SalesQuotationsPage'
 import ReportsPage from './pages/ReportsPage'
 import VendorsPage from './pages/VendorsPage'
 import AccessControlPage from './pages/AccessControlPage'
@@ -61,6 +62,7 @@ const App: React.FC = () => {
                 <Route path="accounting/journals" element={<PermissionRoute anyPermissions={['journal_entries:read']}><JournalEntriesPage /></PermissionRoute>} />
                 <Route path="accounting/periods" element={<PermissionRoute anyPermissions={['accounts:read']}><AccountingPeriodsPage /></PermissionRoute>} />
                 <Route path="sales/orders" element={<PermissionRoute anyPermissions={['sales_orders:read']}><SalesPage /></PermissionRoute>} />
+                <Route path="sales/quotations" element={<PermissionRoute anyPermissions={['sales_orders:read', 'purchase_orders:read']}><SalesQuotationsPage /></PermissionRoute>} />
                 <Route path="reports" element={<PermissionRoute anyPermissions={['reports:read']}><ReportsPage /></PermissionRoute>} />
                 <Route path="vendors" element={<PermissionRoute anyPermissions={['purchase_orders:read', 'accounts:read']}><VendorsPage /></PermissionRoute>} />
                 

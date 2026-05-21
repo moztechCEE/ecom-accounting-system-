@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { Card, Typography, Table, Button, Tag, Space, message, Modal, Form, Input } from 'antd'
-import { PlusOutlined, ReloadOutlined, ScanOutlined } from '@ant-design/icons'
+import { FileTextOutlined, PlusOutlined, ReloadOutlined, ScanOutlined } from '@ant-design/icons'
 import { motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { purchaseService, PurchaseOrder } from '../services/purchase.service'
 
 const { Title } = Typography
 
 const PurchaseOrdersPage: React.FC = () => {
+  const navigate = useNavigate()
   const [orders, setOrders] = useState<PurchaseOrder[]>([])
   const [loading, setLoading] = useState(false)
   const [receiveModalVisible, setReceiveModalVisible] = useState(false)
@@ -120,6 +122,9 @@ const PurchaseOrdersPage: React.FC = () => {
         </div>
         <Space>
           <Button icon={<ReloadOutlined />} onClick={fetchOrders}>重新整理</Button>
+          <Button icon={<FileTextOutlined />} onClick={() => navigate('/sales/quotations')}>
+            客戶報價單
+          </Button>
           <Button type="primary" icon={<PlusOutlined />} size="large">
             建立採購單
           </Button>

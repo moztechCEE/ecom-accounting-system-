@@ -275,6 +275,18 @@ export class LeaveService {
     const actorEmployee = await this.prisma.employee.findUnique({
       where: { userId },
     });
+    const adminBackfill = Boolean(dto.adminBackfill);
+    if (adminBackfill) {
+      const canBackfill = await this.usersService.hasPermission(
+        userId,
+        'attendance_admin',
+        'update',
+      );
+      if (!canBackfill) {
+        throw new BadRequestException('只有考勤管理員可以補登假單');
+      }
+    }
+
     const employee = await this.resolveLeaveRequestEmployee(
       userId,
       dto,
@@ -319,6 +331,8 @@ export class LeaveService {
       hours: dto.hours,
       documents,
       funeralDetails,
+      skipNoticeRequirement: adminBackfill,
+      skipDocumentRequirement: adminBackfill,
     });
 
     await this.balanceService.reserveLeaveHours({
@@ -1039,6 +1053,8 @@ export class LeaveService {
       checksum?: string;
     }>;
     funeralDetails?: FuneralLeaveDetails | null;
+    skipNoticeRequirement?: boolean;
+    skipDocumentRequirement?: boolean;
   }): Promise<LeaveRequestRuleContext> {
     if (
       Number.isNaN(params.startAt.getTime()) ||
@@ -1058,6 +1074,7 @@ export class LeaveService {
     }
 
     if (
+      !params.skipNoticeRequirement &&
       params.leaveType.minNoticeHours &&
       params.leaveType.minNoticeHours > 0
     ) {
@@ -1071,7 +1088,11 @@ export class LeaveService {
       }
     }
 
-    if (params.leaveType.requiresDocument && params.documents.length === 0) {
+    if (
+      !params.skipDocumentRequirement &&
+      params.leaveType.requiresDocument &&
+      params.documents.length === 0
+    ) {
       throw new BadRequestException(
         params.leaveType.documentExamples
           ? `此假別需提供附件，可參考：${params.leaveType.documentExamples}`

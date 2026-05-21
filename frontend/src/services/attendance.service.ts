@@ -86,6 +86,21 @@ export const attendanceService = {
     return response.data;
   },
 
+  adjustAdminAttendance: async (data: {
+    employeeId: string;
+    workDate: string;
+    clockInAt?: string;
+    clockOutAt?: string;
+    breakMinutes?: number;
+    note?: string;
+  }): Promise<AdminAttendanceRecord> => {
+    const response = await api.post<AdminAttendanceRecord>(
+      "/attendance/admin/attendance-adjustments",
+      data,
+    );
+    return response.data;
+  },
+
   getAdminPolicies: async (): Promise<AttendancePolicy[]> => {
     const response = await api.get<AttendancePolicy[]>(
       "/attendance/admin/policies",

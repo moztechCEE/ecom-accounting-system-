@@ -7,6 +7,8 @@ import {
   DatePicker,
   Empty,
   Form,
+  Input,
+  InputNumber,
   Modal,
   Row,
   Select,
@@ -15,6 +17,7 @@ import {
   Table,
   Tabs,
   Tag,
+  TimePicker,
   Timeline,
   Typography,
   message,
@@ -22,10 +25,12 @@ import {
 import {
   CalendarOutlined,
   CheckCircleOutlined,
+  ClockCircleOutlined,
   ExclamationCircleOutlined,
   DownloadOutlined,
   DollarOutlined,
   FileTextOutlined,
+  PlusOutlined,
   PlayCircleOutlined,
   PrinterOutlined,
   RollbackOutlined,
@@ -36,6 +41,7 @@ import { motion } from 'framer-motion'
 import dayjs from 'dayjs'
 import { GlassDrawer, GlassDrawerSection } from '../components/ui/GlassDrawer'
 import { payrollService } from '../services/payroll.service'
+import { attendanceService } from '../services/attendance.service'
 import {
   AuditLogEntry,
   BankAccount,
@@ -45,6 +51,7 @@ import {
   PayrollRunPrecheckIssue,
   PayrollRunPrecheckResult,
 } from '../types'
+import { LeaveStatus, LeaveType } from '../types/attendance'
 import { useAuth } from '../contexts/AuthContext'
 import { hasPermission } from '../utils/access'
 
@@ -113,8 +120,16 @@ const PayrollPage: React.FC = () => {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [precheckResult, setPrecheckResult] = useState<PayrollRunPrecheckResult | null>(null)
   const [pendingCreatePayload, setPendingCreatePayload] = useState<PayrollRunCreatePayload | null>(null)
+  const [selectedPrecheckIssue, setSelectedPrecheckIssue] = useState<PayrollRunPrecheckIssue | null>(null)
+  const [attendanceAdjustOpen, setAttendanceAdjustOpen] = useState(false)
+  const [leaveBackfillOpen, setLeaveBackfillOpen] = useState(false)
+  const [attendanceAdjustLoading, setAttendanceAdjustLoading] = useState(false)
+  const [leaveBackfillLoading, setLeaveBackfillLoading] = useState(false)
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([])
   const [form] = Form.useForm()
   const [payForm] = Form.useForm()
+  const [attendanceAdjustForm] = Form.useForm()
+  const [leaveBackfillForm] = Form.useForm()
 
   const canManagePayroll = useMemo(
     () => hasPermission(user, 'payroll_admin:update'),
@@ -277,6 +292,126 @@ const PayrollPage: React.FC = () => {
       message.error(error?.response?.data?.message || '薪資前檢查失敗')
     } finally {
       setCreateLoading(false)
+    }
+  }
+
+  const refreshPrecheck = async () => {
+    if (!pendingCreatePayload) {
+      return
+    }
+
+    const preview = await payrollService.previewPayrollRunWarnings(pendingCreatePayload)
+    setPrecheckResult(preview)
+    if (preview.issueCount === 0) {
+      message.success('本期異常已確認完成，可以建立薪資批次')
+    }
+  }
+
+  const openAttendanceAdjustModal = (issue: PayrollRunPrecheckIssue) => {
+    setSelectedPrecheckIssue(issue)
+    attendanceAdjustForm.setFieldsValue({
+      clockInTime: issue.clockInTime ? dayjs(issue.clockInTime) : dayjs(`${issue.workDate} 09:00`),
+      clockOutTime: issue.clockOutTime ? dayjs(issue.clockOutTime) : dayjs(`${issue.workDate} 18:00`),
+      breakMinutes: 60,
+      note: '薪資結算前由管理員補登打卡',
+    })
+    setAttendanceAdjustOpen(true)
+  }
+
+  const openLeaveBackfillModal = async (issue: PayrollRunPrecheckIssue) => {
+    setSelectedPrecheckIssue(issue)
+    leaveBackfillForm.setFieldsValue({
+      startTime: dayjs(`${issue.workDate} 09:00`),
+      endTime: dayjs(`${issue.workDate} 18:00`),
+      hours: 8,
+      reason: '薪資結算前補登請假',
+    })
+    setLeaveBackfillOpen(true)
+
+    if (leaveTypes.length === 0) {
+      try {
+        const types = await attendanceService.getAdminLeaveTypes()
+        setLeaveTypes(types.filter((type) => type.isActive !== false))
+      } catch (error: any) {
+        message.error(error?.response?.data?.message || '載入假別失敗')
+      }
+    }
+  }
+
+  const handleAttendanceAdjust = async () => {
+    if (!selectedPrecheckIssue) {
+      return
+    }
+
+    try {
+      const values = await attendanceAdjustForm.validateFields()
+      setAttendanceAdjustLoading(true)
+      await attendanceService.adjustAdminAttendance({
+        employeeId: selectedPrecheckIssue.employeeId,
+        workDate: selectedPrecheckIssue.workDate,
+        clockInAt: values.clockInTime
+          ? dayjs(`${selectedPrecheckIssue.workDate} ${values.clockInTime.format('HH:mm')}`).toISOString()
+          : undefined,
+        clockOutAt: values.clockOutTime
+          ? dayjs(`${selectedPrecheckIssue.workDate} ${values.clockOutTime.format('HH:mm')}`).toISOString()
+          : undefined,
+        breakMinutes: Number(values.breakMinutes ?? 0),
+        note: values.note,
+      })
+      message.success('出勤時間已補登')
+      setAttendanceAdjustOpen(false)
+      attendanceAdjustForm.resetFields()
+      await refreshPrecheck()
+    } catch (error: any) {
+      if (error?.errorFields) {
+        return
+      }
+      message.error(error?.response?.data?.message || '補登出勤失敗')
+    } finally {
+      setAttendanceAdjustLoading(false)
+    }
+  }
+
+  const handleLeaveBackfill = async () => {
+    if (!selectedPrecheckIssue) {
+      return
+    }
+
+    try {
+      const values = await leaveBackfillForm.validateFields()
+      setLeaveBackfillLoading(true)
+      const startAt = dayjs(`${selectedPrecheckIssue.workDate} ${values.startTime.format('HH:mm')}`)
+      const endAt = dayjs(`${selectedPrecheckIssue.workDate} ${values.endTime.format('HH:mm')}`)
+      if (!endAt.isAfter(startAt)) {
+        message.error('請假結束時間必須晚於開始時間')
+        return
+      }
+
+      const request = await attendanceService.createLeaveRequest({
+        employeeId: selectedPrecheckIssue.employeeId,
+        leaveTypeId: values.leaveTypeId,
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        hours: Number(values.hours),
+        reason: values.reason,
+        adminBackfill: true,
+      })
+      await attendanceService.updateLeaveStatus(
+        request.id,
+        LeaveStatus.APPROVED,
+        '薪資結算前由管理員補假並核准',
+      )
+      message.success('假單已補登並核准')
+      setLeaveBackfillOpen(false)
+      leaveBackfillForm.resetFields()
+      await refreshPrecheck()
+    } catch (error: any) {
+      if (error?.errorFields) {
+        return
+      }
+      message.error(error?.response?.data?.message || '補假失敗')
+    } finally {
+      setLeaveBackfillLoading(false)
     }
   }
 
@@ -798,6 +933,29 @@ const PayrollPage: React.FC = () => {
             {issue.summaryStatus ? ` · 出勤狀態：${issue.summaryStatus}` : ''}
           </div>
         </div>
+      ),
+    },
+    {
+      title: '處理',
+      key: 'actions',
+      width: 180,
+      render: (_: unknown, issue: PayrollRunPrecheckIssue) => (
+        <Space wrap>
+          <Button
+            size="small"
+            icon={<ClockCircleOutlined />}
+            onClick={() => openAttendanceAdjustModal(issue)}
+          >
+            補打卡
+          </Button>
+          <Button
+            size="small"
+            icon={<PlusOutlined />}
+            onClick={() => void openLeaveBackfillModal(issue)}
+          >
+            補假
+          </Button>
+        </Space>
       ),
     },
   ]
@@ -1325,7 +1483,7 @@ const PayrollPage: React.FC = () => {
               type="warning"
               showIcon
               message={`本期預估工作天數 ${precheckResult.periodWorkdayCount} 天，找到 ${precheckResult.issueCount} 筆待確認異常`}
-              description={`已檢查 ${precheckResult.employeesChecked} 位員工。系統已自動排除週末、特殊統一放假宣告，以及已送出／已核准的請假紀錄。建議先確認是否漏請假或漏打卡，再決定是否繼續結算。`}
+              description={`已檢查 ${precheckResult.employeesChecked} 位員工。系統已自動排除週末、特殊統一放假宣告，以及已送出／已核准的請假紀錄。確認後可直接在處理欄補打卡或補假，再決定是否繼續結算。`}
             />
             <Table
               rowKey={(issue) => `${issue.employeeId}-${issue.workDate}-${issue.issueType}`}
@@ -1335,6 +1493,105 @@ const PayrollPage: React.FC = () => {
               size="small"
               scroll={{ x: 840 }}
             />
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        title="補登／調整打卡時間"
+        open={attendanceAdjustOpen}
+        onCancel={() => {
+          setAttendanceAdjustOpen(false)
+          setSelectedPrecheckIssue(null)
+          attendanceAdjustForm.resetFields()
+        }}
+        onOk={() => void handleAttendanceAdjust()}
+        okText="儲存出勤時間"
+        cancelText="取消"
+        confirmLoading={attendanceAdjustLoading}
+      >
+        {selectedPrecheckIssue ? (
+          <div className="space-y-4">
+            <Alert
+              type="info"
+              showIcon
+              message={`${selectedPrecheckIssue.employeeName} (${selectedPrecheckIssue.employeeNo}) · ${dayjs(selectedPrecheckIssue.workDate).format('YYYY-MM-DD')}`}
+              description="可補上缺少的上班或下班時間；儲存後系統會重新計算當日工時，並更新薪資結算前檢查。"
+            />
+            <Form form={attendanceAdjustForm} layout="vertical">
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item name="clockInTime" label="上班時間">
+                    <TimePicker className="w-full" format="HH:mm" minuteStep={5} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="clockOutTime" label="下班時間">
+                    <TimePicker className="w-full" format="HH:mm" minuteStep={5} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item name="breakMinutes" label="休息分鐘" rules={[{ required: true, message: '請輸入休息分鐘' }]}>
+                <InputNumber className="w-full" min={0} step={5} />
+              </Form.Item>
+              <Form.Item name="note" label="備註">
+                <Input.TextArea rows={3} placeholder="例如：員工確認忘記打卡，由管理員補登" />
+              </Form.Item>
+            </Form>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        title="補登員工請假"
+        open={leaveBackfillOpen}
+        onCancel={() => {
+          setLeaveBackfillOpen(false)
+          setSelectedPrecheckIssue(null)
+          leaveBackfillForm.resetFields()
+        }}
+        onOk={() => void handleLeaveBackfill()}
+        okText="建立並核准假單"
+        cancelText="取消"
+        confirmLoading={leaveBackfillLoading}
+      >
+        {selectedPrecheckIssue ? (
+          <div className="space-y-4">
+            <Alert
+              type="info"
+              showIcon
+              message={`${selectedPrecheckIssue.employeeName} (${selectedPrecheckIssue.employeeNo}) · ${dayjs(selectedPrecheckIssue.workDate).format('YYYY-MM-DD')}`}
+              description="補假會建立正式假單並直接核准，薪資計算會依假別的支薪比例處理。"
+            />
+            <Form form={leaveBackfillForm} layout="vertical">
+              <Form.Item name="leaveTypeId" label="假別" rules={[{ required: true, message: '請選擇假別' }]}>
+                <Select
+                  placeholder="選擇假別"
+                  options={leaveTypes.map((type) => ({
+                    value: type.id,
+                    label: `${type.name}${typeof type.paidPercentage === 'number' ? ` · 支薪 ${type.paidPercentage}%` : ''}`,
+                  }))}
+                />
+              </Form.Item>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item name="startTime" label="開始時間" rules={[{ required: true, message: '請選擇開始時間' }]}>
+                    <TimePicker className="w-full" format="HH:mm" minuteStep={5} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="endTime" label="結束時間" rules={[{ required: true, message: '請選擇結束時間' }]}>
+                    <TimePicker className="w-full" format="HH:mm" minuteStep={5} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item name="hours" label="請假時數" rules={[{ required: true, message: '請輸入請假時數' }]}>
+                <InputNumber className="w-full" min={0.5} step={0.5} />
+              </Form.Item>
+              <Form.Item name="reason" label="原因">
+                <Input.TextArea rows={3} placeholder="例如：員工確認當日為請假，原先漏送假單" />
+              </Form.Item>
+            </Form>
           </div>
         ) : null}
       </Modal>

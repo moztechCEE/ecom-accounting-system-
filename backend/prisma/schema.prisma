@@ -23,21 +23,21 @@ enum TaxType {
 // ============================================
 
 model User {
-  id           String  @id @default(uuid())
-  email        String  @unique
-  passwordHash String  @map("password_hash")
-  name         String
-  isActive     Boolean @default(true) @map("is_active")
-  employeeDataScope       String    @default("SELF") @map("employee_data_scope")
-  attendanceDataScope     String    @default("SELF") @map("attendance_data_scope")
-  payrollDataScope        String    @default("SELF") @map("payroll_data_scope")
-  accountingDataScope     String    @default("SELF") @map("accounting_data_scope")
-  inventoryDataScope      String    @default("SELF") @map("inventory_data_scope")
-  salesDataScope          String    @default("SELF") @map("sales_data_scope")
-  purchasingDataScope     String    @default("SELF") @map("purchasing_data_scope")
-  bankingDataScope        String    @default("SELF") @map("banking_data_scope")
-  mustChangePassword         Boolean   @default(false) @map("must_change_password")
-  passwordResetTokenHash     String?   @unique @map("password_reset_token_hash")
+  id                          String    @id @default(uuid())
+  email                       String    @unique
+  passwordHash                String    @map("password_hash")
+  name                        String
+  isActive                    Boolean   @default(true) @map("is_active")
+  employeeDataScope           String    @default("SELF") @map("employee_data_scope")
+  attendanceDataScope         String    @default("SELF") @map("attendance_data_scope")
+  payrollDataScope            String    @default("SELF") @map("payroll_data_scope")
+  accountingDataScope         String    @default("SELF") @map("accounting_data_scope")
+  inventoryDataScope          String    @default("SELF") @map("inventory_data_scope")
+  salesDataScope              String    @default("SELF") @map("sales_data_scope")
+  purchasingDataScope         String    @default("SELF") @map("purchasing_data_scope")
+  bankingDataScope            String    @default("SELF") @map("banking_data_scope")
+  mustChangePassword          Boolean   @default(false) @map("must_change_password")
+  passwordResetTokenHash      String?   @unique @map("password_reset_token_hash")
   passwordResetTokenExpiresAt DateTime? @map("password_reset_token_expires_at")
 
   // 2FA Fields
@@ -70,14 +70,14 @@ model User {
   notifications                 Notification[]
 
   // Attendance Relations
-  employee                Employee?
+  employee                  Employee?
   verifiedEmployeeDocuments EmployeeOnboardingDocument[] @relation("EmployeeOnboardingDocumentVerifier")
-  reviewedLeaveRequests   LeaveRequest[]         @relation("LeaveReviewer")
-  uploadedLeaveDocuments  LeaveDocument[]        @relation("LeaveDocumentUploader")
-  leaveRequestHistories   LeaveRequestHistory[]  @relation("LeaveHistoryActor")
-  resolvedAnomalies       AttendanceAnomaly[]    @relation("AnomalyResolver")
-  createdDisasterClosures DisasterClosureEvent[] @relation("DisasterClosureCreator")
-  createdAssemblyOrders   AssemblyOrder[]
+  reviewedLeaveRequests     LeaveRequest[]               @relation("LeaveReviewer")
+  uploadedLeaveDocuments    LeaveDocument[]              @relation("LeaveDocumentUploader")
+  leaveRequestHistories     LeaveRequestHistory[]        @relation("LeaveHistoryActor")
+  resolvedAnomalies         AttendanceAnomaly[]          @relation("AnomalyResolver")
+  createdDisasterClosures   DisasterClosureEvent[]       @relation("DisasterClosureCreator")
+  createdAssemblyOrders     AssemblyOrder[]
 
   @@map("users")
 }
@@ -180,6 +180,7 @@ model Entity {
   products              Product[]
   salesChannels         SalesChannel[]
   salesOrders           SalesOrder[]
+  salesQuotations       SalesQuotation[]
   arInvoices            ArInvoice[]
   apInvoices            ApInvoice[]
   bankAccounts          BankAccount[]
@@ -344,29 +345,30 @@ model SalesChannel {
 
 // 客戶
 model Customer {
-  id                 String   @id @default(uuid())
-  entityId           String   @map("entity_id")
-  name               String
-  email              String?
-  phone              String?
-  taxId              String?  @map("tax_id")
-  type               String   @default("individual") // individual, company
-  address            String?
-  paymentTerms       String?  @map("payment_terms") // prepaid, net30, net45, custom
-  paymentTermDays    Int      @default(0) @map("payment_term_days")
-  isMonthlyBilling   Boolean  @default(false) @map("is_monthly_billing")
-  billingCycle       String?  @map("billing_cycle") // monthly, biweekly, custom
-  statementEmail     String?  @map("statement_email")
-  collectionOwner    String?  @map("collection_owner")
-  collectionNote     String?  @map("collection_note")
-  creditLimit        Decimal  @default(0) @map("credit_limit") @db.Decimal(18, 4)
-  isActive           Boolean  @default(true) @map("is_active")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  id               String   @id @default(uuid())
+  entityId         String   @map("entity_id")
+  name             String
+  email            String?
+  phone            String?
+  taxId            String?  @map("tax_id")
+  type             String   @default("individual") // individual, company
+  address          String?
+  paymentTerms     String?  @map("payment_terms") // prepaid, net30, net45, custom
+  paymentTermDays  Int      @default(0) @map("payment_term_days")
+  isMonthlyBilling Boolean  @default(false) @map("is_monthly_billing")
+  billingCycle     String?  @map("billing_cycle") // monthly, biweekly, custom
+  statementEmail   String?  @map("statement_email")
+  collectionOwner  String?  @map("collection_owner")
+  collectionNote   String?  @map("collection_note")
+  creditLimit      Decimal  @default(0) @map("credit_limit") @db.Decimal(18, 4)
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
-  entity      Entity       @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  salesOrders SalesOrder[]
-  arInvoices  ArInvoice[]
+  entity          Entity           @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  salesOrders     SalesOrder[]
+  salesQuotations SalesQuotation[]
+  arInvoices      ArInvoice[]
 
   @@index([entityId])
   @@map("customers")
@@ -424,14 +426,15 @@ model Product {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  entity             Entity                 @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  salesOrderItems    SalesOrderItem[]
-  purchaseOrderItems PurchaseOrderItem[]
-  productBatches     ProductBatch[]
-  devCosts           DevCost[]
-  invoiceLines       InvoiceLine[]
-  inventorySnapshots InventorySnapshot[]
-  inventoryMovements InventoryTransaction[]
+  entity              Entity                 @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  salesOrderItems     SalesOrderItem[]
+  salesQuotationItems SalesQuotationItem[]
+  purchaseOrderItems  PurchaseOrderItem[]
+  productBatches      ProductBatch[]
+  devCosts            DevCost[]
+  invoiceLines        InvoiceLine[]
+  inventorySnapshots  InventorySnapshot[]
+  inventoryMovements  InventoryTransaction[]
 
   // BOM Relations
   bomParent   BillOfMaterial[] @relation("BomParent")
@@ -616,6 +619,67 @@ model InventoryTransaction {
   @@index([entityId, warehouseId, productId])
   @@index([referenceType, referenceId])
   @@map("inventory_transactions")
+}
+
+// 銷售報價單
+model SalesQuotation {
+  id            String    @id @default(uuid())
+  entityId      String    @map("entity_id")
+  customerId    String?   @map("customer_id")
+  quotationNo   String    @map("quotation_no")
+  quotationDate DateTime  @map("quotation_date")
+  validUntil    DateTime? @map("valid_until")
+  ownerName     String?   @map("owner_name")
+  currency      String    @default("TWD")
+  paymentTerms  String?   @map("payment_terms")
+  deliveryTerms String?   @map("delivery_terms")
+  reference     String?
+  status        String    @default("draft") // draft, pending, approved, sent, accepted, rejected, expired
+
+  subtotalOriginal       Decimal @default(0) @map("subtotal_original") @db.Decimal(18, 2)
+  discountAmountOriginal Decimal @default(0) @map("discount_amount_original") @db.Decimal(18, 2)
+  taxAmountOriginal      Decimal @default(0) @map("tax_amount_original") @db.Decimal(18, 2)
+  totalAmountOriginal    Decimal @default(0) @map("total_amount_original") @db.Decimal(18, 2)
+
+  notes        String?
+  internalNote String?   @map("internal_note")
+  createdBy    String?   @map("created_by")
+  approvedAt   DateTime? @map("approved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  entity   Entity               @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  customer Customer?            @relation(fields: [customerId], references: [id])
+  items    SalesQuotationItem[]
+
+  @@unique([entityId, quotationNo])
+  @@index([entityId, quotationDate])
+  @@index([entityId, status])
+  @@index([customerId])
+  @@map("sales_quotations")
+}
+
+// 銷售報價單明細
+model SalesQuotationItem {
+  id                String  @id @default(uuid())
+  quotationId       String  @map("quotation_id")
+  productId         String? @map("product_id")
+  itemName          String  @map("item_name")
+  itemSpec          String? @map("item_spec")
+  quantity          Decimal @db.Decimal(18, 2)
+  unitPriceOriginal Decimal @map("unit_price_original") @db.Decimal(18, 2)
+  discountOriginal  Decimal @default(0) @map("discount_original") @db.Decimal(18, 2)
+  taxRate           Decimal @default(5) @map("tax_rate") @db.Decimal(8, 4)
+  taxAmountOriginal Decimal @default(0) @map("tax_amount_original") @db.Decimal(18, 2)
+  lineTotalOriginal Decimal @default(0) @map("line_total_original") @db.Decimal(18, 2)
+  sortOrder         Int     @default(0) @map("sort_order")
+
+  quotation SalesQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  product   Product?       @relation(fields: [productId], references: [id])
+
+  @@index([quotationId])
+  @@index([productId])
+  @@map("sales_quotation_items")
 }
 
 // 銷售訂單
@@ -1391,20 +1455,20 @@ model Department {
 
 // 員工
 model Employee {
-  id            String    @id @default(uuid())
-  entityId      String    @map("entity_id")
-  userId        String?   @unique @map("user_id")
-  employeeNo    String    @map("employee_no")
-  name          String
-  gender        String?
-  nationalId    String?   @map("national_id")
-  mailingAddress String?  @map("mailing_address")
-  country       String // TW, CN
-  location      String?
-  attendanceType String   @default("INTERNAL") @map("attendance_type") // INTERNAL, EXTERNAL
-  departmentId  String?   @map("department_id")
-  hireDate      DateTime  @map("hire_date")
-  terminateDate DateTime? @map("terminate_date")
+  id             String    @id @default(uuid())
+  entityId       String    @map("entity_id")
+  userId         String?   @unique @map("user_id")
+  employeeNo     String    @map("employee_no")
+  name           String
+  gender         String?
+  nationalId     String?   @map("national_id")
+  mailingAddress String?   @map("mailing_address")
+  country        String // TW, CN
+  location       String?
+  attendanceType String    @default("INTERNAL") @map("attendance_type") // INTERNAL, EXTERNAL
+  departmentId   String?   @map("department_id")
+  hireDate       DateTime  @map("hire_date")
+  terminateDate  DateTime? @map("terminate_date")
 
   // 薪資基數（符合四欄位標準）
   salaryBaseOriginal Decimal @map("salary_base_original") @db.Decimal(18, 2)
@@ -1417,12 +1481,12 @@ model Employee {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  entity       Entity        @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  user         User?         @relation(fields: [userId], references: [id])
-  department   Department?   @relation(fields: [departmentId], references: [id])
-  payrollItems PayrollItem[]
+  entity               Entity                        @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  user                 User?                         @relation(fields: [userId], references: [id])
+  department           Department?                   @relation(fields: [departmentId], references: [id])
+  payrollItems         PayrollItem[]
   compensationSettings EmployeeCompensationSettings?
-  onboardingDocuments EmployeeOnboardingDocument[]
+  onboardingDocuments  EmployeeOnboardingDocument[]
 
   // Attendance Relations
   attendanceSchedules AttendanceSchedule[]
@@ -1438,23 +1502,23 @@ model Employee {
 }
 
 model EmployeeCompensationSettings {
-  id                      String   @id @default(uuid())
-  employeeId              String   @unique @map("employee_id")
-  transportAllowance      Decimal  @default(0) @map("transport_allowance") @db.Decimal(18, 2)
-  supervisorAllowance     Decimal  @default(0) @map("supervisor_allowance") @db.Decimal(18, 2)
-  extraAllowance          Decimal  @default(0) @map("extra_allowance") @db.Decimal(18, 2)
-  courseAllowance         Decimal  @default(0) @map("course_allowance") @db.Decimal(18, 2)
-  seniorityPay            Decimal  @default(0) @map("seniority_pay") @db.Decimal(18, 2)
-  bonus                   Decimal  @default(0) @db.Decimal(18, 2)
-  salaryAdjustment        Decimal  @default(0) @map("salary_adjustment") @db.Decimal(18, 2)
-  annualAdjustment        Decimal  @default(0) @map("annual_adjustment") @db.Decimal(18, 2)
-  laborInsuranceDeduction Decimal  @default(0) @map("labor_insurance_deduction") @db.Decimal(18, 2)
-  healthInsuranceDeduction Decimal @default(0) @map("health_insurance_deduction") @db.Decimal(18, 2)
-  pensionSelfContribution Decimal  @default(0) @map("pension_self_contribution") @db.Decimal(18, 2)
-  dependentInsurance      Decimal  @default(0) @map("dependent_insurance") @db.Decimal(18, 2)
-  salaryAdvance           Decimal  @default(0) @map("salary_advance") @db.Decimal(18, 2)
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
+  id                       String   @id @default(uuid())
+  employeeId               String   @unique @map("employee_id")
+  transportAllowance       Decimal  @default(0) @map("transport_allowance") @db.Decimal(18, 2)
+  supervisorAllowance      Decimal  @default(0) @map("supervisor_allowance") @db.Decimal(18, 2)
+  extraAllowance           Decimal  @default(0) @map("extra_allowance") @db.Decimal(18, 2)
+  courseAllowance          Decimal  @default(0) @map("course_allowance") @db.Decimal(18, 2)
+  seniorityPay             Decimal  @default(0) @map("seniority_pay") @db.Decimal(18, 2)
+  bonus                    Decimal  @default(0) @db.Decimal(18, 2)
+  salaryAdjustment         Decimal  @default(0) @map("salary_adjustment") @db.Decimal(18, 2)
+  annualAdjustment         Decimal  @default(0) @map("annual_adjustment") @db.Decimal(18, 2)
+  laborInsuranceDeduction  Decimal  @default(0) @map("labor_insurance_deduction") @db.Decimal(18, 2)
+  healthInsuranceDeduction Decimal  @default(0) @map("health_insurance_deduction") @db.Decimal(18, 2)
+  pensionSelfContribution  Decimal  @default(0) @map("pension_self_contribution") @db.Decimal(18, 2)
+  dependentInsurance       Decimal  @default(0) @map("dependent_insurance") @db.Decimal(18, 2)
+  salaryAdvance            Decimal  @default(0) @map("salary_advance") @db.Decimal(18, 2)
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
@@ -1477,8 +1541,8 @@ model EmployeeOnboardingDocument {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  verifier   User?    @relation("EmployeeOnboardingDocumentVerifier", fields: [verifiedBy], references: [id], onDelete: SetNull)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  verifier User?    @relation("EmployeeOnboardingDocumentVerifier", fields: [verifiedBy], references: [id], onDelete: SetNull)
 
   @@unique([employeeId, docType])
   @@index([employeeId, status])

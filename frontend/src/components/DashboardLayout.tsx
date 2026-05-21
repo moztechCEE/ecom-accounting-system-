@@ -90,6 +90,12 @@ const DashboardLayout: React.FC = () => {
           onClick: () => navigate('/sales/orders'),
         },
         {
+          key: '/sales/quotations',
+          label: '客戶報價單',
+          hidden: !canAccess(['sales_orders:read', 'purchase_orders:read']),
+          onClick: () => navigate('/sales/quotations'),
+        },
+        {
           key: '/sales/customers',
           label: '客戶管理',
           hidden: !canAccess(['sales_orders:read']),

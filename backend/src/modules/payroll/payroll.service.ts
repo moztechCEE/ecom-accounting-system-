@@ -2896,6 +2896,8 @@ export class PayrollService {
       scheduleSource: 'employee' | 'department' | 'global' | 'default';
       detail: string;
       summaryStatus: string | null;
+      clockInTime: string | null;
+      clockOutTime: string | null;
     }> = [];
 
     for (const employee of employees) {
@@ -2965,6 +2967,8 @@ export class PayrollService {
             issueType: 'MISSING_ATTENDANCE_OR_LEAVE',
             scheduleSource,
             summaryStatus: null,
+            clockInTime: null,
+            clockOutTime: null,
             detail: '該工作日沒有打卡摘要，也沒有已送出或已核准的請假紀錄。',
           });
           continue;
@@ -2988,6 +2992,8 @@ export class PayrollService {
           issueType: 'INCOMPLETE_CLOCK',
           scheduleSource,
           summaryStatus: summary.status ?? null,
+          clockInTime: summary.clockInTime?.toISOString() ?? null,
+          clockOutTime: summary.clockOutTime?.toISOString() ?? null,
           detail:
             !summary.clockInTime && !summary.clockOutTime
               ? '有出勤摘要，但沒有完整打卡時間，請確認是否漏打卡或需要補請假。'

@@ -63,6 +63,86 @@ export interface SalesOrderItem {
   currency: string
 }
 
+export interface SalesQuotationItem {
+  id: string
+  productId?: string | null
+  itemName: string
+  itemSpec?: string | null
+  quantity: number
+  unitPriceOriginal: number
+  discountOriginal: number
+  taxRate: number
+  taxAmountOriginal: number
+  lineTotalOriginal: number
+  sortOrder: number
+  product?: {
+    id: string
+    sku: string
+    name: string
+    modelNumber?: string | null
+    category?: string | null
+    salesPrice?: number | string
+  } | null
+}
+
+export interface SalesQuotation {
+  id: string
+  entityId: string
+  customerId?: string | null
+  quotationNo: string
+  quotationDate: string
+  validUntil?: string | null
+  ownerName?: string | null
+  currency: string
+  paymentTerms?: string | null
+  deliveryTerms?: string | null
+  reference?: string | null
+  status: 'draft' | 'pending' | 'approved' | 'sent' | 'accepted' | 'rejected' | 'expired'
+  subtotalOriginal: number
+  discountAmountOriginal: number
+  taxAmountOriginal: number
+  totalAmountOriginal: number
+  notes?: string | null
+  internalNote?: string | null
+  approvedAt?: string | null
+  createdAt: string
+  updatedAt: string
+  customer?: {
+    id: string
+    name: string
+    email?: string | null
+    phone?: string | null
+    taxId?: string | null
+    address?: string | null
+    paymentTerms?: string | null
+    paymentTermDays?: number | null
+  } | null
+  items: SalesQuotationItem[]
+}
+
+export interface CreateSalesQuotationPayload {
+  entityId?: string
+  customerId?: string
+  quotationDate?: string
+  validUntil?: string
+  ownerName?: string
+  currency?: string
+  paymentTerms?: string
+  deliveryTerms?: string
+  reference?: string
+  notes?: string
+  internalNote?: string
+  items: Array<{
+    productId?: string
+    itemName: string
+    itemSpec?: string
+    quantity: number
+    unitPriceOriginal: number
+    discountOriginal?: number
+    taxRate?: number
+  }>
+}
+
 type SalesOrderApiResponse = {
   id: string
   externalOrderId?: string | null
@@ -425,5 +505,71 @@ export const salesService = {
       params: { entityId }
     })
     return response.data
+  },
+
+  async findQuotations(params?: {
+    entityId?: string
+    status?: string
+    search?: string
+    startDate?: string
+    endDate?: string
+  }) {
+    const entityId =
+      params?.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.get<SalesQuotation[]>('/sales/quotations', {
+      params: {
+        entityId,
+        status: params?.status,
+        search: params?.search,
+        startDate: params?.startDate,
+        endDate: params?.endDate,
+      },
+    })
+    return response.data.map(normalizeQuotation)
+  },
+
+  async findQuotation(id: string, entityId?: string) {
+    const effectiveEntityId = entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.get<SalesQuotation>(`/sales/quotations/${id}`, {
+      params: { entityId: effectiveEntityId },
+    })
+    return normalizeQuotation(response.data)
+  },
+
+  async createQuotation(payload: CreateSalesQuotationPayload) {
+    const entityId =
+      payload.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.post<SalesQuotation>('/sales/quotations', {
+      ...payload,
+      entityId,
+    })
+    return normalizeQuotation(response.data)
+  },
+
+  async updateQuotationStatus(id: string, status: SalesQuotation['status'], entityId?: string) {
+    const effectiveEntityId = entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.post<SalesQuotation>(
+      `/sales/quotations/${id}/status`,
+      { status },
+      { params: { entityId: effectiveEntityId } },
+    )
+    return normalizeQuotation(response.data)
   }
 }
+
+const normalizeQuotation = (quotation: SalesQuotation): SalesQuotation => ({
+  ...quotation,
+  subtotalOriginal: Number(quotation.subtotalOriginal || 0),
+  discountAmountOriginal: Number(quotation.discountAmountOriginal || 0),
+  taxAmountOriginal: Number(quotation.taxAmountOriginal || 0),
+  totalAmountOriginal: Number(quotation.totalAmountOriginal || 0),
+  items: (quotation.items || []).map((item) => ({
+    ...item,
+    quantity: Number(item.quantity || 0),
+    unitPriceOriginal: Number(item.unitPriceOriginal || 0),
+    discountOriginal: Number(item.discountOriginal || 0),
+    taxRate: Number(item.taxRate || 0),
+    taxAmountOriginal: Number(item.taxAmountOriginal || 0),
+    lineTotalOriginal: Number(item.lineTotalOriginal || 0),
+  })),
+})

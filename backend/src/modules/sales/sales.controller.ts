@@ -19,10 +19,15 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SalesService } from './sales.service';
 import { SalesOrderService } from './services/sales-order.service';
+import { SalesQuotationService } from './services/sales-quotation.service';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
 import { FulfillSalesOrderDto } from './dto/fulfill-sales-order.dto';
 import { ImportEcpayIssuedInvoicesDto } from './dto/import-ecpay-issued-invoices.dto';
 import { SyncSalesOrderInvoiceStatusDto } from './dto/sync-sales-order-invoice-status.dto';
+import {
+  CreateSalesQuotationDto,
+  UpdateSalesQuotationStatusDto,
+} from './dto/create-sales-quotation.dto';
 /**
  * SalesController 銷售控制器
  */
@@ -34,6 +39,7 @@ export class SalesController {
   constructor(
     private readonly salesService: SalesService,
     private readonly salesOrderService: SalesOrderService,
+    private readonly salesQuotationService: SalesQuotationService,
   ) {}
 
   /**
@@ -87,6 +93,62 @@ export class SalesController {
     @CurrentUser('id') userId: string,
   ) {
     return this.salesOrderService.createSalesOrder(dto, userId);
+  }
+
+  @Get('quotations')
+  @ApiOperation({ summary: '查詢銷售報價單' })
+  @ApiQuery({ name: 'entityId', required: true })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  async getSalesQuotations(
+    @Query('entityId') entityId: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.salesQuotationService.findAll(this.requireEntityId(entityId), {
+      status,
+      search,
+      startDate: this.parseOptionalDate(startDate, 'startDate'),
+      endDate: this.parseOptionalDate(endDate, 'endDate'),
+    });
+  }
+
+  @Get('quotations/:id')
+  @ApiOperation({ summary: '查詢單一銷售報價單' })
+  @ApiQuery({ name: 'entityId', required: true })
+  async getSalesQuotation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('entityId') entityId: string,
+  ) {
+    return this.salesQuotationService.findOne(this.requireEntityId(entityId), id);
+  }
+
+  @Post('quotations')
+  @ApiOperation({ summary: '建立銷售報價單' })
+  async createSalesQuotation(
+    @Body() dto: CreateSalesQuotationDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.salesQuotationService.create(dto, userId);
+  }
+
+  @Post('quotations/:id/status')
+  @ApiOperation({ summary: '更新銷售報價單狀態' })
+  @ApiQuery({ name: 'entityId', required: true })
+  async updateSalesQuotationStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('entityId') entityId: string,
+    @Body() dto: UpdateSalesQuotationStatusDto,
+  ) {
+    return this.salesQuotationService.updateStatus(
+      this.requireEntityId(entityId),
+      id,
+      dto.status,
+    );
   }
 
   /**

@@ -16,9 +16,10 @@ import { PrismaModule } from '../../common/prisma/prisma.module';
 import { NotificationModule } from '../notification/notification.module';
 import { UsersModule } from '../users/users.module';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { AuditModule } from '../../common/audit/audit.module';
 
 @Module({
-  imports: [PrismaModule, NotificationModule, UsersModule],
+  imports: [PrismaModule, NotificationModule, UsersModule, AuditModule],
   controllers: [AttendanceController, LeaveController],
   providers: [
     AttendanceService,

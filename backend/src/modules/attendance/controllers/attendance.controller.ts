@@ -23,6 +23,7 @@ import { UpsertDisasterClosureDto } from '../dto/upsert-disaster-closure.dto';
 import { OvertimeService } from '../services/overtime.service';
 import { CreateOvertimeRequestDto } from '../dto/create-overtime-request.dto';
 import { ReviewOvertimeRequestDto } from '../dto/review-overtime-request.dto';
+import { AdminAdjustAttendanceDto } from '../dto/admin-adjust-attendance.dto';
 
 @Controller('attendance')
 @UseGuards(JwtAuthGuard)
@@ -86,6 +87,16 @@ export class AttendanceController {
       employeeStatus,
       attendanceType,
     });
+  }
+
+  @Post('admin/attendance-adjustments')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
+  async adjustAdminAttendance(
+    @Request() req: any,
+    @Body() dto: AdminAdjustAttendanceDto,
+  ) {
+    return this.attendanceService.adjustAdminAttendance(req.user.id, dto);
   }
 
   @Get('admin/policies')
