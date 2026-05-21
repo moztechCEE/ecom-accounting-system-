@@ -87,6 +87,149 @@ const computeQuotationLine = (item: any = {}) => {
   }
 }
 
+const escapeHtml = (value: unknown) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+
+const buildQuotationPrintHtml = (quotation: SalesQuotation) => {
+  const itemRows = quotation.items.map((item) => {
+    const unitDiscount = item.quantity ? item.discountOriginal / item.quantity : 0
+    const line = computeQuotationLine({
+      quantity: item.quantity,
+      unitPriceOriginal: item.unitPriceOriginal,
+      unitDiscountOriginal: unitDiscount,
+      taxRate: item.taxRate,
+    })
+
+    return `
+      <tr>
+        <td>${escapeHtml(item.product?.sku || '—')}</td>
+        <td>${escapeHtml(`${item.itemName}${item.itemSpec ? ` [${item.itemSpec}]` : ''}`)}</td>
+        <td class="num">${numberFormatter(item.quantity)}</td>
+        <td class="num">${numberFormatter(item.unitPriceOriginal)}</td>
+        <td class="num">${numberFormatter(unitDiscount)}</td>
+        <td class="num">${numberFormatter(line.unitPriceWithTax)}</td>
+        <td class="num">${numberFormatter(line.subtotal)}</td>
+        <td class="num">${numberFormatter(item.taxAmountOriginal)}</td>
+        <td class="num">${numberFormatter(item.lineTotalOriginal)}</td>
+        <td class="num strong">${numberFormatter(item.lineTotalOriginal)}</td>
+      </tr>
+    `
+  }).join('')
+
+  const notes = quotation.notes
+    ? `<div class="notes">${escapeHtml(quotation.notes).replace(/\n/g, '<br />')}</div>`
+    : ''
+
+  return `<!doctype html>
+    <html lang="zh-Hant">
+      <head>
+        <meta charset="utf-8" />
+        <title>${escapeHtml(quotation.quotationNo)} 報價單</title>
+        <style>
+          @page { size: A4 landscape; margin: 12mm; }
+          * { box-sizing: border-box; }
+          body { margin: 0; color: #111827; font-family: Arial, "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+          .sheet { width: 100%; padding: 8px; background: #fff; }
+          h1 { margin: 0 0 14px; text-align: center; font-size: 28px; letter-spacing: 0.35em; }
+          .top { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 10px; }
+          table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+          th, td { border: 1px solid #4b5563; padding: 7px 8px; font-size: 12px; line-height: 1.35; vertical-align: middle; word-break: break-word; }
+          th { background: #f8fafc; font-weight: 700; text-align: center; }
+          .label { width: 110px; text-align: right; }
+          .amount { margin: 10px 0 14px; border: 2px solid #111827; padding: 8px 12px; font-size: 18px; font-weight: 700; }
+          .amount span { float: right; }
+          .num { text-align: right; font-variant-numeric: tabular-nums; }
+          .strong { font-weight: 700; }
+          .notes { margin-top: 14px; font-size: 13px; white-space: normal; }
+          .actions { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 8px; }
+          .actions button { border: 1px solid #111827; border-radius: 8px; background: #111827; color: #fff; padding: 10px 14px; font-size: 14px; cursor: pointer; }
+          @media print { .actions { display: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="sheet">
+          <h1>報價單</h1>
+          <div class="top">
+            <table>
+              <tbody>
+                <tr><th class="label">報價單號</th><td>${escapeHtml(quotation.quotationNo)}</td></tr>
+                <tr><th class="label">客戶名</th><td>${escapeHtml(quotation.customer?.name || '—')}</td></tr>
+                <tr><th class="label">參考</th><td>${escapeHtml(quotation.reference || '—')}</td></tr>
+                <tr><th class="label">TEL/FAX</th><td>${escapeHtml(quotation.customer?.phone || '')} /</td></tr>
+                <tr><th class="label">有效期間</th><td>${quotation.validUntil ? dayjs(quotation.validUntil).format('YYYY/MM/DD') : '—'}</td></tr>
+              </tbody>
+            </table>
+            <table>
+              <tbody>
+                <tr><th class="label">公司名稱</th><td>萬博創意科技有限公司</td></tr>
+                <tr><th class="label">地址</th><td>709臺南市安南區工業五路26號</td></tr>
+                <tr><th class="label">承辦人</th><td>${escapeHtml(quotation.ownerName || '—')}</td></tr>
+                <tr><th class="label">TEL</th><td>06-3843492</td></tr>
+                <tr><th class="label">支付條件</th><td>${escapeHtml(quotation.paymentTerms || '—')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="amount">
+            報價單：${numberFormatter(quotation.totalAmountOriginal)}
+            <span>( ${numberFormatter(quotation.totalAmountOriginal)} ) 包含VAT</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>品項編碼</th>
+                <th>品項名稱(規格)</th>
+                <th>數量</th>
+                <th>單價</th>
+                <th>折扣</th>
+                <th>單價(含稅)</th>
+                <th>稅前價格</th>
+                <th>營業稅</th>
+                <th>含稅價格</th>
+                <th>總價</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemRows}
+              <tr>
+                <td class="strong" colspan="2">合計</td>
+                <td></td>
+                <td></td>
+                <td class="num strong">${numberFormatter(quotation.discountAmountOriginal)}</td>
+                <td></td>
+                <td class="num strong">${numberFormatter(quotation.subtotalOriginal - quotation.discountAmountOriginal)}</td>
+                <td class="num strong">${numberFormatter(quotation.taxAmountOriginal)}</td>
+                <td class="num strong">${numberFormatter(quotation.totalAmountOriginal)}</td>
+                <td class="num strong">${numberFormatter(quotation.totalAmountOriginal)}</td>
+              </tr>
+            </tbody>
+          </table>
+          ${notes}
+        </div>
+        <div class="actions">
+          <button onclick="window.print()">列印 / 另存 PDF</button>
+        </div>
+      </body>
+    </html>`
+}
+
+const writeQuotationPrintWindow = (
+  printWindow: Window,
+  quotation: SalesQuotation,
+) => {
+  printWindow.document.open()
+  printWindow.document.write(buildQuotationPrintHtml(quotation))
+  printWindow.document.close()
+  printWindow.focus()
+  window.setTimeout(() => {
+    printWindow.print()
+  }, 300)
+}
+
 const SalesQuotationsPage: React.FC = () => {
   const [quotations, setQuotations] = useState<SalesQuotation[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -315,8 +458,30 @@ const SalesQuotationsPage: React.FC = () => {
     XLSX.writeFile(wb, `sales_quotations_${dayjs().format('YYYYMMDD')}.xlsx`)
   }
 
-  const handlePrint = () => {
-    window.print()
+  const handlePrintQuotation = async (
+    quotation: SalesQuotation,
+    intent: 'print' | 'pdf' = 'print',
+  ) => {
+    const printWindow = window.open('', '_blank', 'width=1180,height=900')
+    if (!printWindow) {
+      message.error('瀏覽器阻擋了列印視窗，請允許此網站開啟彈出式視窗')
+      return
+    }
+
+    printWindow.document.write('<p style="font-family: sans-serif; padding: 24px;">正在準備報價單...</p>')
+
+    try {
+      const detail = quotation.items?.length
+        ? quotation
+        : await salesService.findQuotation(quotation.id)
+      writeQuotationPrintWindow(printWindow, detail)
+      if (intent === 'pdf') {
+        message.info('請在列印視窗選擇「另存為 PDF」')
+      }
+    } catch (error: any) {
+      printWindow.close()
+      message.error(error?.response?.data?.message || '無法產生列印內容')
+    }
   }
 
   const columns = [
@@ -391,6 +556,12 @@ const SalesQuotationsPage: React.FC = () => {
         <Space wrap>
           <Button size="small" icon={<FileTextOutlined />} onClick={() => void openPreview(quotation)}>
             查詢
+          </Button>
+          <Button size="small" icon={<PrinterOutlined />} onClick={() => void handlePrintQuotation(quotation, 'print')}>
+            列印
+          </Button>
+          <Button size="small" icon={<DownloadOutlined />} onClick={() => void handlePrintQuotation(quotation, 'pdf')}>
+            PDF
           </Button>
           {quotation.status === 'draft' ? (
             <Button size="small" onClick={() => void updateStatus(quotation, 'pending')}>
@@ -759,7 +930,8 @@ const SalesQuotationsPage: React.FC = () => {
         footer={[
           <Button key="close" onClick={() => setPreviewOpen(false)}>關閉</Button>,
           <Button key="sent" onClick={() => selectedQuotation && void updateStatus(selectedQuotation, 'sent')}>標記已送出</Button>,
-          <Button key="print" type="primary" icon={<PrinterOutlined />} onClick={handlePrint}>列印</Button>,
+          <Button key="pdf" icon={<DownloadOutlined />} onClick={() => selectedQuotation && void handlePrintQuotation(selectedQuotation, 'pdf')}>存成 PDF</Button>,
+          <Button key="print" type="primary" icon={<PrinterOutlined />} onClick={() => selectedQuotation && void handlePrintQuotation(selectedQuotation, 'print')}>列印</Button>,
         ]}
       >
         {selectedQuotation ? (
