@@ -7,6 +7,7 @@ export interface Customer {
   email?: string
   phone?: string
   phoneExtension?: string
+  mobile?: string
   taxId?: string
   type: 'individual' | 'company'
   contactPerson?: string

@@ -352,6 +352,7 @@ model Customer {
   email            String?
   phone            String?
   phoneExtension   String?  @map("phone_extension")
+  mobile           String?
   taxId            String?  @map("tax_id")
   type             String   @default("individual") // individual, company
   contactPerson    String?  @map("contact_person")

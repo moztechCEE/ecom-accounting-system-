@@ -90,6 +90,7 @@ const CustomersPage: React.FC = () => {
         customer.email,
         customer.phone,
         customer.phoneExtension,
+        customer.mobile,
         customer.taxId,
         customer.contactPerson,
         customer.address,
@@ -159,6 +160,16 @@ const CustomersPage: React.FC = () => {
 
   const columns = [
     {
+      title: '客戶編號',
+      key: 'code',
+      width: 140,
+      render: (_: unknown, record: Customer) => (
+        <div className="font-medium text-slate-900">
+          {record.code || '系統待產生'}
+        </div>
+      ),
+    },
+    {
       title: '客戶',
       key: 'customer',
       render: (_: unknown, record: Customer) => (
@@ -166,8 +177,6 @@ const CustomersPage: React.FC = () => {
           <div className="font-medium text-slate-900">{record.name}</div>
           <div className="text-xs text-slate-400">
             {record.email || '未填 Email'}
-            {record.phone ? ` · ${record.phone}` : ''}
-            {record.phoneExtension ? ` #${record.phoneExtension}` : ''}
           </div>
           <div className="text-xs text-slate-400">
             {record.contactPerson ? `聯絡人：${record.contactPerson}` : '未填聯絡人'}
@@ -202,10 +211,22 @@ const CustomersPage: React.FC = () => {
             {record.type === 'company' ? 'B2B / 公司' : 'B2C / 個人'}
           </Tag>
           <span className="text-xs text-slate-400">
-            編碼：{record.code || '系統待產生'}
-          </span>
-          <span className="text-xs text-slate-400">
             {record.taxId || '未填統編'}
+          </span>
+        </Space>
+      ),
+    },
+    {
+      title: '聯絡電話',
+      key: 'contactPhones',
+      render: (_: unknown, record: Customer) => (
+        <Space direction="vertical" size={2}>
+          <span className="text-sm text-slate-700">
+            電話：{record.phone || '未填'}
+            {record.phoneExtension ? ` #${record.phoneExtension}` : ''}
+          </span>
+          <span className="text-sm text-slate-700">
+            手機：{record.mobile || '未填'}
           </span>
         </Space>
       ),
@@ -400,12 +421,15 @@ const CustomersPage: React.FC = () => {
           </Form.Item>
           <div className="grid gap-3 md:grid-cols-[1fr_160px]">
             <Form.Item name="phone" label="電話">
-              <Input placeholder="市話或主要聯絡電話" />
+              <Input placeholder="市話，例如 02-12345678" />
             </Form.Item>
             <Form.Item name="phoneExtension" label="分機">
               <Input placeholder="例如 123" />
             </Form.Item>
           </div>
+          <Form.Item name="mobile" label="手機">
+            <Input placeholder="手機，例如 0912-345-678" />
+          </Form.Item>
           <Form.Item
             name="address"
             label="地址"

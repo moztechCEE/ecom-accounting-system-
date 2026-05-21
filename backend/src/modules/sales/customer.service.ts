@@ -299,6 +299,7 @@ export class CustomerService {
       'email',
       'phone',
       'phoneExtension',
+      'mobile',
       'taxId',
       'contactPerson',
       'address',
