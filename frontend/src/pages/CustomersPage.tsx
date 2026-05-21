@@ -41,6 +41,7 @@ const CustomersPage: React.FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form] = Form.useForm()
+  const watchedTaxId = Form.useWatch('taxId', form)
 
   const fetchCustomers = async () => {
     setLoading(true)
@@ -85,9 +86,13 @@ const CustomersPage: React.FC = () => {
 
       return [
         customer.name,
+        customer.code,
         customer.email,
         customer.phone,
+        customer.phoneExtension,
         customer.taxId,
+        customer.contactPerson,
+        customer.address,
         customer.primarySourceLabel,
         customer.primarySourceBrand,
         ...sourceLabels,
@@ -97,6 +102,26 @@ const CustomersPage: React.FC = () => {
         .some((value) => String(value).toLowerCase().includes(keyword))
     })
   }, [customers, searchText, sourceFilter])
+
+  useEffect(() => {
+    if (!isModalVisible) {
+      return
+    }
+
+    const normalizedTaxId = String(watchedTaxId || '').replace(/\D/g, '')
+    const currentCode = form.getFieldValue('code')
+
+    if (normalizedTaxId) {
+      if (currentCode !== normalizedTaxId) {
+        form.setFieldsValue({ code: normalizedTaxId, type: 'company' })
+      }
+      return
+    }
+
+    if (!editingId && currentCode) {
+      form.setFieldsValue({ code: undefined })
+    }
+  }, [editingId, form, isModalVisible, watchedTaxId])
 
   const handleCreateOrUpdate = async (values: Partial<Customer>) => {
     try {
@@ -142,6 +167,10 @@ const CustomersPage: React.FC = () => {
           <div className="text-xs text-slate-400">
             {record.email || '未填 Email'}
             {record.phone ? ` · ${record.phone}` : ''}
+            {record.phoneExtension ? ` #${record.phoneExtension}` : ''}
+          </div>
+          <div className="text-xs text-slate-400">
+            {record.contactPerson ? `聯絡人：${record.contactPerson}` : '未填聯絡人'}
           </div>
         </div>
       ),
@@ -172,6 +201,9 @@ const CustomersPage: React.FC = () => {
           <Tag color={record.type === 'company' ? 'purple' : 'green'}>
             {record.type === 'company' ? 'B2B / 公司' : 'B2C / 個人'}
           </Tag>
+          <span className="text-xs text-slate-400">
+            編碼：{record.code || '系統待產生'}
+          </span>
           <span className="text-xs text-slate-400">
             {record.taxId || '未填統編'}
           </span>
@@ -324,28 +356,62 @@ const CustomersPage: React.FC = () => {
         open={isModalVisible}
         onCancel={() => setIsModalVisible(false)}
         onOk={() => form.submit()}
+        okText={editingId ? '儲存變更' : '建立客戶'}
+        cancelText="取消"
+        width={760}
       >
         <Form form={form} layout="vertical" onFinish={handleCreateOrUpdate}>
           <Form.Item name="name" label="客戶名稱" rules={[{ required: true }]}>
             <Input prefix={<UserOutlined />} placeholder="例如: 王小明 或 某某公司" />
           </Form.Item>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Form.Item
+              name="code"
+              label="客戶/供應商編碼"
+              extra="有統編時會自動同步；無統編時建立後由系統產生個人編號。"
+            >
+              <Input readOnly placeholder="系統自動帶入" />
+            </Form.Item>
+            <Form.Item
+              name="taxId"
+              label="統一編號"
+              extra="開立 B2B 發票時會帶入買受人統編。"
+              normalize={(value) => String(value || '').replace(/\D/g, '').slice(0, 8)}
+            >
+              <Input inputMode="numeric" maxLength={8} placeholder="例如 12345678" />
+            </Form.Item>
+          </div>
           <Form.Item name="type" label="類型" initialValue="individual">
             <Select>
               <Option value="individual">個人 / B2C</Option>
               <Option value="company">公司 / B2B</Option>
             </Select>
           </Form.Item>
-          <Form.Item name="email" label="Email">
-            <Input />
+          <Form.Item name="contactPerson" label="聯絡人">
+            <Input placeholder="公司客戶的對接窗口，例如：王小姐" />
           </Form.Item>
-          <Form.Item name="phone" label="電話">
-            <Input />
+          <Form.Item
+            name="email"
+            label="Email"
+            rules={[{ type: 'email', message: 'Email 格式不正確' }]}
+            extra="需要寄送電子發票或對帳資料時會優先使用這個信箱。"
+          >
+            <Input placeholder="invoice@example.com" />
           </Form.Item>
-          <Form.Item name="taxId" label="統一編號">
-            <Input />
-          </Form.Item>
-          <Form.Item name="address" label="地址">
-            <Input.TextArea rows={2} />
+          <div className="grid gap-3 md:grid-cols-[1fr_160px]">
+            <Form.Item name="phone" label="電話">
+              <Input placeholder="市話或主要聯絡電話" />
+            </Form.Item>
+            <Form.Item name="phoneExtension" label="分機">
+              <Input placeholder="例如 123" />
+            </Form.Item>
+          </div>
+          <Form.Item
+            name="address"
+            label="地址"
+            rules={[{ required: true, message: '請填入地址' }]}
+          >
+            <Input.TextArea rows={2} placeholder="發票、報價單或出貨聯絡可使用的地址" />
           </Form.Item>
           <div className="rounded-2xl bg-slate-50 p-4">
             <div className="mb-3 text-sm font-semibold text-slate-900">B2B 月結 / 應收條件</div>

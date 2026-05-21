@@ -66,37 +66,45 @@ export class CustomerService {
   }
 
   async create(entityId: string, data: Prisma.CustomerCreateInput) {
-    const paymentTermDays = this.resolvePaymentTermDays(data);
+    const normalizedData = await this.prepareCustomerData(entityId, data);
+    const paymentTermDays = this.resolvePaymentTermDays(normalizedData);
+    const createData = {
+      ...normalizedData,
+      paymentTermDays,
+      isMonthlyBilling: Boolean(normalizedData.isMonthlyBilling || paymentTermDays > 0),
+      entity: { connect: { id: entityId } },
+    } as Prisma.CustomerCreateInput;
+
     return this.prisma.customer.create({
-      data: {
-        ...data,
-        paymentTermDays,
-        isMonthlyBilling: Boolean(data.isMonthlyBilling || paymentTermDays > 0),
-        entity: { connect: { id: entityId } },
-      },
+      data: createData,
     });
   }
 
   async update(entityId: string, id: string, data: Prisma.CustomerUpdateInput) {
     const existing = await this.prisma.customer.findFirst({
       where: { id, entityId },
-      select: { id: true },
+      select: { id: true, code: true },
     });
     if (!existing) {
       return null;
     }
-    const paymentTermDays = this.resolvePaymentTermDays(data);
+    const normalizedData = await this.prepareCustomerData(entityId, data, existing);
+    const paymentTermDays = this.resolvePaymentTermDays(normalizedData);
+    const updateData = {
+      ...normalizedData,
+      ...(paymentTermDays !== undefined
+        ? {
+            paymentTermDays,
+            isMonthlyBilling: Boolean(
+              normalizedData.isMonthlyBilling || paymentTermDays > 0,
+            ),
+          }
+        : {}),
+    } as Prisma.CustomerUpdateInput;
+
     return this.prisma.customer.update({
       where: { id },
-      data: {
-        ...data,
-        ...(paymentTermDays !== undefined
-          ? {
-              paymentTermDays,
-              isMonthlyBilling: Boolean(data.isMonthlyBilling || paymentTermDays > 0),
-            }
-          : {}),
-      },
+      data: updateData,
     });
   }
 
@@ -277,6 +285,81 @@ export class CustomerService {
     return ['萬魔未來工學院', '萬物未來工學院', '1SHOP', 'SHOPLINE'].some(
       (keyword) => value.toUpperCase().includes(keyword.toUpperCase()),
     );
+  }
+
+  private async prepareCustomerData(
+    entityId: string,
+    data: Prisma.CustomerCreateInput | Prisma.CustomerUpdateInput,
+    existing?: { code: string | null },
+  ) {
+    const normalized = { ...data } as Record<string, any>;
+
+    for (const key of [
+      'name',
+      'email',
+      'phone',
+      'phoneExtension',
+      'taxId',
+      'contactPerson',
+      'address',
+      'statementEmail',
+      'collectionOwner',
+      'collectionNote',
+    ]) {
+      if (typeof normalized[key] === 'string') {
+        const value = normalized[key].trim();
+        normalized[key] = value || null;
+      }
+    }
+
+    const taxId = this.normalizeTaxId(normalized.taxId);
+    if (taxId) {
+      normalized.taxId = taxId;
+      normalized.code = taxId;
+      if (!normalized.type) {
+        normalized.type = 'company';
+      }
+      return normalized;
+    }
+
+    if (normalized.taxId !== undefined) {
+      normalized.taxId = null;
+    }
+
+    if (typeof normalized.code === 'string') {
+      const code = normalized.code.trim();
+      normalized.code = code || null;
+    }
+
+    if (!normalized.code && !existing?.code) {
+      normalized.code = await this.generatePersonalCustomerCode(entityId);
+    }
+
+    return normalized;
+  }
+
+  private normalizeTaxId(value: unknown) {
+    const taxId = String(value || '').replace(/\D/g, '');
+    return taxId || null;
+  }
+
+  private async generatePersonalCustomerCode(entityId: string) {
+    const customers = await this.prisma.customer.findMany({
+      where: {
+        entityId,
+        code: {
+          startsWith: 'P',
+        },
+      },
+      select: { code: true },
+    });
+
+    const maxSequence = customers.reduce((max, customer) => {
+      const match = customer.code?.match(/^P(\d+)$/);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+
+    return `P${String(maxSequence + 1).padStart(5, '0')}`;
   }
 
   private extractMetadata(notes?: string | null) {

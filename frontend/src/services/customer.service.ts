@@ -2,11 +2,14 @@ import api from './api'
 
 export interface Customer {
   id: string
+  code?: string
   name: string
   email?: string
   phone?: string
+  phoneExtension?: string
   taxId?: string
   type: 'individual' | 'company'
+  contactPerson?: string
   address?: string
   paymentTerms?: string
   paymentTermDays?: number

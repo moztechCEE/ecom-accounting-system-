@@ -347,11 +347,14 @@ model SalesChannel {
 model Customer {
   id               String   @id @default(uuid())
   entityId         String   @map("entity_id")
+  code             String?
   name             String
   email            String?
   phone            String?
+  phoneExtension   String?  @map("phone_extension")
   taxId            String?  @map("tax_id")
   type             String   @default("individual") // individual, company
+  contactPerson    String?  @map("contact_person")
   address          String?
   paymentTerms     String?  @map("payment_terms") // prepaid, net30, net45, custom
   paymentTermDays  Int      @default(0) @map("payment_term_days")
@@ -371,6 +374,7 @@ model Customer {
   arInvoices      ArInvoice[]
 
   @@index([entityId])
+  @@index([entityId, code])
   @@map("customers")
 }
 
