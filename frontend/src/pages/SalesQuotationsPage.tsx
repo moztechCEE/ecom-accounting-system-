@@ -57,6 +57,36 @@ type StatusFilter = 'all' | SalesQuotation['status']
 const currencyFormatter = (value?: number | string | null) =>
   `NT$ ${Number(value || 0).toLocaleString()}`
 
+const numberFormatter = (value?: number | string | null) =>
+  Number(value || 0).toLocaleString('zh-TW', {
+    maximumFractionDigits: 2,
+  })
+
+const toNumber = (value: unknown) => Number(value || 0)
+
+const computeQuotationLine = (item: any = {}) => {
+  const quantity = toNumber(item.quantity)
+  const unitPrice = toNumber(item.unitPriceOriginal)
+  const unitDiscount = toNumber(item.unitDiscountOriginal)
+  const taxRate = toNumber(item.taxRate ?? 5)
+  const netUnitPrice = Math.max(unitPrice - unitDiscount, 0)
+  const unitPriceWithTax = netUnitPrice * (1 + taxRate / 100)
+  const subtotal = netUnitPrice * quantity
+  const taxAmount = subtotal * (taxRate / 100)
+  const total = subtotal + taxAmount
+
+  return {
+    quantity,
+    unitPrice,
+    unitDiscount,
+    netUnitPrice,
+    unitPriceWithTax,
+    subtotal,
+    taxAmount,
+    total,
+  }
+}
+
 const SalesQuotationsPage: React.FC = () => {
   const [quotations, setQuotations] = useState<SalesQuotation[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -74,6 +104,7 @@ const SalesQuotationsPage: React.FC = () => {
   const [form] = Form.useForm()
   const [customerForm] = Form.useForm()
   const watchedCustomerTaxId = Form.useWatch('taxId', customerForm)
+  const watchedItems = Form.useWatch('items', form) || []
 
   const fetchData = async () => {
     setLoading(true)
@@ -140,6 +171,7 @@ const SalesQuotationsPage: React.FC = () => {
         {
           quantity: 1,
           unitPriceOriginal: 0,
+          unitDiscountOriginal: 0,
           discountOriginal: 0,
           taxRate: 5,
         },
@@ -200,6 +232,7 @@ const SalesQuotationsPage: React.FC = () => {
     form.setFieldValue(['items', fieldName, 'itemName'], product.name)
     form.setFieldValue(['items', fieldName, 'itemSpec'], product.modelNumber || product.sku)
     form.setFieldValue(['items', fieldName, 'unitPriceOriginal'], Number(product.salesPrice || 0))
+    form.setFieldValue(['items', fieldName, 'unitDiscountOriginal'], 0)
   }
 
   const handleCreate = async () => {
@@ -223,7 +256,8 @@ const SalesQuotationsPage: React.FC = () => {
           itemSpec: item.itemSpec,
           quantity: Number(item.quantity || 0),
           unitPriceOriginal: Number(item.unitPriceOriginal || 0),
-          discountOriginal: Number(item.discountOriginal || 0),
+          discountOriginal:
+            Number(item.unitDiscountOriginal || 0) * Number(item.quantity || 0),
           taxRate: Number(item.taxRate ?? 5),
         })),
       }
@@ -452,7 +486,7 @@ const SalesQuotationsPage: React.FC = () => {
         title="建立報價單"
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={980}
+        width={1320}
         extra={
           <Space>
             <Button onClick={() => setDrawerOpen(false)}>取消</Button>
@@ -530,16 +564,27 @@ const SalesQuotationsPage: React.FC = () => {
 
           <div className="mb-3 mt-4 flex items-center justify-between">
             <div className="font-semibold text-slate-900">報價明細</div>
-            <Text type="secondary">稅額會依每列稅率自動由後端計算</Text>
+            <Text type="secondary">折扣填單價折扣，系統會自動換算整列金額</Text>
           </div>
           <Form.List name="items">
             {(fields, { add, remove }) => (
-              <div className="space-y-3">
-                {fields.map((field) => (
-                  <div key={field.key} className="rounded-lg border border-slate-200 p-4">
-                    <Row gutter={12}>
-                      <Col span={7}>
-                        <Form.Item name={[field.name, 'productId']} label="品項">
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <div className="grid min-w-[1580px] grid-cols-[190px_220px_150px_90px_120px_120px_130px_130px_130px_130px_100px_84px] border-b border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700">
+                  {['品項', '品項名稱', '規格', '數量', '單價', '折扣(單價)', '單價(含稅)', '稅前價格', '含稅價格', '總價', '營業稅%', ''].map((label) => (
+                    <div key={label || 'actions'} className="px-3 py-2">
+                      {label}
+                    </div>
+                  ))}
+                </div>
+                <div className="min-w-[1580px] divide-y divide-slate-100">
+                  {fields.map((field) => {
+                    const line = computeQuotationLine(watchedItems?.[field.name])
+                    return (
+                      <div
+                        key={field.key}
+                        className="grid grid-cols-[190px_220px_150px_90px_120px_120px_130px_130px_130px_130px_100px_84px] items-start gap-0 px-3 py-3"
+                      >
+                        <Form.Item name={[field.name, 'productId']} className="!mb-0 pr-2">
                           <Select
                             allowClear
                             showSearch
@@ -549,46 +594,54 @@ const SalesQuotationsPage: React.FC = () => {
                             onChange={(value) => value && handleProductPicked(field.name, value)}
                           />
                         </Form.Item>
-                      </Col>
-                      <Col span={7}>
-                        <Form.Item name={[field.name, 'itemName']} label="品項名稱" rules={[{ required: true, message: '請輸入品項名稱' }]}>
+                        <Form.Item name={[field.name, 'itemName']} className="!mb-0 pr-2" rules={[{ required: true, message: '請輸入品項名稱' }]}>
                           <Input />
                         </Form.Item>
-                      </Col>
-                      <Col span={4}>
-                        <Form.Item name={[field.name, 'itemSpec']} label="規格">
+                        <Form.Item name={[field.name, 'itemSpec']} className="!mb-0 pr-2">
                           <Input />
                         </Form.Item>
-                      </Col>
-                      <Col span={3}>
-                        <Form.Item name={[field.name, 'quantity']} label="數量" rules={[{ required: true }]}>
+                        <Form.Item name={[field.name, 'quantity']} className="!mb-0 pr-2" rules={[{ required: true }]}>
                           <InputNumber className="w-full" min={0.01} step={1} />
                         </Form.Item>
-                      </Col>
-                      <Col span={3}>
-                        <Form.Item name={[field.name, 'unitPriceOriginal']} label="單價" rules={[{ required: true }]}>
+                        <Form.Item name={[field.name, 'unitPriceOriginal']} className="!mb-0 pr-2" rules={[{ required: true }]}>
                           <InputNumber className="w-full" min={0} />
                         </Form.Item>
-                      </Col>
-                      <Col span={4}>
-                        <Form.Item name={[field.name, 'discountOriginal']} label="折扣">
-                          <InputNumber className="w-full" min={0} />
+                        <Form.Item name={[field.name, 'unitDiscountOriginal']} className="!mb-0 pr-2">
+                          <InputNumber
+                            className="w-full"
+                            min={0}
+                            max={line.unitPrice}
+                            placeholder="0"
+                          />
                         </Form.Item>
-                      </Col>
-                      <Col span={4}>
-                        <Form.Item name={[field.name, 'taxRate']} label="營業稅%">
+                        <div className="pr-2 pt-1 text-right font-mono text-slate-700">
+                          {numberFormatter(line.unitPriceWithTax)}
+                        </div>
+                        <div className="pr-2 pt-1 text-right font-mono text-slate-700">
+                          {numberFormatter(line.subtotal)}
+                        </div>
+                        <div className="pr-2 pt-1 text-right font-mono text-slate-700">
+                          {numberFormatter(line.total)}
+                        </div>
+                        <div className="pr-2 pt-1 text-right font-mono font-semibold text-slate-900">
+                          {numberFormatter(line.total)}
+                        </div>
+                        <Form.Item name={[field.name, 'taxRate']} className="!mb-0 pr-2">
                           <InputNumber className="w-full" min={0} step={1} />
                         </Form.Item>
-                      </Col>
-                      <Col span={16} className="flex items-end justify-end">
                         <Button danger onClick={() => remove(field.name)} disabled={fields.length === 1}>
                           移除
                         </Button>
-                      </Col>
-                    </Row>
-                  </div>
-                ))}
-                <Button block icon={<PlusOutlined />} onClick={() => add({ quantity: 1, unitPriceOriginal: 0, discountOriginal: 0, taxRate: 5 })}>
+                      </div>
+                    )
+                  })}
+                </div>
+                <Button
+                  block
+                  className="!rounded-none border-x-0 border-b-0"
+                  icon={<PlusOutlined />}
+                  onClick={() => add({ quantity: 1, unitPriceOriginal: 0, unitDiscountOriginal: 0, discountOriginal: 0, taxRate: 5 })}
+                >
                   新增明細
                 </Button>
               </div>
@@ -752,21 +805,35 @@ const QuotationPreview: React.FC<{ quotation: SalesQuotation }> = ({ quotation }
             <th className="border border-slate-400 bg-slate-50 p-2">品項名稱(規格)</th>
             <th className="border border-slate-400 bg-slate-50 p-2">數量</th>
             <th className="border border-slate-400 bg-slate-50 p-2">單價</th>
+            <th className="border border-slate-400 bg-slate-50 p-2">折扣</th>
+            <th className="border border-slate-400 bg-slate-50 p-2">單價(含稅)</th>
             <th className="border border-slate-400 bg-slate-50 p-2">稅前價格</th>
             <th className="border border-slate-400 bg-slate-50 p-2">營業稅</th>
+            <th className="border border-slate-400 bg-slate-50 p-2">含稅價格</th>
+            <th className="border border-slate-400 bg-slate-50 p-2">總價</th>
           </tr>
         </thead>
         <tbody>
           {quotation.items.map((item) => {
-            const beforeTax = item.quantity * item.unitPriceOriginal - item.discountOriginal
+            const unitDiscount = item.quantity ? item.discountOriginal / item.quantity : 0
+            const line = computeQuotationLine({
+              quantity: item.quantity,
+              unitPriceOriginal: item.unitPriceOriginal,
+              unitDiscountOriginal: unitDiscount,
+              taxRate: item.taxRate,
+            })
             return (
               <tr key={item.id}>
                 <td className="border border-slate-300 p-2">{item.product?.sku || '—'}</td>
                 <td className="border border-slate-300 p-2">{item.itemName}{item.itemSpec ? ` [${item.itemSpec}]` : ''}</td>
                 <td className="border border-slate-300 p-2 text-right">{Number(item.quantity).toLocaleString()}</td>
                 <td className="border border-slate-300 p-2 text-right">{Number(item.unitPriceOriginal).toLocaleString()}</td>
-                <td className="border border-slate-300 p-2 text-right">{Number(beforeTax).toLocaleString()}</td>
+                <td className="border border-slate-300 p-2 text-right">{Number(unitDiscount).toLocaleString()}</td>
+                <td className="border border-slate-300 p-2 text-right">{numberFormatter(line.unitPriceWithTax)}</td>
+                <td className="border border-slate-300 p-2 text-right">{numberFormatter(line.subtotal)}</td>
                 <td className="border border-slate-300 p-2 text-right">{Number(item.taxAmountOriginal).toLocaleString()}</td>
+                <td className="border border-slate-300 p-2 text-right">{numberFormatter(item.lineTotalOriginal)}</td>
+                <td className="border border-slate-300 p-2 text-right font-semibold">{numberFormatter(item.lineTotalOriginal)}</td>
               </tr>
             )
           })}
@@ -774,8 +841,12 @@ const QuotationPreview: React.FC<{ quotation: SalesQuotation }> = ({ quotation }
             <td className="border border-slate-300 p-2 text-center font-bold" colSpan={2}>合計</td>
             <td className="border border-slate-300 p-2" />
             <td className="border border-slate-300 p-2" />
+            <td className="border border-slate-300 p-2 text-right font-bold">{Number(quotation.discountAmountOriginal).toLocaleString()}</td>
+            <td className="border border-slate-300 p-2" />
             <td className="border border-slate-300 p-2 text-right font-bold">{Number(quotation.subtotalOriginal - quotation.discountAmountOriginal).toLocaleString()}</td>
             <td className="border border-slate-300 p-2 text-right font-bold">{Number(quotation.taxAmountOriginal).toLocaleString()}</td>
+            <td className="border border-slate-300 p-2 text-right font-bold">{Number(quotation.totalAmountOriginal).toLocaleString()}</td>
+            <td className="border border-slate-300 p-2 text-right font-bold">{Number(quotation.totalAmountOriginal).toLocaleString()}</td>
           </tr>
         </tbody>
       </table>
