@@ -3,6 +3,7 @@ import {
   Button,
   Col,
   DatePicker,
+  Divider,
   Drawer,
   Empty,
   Form,
@@ -66,8 +67,13 @@ const SalesQuotationsPage: React.FC = () => {
   const [selectedQuotation, setSelectedQuotation] = useState<SalesQuotation | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [searchText, setSearchText] = useState('')
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [customerModalOpen, setCustomerModalOpen] = useState(false)
+  const [customerSubmitting, setCustomerSubmitting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [form] = Form.useForm()
+  const [customerForm] = Form.useForm()
+  const watchedCustomerTaxId = Form.useWatch('taxId', customerForm)
 
   const fetchData = async () => {
     setLoading(true)
@@ -107,7 +113,14 @@ const SalesQuotationsPage: React.FC = () => {
 
   const customerOptions = customers.map((customer) => ({
     value: customer.id,
-    label: `${customer.name}${customer.taxId ? ` · ${customer.taxId}` : ''}`,
+    label: [
+      customer.code,
+      customer.name,
+      customer.taxId,
+      customer.phone || customer.mobile,
+    ]
+      .filter(Boolean)
+      .join(' · '),
   }))
 
   const productOptions = products.map((product) => ({
@@ -133,6 +146,52 @@ const SalesQuotationsPage: React.FC = () => {
       ],
     })
     setDrawerOpen(true)
+  }
+
+  useEffect(() => {
+    if (!customerModalOpen) {
+      return
+    }
+
+    const normalizedTaxId = String(watchedCustomerTaxId || '').replace(/\D/g, '')
+    const currentCode = customerForm.getFieldValue('code')
+    if (normalizedTaxId) {
+      if (currentCode !== normalizedTaxId) {
+        customerForm.setFieldsValue({ code: normalizedTaxId, type: 'company' })
+      }
+      return
+    }
+    if (currentCode) {
+      customerForm.setFieldsValue({ code: undefined })
+    }
+  }, [customerForm, customerModalOpen, watchedCustomerTaxId])
+
+  const openCustomerModal = () => {
+    customerForm.resetFields()
+    customerForm.setFieldsValue({
+      name: customerSearch.trim(),
+      type: 'individual',
+    })
+    setCustomerModalOpen(true)
+  }
+
+  const handleInlineCustomerCreate = async () => {
+    try {
+      const values = await customerForm.validateFields()
+      setCustomerSubmitting(true)
+      const created = await customerService.create(values)
+      setCustomers((current) => [created, ...current])
+      form.setFieldValue('customerId', created.id)
+      setCustomerModalOpen(false)
+      customerForm.resetFields()
+      setCustomerSearch('')
+      message.success('客戶已建立並帶入報價單')
+    } catch (error: any) {
+      if (error?.errorFields) return
+      message.error(error?.response?.data?.message || '建立客戶失敗')
+    } finally {
+      setCustomerSubmitting(false)
+    }
   }
 
   const handleProductPicked = (fieldName: number, productId: string) => {
@@ -422,7 +481,29 @@ const SalesQuotationsPage: React.FC = () => {
             </Col>
             <Col span={12}>
               <Form.Item name="customerId" label="客戶" rules={[{ required: true, message: '請選擇客戶' }]}>
-                <Select showSearch optionFilterProp="label" options={customerOptions} placeholder="選擇客戶" />
+                <Select
+                  showSearch
+                  optionFilterProp="label"
+                  options={customerOptions}
+                  placeholder="選擇客戶"
+                  onSearch={setCustomerSearch}
+                  notFoundContent={<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="找不到客戶" />}
+                  dropdownRender={(menu) => (
+                    <>
+                      {menu}
+                      <Divider className="!my-2" />
+                      <Button
+                        type="text"
+                        block
+                        icon={<PlusOutlined />}
+                        className="!justify-start"
+                        onClick={openCustomerModal}
+                      >
+                        新增客戶資訊
+                      </Button>
+                    </>
+                  )}
+                />
               </Form.Item>
             </Col>
             <Col span={6}>
@@ -528,6 +609,85 @@ const SalesQuotationsPage: React.FC = () => {
           </Row>
         </Form>
       </Drawer>
+
+      <Modal
+        title="新增客戶資訊"
+        open={customerModalOpen}
+        onCancel={() => setCustomerModalOpen(false)}
+        onOk={() => void handleInlineCustomerCreate()}
+        okText="建立並帶入"
+        cancelText="取消"
+        confirmLoading={customerSubmitting}
+        width={720}
+      >
+        <Form form={customerForm} layout="vertical">
+          <Form.Item name="name" label="客戶名稱" rules={[{ required: true, message: '請輸入客戶名稱' }]}>
+            <Input placeholder="例如：王小明 或 某某公司" />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item
+                name="code"
+                label="客戶/供應商編碼"
+                extra="有統編時會自動同步；無統編時建立後由系統產生個人編號。"
+              >
+                <Input readOnly placeholder="系統自動帶入" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="taxId"
+                label="統一編號"
+                normalize={(value) => String(value || '').replace(/\D/g, '').slice(0, 8)}
+              >
+                <Input inputMode="numeric" maxLength={8} placeholder="例如 12345678" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item name="type" label="類型" initialValue="individual">
+                <Select
+                  options={[
+                    { value: 'individual', label: '個人 / B2C' },
+                    { value: 'company', label: '公司 / B2B' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="contactPerson" label="聯絡人">
+                <Input placeholder="公司客戶的對接窗口" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item
+            name="email"
+            label="Email"
+            rules={[{ type: 'email', message: 'Email 格式不正確' }]}
+          >
+            <Input placeholder="invoice@example.com" />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={14}>
+              <Form.Item name="phone" label="電話">
+                <Input placeholder="市話，例如 02-12345678" />
+              </Form.Item>
+            </Col>
+            <Col span={10}>
+              <Form.Item name="phoneExtension" label="分機">
+                <Input placeholder="例如 123" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="mobile" label="手機">
+            <Input placeholder="手機，例如 0912-345-678" />
+          </Form.Item>
+          <Form.Item name="address" label="地址" rules={[{ required: true, message: '請填入地址' }]}>
+            <Input.TextArea rows={2} placeholder="發票、報價單或出貨聯絡可使用的地址" />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Modal
         title="報價單預覽"
