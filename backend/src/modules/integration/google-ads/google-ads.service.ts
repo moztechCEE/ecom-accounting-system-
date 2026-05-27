@@ -320,7 +320,11 @@ export class GoogleAdsService {
       campaignId: row.campaignId || null,
       campaignName: row.campaignName || null,
       brand: row.rawAccount?.brand || null,
+      reportBrand: row.rawAccount?.reportBrand || null,
       platform: row.rawAccount?.platform || null,
+      market: row.rawAccount?.market || null,
+      businessUnit: row.rawAccount?.businessUnit || null,
+      channelCode: row.rawAccount?.channelCode || null,
       date: row.date,
       spend: this.costMicrosToAmount(row.costMicros),
       impressions: this.toNumber(row.impressions),
@@ -334,7 +338,17 @@ export class GoogleAdsService {
       'Google Ads 廣告費',
       row.customerName || row.rawAccount?.name || row.customerId,
       row.rawAccount?.brand ? `brand=${row.rawAccount.brand}` : null,
+      row.rawAccount?.reportBrand
+        ? `reportBrand=${row.rawAccount.reportBrand}`
+        : null,
       row.rawAccount?.platform ? `platform=${row.rawAccount.platform}` : null,
+      row.rawAccount?.market ? `market=${row.rawAccount.market}` : null,
+      row.rawAccount?.businessUnit
+        ? `businessUnit=${row.rawAccount.businessUnit}`
+        : null,
+      row.rawAccount?.channelCode
+        ? `channelCode=${row.rawAccount.channelCode}`
+        : null,
       row.date,
     ].filter(Boolean);
     return parts.join(' ');
@@ -346,7 +360,17 @@ export class GoogleAdsService {
       `customer=${row.customerId}`,
       row.customerName ? `customerName=${row.customerName}` : null,
       row.rawAccount?.brand ? `brand=${row.rawAccount.brand}` : null,
+      row.rawAccount?.reportBrand
+        ? `reportBrand=${row.rawAccount.reportBrand}`
+        : null,
       row.rawAccount?.platform ? `platform=${row.rawAccount.platform}` : null,
+      row.rawAccount?.market ? `market=${row.rawAccount.market}` : null,
+      row.rawAccount?.businessUnit
+        ? `businessUnit=${row.rawAccount.businessUnit}`
+        : null,
+      row.rawAccount?.channelCode
+        ? `channelCode=${row.rawAccount.channelCode}`
+        : null,
       row.impressions ? `impressions=${row.impressions}` : null,
       row.clicks ? `clicks=${row.clicks}` : null,
     ].filter(Boolean);

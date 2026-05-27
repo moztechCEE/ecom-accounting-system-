@@ -308,7 +308,11 @@ export class MetaAdsService {
       campaignId: row.campaign_id || null,
       campaignName: row.campaign_name || null,
       brand: row.rawAccount?.brand || null,
+      reportBrand: row.rawAccount?.reportBrand || null,
       platform: row.rawAccount?.platform || null,
+      market: row.rawAccount?.market || null,
+      businessUnit: row.rawAccount?.businessUnit || null,
+      channelCode: row.rawAccount?.channelCode || null,
       dateStart: row.date_start || null,
       dateStop: row.date_stop || null,
       spend: this.toNumber(row.spend),
@@ -329,7 +333,17 @@ export class MetaAdsService {
       'Meta Ads 廣告費',
       row.account_name || row.rawAccount?.name || accountId,
       row.rawAccount?.brand ? `brand=${row.rawAccount.brand}` : null,
+      row.rawAccount?.reportBrand
+        ? `reportBrand=${row.rawAccount.reportBrand}`
+        : null,
       row.rawAccount?.platform ? `platform=${row.rawAccount.platform}` : null,
+      row.rawAccount?.market ? `market=${row.rawAccount.market}` : null,
+      row.rawAccount?.businessUnit
+        ? `businessUnit=${row.rawAccount.businessUnit}`
+        : null,
+      row.rawAccount?.channelCode
+        ? `channelCode=${row.rawAccount.channelCode}`
+        : null,
       date,
     ].filter(Boolean);
     return parts.join(' ');
@@ -341,7 +355,17 @@ export class MetaAdsService {
       `account=${accountId}`,
       row.account_name ? `accountName=${row.account_name}` : null,
       row.rawAccount?.brand ? `brand=${row.rawAccount.brand}` : null,
+      row.rawAccount?.reportBrand
+        ? `reportBrand=${row.rawAccount.reportBrand}`
+        : null,
       row.rawAccount?.platform ? `platform=${row.rawAccount.platform}` : null,
+      row.rawAccount?.market ? `market=${row.rawAccount.market}` : null,
+      row.rawAccount?.businessUnit
+        ? `businessUnit=${row.rawAccount.businessUnit}`
+        : null,
+      row.rawAccount?.channelCode
+        ? `channelCode=${row.rawAccount.channelCode}`
+        : null,
       row.impressions ? `impressions=${row.impressions}` : null,
       row.clicks ? `clicks=${row.clicks}` : null,
     ].filter(Boolean);

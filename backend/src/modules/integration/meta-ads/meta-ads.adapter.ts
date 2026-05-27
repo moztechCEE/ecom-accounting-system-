@@ -10,7 +10,11 @@ export type MetaAdsAccountConfig = {
   accountId: string;
   name?: string;
   brand?: string;
+  reportBrand?: string;
   platform?: string;
+  market?: string;
+  businessUnit?: string;
+  channelCode?: string;
   currency?: string;
   entityId?: string;
 };
@@ -91,7 +95,11 @@ export class MetaAdsAdapter {
         accountId: this.normalizeAccountId(account.accountId),
         name: account.name || null,
         brand: account.brand || null,
+        reportBrand: account.reportBrand || null,
         platform: account.platform || null,
+        market: account.market || null,
+        businessUnit: account.businessUnit || null,
+        channelCode: account.channelCode || null,
         currency: account.currency || null,
         entityId: account.entityId || null,
       })),
@@ -322,7 +330,15 @@ export class MetaAdsAdapter {
       accountId: this.normalizeAccountId(accountId),
       name: this.optionalString(item.name),
       brand: this.optionalString(item.brand),
+      reportBrand: this.optionalString(
+        item.reportBrand || item.report_brand || item.reportingBrand,
+      ),
       platform: this.optionalString(item.platform),
+      market: this.optionalString(item.market || item.country),
+      businessUnit: this.optionalString(
+        item.businessUnit || item.business_unit,
+      ),
+      channelCode: this.optionalString(item.channelCode || item.channel_code),
       currency: this.optionalString(item.currency),
       entityId: this.optionalString(item.entityId || item.entity_id),
     };

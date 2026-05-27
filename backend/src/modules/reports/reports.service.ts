@@ -4432,6 +4432,11 @@ export class ReportsService {
     if (/bonson|邦生/i.test(text)) return 'BONSON';
     if (/moztech|墨子/i.test(text)) return 'MOZTECH';
 
+    const reportBrandMatch = text.match(/reportBrand=([^;\s]+)/i);
+    if (reportBrandMatch?.[1]) {
+      return this.resolveCommerceBrand(reportBrandMatch[1]);
+    }
+
     const brandMatch = text.match(/brand=([^;\s]+)/i);
     if (brandMatch?.[1]) {
       return this.resolveCommerceBrand(brandMatch[1]);
@@ -4459,6 +4464,11 @@ export class ReportsService {
     if (/bonson|邦生/i.test(text)) return 'BONSON';
     if (/moztech|墨子/i.test(text)) return 'MOZTECH';
     if (/moritek/i.test(text)) return 'MORITEK';
+
+    const reportBrandMatch = text.match(/reportBrand=([^;\s]+)/i);
+    if (reportBrandMatch?.[1]) {
+      return this.resolveCommerceBrand(reportBrandMatch[1]);
+    }
 
     const brandMatch = text.match(/brand=([^;\s]+)/i);
     if (brandMatch?.[1]) {
@@ -4493,6 +4503,13 @@ export class ReportsService {
         const normalized = value.startsWith('act_') ? value : `act_${value}`;
         return normalized === accountId;
       });
+      const reportBrand =
+        typeof matched?.reportBrand === 'string'
+          ? matched.reportBrand.trim()
+          : '';
+      if (reportBrand) {
+        return reportBrand;
+      }
       return typeof matched?.brand === 'string' ? matched.brand.trim() : '';
     } catch {
       return '';
@@ -4521,6 +4538,13 @@ export class ReportsService {
         ).replace(/[^0-9]/g, '');
         return value === normalizedCustomerId;
       });
+      const reportBrand =
+        typeof matched?.reportBrand === 'string'
+          ? matched.reportBrand.trim()
+          : '';
+      if (reportBrand) {
+        return reportBrand;
+      }
       return typeof matched?.brand === 'string' ? matched.brand.trim() : '';
     } catch {
       return '';
@@ -4532,6 +4556,10 @@ export class ReportsService {
     if (!normalized || this.isPlatformName(normalized)) {
       return '未分類品牌';
     }
+    if (/^MOZTECH[_\s-]*(TW|TAIWAN)$/i.test(normalized)) return 'MOZTECH_TW';
+    if (/^MOZTECH[_\s-]*(US|USA)$/i.test(normalized)) return 'MOZTECH_US';
+    if (/墨子.*(台灣|臺灣)/i.test(normalized)) return 'MOZTECH_TW';
+    if (/墨子.*(美國)/i.test(normalized)) return 'MOZTECH_US';
     if (/moztech|墨子/i.test(normalized)) return 'MOZTECH';
     if (/bonson|邦生/i.test(normalized)) return 'BONSON';
     if (/airity/i.test(normalized)) return 'AIRITY';
