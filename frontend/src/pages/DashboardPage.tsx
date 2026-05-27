@@ -1001,130 +1001,183 @@ const DashboardPage: React.FC = () => {
       amount: items.reduce((sum, item) => sum + item.amount, 0),
     }
   })
+  const commandCenterStats = [
+    {
+      label: `${selectedPeriodLabel}淨利`,
+      value: fmtSignedMoney(selectedNetProfit),
+      helper: `營收 ${fmtMoney(selectedRevenue)} · 淨利率 ${fmtPct(selectedNetMarginPct)}`,
+      tone: selectedNetProfit < 0 ? "border-red-200 bg-red-50/70 text-red-700" : "border-emerald-100 bg-emerald-50/70 text-emerald-700",
+    },
+    {
+      label: "現金流風險",
+      value: fmtMoney(cashRiskAmount),
+      helper: `逾期 AR ${overdueAR} · 超收 ${overpaidAR} · 待付款 ${fmtMoney(payableExposure)}`,
+      tone: cashRiskAmount > 0 ? "border-rose-200 bg-rose-50/70 text-rose-700" : "border-slate-100 bg-white/70 text-slate-700",
+    },
+    {
+      label: "財務待辦",
+      value: `${financeWatchCount} 項`,
+      helper: `缺發票 ${missingInvoiceCount} · 稽核 ${financialAuditIssueCount}`,
+      tone: financeWatchCount > 0 ? "border-amber-200 bg-amber-50/70 text-amber-700" : "border-slate-100 bg-white/70 text-slate-700",
+    },
+  ]
+  const urgentTaskRows = [
+    ...(criticalCount > 0
+      ? [{
+          key: "critical",
+          icon: <WarningOutlined />,
+          title: "需要立刻處理",
+          count: `${criticalCount} 項`,
+          helper: [
+            criticalInventory > 0 ? `${criticalInventory} 個商品斷貨` : "",
+            overdueAR > 0 ? `${overdueAR} 筆應收逾期` : "",
+            overpaidAR > 0 ? `${overpaidAR} 筆疑似超收` : "",
+            criticalAnomalies > 0 ? `${criticalAnomalies} 個財務異常` : "",
+          ].filter(Boolean).join(" · "),
+          tone: "red",
+          action: "查看風險",
+          onClick: () => setFinanceOptionsOpen(true),
+        }]
+      : []),
+    ...(overpaidAR > 0
+      ? [{
+          key: "overpaid",
+          icon: <FallOutlined />,
+          title: "超收 / 疑似重複收款",
+          count: `${overpaidAR} 筆`,
+          helper: `差額合計 ${fmtMoney(overpaidARAmount)}，請核對付款列與 provider payment id。`,
+          tone: "red",
+          action: "查看明細",
+          onClick: () => navigate("/sales/invoices?focus=overpaid"),
+        }]
+      : []),
+    {
+      key: "missing-invoices",
+      icon: <FileTextOutlined />,
+      title: "缺發票訂單",
+      count: missingInvoiceCount > 0 ? `${missingInvoiceCount} 筆` : "已清空",
+      helper: "補發票、同步綠界發票與後續入帳，統一到會計工作台處理。",
+      tone: missingInvoiceCount > 0 ? "amber" : "green",
+      action: missingInvoiceCount > 0 ? "處理缺發票" : "查看工作台",
+      onClick: () => navigate("/accounting/workbench?focus=missing-invoices"),
+    },
+  ]
 
   return (
     <div className="page-section-stack page-section-stack--compact">
       {/* AI Insights Widget */}
       <AIInsightsWidget />
 
-      {/* ── 頁面標題 + 篩選控制 ── */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <Title level={2} className="!text-gray-800 font-light tracking-tight !mb-0">
-              CEO 儀表板
-            </Title>
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse-green" />
-              <span className="text-xs font-medium text-green-600 uppercase tracking-wider">即時資料</span>
+      {/* ── 決策首頁：把篩選、同步、重點數字與待辦收在同一個工作區 ── */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5 lg:p-6">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-3">
+              <Title level={2} className="!mb-0 !text-2xl !font-semibold !tracking-normal !text-slate-900">
+                CEO 儀表板
+              </Title>
+              <Tag className="rounded-full border-emerald-100 bg-emerald-50 px-3 py-1 text-emerald-700">
+                即時資料
+              </Tag>
             </div>
+            <Text className="text-sm text-slate-500">
+              Moztech、Bonson、Moritek 的財務、現金流與營運風險集中檢視。
+            </Text>
           </div>
-          <Text className="text-slate-400 text-sm">
-            Moztech · Bonson · Moritek — 三品牌、三通路、財務一覽
-          </Text>
-        </div>
-        <div className="flex flex-col sm:items-end gap-3 w-full sm:w-auto">
-          <div className="flex flex-wrap justify-end gap-2 items-center">
-            <Radio.Group value={rangeMode} onChange={(e) => {
-              const nextMode = e.target.value as RangeMode;
-              setRangeMode(nextMode);
-              if (nextMode === "custom" && (!customRange?.[0] || !customRange?.[1])) {
-                message.info("請選擇自訂日期區間");
-              }
-            }}>
-              <Radio.Button value="today">今天</Radio.Button>
-              <Radio.Button value="yesterday">昨天</Radio.Button>
-              <Radio.Button value="last7d">近 7 天</Radio.Button>
-              <Radio.Button value="last30d">近 30 天</Radio.Button>
-              <Radio.Button value="last1y">近 1 年</Radio.Button>
-              <Radio.Button value="all">全部</Radio.Button>
-              <Radio.Button value="custom">自訂</Radio.Button>
-            </Radio.Group>
-            <Button type="primary" icon={<SyncOutlined spin={syncing} />} loading={syncing}
-              onClick={handleManualSync} className="bg-black hover:bg-gray-800 border-none shadow-sm">
-              {syncing ? "同步中..." : "即時同步"}
-            </Button>
-          </div>
-          {rangeMode === "custom" && (
-            <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
-              <RangePicker value={customRange} onChange={handleCustomRangeChange}
-                format="YYYY/MM/DD" allowClear className="shadow-sm"
-                placeholder={["開始日期", "結束日期"]} />
-            </motion.div>
-          )}
-        </div>
-      </div>
 
-      {/* ── 🚨 紅燈警示 ── */}
-      {criticalCount > 0 && (
-        <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
-          className="rounded-2xl border border-red-200 bg-red-50/80 px-5 py-4 flex items-center gap-4">
-          <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-          <div className="flex-1 text-sm">
-            <span className="font-semibold text-red-700">需要立刻處理：</span>
-            <span className="ml-2 text-red-600">
-              {criticalInventory > 0 && `${criticalInventory} 個商品斷貨　`}
-              {overdueAR > 0 && `${overdueAR} 筆應收逾期　`}
-              {overpaidAR > 0 && `${overpaidAR} 筆疑似超收 / 重複收款　`}
-              {criticalAnomalies > 0 && `${criticalAnomalies} 個財務異常`}
-            </span>
+          <div className="flex w-full flex-col gap-3 xl:w-auto xl:items-end">
+            <div className="flex flex-wrap gap-2 xl:justify-end">
+              <Radio.Group value={rangeMode} onChange={(e) => {
+                const nextMode = e.target.value as RangeMode;
+                setRangeMode(nextMode);
+                if (nextMode === "custom" && (!customRange?.[0] || !customRange?.[1])) {
+                  message.info("請選擇自訂日期區間");
+                }
+              }}>
+                <Radio.Button value="today">今天</Radio.Button>
+                <Radio.Button value="yesterday">昨天</Radio.Button>
+                <Radio.Button value="last7d">近 7 天</Radio.Button>
+                <Radio.Button value="last30d">近 30 天</Radio.Button>
+                <Radio.Button value="last1y">近 1 年</Radio.Button>
+                <Radio.Button value="all">全部</Radio.Button>
+                <Radio.Button value="custom">自訂</Radio.Button>
+              </Radio.Group>
+              <Button type="primary" icon={<SyncOutlined spin={syncing} />} loading={syncing}
+                onClick={handleManualSync} className="bg-slate-950 hover:bg-slate-800 border-none shadow-sm">
+                {syncing ? "同步中..." : "即時同步"}
+              </Button>
+            </div>
+            {rangeMode === "custom" && (
+              <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}>
+                <RangePicker value={customRange} onChange={handleCustomRangeChange}
+                  format="YYYY/MM/DD" allowClear className="shadow-sm"
+                  placeholder={["開始日期", "結束日期"]} />
+              </motion.div>
+            )}
           </div>
-          <Tag color="red" className="shrink-0">共 {criticalCount} 項</Tag>
-        </motion.div>
-      )}
+        </div>
 
-      {overpaidAR > 0 && (
-        <div className="rounded-2xl border border-red-200 bg-red-50/80 px-5 py-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-red-600 shadow-sm">
-                <FallOutlined />
+        <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_420px]">
+          <div className="grid gap-3 md:grid-cols-3">
+            {commandCenterStats.map((item) => (
+              <div key={item.label} className={`rounded-2xl border px-4 py-4 ${item.tone}`}>
+                <div className="text-xs font-medium text-slate-500">{item.label}</div>
+                <div className="mt-2 text-2xl font-bold text-slate-950">{item.value}</div>
+                <div className="mt-2 text-xs leading-5 text-slate-500">{item.helper}</div>
               </div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-slate-900">超收 / 疑似重複收款</span>
-                  <Tag color="red">{overpaidAR} 筆待核對</Tag>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-slate-100 bg-white/75 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">今日處理佇列</div>
+                <div className="text-xs text-slate-500">只保留需要行動的入口，降低首頁雜訊。</div>
+              </div>
+              <Tag color={criticalCount > 0 ? "red" : missingInvoiceCount > 0 ? "gold" : "green"}>
+                {criticalCount + missingInvoiceCount} 項
+              </Tag>
+            </div>
+            <div className="space-y-2">
+              {urgentTaskRows.map((item) => (
+                <div key={item.key} className={`rounded-xl border px-3 py-3 ${
+                  item.tone === "red" ? "border-red-100 bg-red-50/70" :
+                  item.tone === "amber" ? "border-amber-100 bg-amber-50/70" :
+                  "border-emerald-100 bg-emerald-50/60"
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm ${
+                      item.tone === "red" ? "text-red-600" :
+                      item.tone === "amber" ? "text-amber-600" :
+                      "text-emerald-600"
+                    }`}>
+                      {item.icon}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-slate-900">{item.title}</span>
+                        <Tag color={item.tone === "red" ? "red" : item.tone === "amber" ? "gold" : "green"}>{item.count}</Tag>
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-slate-600">{item.helper}</div>
+                    </div>
+                    <Button size="small" onClick={item.onClick}>
+                      {item.action}
+                    </Button>
+                  </div>
                 </div>
-                <div className="mt-1 text-sm leading-6 text-slate-600">
-                  本區間已收金額高於訂單應收，差額合計 {fmtMoney(overpaidARAmount)}。請到應收帳款頁查看付款列、payout batch 與 provider payment id。
-                </div>
+              ))}
+              <div className="flex flex-wrap justify-end gap-2 pt-1">
+                <Button size="small" onClick={handleSyncInvoiceStatuses} loading={syncingInvoiceStatuses}>
+                  同步發票狀態
+                </Button>
+                <Button size="small" onClick={() => setFinanceOptionsOpen(true)}>
+                  財務選項
+                </Button>
               </div>
             </div>
-            <Button danger onClick={() => navigate("/sales/invoices?focus=overpaid")}>
-              查看超收明細
-            </Button>
           </div>
         </div>
-      )}
-
-      <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-5 py-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 shadow-sm">
-              <FileTextOutlined />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-slate-900">缺發票訂單處理入口</span>
-                <Tag color={missingInvoiceCount > 0 ? "gold" : "green"}>
-                  {missingInvoiceCount > 0 ? `${missingInvoiceCount} 筆待處理` : "目前無待處理"}
-                </Tag>
-              </div>
-              <div className="mt-1 text-sm leading-6 text-slate-600">
-                訂單明細仍在銷售訂單頁查看；補發票、同步綠界發票、匯入綠界銷項發票與後續入帳，統一到會計工作台處理。
-              </div>
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <Button onClick={handleSyncInvoiceStatuses} loading={syncingInvoiceStatuses}>
-              同步發票狀態
-            </Button>
-            <Button type="primary" onClick={() => navigate("/accounting/workbench?focus=missing-invoices")}>
-              處理缺發票
-            </Button>
-          </div>
-        </div>
-      </div>
+      </motion.div>
 
       {/* ── CEO 財務管制：現金流、淨利、廣告與異常 ── */}
       <div className="glass-card p-6">
