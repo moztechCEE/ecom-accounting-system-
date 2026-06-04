@@ -110,6 +110,7 @@ export interface SalesQuotation {
   customer?: {
     id: string
     name: string
+    companyName?: string | null
     email?: string | null
     phone?: string | null
     taxId?: string | null
@@ -205,6 +206,7 @@ export interface AfterSalesCase {
   customer?: {
     id: string
     name: string
+    companyName?: string | null
     email?: string | null
     phone?: string | null
     mobile?: string | null
@@ -267,6 +269,7 @@ type SalesOrderApiResponse = {
   accountingPosted?: boolean
   customer?: {
     name?: string | null
+    companyName?: string | null
     email?: string | null
     phone?: string | null
     type?: 'individual' | 'company' | null

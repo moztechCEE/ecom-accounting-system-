@@ -158,7 +158,7 @@ const buildQuotationPrintHtml = (quotation: SalesQuotation) => {
             <table>
               <tbody>
                 <tr><th class="label">報價單號</th><td>${escapeHtml(quotation.quotationNo)}</td></tr>
-                <tr><th class="label">客戶名</th><td>${escapeHtml(quotation.customer?.name || '—')}</td></tr>
+                <tr><th class="label">客戶名</th><td>${escapeHtml(quotation.customer?.companyName || quotation.customer?.name || '—')}</td></tr>
                 <tr><th class="label">參考</th><td>${escapeHtml(quotation.reference || '—')}</td></tr>
                 <tr><th class="label">TEL/FAX</th><td>${escapeHtml(quotation.customer?.phone || '')} /</td></tr>
                 <tr><th class="label">有效期間</th><td>${quotation.validUntil ? dayjs(quotation.validUntil).format('YYYY/MM/DD') : '—'}</td></tr>
@@ -290,6 +290,7 @@ const SalesQuotationsPage: React.FC = () => {
     label: [
       customer.code,
       customer.name,
+      customer.companyName,
       customer.taxId,
       customer.phone || customer.mobile,
     ]
@@ -504,7 +505,9 @@ const SalesQuotationsPage: React.FC = () => {
       key: 'customer',
       render: (_: unknown, quotation: SalesQuotation) => (
         <div>
-          <div className="font-medium text-slate-900">{quotation.customer?.name || '未指定客戶'}</div>
+          <div className="font-medium text-slate-900">
+            {quotation.customer?.companyName || quotation.customer?.name || '未指定客戶'}
+          </div>
           <div className="text-xs text-slate-400">{quotation.customer?.phone || quotation.customer?.email || '未填聯絡資訊'}</div>
         </div>
       ),
@@ -849,7 +852,7 @@ const SalesQuotationsPage: React.FC = () => {
             <Input placeholder="例如：王小明 或 某某公司" />
           </Form.Item>
           <Row gutter={12}>
-            <Col span={12}>
+            <Col span={8}>
               <Form.Item
                 name="code"
                 label="客戶/供應商編碼"
@@ -858,13 +861,22 @@ const SalesQuotationsPage: React.FC = () => {
                 <Input readOnly placeholder="系統自動帶入" />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col span={8}>
               <Form.Item
                 name="taxId"
                 label="統一編號"
                 normalize={(value) => String(value || '').replace(/\D/g, '').slice(0, 8)}
               >
                 <Input inputMode="numeric" maxLength={8} placeholder="例如 12345678" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="companyName"
+                label="公司名稱"
+                extra="開立 B2B 發票時會優先帶入。"
+              >
+                <Input placeholder="例如 某某股份有限公司" />
               </Form.Item>
             </Col>
           </Row>
@@ -950,7 +962,7 @@ const QuotationPreview: React.FC<{ quotation: SalesQuotation }> = ({ quotation }
         <table className="w-full border-collapse text-sm">
           <tbody>
             <PreviewRow label="報價單號" value={quotation.quotationNo} />
-            <PreviewRow label="客戶名" value={quotation.customer?.name || '—'} />
+            <PreviewRow label="客戶名" value={quotation.customer?.companyName || quotation.customer?.name || '—'} />
             <PreviewRow label="參考" value={quotation.reference || '—'} />
             <PreviewRow label="TEL/FAX" value={`${quotation.customer?.phone || ''} /`} />
             <PreviewRow label="有效期間" value={quotation.validUntil ? dayjs(quotation.validUntil).format('YYYY/MM/DD') : '—'} />

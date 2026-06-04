@@ -298,7 +298,7 @@ export class InvoicingService {
     return {
       orderId: order.id,
       invoiceType: 'B2C',
-      buyerName: order.customer?.name || '散客',
+      buyerName: order.customer?.companyName || order.customer?.name || '散客',
       buyerTaxId: null,
       currency: order.totalGrossCurrency,
       fxRate: fxRate.toNumber(),

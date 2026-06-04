@@ -92,6 +92,7 @@ const CustomersPage: React.FC = () => {
         customer.phoneExtension,
         customer.mobile,
         customer.taxId,
+        customer.companyName,
         customer.contactPerson,
         customer.address,
         customer.summary,
@@ -176,6 +177,9 @@ const CustomersPage: React.FC = () => {
       render: (_: unknown, record: Customer) => (
         <div>
           <div className="font-medium text-slate-900">{record.name}</div>
+          {record.companyName ? (
+            <div className="text-xs text-slate-500">公司：{record.companyName}</div>
+          ) : null}
           <div className="text-xs text-slate-400">
             {record.email || '未填 Email'}
           </div>
@@ -406,6 +410,13 @@ const CustomersPage: React.FC = () => {
               normalize={(value) => String(value || '').replace(/\D/g, '').slice(0, 8)}
             >
               <Input inputMode="numeric" maxLength={8} placeholder="例如 12345678" />
+            </Form.Item>
+            <Form.Item
+              name="companyName"
+              label="公司名稱"
+              extra="開立 B2B 發票時會優先帶入買受人公司名稱。"
+            >
+              <Input placeholder="例如 某某股份有限公司" />
             </Form.Item>
           </div>
           <Form.Item name="type" label="類型" initialValue="individual">

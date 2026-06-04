@@ -301,6 +301,7 @@ export class CustomerService {
       'phoneExtension',
       'mobile',
       'taxId',
+      'companyName',
       'contactPerson',
       'address',
       'summary',

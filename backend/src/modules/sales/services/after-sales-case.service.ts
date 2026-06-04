@@ -397,7 +397,10 @@ export class AfterSalesCaseService {
         status: 'issued',
         invoiceType: afterSalesCase.customer?.taxId ? 'B2B' : 'B2C',
         issuedAt,
-        buyerName: afterSalesCase.customer?.name || null,
+        buyerName:
+          afterSalesCase.customer?.companyName ||
+          afterSalesCase.customer?.name ||
+          null,
         buyerTaxId: afterSalesCase.customer?.taxId || null,
         buyerEmail: afterSalesCase.customer?.email || null,
         buyerPhone: afterSalesCase.customer?.phone || afterSalesCase.customer?.mobile || null,

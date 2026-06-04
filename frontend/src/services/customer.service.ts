@@ -9,6 +9,7 @@ export interface Customer {
   phoneExtension?: string
   mobile?: string
   taxId?: string
+  companyName?: string
   type: 'individual' | 'company'
   contactPerson?: string
   address?: string

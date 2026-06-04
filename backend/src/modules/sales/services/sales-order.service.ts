@@ -1360,6 +1360,7 @@ export class SalesOrderService {
       totalGrossFxRate: Decimal;
       customer?: {
         name?: string | null;
+        companyName?: string | null;
         email?: string | null;
         phone?: string | null;
         taxId?: string | null;
@@ -1405,7 +1406,7 @@ export class SalesOrderService {
         status: options?.issued === false ? 'draft' : 'issued',
         invoiceType: order.customer?.taxId ? 'B2B' : 'B2C',
         issuedAt,
-        buyerName: order.customer?.name || null,
+        buyerName: order.customer?.companyName || order.customer?.name || null,
         buyerTaxId: order.customer?.taxId || null,
         buyerEmail: order.customer?.email || null,
         buyerPhone: order.customer?.phone || null,
