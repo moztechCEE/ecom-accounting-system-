@@ -79,6 +79,7 @@ export class SeederService implements OnModuleInit {
       'accounts',
       'journal_entries',
       'sales_orders',
+      'after_sales_cases',
       'reconciliation_timeout',
     ];
     const actions = ['read', 'create', 'update', 'delete', 'approve'];
@@ -125,6 +126,7 @@ export class SeederService implements OnModuleInit {
           'journal_entries:create',
           'journal_entries:approve',
           'sales_orders:read',
+          'after_sales_cases:read',
           'reconciliation_timeout:read',
         ],
       },
@@ -135,6 +137,9 @@ export class SeederService implements OnModuleInit {
         hierarchyLevel: 4,
         permissions: [
           'sales_orders:read',
+          'after_sales_cases:read',
+          'after_sales_cases:create',
+          'after_sales_cases:update',
           'reconciliation_timeout:read',
           'reconciliation_timeout:update',
         ],

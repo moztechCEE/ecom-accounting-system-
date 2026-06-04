@@ -143,6 +143,108 @@ export interface CreateSalesQuotationPayload {
   }>
 }
 
+export type AfterSalesReasonCategory =
+  | 'repair'
+  | 'exchange'
+  | 'return'
+  | 'warranty'
+  | 'trade_in_upgrade'
+  | 'other'
+
+export type AfterSalesCaseStatus =
+  | 'customer_service'
+  | 'awaiting_payment'
+  | 'accounting_invoice'
+  | 'warehouse_receiving'
+  | 'customer_service_shipping'
+  | 'completed'
+  | 'cancelled'
+
+export interface AfterSalesCaseItem {
+  id: string
+  productId?: string | null
+  sku?: string | null
+  itemName: string
+  quantity: number
+  unitPriceOriginal: number
+  paymentRequired: boolean
+  paymentAmountOriginal: number
+  notes?: string | null
+  product?: {
+    id: string
+    sku: string
+    name: string
+  } | null
+}
+
+export interface AfterSalesCase {
+  id: string
+  entityId: string
+  customerId?: string | null
+  originalSalesOrderId?: string | null
+  caseNo: string
+  caseDate: string
+  reasonCategory: AfterSalesReasonCategory
+  status: AfterSalesCaseStatus
+  currency: string
+  paymentStatus: 'not_required' | 'pending' | 'paid'
+  paymentAmountOriginal: number
+  paymentLinkUrl?: string | null
+  paymentRequestedAt?: string | null
+  paidAt?: string | null
+  accountingReceivedAt?: string | null
+  invoiceId?: string | null
+  invoiceNumber?: string | null
+  invoiceIssuedAt?: string | null
+  warehouseReceivedAt?: string | null
+  shippedAt?: string | null
+  trackingNo?: string | null
+  notes?: string | null
+  createdAt: string
+  updatedAt: string
+  customer?: {
+    id: string
+    name: string
+    email?: string | null
+    phone?: string | null
+    mobile?: string | null
+  } | null
+  items: AfterSalesCaseItem[]
+}
+
+export interface AfterSalesCaseListResponse {
+  entityId: string
+  summary: {
+    total: number
+    awaitingPayment: number
+    accounting: number
+    warehouse: number
+    shipping: number
+    payableAmount: number
+  }
+  items: AfterSalesCase[]
+}
+
+export interface CreateAfterSalesCasePayload {
+  entityId?: string
+  customerId?: string
+  originalSalesOrderId?: string
+  caseDate?: string
+  reasonCategory: AfterSalesReasonCategory
+  currency?: string
+  notes?: string
+  items: Array<{
+    productId?: string
+    sku?: string
+    itemName?: string
+    quantity?: number
+    unitPriceOriginal?: number
+    paymentRequired?: boolean
+    paymentAmountOriginal?: number
+    notes?: string
+  }>
+}
+
 type SalesOrderApiResponse = {
   id: string
   externalOrderId?: string | null
@@ -554,7 +656,112 @@ export const salesService = {
       { params: { entityId: effectiveEntityId } },
     )
     return normalizeQuotation(response.data)
-  }
+  },
+
+  async getAfterSalesCases(params?: {
+    entityId?: string
+    status?: AfterSalesCaseStatus | 'all'
+    search?: string
+    limit?: number
+  }) {
+    const entityId =
+      params?.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.get<AfterSalesCaseListResponse>('/sales/after-sales-cases', {
+      params: {
+        entityId,
+        status: params?.status,
+        search: params?.search,
+        limit: params?.limit,
+      },
+      timeout: 60000,
+    })
+    return response.data
+  },
+
+  async createAfterSalesCase(payload: CreateAfterSalesCasePayload) {
+    const entityId =
+      payload.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.post<AfterSalesCase>('/sales/after-sales-cases', {
+      ...payload,
+      entityId,
+    })
+    return response.data
+  },
+
+  async setAfterSalesItemPaymentRequired(
+    caseId: string,
+    itemId: string,
+    data: { paymentRequired: boolean; paymentAmountOriginal?: number },
+    entityId?: string,
+  ) {
+    const resolvedEntityId =
+      entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.patch<AfterSalesCase>(
+      `/sales/after-sales-cases/${caseId}/items/${itemId}/payment-required`,
+      data,
+      { params: { entityId: resolvedEntityId } },
+    )
+    return response.data
+  },
+
+  async issueAfterSalesPayment(caseId: string, entityId?: string) {
+    const resolvedEntityId =
+      entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.post<AfterSalesCase>(
+      `/sales/after-sales-cases/${caseId}/issue-payment`,
+      {},
+      { params: { entityId: resolvedEntityId } },
+    )
+    return response.data
+  },
+
+  async markAfterSalesPaid(caseId: string, entityId?: string) {
+    const resolvedEntityId =
+      entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.post<AfterSalesCase>(
+      `/sales/after-sales-cases/${caseId}/mark-paid`,
+      {},
+      { params: { entityId: resolvedEntityId } },
+    )
+    return response.data
+  },
+
+  async confirmAfterSalesAccounting(caseId: string, entityId?: string) {
+    const resolvedEntityId =
+      entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.post<AfterSalesCase>(
+      `/sales/after-sales-cases/${caseId}/confirm-accounting`,
+      {},
+      { params: { entityId: resolvedEntityId } },
+    )
+    return response.data
+  },
+
+  async confirmAfterSalesWarehouseReceived(caseId: string, entityId?: string) {
+    const resolvedEntityId =
+      entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.post<AfterSalesCase>(
+      `/sales/after-sales-cases/${caseId}/confirm-warehouse-received`,
+      {},
+      { params: { entityId: resolvedEntityId } },
+    )
+    return response.data
+  },
+
+  async shipAfterSalesCase(
+    caseId: string,
+    data: { trackingNo?: string } = {},
+    entityId?: string,
+  ) {
+    const resolvedEntityId =
+      entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+    const response = await api.post<AfterSalesCase>(
+      `/sales/after-sales-cases/${caseId}/ship`,
+      data,
+      { params: { entityId: resolvedEntityId } },
+    )
+    return response.data
+  },
 }
 
 const normalizeQuotation = (quotation: SalesQuotation): SalesQuotation => ({

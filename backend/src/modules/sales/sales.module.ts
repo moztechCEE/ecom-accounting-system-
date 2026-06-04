@@ -4,6 +4,7 @@ import { CustomerController } from './customer.controller';
 import { SalesService } from './sales.service';
 import { SalesOrderService } from './services/sales-order.service';
 import { SalesQuotationService } from './services/sales-quotation.service';
+import { AfterSalesCaseService } from './services/after-sales-case.service';
 import { CustomerService } from './customer.service';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { AccountingModule } from '../accounting/accounting.module'; // 依賴：產生會計分錄
@@ -33,7 +34,13 @@ import { ApModule } from '../ap/ap.module';
 @Module({
   imports: [PrismaModule, AccountingModule, InventoryModule, ApModule],
   controllers: [SalesController, CustomerController],
-  providers: [SalesService, SalesOrderService, SalesQuotationService, CustomerService],
-  exports: [SalesService, SalesOrderService, SalesQuotationService],
+  providers: [
+    SalesService,
+    SalesOrderService,
+    SalesQuotationService,
+    AfterSalesCaseService,
+    CustomerService,
+  ],
+  exports: [SalesService, SalesOrderService, SalesQuotationService, AfterSalesCaseService],
 })
 export class SalesModule {}

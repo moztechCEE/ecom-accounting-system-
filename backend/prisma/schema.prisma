@@ -181,6 +181,8 @@ model Entity {
   salesChannels         SalesChannel[]
   salesOrders           SalesOrder[]
   salesQuotations       SalesQuotation[]
+  afterSalesCases       AfterSalesCase[]
+  afterSalesCaseItems   AfterSalesCaseItem[]
   arInvoices            ArInvoice[]
   apInvoices            ApInvoice[]
   bankAccounts          BankAccount[]
@@ -373,6 +375,7 @@ model Customer {
   entity          Entity           @relation(fields: [entityId], references: [id], onDelete: Cascade)
   salesOrders     SalesOrder[]
   salesQuotations SalesQuotation[]
+  afterSalesCases AfterSalesCase[]
   arInvoices      ArInvoice[]
 
   @@index([entityId])
@@ -435,6 +438,7 @@ model Product {
   entity              Entity                 @relation(fields: [entityId], references: [id], onDelete: Cascade)
   salesOrderItems     SalesOrderItem[]
   salesQuotationItems SalesQuotationItem[]
+  afterSalesCaseItems AfterSalesCaseItem[]
   purchaseOrderItems  PurchaseOrderItem[]
   productBatches      ProductBatch[]
   devCosts            DevCost[]
@@ -688,6 +692,71 @@ model SalesQuotationItem {
   @@map("sales_quotation_items")
 }
 
+// 售後來回件
+model AfterSalesCase {
+  id                    String    @id @default(uuid())
+  entityId              String    @map("entity_id")
+  customerId            String?   @map("customer_id")
+  originalSalesOrderId  String?   @map("original_sales_order_id")
+  caseNo                String    @map("case_no")
+  caseDate              DateTime  @default(now()) @map("case_date")
+  reasonCategory        String    @map("reason_category") // repair, exchange, return, warranty, trade_in_upgrade, other
+  status                String    @default("customer_service") // customer_service, awaiting_payment, accounting_invoice, warehouse_receiving, customer_service_shipping, completed, cancelled
+  currency              String    @default("TWD")
+  paymentStatus         String    @default("not_required") @map("payment_status") // not_required, pending, paid
+  paymentAmountOriginal Decimal   @default(0) @map("payment_amount_original") @db.Decimal(18, 2)
+  paymentLinkUrl        String?   @map("payment_link_url")
+  paymentRequestedAt    DateTime? @map("payment_requested_at")
+  paidAt                DateTime? @map("paid_at")
+  accountingReceivedAt  DateTime? @map("accounting_received_at")
+  invoiceId             String?   @map("invoice_id")
+  invoiceNumber         String?   @map("invoice_number")
+  invoiceIssuedAt       DateTime? @map("invoice_issued_at")
+  warehouseReceivedAt   DateTime? @map("warehouse_received_at")
+  shippedAt             DateTime? @map("shipped_at")
+  trackingNo            String?   @map("tracking_no")
+  notes                 String?
+  createdBy             String?   @map("created_by")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  entity             Entity               @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  customer           Customer?            @relation(fields: [customerId], references: [id])
+  originalSalesOrder SalesOrder?          @relation(fields: [originalSalesOrderId], references: [id])
+  items              AfterSalesCaseItem[]
+
+  @@unique([entityId, caseNo])
+  @@index([entityId, status])
+  @@index([entityId, reasonCategory])
+  @@index([customerId])
+  @@map("after_sales_cases")
+}
+
+// 售後來回件商品明細
+model AfterSalesCaseItem {
+  id                    String  @id @default(uuid())
+  entityId              String  @map("entity_id")
+  afterSalesCaseId      String  @map("after_sales_case_id")
+  productId             String? @map("product_id")
+  sku                   String?
+  itemName              String  @map("item_name")
+  quantity              Decimal @default(1) @db.Decimal(18, 2)
+  unitPriceOriginal     Decimal @default(0) @map("unit_price_original") @db.Decimal(18, 2)
+  paymentRequired       Boolean @default(false) @map("payment_required")
+  paymentAmountOriginal Decimal @default(0) @map("payment_amount_original") @db.Decimal(18, 2)
+  notes                 String?
+  sortOrder             Int     @default(0) @map("sort_order")
+
+  entity         Entity         @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  afterSalesCase AfterSalesCase @relation(fields: [afterSalesCaseId], references: [id], onDelete: Cascade)
+  product        Product?       @relation(fields: [productId], references: [id])
+
+  @@index([entityId])
+  @@index([afterSalesCaseId])
+  @@index([productId])
+  @@map("after_sales_case_items")
+}
+
 // 銷售訂單
 model SalesOrder {
   id              String   @id @default(uuid())
@@ -734,13 +803,14 @@ model SalesOrder {
   createdAt                      DateTime  @default(now()) @map("created_at")
   updatedAt                      DateTime  @updatedAt @map("updated_at")
 
-  entity    Entity           @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  channel   SalesChannel     @relation(fields: [channelId], references: [id])
-  customer  Customer?        @relation(fields: [customerId], references: [id])
-  items     SalesOrderItem[]
-  shipments Shipment[]
-  payments  Payment[]
-  invoices  Invoice[]
+  entity          Entity           @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  channel         SalesChannel     @relation(fields: [channelId], references: [id])
+  customer        Customer?        @relation(fields: [customerId], references: [id])
+  items           SalesOrderItem[]
+  shipments       Shipment[]
+  payments        Payment[]
+  invoices        Invoice[]
+  afterSalesCases AfterSalesCase[]
 
   @@index([entityId, orderDate])
   @@index([channelId])

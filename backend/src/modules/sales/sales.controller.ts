@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Controller,
   Get,
+  Patch,
   Post,
   Body,
   Param,
@@ -20,6 +21,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SalesService } from './sales.service';
 import { SalesOrderService } from './services/sales-order.service';
 import { SalesQuotationService } from './services/sales-quotation.service';
+import { AfterSalesCaseService } from './services/after-sales-case.service';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
 import { FulfillSalesOrderDto } from './dto/fulfill-sales-order.dto';
 import { ImportEcpayIssuedInvoicesDto } from './dto/import-ecpay-issued-invoices.dto';
@@ -40,6 +42,7 @@ export class SalesController {
     private readonly salesService: SalesService,
     private readonly salesOrderService: SalesOrderService,
     private readonly salesQuotationService: SalesQuotationService,
+    private readonly afterSalesCaseService: AfterSalesCaseService,
   ) {}
 
   /**
@@ -134,6 +137,112 @@ export class SalesController {
     @CurrentUser('id') userId: string,
   ) {
     return this.salesQuotationService.create(dto, userId);
+  }
+
+  @Get('after-sales-cases')
+  @ApiOperation({ summary: '查詢售後來回件' })
+  @ApiQuery({ name: 'entityId', required: true })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  async getAfterSalesCases(
+    @Query('entityId') entityId: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.afterSalesCaseService.findAll(this.requireEntityId(entityId), {
+      status,
+      search,
+      limit: this.parseOptionalLimit(limit),
+    });
+  }
+
+  @Post('after-sales-cases')
+  @ApiOperation({ summary: '建立售後來回件' })
+  async createAfterSalesCase(
+    @Body() body: any,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.afterSalesCaseService.create(body, userId);
+  }
+
+  @Patch('after-sales-cases/:caseId/items/:itemId/payment-required')
+  @ApiOperation({ summary: '設定售後來回件商品是否需付款' })
+  @ApiQuery({ name: 'entityId', required: true })
+  async setAfterSalesItemPaymentRequired(
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Query('entityId') entityId: string,
+    @Body() body: { paymentRequired: boolean; paymentAmountOriginal?: number },
+  ) {
+    return this.afterSalesCaseService.setItemPaymentRequired(
+      this.requireEntityId(entityId),
+      caseId,
+      itemId,
+      body,
+    );
+  }
+
+  @Post('after-sales-cases/:caseId/issue-payment')
+  @ApiOperation({ summary: '開立售後來回件付款連結' })
+  @ApiQuery({ name: 'entityId', required: true })
+  async issueAfterSalesPayment(
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+    @Query('entityId') entityId: string,
+  ) {
+    return this.afterSalesCaseService.issuePayment(this.requireEntityId(entityId), caseId);
+  }
+
+  @Post('after-sales-cases/:caseId/mark-paid')
+  @ApiOperation({ summary: '確認售後來回件客戶付款並自動標記發票已開立' })
+  @ApiQuery({ name: 'entityId', required: true })
+  async markAfterSalesPaid(
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+    @Query('entityId') entityId: string,
+  ) {
+    return this.afterSalesCaseService.markPaid(this.requireEntityId(entityId), caseId);
+  }
+
+  @Post('after-sales-cases/:caseId/confirm-accounting')
+  @ApiOperation({ summary: '會計確認售後來回件發票流程完成' })
+  @ApiQuery({ name: 'entityId', required: true })
+  async confirmAfterSalesAccounting(
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+    @Query('entityId') entityId: string,
+  ) {
+    return this.afterSalesCaseService.confirmAccounting(
+      this.requireEntityId(entityId),
+      caseId,
+    );
+  }
+
+  @Post('after-sales-cases/:caseId/confirm-warehouse-received')
+  @ApiOperation({ summary: '倉儲確認售後來回件收件' })
+  @ApiQuery({ name: 'entityId', required: true })
+  async confirmAfterSalesWarehouseReceived(
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+    @Query('entityId') entityId: string,
+  ) {
+    return this.afterSalesCaseService.confirmWarehouseReceived(
+      this.requireEntityId(entityId),
+      caseId,
+    );
+  }
+
+  @Post('after-sales-cases/:caseId/ship')
+  @ApiOperation({ summary: '客服打單寄出售後來回件' })
+  @ApiQuery({ name: 'entityId', required: true })
+  async shipAfterSalesCase(
+    @Param('caseId', ParseUUIDPipe) caseId: string,
+    @Query('entityId') entityId: string,
+    @Body() body: { trackingNo?: string },
+  ) {
+    return this.afterSalesCaseService.ship(
+      this.requireEntityId(entityId),
+      caseId,
+      body,
+    );
   }
 
   @Post('quotations/:id/status')
