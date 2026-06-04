@@ -15,6 +15,7 @@ import JournalEntriesPage from './pages/JournalEntriesPage'
 import AccountingPeriodsPage from './pages/AccountingPeriodsPage'
 import AccountingWorkbenchPage from './pages/AccountingWorkbenchPage'
 import ReconciliationCenterPage from './pages/ReconciliationCenterPage'
+import TimeoutReconciliationPage from './pages/TimeoutReconciliationPage'
 import SalesPage from './pages/SalesPage'
 import SalesQuotationsPage from './pages/SalesQuotationsPage'
 import ReportsPage from './pages/ReportsPage'
@@ -56,7 +57,8 @@ const App: React.FC = () => {
               <Route element={<DashboardLayout />}>
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<DashboardPage />} />
-                <Route path="reconciliation" element={<ReconciliationCenterPage />} />
+                <Route path="reconciliation" element={<PermissionRoute anyPermissions={['banking:read', 'reports:read', 'accounts:read']}><ReconciliationCenterPage /></PermissionRoute>} />
+                <Route path="reconciliation/timeout" element={<PermissionRoute anyPermissions={['reconciliation_timeout:read', 'accounts:read', 'journal_entries:read']}><TimeoutReconciliationPage /></PermissionRoute>} />
                 <Route path="accounting/workbench" element={<PermissionRoute anyPermissions={['accounts:read', 'journal_entries:read']}><AccountingWorkbenchPage /></PermissionRoute>} />
                 <Route path="accounting/accounts" element={<PermissionRoute anyPermissions={['accounts:read']}><AccountsPage /></PermissionRoute>} />
                 <Route path="accounting/journals" element={<PermissionRoute anyPermissions={['journal_entries:read']}><JournalEntriesPage /></PermissionRoute>} />
@@ -93,9 +95,6 @@ const App: React.FC = () => {
 
                 {/* User Routes */}
                 <Route path="profile" element={<PermissionRoute anyPermissions={['profile_self:read']}><ProfilePage /></PermissionRoute>} />
-
-                {/* 電商對帳中心路由（2026-04）*/}
-                <Route path="reconciliation" element={<ReconciliationCenterPage />} />
 
                 {/* Placeholder Routes */}
                 <Route path="import" element={<ImportPage />} />

@@ -5,6 +5,7 @@
 import {
   Controller,
   Get,
+  Patch,
   Post,
   Body,
   Param,
@@ -215,6 +216,26 @@ class ClearReadyPaymentsDto {
   dryRun?: boolean;
 }
 
+class UpdateTimeoutReconciliationCaseDto {
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @IsOptional()
+  @IsString()
+  paymentLinkUrl?: string;
+
+  @IsOptional()
+  @IsIn(['customer_service', 'accounting', 'completed'])
+  status?: string;
+}
+
+class ReturnTimeoutReconciliationCaseDto {
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
 @ApiTags('Reconciliation')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -245,6 +266,66 @@ export class ReconciliationController {
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
       limit ? Number(limit) : undefined,
+    );
+  }
+
+  @Get('timeout-cases')
+  @Roles('ADMIN', 'ACCOUNTANT', 'CUSTOMER_SERVICE')
+  @ApiOperation({
+    summary: '超時對帳案件',
+    description:
+      '查詢超過指定天數且仍未完成收款、發票與對帳閉環的案件，供客服追蹤與返回會計。',
+  })
+  async getTimeoutReconciliationCases(
+    @Query('entityId') entityId: string,
+    @Query('status') status?: string,
+    @Query('limit') limit?: string,
+    @Query('overdueDays') overdueDays?: string,
+  ) {
+    return this.reconciliationService.getTimeoutReconciliationCases(entityId, {
+      status,
+      limit: limit ? Number(limit) : undefined,
+      overdueDays: overdueDays ? Number(overdueDays) : undefined,
+    });
+  }
+
+  @Patch('timeout-cases/:orderId')
+  @Roles('ADMIN', 'ACCOUNTANT', 'CUSTOMER_SERVICE')
+  @ApiOperation({ summary: '更新超時對帳案件客服備註、付款連結或狀態' })
+  async updateTimeoutReconciliationCase(
+    @Query('entityId') entityId: string,
+    @Param('orderId') orderId: string,
+    @Body() body: UpdateTimeoutReconciliationCaseDto,
+  ) {
+    return this.reconciliationService.updateTimeoutReconciliationCase(
+      entityId,
+      orderId,
+      body,
+    );
+  }
+
+  @Post('timeout-cases/:orderId/resend-payment-link')
+  @Roles('ADMIN', 'ACCOUNTANT', 'CUSTOMER_SERVICE')
+  @ApiOperation({ summary: '重新傳送超時對帳案件付款連結' })
+  async resendTimeoutPaymentLink(
+    @Query('entityId') entityId: string,
+    @Param('orderId') orderId: string,
+  ) {
+    return this.reconciliationService.resendTimeoutPaymentLink(entityId, orderId);
+  }
+
+  @Post('timeout-cases/:orderId/return-accounting')
+  @Roles('ADMIN', 'ACCOUNTANT', 'CUSTOMER_SERVICE')
+  @ApiOperation({ summary: '將超時對帳案件返回會計處理' })
+  async returnTimeoutCaseToAccounting(
+    @Query('entityId') entityId: string,
+    @Param('orderId') orderId: string,
+    @Body() body: ReturnTimeoutReconciliationCaseDto,
+  ) {
+    return this.reconciliationService.returnTimeoutCaseToAccounting(
+      entityId,
+      orderId,
+      body,
     );
   }
 

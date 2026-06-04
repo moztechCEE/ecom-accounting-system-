@@ -74,7 +74,13 @@ export class SeederService implements OnModuleInit {
 
   private async createRolesAndPermissions(): Promise<Record<string, Role>> {
     // Create Permissions (Simplified for critical ones)
-    const resources = ['users', 'accounts', 'journal_entries', 'sales_orders'];
+    const resources = [
+      'users',
+      'accounts',
+      'journal_entries',
+      'sales_orders',
+      'reconciliation_timeout',
+    ];
     const actions = ['read', 'create', 'update', 'delete', 'approve'];
 
     const permissions: Permission[] = [];
@@ -119,13 +125,25 @@ export class SeederService implements OnModuleInit {
           'journal_entries:create',
           'journal_entries:approve',
           'sales_orders:read',
+          'reconciliation_timeout:read',
+        ],
+      },
+      {
+        code: 'CUSTOMER_SERVICE',
+        name: 'CUSTOMER_SERVICE',
+        description: '客服部門成員，可處理超時對帳與付款連結通知',
+        hierarchyLevel: 4,
+        permissions: [
+          'sales_orders:read',
+          'reconciliation_timeout:read',
+          'reconciliation_timeout:update',
         ],
       },
       {
         code: 'OPERATOR',
         name: 'OPERATOR',
         description: '一般操作成員，可進行基礎作業',
-        hierarchyLevel: 4,
+        hierarchyLevel: 5,
         permissions: ['sales_orders:read', 'sales_orders:create'],
       },
     ];

@@ -964,6 +964,234 @@ export class ReconciliationService {
     };
   }
 
+  async getTimeoutReconciliationCases(
+    entityId: string,
+    params: {
+      status?: string;
+      limit?: number;
+      overdueDays?: number;
+    } = {},
+  ) {
+    const normalizedLimit = Math.min(Math.max(Number(params.limit || 300), 20), 500);
+    const overdueDays = Math.min(Math.max(Number(params.overdueDays || 30), 1), 365);
+    const cutoff = new Date(Date.now() - overdueDays * 24 * 60 * 60 * 1000);
+    const statusFilter = params.status?.trim();
+
+    const orders = await this.prisma.salesOrder.findMany({
+      where: {
+        entityId,
+        orderDate: { lte: cutoff },
+        status: { notIn: ['cancelled', 'refunded'] },
+      },
+      include: {
+        customer: true,
+        channel: true,
+        payments: true,
+        invoices: true,
+      },
+      orderBy: [{ orderDate: 'asc' }, { updatedAt: 'desc' }],
+      take: normalizedLimit * 2,
+    });
+
+    const allItems = orders
+      .map((order) => this.mapTimeoutReconciliationCase(order, cutoff))
+      .filter((item) => item.isTimeoutCandidate);
+
+    const items = allItems
+      .filter((item) =>
+        statusFilter && statusFilter !== 'all'
+          ? item.timeoutStatus === statusFilter
+          : item.timeoutStatus !== 'completed',
+      )
+      .slice(0, normalizedLimit);
+
+    return {
+      entityId,
+      overdueDays,
+      cutoff: cutoff.toISOString(),
+      summary: {
+        total: allItems.length,
+        customerService: allItems.filter((item) => item.timeoutStatus === 'customer_service').length,
+        accounting: allItems.filter((item) => item.timeoutStatus === 'accounting').length,
+        completed: allItems.filter((item) => item.timeoutStatus === 'completed').length,
+        outstandingAmount: allItems.reduce((sum, item) => sum + item.outstandingAmount, 0),
+      },
+      items,
+    };
+  }
+
+  async updateTimeoutReconciliationCase(
+    entityId: string,
+    orderId: string,
+    data: {
+      note?: string;
+      paymentLinkUrl?: string;
+      status?: string;
+    },
+  ) {
+    await this.ensureSalesOrderInEntity(entityId, orderId);
+    await this.prisma.salesOrder.update({
+      where: { id: orderId },
+      data: {
+        ...(data.note !== undefined
+          ? { timeoutReconciliationNote: data.note?.trim() || null }
+          : {}),
+        ...(data.paymentLinkUrl !== undefined
+          ? { paymentLinkUrl: data.paymentLinkUrl?.trim() || null }
+          : {}),
+        ...(data.status
+          ? { timeoutReconciliationStatus: data.status.trim() }
+          : {}),
+        timeoutReconciliationUpdatedAt: new Date(),
+      },
+    });
+
+    return this.getTimeoutReconciliationCaseById(entityId, orderId);
+  }
+
+  async resendTimeoutPaymentLink(entityId: string, orderId: string) {
+    const order = await this.ensureSalesOrderInEntity(entityId, orderId);
+    const paymentLinkUrl = order.paymentLinkUrl || this.buildPaymentLink(order);
+
+    await this.prisma.salesOrder.update({
+      where: { id: orderId },
+      data: {
+        paymentLinkUrl,
+        paymentLinkLastSentAt: new Date(),
+        paymentLinkResendCount: { increment: 1 },
+        timeoutReconciliationStatus: 'customer_service',
+        timeoutReconciliationUpdatedAt: new Date(),
+      },
+    });
+
+    return this.getTimeoutReconciliationCaseById(entityId, orderId);
+  }
+
+  async returnTimeoutCaseToAccounting(
+    entityId: string,
+    orderId: string,
+    data: { note?: string } = {},
+  ) {
+    const order = await this.ensureSalesOrderInEntity(entityId, orderId);
+    const nextNote = data.note?.trim()
+      ? [order.timeoutReconciliationNote, `[返回會計] ${data.note.trim()}`]
+          .filter(Boolean)
+          .join('\n')
+      : order.timeoutReconciliationNote;
+
+    await this.prisma.salesOrder.update({
+      where: { id: orderId },
+      data: {
+        timeoutReconciliationStatus: 'accounting',
+        timeoutReconciliationNote: nextNote || null,
+        returnedToAccountingAt: new Date(),
+        timeoutReconciliationUpdatedAt: new Date(),
+      },
+    });
+
+    return this.getTimeoutReconciliationCaseById(entityId, orderId);
+  }
+
+  private async getTimeoutReconciliationCaseById(entityId: string, orderId: string) {
+    const order = await this.prisma.salesOrder.findFirst({
+      where: { id: orderId, entityId },
+      include: {
+        customer: true,
+        channel: true,
+        payments: true,
+        invoices: true,
+      },
+    });
+    if (!order) {
+      throw new NotFoundException('Timeout reconciliation case not found');
+    }
+
+    return this.mapTimeoutReconciliationCase(order);
+  }
+
+  private async ensureSalesOrderInEntity(entityId: string, orderId: string) {
+    const order = await this.prisma.salesOrder.findFirst({
+      where: { id: orderId, entityId },
+      include: {
+        customer: true,
+        channel: true,
+        payments: true,
+        invoices: true,
+      },
+    });
+    if (!order) {
+      throw new NotFoundException('Sales order not found');
+    }
+    return order;
+  }
+
+  private mapTimeoutReconciliationCase(order: any, cutoff?: Date) {
+    const paidAmount = (order.payments || []).reduce(
+      (sum, payment) => sum + Number(payment.amountGrossOriginal || 0),
+      0,
+    );
+    const grossAmount = Number(order.totalGrossOriginal || 0);
+    const outstandingAmount = Math.max(grossAmount - paidAmount, 0);
+    const hasInvoice = Boolean(order.hasInvoice || order.invoiceId || order.invoices?.length);
+    const reconciled = (order.payments || []).some((payment) => payment.reconciledFlag);
+    const isTimeoutCandidate =
+      (cutoff ? new Date(order.orderDate) <= cutoff : true) &&
+      outstandingAmount > 0 &&
+      !hasInvoice &&
+      !reconciled;
+    const timeoutStatus =
+      order.timeoutReconciliationStatus ||
+      (isTimeoutCandidate ? 'customer_service' : 'completed');
+
+    return {
+      key: order.id,
+      orderId: order.id,
+      orderNumber: order.externalOrderId || order.id,
+      customerName: order.customer?.name || '未指定客戶',
+      customerEmail: order.customer?.email || null,
+      customerPhone: order.customer?.phone || order.customer?.mobile || null,
+      sourceLabel: order.channel?.name || order.channel?.code || '未指定通路',
+      orderDate: order.orderDate?.toISOString?.() || order.orderDate,
+      daysOverdue: Math.max(
+        Math.floor((Date.now() - new Date(order.orderDate).getTime()) / (24 * 60 * 60 * 1000)),
+        0,
+      ),
+      grossAmount,
+      paidAmount,
+      outstandingAmount,
+      hasInvoice,
+      reconciledFlag: reconciled,
+      timeoutStatus,
+      timeoutNote: order.timeoutReconciliationNote || null,
+      paymentLinkUrl: order.paymentLinkUrl || this.buildPaymentLink(order),
+      paymentLinkLastSentAt:
+        order.paymentLinkLastSentAt?.toISOString?.() || order.paymentLinkLastSentAt || null,
+      paymentLinkResendCount: Number(order.paymentLinkResendCount || 0),
+      returnedToAccountingAt:
+        order.returnedToAccountingAt?.toISOString?.() || order.returnedToAccountingAt || null,
+      updatedAt:
+        order.timeoutReconciliationUpdatedAt?.toISOString?.() ||
+        order.updatedAt?.toISOString?.() ||
+        order.updatedAt ||
+        null,
+      isTimeoutCandidate,
+      nextAction:
+        timeoutStatus === 'accounting'
+          ? '會計可重新對帳、同步發票，完成後結案。'
+          : '客服聯繫客戶並重送付款連結；確認後返回會計。',
+    };
+  }
+
+  private buildPaymentLink(order: any) {
+    const baseUrl =
+      this.configService.get<string>('PAYMENT_LINK_BASE_URL', '') ||
+      this.configService.get<string>('FRONTEND_PUBLIC_URL', '') ||
+      this.configService.get<string>('FRONTEND_URL', '') ||
+      '';
+    const path = `/payment/reconciliation/${encodeURIComponent(order.id)}`;
+    return baseUrl ? `${baseUrl.replace(/\/$/, '')}${path}` : path;
+  }
+
   private emptyCenterBucket(key: string, label: string) {
     return {
       key,

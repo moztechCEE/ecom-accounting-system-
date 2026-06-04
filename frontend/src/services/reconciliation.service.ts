@@ -139,6 +139,48 @@ export type ClearReadyPaymentsResponse = {
   }>
 }
 
+export type TimeoutReconciliationStatus = 'customer_service' | 'accounting' | 'completed'
+
+export type TimeoutReconciliationCase = {
+  key: string
+  orderId: string
+  orderNumber: string
+  customerName: string
+  customerEmail?: string | null
+  customerPhone?: string | null
+  sourceLabel: string
+  orderDate: string
+  daysOverdue: number
+  grossAmount: number
+  paidAmount: number
+  outstandingAmount: number
+  hasInvoice: boolean
+  reconciledFlag: boolean
+  timeoutStatus: TimeoutReconciliationStatus
+  timeoutNote?: string | null
+  paymentLinkUrl?: string | null
+  paymentLinkLastSentAt?: string | null
+  paymentLinkResendCount: number
+  returnedToAccountingAt?: string | null
+  updatedAt?: string | null
+  isTimeoutCandidate: boolean
+  nextAction: string
+}
+
+export type TimeoutReconciliationResponse = {
+  entityId: string
+  overdueDays: number
+  cutoff: string
+  summary: {
+    total: number
+    customerService: number
+    accounting: number
+    completed: number
+    outstandingAmount: number
+  }
+  items: TimeoutReconciliationCase[]
+}
+
 export type ImportProviderPayoutsResponse = {
   success: boolean
   batchId: string
@@ -253,6 +295,87 @@ export const reconciliationService = {
       },
       timeout: 60000,
     })
+    return response.data
+  },
+
+  getTimeoutCases: async (params?: {
+    entityId?: string
+    status?: TimeoutReconciliationStatus | 'all'
+    limit?: number
+    overdueDays?: number
+  }) => {
+    const entityId =
+      params?.entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+
+    const response = await api.get<TimeoutReconciliationResponse>(
+      '/reconciliation/timeout-cases',
+      {
+        params: {
+          entityId,
+          status: params?.status,
+          limit: params?.limit,
+          overdueDays: params?.overdueDays,
+        },
+        timeout: 60000,
+      },
+    )
+    return response.data
+  },
+
+  updateTimeoutCase: async (
+    orderId: string,
+    data: {
+      note?: string
+      paymentLinkUrl?: string
+      status?: TimeoutReconciliationStatus
+    },
+    entityId?: string,
+  ) => {
+    const resolvedEntityId =
+      entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+
+    const response = await api.patch<TimeoutReconciliationCase>(
+      `/reconciliation/timeout-cases/${orderId}`,
+      data,
+      {
+        params: { entityId: resolvedEntityId },
+        timeout: 60000,
+      },
+    )
+    return response.data
+  },
+
+  resendTimeoutPaymentLink: async (orderId: string, entityId?: string) => {
+    const resolvedEntityId =
+      entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+
+    const response = await api.post<TimeoutReconciliationCase>(
+      `/reconciliation/timeout-cases/${orderId}/resend-payment-link`,
+      {},
+      {
+        params: { entityId: resolvedEntityId },
+        timeout: 60000,
+      },
+    )
+    return response.data
+  },
+
+  returnTimeoutCaseToAccounting: async (
+    orderId: string,
+    data: { note?: string } = {},
+    entityId?: string,
+  ) => {
+    const resolvedEntityId =
+      entityId?.trim() || localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID
+
+    const response = await api.post<TimeoutReconciliationCase>(
+      `/reconciliation/timeout-cases/${orderId}/return-accounting`,
+      data,
+      {
+        params: { entityId: resolvedEntityId },
+        timeout: 60000,
+      },
+    )
     return response.data
   },
 

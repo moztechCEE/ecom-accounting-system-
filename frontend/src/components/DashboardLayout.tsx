@@ -200,6 +200,12 @@ const DashboardLayout: React.FC = () => {
           onClick: () => navigate('/reconciliation'),
         },
         {
+          key: '/reconciliation/timeout',
+          label: '超時對帳',
+          hidden: !canAccess(['reconciliation_timeout:read', 'accounts:read', 'journal_entries:read']),
+          onClick: () => navigate('/reconciliation/timeout'),
+        },
+        {
           key: '/reports',
           label: '報表中心',
           hidden: !canAccess(['reports:read']),
