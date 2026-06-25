@@ -64,6 +64,8 @@ const ProfilePage: React.FC = () => {
       profileForm.setFieldsValue({
         nationalId: profile.nationalId || '',
         mailingAddress: profile.mailingAddress || '',
+        emergencyContactName: profile.emergencyContactName || '',
+        emergencyContactPhone: profile.emergencyContactPhone || '',
       })
     } catch (error: any) {
       setEmployeeProfile(null)
@@ -175,6 +177,14 @@ const ProfilePage: React.FC = () => {
               <Form.Item name="mailingAddress" label="通訊地址">
                 <Input.TextArea rows={3} placeholder="請輸入通訊地址" />
               </Form.Item>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Form.Item name="emergencyContactName" label="緊急聯絡人">
+                  <Input placeholder="請輸入緊急聯絡人姓名" />
+                </Form.Item>
+                <Form.Item name="emergencyContactPhone" label="緊急聯絡人電話">
+                  <Input placeholder="請輸入緊急聯絡人電話" />
+                </Form.Item>
+              </div>
               <Button type="primary" loading={profileSaving} onClick={handleSaveProfile}>
                 儲存入職資料
               </Button>

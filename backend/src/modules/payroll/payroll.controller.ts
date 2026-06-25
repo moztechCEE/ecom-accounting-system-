@@ -290,6 +290,8 @@ export class PayrollController {
     body: {
       nationalId?: string | null;
       mailingAddress?: string | null;
+      emergencyContactName?: string | null;
+      emergencyContactPhone?: string | null;
     },
   ) {
     return this.payrollService.updateMyEmployeeProfile(req.user.id, body);

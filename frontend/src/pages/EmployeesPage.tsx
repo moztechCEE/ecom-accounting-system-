@@ -255,6 +255,8 @@ const employeeFormFieldLabels: Record<string, string> = {
   userId: "登入帳號",
   nationalId: "身分證字號",
   mailingAddress: "通訊地址",
+  emergencyContactName: "緊急聯絡人",
+  emergencyContactPhone: "緊急聯絡人電話",
   departmentId: "部門",
   attendanceType: "出勤類型",
   hireDate: "到職日",
@@ -393,6 +395,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     userId: employee?.userId || undefined,
     nationalId: employee?.nationalId || "",
     mailingAddress: employee?.mailingAddress || "",
+    emergencyContactName: employee?.emergencyContactName || "",
+    emergencyContactPhone: employee?.emergencyContactPhone || "",
     departmentId: employee?.departmentId || undefined,
     attendanceType: employee?.attendanceType || "INTERNAL",
     hireDate: employee?.hireDate ? dayjs(employee.hireDate) : undefined,
@@ -424,7 +428,14 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     if (["name", "gender", "departmentId", "attendanceType", "hireDate"].includes(rootName)) {
       return "basic";
     }
-    if (["nationalId", "mailingAddress"].includes(rootName)) {
+    if (
+      [
+        "nationalId",
+        "mailingAddress",
+        "emergencyContactName",
+        "emergencyContactPhone",
+      ].includes(rootName)
+    ) {
       return "profile";
     }
     if (["salaryBaseOriginal", "compensationSettings"].includes(rootName)) {
@@ -488,6 +499,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         hireDate: employeeValues.hireDate.toISOString(),
         nationalId: employeeValues.nationalId,
         mailingAddress: employeeValues.mailingAddress,
+        emergencyContactName: employeeValues.emergencyContactName,
+        emergencyContactPhone: employeeValues.emergencyContactPhone,
         compensationSettings: employeeValues.compensationSettings,
         onboardingRequirements,
         loginEmail: loginEmail?.trim() || undefined,
@@ -572,6 +585,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           : null,
         nationalId: employeeValues.nationalId,
         mailingAddress: employeeValues.mailingAddress,
+        emergencyContactName: employeeValues.emergencyContactName,
+        emergencyContactPhone: employeeValues.emergencyContactPhone,
         compensationSettings: employeeValues.compensationSettings,
       });
       message.success("員工更新成功");
@@ -920,6 +935,12 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
             </Form.Item>
             <Form.Item name="mailingAddress" label="通訊地址">
               <Input placeholder="請輸入員工通訊地址" />
+            </Form.Item>
+            <Form.Item name="emergencyContactName" label="緊急聯絡人">
+              <Input placeholder="請輸入緊急聯絡人姓名" />
+            </Form.Item>
+            <Form.Item name="emergencyContactPhone" label="緊急聯絡人電話">
+              <Input placeholder="請輸入緊急聯絡人電話" />
             </Form.Item>
           </div>
           <Alert

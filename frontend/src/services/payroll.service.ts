@@ -120,6 +120,8 @@ export const payrollService = {
   updateMyEmployeeProfile: async (data: {
     nationalId?: string | null;
     mailingAddress?: string | null;
+    emergencyContactName?: string | null;
+    emergencyContactPhone?: string | null;
   }) => {
     const response = await api.patch<Employee>("/payroll/my/employee", data);
     return response.data;

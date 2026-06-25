@@ -1096,6 +1096,8 @@ export class PayrollService {
       attendanceType?: string | null;
       nationalId?: string | null;
       mailingAddress?: string | null;
+      emergencyContactName?: string | null;
+      emergencyContactPhone?: string | null;
       compensationSettings?: Record<string, unknown> | null;
       onboardingRequirements?:
         | Record<string, unknown>
@@ -1201,6 +1203,8 @@ export class PayrollService {
         gender,
         nationalId: data.nationalId?.trim() || null,
         mailingAddress: data.mailingAddress?.trim() || null,
+        emergencyContactName: data.emergencyContactName?.trim() || null,
+        emergencyContactPhone: data.emergencyContactPhone?.trim() || null,
         country: entity.country,
         location: data.location?.trim() || null,
         attendanceType: this.normalizeEmployeeAttendanceType(
@@ -1395,6 +1399,8 @@ export class PayrollService {
       terminateDate?: string | Date | null;
       nationalId?: string | null;
       mailingAddress?: string | null;
+      emergencyContactName?: string | null;
+      emergencyContactPhone?: string | null;
       compensationSettings?: Record<string, unknown> | null;
       loginEmail?: string | null;
       loginPassword?: string | null;
@@ -1488,6 +1494,16 @@ export class PayrollService {
 
     if (data.mailingAddress !== undefined) {
       updateData.mailingAddress = data.mailingAddress?.trim() || null;
+    }
+
+    if (data.emergencyContactName !== undefined) {
+      updateData.emergencyContactName =
+        data.emergencyContactName?.trim() || null;
+    }
+
+    if (data.emergencyContactPhone !== undefined) {
+      updateData.emergencyContactPhone =
+        data.emergencyContactPhone?.trim() || null;
     }
 
     if (data.terminateDate !== undefined) {
@@ -1973,6 +1989,8 @@ export class PayrollService {
     data: {
       nationalId?: string | null;
       mailingAddress?: string | null;
+      emergencyContactName?: string | null;
+      emergencyContactPhone?: string | null;
     },
   ) {
     const employee = await this.prisma.employee.findUnique({
@@ -1992,6 +2010,15 @@ export class PayrollService {
           : {}),
         ...(data.mailingAddress !== undefined
           ? { mailingAddress: data.mailingAddress?.trim() || null }
+          : {}),
+        ...(data.emergencyContactName !== undefined
+          ? { emergencyContactName: data.emergencyContactName?.trim() || null }
+          : {}),
+        ...(data.emergencyContactPhone !== undefined
+          ? {
+              emergencyContactPhone:
+                data.emergencyContactPhone?.trim() || null,
+            }
           : {}),
       },
       include: this.buildEmployeeInclude(),

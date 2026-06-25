@@ -1548,6 +1548,8 @@ model Employee {
   gender         String?
   nationalId     String?   @map("national_id")
   mailingAddress String?   @map("mailing_address")
+  emergencyContactName  String? @map("emergency_contact_name")
+  emergencyContactPhone String? @map("emergency_contact_phone")
   country        String // TW, CN
   location       String?
   attendanceType String    @default("INTERNAL") @map("attendance_type") // INTERNAL, EXTERNAL

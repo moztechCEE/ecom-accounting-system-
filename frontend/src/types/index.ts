@@ -298,6 +298,8 @@ export interface Employee {
   gender?: "MALE" | "FEMALE" | null;
   nationalId?: string | null;
   mailingAddress?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
   attendanceType?: "INTERNAL" | "EXTERNAL";
   departmentId?: string;
   departmentName?: string;
