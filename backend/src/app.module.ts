@@ -43,6 +43,7 @@ import { OneShopIntegrationModule } from './modules/integration/one-shop/one-sho
 import { ShoplineIntegrationModule } from './modules/integration/shopline/shopline.module';
 import { MetaAdsIntegrationModule } from './modules/integration/meta-ads/meta-ads.module';
 import { GoogleAdsIntegrationModule } from './modules/integration/google-ads/google-ads.module';
+import { Ga4IntegrationModule } from './modules/integration/ga4/ga4.module';
 import { PurchaseModule } from './modules/purchase/purchase.module';
 import { AssemblyModule } from './modules/assembly/assembly.module';
 
@@ -115,6 +116,7 @@ import { AssemblyModule } from './modules/assembly/assembly.module';
     ShoplineIntegrationModule,
     MetaAdsIntegrationModule,
     GoogleAdsIntegrationModule,
+    Ga4IntegrationModule,
     NotificationModule,
     AiModule,
     AttendanceModule,
