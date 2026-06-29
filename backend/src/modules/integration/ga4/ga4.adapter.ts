@@ -252,6 +252,19 @@ export class Ga4Adapter {
   }
 
   private async fetchAccessToken(property?: Ga4PropertyConfig) {
+    const authMode = (
+      this.config.get<string>('GA4_AUTH_MODE', '') || 'auto'
+    )
+      .trim()
+      .toLowerCase();
+    if (
+      ['metadata', 'service_account', 'service-account', 'service_account_metadata'].includes(
+        authMode,
+      )
+    ) {
+      return this.fetchMetadataAccessToken();
+    }
+
     const oauth = await this.fetchOAuthAccessToken(property);
     if (oauth) {
       return oauth;
