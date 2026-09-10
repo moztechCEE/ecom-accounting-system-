@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { activeNavigation, navigationLeaves, navigationParent, visibleNavigation } from '../src/config/navigation.ts'
+import { activeNavigation, navigationLeaves, navigationParent, visibleNavigation, workspaceNavigation } from '../src/config/navigation.ts'
+import { warehouseAreas, warehouseOnlyUser } from '../src/config/workspaces.ts'
 import { afterSalesTypes } from '../src/utils/after-sales-display.ts'
 import type { User } from '../src/types/index.ts'
 import { loginDestination } from '../src/utils/login-destination.ts'
@@ -8,12 +9,24 @@ import { loginDestination } from '../src/utils/login-destination.ts'
 const admin = { roles: ['SUPER_ADMIN'], permissions: [] } as unknown as User
 const staff = { roles: ['CUSTOMER_SERVICE'], permissions: ['after_sales_cases:read'] } as unknown as User
 test('warehouse entry follows ERP permission without implying WMS access', () => {
-  const warehouse = { roles: ['EMPLOYEE'], permissions: ['inventory:read'] } as unknown as User
+  const warehouse = { roles: ['EMPLOYEE'], permissions: ['wms_tasks:read'] } as unknown as User
   assert(visibleNavigation(warehouse).some(item => item.key === 'warehouse'))
   assert(!visibleNavigation(staff).some(item => item.key === 'warehouse'))
   assert.equal(loginDestination(warehouse), '/warehouse')
   assert.equal(loginDestination({ ...warehouse, mustChangePassword: true }), '/auth/change-password')
   assert.equal(loginDestination(admin), '/dashboard')
+  assert(!visibleNavigation({...warehouse,permissions:['inventory:read']}).some(item=>item.key==='warehouse'))
+})
+test('warehouse-only users see only assigned work plus personal self-service',()=>{
+  const picker={...staff,roles:['EMPLOYEE'],permissions:['wms_tasks:read','wms_picking:execute','attendance_self:read','leave_self:read','profile_self:read']}
+  assert(warehouseOnlyUser(picker))
+  assert.deepEqual(warehouseAreas(picker).map(a=>a.key),['pick'])
+  assert.deepEqual(navigationLeaves(workspaceNavigation(picker,'all')).map(i=>i.key),['/warehouse','/attendance/dashboard','/attendance/leaves','/profile'])
+  assert.deepEqual(warehouseAreas({...picker,permissions:['wms_picking:execute']}).map(a=>a.key),[])
+  const scoped=navigationLeaves(workspaceNavigation(admin,'warehouse')).map(i=>i.key)
+  assert(!scoped.includes('/payroll/employees'))
+  assert(!scoped.includes('/reports'))
+  assert.equal(navigationLeaves(visibleNavigation(admin)).find(i=>i.key==='/admin/after-sales-brands')?.label,'品牌設定')
 })
 test('source after-sales types remain accessible without unrelated financial access', () => {
   const items = visibleNavigation(staff)

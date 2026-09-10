@@ -90,7 +90,7 @@ export default function AfterSalesBrandsPage() {
   return (
     <section className="after-sales-preparation">
       <header className="prep-heading">
-        <Typography.Title level={2}>品牌與 LINE</Typography.Title>
+        <Typography.Title level={2}>品牌設定</Typography.Title>
         <Button
           type="primary"
           icon={<PlusOutlined />}

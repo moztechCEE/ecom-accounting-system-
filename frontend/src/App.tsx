@@ -1,6 +1,8 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider } from './contexts/AuthContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { loginDestination } from './utils/login-destination'
+import { warehouseOnlyUser } from './config/workspaces'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { AIProvider } from './contexts/AIContext'
 import DashboardLayout from './components/DashboardLayout'
@@ -47,6 +49,12 @@ import AssemblyPage from './pages/AssemblyPage'
 import CustomersPage from './pages/CustomersPage'
 import ProfilePage from './pages/ProfilePage'
 
+function HomeEntry({ dashboard = false }: { dashboard?: boolean }) {
+  const { user, loading } = useAuth()
+  if (loading) return null
+  if (dashboard && !warehouseOnlyUser(user)) return <DashboardPage />
+  return <Navigate to={loginDestination(user)} replace />
+}
 const App: React.FC = () => {
   return (
     <BrowserRouter>
@@ -60,8 +68,8 @@ const App: React.FC = () => {
             <Route path="/" element={<ProtectedRoute />}>
               <Route path="auth/change-password" element={<ForcePasswordChangePage />} />
               <Route element={<DashboardLayout />}>
-                <Route index element={<Navigate to="/dashboard" replace />} />
-                <Route path="dashboard" element={<DashboardPage />} />
+                <Route index element={<HomeEntry />} />
+                <Route path="dashboard" element={<HomeEntry dashboard />} />
                 <Route path="reconciliation" element={<PermissionRoute anyPermissions={['banking:read', 'reports:read', 'accounts:read']}><ReconciliationCenterPage /></PermissionRoute>} />
                 <Route path="reconciliation/timeout" element={<PermissionRoute anyPermissions={['reconciliation_timeout:read', 'accounts:read', 'journal_entries:read']}><TimeoutReconciliationPage /></PermissionRoute>} />
                 <Route path="accounting/workbench" element={<PermissionRoute anyPermissions={['accounts:read', 'journal_entries:read']}><AccountingWorkbenchPage /></PermissionRoute>} />
@@ -97,7 +105,7 @@ const App: React.FC = () => {
                 <Route path="attendance/admin" element={<PermissionRoute anyPermissions={['attendance_admin:read']}><AttendanceAdminPage /></PermissionRoute>} />
 
                 {/* Supply Chain Routes */}
-                <Route path="warehouse" element={<PermissionRoute anyPermissions={['inventory:read']}><WarehouseCenterPage /></PermissionRoute>} />
+                <Route path="warehouse" element={<PermissionRoute anyPermissions={['wms_tasks:read']}><WarehouseCenterPage /></PermissionRoute>} />
                 <Route path="inventory/products" element={<PermissionRoute anyPermissions={['inventory:read']}><ProductsPage /></PermissionRoute>} />
                 <Route path="purchasing/orders" element={<PermissionRoute anyPermissions={['purchase_orders:read']}><PurchaseOrdersPage /></PermissionRoute>} />
                 <Route path="manufacturing/assembly" element={<PermissionRoute anyPermissions={['inventory:read']}><AssemblyPage /></PermissionRoute>} />

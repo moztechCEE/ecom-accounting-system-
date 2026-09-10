@@ -3,6 +3,7 @@ import { hasPermission, hasRole, isAdminUser } from './access'
 
 export function loginDestination(user: User | null) {
   if (user?.mustChangePassword) return '/auth/change-password'
+  if (!isAdminUser(user) && hasPermission(user, 'wms_tasks:read')) return '/warehouse'
   if (
     !isAdminUser(user) &&
     hasRole(user, 'CUSTOMER_SERVICE') &&
@@ -10,6 +11,5 @@ export function loginDestination(user: User | null) {
     hasPermission(user, 'after_sales_cases:read')
   )
     return '/sales/after-sales'
-  if (!isAdminUser(user) && hasPermission(user, 'inventory:read') && !hasPermission(user, 'after_sales_cases:read')) return '/warehouse'
   return '/dashboard'
 }

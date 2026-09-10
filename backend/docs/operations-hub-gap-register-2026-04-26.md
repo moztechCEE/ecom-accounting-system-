@@ -1029,3 +1029,11 @@ Cloud Run 正式資料目前已經不是空系統，但核心治理缺口很大�
 - 新三表 migration 只套用到 `erp_after_sales_staging`，execution `erp-ops-schema-0910-xdhxt` 成功。私有候選後端 `00003-jxn` Ready；健康與 DB readiness 200，匿名 403，排程與 startup seed 關閉。
 - 使用者拒絕 frontend invoke grant：未新增 IAM、未公開 staging。前端已 build 但未部署，真實瀏覽器聯調、售後來源版本／公司 mapping、WMS service identity、employee/order/brand mapping 與交易 parity 仍是阻擋項。
 - 正式 ERP／WMS 流量、原 checkout 與另一套售後程式未更動。詳見 `operations-staging-receipt-2026-09-10.md`、`wms-integration-2026-09-10.md`。不能宣稱完整整合或正式上線。
+
+2026-09-10 儲運職務工作區與原生掃碼（本機增量）：
+
+- 品牌設定命名統一；新增儲運工作區導覽／登入導向、訂單調度／揀貨／裝箱／出貨區域，純儲運角色只見出貨與自己的資訊。搜尋共用同一份權限導覽。
+- 原生揀貨／裝箱面板、進度、SN／條碼輸入及測試角色切換完成。瀏覽器完成同一合成訂單揀貨→裝箱→核對完成，重複 SN 不增加數量；沒有產生物流交接或實收事實。
+- 新增五項 WMS 權限 catalog migration，未套用、未賦權；後端不再以 inventory:read 當作出貨權限。未接來源的 GET／POST 仍受 guard 保護並回 503，沒有真實命令寫入。
+- 前端 13 tests、後端 39 suites / 170 tests 與前後端 build 通過。正式角色指派、來源身分與 mappings、持久命令交易、建單匯入、完整舊功能 parity、真實人資範圍與端到端驗證未完成。
+- 本輪沒有部署、IAM 或正式流量變更，遵守私有 staging 限制。具體責任與缺口見 `warehouse-workspace-2026-09-10.md`。

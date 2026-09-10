@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Avatar, Button, Drawer, Dropdown, Grid, Input, Menu } from 'antd'
+import { Avatar, Button, Drawer, Dropdown, Grid, Input, Menu, Select } from 'antd'
 import { AppstoreOutlined, BankOutlined, CustomerServiceOutlined, DashboardOutlined, LogoutOutlined, MenuFoldOutlined, MenuOutlined, MenuUnfoldOutlined, SearchOutlined, SettingOutlined, ShoppingOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
 import { PRODUCT } from '../config/product'
-import { activeNavigation, navigationParent, visibleNavigation, type NavigationItem } from '../config/navigation'
+import { activeNavigation, navigationParent, workspaceNavigation, type NavigationItem } from '../config/navigation'
+import { PERSONAL_PATHS, warehouseOnlyUser } from '../config/workspaces'
+import { hasPermission } from '../utils/access'
 import CommandPalette from './CommandPalette'
 import NotificationCenter from './NotificationCenter'
 import SettingsDrawer from './SettingsDrawer'
@@ -16,7 +18,7 @@ const icons: Record<string, React.ReactNode> = {
   '/dashboard': <DashboardOutlined />, sales: <ShoppingOutlined />,
   service: <CustomerServiceOutlined />, warehouse: <AppstoreOutlined />, inventory: <AppstoreOutlined />,
   finance: <BankOutlined />, people: <TeamOutlined />, admin: <SettingOutlined />,
-  '/profile': <UserOutlined />,
+  '/profile': <UserOutlined />, personal: <UserOutlined />,
 }
 function savedNavigation(): { collapsed: boolean; closed: string[] } {
   try {
@@ -36,11 +38,17 @@ export default function DashboardLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [menuSearch, setMenuSearch] = useState('')
-  const items = visibleNavigation(user)
+  const [workspace, setWorkspace] = useState<'all' | 'warehouse'>(location.pathname === '/warehouse' ? 'warehouse' : 'all')
+  const activeWorkspace = warehouseOnlyUser(user) ? 'warehouse' : workspace
+  const items = workspaceNavigation(user, activeWorkspace)
   const active = activeNavigation(items, location.pathname, location.search)
   const parent = navigationParent(items, active?.key || '')
 
   useEffect(() => { document.title = PRODUCT.title }, [])
+  useEffect(() => {
+    if (location.pathname === '/warehouse') setWorkspace('warehouse')
+    else if (!PERSONAL_PATHS.includes(location.pathname)) setWorkspace('all')
+  }, [location.pathname])
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences)) } catch { /* Storage may be unavailable. */ }
   }, [preferences])
@@ -71,6 +79,11 @@ export default function DashboardLayout() {
       <img src={collapsed ? PRODUCT.mark : PRODUCT.logo} alt={PRODUCT.brand} />
       {!collapsed && <span>{PRODUCT.name}</span>}
     </div>
+    {!collapsed && hasPermission(user, 'wms_tasks:read') && <div className="operations-nav-search">
+      <Select aria-label="工作區" value={activeWorkspace} style={{ width: '100%' }}
+        options={[{value:'warehouse',label:'儲運工作區'}, ...(!warehouseOnlyUser(user) ? [{value:'all',label:'全部功能'}] : [])]}
+        onChange={value => {setWorkspace(value); setMenuSearch(''); if(value==='warehouse') navigate('/warehouse')}} />
+    </div>}
     {!collapsed && <div className="operations-nav-search"><Input prefix={<SearchOutlined />} placeholder="搜尋功能" aria-label="搜尋功能"
       value={menuSearch} allowClear onChange={(event) => setMenuSearch(event.target.value)} /></div>}
     <nav aria-label="主選單" className="operations-nav-scroll">
@@ -81,7 +94,7 @@ export default function DashboardLayout() {
 
   return <div className={`operations-layout${preferences.collapsed ? ' operations-layout--collapsed' : ''}`}>
     <a className="operations-skip" href="#operations-content">跳至主要內容</a>
-    <CommandPalette />
+    <CommandPalette items={items} />
     <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     {!mobile && <aside className="operations-sidebar">
       {navContent(preferences.collapsed)}

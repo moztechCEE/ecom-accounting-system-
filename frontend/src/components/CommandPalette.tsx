@@ -3,14 +3,14 @@ import { Input, Modal, Empty } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { navigationLeaves, visibleNavigation } from '../config/navigation'
+import { navigationLeaves, visibleNavigation, type NavigationItem } from '../config/navigation'
 
-export default function CommandPalette() {
+export default function CommandPalette({ items }: { items?: NavigationItem[] }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const { user } = useAuth()
   const navigate = useNavigate()
-  const pages = navigationLeaves(visibleNavigation(user)).filter((item) => item.label.includes(search.trim()))
+  const pages = navigationLeaves(items || visibleNavigation(user)).filter((item) => item.label.includes(search.trim()))
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {

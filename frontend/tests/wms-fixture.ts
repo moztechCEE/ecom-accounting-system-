@@ -1,18 +1,32 @@
 import type { Plugin } from 'vite'
-const states = ['pending','picking','picked','packing','completed']
-const labels:Record<string,string>={pending:'待揀貨',picking:'揀貨中',picked:'待裝箱',packing:'裝箱中',completed:'核對完成'}
+import { createSimulation, SimulationError, type FixtureRole } from './wms-simulator'
 export function wmsFixture():Plugin {
-  return {name:'local-wms-fixture',configureServer(server){server.middlewares.use((req,res,next)=>{
-    const url=new URL(req.url||'/','http://localhost')
-    if(url.pathname!=='/api/v1/wms/workbench/orders')return next()
+  const simulation=createSimulation()
+  return {name:'local-wms-fixture',configureServer(server){server.middlewares.use(async(req,res,next)=>{
+    const url=new URL(req.url||'/','http://localhost'), prefix='/api/v1/wms/workbench/orders'
+    if(!url.pathname.startsWith(prefix))return next()
     res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store')
-    if(req.method!=='GET'){res.statusCode=405;res.end('{}');return}
-    if(url.searchParams.get('entityId')!=='test-entity'){res.statusCode=403;res.end('{}');return}
-    if(url.searchParams.get('search')==='simulate-error'){res.statusCode=503;res.end('{}');return}
-    const all=Array.from({length:38},(_,i)=>({id:'wms-fixture-'+(i+1),orderNumber:'TEST-WMS-'+String(i+1).padStart(4,'0'),brand:i%3===0?null:['AIRITY','MOZTECH','BONSON'][i%3],warehouseLabel:labels[states[i%5]],logisticsLabel:i%7===0?'退回物流中心':i%5===4?'到店待取':'尚無物流紀錄',receiptLabel:'尚未確認',assignee:i%2?'測試揀貨員':null,updatedAt:'2026-09-10T00:00:00Z',state:states[i%5]}))
-    const view=url.searchParams.get('view')||'all', search=url.searchParams.get('search')||''
-    const rows=all.filter(r=>(!search||r.orderNumber.includes(search))&&(view==='all'||view==='logistics'&&r.logisticsLabel!=='尚無物流紀錄'||view==='returns'&&r.logisticsLabel==='退回物流中心'||view==='packing'&&['picked','packing'].includes(r.state)||r.state===view))
-    const page=Math.max(1,Number(url.searchParams.get('page')||1))
-    res.end(JSON.stringify({items:rows.slice((page-1)*25,page*25),total:rows.length,mode:'read_only',source:'fixture'}))
+    const send=(status:number,data:unknown)=>{res.statusCode=status;res.end(JSON.stringify(data))}
+    const role=String(req.headers['x-wms-fixture-role']||'admin') as FixtureRole
+    if(!['admin','picker','packer','dispatcher','shipping'].includes(role))return send(403,{})
+    try {
+      if(req.method==='POST') {
+        let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{})}
+        const body=JSON.parse(raw), match=url.pathname.match(/\/orders\/([^/]+)\/(pick|pack)\/(claim|scan)$/)
+        if(body.entityId!=='test-entity')return send(403,{})
+        if(!match)return send(404,{})
+        return send(200,simulation.command(match[1],role,match[2],match[3],body))
+      }
+      if(req.method!=='GET')return send(405,{})
+      if(url.searchParams.get('entityId')!=='test-entity')return send(403,{})
+      if(url.pathname!==prefix)return send(200,simulation.detail(url.pathname.slice(prefix.length+1),role))
+      if(url.searchParams.get('search')==='simulate-error')return send(503,{})
+      const area=url.searchParams.get('area')||'overview', view=url.searchParams.get('view')||'all', search=url.searchParams.get('search')||''
+      const rows=simulation.orders.filter(r=>simulation.canRead(r,role)&&(!search||r.orderNumber.includes(search))&&
+        (area==='pick'?['pending','picking'].includes(r.state):area==='pack'?view==='completed'?r.state==='completed':['picked','packing'].includes(r.state):area==='shipping'?r.state==='completed':true)&&
+        (view==='all'||view==='logistics'&&r.logisticsLabel!=='尚無物流紀錄'||view==='returns'&&r.logisticsLabel==='退回物流中心'||view==='packing'&&['picked','packing'].includes(r.state)||r.state===view))
+      const page=Math.max(1,Number(url.searchParams.get('page')||1))
+      send(200,{items:rows.slice((page-1)*25,page*25).map(({items,allowedActions,blockers,...row})=>row),total:rows.length,mode:'read_only',source:'fixture'})
+    }catch(e){send(e instanceof SimulationError?e.status:400,{message:e instanceof Error?e.message:'Invalid request'})}
   })}}
 }

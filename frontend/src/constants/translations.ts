@@ -4,6 +4,11 @@ export const RESOURCE_TRANSLATIONS: Record<string, string> = {
   sales_orders: '銷售訂單',
   purchase_orders: '採購訂單',
   inventory: '庫存管理',
+  wms_tasks: '儲運工作區',
+  wms_orders: '訂單調度',
+  wms_picking: '揀貨作業',
+  wms_packing: '裝箱核對',
+  wms_shipping: '出貨交接',
   banking: '銀行管理',
   reports: '報表中心',
   settings: '系統設定',
@@ -29,6 +34,7 @@ export const ACTION_TRANSLATIONS: Record<string, string> = {
   approve: '核准',
   export: '匯出',
   import: '匯入',
+  execute: '操作',
 }
 
 export const ROLE_TRANSLATIONS: Record<string, string> = {

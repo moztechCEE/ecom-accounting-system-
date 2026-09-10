@@ -636,7 +636,7 @@ input:-webkit-autofill:active {
 }
 
 /* Buttons */
-.ant-btn-primary {
+.ant-btn-primary:not(:disabled):not(.ant-btn-disabled) {
   background: #1d1d1f !important; /* Apple Black */
   border-radius: 14px !important;
   height: 44px !important;
@@ -647,13 +647,13 @@ input:-webkit-autofill:active {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
-.ant-btn-primary:hover {
+.ant-btn-primary:not(:disabled):not(.ant-btn-disabled):hover {
   background: #333333 !important;
   transform: translateY(-1px);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2) !important;
 }
 
-.ant-btn-primary:active {
+.ant-btn-primary:not(:disabled):not(.ant-btn-disabled):active {
   transform: scale(0.98);
 }
 

@@ -1,4 +1,5 @@
 import React from 'react'
+import { Select } from 'antd'
 import { createRoot } from 'react-dom/client'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import 'antd/dist/reset.css'
@@ -14,18 +15,25 @@ import LoginPage from '../src/pages/LoginPage'
 import WarehouseCenterPage from '../src/pages/WarehouseCenterPage'
 import AfterSalesBrandsPage from '../src/pages/AfterSalesBrandsPage'
 import AfterSalesQuotesPage from '../src/pages/AfterSalesQuotesPage'
+import api from '../src/services/api'
+import { WAREHOUSE_AREAS } from '../src/config/workspaces'
 
 // Test-only entry: no production API, real credentials or write operations.
 window.__APP_CONFIG__ = { apiUrl: '/api/v1' }
 localStorage.setItem('entityId', 'test-entity')
 authService.getToken = () => 'test-only'
-authService.getCurrentUser = async () => ({ id: 'preview', email: 'preview@example.invalid', name: '設計驗證', roles: ['SUPER_ADMIN'], permissions: [] })
+const roleOptions=[{value:'admin',label:'管理員'},{value:'dispatcher',label:'訂單調度'},{value:'picker',label:'揀貨員'},{value:'packer',label:'裝箱員'},{value:'shipping',label:'出貨人員'}]
+const roleParam=new URLSearchParams(location.search).get('role')||'admin'
+const previewRole=roleOptions.some(o=>o.value===roleParam)?roleParam:'admin'
+const areaKey:Record<string,string>={dispatcher:'dispatch',picker:'pick',packer:'pack',shipping:'shipping'}
+api.defaults.headers.common['X-Wms-Fixture-Role']=previewRole
+authService.getCurrentUser = async () => ({ id: 'preview', email: 'preview@example.invalid', name: `測試${roleOptions.find(o=>o.value===previewRole)!.label}`, roles: [previewRole==='admin'?'SUPER_ADMIN':'EMPLOYEE'], permissions: previewRole==='admin'?[]:['wms_tasks:read',WAREHOUSE_AREAS.find(a=>a.key===areaKey[previewRole])!.permission,'attendance_self:read','leave_self:read','profile_self:read'] })
 authService.getLoginEntities = async () => [{ id: 'test-entity', loginCode: 'TEST' }]
 webSocketService.connect = () => {}
 notificationService.getNotifications = async () => []
 const initial = new URLSearchParams(location.search).get('screen') || '/sales/after-sales?type=REPAIR'
 createRoot(document.getElementById('root')!).render(
-  <React.StrictMode><ThemeProvider><AuthProvider><MemoryRouter initialEntries={[initial]}>
+  <React.StrictMode><ThemeProvider><div style={{position:'fixed',bottom:16,right:20,zIndex:1200,background:'white',padding:'6px 10px',border:'1px solid #ddd',borderRadius:8}}>預覽角色 <Select aria-label="預覽角色" value={previewRole} options={roleOptions} style={{width:120}} onChange={value=>{const url=new URL(location.href);url.searchParams.set('role',value);location.assign(url)}} /></div><AuthProvider><MemoryRouter initialEntries={[initial]}>
     <Routes><Route path="/login" element={<LoginPage />} /><Route element={<DashboardLayout />}>
       <Route path="/warehouse" element={<WarehouseCenterPage />} />
       <Route path="/sales/after-sales" element={<AfterSalesWorkbenchPage />} />

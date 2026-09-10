@@ -1,5 +1,6 @@
 import type { User } from '../types'
 import { hasAnyPermission, isAdminUser } from '../utils/access'
+import { PERSONAL_PATHS, warehouseOnlyUser } from './workspaces'
 
 export type NavigationItem = { key: string; label: string; permissions?: string[]; adminOnly?: boolean; superAdminOnly?: boolean; children?: NavigationItem[] }
 export const NAVIGATION: NavigationItem[] = [
@@ -21,7 +22,7 @@ export const NAVIGATION: NavigationItem[] = [
     { key: '/sales/after-sales?type=CUSTOMER_ISSUE', label: '客戶問題', permissions: ['after_sales_cases:read'] },
   ] },
   { key: 'warehouse', label: '儲運管理中心', children: [
-    { key: '/warehouse', label: '儲運工作台', permissions: ['inventory:read'] },
+    { key: '/warehouse', label: '出貨工作台', permissions: ['wms_tasks:read'] },
   ] },
   { key: 'inventory', label: '採購庫存', children: [
     { key: '/purchasing/orders', label: '採購訂單', permissions: ['purchase_orders:read'] },
@@ -56,18 +57,26 @@ export const NAVIGATION: NavigationItem[] = [
     { key: '/admin/entities', label: '公司管理', superAdminOnly: true },
     { key: '/admin/reimbursement-items', label: '報銷項目' },
     { key: '/admin/settings', label: '系統設定' },
-    { key: '/admin/after-sales-brands', label: '品牌與 LINE' },
+    { key: '/admin/after-sales-brands', label: '品牌設定' },
   ] },
   { key: '/profile', label: '個人資料', permissions: ['profile_self:read'] },
 ]
 export function visibleNavigation(user: User | null | undefined, items = NAVIGATION): NavigationItem[] {
   return items.flatMap((item) => {
+    if (item.key === '/dashboard' && warehouseOnlyUser(user)) return []
     if (item.superAdminOnly && !user?.roles?.includes('SUPER_ADMIN')) return []
     if (item.adminOnly && !isAdminUser(user) && !hasAnyPermission(user, item.permissions || [])) return []
     if (item.permissions?.length && !hasAnyPermission(user, item.permissions)) return []
     const children = item.children ? visibleNavigation(user, item.children) : undefined
     return item.children && !children?.length ? [] : [{ ...item, children }]
   })
+}
+export function workspaceNavigation(user: User | null | undefined, workspace: 'all' | 'warehouse'): NavigationItem[] {
+  const items = visibleNavigation(user)
+  if (workspace === 'all' && !warehouseOnlyUser(user)) return items
+  const personal = navigationLeaves(items).filter(item => PERSONAL_PATHS.includes(item.key))
+  return [...items.filter(item => item.key === 'warehouse'),
+    ...(personal.length ? [{ key: 'personal', label: '我的資訊', children: personal }] : [])]
 }
 export function navigationLeaves(items: NavigationItem[]): NavigationItem[] {
   return items.flatMap((item) => item.children ? navigationLeaves(item.children) : [item])
