@@ -1020,3 +1020,12 @@ Cloud Run 正式資料目前已經不是空系統，但核心治理缺口很大�
 - 新增三表 migration、company/source guard、品牌 CAS、案件品牌交易綁定、actor + idempotency key/hash、精確小數金額及顧客欄位 allowlist。未知或衝突品牌 fail closed，不回退 MOZTECH。
 - 前後端 build、後端 20 tests、前端 8 tests、Prisma validate 通過；isolated in-memory PostgreSQL migration/constraints 測試通過。瀏覽器完成品牌保存、測試案件草稿、預覽、重新載入、鎖定品牌與建立新版驗證。
 - 未驗收真正 Cloud SQL/Nest/source 全链路；預覽用 localhost 合成 fixture。未部署／未套用 migration，正式 LINE 憑證、發送、付款、發票與庫存寫入均未啟用。source command API 與多租戶/部門角色 parity 仍未完成。
+
+2026-09-10 儲運原生介面與私有 staging（更新上述本機候選狀態）：
+
+- 使用者否定外部工作台連結；已移除外連，改為 ERP 原生 `/warehouse` 清單、揀貨／裝箱／物流／未取退回篩選、分頁、搜尋與站內明細。預覽使用明示合成資料，真實 command 尚未開通。
+- WMS 以實際 `9b376526` 為基準建立獨立 worktree，查得舊 order GET 有修改狀態副作用；新增 READ ONLY transaction、即時角色與可信 mapping 邊界的獨立 read service，不轉接舊有副作用 handler。尚未掛載 HTTP 或部署 WMS。
+- ERP 契約及 company/brand/order/logistics 嚴格對照、故障拒絕和事實分離測試已加入；未接來源的受權限保護 route 明確 503，不回假零筆。ERP 後端 38 suites / 166 tests、前端 9 tests、WMS 2 tests 與 builds 通過。
+- 新三表 migration 只套用到 `erp_after_sales_staging`，execution `erp-ops-schema-0910-xdhxt` 成功。私有候選後端 `00003-jxn` Ready；健康與 DB readiness 200，匿名 403，排程與 startup seed 關閉。
+- 使用者拒絕 frontend invoke grant：未新增 IAM、未公開 staging。前端已 build 但未部署，真實瀏覽器聯調、售後來源版本／公司 mapping、WMS service identity、employee/order/brand mapping 與交易 parity 仍是阻擋項。
+- 正式 ERP／WMS 流量、原 checkout 與另一套售後程式未更動。詳見 `operations-staging-receipt-2026-09-10.md`、`wms-integration-2026-09-10.md`。不能宣稱完整整合或正式上線。
