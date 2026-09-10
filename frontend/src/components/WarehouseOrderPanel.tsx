@@ -4,8 +4,8 @@ import type { InputRef } from 'antd'
 import api from '../services/api'
 import type { WarehouseDetail, WarehouseRow, WorkItem, WorkStage } from '../services/warehouse.types'
 
-export default function WarehouseOrderPanel({ order, entityId, stage, onClose }: {
-  order: WarehouseRow; entityId: string; stage: WorkStage | null; onClose: () => void;
+export default function WarehouseOrderPanel({ order, entityId, station, stage, onClose }: {
+  order: WarehouseRow; entityId: string; station: string; stage: WorkStage | null; onClose: () => void;
 }) {
   const [data, setData] = useState<WarehouseDetail | null>(null)
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [scan, setScan] = useState('')
@@ -13,11 +13,11 @@ export default function WarehouseOrderPanel({ order, entityId, stage, onClose }:
   const input = useRef<InputRef>(null), inFlight = useRef(false)
   useEffect(() => {
     const abort = new AbortController(); setData(null); setError('')
-    api.get<WarehouseDetail>(`/wms/workbench/orders/${encodeURIComponent(order.id)}`, { params: { entityId }, signal: abort.signal })
+    api.get<WarehouseDetail>(`/wms/workbench/orders/${encodeURIComponent(order.id)}`, { params: { entityId, area: station }, signal: abort.signal })
       .then(r => { if (!abort.signal.aborted) setData(r.data) })
       .catch(() => { if (!abort.signal.aborted) setError('無法載入作業明細') })
     return () => abort.abort()
-  }, [order.id, entityId, reload])
+  }, [order.id, entityId, station, reload])
   const action = (kind: string) => !!data?.allowedActions.includes(`${stage}:${kind}`)
   useEffect(() => {
     if (!busy && stage && data?.allowedActions.includes(`${stage}:scan`)) input.current?.focus()

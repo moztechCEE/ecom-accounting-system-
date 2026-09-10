@@ -1037,3 +1037,11 @@ Cloud Run 正式資料目前已經不是空系統，但核心治理缺口很大�
 - 新增五項 WMS 權限 catalog migration，未套用、未賦權；後端不再以 inventory:read 當作出貨權限。未接來源的 GET／POST 仍受 guard 保護並回 503，沒有真實命令寫入。
 - 前端 13 tests、後端 39 suites / 170 tests 與前後端 build 通過。正式角色指派、來源身分與 mappings、持久命令交易、建單匯入、完整舊功能 parity、真實人資範圍與端到端驗證未完成。
 - 本輪沒有部署、IAM 或正式流量變更，遵守私有 staging 限制。具體責任與缺口見 `warehouse-workspace-2026-09-10.md`。
+
+2026-09-11 ERP / WMS 同人多工作站查詢橋接（本機增量）：
+
+- ERP GET 清單／明細由 placeholder 改接預設關閉的受控服務；每次重查員工啟用與工作站權限，簽發固定 scope 的短效委派。來源 WMS 新增獨立唯讀 router、空 mapping 三表 migration 和任務歸屬檢查，不轉接舊有副作用 GET。
+- 同一 actor 的 pick / pack 雙授權及撤銷已測試；不修改帳號 role，不把 inventory:read 升為出貨操作。來源品牌／公司／訂單與未指派／本人任務隔離；正式 POST 仍不開通。
+- 真正 localhost HTTP 串連 ERP 編譯後 bridge、WMS 簽章驗證與隔離 PGlite SQL 通過；不是前端 fixture，也不是正式登入／雲端 DB 驗收。ERP 40 suites / 173 tests、前端 13 tests、WMS 3 tests 與 builds 通過。
+- 未建立正式金鑰、未寫正式 mapping、未套 migration、未部署或改 IAM。私有 staging 及原 checkout 不動；恢復本機 4396 fixture 並驗證清單／明細。
+- 仍需實際帳號／公司／品牌範圍核准、source commands 共用服務、拋單匯入、語音通知、封箱貼標交接、硬體與全流程驗收。詳見 `wms-source-bridge-2026-09-11.md`，不得宣稱整套出貨已整合上線。

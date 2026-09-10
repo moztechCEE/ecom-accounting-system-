@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, Module, Post, Query, ServiceUnavailableException, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Module, Param, Post, Query, Req, ServiceUnavailableException, UseGuards } from '@nestjs/common';
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -6,6 +6,8 @@ import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { EntityAccessGuard } from '../../../common/guards/entity-access.guard';
 import { RequireEntityAccess } from '../../../common/decorators/entity-access.decorator';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { PrismaService } from '../../../common/prisma/prisma.service';
+import { WmsWorkspaceBridge } from './wms-workspace-bridge';
 
 export class WmsWorkbenchQuery {
   @IsString() @IsNotEmpty() @MaxLength(128) entityId!: string;
@@ -28,14 +30,16 @@ export class WmsScanDto extends WmsCommandDto {
 @RequireEntityAccess('inventory')
 @RequirePermissions({resource:'wms_tasks',action:'read'})
 export class WmsWorkbenchController {
+  constructor(private readonly bridge:WmsWorkspaceBridge) {}
   @Get('orders') @Header('Cache-Control','private, no-store')
-  orders(@Query() _query: WmsWorkbenchQuery) {
-    // Never tunnel requests to legacy side-effecting GETs. No source access
-    // until service identity and employee/company/brand mapping are approved.
-    throw new ServiceUnavailableException({code:'WMS_SOURCE_NOT_APPROVED',message:'WMS 安全連線與員工對照尚未開通'});
+  orders(@Query() query: WmsWorkbenchQuery,@Req() request:{user:{id:string}}) {
+    return this.bridge.read(request.user.id,query);
   }
   @Get('orders/:id') @Header('Cache-Control','private, no-store')
-  detail(@Query() _query: WmsWorkbenchQuery) { return this.unavailable(); }
+  detail(@Query() query: WmsWorkbenchQuery,@Req() request:{user:{id:string}},@Param('id') id:string) { return this.bridge.read(request.user.id,query,id); }
+
+  @Get('stations') @Header('Cache-Control','private, no-store')
+  stations(@Query() _query: WmsWorkbenchQuery,@Req() request:{user:{id:string}}) { return this.bridge.stations(request.user.id); }
 
   @Post('orders/:id/pick/claim')
   @RequirePermissions({resource:'wms_tasks',action:'read'},{resource:'wms_picking',action:'execute'})
@@ -57,5 +61,5 @@ export class WmsWorkbenchController {
     throw new ServiceUnavailableException({code:'WMS_SOURCE_NOT_APPROVED',message:'WMS 安全連線與員工對照尚未開通'});
   }
 }
-@Module({controllers:[WmsWorkbenchController]})
+@Module({controllers:[WmsWorkbenchController],providers:[{provide:WmsWorkspaceBridge,useFactory:(prisma:PrismaService)=>new WmsWorkspaceBridge(prisma),inject:[PrismaService]}]})
 export class WmsWorkbenchModule {}

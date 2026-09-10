@@ -1,5 +1,6 @@
 import { projectWmsFact, WMS_CONTRACT, WmsBinding, WmsFact } from './wms-read.contract';
 import { WmsReadService } from './wms-read.service';
+import { WmsWorkspaceBridge } from './wms-workspace-bridge';
 import { WmsWorkbenchController, WmsWorkbenchQuery } from './wms-workbench.module';
 import { validateSync } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
@@ -7,8 +8,9 @@ const binding: WmsBinding = { entityId:'company-a', brandCode:'AIRITY', erpOrder
 const scope = { entityId:'company-a',brandCodes:['AIRITY'] };
 const fact: WmsFact = { contractVersion:WMS_CONTRACT,binding,warehouseStatus:'completed',logisticsStatus:'returned_to_center',observedAt:'2026-09-10T00:00:00Z',warehouseReceivedAt:null,returnKind:'uncollected' };
 describe('WMS read boundary',()=>{
-  it('fails closed until the source is approved and bounds query DTO',()=>{
-    expect(()=>new WmsWorkbenchController().orders({entityId:'company-a'})).toThrow('WMS 安全連線與員工對照尚未開通');
+  it('fails closed until the source is approved and bounds query DTO',async()=>{
+    const controller=new WmsWorkbenchController(new WmsWorkspaceBridge({} as any,{}));
+    await expect(controller.orders({entityId:'company-a'},{user:{id:'employee'}})).rejects.toThrow('WMS 安全連線與員工對照尚未開通');
     expect(validateSync(plainToInstance(WmsWorkbenchQuery,{entityId:'company-a',pageSize:1000})).length).toBeGreaterThan(0);
     expect(validateSync(plainToInstance(WmsWorkbenchQuery,{entityId:'company-a',view:'refund'})).length).toBeGreaterThan(0);
   });

@@ -57,7 +57,7 @@ function WarehouseWorkspace({entityId}:{entityId:string}) {
         {title:'處理人員',dataIndex:'assignee',render:value=>value||'未指派'},
         {title:'操作',render:(_,row)=><Button onClick={()=>setSelected(row)}>{area==='pick'?'揀貨':area==='pack'?'裝箱核對':'查看'}</Button>},
       ]}/>
-    {selected && <WarehouseOrderPanel key={`${entityId}:${selected.id}:${area}`} entityId={entityId} order={selected} stage={area==='pick'||area==='pack'?area:null}
+    {selected && <WarehouseOrderPanel key={`${entityId}:${selected.id}:${area}`} entityId={entityId} order={selected} station={area} stage={area==='pick'||area==='pack'?area:null}
       onClose={()=>{setSelected(null);setRefresh(x=>x+1)}} />}
   </section>
 }

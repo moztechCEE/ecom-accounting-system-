@@ -29,8 +29,8 @@ describe('warehouse workspace permission boundary', () => {
     await expect(guard(['wms_picking:execute']).canActivate(context('scanPick'))).rejects.toThrow('wms_tasks:read');
   });
   it('valid permission still cannot activate unapproved source writes', () => {
-    const controller=new WmsWorkbenchController();
-    for(const method of ['claimPick','scanPick','claimPack','scanPack','detail']) {
+    const controller=new WmsWorkbenchController({} as any);
+    for(const method of ['claimPick','scanPick','claimPack','scanPack']) {
       expect(()=>controller[method]({entityId:'entity'})).toThrow('WMS 安全連線與員工對照尚未開通');
     }
   });
