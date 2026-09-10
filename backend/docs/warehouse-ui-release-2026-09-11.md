@@ -27,6 +27,7 @@
 - 正式 `https://erp.corely.cc/warehouse` 回新版 HTML，JS `index-CEQJR-aE.js`、CSS `index-Bf9hHfGu.css` 均 200；config.js 確認原 API／WS 網域與 `stagedOperationsEnabled:false`。API `/api/v1/health/ready` 回 ready。
 - 使用既有登入 session 的實際瀏覽器驗證：ERP 導覽含四報表，逐頁路由與標題正確，來源未連線如實顯示警示，沒有 TEST-WMS 或測試帳號切換列；沒有作業工作站入口，既有來回件頁仍可開啟。沒有建立、掃描、拋單、退款或開票。
 - 截圖 `output/playwright/warehouse-production-6814f67f.png` 為已登入正式介面，不是 fixture。
+- 追加唯讀檢查：既有 `/sales/after-sales-cases` 兩次回 200；客戶選项 `/customers` 曾出現 CORS/network error，再試 20 秒內未取得回應，OPTIONS 則回 204 且允許 ERP origin。此客戶清單連線問題未在本輪定位／修正，不宣稱舊來回件的新增流程已完成端到端驗收；本次沒有修改其 API 呼叫或正式後端。
 - 發布後正式 backend 仍為 `00506-ray` 100% / generation 509；私有 staging 仍 `00003-jxn` / generation 3；WMS 仍 `00010-hug` 100% / generation 13。未套任何 migration 或修改員工權限。
 - 已知非零警告：WMS 未接通的 GET 404、Ant Design Input deprecation；Actions Node 20 deprecation 與 checkout cleanup git warning 不影響兩個 job 成功。`/healthz` 在新舊 Cloud Run tagged URL 均回 404，因此不將該路徑當作本次健康成功證據，以 Ready condition、正式資源與既有 API readiness 驗證。
 
