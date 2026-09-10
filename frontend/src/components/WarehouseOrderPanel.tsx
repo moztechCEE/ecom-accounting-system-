@@ -2,11 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Descriptions, Drawer, Input, Progress, Space, Table, Tag, Typography } from 'antd'
 import type { InputRef } from 'antd'
 import api from '../services/api'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+import { hasPermission } from '../utils/access'
+import { WAREHOUSE_REPORTS } from '../config/workspaces'
 import type { WarehouseDetail, WarehouseRow, WorkItem, WorkStage } from '../services/warehouse.types'
 
 export default function WarehouseOrderPanel({ order, entityId, station, stage, onClose }: {
   order: WarehouseRow; entityId: string; station: string; stage: WorkStage | null; onClose: () => void;
 }) {
+  const { user } = useAuth()
   const [data, setData] = useState<WarehouseDetail | null>(null)
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [scan, setScan] = useState('')
   const [reload, setReload] = useState(0), [feedback, setFeedback] = useState('')
@@ -44,6 +49,7 @@ export default function WarehouseOrderPanel({ order, entityId, station, stage, o
     <Space direction="vertical" size={20} style={{ width: '100%' }}>
       {error && <Alert type="warning" message={error} action={<Button disabled={busy} onClick={() => setReload(x => x + 1)}>重新載入</Button>} />}
       {data && <>
+        {!stage && <Space wrap>{WAREHOUSE_REPORTS.filter(r=>hasPermission(user,r.permission)).map(r=><Link key={r.key} to={`/warehouse/${r.key}?order=${encodeURIComponent(order.orderNumber)}`} onClick={onClose}>{r.label}</Link>)}</Space>}
         {data.source === 'fixture' && <Tag>操作預覽 · 測試資料</Tag>}
         <Descriptions column={2} items={[
           { key: 'state', label: '作業狀態', children: data.warehouseLabel },

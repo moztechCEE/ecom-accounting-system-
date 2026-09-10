@@ -6,6 +6,7 @@ declare global {
       apiUrl?: string
       defaultEntityId?: string
       wsUrl?: string
+      stagedOperationsEnabled?: boolean
     }
   }
 }

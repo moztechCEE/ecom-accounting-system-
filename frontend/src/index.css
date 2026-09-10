@@ -639,9 +639,9 @@ input:-webkit-autofill:active {
 .ant-btn-primary:not(:disabled):not(.ant-btn-disabled) {
   background: #1d1d1f !important; /* Apple Black */
   border-radius: 14px !important;
-  height: 44px !important;
+  height: var(--corely-control-height, 40px) !important;
   font-weight: 500 !important;
-  font-size: 15px !important;
+  font-size: var(--corely-control-font-size, 15px) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
   border: none !important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -847,8 +847,8 @@ body.dark .glass-input {
 
 /* ERP action controls use one consistent hit area across pages. */
 .ant-btn:not(.ant-btn-link) {
-  min-height: 40px !important;
-  height: 40px !important;
+  min-height: var(--corely-control-height, 40px) !important;
+  height: var(--corely-control-height, 40px) !important;
   padding-inline: 16px;
   display: inline-flex;
   align-items: center;
@@ -857,12 +857,12 @@ body.dark .glass-input {
 
 .ant-btn-sm:not(.ant-btn-link),
 .ant-btn-lg:not(.ant-btn-link) {
-  min-height: 40px !important;
-  height: 40px !important;
+  min-height: var(--corely-control-height, 40px) !important;
+  height: var(--corely-control-height, 40px) !important;
 }
 
 .ant-btn-icon-only:not(.ant-btn-link) {
-  width: 40px !important;
+  width: var(--corely-control-height, 40px) !important;
   padding-inline: 0;
 }
 

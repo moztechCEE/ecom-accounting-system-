@@ -35,7 +35,7 @@
 .station-work { padding:28px; border:1px solid #dae2eb; border-radius:16px; background:#fff; min-height:65vh; min-width:0; display:grid; gap:20px; align-content:start; }
 .station-order-heading { display:flex; justify-content:space-between; gap:20px; align-items:center; }.station-order-heading h2 { font-size:clamp(22px,2.7vw,38px); margin:8px 0; overflow-wrap:anywhere; }.station-count { display:grid; text-align:right; white-space:nowrap; }.station-count strong { font-size:72px; font-weight:650; line-height:1.15; font-variant-numeric:tabular-nums; color:#1c63bf; }.station-count small { color:#687b8f; }
 .station-feedback { padding:14px 18px; background:#eff5fc; border-radius:8px; font-size:20px; min-height:55px; }.tone-error .station-feedback { background:#fff1f0; color:#a32424; }.tone-complete .station-feedback { background:#eef8f0; color:#246337; }
-.station-scan { display:flex; gap:12px; position:sticky; top:0; z-index:2; padding:12px 0; background:#fff; }.station-scan .ant-input { height:56px; font-size:22px; }.station-scan .ant-btn { height:56px; font-size:18px; min-width:90px; }
+.station-scan { --corely-control-height:56px; --corely-control-font-size:18px; display:flex; gap:12px; position:sticky; top:0; z-index:2; padding:12px 0; background:#fff; }.station-scan .ant-input { height:var(--corely-control-height); font-size:22px; }.station-scan .ant-btn { font-size:var(--corely-control-font-size); min-width:90px; }
 .station-items { display:grid; gap:12px; }.station-item { display:flex; justify-content:space-between; gap:20px; border:1px solid #e0e6ef; border-radius:10px; padding:22px; }.station-item h3 { margin:6px 0; font-size:25px; }.station-item code { font-size:15px; overflow-wrap:anywhere; }.station-item > strong { font-size:38px; white-space:nowrap; font-variant-numeric:tabular-nums; }.station-item small { font-size:18px; color:#6a7b8d; }.station-item.verified { background:#f5f8f6; color:#64806d; padding:12px 22px; }.station-item.verified h3 { font-size:17px; }.station-item.verified > strong { font-size:22px; }.station-item details { margin-top:12px; }.station-item summary { cursor:pointer; }
 .station-idle { min-height:50vh; display:flex; flex-direction:column; align-items:center; justify-content:center; }.station-idle-symbol { font-size:80px; color:#c4d3e6; }.station-idle h2 { font-size:27px; }.station-idle p,.station-complete p { color:#66788b; }.station-complete { text-align:center; padding:35px; }.station-complete h2 { font-size:36px; color:#27633b; }
 .warehouse-dispatch { display:grid; gap:16px; padding:24px; background:#fff; border:1px solid #dce3ec; border-radius:12px; }.warehouse-dispatch h2,.warehouse-dispatch h3 { margin:0; }
@@ -43,3 +43,44 @@
 @media(max-width:1000px){.station-layout{grid-template-columns:240px minmax(0,1fr);gap:12px}.station-work{padding:18px}.station-count strong{font-size:54px}}
 @media(max-width:700px){.station-layout{grid-template-columns:1fr}.station-tasks{max-height:220px}.station-order-heading{align-items:flex-start}.station-count strong{font-size:44px}.station-item{padding:14px}.station-item h3{font-size:20px}.station-work{padding:16px}.station-scan .ant-input{font-size:17px}}
 @media(prefers-reduced-motion:no-preference){.station-work,.station-task{animation:warehouse-enter .18s ease-out}}
+.warehouse-management { display:grid; gap:22px; color:#24364c; }
+.warehouse-management-header { display:flex; justify-content:space-between; align-items:center; gap:20px; flex-wrap:wrap; }
+.warehouse-management h1 { font-size:30px; margin:5px 0 0; letter-spacing:-.02em; }
+.warehouse-management .ant-btn { min-height:40px; }
+.warehouse-management-tools,.warehouse-report-filters { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.warehouse-management-tools>.ant-input-group-wrapper,.warehouse-report-filters>.ant-input-group-wrapper { max-width:380px; }
+.warehouse-management-tools>span:last-child,.warehouse-source-note { font-size:13px; color:#69778a; }
+.warehouse-report-filters .ant-select { min-width:130px; height:40px; }
+.warehouse-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
+.warehouse-status-card { --status-accent:#a45d12; --status-tint:#fff6e8; --status-border:#eedcc0; --status-icon:#f6e7ca; padding:24px; min-height:136px; display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid var(--status-border); border-radius:24px; background:linear-gradient(120deg,#fff 0%,var(--status-tint) 100%); box-shadow:0 3px 12px #26374a04; }
+.warehouse-status-card>div { display:grid; gap:12px; min-width:0; }
+.warehouse-status-card>div>span { color:#506074; font-size:14px; font-weight:500; }
+.warehouse-status-card strong { color:var(--status-accent); }
+.warehouse-status-card.status-picking { --status-accent:#285dba; --status-tint:#edf4ff; --status-border:#d2e1f7; --status-icon:#dce9fc; }
+.warehouse-status-card.status-picked { --status-accent:#147568; --status-tint:#eaf7f3; --status-border:#cee7de; --status-icon:#d3eee5; }
+.warehouse-status-card.status-packing { --status-accent:#7855ac; --status-tint:#f5effb; --status-border:#e3d8f2; --status-icon:#e9ddf6; }
+.warehouse-status-icon { width:46px; height:46px; flex:0 0 46px; display:grid; place-items:center; border-radius:16px; color:var(--status-accent); background:var(--status-icon); font-size:23px; }
+.warehouse-summary strong,.warehouse-report-summary strong { font-size:32px; font-weight:600; font-variant-numeric:tabular-nums; }
+.warehouse-summary small,.warehouse-report-summary small { font-size:14px; font-weight:400; color:#748094; }
+.warehouse-lanes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; align-items:start; }
+.warehouse-lane { border:1px solid #dce3ec; border-radius:24px; background:#f8fafc; padding:18px; display:grid; gap:18px; min-width:0; }
+.warehouse-lane>header,.warehouse-lane>header>div { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.warehouse-lane h2 { margin:0; font-size:21px; }.warehouse-lane>header>strong { font-size:16px; }
+.lane-number { border-radius:8px; background:#f5e9d8; color:#925e1c; padding:7px 9px; font-size:14px; font-weight:600; }.lane-pack .lane-number { background:#deefeb; color:#26786e; }
+.warehouse-lane-orders { display:grid; gap:12px; }
+.warehouse-manager-order { display:grid; gap:10px; width:100%; padding:18px; border:1px solid #e0e6ef; border-radius:10px; background:#fff; text-align:left; color:inherit; cursor:pointer; }
+.warehouse-manager-order:hover { border-color:#7fa6de; }.warehouse-manager-order:focus-visible { outline:3px solid #1677ff; outline-offset:2px; }
+.warehouse-order-line { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:13px; color:#586a80; }
+.warehouse-order-line:first-child>b { font-size:17px; color:#263b55; overflow-wrap:anywhere; }.warehouse-order-line .ant-tag { margin:0; }
+.warehouse-manager-order>small { color:#788698; }.warehouse-manager-order .ant-progress { margin:0; line-height:1; }
+.warehouse-report-summary { display:flex; gap:30px; align-items:center; padding:22px; border:1px solid #e0e6ed; border-radius:12px; background:white; }.warehouse-report-summary>div:first-child { display:grid; gap:5px; flex-shrink:0; }
+.warehouse-breakdown { display:flex; flex-wrap:wrap; gap:10px; }.warehouse-breakdown>span { background:#f2f5f9; border-radius:6px; padding:8px 12px; color:#607087; }.warehouse-breakdown b { color:#24364c; margin-left:10px; font-variant-numeric:tabular-nums; }
+.warehouse-report-table { background:#fff; border:1px solid #e0e6ed; border-radius:12px; overflow:hidden; }.warehouse-report-table .ant-pagination { padding:0 18px; }.warehouse-report-table .ant-btn-link { padding-left:0; }
+.warehouse-management .ant-input { min-height:40px; }
+.warehouse-station.station-screen { position:fixed; inset:0; z-index:1300; overflow:auto; padding:28px; background:#f5f7fa; }
+.station-screen .station-layout { grid-template-columns:300px minmax(0,1fr); }.station-screen .station-work { min-height:calc(100vh - 160px); }
+.station-screen .station-tasks { max-height:calc(100vh - 320px); }
+@media(prefers-reduced-motion:no-preference) { .warehouse-status-card { animation:warehouse-enter .2s ease-out both; }.warehouse-status-card:nth-child(2) { animation-delay:35ms; }.warehouse-status-card:nth-child(3) { animation-delay:70ms; }.warehouse-status-card:nth-child(4) { animation-delay:105ms; } }
+@media(max-width:1150px) { .warehouse-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:900px) { .warehouse-lanes { grid-template-columns:1fr; }.warehouse-status-card { padding:18px; }.warehouse-report-summary { align-items:flex-start; flex-direction:column; gap:14px; } }
+@media(max-width:550px) { .warehouse-summary { gap:12px; }.warehouse-status-card { padding:16px; border-radius:22px; min-height:118px; }.warehouse-status-icon { width:34px; height:34px; flex-basis:34px; font-size:19px; border-radius:12px; }.warehouse-station.station-screen { padding:14px; }.station-screen .station-layout { grid-template-columns:1fr; } }

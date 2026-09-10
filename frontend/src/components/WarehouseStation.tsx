@@ -43,6 +43,12 @@ export default function WarehouseStation({
     seen = useRef<Set<string> | null>(null),
     opened = useRef(0);
   const [voice, setVoice] = useState(audio.voice);
+  const [screenMode, setScreenMode] = useState(false), [queueNotice, setQueueNotice] = useState('');
+  useEffect(() => {
+    const exit = (event: KeyboardEvent) => { if (event.key === 'Escape') setScreenMode(false) };
+    window.addEventListener('keydown', exit);
+    return () => window.removeEventListener('keydown', exit);
+  }, []);
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -80,7 +86,7 @@ export default function WarehouseStation({
             "new",
             `${count} 筆新${stage === "pick" ? "揀貨" : "裝箱"}任務`,
           );
-          setFeedback(`${count} 筆新任務`);
+          setQueueNotice(`${count} 筆新任務`);
         }
         if (keys) seen.current = new Set(keys);
         setRows(r.data.items);
@@ -203,13 +209,14 @@ export default function WarehouseStation({
     }
   }
   return (
-    <section className={`warehouse-station station-${stage}`}>
+    <section className={`warehouse-station station-${stage} ${screenMode ? 'station-screen' : ''}`}>
       <header className="station-heading">
         <div>
           <span className="station-eyebrow">儲運管理中心</span>
           <h1>{stage === "pick" ? "揀貨工作站" : "裝箱工作站"}</h1>
         </div>
         <div className="station-controls">
+          <Button onClick={() => setScreenMode(v => !v)}>{screenMode ? '退出大字工作站' : '大字工作站'}</Button>
           <Button
             onClick={async () => {
               const ok = await audio.enable();
@@ -242,8 +249,9 @@ export default function WarehouseStation({
         <aside className="station-queue">
           <div className="station-queue-heading">
             <h2>{stage === "pick" ? "揀貨任務" : "裝箱任務"}</h2>
-            <strong>{total}</strong>
+            <strong>{total} 單</strong>
           </div>
+          {queueNotice && <span role="status" aria-live="polite">{queueNotice}</span>}
           <Input.Search
             aria-label="搜尋工作站訂單"
             placeholder="搜尋訂單"
@@ -346,7 +354,7 @@ export default function WarehouseStation({
                 <div className="station-complete">
                   <h2>{stage === "pick" ? "揀貨完成" : "裝箱核對完成"}</h2>
                   <p>
-                    {stage === "pick" ? "已進入裝箱佇列" : "尚不代表已交付物流"}
+                    {stage === "pick" ? "已進入裝箱佇列" : "標籤與出貨確認尚未開通"}
                   </p>
                   <Button
                     type="primary"

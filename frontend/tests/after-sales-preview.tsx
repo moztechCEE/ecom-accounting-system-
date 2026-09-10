@@ -7,7 +7,7 @@ import { AuthProvider } from '../src/contexts/AuthContext'
 import { authService } from '../src/services/auth.service'
 
 // Standalone, development-only fixture entry. Never included by the production index.
-window.__APP_CONFIG__ = { apiUrl: '/api/v1' }
+window.__APP_CONFIG__ = { apiUrl: '/api/v1', stagedOperationsEnabled: true }
 localStorage.setItem('entityId', 'test-entity')
 authService.getToken = () => null
 createRoot(document.getElementById('root')!).render(

@@ -1,6 +1,7 @@
 import type { User } from '../types'
 import { hasAnyPermission, isAdminUser } from '../utils/access'
-import { PERSONAL_PATHS, warehouseOnlyUser } from './workspaces'
+import { PERSONAL_PATHS, warehouseOnlyUser, hasWarehouseManagementAccess, WAREHOUSE_REPORTS } from './workspaces'
+import { stagedOperationsEnabled } from './release'
 
 export type NavigationItem = { key: string; label: string; permissions?: string[]; adminOnly?: boolean; superAdminOnly?: boolean; children?: NavigationItem[] }
 export const NAVIGATION: NavigationItem[] = [
@@ -21,8 +22,10 @@ export const NAVIGATION: NavigationItem[] = [
     { key: '/sales/after-sales?type=PRIVATE_PURCHASE', label: '私下購買', permissions: ['after_sales_cases:read'] },
     { key: '/sales/after-sales?type=CUSTOMER_ISSUE', label: '客戶問題', permissions: ['after_sales_cases:read'] },
   ] },
-  { key: 'warehouse', label: '儲運管理中心', children: [
-    { key: '/warehouse', label: '出貨工作台', permissions: ['wms_tasks:read'] },
+  { key: 'warehouse', label: '儲運管理中心', permissions: ['wms_tasks:read'], children: [
+    { key: '/warehouse', label: '儲運工作台', permissions: ['wms_tasks:read'] },
+    ...WAREHOUSE_REPORTS.map(r => ({ key: '/warehouse/' + r.key, label: r.label, permissions: [r.permission] })),
+    { key: '/warehouse/workstation', label: '作業工作站', permissions: ['wms_orders:create', 'wms_picking:execute', 'wms_packing:execute'] },
   ] },
   { key: 'inventory', label: '採購庫存', children: [
     { key: '/purchasing/orders', label: '採購訂單', permissions: ['purchase_orders:read'] },
@@ -61,21 +64,27 @@ export const NAVIGATION: NavigationItem[] = [
   ] },
   { key: '/profile', label: '個人資料', permissions: ['profile_self:read'] },
 ]
-export function visibleNavigation(user: User | null | undefined, items = NAVIGATION): NavigationItem[] {
-  return items.flatMap((item) => {
+export function visibleNavigation(user: User | null | undefined, items = NAVIGATION, staged = stagedOperationsEnabled()): NavigationItem[] {
+  return items.flatMap((original) => {
+    if (!staged && ['/warehouse/workstation', '/admin/after-sales-brands'].includes(original.key)) return []
+    const item = !staged && original.key === 'service'
+      ? {...original, children: [{key:'/sales/after-sales',label:'來回件',permissions:['after_sales_cases:read','sales_orders:read']}]}
+      : original
+    if (item.key === '/warehouse/workstation' && !hasWarehouseManagementAccess(user)) return []
     if (item.key === '/dashboard' && warehouseOnlyUser(user)) return []
     if (item.superAdminOnly && !user?.roles?.includes('SUPER_ADMIN')) return []
     if (item.adminOnly && !isAdminUser(user) && !hasAnyPermission(user, item.permissions || [])) return []
     if (item.permissions?.length && !hasAnyPermission(user, item.permissions)) return []
-    const children = item.children ? visibleNavigation(user, item.children) : undefined
-    return item.children && !children?.length ? [] : [{ ...item, children }]
+    const children = item.children ? visibleNavigation(user, item.children, staged) : undefined
+    const label = item.key === '/warehouse' ? (hasWarehouseManagementAccess(user) ? '儲運總覽' : '我的工作站') : item.label
+    return item.children && !children?.length ? [] : [{ ...item, label, children }]
   })
 }
 export function workspaceNavigation(user: User | null | undefined, workspace: 'all' | 'warehouse'): NavigationItem[] {
   const items = visibleNavigation(user)
   if (workspace === 'all' && !warehouseOnlyUser(user)) return items
   const personal = navigationLeaves(items).filter(item => PERSONAL_PATHS.includes(item.key))
-  return [...items.filter(item => item.key === 'warehouse'),
+  return [...items.filter(item => item.key === 'warehouse').map(item => ({...item, children: item.children?.filter(child => child.key === '/warehouse' || child.key === '/warehouse/workstation')})),
     ...(personal.length ? [{ key: 'personal', label: '我的資訊', children: personal }] : [])]
 }
 export function navigationLeaves(items: NavigationItem[]): NavigationItem[] {

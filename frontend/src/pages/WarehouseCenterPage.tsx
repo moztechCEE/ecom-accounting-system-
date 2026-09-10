@@ -4,20 +4,24 @@ import { ReloadOutlined } from '@ant-design/icons'
 import { useEntityContext } from '../hooks/useEntityContext'
 import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
-import { warehouseAreas } from '../config/workspaces'
+import { warehouseAreas, WAREHOUSE_REPORTS } from '../config/workspaces'
+import { Navigate } from 'react-router-dom'
 import type { WarehouseRow as Row } from '../services/warehouse.types'
 import WarehouseOrderPanel from '../components/WarehouseOrderPanel'
 import WarehouseStation from '../components/WarehouseStation'
 import WarehouseDispatch from '../components/WarehouseDispatch'
+import WarehouseOverview from '../components/WarehouseOverview'
+import { hasPermission } from '../utils/access'
 import { WarehouseFeedback } from '../services/warehouse-feedback'
+import { stagedOperationsEnabled } from '../config/release'
 import './WarehouseCenterPage.css'
 
 type Page = { items: Row[]; total: number; mode: 'read_only'; source: string }
-export default function WarehouseCenterPage() {
+export default function WarehouseCenterPage({workstationOnly=false}:{workstationOnly?:boolean}) {
   const entityId = useEntityContext()
-  return <WarehouseWorkspace key={entityId} entityId={entityId} />
+  return <WarehouseWorkspace key={`${entityId}:${workstationOnly}`} entityId={entityId} workstationOnly={workstationOnly} />
 }
-function WarehouseWorkspace({entityId}:{entityId:string}) {
+function WarehouseWorkspace({entityId,workstationOnly}:{entityId:string;workstationOnly:boolean}) {
   const { user } = useAuth()
   const [serverAreas,setServerAreas]=useState<string[]>([]),[stationError,setStationError]=useState('')
   const [stationsLoaded,setStationsLoaded]=useState(false)
@@ -25,10 +29,12 @@ function WarehouseWorkspace({entityId}:{entityId:string}) {
   const areas = warehouseAreas(user).filter(a=>serverAreas.includes(a.key))
   const [chosenArea, setChosenArea] = useState('')
   const area = areas.find(a => a.key === chosenArea)?.key || ''
+  const manager = hasPermission(user, 'wms_overview:read')
   const [view,setView]=useState('all'), [search,setSearch]=useState(''), [query,setQuery]=useState('')
   const [page,setPage]=useState(1), [refresh,setRefresh]=useState(0), [loading,setLoading]=useState(false)
   const [data,setData]=useState<Page|null>(null), [error,setError]=useState(''), [selected,setSelected]=useState<Row|null>(null)
   useEffect(()=>{const abort=new AbortController();setServerAreas([]);setChosenArea('');setStationError('');setStationsLoaded(false)
+    if(!stagedOperationsEnabled()) return ()=>abort.abort()
     api.get<string[]>('/wms/workbench/stations',{params:{entityId},signal:abort.signal}).then(r=>{if(!abort.signal.aborted){setServerAreas(r.data);setStationsLoaded(true)}}).catch(()=>{if(!abort.signal.aborted)setStationError('無法確認工作站權限，請重新載入或聯絡管理員')})
     return()=>abort.abort()
   },[entityId,user?.id])
@@ -43,17 +49,20 @@ function WarehouseWorkspace({entityId}:{entityId:string}) {
       .finally(()=>{if(!abort.signal.aborted)setLoading(false)})
     return ()=>abort.abort()
   },[entityId,area,view,query,page,refresh])
-  if(!area)return <section className="warehouse-station-choice"><span className="station-eyebrow">儲運管理中心</span><h1>選擇今天的工作站</h1>{stationError&&<Alert type="warning" message={stationError}/>}<div>{areas.map(a=><button key={a.key} onClick={async()=>{await audio.enable();setChosenArea(a.key)}}><span>{a.key==='pick'?'01':a.key==='pack'?'02':a.key==='dispatch'?'03':'04'}</span><h2>{a.label}</h2><p>{a.key==='pick'?'接單・揀貨・掃碼':a.key==='pack'?'二次核對・裝箱':a.key==='dispatch'?'ERP 訂單・拋轉':'出貨狀態・物流'}</p><b>進入工作站 →</b></button>)}</div>{!areas.length&&!stationError&&<p>{stationsLoaded?'尚未獲派工作站，請聯絡管理員':'正在確認可用工作站'}</p>}</section>
+  if(!workstationOnly && manager)return <WarehouseOverview entityId={entityId} />
+  const firstReport=WAREHOUSE_REPORTS.find(r=>hasPermission(user,r.permission))
+  if(!workstationOnly && firstReport)return <Navigate to={`/warehouse/${firstReport.key}`} replace />
+  if(!stagedOperationsEnabled())return <section className="warehouse-center"><h1>儲運工作站</h1><Alert type="info" message="儲運作業尚未開通"/></section>
+  if(!area)return <section className="warehouse-station-choice"><span className="station-eyebrow">儲運管理中心</span><h1>{areas.some(a=>a.key==='pick'||a.key==='pack')?'今天的工作':'訂單工作區'}</h1>{stationError&&<Alert type="warning" message={stationError}/>}<div>{areas.map(a=><button key={a.key} onClick={async()=>{await audio.enable();setChosenArea(a.key)}}><span>{a.key==='pick'?'01':a.key==='pack'?'02':'ERP'}</span><h2>{a.label}</h2><p>{a.key==='pick'?'接單・揀貨・掃碼':a.key==='pack'?'二次核對・裝箱・出貨':'建立訂單・拋轉倉庫'}</p><b>開始工作 →</b></button>)}</div>{!areas.length&&!stationError&&<p>{stationsLoaded?'尚未獲派工作站，請聯絡管理員':'正在確認可用工作站'}</p>}</section>
   if(area==='pick'||area==='pack')return <WarehouseStation key={`${entityId}:${area}`} entityId={entityId} stage={area} audio={audio} onExit={()=>setChosenArea('')}/>
   return <section className="warehouse-center">
-    <header><Typography.Title level={2}>{areas.find(a=>a.key===area)?.label || '出貨工作台'}</Typography.Title><Button icon={<ReloadOutlined />} onClick={()=>setRefresh(x=>x+1)} loading={loading}>重新整理</Button></header>
+    <header><Typography.Title level={2}>{areas.find(a=>a.key===area)?.label || '儲運工作台'}</Typography.Title>{areas.length>1 && <Button onClick={()=>setChosenArea('')}>切換工作站</Button>}<Button icon={<ReloadOutlined />} onClick={()=>setRefresh(x=>x+1)} loading={loading}>重新整理</Button></header>
     {areas.length > 1 && <Segmented aria-label="作業區域" value={area} options={areas.map(a=>({value:a.key,label:a.label}))} onChange={value=>{setChosenArea(value);setView('all');setPage(1);setSelected(null)}} />}
     {area==='dispatch'&&<WarehouseDispatch entityId={entityId} onDispatched={()=>setRefresh(x=>x+1)}/>}
     <Space wrap className="warehouse-toolbar">
       <Segmented value={view} onChange={value=>{setView(value);setPage(1)}} options={[
         {label:'全部',value:'all'},{label:'待揀貨',value:'pending'},{label:'揀貨中',value:'picking'},
         {label:'裝箱',value:'packing'},{label:'核對完成',value:'completed'},
-        {label:'物流追蹤',value:'logistics'},{label:'未取退回',value:'returns'},
       ]}/>
       <Input.Search aria-label="搜尋訂單或物流單號" placeholder="訂單／物流單號" value={search} allowClear onChange={event=>setSearch(event.target.value)} onSearch={value=>{setQuery(value);setPage(1)}} style={{width:250}}/>
     </Space>

@@ -67,6 +67,7 @@ const server = http.createServer(async (req, res) => {
         apiUrl,
         wsUrl,
         defaultEntityId,
+        stagedOperationsEnabled: process.env.STAGED_OPERATIONS_ENABLED === 'true',
       })};`,
     );
     return;

@@ -18,6 +18,7 @@ import WarehouseDispatch from './WarehouseDispatch'
 import {useEntityContext} from '../hooks/useEntityContext'
 import {useAuth} from '../contexts/AuthContext'
 import {hasPermission} from '../utils/access'
+import {stagedOperationsEnabled} from '../config/release'
 
 const { Title, Text } = Typography
 
@@ -183,7 +184,7 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
         open={open}
       >
         <div className="space-y-4">
-          {hasPermission(user,'wms_tasks:read')&&hasPermission(user,'wms_orders:create')&&order.status==='pending'&&<WarehouseDispatch key={`${entityId}:${order.id}`} entityId={entityId} orderId={order.id} onDispatched={()=>onUpdate?.()}/>}
+          {stagedOperationsEnabled()&&hasPermission(user,'wms_tasks:read')&&hasPermission(user,'wms_orders:create')&&order.status==='pending'&&<WarehouseDispatch key={`${entityId}:${order.id}`} entityId={entityId} orderId={order.id} onDispatched={()=>onUpdate?.()}/>}
           {/* Status Timeline */}
           <GlassDrawerSection>
             <Steps

@@ -9,6 +9,7 @@ import { RequirePermissions } from '../../../common/decorators/permissions.decor
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { WmsWorkspaceBridge } from './wms-workspace-bridge';
 import { WmsDispatchService } from './wms-dispatch.service';
+import type { ManagementSection } from './wms-management.contract';
 
 export class WmsWorkbenchQuery {
   @IsString() @IsNotEmpty() @MaxLength(128) entityId!: string;
@@ -22,6 +23,15 @@ export class WmsCommandDto {
   @IsString() @IsNotEmpty() @MaxLength(128) entityId!: string;
   @IsInt() @Min(1) @Max(Number.MAX_SAFE_INTEGER) expectedRevision!: number;
   @IsString() @IsNotEmpty() @MaxLength(64) requestId!: string;
+}
+export class WmsManagementQuery {
+  @IsString() @IsNotEmpty() @MaxLength(128) entityId!:string;
+  @IsOptional() @IsString() @MaxLength(120) search?:string;
+  @IsOptional() @Type(()=>Number) @IsIn([0,1,7,30,90]) days?:number;
+  @IsOptional() @IsIn(['all','open','ack','resolved','rejected','unresolved']) status?:string;
+  @IsOptional() @Type(()=>Number) @IsInt() @Min(1) @Max(10000) page?:number;
+  @IsOptional() @Type(()=>Number) @IsInt() @Min(1) @Max(10000) pickPage?:number;
+  @IsOptional() @Type(()=>Number) @IsInt() @Min(1) @Max(10000) packPage?:number;
 }
 export class WmsScanDto extends WmsCommandDto {
   @IsString() @IsNotEmpty() @MaxLength(256) scanValue!: string;
@@ -37,6 +47,11 @@ export class WmsDispatchDto {
 @RequirePermissions({resource:'wms_tasks',action:'read'})
 export class WmsWorkbenchController {
   constructor(private readonly bridge:WmsWorkspaceBridge,private readonly dispatchService?:WmsDispatchService) {}
+  @Get('management/:section') @Header('Cache-Control','private, no-store')
+  management(@Query() q:WmsManagementQuery,@Param('section') section:ManagementSection,@Req() req:{user:{id:string}}){
+    // Bridge rechecks the selected report's permission on every request, in addition to entity/task guards.
+    return this.bridge.readManagement(req.user.id,q,section);
+  }
   @Get('orders') @Header('Cache-Control','private, no-store')
   orders(@Query() query: WmsWorkbenchQuery,@Req() request:{user:{id:string}}) {
     return this.bridge.read(request.user.id,query);

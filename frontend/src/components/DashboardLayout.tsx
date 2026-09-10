@@ -6,8 +6,8 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
 import { PRODUCT } from '../config/product'
 import { activeNavigation, navigationParent, workspaceNavigation, type NavigationItem } from '../config/navigation'
-import { PERSONAL_PATHS, warehouseOnlyUser } from '../config/workspaces'
-import { hasPermission } from '../utils/access'
+import { PERSONAL_PATHS, warehouseOnlyUser, warehouseWorkspace, hasWarehouseManagementAccess, warehouseAreas } from '../config/workspaces'
+import { stagedOperationsEnabled } from '../config/release'
 import CommandPalette from './CommandPalette'
 import NotificationCenter from './NotificationCenter'
 import SettingsDrawer from './SettingsDrawer'
@@ -38,7 +38,7 @@ export default function DashboardLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [menuSearch, setMenuSearch] = useState('')
-  const [workspace, setWorkspace] = useState<'all' | 'warehouse'>(location.pathname === '/warehouse' ? 'warehouse' : 'all')
+  const [workspace, setWorkspace] = useState<'all' | 'warehouse'>(() => warehouseWorkspace(user, location.pathname))
   const activeWorkspace = warehouseOnlyUser(user) ? 'warehouse' : workspace
   const items = workspaceNavigation(user, activeWorkspace)
   const active = activeNavigation(items, location.pathname, location.search)
@@ -46,9 +46,8 @@ export default function DashboardLayout() {
 
   useEffect(() => { document.title = PRODUCT.title }, [])
   useEffect(() => {
-    if (location.pathname === '/warehouse') setWorkspace('warehouse')
-    else if (!PERSONAL_PATHS.includes(location.pathname)) setWorkspace('all')
-  }, [location.pathname])
+    if (!PERSONAL_PATHS.includes(location.pathname)) setWorkspace(warehouseWorkspace(user, location.pathname))
+  }, [location.pathname, user])
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences)) } catch { /* Storage may be unavailable. */ }
   }, [preferences])
@@ -79,10 +78,15 @@ export default function DashboardLayout() {
       <img src={collapsed ? PRODUCT.mark : PRODUCT.logo} alt={PRODUCT.brand} />
       {!collapsed && <span>{PRODUCT.name}</span>}
     </div>
-    {!collapsed && hasPermission(user, 'wms_tasks:read') && <div className="operations-nav-search">
+    {!collapsed && stagedOperationsEnabled() && warehouseAreas(user).length>0 && <div className="operations-nav-search">
       <Select aria-label="工作區" value={activeWorkspace} style={{ width: '100%' }}
-        options={[{value:'warehouse',label:'儲運工作區'}, ...(!warehouseOnlyUser(user) ? [{value:'all',label:'全部功能'}] : [])]}
-        onChange={value => {setWorkspace(value); setMenuSearch(''); if(value==='warehouse') navigate('/warehouse')}} />
+        options={[{value:'warehouse',label:'儲運作業'}, ...(!warehouseOnlyUser(user) ? [{value:'all',label:'營運管理'}] : [])]}
+        onChange={value => {
+          setWorkspace(value)
+          setMenuSearch('')
+          if (value === 'warehouse') navigate(hasWarehouseManagementAccess(user) ? '/warehouse/workstation' : '/warehouse')
+          else if (location.pathname === '/warehouse/workstation' && hasWarehouseManagementAccess(user)) navigate('/warehouse')
+        }} />
     </div>}
     {!collapsed && <div className="operations-nav-search"><Input prefix={<SearchOutlined />} placeholder="搜尋功能" aria-label="搜尋功能"
       value={menuSearch} allowClear onChange={(event) => setMenuSearch(event.target.value)} /></div>}

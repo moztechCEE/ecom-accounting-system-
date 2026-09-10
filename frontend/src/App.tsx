@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { loginDestination } from './utils/login-destination'
 import { warehouseOnlyUser } from './config/workspaces'
+import WarehouseReportsPage from './pages/WarehouseReportsPage'
+import { stagedOperationsEnabled } from './config/release'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { AIProvider } from './contexts/AIContext'
 import DashboardLayout from './components/DashboardLayout'
@@ -56,6 +58,7 @@ function HomeEntry({ dashboard = false }: { dashboard?: boolean }) {
   return <Navigate to={loginDestination(user)} replace />
 }
 const App: React.FC = () => {
+  const staged = stagedOperationsEnabled()
   return (
     <BrowserRouter>
       <ThemeProvider>
@@ -78,9 +81,9 @@ const App: React.FC = () => {
                 <Route path="accounting/periods" element={<PermissionRoute anyPermissions={['accounts:read']}><AccountingPeriodsPage /></PermissionRoute>} />
                 <Route path="sales/orders" element={<PermissionRoute anyPermissions={['sales_orders:read']}><SalesPage /></PermissionRoute>} />
                 <Route path="sales/quotations" element={<PermissionRoute anyPermissions={['sales_orders:read', 'purchase_orders:read']}><SalesQuotationsPage /></PermissionRoute>} />
-                <Route path="sales/after-sales" element={<PermissionRoute anyPermissions={['after_sales_cases:read']}><AfterSalesWorkbenchPage /></PermissionRoute>} />
-                <Route path="sales/after-sales/quotes" element={<PermissionRoute anyPermissions={['after_sales_cases:read']}><AfterSalesQuotesPage /></PermissionRoute>} />
-                <Route path="admin/after-sales-brands" element={<PermissionRoute anyRoles={['ADMIN']}><AfterSalesBrandsPage /></PermissionRoute>} />
+                <Route path="sales/after-sales" element={<PermissionRoute anyPermissions={staged?['after_sales_cases:read']:['after_sales_cases:read','sales_orders:read']}>{staged?<AfterSalesWorkbenchPage />:<AfterSalesCasesPage />}</PermissionRoute>} />
+                <Route path="sales/after-sales/quotes" element={staged?<PermissionRoute anyPermissions={['after_sales_cases:read']}><AfterSalesQuotesPage /></PermissionRoute>:<Navigate to="/sales/after-sales" replace />} />
+                <Route path="admin/after-sales-brands" element={staged?<PermissionRoute anyRoles={['ADMIN']}><AfterSalesBrandsPage /></PermissionRoute>:<Navigate to="/sales/after-sales" replace />} />
                 <Route path="sales/after-sales/internal" element={<PermissionRoute anyPermissions={['after_sales_cases:read']}><AfterSalesCasesPage /></PermissionRoute>} />
                 <Route path="reports" element={<PermissionRoute anyPermissions={['reports:read']}><ReportsPage /></PermissionRoute>} />
                 <Route path="vendors" element={<PermissionRoute anyPermissions={['purchase_orders:read', 'accounts:read']}><VendorsPage /></PermissionRoute>} />
@@ -106,6 +109,8 @@ const App: React.FC = () => {
 
                 {/* Supply Chain Routes */}
                 <Route path="warehouse" element={<PermissionRoute anyPermissions={['wms_tasks:read']}><WarehouseCenterPage /></PermissionRoute>} />
+                <Route path="warehouse/workstation" element={<PermissionRoute anyPermissions={['wms_tasks:read']}><WarehouseCenterPage workstationOnly /></PermissionRoute>} />
+                <Route path="warehouse/:report" element={<PermissionRoute anyPermissions={['wms_tasks:read']}><WarehouseReportsPage /></PermissionRoute>} />
                 <Route path="inventory/products" element={<PermissionRoute anyPermissions={['inventory:read']}><ProductsPage /></PermissionRoute>} />
                 <Route path="purchasing/orders" element={<PermissionRoute anyPermissions={['purchase_orders:read']}><PurchaseOrdersPage /></PermissionRoute>} />
                 <Route path="manufacturing/assembly" element={<PermissionRoute anyPermissions={['inventory:read']}><AssemblyPage /></PermissionRoute>} />

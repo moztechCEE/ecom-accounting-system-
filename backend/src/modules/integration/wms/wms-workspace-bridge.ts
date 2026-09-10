@@ -3,9 +3,10 @@ import { JwtService } from '@nestjs/jwt';
 import { createPrivateKey, createHash } from 'node:crypto';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 
-const permissions = { dispatch:'wms_orders:create', pick:'wms_picking:execute', pack:'wms_packing:execute', shipping:'wms_shipping:execute' };
+import { managementPermissions, ManagementSection, projectManagement } from './wms-management.contract';
+const permissions = { dispatch:'wms_orders:create', pick:'wms_picking:execute', pack:'wms_packing:execute', shipping:'wms_shipping:execute', ...managementPermissions };
 export type Station = keyof typeof permissions;
-type Query = {area?:string;view?:string;search?:string;page?:number;pageSize?:number;entityId:string};
+type Query = {area?:string;view?:string;search?:string;page?:number;pageSize?:number;entityId:string;days?:number;status?:string;pickPage?:number;packPage?:number};
 const unavailable=()=>new ServiceUnavailableException({code:'WMS_SOURCE_NOT_APPROVED',message:'WMS 安全連線與員工對照尚未開通'});
 const invalid=()=>new ServiceUnavailableException({code:'WMS_RESPONSE_INVALID',message:'WMS 回應格式不符，請勿依此作業'});
 function record(value:unknown):Record<string,unknown>{if(!value||typeof value!=='object'||Array.isArray(value))throw invalid();return value as Record<string,unknown>;}
@@ -58,7 +59,11 @@ export class WmsWorkspaceBridge {
     if(this.env.WMS_WORKSPACE_COMMANDS_ENABLED!=='true')throw unavailable();
     return this.read(actorId,{entityId,area:station},id,{kind,body});
   }
-  async read(actorId:string,query:Query,id?:string,command?:{kind:string;body:Record<string,unknown>}) {
+  async readManagement(actorId:string,query:Query,section:ManagementSection) {
+    if(!Object.hasOwn(managementPermissions,section))throw new BadRequestException('WMS_SECTION_INVALID');
+    return this.read(actorId,{...query,area:section},undefined,undefined,section);
+  }
+  async read(actorId:string,query:Query,id?:string,command?:{kind:string;body:Record<string,unknown>},management?:ManagementSection) {
     if(this.env.WMS_WORKSPACE_READ_ENABLED!=='true')throw unavailable();
     if(!/^[A-Za-z0-9_-]{1,128}$/.test(actorId)||!/^[A-Za-z0-9_-]{1,128}$/.test(query.entityId)|| (id!==undefined&&!/^[A-Za-z0-9_-]{1,128}$/.test(id)))throw new BadRequestException('WMS_SCOPE_INVALID');
     const allowed=await this.stations(actorId);
@@ -73,11 +78,12 @@ export class WmsWorkspaceBridge {
       const key=createPrivateKey(privateKey);
       if(key.asymmetricKeyType!=='rsa'||(key.asymmetricKeyDetails?.modulusLength||0)<2048||!this.env.WMS_WORKSPACE_ISSUER||!this.env.WMS_WORKSPACE_AUDIENCE)throw Error();
     }catch{throw unavailable();}
-    const writable=!!id&&this.env.WMS_WORKSPACE_COMMANDS_ENABLED==='true';
+    const writable=!!id&&['pick','pack','dispatch'].includes(area)&&this.env.WMS_WORKSPACE_COMMANDS_ENABLED==='true';
     const method=command?'POST':'GET',body=command?.body||{};
-    const suffix='/orders'+(id?'/'+encodeURIComponent(id):'')+(command?'/'+command.kind:'');
+    const suffix=management?'/management/'+management:'/orders'+(id?'/'+encodeURIComponent(id):'')+(command?'/'+command.kind:'');
     const url=new URL((writable?'/api/integrations/erp/workflow/v1':'/api/integrations/erp/v1')+suffix,base);
     if(!writable)for(const key of ['view','search','page','pageSize'] as const)if(query[key]!==undefined)url.searchParams.set(key,String(query[key]));
+    if(management){url.searchParams.delete('view');url.searchParams.delete('pageSize');for(const key of ['days','status','pickPage','packPage'] as const)if(query[key]!==undefined)url.searchParams.set(key,String(query[key]));}
     const token=await new JwtService().signAsync({entityId:query.entityId,station:area,scope:writable?'wms.workspace.command':'wms.workspace.read',
       ...(writable?{method,path:suffix,bodyHash:createHash('sha256').update(JSON.stringify(body)).digest('hex')}:{})},
       {privateKey,algorithm:'RS256',issuer:this.env.WMS_WORKSPACE_ISSUER,audience:this.env.WMS_WORKSPACE_AUDIENCE,subject:actorId,expiresIn:45});
@@ -94,6 +100,6 @@ export class WmsWorkspaceBridge {
       finally{await reader.cancel();}
       result=JSON.parse(Buffer.concat(chunks).toString('utf8'));
     }catch(e){if(e instanceof ForbiddenException||e instanceof NotFoundException||e instanceof ConflictException||e instanceof BadRequestException)throw e;throw new ServiceUnavailableException({code:command?'WMS_COMMAND_RESULT_UNKNOWN':'WMS_SOURCE_UNAVAILABLE',message:command?'結果尚未確認，請核對原請求紀錄':'WMS 連線未完成，請稍後重試'});}
-    return projectWorkspaceResponse(result,!!id,id,writable,area);
+    return management?projectManagement(result,management):projectWorkspaceResponse(result,!!id,id,writable,area);
   }
 }

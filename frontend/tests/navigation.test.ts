@@ -1,13 +1,55 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { activeNavigation, navigationLeaves, navigationParent, visibleNavigation, workspaceNavigation } from '../src/config/navigation.ts'
-import { warehouseAreas, warehouseOnlyUser } from '../src/config/workspaces.ts'
+import { warehouseAreas, warehouseOnlyUser, isWarehousePath, hasWarehouseManagementAccess, warehouseWorkspace } from '../src/config/workspaces.ts'
 import { afterSalesTypes } from '../src/utils/after-sales-display.ts'
 import type { User } from '../src/types/index.ts'
 import { loginDestination } from '../src/utils/login-destination.ts'
+import { stagedOperationsEnabled } from '../src/config/release.ts'
+
+Object.defineProperty(globalThis, 'window', {value:{__APP_CONFIG__:{stagedOperationsEnabled:true}},configurable:true})
 
 const admin = { roles: ['SUPER_ADMIN'], permissions: [] } as unknown as User
 const staff = { roles: ['CUSTOMER_SERVICE'], permissions: ['after_sales_cases:read'] } as unknown as User
+test('UI-only release preserves existing after-sales entry and excludes staged commands',()=>{
+  const leaves=navigationLeaves(visibleNavigation(admin,undefined,false))
+  assert.equal(leaves.find(i=>i.key==='/sales/after-sales')?.label,'來回件')
+  assert(!leaves.some(i=>i.key==='/sales/after-sales/quotes'||i.key==='/admin/after-sales-brands'||i.key==='/warehouse/workstation'))
+  assert.equal(leaves.filter(i=>i.key.startsWith('/warehouse/')).length,4)
+  assert(navigationLeaves(visibleNavigation({...staff,permissions:['sales_orders:read']},undefined,false)).some(i=>i.key==='/sales/after-sales'))
+  const config=window.__APP_CONFIG__
+  try {window.__APP_CONFIG__=undefined;assert.equal(stagedOperationsEnabled(),false)} finally {window.__APP_CONFIG__=config}
+})
+test('manager reports stay separate from picker and packer workstations',()=>{
+  assert(isWarehousePath('/warehouse/logs'));assert(!isWarehousePath('/warehouse-other'))
+  assert(!visibleNavigation({...staff,permissions:['wms_logs:read']}).some(i=>i.key==='warehouse'))
+  assert.deepEqual(warehouseAreas(admin).map(a=>a.key),['dispatch','pick','pack'])
+  const reports=navigationLeaves(visibleNavigation(admin)).filter(i=>i.key.startsWith('/warehouse/')&&i.key!=='/warehouse/workstation')
+  assert.deepEqual(reports.map(i=>i.label),['操作日誌','例外總覽','刷錯分析','新品不良分析'])
+  const operator={...staff,roles:['EMPLOYEE'],permissions:['wms_tasks:read','wms_picking:execute','wms_packing:execute']}
+  assert.deepEqual(navigationLeaves(workspaceNavigation(operator,'warehouse')).map(i=>i.key),['/warehouse'])
+  assert.equal(activeNavigation(visibleNavigation(admin),'/warehouse/scan-errors','')?.label,'刷錯分析')
+})
+test('supervisor analysis stays in the ERP navigation and never implies an operator station',()=>{
+  const supervisor={...staff,roles:['EMPLOYEE'],permissions:['wms_tasks:read','wms_overview:read','wms_logs:read','wms_exceptions:read','wms_scan_errors:read','wms_defects:read','profile_self:read']}
+  assert(hasWarehouseManagementAccess(supervisor))
+  assert(!warehouseOnlyUser(supervisor))
+  assert.deepEqual(warehouseAreas(supervisor),[])
+  assert.equal(warehouseWorkspace(supervisor,'/warehouse'),'all')
+  assert.equal(warehouseWorkspace(admin,'/warehouse/scan-errors'),'all')
+  assert.equal(warehouseWorkspace(admin,'/warehouse/workstation'),'warehouse')
+  const leaves=navigationLeaves(workspaceNavigation(supervisor,'all'))
+  assert.equal(leaves.find(i=>i.key==='/warehouse')?.label,'儲運總覽')
+  assert(leaves.some(i=>i.key==='/warehouse/defects'))
+  assert(!leaves.some(i=>i.key==='/warehouse/workstation'||i.key==='/sales/orders'||i.key==='/payroll/employees'))
+  const adminERP=navigationLeaves(workspaceNavigation(admin,warehouseWorkspace(admin,'/warehouse')))
+  assert(adminERP.some(i=>i.key==='/sales/orders'))
+  assert(adminERP.some(i=>i.key==='/warehouse/logs'))
+  const worker={...staff,roles:['EMPLOYEE'],permissions:['wms_tasks:read','wms_packing:execute']}
+  assert.equal(warehouseWorkspace(worker,'/warehouse'),'warehouse')
+  assert.equal(navigationLeaves(workspaceNavigation(worker,'all'))[0].label,'我的工作站')
+  assert(!navigationLeaves(workspaceNavigation(admin,'warehouse')).some(i=>i.key==='/warehouse/logs'))
+})
 test('warehouse entry follows ERP permission without implying WMS access', () => {
   const warehouse = { roles: ['EMPLOYEE'], permissions: ['wms_tasks:read'] } as unknown as User
   assert(visibleNavigation(warehouse).some(item => item.key === 'warehouse'))

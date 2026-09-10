@@ -24,6 +24,7 @@ import SalesOrderCreate from '../components/SalesOrderCreate'
 import {useAuth} from '../contexts/AuthContext'
 import {useEntityContext} from '../hooks/useEntityContext'
 import {hasPermission} from '../utils/access'
+import {stagedOperationsEnabled} from '../config/release'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -432,7 +433,7 @@ const SalesPage: React.FC = () => {
           <Title level={2} className="!mb-0">銷售訂單</Title>
         </div>
         <Space wrap>
-          {hasPermission(user,'sales_orders:create')&&<Button type="primary" disabled={!entityId} onClick={()=>setCreateOpen(true)}>新增訂單</Button>}
+          {stagedOperationsEnabled()&&hasPermission(user,'sales_orders:create')&&<Button type="primary" disabled={!entityId} onClick={()=>setCreateOpen(true)}>新增訂單</Button>}
           <Button icon={<ReloadOutlined />} onClick={fetchOrders}>重新整理</Button>
           <Button
             icon={<SyncOutlined spin={syncingInvoiceBatch} />}
