@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Header, Module, Param, Post, Query, Req, ServiceUnavailableException, UseGuards } from '@nestjs/common';
-import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
@@ -8,6 +8,7 @@ import { RequireEntityAccess } from '../../../common/decorators/entity-access.de
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { WmsWorkspaceBridge } from './wms-workspace-bridge';
+import { WmsDispatchService } from './wms-dispatch.service';
 
 export class WmsWorkbenchQuery {
   @IsString() @IsNotEmpty() @MaxLength(128) entityId!: string;
@@ -25,12 +26,17 @@ export class WmsCommandDto {
 export class WmsScanDto extends WmsCommandDto {
   @IsString() @IsNotEmpty() @MaxLength(256) scanValue!: string;
 }
+export class WmsDispatchDto {
+  @IsString() @IsNotEmpty() @MaxLength(128) entityId!:string;
+  @IsString() @Matches(/^[a-f0-9]{64}$/) sourceHash!:string;
+  @IsString() @Matches(/^[A-Za-z0-9_-]{1,64}$/) requestId!:string;
+}
 @Controller('wms/workbench')
 @UseGuards(JwtAuthGuard, PermissionsGuard, EntityAccessGuard)
 @RequireEntityAccess('inventory')
 @RequirePermissions({resource:'wms_tasks',action:'read'})
 export class WmsWorkbenchController {
-  constructor(private readonly bridge:WmsWorkspaceBridge) {}
+  constructor(private readonly bridge:WmsWorkspaceBridge,private readonly dispatchService?:WmsDispatchService) {}
   @Get('orders') @Header('Cache-Control','private, no-store')
   orders(@Query() query: WmsWorkbenchQuery,@Req() request:{user:{id:string}}) {
     return this.bridge.read(request.user.id,query);
@@ -41,25 +47,36 @@ export class WmsWorkbenchController {
   @Get('stations') @Header('Cache-Control','private, no-store')
   stations(@Query() _query: WmsWorkbenchQuery,@Req() request:{user:{id:string}}) { return this.bridge.stations(request.user.id); }
 
+  @Get('dispatch/:id') @Header('Cache-Control','private, no-store')
+  @RequirePermissions({resource:'wms_tasks',action:'read'},{resource:'wms_orders',action:'create'})
+  previewDispatch(@Query() q:WmsWorkbenchQuery,@Param('id') id:string,@Req() req:{user:{id:string}}){return this.dispatchService!.preview(req.user.id,q.entityId,id);}
+  @Get('dispatch-orders') @Header('Cache-Control','private, no-store')
+  @RequirePermissions({resource:'wms_tasks',action:'read'},{resource:'wms_orders',action:'create'})
+  dispatchOrders(@Query() q:WmsWorkbenchQuery,@Req() req:{user:{id:string}}){return this.dispatchService!.candidates(req.user.id,q.entityId,q.search);}
+  @Post('dispatch/:id')
+  @RequirePermissions({resource:'wms_tasks',action:'read'},{resource:'wms_orders',action:'create'})
+  dispatch(@Body() body:WmsDispatchDto,@Param('id') id:string,@Req() req:{user:{id:string}}){return this.dispatchService!.dispatch(req.user.id,body.entityId,id,body.sourceHash,body.requestId);}
+
   @Post('orders/:id/pick/claim')
   @RequirePermissions({resource:'wms_tasks',action:'read'},{resource:'wms_picking',action:'execute'})
-  claimPick(@Body() _body: WmsCommandDto) { return this.unavailable(); }
+  claimPick(@Body() body: WmsCommandDto,@Param('id') id:string,@Req() req:{user:{id:string}}) { return this.bridge.command(req.user.id,body.entityId,id,'pick','claim',body as any); }
 
   @Post('orders/:id/pick/scan')
   @RequirePermissions({resource:'wms_tasks',action:'read'},{resource:'wms_picking',action:'execute'})
-  scanPick(@Body() _body: WmsScanDto) { return this.unavailable(); }
+  scanPick(@Body() body: WmsScanDto,@Param('id') id:string,@Req() req:{user:{id:string}}) { return this.bridge.command(req.user.id,body.entityId,id,'pick','scan',body as any); }
 
   @Post('orders/:id/pack/claim')
   @RequirePermissions({resource:'wms_tasks',action:'read'},{resource:'wms_packing',action:'execute'})
-  claimPack(@Body() _body: WmsCommandDto) { return this.unavailable(); }
+  claimPack(@Body() body: WmsCommandDto,@Param('id') id:string,@Req() req:{user:{id:string}}) { return this.bridge.command(req.user.id,body.entityId,id,'pack','claim',body as any); }
 
   @Post('orders/:id/pack/scan')
   @RequirePermissions({resource:'wms_tasks',action:'read'},{resource:'wms_packing',action:'execute'})
-  scanPack(@Body() _body: WmsScanDto) { return this.unavailable(); }
+  scanPack(@Body() body: WmsScanDto,@Param('id') id:string,@Req() req:{user:{id:string}}) { return this.bridge.command(req.user.id,body.entityId,id,'pack','scan',body as any); }
 
   private unavailable(): never {
     throw new ServiceUnavailableException({code:'WMS_SOURCE_NOT_APPROVED',message:'WMS 安全連線與員工對照尚未開通'});
   }
 }
-@Module({controllers:[WmsWorkbenchController],providers:[{provide:WmsWorkspaceBridge,useFactory:(prisma:PrismaService)=>new WmsWorkspaceBridge(prisma),inject:[PrismaService]}]})
+@Module({controllers:[WmsWorkbenchController],providers:[{provide:WmsWorkspaceBridge,useFactory:(prisma:PrismaService)=>new WmsWorkspaceBridge(prisma),inject:[PrismaService]},
+ {provide:WmsDispatchService,useFactory:(prisma:PrismaService,bridge:WmsWorkspaceBridge)=>new WmsDispatchService(prisma,bridge),inject:[PrismaService,WmsWorkspaceBridge]}]})
 export class WmsWorkbenchModule {}

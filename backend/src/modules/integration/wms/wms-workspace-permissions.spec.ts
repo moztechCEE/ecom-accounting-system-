@@ -28,11 +28,13 @@ describe('warehouse workspace permission boundary', () => {
     await expect(packer.canActivate(context('claimPick'))).rejects.toThrow('wms_picking:execute');
     await expect(guard(['wms_picking:execute']).canActivate(context('scanPick'))).rejects.toThrow('wms_tasks:read');
   });
-  it('valid permission still cannot activate unapproved source writes', () => {
-    const controller=new WmsWorkbenchController({} as any);
+  it('commands delegate the authenticated actor, never a browser supplied actor', async () => {
+    const bridge={command:jest.fn().mockRejectedValue(new Error('WMS disabled'))};
+    const controller=new WmsWorkbenchController(bridge as any);
     for(const method of ['claimPick','scanPick','claimPack','scanPack']) {
-      expect(()=>controller[method]({entityId:'entity'})).toThrow('WMS 安全連線與員工對照尚未開通');
+      await expect(controller[method]({entityId:'entity'},'order',{user:{id:'employee'}})).rejects.toThrow('WMS disabled');
     }
+    expect(bridge.command.mock.calls.every(c=>c[0]==='employee')).toBe(true);
   });
   it('requires bounded request key, source revision and scan value', () => {
     const good={entityId:'entity',expectedRevision:1,requestId:'request'};

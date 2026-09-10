@@ -14,6 +14,10 @@ import {
 import { salesService } from '../services/sales.service'
 import type { SalesOrder, SalesOrderItem } from '../services/sales.service'
 import FulfillOrderModal from './FulfillOrderModal'
+import WarehouseDispatch from './WarehouseDispatch'
+import {useEntityContext} from '../hooks/useEntityContext'
+import {useAuth} from '../contexts/AuthContext'
+import {hasPermission} from '../utils/access'
 
 const { Title, Text } = Typography
 
@@ -42,6 +46,7 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
   const [refunding, setRefunding] = useState(false)
   const [fulfillOpen, setFulfillOpen] = useState(false)
   const [refundForm] = Form.useForm()
+  const entityId=useEntityContext(),{user}=useAuth()
 
   if (!order) return null
 
@@ -178,6 +183,7 @@ const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({ open, onClose, 
         open={open}
       >
         <div className="space-y-4">
+          {hasPermission(user,'wms_tasks:read')&&hasPermission(user,'wms_orders:create')&&order.status==='pending'&&<WarehouseDispatch key={`${entityId}:${order.id}`} entityId={entityId} orderId={order.id} onDispatched={()=>onUpdate?.()}/>}
           {/* Status Timeline */}
           <GlassDrawerSection>
             <Steps

@@ -17,6 +17,8 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { EntityAccessGuard } from '../../common/guards/entity-access.guard';
 import { RequireEntityAccess } from '../../common/decorators/entity-access.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -98,6 +100,8 @@ export class SalesController {
    * 建立銷售訂單
    */
   @Post('orders')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({resource:'sales_orders',action:'create'})
   @ApiOperation({ summary: '建立銷售訂單' })
   async createSalesOrder(
     @Body() dto: CreateSalesOrderDto,
@@ -105,6 +109,11 @@ export class SalesController {
   ) {
     return this.salesOrderService.createSalesOrder(dto, userId);
   }
+
+  @Get('order-options')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({resource:'sales_orders',action:'create'})
+  orderOptions(@Query('entityId') entityId:string){return this.salesOrderService.orderEntryOptions(this.requireEntityId(entityId));}
 
   @Get('quotations')
   @ApiOperation({ summary: '查詢銷售報價單' })

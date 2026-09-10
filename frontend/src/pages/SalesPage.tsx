@@ -20,6 +20,10 @@ import SalesAnalytics from '../components/SalesAnalytics'
 import { salesService, SalesOrder } from '../services/sales.service'
 import { dashboardService, EcommerceHistory } from '../services/dashboard.service'
 import { resolveEntityId } from '../services/entities.service'
+import SalesOrderCreate from '../components/SalesOrderCreate'
+import {useAuth} from '../contexts/AuthContext'
+import {useEntityContext} from '../hooks/useEntityContext'
+import {hasPermission} from '../utils/access'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -63,6 +67,7 @@ const KanbanColumn: React.FC<{ title: string; orders: SalesOrder[]; color: strin
 )
 
 const SalesPage: React.FC = () => {
+  const {user}=useAuth(),entityId=useEntityContext(),[createOpen,setCreateOpen]=useState(false)
   const [orders, setOrders] = useState<SalesOrder[]>([])
   const [loading, setLoading] = useState(false)
   const [searchText, setSearchText] = useState('')
@@ -425,9 +430,9 @@ const SalesPage: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <Title level={2} className="!mb-0">銷售訂單</Title>
-          <Text type="secondary">這裡只看訂單、通路、品牌與銷售表現；對帳與分錄會往對帳中心與會計工作台處理。</Text>
         </div>
         <Space wrap>
+          {hasPermission(user,'sales_orders:create')&&<Button type="primary" disabled={!entityId} onClick={()=>setCreateOpen(true)}>新增訂單</Button>}
           <Button icon={<ReloadOutlined />} onClick={fetchOrders}>重新整理</Button>
           <Button
             icon={<SyncOutlined spin={syncingInvoiceBatch} />}
@@ -439,6 +444,8 @@ const SalesPage: React.FC = () => {
           <Button icon={<DownloadOutlined />} onClick={handleExport}>匯出報表</Button>
         </Space>
       </div>
+
+      {createOpen&&<SalesOrderCreate key={entityId} entityId={entityId} onClose={()=>setCreateOpen(false)} onCreated={()=>void fetchOrders()}/>}
 
       {/* Analytics Cards */}
       <SalesAnalytics

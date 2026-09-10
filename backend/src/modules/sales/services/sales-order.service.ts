@@ -51,6 +51,26 @@ export class SalesOrderService {
     private readonly externalInvoiceIngestion: ExternalInvoiceIngestionService,
   ) {}
 
+  async orderEntryOptions(entityId:string){
+    const [channels,products,customers]=await Promise.all([
+      this.prisma.salesChannel.findMany({where:{entityId,isActive:true},select:{id:true,name:true},orderBy:{name:'asc'}}),
+      this.prisma.product.findMany({where:{entityId,isActive:true},select:{id:true,sku:true,name:true,salesPrice:true,hasSerialNumbers:true},orderBy:{sku:'asc'}}),
+      this.prisma.customer.findMany({where:{entityId,isActive:true},select:{id:true,name:true},orderBy:{name:'asc'}}),
+    ]);
+    return {channels,products,customers};
+  }
+
+  async validateOrderInput(data:{entityId:string;channelId:string;customerId?:string;items:Array<{productId:string;qty:number;unitPrice:number;discount?:number}>}){
+    if(!data.items?.length||data.items.length>1000||data.items.some(i=>!Number.isFinite(i.qty)||i.qty<=0||!Number.isFinite(i.unitPrice)||i.unitPrice<0||!Number.isFinite(i.discount||0)||(i.discount||0)<0||(i.discount||0)>i.qty*i.unitPrice))throw new BadRequestException('訂單品項、数量或金額不符');
+    const ids=[...new Set(data.items.map(i=>i.productId))];
+    const [channel,products,customer]=await Promise.all([
+      this.prisma.salesChannel.findFirst({where:{id:data.channelId,entityId:data.entityId,isActive:true},select:{id:true}}),
+      this.prisma.product.findMany({where:{id:{in:ids},entityId:data.entityId,isActive:true},select:{id:true}}),
+      data.customerId?this.prisma.customer.findFirst({where:{id:data.customerId,entityId:data.entityId,isActive:true},select:{id:true}}):Promise.resolve(true),
+    ]);
+    if(!channel||!customer||products.length!==ids.length)throw new BadRequestException('通路、客戶或商品不屬於目前公司，或已停用');
+  }
+
   /**
    * 建立銷售訂單
    * @param data - 訂單資料
@@ -75,6 +95,7 @@ export class SalesOrderService {
     },
     createdBy: string,
   ) {
+    await this.validateOrderInput(data);
     // 計算訂單金額
     const totalGross = data.items.reduce(
       (sum, item) => sum + item.qty * item.unitPrice - (item.discount || 0),

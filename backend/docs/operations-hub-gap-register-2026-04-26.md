@@ -1045,3 +1045,14 @@ Cloud Run 正式資料目前已經不是空系統，但核心治理缺口很大�
 - 真正 localhost HTTP 串連 ERP 編譯後 bridge、WMS 簽章驗證與隔離 PGlite SQL 通過；不是前端 fixture，也不是正式登入／雲端 DB 驗收。ERP 40 suites / 173 tests、前端 13 tests、WMS 3 tests 與 builds 通過。
 - 未建立正式金鑰、未寫正式 mapping、未套 migration、未部署或改 IAM。私有 staging 及原 checkout 不動；恢復本機 4396 fixture 並驗證清單／明細。
 - 仍需實際帳號／公司／品牌範圍核准、source commands 共用服務、拋單匯入、語音通知、封箱貼標交接、硬體與全流程驗收。詳見 `wms-source-bridge-2026-09-11.md`，不得宣稱整套出貨已整合上線。
+
+2026-09-11 業務建單、揀貨／裝箱工作站与持久命令（本機增量，未部署）：
+
+- 業務新增 pending 訂單、同公司通路／客戶／商品驗證、建單權限、既有單號搜尋與拋單預覽接入 ERP。存單與拋轉分開，不自動扣庫存／開票；移除訂單頁標題下冗長旁白。
+- 揀貨／裝箱改成原生整頁工作站，明確任務、大字剩餘件數、固定掃碼區、成功／錯誤／整單完成音效與可選語音。完成不跳離本站；工作站切換限定已授權角色，純倉儲導覽維持自身工作＋個人資訊。
+- ERP durable dispatch intent、WMS transaction/CAS/receipt/audit、逐項 SN／條碼核對、tracking intent、撤銷與公司品牌權限守門已實作。來源成功但回應遺失的重試不建立第二張訂單；SN 遺失或數量異常拒絕作業。
+- 查詢完成後隔 3 秒更新；新任務 readyKeys 不受頁碼／搜尋影響。這不是 Socket 推送或持久離線事件。音訊裝置錯誤不影響已保存的命令結果。
+- ERP backend 42 suites / 179 tests、frontend 18 tests 與前後端 build 通過；WMS read/commands 5 tests、跨 repo 兩個暫存 DB＋localhost HTTP 4 tests 通過。合成瀏覽器測試走完建單→拋單→揀貨錯碼／正確掃碼→另一裝箱站二次核對；不是正式帳號、Cloud SQL 或硬體驗收。
+- 所有新 migrations 均未套用，無部署、push、IAM 或正式流量變動。Write router 限定獨立 staging DB 並核對實際 DB 名稱，拒絕 `corely_wms`；舊 WMS direct writers 尚未完成安全共存隔離，不能僅打開 flag 就上線。
+- SN 配置來源（業務先指定／揀貨才綁定）已詢問使用者，未自行假設；需 SN、混合品牌、組合／服務商品先擋下。正式 mappings／員工賦權、Excel全部格式、每日排班、標籤／封箱／物流、實收、庫存財務與完整 parity 仍待驗收。
+- 交接與重跑指令見 `warehouse-workflow-2026-09-11.md`。私有 staging 限制、原 checkout 及另一套售後系統均維持不動。
