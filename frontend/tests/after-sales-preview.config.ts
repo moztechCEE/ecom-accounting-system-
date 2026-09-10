@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { preparationFixture } from './preparation-fixture'
+import { wmsFixture } from './wms-fixture'
 
 const rows = Array.from({ length: 57 }, (_, index) => ({
   id: `fixture-${index + 1}`,
@@ -35,6 +36,7 @@ const meta = {
 export default defineConfig({
   define: { 'import.meta.env.VITE_API_URL': JSON.stringify('/api/v1') },
   plugins: [
+    wmsFixture(),
     preparationFixture(),
     react(),
     {

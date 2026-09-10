@@ -50,6 +50,7 @@ import { PurchaseModule } from './modules/purchase/purchase.module';
 import { AssemblyModule } from './modules/assembly/assembly.module';
 import { InvoiceSyncModule } from './modules/invoice-sync/invoice-sync.module';
 import { AfterSalesIntegrationModule } from './modules/integration/after-sales/after-sales.module';
+import { WmsWorkbenchModule } from './modules/integration/wms/wms-workbench.module';
 
 /**
  * AppModule
@@ -124,6 +125,7 @@ import { AfterSalesIntegrationModule } from './modules/integration/after-sales/a
     GoogleAdsIntegrationModule,
     Ga4IntegrationModule,
     AfterSalesIntegrationModule,
+    WmsWorkbenchModule,
     NotificationModule,
     AiModule,
     AttendanceModule,

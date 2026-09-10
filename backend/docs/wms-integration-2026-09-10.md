@@ -23,7 +23,7 @@ ERP 統一入口、授權與訂單關聯；WMS 保留獨立作業服務及資料
 
 ## 分階段交付
 
-1. **本輪**：ERP `/warehouse` 儲運管理中心，依 inventory:read 顯示工作入口。既有權限的非管理者、非售後人員登入可導向儲運；這不建立新 WMS 帳號或擴大權限。提供原 WMS 工作台、公告及管理入口，明示分開登入。物流與實收顯示待串接，不用假計數。
+1. **本輪，使用者更正後**：ERP `/warehouse` 儲運管理中心採原生工作台，不接受外連工作台替代整合。已移除 WMS 外連，加入作業篩選、搜尋、分頁、ERP 內明細抽屜；production API 未授權來源時 503，不回假計數。合成資料只在 localhost fixture。依 inventory:read 顯示入口；既有權限的非管理者、非售後人員登入可導向儲運，不建立 WMS 帳號或擴大權限。認領、掃碼及交接尚未開通。
 2. WMS 新增獨立 GET-only exporter，ERP server 透過短效 service-to-service OIDC token 呼叫。驗证簽章、issuer、audience、expiry、專用 principal；不共享 JWT_SECRET、不把服務 token 給瀏覽器。服務身分建立/IAM 授權另行核准。Exporter 不接受任意資料表/路徑，禁止既有有副作用 GET。
 3. ERP 後端從已認證 actor、membership、功能權限和品牌 scope 建立委派查詢；服務端重查 actor 對照。使用公司/品牌允許集合，空集合拒絕，不以 header 自報公司授權。SELF/DEPARTMENT 必須完成 WMS worker mapping 才開放。WMS 自身使用唯讀 DB role/transaction，指定 allowlist 欄位、bounded cursor、timeout、rate limit、無副作用审計紀錄。
 4. SSO 使用同一 OIDC issuer、各自 client/audience、authorization-code + PKCE、一致 logout/撤權；ERP user ID 與 WMS user ID 明確對照。不同角色映射需管理員確認，不能把 ERP inventory:read 等同 WMS admin。跨部門多角色可選工作中心，缺權限顯示申請入口，不自動加角色。
@@ -32,6 +32,10 @@ ERP 統一入口、授權與訂單關聯；WMS 保留獨立作業服務及資料
 ## wms.read.v1 契約
 
 本輪新增 `wms-read.contract.ts` 與 `wms-read.service.ts`，為未掛載 live route 的可測 ports/service；沒有呼叫現有 WMS、沒有假稱連線。
+
+ERP 新增 JWT + inventory permission + entity guard 的 `/api/v1/wms/workbench/orders`，尚未接 exporter 時固定 fail closed 503。WMS 新隔離 worktree `/Users/moztecheason/.codex/worktrees/wms-erp-read-20260910` / commit `998c164` 新增 `erpReadService.js`，透過可信 mapping repository 解析公司/品牌/員工/訂單，使用 READ ONLY transaction 和即時 WMS role，再回傳 allowlist。尚未掛載 HTTP router，原 WMS checkout 和部署不變。2 個 PGlite 測試通過，包含公司品牌拒絕、角色降權、未映射物流不外洩，以及已全數核對的訂單查詢不會自動更新狀態。
+
+使用者本輪明確拒絕新增 ERP frontend runtime 對私有 staging backend 的 invoke 權限。沒有新增 IAM 或將 staging 設為公開；雲端瀏覽器的 staging 全鏈路驗收因此阻擋，不得用 production token/共用帳號迴避。
 
 - 關聯鍵：entityId + brandCode + erpOrderId + wmsOrderId + accountId + environment + merchantId + logisticsId，必須來自已審核 mapping repository。不能以帳號名稱、品牌名稱、物流單號相似度自動核准。1:N 分批出貨必須逐物流綁定，訂單讀取聚合要保留所有物流腿；目前 port 僅單筆明確綁定，不能當作全量訂單快照。
 - snapshot：warehouseStatus、logisticsStatus、warehouseReceivedAt、returnKind、observedAt。未知狀態保留待確認，不推論送達。實收時間只能來自倉庫掃碼實收證據；provider return 不可填入。
