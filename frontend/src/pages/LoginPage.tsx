@@ -1,12 +1,14 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Form, Input, Button, message, Typography, Divider, Checkbox, Modal, Select } from 'antd'
-import { ApartmentOutlined, UserOutlined, LockOutlined, GoogleOutlined, GithubOutlined, WindowsOutlined } from '@ant-design/icons'
-import { motion } from 'framer-motion'
+import { Form, Input, Button, message, Typography, Checkbox, Modal, Select } from 'antd'
+import { ApartmentOutlined, UserOutlined, LockOutlined } from '@ant-design/icons'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
 import { authService } from '../services/auth.service'
 import { LoginRequest } from '../types'
 import BrandMark from '../components/BrandMark'
+import { loginDestination } from '../utils/login-destination'
+import { PRODUCT } from '../config/product'
 
 const { Title, Text } = Typography
 const PLATFORM_ADMIN_LOGIN_IDS = new Set([
@@ -19,7 +21,7 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate()
   const { login } = useAuth()
   const [loading, setLoading] = React.useState(false)
-  const [passwordStrength, setPasswordStrength] = React.useState(0)
+  const reducedMotion = useReducedMotion()
   const [forgotOpen, setForgotOpen] = React.useState(false)
   const [forgotLoading, setForgotLoading] = React.useState(false)
   const [loginEntities, setLoginEntities] = React.useState<Array<{ id: string; loginCode: string }>>([])
@@ -34,15 +36,6 @@ const LoginPage: React.FC = () => {
         setLoginEntities([])
       })
   }, [])
-
-  const checkPasswordStrength = (password: string) => {
-    let strength = 0
-    if (password.length >= 8) strength += 1
-    if (/[A-Z]/.test(password)) strength += 1
-    if (/[0-9]/.test(password)) strength += 1
-    if (/[^A-Za-z0-9]/.test(password)) strength += 1
-    setPasswordStrength(strength)
-  }
 
   const onFinish = async (values: LoginRequest & { loginId?: string }) => {
     setLoading(true)
@@ -61,9 +54,9 @@ const LoginPage: React.FC = () => {
       password: values.password.trim()
     }
     try {
-      await login(cleanValues)
+      const currentUser = await login(cleanValues)
       message.success('登入成功')
-      navigate('/dashboard')
+      navigate(loginDestination(currentUser))
     } catch (error: any) {
       console.error('Login error:', error)
       let errorMsg = '登入失敗'
@@ -106,53 +99,26 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Colorful Background Blobs for Glass Effect */}
       <motion.div 
-        animate={{ 
-          x: [0, 50, -50, 0],
-          y: [0, -50, 50, 0],
-          scale: [1, 1.1, 0.9, 1]
-        }}
-        transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-        className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] rounded-full bg-blue-400/30 blur-[100px] pointer-events-none"
-      />
-      <motion.div 
-        animate={{ 
-          x: [0, -30, 30, 0],
-          y: [0, 30, -30, 0],
-          scale: [1, 0.9, 1.1, 1]
-        }}
-        transition={{ duration: 15, repeat: Infinity, ease: "linear", delay: 1 }}
-        className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] rounded-full bg-purple-400/30 blur-[100px] pointer-events-none"
-      />
-      <motion.div 
-        animate={{ 
-          x: [0, 40, -40, 0],
-          y: [0, 40, -40, 0],
-        }}
-        transition={{ duration: 18, repeat: Infinity, ease: "linear", delay: 2 }}
-        className="absolute top-[40%] left-[40%] w-[40%] h-[40%] rounded-full bg-pink-300/20 blur-[80px] pointer-events-none"
-      />
-
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
+        initial={reducedMotion ? false : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
         className="glass-card w-full max-w-[420px] p-10 relative z-10"
       >
         <div className="text-center mb-10">
           <motion.div 
-            whileHover={{ rotate: 10, scale: 1.05 }}
+            whileHover={reducedMotion ? undefined : { scale: 1.03 }}
             className="w-20 h-20 bg-white/50 rounded-3xl flex items-center justify-center mx-auto mb-6 backdrop-blur-xl border border-white/60 shadow-lg cursor-pointer transition-all"
           >
-            <BrandMark className="w-12 h-12 drop-shadow-sm" alt="System logo" />
+            <BrandMark className="w-12 h-12 drop-shadow-sm" alt="Corely AI" />
           </motion.div>
-          <Title level={2} className="!text-gray-800 !mb-2 !font-light tracking-tight">電子商務 ERP</Title>
-          <Text className="text-gray-500 font-light">營運與財務管理系統</Text>
+          <Title level={2} className="!text-gray-800 !mb-2 !font-medium tracking-tight">{PRODUCT.name}</Title>
+          <Text className="text-gray-500">{PRODUCT.brand}</Text>
         </div>
 
         <Form
           name="login"
+          method="post"
           onFinish={onFinish}
           autoComplete="off"
           layout="vertical"
@@ -205,23 +171,9 @@ const LoginPage: React.FC = () => {
               prefix={<LockOutlined className="text-gray-400 text-lg" />} 
               placeholder="密碼" 
               className="!h-12 !rounded-xl hover:!border-blue-400 focus:!border-blue-500 transition-colors"
-              onChange={(e) => checkPasswordStrength(e.target.value)}
+              autoComplete="current-password"
             />
           </Form.Item>
-
-          {/* Password Strength Indicator */}
-          <div className="flex gap-1 mb-6 h-1">
-            {[1, 2, 3, 4].map((level) => (
-              <div 
-                key={level}
-                className={`flex-1 rounded-full transition-all duration-300 ${
-                  passwordStrength >= level 
-                    ? level <= 2 ? 'bg-red-400' : level === 3 ? 'bg-yellow-400' : 'bg-green-400'
-                    : 'bg-gray-200'
-                }`}
-              />
-            ))}
-          </div>
 
           <div className="flex justify-between items-center mb-6">
             <Form.Item name="remember" valuePropName="checked" noStyle>
@@ -250,32 +202,9 @@ const LoginPage: React.FC = () => {
             </Button>
           </Form.Item>
 
-          <Divider plain className="!text-gray-400 !text-xs !my-6">或使用其他方式登入</Divider>
-
-          <div className="flex justify-center gap-4 mb-6">
-            <Button 
-              shape="circle" 
-              size="large" 
-              icon={<GoogleOutlined />} 
-              className="!flex !items-center !justify-center hover:!text-red-500 hover:!border-red-500 transition-colors"
-            />
-            <Button 
-              shape="circle" 
-              size="large" 
-              icon={<GithubOutlined />} 
-              className="!flex !items-center !justify-center hover:!text-gray-800 hover:!border-gray-800 transition-colors"
-            />
-            <Button 
-              shape="circle" 
-              size="large" 
-              icon={<WindowsOutlined />} 
-              className="!flex !items-center !justify-center hover:!text-blue-500 hover:!border-blue-500 transition-colors"
-            />
-          </div>
-          
           <div className="text-center">
             <Text className="text-gray-400 text-xs">
-              © 2025 MOZTECH. All rights reserved.
+              © {new Date().getFullYear()} Corely AI
             </Text>
           </div>
         </Form>

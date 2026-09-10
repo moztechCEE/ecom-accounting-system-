@@ -3,4 +3,8 @@
 node_modules
 dist
 coverage
+output
+.env
+.env.*
+.git
 npm-debug.log

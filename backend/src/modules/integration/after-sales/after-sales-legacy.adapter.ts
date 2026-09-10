@@ -12,6 +12,10 @@ import {
   LegacyAfterSalesCaseList,
   LegacyAfterSalesHealth,
 } from './after-sales-legacy.types';
+import {
+  projectWorkbenchDetail,
+  projectWorkbenchList,
+} from './after-sales-workbench.projection';
 
 type ListCasesInput = {
   limit?: number;
@@ -116,6 +120,33 @@ export class AfterSalesLegacyAdapter {
     );
   }
 
+  async getWorkbench(input: {
+    page?: number;
+    pageSize?: number;
+    view?: string;
+    type?: string;
+    status?: string;
+    search?: string;
+  }) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(input))
+      if (value !== undefined && value !== '') query.set(key, String(value));
+    return projectWorkbenchList(
+      await this.request<Record<string, unknown>>(
+        `/api/integration/v1/workbench/cases?${query}`,
+      ),
+    );
+  }
+
+  async getWorkbenchCase(caseId: string) {
+    return projectWorkbenchDetail(
+      await this.request<Record<string, unknown>>(
+        `/api/integration/v1/workbench/cases/${encodeURIComponent(caseId)}`,
+      ),
+      caseId,
+    );
+  }
+
   private isConfigured() {
     if (!this.baseUrl || !this.apiKey) return false;
 
@@ -171,9 +202,7 @@ export class AfterSalesLegacyAdapter {
     const value = response.ok ? (await response.text()).trim() : '';
 
     if (!value) {
-      throw new BadGatewayException(
-        '無法取得售後系統 Cloud Run 服務身分',
-      );
+      throw new BadGatewayException('無法取得售後系統 Cloud Run 服務身分');
     }
 
     this.cloudRunIdentityToken = {
@@ -195,8 +224,7 @@ export class AfterSalesLegacyAdapter {
           Authorization: `Bearer ${this.apiKey}`,
           ...(cloudRunIdentityToken
             ? {
-                'X-Serverless-Authorization':
-                  `Bearer ${cloudRunIdentityToken}`,
+                'X-Serverless-Authorization': `Bearer ${cloudRunIdentityToken}`,
               }
             : {}),
         },

@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { Permission, Role } from '@prisma/client';
+import { seedOnStartupEnabled } from '../config/runtime-effects';
 
 @Injectable()
 export class SeederService implements OnModuleInit {
@@ -10,6 +11,10 @@ export class SeederService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
+    if (!seedOnStartupEnabled()) {
+      this.logger.log('Startup seed disabled');
+      return;
+    }
     this.logger.log('Checking database seed status...');
     await this.seed();
   }

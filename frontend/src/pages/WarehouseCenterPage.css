@@ -1,0 +1,8 @@
+.warehouse-center { display: grid; gap: 20px; }
+.warehouse-center header { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.warehouse-center header h2 { margin: 0; }
+.warehouse-center-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 16px; }
+.warehouse-center .ant-card { border-radius: 12px; box-shadow: none; }
+.warehouse-center p { color: #64748b; margin: 0 0 20px; }
+.warehouse-center .ant-card > .ant-card-body > p:last-child { margin: 16px 0 0; }
+.warehouse-center .ant-btn { height: 36px; }

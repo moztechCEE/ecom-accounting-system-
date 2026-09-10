@@ -197,6 +197,8 @@ model Entity {
   salesOrders                SalesOrder[]
   salesQuotations            SalesQuotation[]
   afterSalesCases            AfterSalesCase[]
+  afterSalesBrandSettings    AfterSalesBrandSettings[]
+  afterSalesQuoteDrafts      AfterSalesQuoteDraft[]
   afterSalesCaseItems        AfterSalesCaseItem[]
   afterSalesImportRuns       AfterSalesImportRun[]
   afterSalesImportCandidates AfterSalesImportCandidate[]
@@ -843,6 +845,47 @@ model AfterSalesImportCandidate {
 }
 
 // 銷售訂單
+// Staging/preparatory data; never a second source-of-truth Case workflow.
+model AfterSalesBrandSettings {
+  caseBindings AfterSalesCaseBrandBinding[]
+  entityId  String @map("entity_id")
+  entity    Entity @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  code      String
+  version   Int
+  data      Json
+  updatedBy String @map("updated_by")
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz
+
+  @@id([entityId, code])
+  @@map("after_sales_brand_settings")
+}
+
+model AfterSalesCaseBrandBinding {
+  entityId     String @map("entity_id")
+  sourceCaseId String @map("source_case_id")
+  brandCode    String @map("brand_code")
+  brand        AfterSalesBrandSettings @relation(fields: [entityId, brandCode], references: [entityId, code], onDelete: Restrict)
+  createdBy    String @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@id([entityId, sourceCaseId])
+  @@map("after_sales_case_brand_bindings")
+}
+
+model AfterSalesQuoteDraft {
+  id          String @id
+  entityId    String @map("entity_id")
+  entity      Entity @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  requestKey  String @map("request_key")
+  requestHash String @map("request_hash")
+  data        Json
+  createdBy   String @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([entityId, requestKey])
+  @@index([entityId, createdAt], map: "after_sales_quote_drafts_entity_created_idx")
+  @@map("after_sales_quote_drafts")
+}
+
 model SalesOrder {
   id              String   @id @default(uuid())
   entityId        String   @map("entity_id")

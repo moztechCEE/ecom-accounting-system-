@@ -5,6 +5,8 @@ import {
   Param,
   Post,
   Query,
+  Header,
+  BadRequestException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -17,7 +19,16 @@ import {
   IsString,
   Max,
   Min,
+  MaxLength,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
+import { AfterSalesSourceGuard } from './after-sales-source.guard';
+import {
+  AFTER_SALES_CASE_STATUSES,
+  AFTER_SALES_CASE_TYPES,
+} from './after-sales-workflow.contract';
 import { RequireEntityAccess } from '../../../common/decorators/entity-access.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { EntityAccessGuard } from '../../../common/guards/entity-access.guard';
@@ -56,6 +67,34 @@ class EntityQueryDto {
   entityId!: string;
 }
 
+class WorkbenchQueryDto extends EntityQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100000)
+  page?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number;
+  @IsOptional()
+  @IsIn(['all', 'active', 'urgent', 'closed'])
+  view?: string;
+  @IsOptional()
+  @IsIn(AFTER_SALES_CASE_TYPES)
+  type?: string;
+  @IsOptional()
+  @IsIn(AFTER_SALES_CASE_STATUSES)
+  status?: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+}
+
 class MigrationPageDto {
   @IsString()
   @IsNotEmpty()
@@ -79,14 +118,45 @@ class MigrationPageDto {
 @ApiTags('After Sales')
 @ApiBearerAuth()
 @Controller('after-sales')
-@UseGuards(JwtAuthGuard, RolesGuard, EntityAccessGuard)
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+  PermissionsGuard,
+  EntityAccessGuard,
+  AfterSalesSourceGuard,
+)
 @RequireEntityAccess('sales')
-@Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT', 'CUSTOMER_SERVICE', 'OPERATOR')
+@RequirePermissions({ resource: 'after_sales_cases', action: 'read' })
 export class AfterSalesController {
   constructor(
     private readonly legacyAdapter: AfterSalesLegacyAdapter,
     private readonly migrationService: AfterSalesMigrationService,
   ) {}
+
+  @Get('workbench/cases')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: '售後工作台分頁查詢（唯讀）' })
+  workbench(@Query() query: WorkbenchQueryDto) {
+    const { page, pageSize, view, type, status, search } = query;
+    return this.legacyAdapter.getWorkbench({
+      page,
+      pageSize,
+      view,
+      type,
+      status,
+      search,
+    });
+  }
+
+  @Get('workbench/cases/:id')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: '售後工作台案件詳情（唯讀）' })
+  workbenchCase(@Param('id') id: string, @Query() query: EntityQueryDto) {
+    void query.entityId;
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id))
+      throw new BadRequestException('案件 ID 格式不正確');
+    return this.legacyAdapter.getWorkbenchCase(id);
+  }
 
   @Get('readiness')
   @ApiOperation({ summary: '檢查售後舊系統唯讀連線' })
@@ -96,6 +166,7 @@ export class AfterSalesController {
   }
 
   @Get('legacy/cases')
+  @Roles('SUPER_ADMIN', 'ADMIN')
   @ApiOperation({ summary: '讀取售後舊系統案件清單' })
   listLegacyCases(@Query() query: LegacyCaseListQueryDto) {
     return this.legacyAdapter.listCases({
@@ -107,6 +178,7 @@ export class AfterSalesController {
   }
 
   @Get('legacy/cases/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
   @ApiOperation({ summary: '讀取售後舊系統案件完整資料' })
   getLegacyCase(@Param('id') id: string, @Query() query: EntityQueryDto) {
     void query.entityId;

@@ -6,6 +6,7 @@ import { AIProvider } from './contexts/AIContext'
 import DashboardLayout from './components/DashboardLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 import PermissionRoute from './components/PermissionRoute'
+import WarehouseCenterPage from './pages/WarehouseCenterPage'
 import LoginPage from './pages/LoginPage'
 import ForcePasswordChangePage from './pages/ForcePasswordChangePage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
@@ -19,6 +20,9 @@ import TimeoutReconciliationPage from './pages/TimeoutReconciliationPage'
 import SalesPage from './pages/SalesPage'
 import SalesQuotationsPage from './pages/SalesQuotationsPage'
 import AfterSalesCasesPage from './pages/AfterSalesCasesPage'
+import AfterSalesWorkbenchPage from './pages/AfterSalesWorkbenchPage'
+import AfterSalesBrandsPage from './pages/AfterSalesBrandsPage'
+import AfterSalesQuotesPage from './pages/AfterSalesQuotesPage'
 import ReportsPage from './pages/ReportsPage'
 import VendorsPage from './pages/VendorsPage'
 import AccessControlPage from './pages/AccessControlPage'
@@ -66,7 +70,10 @@ const App: React.FC = () => {
                 <Route path="accounting/periods" element={<PermissionRoute anyPermissions={['accounts:read']}><AccountingPeriodsPage /></PermissionRoute>} />
                 <Route path="sales/orders" element={<PermissionRoute anyPermissions={['sales_orders:read']}><SalesPage /></PermissionRoute>} />
                 <Route path="sales/quotations" element={<PermissionRoute anyPermissions={['sales_orders:read', 'purchase_orders:read']}><SalesQuotationsPage /></PermissionRoute>} />
-                <Route path="sales/after-sales" element={<PermissionRoute anyPermissions={['after_sales_cases:read', 'sales_orders:read']}><AfterSalesCasesPage /></PermissionRoute>} />
+                <Route path="sales/after-sales" element={<PermissionRoute anyPermissions={['after_sales_cases:read']}><AfterSalesWorkbenchPage /></PermissionRoute>} />
+                <Route path="sales/after-sales/quotes" element={<PermissionRoute anyPermissions={['after_sales_cases:read']}><AfterSalesQuotesPage /></PermissionRoute>} />
+                <Route path="admin/after-sales-brands" element={<PermissionRoute anyRoles={['ADMIN']}><AfterSalesBrandsPage /></PermissionRoute>} />
+                <Route path="sales/after-sales/internal" element={<PermissionRoute anyPermissions={['after_sales_cases:read']}><AfterSalesCasesPage /></PermissionRoute>} />
                 <Route path="reports" element={<PermissionRoute anyPermissions={['reports:read']}><ReportsPage /></PermissionRoute>} />
                 <Route path="vendors" element={<PermissionRoute anyPermissions={['purchase_orders:read', 'accounts:read']}><VendorsPage /></PermissionRoute>} />
                 
@@ -90,6 +97,7 @@ const App: React.FC = () => {
                 <Route path="attendance/admin" element={<PermissionRoute anyPermissions={['attendance_admin:read']}><AttendanceAdminPage /></PermissionRoute>} />
 
                 {/* Supply Chain Routes */}
+                <Route path="warehouse" element={<PermissionRoute anyPermissions={['inventory:read']}><WarehouseCenterPage /></PermissionRoute>} />
                 <Route path="inventory/products" element={<PermissionRoute anyPermissions={['inventory:read']}><ProductsPage /></PermissionRoute>} />
                 <Route path="purchasing/orders" element={<PermissionRoute anyPermissions={['purchase_orders:read']}><PurchaseOrdersPage /></PermissionRoute>} />
                 <Route path="manufacturing/assembly" element={<PermissionRoute anyPermissions={['inventory:read']}><AssemblyPage /></PermissionRoute>} />

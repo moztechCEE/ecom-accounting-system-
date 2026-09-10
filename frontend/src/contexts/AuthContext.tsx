@@ -6,7 +6,7 @@ import { User, LoginRequest } from '../types'
 interface AuthContextType {
   user: User | null
   loading: boolean
-  login: (data: LoginRequest) => Promise<void>
+  login: (data: LoginRequest) => Promise<User>
   logout: () => void
   refreshCurrentUser: () => Promise<User | null>
 }
@@ -67,6 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setUser(response.user)
     webSocketService.connect()
+    return response.user
   }
 
   const logout = () => {

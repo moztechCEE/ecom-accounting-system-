@@ -984,3 +984,39 @@ Cloud Run 正式資料目前已經不是空系統，但核心治理缺口很大�
 - 為避免主工作目錄既有未提交內容被混入，已在隔離 worktree 建立可追溯的本機 commits：ERP `fa73e85e`、售後 exporter `7dfa2a5`；尚未推送遠端，也未替使用者整理或提交主工作目錄的其他變更。
 
 下一步：加入 `snapshotAt` / high-watermark 契約，核對 staging payload 內付款、退款與發票金額及關聯欄位，處理 13 筆待審案件與 75 個商品 mapping；再建立 ERP 正式售後案件聚合模型與 typed commands，讓 inventory、payment/reconciliation、refund、invoice 各自由原生服務持有 single-writer。在逐欄 shadow compare、測試交易與另一次正式啟用授權完成前，不啟用正式庫存、退款或開票寫入。
+
+2026-09-04 唯讀工作台建構（尚未部署）：
+
+- ERP `/sales/after-sales` 已新增原生工作台；經服務端 API 查詢舊案件，保留六類流程與各案件相關明細，沒有將舊系統直接 iframe 嵌入或共用密碼。
+- 新增服務端分頁搜尋、來源版本與明細完整性驗證、欄位允許清單、公司綁定、專用售後讀取權限及資料範圍守門；故障不顯示成零筆、切換查詢不顯示舊結果。
+- 真實來源唯讀驗證有效案件 514 筆、待處理 49、急件 1、已結束 465；五個有資料類型的明細通過投影驗證。這是新程式直接查來源資料庫的結果，不是新 HTTP 候選已部署的證明。
+- Backend 35 suites / 133 tests、frontend 四項規則測試、來源五項測試、前後端 build、新增檔案 lint 及本機瀏覽器驗證通過。套件安全掃描服務逾時，該 gate 仍未通過。
+- 遠端新增發票重寄／列印 commit `85135a0` 已納入待驗收清單。舊 enum 與庫存顯示名稱不一致，禁止依名稱猜測 ERP 庫存動作。
+- 詳見 `backend/docs/after-sales-workbench-handoff-2026-09-04.md`。本輪未部署、未改正式流量、未開通正式交易寫入；完整交易整合與單一登入尚未完成。
+
+2026-09-09 LUNA 公司範圍讀取授權（獨立於售後工作台）：
+
+- 使用者明確確認 MOZTECH 各模組的公司資料讀取，不限報表；投放、付款、退款、出貨等寫入仍需具體確認。
+- 原 LUNA 服務身分沒有角色或公司 membership，八項 data scopes 都是 SELF，報表回 403。已建立專用 `LUNA_MOZTECH_BUSINESS_READ` 角色，持續性賦予既有十類業務 read、八項 ENTITY scopes，唯一公司為 `tw-entity-001`；沒有授予 ADMIN／SUPER_ADMIN 或建立新憑證。
+- 正常賦權 API 發現 `SetRolePermissionsDto` 的 UUID v4 限制與正式資料庫七項 legacy `perm_*` ID 不相容。未更名 ID、未借用管理員角色；沿用正式 immutable image 的一次性維護工作，以單一 Serializable transaction 寫入精確的 role permissions、user role、membership 與 scope，沒有業務資料寫入。成功 execution：`luna-company-read-apply-676674fb1b8cf762-9vpwv`。正式 ERP revision／traffic 未變更。
+- LUNA 自有身分實測十項 read 與唯一公司均通過；兩種報表與會計科目可讀，新倉庫／庫存／供應商 GET 投影回空清單，不解讀為零庫存或完整資料。LUNA 容器的所有新增工具和既有四來源驗證通過，主程式沒有重啟。
+- 仍需窄幅正常修正並發佈 DTO：有界非空 string IDs + 既有 permission catalog 存在性檢查，保留權限與交易守門。另有部分舊 products/customers 路由未明確限公司、GET 具有寫入副作用、leave nested User 可能含機密欄位，未將它們開放到 LUNA 的私有讀取接口。這些是 source review 發現，尚未聲稱全部 production routes 已修好。
+- 驗證／程式與完整未接通範圍記錄在 `luna-single-agent/single-agent/COMPANY-READ-ACCEPTANCE.md`。本次保留此 ERP 工作樹全部既有售後變更，沒有打包或部署整份工作樹。
+
+2026-09-10 Corely AI 營運管理系統／售後管理中心（本機候選）：
+
+- 在隔離分支 `codex/operations-corely-20260910` 整理品牌與導覽；沒有覆蓋原 checkout 的未提交工作。
+- 總入口命名「售後管理中心」，來回件保留 source EXCHANGE_RETURN 案件分類。維修、報價、補寄等入口使用原售後查詢，不走 ERP 原生簡化來回件流程。
+- 桌機取消 768–1023px 強制收合；預設展開分組，手動收合/展開持久化；手機用 Drawer。依使用者原權限過濾選單，新增帶 query 的精確選取。
+- Corely 品牌與共用控制項 token、登入名稱已修改；移除登入假社群按鈕及密碼強度提示。功能搜尋與 sidebar 共用路由/權限，不再呈現無作用的假命令。
+- `npx --package tsx tsx --test tests/navigation.test.ts tests/after-sales-workbench.test.ts` 8/8 通過；前端 TypeScript/Vite build 通過，仍有既存 bundle 大小及 browserslist 資料過期警告。
+- 本機 fixture 瀏覽器：900px sidebar 248px；手動收合並 reload 後 72px；390px 手機 Drawer 320px、頁面無水平溢出、可 Escape 關閉。非正式資料驗證，沒有 production mutation。
+- 既有 Ant Design Input.Search addonAfter deprecation 仍有警告，不宣稱全站零警告。正式部署、來源 command API、SSO、全量物流號查找及角色佇列仍未完成。
+- 實作次序與原流程邊界見 `after-sales-center-integration-2026-09-10.md`。售後 source 領域服務本次未修改；正式庫存、退款、發票寫入未啟用。
+
+2026-09-10 品牌設定／案件報價草稿（本機候選，未部署）：
+
+- 新增品牌 metadata 管理、原維修案件品牌解析、不可變報價草稿與建立新版／顧客版預覽。AIRITY 保持獨立品牌；預定「萬博創意科技有限公司／萬魔未來」僅存本機合成 fixture，統編與正式商戶映射仍待核對。
+- 新增三表 migration、company/source guard、品牌 CAS、案件品牌交易綁定、actor + idempotency key/hash、精確小數金額及顧客欄位 allowlist。未知或衝突品牌 fail closed，不回退 MOZTECH。
+- 前後端 build、後端 20 tests、前端 8 tests、Prisma validate 通過；isolated in-memory PostgreSQL migration/constraints 測試通過。瀏覽器完成品牌保存、測試案件草稿、預覽、重新載入、鎖定品牌與建立新版驗證。
+- 未驗收真正 Cloud SQL/Nest/source 全链路；預覽用 localhost 合成 fixture。未部署／未套用 migration，正式 LINE 憑證、發送、付款、發票與庫存寫入均未啟用。source command API 與多租戶/部門角色 parity 仍未完成。

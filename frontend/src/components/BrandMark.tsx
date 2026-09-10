@@ -1,4 +1,5 @@
 import React from 'react'
+import { PRODUCT } from '../config/product'
 
 interface BrandMarkProps {
   className?: string
@@ -7,9 +8,9 @@ interface BrandMarkProps {
 
 const BrandMark: React.FC<BrandMarkProps> = ({
   className = 'w-10 h-10',
-  alt = 'Brand mark',
+  alt = PRODUCT.brand,
 }) => {
-  return <img src="/brandmark.svg" alt={alt} className={className} />
+  return <img src={PRODUCT.mark} alt={alt} className={className} />
 }
 
 export default BrandMark

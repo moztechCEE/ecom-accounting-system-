@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { runtimeScheduleOptions } from './common/config/runtime-effects';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -84,7 +85,7 @@ import { AfterSalesIntegrationModule } from './modules/integration/after-sales/a
     GlobalQueueModule, // Global Queue
     GuardsModule,
     ConnectorSyncModule,
-    ScheduleModule.forRoot(),
+    ScheduleModule.forRoot(runtimeScheduleOptions()),
 
     // Features
     AuthModule,

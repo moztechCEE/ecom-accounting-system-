@@ -105,6 +105,10 @@ class EnvironmentVariables {
 
   @IsOptional()
   @IsString()
+  AFTER_SALES_LEGACY_ENTITY_ID?: string;
+
+  @IsOptional()
+  @IsString()
   AFTER_SALES_LEGACY_TIMEOUT_MS?: string;
 
   @IsOptional()

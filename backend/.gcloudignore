@@ -1,0 +1,10 @@
+.gcloudignore
+.git
+.gitignore
+.env
+.env.*
+node_modules
+dist
+coverage
+*.log
+*.tsbuildinfo

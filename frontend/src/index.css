@@ -2,16 +2,16 @@
 
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-  --bg-primary: #f5f5f7;
+  --bg-primary: #f5f7fa;
   --text-primary: #1d1d1f;
   
   /* Apple-style Glass Variables */
-  --glass-bg: rgba(255, 255, 255, 0.4);
-  --glass-border: rgba(255, 255, 255, 0.5);
-  --glass-card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.2) 100%);
-  --glass-card-hover: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.3) 100%);
-  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
-  --glass-radius: 24px;
+  --glass-bg: #ffffff;
+  --glass-border: #e5eaf0;
+  --glass-card-bg: #ffffff;
+  --glass-card-hover: #ffffff;
+  --glass-shadow: 0 2px 8px rgba(24, 39, 61, 0.03);
+  --glass-radius: 12px;
   
   /* Mesh Gradient Colors */
   --mesh-c1: #E0C3FC;
@@ -43,7 +43,7 @@ body {
   margin: 0;
   min-height: 100vh;
   /* Apple-style gradient background */
-  background: radial-gradient(circle at 50% 0%, #F5F7FA 0%, #E9EEF5 50%, #E3E8EF 100%);
+  background: var(--bg-primary);
   background-attachment: fixed;
   color: var(--text-primary);
   overflow-x: hidden;
@@ -223,7 +223,7 @@ body {
   margin: 0;
   min-height: 100vh;
   /* Apple-style gradient background */
-  background: radial-gradient(circle at 50% 0%, #F5F7FA 0%, #E9EEF5 50%, #E3E8EF 100%);
+  background: var(--bg-primary);
   background-attachment: fixed;
   color: var(--text-primary);
   overflow-x: hidden;
@@ -270,11 +270,6 @@ body {
 
 .glass-card:hover {
   background: var(--glass-card-hover);
-  box-shadow: 
-    0 30px 60px rgba(0, 0, 0, 0.08),
-    0 1px 3px rgba(0, 0, 0, 0.02),
-    inset 0 0 0 1px var(--glass-border);
-  transform: translateY(-2px);
 }
 
 /* Floating Sidebar */
@@ -331,8 +326,7 @@ body {
 }
 
 .ant-table-wrapper .ant-table-tbody > tr:hover {
-  transform: scale(1.01);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: none;
 }
 
 body.dark .ant-table-wrapper .ant-table-tbody > tr:hover > td {

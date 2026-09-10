@@ -218,11 +218,11 @@ const NotificationCenter: React.FC = () => {
       overlayClassName="notification-popover"
       arrow={false}
     >
-      <div className="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors relative">
+      <button type="button" aria-label="通知中心" className="w-9 h-9 border-0 bg-transparent rounded-lg hover:bg-black/5 flex items-center justify-center cursor-pointer transition-colors relative">
         <Badge count={unreadCount} offset={[-2, 5]} size="small" color="#ef4444">
-          <BellOutlined className="text-lg text-white/70" />
+          <BellOutlined className="text-lg text-[var(--text-primary)]" />
         </Badge>
-      </div>
+      </button>
     </Popover>
   )
 }
