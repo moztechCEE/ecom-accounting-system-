@@ -1079,3 +1079,4 @@ Cloud Run 正式資料目前已經不是空系統，但核心治理缺口很大�
 - 使用者授權同步介面。正式後端仍未接新 WMS API，不能把 localhost 合成資料帶上正式。
 - 新增預設關閉的 staged UI 可用性旗標；正式保留既有售後來回件，避免新介面發布同時替換未驗收的售後、建單與 WMS command 工作流程。
 - 本機前端 21 tests、後端 181 tests 通過。發布、候選驗證與正式結果見 `warehouse-ui-release-2026-09-11.md`；後端、migration、真實對照與員工權限不在此次發布範圍。
+- 發布完成：Actions `34521877689` 成功，frontend `00270-vob` 100% / source `6814f67f`。正式登入 session 已驗證四報表入口、ERP 導覽與舊來回件保留；WMS 資料未接通警示是預期狀態，不代表資料串接成功。backend、私有 staging、WMS 的 revision／generation 不變。

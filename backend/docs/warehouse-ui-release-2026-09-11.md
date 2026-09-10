@@ -21,4 +21,21 @@
 ## 驗證與發布結果
 
 - 本機 frontend build、21 項前端測試通過；backend 43 suites / 181 tests 通過，但此次不部署後端。
-- 部署執行 ID、候選／正式 revision、正式域名 smoke 與回滾資訊於發布完成後補入本文件。
+- GitHub source `6814f67f1381ac1eaf06a61af55855a9ea3cee6c` 已推送；Actions `34521877689` 的 quality、deploy 均成功。沒有 dispatch backend／stack。
+- Cloud Build `64266d92-40af-4e2b-a502-f3f12a68baa2` SUCCESS；image digest `sha256:577a48f3b30d3b84a0dd7e634413d079f4bef5648b2228010b9775d6a14e3810`。
+- 正式前端 `ecom-accounting-frontend-00270-vob` Ready=True、100% 流量、generation 271；candidate tag `c-34521877689-1`，既有候選 tags 保留。
+- 正式 `https://erp.corely.cc/warehouse` 回新版 HTML，JS `index-CEQJR-aE.js`、CSS `index-Bf9hHfGu.css` 均 200；config.js 確認原 API／WS 網域與 `stagedOperationsEnabled:false`。API `/api/v1/health/ready` 回 ready。
+- 使用既有登入 session 的實際瀏覽器驗證：ERP 導覽含四報表，逐頁路由與標題正確，來源未連線如實顯示警示，沒有 TEST-WMS 或測試帳號切換列；沒有作業工作站入口，既有來回件頁仍可開啟。沒有建立、掃描、拋單、退款或開票。
+- 截圖 `output/playwright/warehouse-production-6814f67f.png` 為已登入正式介面，不是 fixture。
+- 發布後正式 backend 仍為 `00506-ray` 100% / generation 509；私有 staging 仍 `00003-jxn` / generation 3；WMS 仍 `00010-hug` 100% / generation 13。未套任何 migration 或修改員工權限。
+- 已知非零警告：WMS 未接通的 GET 404、Ant Design Input deprecation；Actions Node 20 deprecation 與 checkout cleanup git warning 不影響兩個 job 成功。`/healthz` 在新舊 Cloud Run tagged URL 均回 404，因此不將該路徑當作本次健康成功證據，以 Ready condition、正式資源與既有 API readiness 驗證。
+
+## 回滾
+
+只回滾前端流量，不動後端／資料庫／WMS：
+
+```bash
+gcloud run services update-traffic ecom-accounting-frontend --project moztech-main-db --region asia-east1 --to-revisions=ecom-accounting-frontend-00268-mim=100
+```
+
+上述為需要回滾時使用的指令，本輪沒有執行回滾。後續文件補記 commit 不代表另一次前端部署；正式程式 source 固定為上列 `6814f67f`。
