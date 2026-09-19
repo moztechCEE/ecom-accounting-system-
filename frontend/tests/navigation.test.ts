@@ -11,6 +11,13 @@ Object.defineProperty(globalThis, 'window', {value:{__APP_CONFIG__:{stagedOperat
 
 const admin = { roles: ['SUPER_ADMIN'], permissions: [] } as unknown as User
 const staff = { roles: ['CUSTOMER_SERVICE'], permissions: ['after_sales_cases:read'] } as unknown as User
+test('SN label drafts belong to purchasing/inventory and respect inventory read access', () => {
+  const inventory = { ...staff, permissions: ['inventory:read'] }
+  const items = visibleNavigation(inventory)
+  assert.equal(navigationParent(items, '/inventory/sn-labels'), 'inventory')
+  assert.equal(activeNavigation(items, '/inventory/sn-labels', '')?.label, 'SN 與標籤')
+  assert(!navigationLeaves(visibleNavigation(staff)).some(i => i.key === '/inventory/sn-labels'))
+})
 test('UI-only release preserves existing after-sales entry and excludes staged commands',()=>{
   const leaves=navigationLeaves(visibleNavigation(admin,undefined,false))
   assert.equal(leaves.find(i=>i.key==='/sales/after-sales')?.label,'來回件')

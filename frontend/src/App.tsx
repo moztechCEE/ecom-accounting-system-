@@ -46,6 +46,7 @@ import EmployeeDashboardPage from './pages/attendance/EmployeeDashboardPage'
 import LeaveRequestPage from './pages/attendance/LeaveRequestPage'
 import AttendanceAdminPage from './pages/attendance/AttendanceAdminPage'
 import ProductsPage from './pages/ProductsPage'
+import SnLabelsPage from './pages/SnLabelsPage'
 import PurchaseOrdersPage from './pages/PurchaseOrdersPage'
 import AssemblyPage from './pages/AssemblyPage'
 import CustomersPage from './pages/CustomersPage'
@@ -112,6 +113,7 @@ const App: React.FC = () => {
                 <Route path="warehouse/workstation" element={<PermissionRoute anyPermissions={['wms_tasks:read']}><WarehouseCenterPage workstationOnly /></PermissionRoute>} />
                 <Route path="warehouse/:report" element={<PermissionRoute anyPermissions={['wms_tasks:read']}><WarehouseReportsPage /></PermissionRoute>} />
                 <Route path="inventory/products" element={<PermissionRoute anyPermissions={['inventory:read']}><ProductsPage /></PermissionRoute>} />
+                <Route path="inventory/sn-labels" element={<PermissionRoute anyPermissions={['inventory:read']}><SnLabelsPage /></PermissionRoute>} />
                 <Route path="purchasing/orders" element={<PermissionRoute anyPermissions={['purchase_orders:read']}><PurchaseOrdersPage /></PermissionRoute>} />
                 <Route path="manufacturing/assembly" element={<PermissionRoute anyPermissions={['inventory:read']}><AssemblyPage /></PermissionRoute>} />
                 <Route path="sales/customers" element={<PermissionRoute anyPermissions={['sales_orders:read']}><CustomersPage /></PermissionRoute>} />
