@@ -1,0 +1,41 @@
+{
+  "checkedAt": "2026-09-21T09:55:14.053119+00:00",
+  "sourceRevision": "ecom-accounting-backend-00506-ray",
+  "checks": {
+    "accounts_passwords_and_scopes": {
+      "productionRows": 6,
+      "devRows": 6,
+      "identical": true
+    },
+    "role_definitions": {
+      "productionRows": 7,
+      "devRows": 7,
+      "identical": true
+    },
+    "user_roles": {
+      "productionRows": 9,
+      "devRows": 9,
+      "identical": true
+    },
+    "role_permissions": {
+      "productionRows": 149,
+      "devRows": 149,
+      "identical": true
+    },
+    "company_memberships": {
+      "productionRows": 3,
+      "devRows": 3,
+      "identical": true
+    },
+    "employee_company_links": {
+      "productionRows": 3,
+      "devRows": 3,
+      "identical": true
+    },
+    "company_login_settings": {
+      "productionRows": 2,
+      "devRows": 2,
+      "identical": true
+    }
+  }
+}
