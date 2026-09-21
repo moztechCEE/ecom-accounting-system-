@@ -7,39 +7,80 @@ export type LabelLayout = {
   qrX: number; qrY: number; qrSize: number
 }
 export type SnDraft = {
-  version: 1; id: string; updatedAt: string; name: string
+  version: 2; id: string; updatedAt: string; name: string
   productId: string; productName: string; sku: string; barcode: string; model: string
   style: string; color: string; modelCode: string; styleCode: string; colorCode: string
-  orderDate: string; manufactureDate: string; year: number
+  orderDate: string; manufactureDate: string; legacyManualYear?: number
   quantity: number; capacity: number | null; label: LabelLayout
 }
 export const PENDING_RULES = [
-  ['流水號範圍', '各款色獨立或共用流水號、跨批接續與作廢方式'],
-  ['箱號規則', '同日多批的箱號接續、未滿箱與重裝箱'],
-  ['裝箱對應', '箱內順序、跳號與換箱紀錄'],
-  ['匯入格式', '倉儲欄位與保固 SKU 對應'],
+  ['倉儲匯入', '欄位與檔案格式於後續設定'],
   ['掃箱出庫', '查詢、確認出貨與重複掃描的處理'],
+] as const
+export const CONFIRMED_RULES = [
+  ['年份', '依製造年取西元後兩碼反轉：2024 → 42、2026 → 62'],
+  ['流水號', '型號＋款式＋顏色＋製造年各自累加，跨年重新計數'],
+  ['同日下單', '同日多次下單併為一筆單，接續排序'],
+  ['裝箱', '維持連續 SN 與固定箱內產品；不足一箱顯示實際數量與序號'],
+  ['補印／重印', '破損或漏印沿用原 SN；只有追加生產數量才接續新號'],
+  ['保固匯入', 'SKU 欄位使用國際條碼'],
 ] as const
 export const defaultLayout = (): LabelLayout => ({
   width: 28, height: 7.5, target: 'box', showQr: true,
   textX: 8, textY: 0.7, fontSize: 1.45, qrX: 0.25, qrY: 0.25, qrSize: 6,
 })
-export function newDraft(id: string, now = new Date()): SnDraft {
+export function newDraft(id: string): SnDraft {
   return {
-    version: 1, id, updatedAt: '', name: '', productId: '', productName: '', sku: '', barcode: '', model: '',
+    version: 2, id, updatedAt: '', name: '', productId: '', productName: '', sku: '', barcode: '', model: '',
     style: '', color: '', modelCode: '', styleCode: '', colorCode: '',
-    orderDate: '', manufactureDate: '', year: now.getFullYear(), quantity: 100, capacity: null, label: defaultLayout(),
+    orderDate: '', manufactureDate: '', quantity: 100, capacity: null, label: defaultLayout(),
   }
 }
 export function yearCode(year: number): string {
   if (!Number.isInteger(year) || year < 2000 || year > 2099) throw new Error('編碼年份需介於 2000～2099')
-  return String(year).slice(-2)
+  return String(year).slice(-2).split('').reverse().join('')
+}
+export function manufacturingYear(date: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('請填寫完整製造日期')
+  const [year, month, day] = date.split('-').map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) throw new Error('製造日期無效')
+  yearCode(year)
+  return year
+}
+function itemPrefix(draft: SnDraft) {
+  const codes = [draft.modelCode, draft.styleCode, draft.colorCode]
+  if (codes.some(code => !/^[A-Z0-9]+$/.test(code)) || !/^[A-Z0-9]{4,6}$/.test(codes.join(''))) {
+    throw new Error('請填寫型號、款式及顏色代碼，合計需為 4～6 碼大寫英數字')
+  }
+  return codes.join('')
+}
+export function sequenceScopeKey(draft: SnDraft): string {
+  itemPrefix(draft)
+  // Preserve tuple boundaries, even when two different configurations concatenate
+  // to the same printable prefix. Issuance still needs a global SN uniqueness check.
+  return JSON.stringify([draft.modelCode, draft.styleCode, draft.colorCode, manufacturingYear(draft.manufactureDate)])
 }
 export function sampleSerial(draft: SnDraft, sequence = 1): string {
-  const prefix = draft.modelCode + draft.styleCode + draft.colorCode
-  if (!draft.modelCode || !/^[A-Z0-9]{4,6}$/.test(prefix)) throw new Error('品項代碼合計需為 4～6 碼大寫英數字')
+  const prefix = itemPrefix(draft)
   if (!Number.isInteger(sequence) || sequence < 1 || sequence > 999999) throw new Error('流水號超出六碼範圍')
-  return prefix + yearCode(draft.year) + String(sequence).padStart(6, '0')
+  return prefix + yearCode(manufacturingYear(draft.manufactureDate)) + String(sequence).padStart(6, '0')
+}
+export type PreviewCarton = { index: number; quantity: number; firstSequence: number; lastSequence: number; firstSn: string; lastSn: string }
+export function previewCartons(draft: SnDraft, page = 1, pageSize = 10, start = 1) {
+  const estimate = cartonEstimate(draft.quantity, draft.capacity)
+  if (!estimate || !draft.capacity) throw new Error('請填寫有效的 SN 數量與每箱容量')
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50 || !Number.isInteger(page) || page < 1) throw new Error('分頁參數無效')
+  sampleSerial(draft, start)
+  sampleSerial(draft, start + draft.quantity - 1) // Fail on overflow before any rows are returned.
+  const rows: PreviewCarton[] = []
+  const offset = (page - 1) * pageSize
+  for (let i = offset; i < Math.min(estimate.boxes, offset + pageSize); i++) {
+    const quantity = Math.min(draft.capacity, draft.quantity - i * draft.capacity)
+    const firstSequence = start + i * draft.capacity, lastSequence = firstSequence + quantity - 1
+    rows.push({ index: i + 1, quantity, firstSequence, lastSequence, firstSn: sampleSerial(draft, firstSequence), lastSn: sampleSerial(draft, lastSequence) })
+  }
+  return { rows, total: estimate.boxes }
 }
 export function cartonEstimate(quantity: number, capacity: number | null) {
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999999 ||
@@ -71,14 +112,20 @@ export function parseDrafts(raw: string | null): SnDraft[] {
     'modelCode', 'styleCode', 'colorCode', 'orderDate', 'manufactureDate'] as const
   return data.map((value: unknown) => {
     if (!value || typeof value !== 'object') throw new Error('草稿格式不正確')
-    const d = value as SnDraft
-    if (d.version !== 1 || keys.some(k => typeof d[k] !== 'string' || d[k].length > 250) || !d.id ||
+    const d = value as Omit<SnDraft, 'version'> & { version: number; year?: number }
+    if (![1, 2].includes(d.version) || keys.some(k => typeof d[k] !== 'string' || d[k].length > 250) || !d.id ||
         !Number.isInteger(d.quantity) || d.quantity < 1 || d.quantity > 999999 ||
         (d.capacity !== null && (!Number.isInteger(d.capacity) || d.capacity < 1 || d.capacity > 999999))) throw new Error('草稿格式不正確')
-    yearCode(d.year)
+    if (d.version === 1) {
+      if (d.year === undefined) throw new Error('舊版草稿缺少年份')
+      yearCode(d.year)
+    }
+    if (d.legacyManualYear !== undefined) yearCode(d.legacyManualYear)
+    if (d.manufactureDate) manufacturingYear(d.manufactureDate)
     const l = d.label
     if (!l || !['box', 'device'].includes(l.target) || typeof l.showQr !== 'boolean' ||
         (['width', 'height', 'textX', 'textY', 'fontSize', 'qrX', 'qrY', 'qrSize'] as const).some(k => !Number.isFinite(l[k]))) throw new Error('標籤格式不正確')
-    return { ...d, label: constrainLayout(l) }
+    const { year, ...rest } = d
+    return { ...rest, version: 2, ...(d.version === 1 ? { legacyManualYear: year } : {}), label: constrainLayout(l) }
   })
 }

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, message } from 'antd'
+import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, message } from 'antd'
+import dayjs from 'dayjs'
 import { DeleteOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons'
 import { useAuth } from '../contexts/AuthContext'
 import { useEntityContext } from '../hooks/useEntityContext'
 import { productService } from '../services/product.service'
 import type { Product } from '../services/product.service'
 import LabelDesigner from '../features/sn-labels/LabelDesigner'
-import { cartonEstimate, draftStorageKey, newDraft, parseDrafts, PENDING_RULES, sampleSerial } from '../features/sn-labels/model'
+import CartonPreview from '../features/sn-labels/CartonPreview'
+import { cartonEstimate, CONFIRMED_RULES, draftStorageKey, manufacturingYear, newDraft, parseDrafts, PENDING_RULES, sampleSerial, yearCode } from '../features/sn-labels/model'
 import type { SnDraft } from '../features/sn-labels/model'
 import './SnLabelsPage.css'
 
@@ -85,20 +87,29 @@ function SnWorkspace({ storageKey }: { storageKey: string }) {
   }
   let preview = '', previewError = ''
   try { preview = sampleSerial(draft) } catch (error) { previewError = (error as Error).message }
+  let yearDisplay = '請先填寫製造日期'
+  try { const year = manufacturingYear(draft.manufactureDate); yearDisplay = `${year} → ${yearCode(year)}` } catch { /* Incomplete draft. */ }
   const packing = cartonEstimate(draft.quantity, draft.capacity)
   const field = (key: 'modelCode' | 'styleCode' | 'colorCode', label: string) => <Form.Item label={label}>
     <Input aria-label={label} maxLength={6} value={draft[key]} onChange={e => update({ [key]: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })} />
   </Form.Item>
+  const dateField = (key: 'orderDate' | 'manufactureDate', label: string) => <Form.Item label={label}>
+    <DatePicker aria-label={label} placeholder="YYYY-MM-DD" format="YYYY-MM-DD" style={{ width: '100%' }}
+      minDate={dayjs('2000-01-01')} maxDate={dayjs('2099-12-31')} value={draft[key] ? dayjs(draft[key]) : null}
+      onChange={value => update({ [key]: value?.format('YYYY-MM-DD') || '' })} />
+  </Form.Item>
   const rules = <div className="sn-rules">
     <section className="sn-panel"><h2>編碼預覽</h2><Form layout="vertical">
       <div className="sn-field-triple">{field('modelCode', '型號代碼')}{field('styleCode', '款式代碼')}{field('colorCode', '顏色代碼')}</div>
-      <Form.Item label="編碼年份"><InputNumber aria-label="編碼年份" min={2000} max={2099} precision={0} value={draft.year} onChange={v => v !== null && update({ year: v })} /></Form.Item>
-    </Form><p className="sn-muted">年份固定使用西元後兩碼；目前手動指定，日期欄位不會自動改變編碼年份。</p>
+      {dateField('manufactureDate', '製造日期')}
+      <Form.Item label="年份碼"><Input aria-label="年份碼" readOnly value={yearDisplay} /></Form.Item>
+    </Form><p className="sn-muted">依製造年取西元後兩碼反轉。型號、款式、顏色與製造年相同時接續流水號；不同組合各自累加。</p>
       <div className="sn-code-parts"><span>品項代碼 4～6 碼</span><span>年份 2 碼</span><span>流水號 6 碼</span></div>
-      <output className="sn-code-preview">{preview || '填寫品項代碼以預覽'}</output>
+      <output className="sn-code-preview">{preview || '完成編碼資料以預覽'}</output>
       <p className="sn-muted">{preview ? `共 ${preview.length} 碼 · 000001 僅為格式樣張，尚未占用或配發號碼。` : previewError}</p>
     </section>
-    <section className="sn-panel"><h2>待確認規則</h2><div className="sn-pending-list">{PENDING_RULES.map(([name, description]) => <div key={name}><strong>{name}</strong><span>{description}</span><Tag>待確認</Tag></div>)}</div></section>
+    <section className="sn-panel"><h2>已確認規則</h2><div className="sn-pending-list">{CONFIRMED_RULES.map(([name, description]) => <div key={name}><strong>{name}</strong><span>{description}</span><Tag>已確認</Tag></div>)}</div>
+      <h2 className="sn-section-title">待確認事項</h2><div className="sn-pending-list">{PENDING_RULES.map(([name, description]) => <div key={name}><strong>{name}</strong><span>{description}</span><Tag>待確認</Tag></div>)}</div></section>
   </div>
   return <div className="sn-workspace">
     {messageContext}{modalContext}
@@ -109,6 +120,7 @@ function SnWorkspace({ storageKey }: { storageKey: string }) {
     </header>
     <Alert type="info" showIcon message="目前為規劃草稿；正式發號與工廠列印尚未啟用。草稿只保存在此瀏覽器，請在離開前儲存。" />
     {storageError && <Alert type="error" showIcon message={storageError} />}
+    {draft.legacyManualYear !== undefined && <Alert type="warning" showIcon message={`這份舊草稿的手填年份 ${draft.legacyManualYear} 已停用。預覽改依製造日期計算反轉年份碼，請重新核對標籤。`} />}
     <Tabs activeKey={tab} onChange={setTab} destroyOnHidden items={[
       { key: 'batch', label: '批次草稿', children: <>
         <div className="sn-batch-grid"><section className="sn-panel"><h2>批次資料</h2><Form layout="vertical">
@@ -117,15 +129,15 @@ function SnWorkspace({ storageKey }: { storageKey: string }) {
             placeholder="搜尋產品名稱、SKU 或型號" onChange={selectProduct} options={products.map(p => ({ value: p.id, label: `${p.name} · ${p.sku}${p.modelNumber ? ' · ' + p.modelNumber : ''}` }))}
             notFoundContent={loading ? '載入中' : productError ? '讀取失敗' : '沒有符合的產品'} /></Form.Item>
           {productError && <Alert type="error" message={productError} action={<Button size="small" icon={<ReloadOutlined />} onClick={() => { setLoading(true); setProductError(''); setReload(n => n + 1) }}>重試</Button>} />}
-          <dl className="sn-product-info"><div><dt>SKU</dt><dd>{draft.sku || '—'}</dd></div><div><dt>國際條碼</dt><dd>{draft.barcode || '—'}</dd></div></dl>
+          <dl className="sn-product-info"><div><dt>ERP SKU</dt><dd>{draft.sku || '—'}</dd></div><div><dt>國際條碼／保固匯入 SKU</dt><dd>{draft.barcode || '未提供'}</dd></div></dl>
           <div className="sn-field-triple">
             <Form.Item label="型號"><Input aria-label="型號" maxLength={60} value={draft.model} onChange={e => update({ model: e.target.value })} /></Form.Item>
             <Form.Item label="款式"><Input aria-label="款式" maxLength={60} value={draft.style} onChange={e => update({ style: e.target.value })} /></Form.Item>
             <Form.Item label="顏色"><Input aria-label="顏色" maxLength={60} value={draft.color} onChange={e => update({ color: e.target.value })} /></Form.Item>
           </div><p className="sn-muted">型號由產品帶入；款式與顏色先手動填寫，不會回寫產品資料。</p>
           <div className="sn-field-pair">
-            <Form.Item label="下單日期"><Input aria-label="下單日期" type="date" value={draft.orderDate} onChange={e => update({ orderDate: e.target.value })} /></Form.Item>
-            <Form.Item label="製造日期"><Input aria-label="製造日期" type="date" value={draft.manufactureDate} onChange={e => update({ manufactureDate: e.target.value })} /></Form.Item>
+            {dateField('orderDate', '下單日期')}
+            {dateField('manufactureDate', '製造日期')}
             <Form.Item label="預計 SN 數量"><InputNumber aria-label="預計 SN 數量" min={1} max={999999} precision={0} value={draft.quantity} onChange={v => v !== null && update({ quantity: v })} /></Form.Item>
             <Form.Item label="每箱容量（選填）"><InputNumber aria-label="每箱容量" min={1} max={999999} precision={0} placeholder="待確認" value={draft.capacity} onChange={v => update({ capacity: v })} /></Form.Item>
           </div>
@@ -135,7 +147,7 @@ function SnWorkspace({ storageKey }: { storageKey: string }) {
           <div><span>編碼格式</span><strong>{preview ? '可預覽' : '待設定'}</strong></div>
           <div><span>預計數量</span><strong>{draft.quantity.toLocaleString()} 件</strong></div>
           <div><span>裝箱估算</span><strong>{packing ? `${packing.boxes} 箱` : '待填容量'}</strong></div>
-          <div><span>正式配號</span><Tag>待規則確認</Tag></div>
+          <div><span>正式配號</span><Tag>尚未啟用</Tag></div>
           <Button block onClick={() => setTab('rules')}>設定編碼</Button>
           <Button block onClick={() => setTab('design')}>設計標籤</Button>
           <p className="sn-muted">標籤與編碼設定隨草稿保存。尚未產生庫存、保固或箱號紀錄。</p>
@@ -153,7 +165,9 @@ function SnWorkspace({ storageKey }: { storageKey: string }) {
       { key: 'cartons', label: '裝箱規劃', children: <section className="sn-panel"><h2>裝箱估算</h2>
         {packing ? <><div className="sn-carton-metrics"><div><span>預計箱數</span><strong>{packing.boxes}</strong></div><div><span>完整箱</span><strong>{packing.full}</strong></div><div><span>尾箱件數</span><strong>{packing.remainder || '無尾箱'}</strong></div></div>
           <p className="sn-muted">依 {draft.quantity} 件、每箱 {draft.capacity} 件估算。尚未建立箱號或分配箱內 SN。</p></> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="先在批次草稿填寫每箱容量，即可估算箱數。" />}
-        <div className="sn-pending-list">{PENDING_RULES.slice(1).map(([name, description]) => <div key={name}><strong>{name}</strong><span>{description}</span><Tag>待確認</Tag></div>)}</div>
+        <CartonPreview key={JSON.stringify([draft.id, draft.quantity, draft.capacity, draft.modelCode, draft.styleCode, draft.colorCode, draft.manufactureDate])} draft={draft} />
+        <p className="sn-muted">出貨維持連號與固定箱內清單，不開放跳號或任意換箱。箱號沿用 CTN－下單日期－型號－箱序格式；同日多次下單的正式合併與配號尚未啟用。</p>
+        <div className="sn-pending-list">{PENDING_RULES.map(([name, description]) => <div key={name}><strong>{name}</strong><span>{description}</span><Tag>待確認</Tag></div>)}</div>
         <Space wrap className="sn-future-actions"><Button disabled>產生箱號</Button><Button disabled>外箱 PDF</Button><Button disabled>倉儲匯入檔</Button><Button disabled>保固匯入檔</Button></Space>
       </section> },
     ]} />

@@ -7,6 +7,7 @@
 .sn-workspace > .ant-alert { margin-bottom: 12px; }
 .sn-panel { background: #fff; border: 1px solid #e4e8ee; border-radius: 10px; padding: 24px; min-width: 0; }
 .sn-panel h2 { font-size: 16px; font-weight: 600; margin: 0 0 20px; }
+.sn-panel h2.sn-section-title { margin-top: 28px; }
 .sn-batch-grid { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(260px, 1fr); gap: 20px; }
 .sn-field-pair, .sn-field-triple { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .sn-field-triple { grid-template-columns: repeat(3, minmax(0, 1fr)); }
