@@ -1,0 +1,52 @@
+{
+  "corely-erp-dev": {
+    "url": "https://corely-erp-dev-sp5g377smq-de.a.run.app",
+    "generation": 2,
+    "traffic": [
+      {
+        "latestRevision": true,
+        "percent": 100,
+        "revisionName": "corely-erp-dev-00002-bwc"
+      }
+    ],
+    "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:e51478ea9f5d4912d633cde2ee5d7b428f9aead313d0e2e3549ed085f07467f8"
+  },
+  "corely-erp-api-dev": {
+    "url": "https://corely-erp-api-dev-sp5g377smq-de.a.run.app",
+    "generation": 2,
+    "traffic": [
+      {
+        "latestRevision": true,
+        "percent": 100,
+        "revisionName": "corely-erp-api-dev-00002-d4n"
+      }
+    ],
+    "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev@sha256:6ecf1c792716faeead87ed89945b96f61969fc786e3b166f326628498ab0ea05"
+  },
+  "ecom-accounting-backend": {
+    "url": "https://ecom-accounting-backend-sp5g377smq-de.a.run.app",
+    "generation": 509,
+    "traffic": [
+      {
+        "percent": 100,
+        "revisionName": "ecom-accounting-backend-00506-ray",
+        "tag": "asro-0902",
+        "url": "https://asro-0902---ecom-accounting-backend-sp5g377smq-de.a.run.app"
+      }
+    ],
+    "image": null
+  },
+  "ecom-accounting-frontend": {
+    "url": "https://ecom-accounting-frontend-sp5g377smq-de.a.run.app",
+    "generation": 271,
+    "traffic": [
+      {
+        "percent": 100,
+        "revisionName": "ecom-accounting-frontend-00270-vob",
+        "tag": "c-34521877689-1",
+        "url": "https://c-34521877689-1---ecom-accounting-frontend-sp5g377smq-de.a.run.app"
+      }
+    ],
+    "image": null
+  }
+}

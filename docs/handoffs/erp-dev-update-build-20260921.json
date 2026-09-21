@@ -1,0 +1,28 @@
+{
+  "id": "1182ec20-a185-497b-bdc2-57aad4dbb6bf",
+  "status": "SUCCESS",
+  "createTime": "2026-09-21T08:45:11.095179567Z",
+  "startTime": "2026-09-21T08:45:11.925198286Z",
+  "finishTime": "2026-09-21T08:46:36.703242Z",
+  "sourceSha": "f8c8fbfe",
+  "images": [
+    {
+      "artifactRegistryPackage": "projects/moztech-main-db/locations/asia-east1/repositories/cloud-run/packages/corely-erp-api-dev/versions/sha256:6ecf1c792716faeead87ed89945b96f61969fc786e3b166f326628498ab0ea05",
+      "digest": "sha256:6ecf1c792716faeead87ed89945b96f61969fc786e3b166f326628498ab0ea05",
+      "name": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev:f8c8fbfe9f5386dbcb33105205ead3efb28e9619",
+      "pushTiming": {
+        "endTime": "2026-09-21T08:46:24.682589023Z",
+        "startTime": "2026-09-21T08:46:14.403018343Z"
+      }
+    },
+    {
+      "artifactRegistryPackage": "projects/moztech-main-db/locations/asia-east1/repositories/cloud-run/packages/corely-erp-dev/versions/sha256:e51478ea9f5d4912d633cde2ee5d7b428f9aead313d0e2e3549ed085f07467f8",
+      "digest": "sha256:e51478ea9f5d4912d633cde2ee5d7b428f9aead313d0e2e3549ed085f07467f8",
+      "name": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev:f8c8fbfe9f5386dbcb33105205ead3efb28e9619",
+      "pushTiming": {
+        "endTime": "2026-09-21T08:46:35.623351630Z",
+        "startTime": "2026-09-21T08:46:24.682754014Z"
+      }
+    }
+  ]
+}

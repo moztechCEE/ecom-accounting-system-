@@ -64,4 +64,25 @@
 
 此修正後前後端 build 通過；後端 46 suites／212 tests、前端 18 tests 通過。新增測試涵蓋跨公司產品寫入被拒絕。這些修正仍只發布 DEV，正式問題未在本輪處理。
 
-第二次 build 使用已驗證 runtime immutable digest 加入重新編譯的 dist；`scripts/dev/build-runtime-update.py` 要求乾淨提交，且確認依賴、schema、啟動腳本及前端 server 與基準不變。這不是對既有映像 tag 覆写；新 source SHA 使用新 tag，再以 digest 部署。
+第二次 build 使用已驗證 runtime immutable digest 加入重新編譯的 dist；`scripts/dev/build-runtime-update.py` 要求乾淨提交，且確認依賴、schema、啟動腳本及前端 server 與基準不變。新 source SHA 使用新 tag，再以 digest 部署。
+
+## 最終部署與驗證結果
+
+- DEV 前台：`https://corely-erp-dev-sp5g377smq-de.a.run.app`。
+- DEV API：`https://corely-erp-api-dev-sp5g377smq-de.a.run.app/api/v1`。
+- source：`f8c8fbfe9f5386dbcb33105205ead3efb28e9619`；其後交接文件／驗證腳本提交不代表另一個 runtime 版本。
+- Cloud Build `1182ec20-a185-497b-bdc2-57aad4dbb6bf` SUCCESS。
+- Backend `corely-erp-api-dev-00002-d4n` 100%，digest `sha256:6ecf1c792716faeead87ed89945b96f61969fc786e3b166f326628498ab0ea05`。
+- Frontend `corely-erp-dev-00002-bwc` 100%，digest `sha256:e51478ea9f5d4912d633cde2ee5d7b428f9aead313d0e2e3549ed085f07467f8`。
+- 線上 API 驗證：readiness 200、未登入 products 401、公開 register 403、原管理員密碼登入 200。
+- 已登入 products（台灣公司）200／1,730 筆、sales orders limit=5 回 5 筆、9 月 dashboard-sales-overview 200。
+- API 新增一筆 DEV-SMOKE 產品、讀取成功、刪除成功、再讀為 404。直接查 DEV DB 確認 smoke SKU 筆數 0，產品仍 1,730、訂單仍 49,392；DEV migration 完成數 56。
+- 首次 smoke create 使用前端舊型別名稱 FINISHED_GOOD，被後端正確拒絕 400；測試腳本改用 Prisma 真正的 SIMPLE 後完成。此不代表已全面整理前端所有舊 product type 定義。
+- config.js 確認 DEV API／測試標示；登入 CORS preflight 204 且允許 DEV origin。瀏覽器檢視登入頁、公司代碼與 DEV 橫幅；沒有注入登入 token，也未宣稱已完成每一頁的瀏覽器端到端驗收。
+- `/healthz` 在 Cloud Run hostname 回 404，與歷史 hosting 路徑行為一致；以 Ready condition、前端實際資源及 API `/health/ready` 為本輪成功依據。
+- gcloud 有本機 Python 3.9／importlib.metadata 警告，但 service Ready、revision、traffic 與實際 HTTP 均已獨立核對。
+- 發布只影響新 DEV service。正式 backend／frontend 維持原流量，詳細最終收據另存 `erp-dev-release-20260921.json`。
+
+尚待使用者以自己的帳號做各頁流程驗收、SN SVG 下載與工廠印表機試印。公開網址可開啟登入頁，業務資料仍需原 ERP 登入及權限；不應把 run.app 可存取誤認為匿名可讀取訂單。
+
+GitHub metadata 確認原 repository 為公開。此分支包含內部資料筆數與營運收據，因此本輪僅保存在本機並部署至公司的 GCP，未 push、開 PR 或 merge；後續若要公開程式，應先分離內部交接／資料收據，不可直接推送本分支歷史。

@@ -48,8 +48,8 @@ for path in ['/products?entityId=tw-entity-001', '/sales/orders?entityId=tw-enti
         assert len(body) > 0
 
 sku = 'DEV-SMOKE-' + uuid.uuid4().hex[:12]
-status, product = request('/products?entityId=tw-entity-001', 'POST', {'sku': sku, 'name': 'DEV deployment validation', 'barcode': sku, 'type': 'FINISHED_GOOD'}, token)
-assert status == 201 and product.get('sku') == sku, ('DEV product create failed', status)
+status, product = request('/products?entityId=tw-entity-001', 'POST', {'sku': sku, 'name': 'DEV deployment validation', 'barcode': sku, 'type': 'SIMPLE'}, token)
+assert status == 201 and product.get('sku') == sku, ('DEV product create failed', status, product.get('message'))
 try:
     status, loaded = request('/products/' + product['id'] + '?entityId=tw-entity-001', token=token)
     assert status == 200 and loaded['sku'] == sku
