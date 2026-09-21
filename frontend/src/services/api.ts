@@ -7,6 +7,8 @@ declare global {
       defaultEntityId?: string
       wsUrl?: string
       stagedOperationsEnabled?: boolean
+      devEnvironment?: boolean
+      dataSnapshotDate?: string
     }
   }
 }

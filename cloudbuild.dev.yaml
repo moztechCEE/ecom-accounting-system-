@@ -1,0 +1,17 @@
+steps:
+  - id: backend
+    name: gcr.io/cloud-builders/docker
+    dir: backend
+    args: ['build', '-t', 'asia-east1-docker.pkg.dev/$PROJECT_ID/cloud-run/corely-erp-api-dev:${_SOURCE_SHA}', '.']
+    waitFor: ['-']
+  - id: frontend
+    name: gcr.io/cloud-builders/docker
+    dir: frontend
+    args: ['build', '--build-arg', 'VITE_API_URL=/api/v1', '-t', 'asia-east1-docker.pkg.dev/$PROJECT_ID/cloud-run/corely-erp-dev:${_SOURCE_SHA}', '.']
+    waitFor: ['-']
+images:
+  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/cloud-run/corely-erp-api-dev:${_SOURCE_SHA}'
+  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/cloud-run/corely-erp-dev:${_SOURCE_SHA}'
+timeout: 1800s
+options:
+  logging: CLOUD_LOGGING_ONLY

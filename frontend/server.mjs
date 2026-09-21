@@ -68,6 +68,8 @@ const server = http.createServer(async (req, res) => {
         wsUrl,
         defaultEntityId,
         stagedOperationsEnabled: process.env.STAGED_OPERATIONS_ENABLED === 'true',
+        devEnvironment: process.env.ERP_DEV_ENVIRONMENT === 'true',
+        dataSnapshotDate: process.env.ERP_DEV_SNAPSHOT_DATE || '',
       })};`,
     );
     return;

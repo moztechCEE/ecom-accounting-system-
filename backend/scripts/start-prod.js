@@ -9,7 +9,10 @@ async function start() {
     // Schema migration is executed exactly once by the release Cloud Run Job.
     // Runtime instances must only start the application process.
     console.log('Starting NestJS server...');
-    const child = spawn('node', ['dist/src/main.js'], {
+    const args = process.env.ERP_DEV_SANDBOX === 'true'
+      ? ['--require', './scripts/dev-sandbox.cjs', 'dist/src/main.js']
+      : ['dist/src/main.js'];
+    const child = spawn('node', args, {
       stdio: 'inherit',
       env: process.env,
     });
