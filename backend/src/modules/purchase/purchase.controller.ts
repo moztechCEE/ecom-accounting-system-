@@ -8,6 +8,8 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { EntityAccessGuard } from '../../common/guards/entity-access.guard';
 import { RequireEntityAccess } from '../../common/decorators/entity-access.decorator';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 
 @Controller('purchase-orders')
 @UseGuards(JwtAuthGuard, RolesGuard, EntityAccessGuard)
@@ -29,13 +31,15 @@ export class PurchaseController {
   }
 
   @Get()
-  @Roles('ADMIN', 'ACCOUNTANT', 'OPERATOR')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
   findAll(@Query('entityId') entityId: string) {
     return this.purchaseService.findAll(this.requireEntityId(entityId));
   }
 
   @Get(':id')
-  @Roles('ADMIN', 'ACCOUNTANT', 'OPERATOR')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
   findOne(@Query('entityId') entityId: string, @Param('id') id: string) {
     return this.purchaseService.findOne(this.requireEntityId(entityId), id);
   }

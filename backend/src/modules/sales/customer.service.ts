@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 
@@ -6,12 +6,39 @@ import { Prisma } from '@prisma/client';
 export class CustomerService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async businessRecords(entityId: string, rawLimit?: string, rawOffset?: string) {
+    const pageNumber = (value: unknown, fallback: number, minimum: number, maximum: number) => {
+      if (value === undefined) return fallback;
+      if (typeof value !== 'string' || !/^(0|[1-9][0-9]{0,9})$/.test(value)
+          || Number(value) < minimum || Number(value) > maximum) {
+        throw new BadRequestException('Invalid business record pagination');
+      }
+      return Number(value);
+    };
+    const limit = pageNumber(rawLimit, 50, 1, 100);
+    const offset = pageNumber(rawOffset, 0, 0, 1_000_000_000);
+    // No relation include: a full customer+orders query can exceed PostgreSQL's
+    // bind parameter ceiling. Business directory pages do not need contacts or orders.
+    const fetched = await this.prisma.customer.findMany({
+      where: { entityId }, orderBy: { id: 'asc' }, take: limit + 1, skip: offset,
+      select: {
+        id: true, entityId: true, code: true, name: true, companyName: true,
+        type: true, isActive: true, paymentTerms: true, paymentTermDays: true,
+        isMonthlyBilling: true, billingCycle: true, updatedAt: true,
+      },
+    });
+    const rows = fetched.slice(0, limit);
+    const hasMore = fetched.length > limit;
+    return { rows, limit, offset, hasMore, nextOffset: hasMore ? offset + rows.length : null };
+  }
+
   async findAll(entityId: string) {
     const customers = await this.prisma.customer.findMany({
       where: { entityId },
       orderBy: { createdAt: 'desc' },
       include: {
         salesOrders: {
+          where: { entityId },
           select: {
             id: true,
             orderDate: true,
@@ -39,6 +66,7 @@ export class CustomerService {
       where: { id, entityId },
       include: {
         salesOrders: {
+          where: { entityId },
           select: {
             id: true,
             orderDate: true,

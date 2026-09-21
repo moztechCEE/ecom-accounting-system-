@@ -53,29 +53,31 @@ export interface CreateProductDto {
   netWeight?: number
 }
 
+const companyParams = () => ({ entityId: localStorage.getItem('entityId')?.trim() || undefined })
+
 export const productService = {
   async findAll(params?: { type?: string; category?: string }) {
-    const response = await api.get<Product[]>('/products', { params })
+    const response = await api.get<Product[]>('/products', { params: { ...companyParams(), ...params } })
     return response.data
   },
 
   async findOne(id: string) {
-    const response = await api.get<Product>(`/products/${id}`)
+    const response = await api.get<Product>(`/products/${id}`, { params: companyParams() })
     return response.data
   },
 
   async create(data: CreateProductDto) {
-    const response = await api.post<Product>('/products', data)
+    const response = await api.post<Product>('/products', data, { params: companyParams() })
     return response.data
   },
 
   async update(id: string, data: Partial<CreateProductDto>) {
-    const response = await api.patch<Product>(`/products/${id}`, data)
+    const response = await api.patch<Product>(`/products/${id}`, data, { params: companyParams() })
     return response.data
   },
 
   async delete(id: string) {
-    const response = await api.delete(`/products/${id}`)
+    const response = await api.delete(`/products/${id}`, { params: companyParams() })
     return response.data
   }
 }
