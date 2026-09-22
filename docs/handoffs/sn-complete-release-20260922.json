@@ -1,0 +1,119 @@
+{
+  "source": "ba9b7cdca3c2794b7c7c379cada25fcf0d5de699",
+  "build": "c5848985-beb8-461a-a406-981d4fcd30a0",
+  "migration": "20260922000000_sn_labels",
+  "services": [
+    {
+      "service": "corely-erp-dev",
+      "generation": 5,
+      "traffic": [
+        {
+          "revision": "corely-erp-dev-00005-zf8",
+          "percent": 100
+        }
+      ],
+      "images": [
+        "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:402a73a0c489446fe2e1cfb223298e25d65a5c9c6b39fd3284f4e9b9a13d080b"
+      ]
+    },
+    {
+      "service": "corely-erp-api-dev",
+      "generation": 3,
+      "traffic": [
+        {
+          "revision": "corely-erp-api-dev-00003-2l2",
+          "percent": 100
+        }
+      ],
+      "images": [
+        "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev@sha256:a137b99bc82b48f12de0ac06fda20cdfe762f15c11b87ed4983281f932a84236"
+      ]
+    },
+    {
+      "service": "ecom-accounting-frontend",
+      "generation": 271,
+      "traffic": [
+        {
+          "revision": "ecom-accounting-frontend-00270-vob",
+          "percent": 100
+        }
+      ],
+      "images": [
+        "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/ecom-accounting-frontend:6814f67f1381ac1eaf06a61af55855a9ea3cee6c"
+      ]
+    },
+    {
+      "service": "ecom-accounting-backend",
+      "generation": 509,
+      "traffic": [
+        {
+          "revision": "ecom-accounting-backend-00506-ray",
+          "percent": 100
+        }
+      ],
+      "images": [
+        "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/ecom-accounting-backend@sha256:811dda7618cd04a4c0ca638522b9d18905112e995d9c49ac79a042ff1e0efc25"
+      ]
+    },
+    {
+      "service": "corely-wms",
+      "generation": 42,
+      "traffic": [
+        {
+          "revision": "corely-wms-import-footer-20260917",
+          "percent": 100
+        }
+      ],
+      "images": [
+        "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-frontend@sha256:99af59f00ba2de28644e8182101b46b5ec6e840a4d619378d4155fd9cba56cf1",
+        "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-backend@sha256:66df66c1bd2624f77a9bb532af4813625b83e7e0de9083c44a93c19d241bc26f"
+      ]
+    },
+    {
+      "service": "corely-wms-dev",
+      "generation": 37,
+      "traffic": [
+        {
+          "revision": "corely-wms-dev-00019-rss",
+          "percent": 100
+        }
+      ],
+      "images": [
+        "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-frontend@sha256:80b5c8bbb447469aecb968137de24113653ce67d9fd58d9b6bf88fc7ecbbaa0b",
+        "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-backend@sha256:3e036925b484f4663d39f37d2fcffdc67de7ce9b161efc1b60ef4692db12ab8b"
+      ]
+    }
+  ],
+  "apiAcceptance": {
+    "productId": "67b12b80-a55b-46eb-9f4d-519d0afd6ff0",
+    "batchId": "8f113889-2cbd-4e1e-ac83-378f53eaf270",
+    "fixture": "DEV SN 功能驗收 B39A",
+    "prefix": "ZB39AK62",
+    "checks": [
+      "anonymous rejected",
+      "existing login",
+      "product profile preserves unrelated attributes",
+      "draft save",
+      "activation replay",
+      "43 SN with 20/20/3 cartons",
+      "same-day append to 45",
+      "tail carton unchanged",
+      "all five exports",
+      "reprint leaves last sequence 45",
+      "search",
+      "export audit"
+    ],
+    "retainedForReview": true
+  },
+  "browserAcceptance": {
+    "existingTestAccountLogin": true,
+    "productAutofill": true,
+    "optionalStyle": true,
+    "ptAndQrBodyControls": true,
+    "serverDraftSave": true,
+    "uiActivationMergedBatch": true,
+    "finalQuantity": 46,
+    "finalCartons": 5,
+    "uiAdditionalSerial": "ZB39AK62000046"
+  }
+}

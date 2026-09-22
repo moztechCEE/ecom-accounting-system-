@@ -31,4 +31,14 @@ Worktree `/Users/moztecheason/ecom-sn-complete-20260922`, branch `codex/sn-compl
 - No shipping command, stock deduction, production allocation or account permission change in this release.
 
 ## Release
-Pending DEV release. Baseline web `corely-erp-dev-00004-lc7`, API `corely-erp-api-dev-00002-d4n`. New migration adds only SN tables; execute exactly this migration in DEV, not all historical migrations. Runtime images retain existing sandbox, secret references, database and WMS portal env. Build script uses locked extra QR/barcode dependencies; standard backend Dockerfile also includes fonts for future full builds.
+DEV release completed. Cloud Build `c5848985-beb8-461a-a406-981d4fcd30a0`, source `ba9b7cdc`. Web `corely-erp-dev-00005-zf8` and API `corely-erp-api-dev-00003-2l2` both receive 100% traffic. Migration `20260922000000_sn_labels` applied and recorded in DEV only. Baseline web `corely-erp-dev-00004-lc7`, API `corely-erp-api-dev-00002-d4n`. New migration adds only SN tables; execute exactly this migration in DEV, not all historical migrations. Runtime images retain existing sandbox, secret references, database and WMS portal env. Build script uses locked extra QR/barcode dependencies; standard backend Dockerfile also includes fonts for future full builds.
+
+
+## Live release acceptance
+- Existing admin API login and existing TEST browser login both succeeded without credential or role changes.
+- Real DEV API: created labeled QA product `DEV SN 功能驗收 B39A`; SN profile patch retained unrelated attributes; 43 units allocated as 20/20/3, replay did not allocate again, +2 merged into same batch leaving old tail fixed. All five exports returned files. Exporting 41–43 did not advance last sequence 45. Search and output audit passed.
+- Live output PDFs were rendered; ZXing decoded the actual 14-character product SN and the complete tail carton list. Warranty and warehouse outputs are retained outside Git in `/tmp/corely-sn-live-acceptance` for this session's QA.
+- Browser: searched B39A, opened persisted batch, expanded exact tail contents 41/42/43. New draft product selection automatically filled model, color, model/color codes and left optional style blank. Font field displayed pt and QR control stated body versus full margin size. Saved an additional clearly labeled UI fixture draft on the server, then confirmed activation from the actual UI: it merged into the same batch and allocated exactly SN 46 in carton 005. The displayed total is now 46 SN / 5 cartons; original cartons were retained.
+- Mac/browser initially unavailable; browser access recovered later. No browser storage/token injection or credential reset was used.
+- An interrupted Cloud SQL proxy connection left one empty disposable acceptance schema; it was removed explicitly. Subsequent acceptance passed and schema inventory was empty.
+- Release readback in `sn-complete-release-20260922.json`; original production ERP and WMS revisions unchanged. No push/merge; coordinate exact commits before integration with another Codex.
