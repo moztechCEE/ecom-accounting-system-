@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
+  Alert,
   Button,
   Form,
   Input,
@@ -61,6 +62,7 @@ import {
   getRoleName,
 } from '../constants/translations'
 import { hasPermission, hasRole, isAdminUser } from '../utils/access'
+import { getAccessControlErrorMessage as getErrorMessage } from '../utils/access-control-errors'
 
 type TableColumn<T> = {
   title: React.ReactNode
@@ -222,25 +224,6 @@ type PermissionsTabProps = {
   reloadRoles: () => Promise<void>
 }
 
-const getErrorMessage = (error: unknown): string => {
-  if (error && typeof error === 'object') {
-    const withResponse = error as {
-      response?: { data?: { message?: string } }
-    }
-    const responseMessage = withResponse.response?.data?.message
-    if (typeof responseMessage === 'string' && responseMessage.trim()) {
-      return responseMessage
-    }
-
-    const withMessage = error as { message?: string }
-    if (typeof withMessage.message === 'string' && withMessage.message.trim()) {
-      return withMessage.message
-    }
-  }
-
-  return '操作失敗，請稍後再試'
-}
-
 const isManagedUserSuperAdmin = (record: ManagedUser) =>
   Boolean(
     record.roles?.some(
@@ -267,6 +250,9 @@ const UsersTab = ({
   const [showSystemAdmins, setShowSystemAdmins] = useState(false)
   const [expandedScopeRowKeys, setExpandedScopeRowKeys] = useState<React.Key[]>([])
   const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const createInFlight = useRef(false)
   const [assignOpen, setAssignOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null)
@@ -339,6 +325,10 @@ const UsersTab = ({
   }, [fetchSystemAdmins, showSystemAdmins])
 
   const handleCreate = async () => {
+    if (createInFlight.current) return
+    createInFlight.current = true
+    setCreating(true)
+    setCreateError(null)
     try {
       const values = await createForm.validateFields()
       const payload = canManageDataScopes
@@ -353,12 +343,17 @@ const UsersTab = ({
       message.success('使用者建立成功')
       setCreateOpen(false)
       createForm.resetFields()
-      fetchUsers(meta.page)
+      fetchUsers(1)
     } catch (error) {
-      if (error instanceof Error && 'errorFields' in error) {
+      if (error && typeof error === 'object' && 'errorFields' in error) {
+        const fields = (error as { errorFields?: { name: string[] }[] }).errorFields
+        if (fields?.[0]) createForm.scrollToField(fields[0].name)
         return
       }
-      message.error(getErrorMessage(error))
+      setCreateError(getErrorMessage(error))
+    } finally {
+      createInFlight.current = false
+      setCreating(false)
     }
   }
 
@@ -691,8 +686,22 @@ const UsersTab = ({
       <Modal
         title="新增使用者"
         open={createOpen}
-        onCancel={() => setCreateOpen(false)}
+        onCancel={() => { if (!createInFlight.current) setCreateOpen(false) }}
+        afterOpenChange={(open) => { if (open) setCreateError(null) }}
         onOk={handleCreate}
+        confirmLoading={creating}
+        cancelButtonProps={{ disabled: creating }}
+        closable={!creating}
+        maskClosable={!creating}
+        keyboard={!creating}
+        style={{ top: 24 }}
+        styles={{ body: { maxHeight: 'calc(100dvh - 240px)', overflowY: 'auto', paddingRight: 8 } }}
+        footer={(buttons) => (
+          <>
+            {createError && <Alert type="error" showIcon message={createError} role="alert" style={{ marginBottom: 12, textAlign: 'left' }} />}
+            {buttons}
+          </>
+        )}
         destroyOnClose
         okText="建立"
         width={820}
