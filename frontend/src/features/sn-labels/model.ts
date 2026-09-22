@@ -1,5 +1,4 @@
-// Planning only. Issuance must eventually be a server transaction with a unique
-// constraint, idempotency key and an explicitly approved sequence scope.
+// Browser format previews; only the server allocates serial numbers.
 export type LabelTarget = 'box' | 'device'
 export type LabelLayout = {
   width: number; height: number; showQr: boolean; target: LabelTarget
@@ -11,7 +10,7 @@ export type SnDraft = {
   productId: string; productName: string; sku: string; barcode: string; model: string
   style: string; color: string; modelCode: string; styleCode: string; colorCode: string
   orderDate: string; manufactureDate: string; legacyManualYear?: number
-  quantity: number; capacity: number | null; label: LabelLayout
+  quantity: number; capacity: number | null; label: LabelLayout; cartonWidth?: number; cartonHeight?: number
 }
 export const PENDING_RULES = [
   ['倉儲匯入', '欄位與檔案格式於後續設定'],
@@ -50,8 +49,8 @@ export function manufacturingYear(date: string): number {
 }
 function itemPrefix(draft: SnDraft) {
   const codes = [draft.modelCode, draft.styleCode, draft.colorCode]
-  if (codes.some(code => !/^[A-Z0-9]+$/.test(code)) || !/^[A-Z0-9]{4,6}$/.test(codes.join(''))) {
-    throw new Error('請填寫型號、款式及顏色代碼，合計需為 4～6 碼大寫英數字')
+  if (!/^[A-Z0-9]+$/.test(codes[0]) || !/^[A-Z0-9]*$/.test(codes[1]) || !/^[A-Z0-9]+$/.test(codes[2]) || !/^[A-Z0-9]{4,6}$/.test(codes.join(''))) {
+    throw new Error('型號與顏色代碼必填；款式選填，合計需為 4～6 碼大寫英數字')
   }
   return codes.join('')
 }

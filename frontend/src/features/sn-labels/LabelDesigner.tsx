@@ -3,6 +3,7 @@ import type { PointerEvent } from 'react'
 import { Alert, Button, Form, InputNumber, Select, Slider, Space, Switch } from 'antd'
 import { DownloadOutlined, ReloadOutlined } from '@ant-design/icons'
 import { QRCodeSVG } from '@rc-component/qrcode'
+import { QrCode, Ecc } from '@rc-component/qrcode/es/libs/qrcodegen'
 import { constrainLayout, defaultLayout, samplePayload, sampleSerial } from './model'
 import type { LabelLayout, SnDraft } from './model'
 
@@ -16,6 +17,8 @@ export default function LabelDesigner({ draft, onChange }: { draft: SnDraft; onC
   const l = draft.label
   let serial = '尚未設定編碼', payload = 'DRAFT:SN-PREVIEW', valid = false
   try { serial = sampleSerial(draft); payload = samplePayload(draft); valid = true } catch { /* Incomplete draft. */ }
+  const modules = QrCode.encodeText(payload, Ecc.MEDIUM).size
+  const bodyRatio = modules / (modules + 8)
   const title = [draft.model || '產品型號', draft.style, draft.color].filter(Boolean).join(' ')
   const date = draft.manufactureDate ? draft.manufactureDate.replaceAll('-', '').slice(0, 6) : '待設定'
   const update = (patch: Partial<LabelLayout>) => onChange(constrainLayout({ ...l, ...patch }))
@@ -88,8 +91,9 @@ export default function LabelDesigner({ draft, onChange }: { draft: SnDraft; onC
           <Form.Item label="X mm"><InputNumber aria-label="元件 X" step={0.1} value={Number((selected === 'text' ? l.textX : l.qrX).toFixed(2))} onChange={v => v !== null && update(selected === 'text' ? { textX: v } : { qrX: v })} /></Form.Item>
           <Form.Item label="Y mm"><InputNumber aria-label="元件 Y" step={0.1} value={Number((selected === 'text' ? l.textY : l.qrY).toFixed(2))} onChange={v => v !== null && update(selected === 'text' ? { textY: v } : { qrY: v })} /></Form.Item>
         </div>
-        <Form.Item label={selected === 'text' ? '字級 mm' : 'QR Code 邊長 mm'}><InputNumber aria-label="元件尺寸" min={selected === 'text' ? 0.8 : 3} step={0.1}
-          value={Number((selected === 'text' ? l.fontSize : l.qrSize).toFixed(2))} onChange={v => v !== null && update(selected === 'text' ? { fontSize: v } : { qrSize: v })} /></Form.Item>
+        <Form.Item label={selected === 'text' ? '字級 pt' : 'QR 碼本體邊長 mm'}><InputNumber aria-label="元件尺寸" min={selected === 'text' ? 2.27 : 2} step={0.1}
+          value={Number((selected === 'text' ? l.fontSize * 72 / 25.4 : l.qrSize * bodyRatio).toFixed(2))} onChange={v => v !== null && update(selected === 'text' ? { fontSize: v * 25.4 / 72 } : { qrSize: v / bodyRatio })} /></Form.Item>
+        <p className="sn-muted">QR 本體 {Number((l.qrSize * bodyRatio).toFixed(2))} mm · 含必要留白 {Number(l.qrSize.toFixed(2))} mm</p>
         <Button icon={<ReloadOutlined />} onClick={() => onChange(defaultLayout())}>重設版面</Button>
       </Form>
     </div>
@@ -101,7 +105,7 @@ export default function LabelDesigner({ draft, onChange }: { draft: SnDraft; onC
           onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
           <title>SN 標籤草稿，非正式序號</title>
           <rect width={l.width} height={l.height} fill="white" />
-          {l.showQr && <g data-drag="qr"><QRCodeSVG value={payload} x={l.qrX} y={l.qrY} width={l.qrSize} height={l.qrSize} marginSize={4} level="M" />
+          {l.showQr && <g data-drag="qr"><QRCodeSVG value={payload} x={l.qrX} y={l.qrY} width={l.qrSize} height={l.qrSize} marginSize={4} level="M" boostLevel={false} />
             <rect data-editor="true" x={l.qrX} y={l.qrY} width={l.qrSize} height={l.qrSize} fill="transparent" stroke={selected === 'qr' ? '#4f6d91' : 'transparent'} strokeWidth={0.06} />
             <rect data-editor="true" data-drag="size" x={l.qrX + l.qrSize - 0.5} y={l.qrY + l.qrSize - 0.5} width={0.7} height={0.7} fill="#4f6d91" style={{ cursor: 'nwse-resize' }} />
           </g>}

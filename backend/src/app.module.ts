@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { SnLabelsModule } from './modules/sn-labels/sn-labels.module';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { runtimeScheduleOptions } from './common/config/runtime-effects';
@@ -97,6 +98,7 @@ import { WmsWorkbenchModule } from './modules/integration/wms/wms-workbench.modu
     VendorModule,
     InventoryModule,
     ProductModule,
+    SnLabelsModule,
 
     // 2. 核心會計模組（被其他模組依賴）
     AccountingModule,

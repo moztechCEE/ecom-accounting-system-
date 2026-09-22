@@ -5,9 +5,9 @@ export interface Product {
   sku: string
   name: string
   description?: string
-  type: 'RAW_MATERIAL' | 'SEMI_FINISHED' | 'FINISHED_GOOD' | 'SERVICE'
+  type: 'SIMPLE' | 'BUNDLE' | 'MANUFACTURED' | 'SERVICE'
   category?: string
-  unit: string
+  unit?: string
   minStockLevel: number
   safetyStockLevel: number
   salesPrice?: number
@@ -35,7 +35,7 @@ export interface CreateProductDto {
   name: string
   type: string
   category?: string
-  unit: string
+  unit?: string
   minStockLevel?: number
   safetyStockLevel?: number
   parentId?: string
@@ -74,6 +74,10 @@ export const productService = {
   async update(id: string, data: Partial<CreateProductDto>) {
     const response = await api.patch<Product>(`/products/${id}`, data, { params: companyParams() })
     return response.data
+  },
+
+  async updateSnProfile(id: string, data: Record<string, string>) {
+    return (await api.patch<Product>(`/products/${id}/sn-profile`, data, { params: companyParams() })).data
   },
 
   async delete(id: string) {

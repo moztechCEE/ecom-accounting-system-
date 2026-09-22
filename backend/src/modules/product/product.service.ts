@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateProductDto, UpdateProductDto } from './dto/create-product.dto';
 import { CreateBomDto } from './dto/create-bom.dto';
@@ -72,6 +72,19 @@ export class ProductService {
       where: { id },
       data: dto,
     });
+  }
+
+  async updateSnProfile(entityId: string, id: string, body: any) {
+    if (!body || typeof body.modelNumber !== 'string' || body.modelNumber.length > 50) throw new BadRequestException('請填寫型號');
+    const profile: Record<string,string> = {};
+    for (const key of ['style','color','modelCode','styleCode','colorCode']) {
+      if (typeof body[key] !== 'string' || body[key].length > (key.endsWith('Code') ? 6 : 50)) throw new BadRequestException('SN 建檔欄位格式錯誤');
+      profile[key] = key.endsWith('Code') ? body[key].trim().toUpperCase() : body[key].trim();
+      if (key.endsWith('Code') && !/^[A-Z0-9]*$/.test(profile[key])) throw new BadRequestException('代碼限英數字');
+    }
+    const updated = await this.prisma.$executeRaw`UPDATE products SET attributes=jsonb_set(CASE WHEN jsonb_typeof(attributes)='object' THEN attributes ELSE '{}'::jsonb END,'{snLabels}',${JSON.stringify(profile)}::jsonb), model_number=${body.modelNumber.trim()}, updated_at=now() WHERE id=${id} AND entity_id=${entityId}`;
+    if (!updated) throw new NotFoundException('Product not found');
+    return this.findOne(entityId,id);
   }
 
   async remove(entityId: string, id: string) {

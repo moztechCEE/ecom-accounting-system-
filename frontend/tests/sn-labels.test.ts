@@ -16,7 +16,8 @@ test('year suffix reverses manufacturing year and never uses order year or obsol
   assert.throws(() => yearCode(26)); assert.throws(() => yearCode(2026.5))
   assert.throws(() => sampleSerial({ ...draft, modelCode: 'A' }))
   assert.throws(() => sampleSerial({ ...draft, modelCode: 'A12345' }))
-  assert.throws(() => sampleSerial({ ...draft, styleCode: '' }))
+  assert.equal(sampleSerial({ ...draft, styleCode: '' }), 'A16K62000001')
+  assert.throws(() => sampleSerial({ ...draft, colorCode: '' }))
 })
 test('missing, malformed and impossible manufacturing dates cannot generate sample SN', () => {
   assert.equal(manufacturingYear('2024-02-29'), 2024)

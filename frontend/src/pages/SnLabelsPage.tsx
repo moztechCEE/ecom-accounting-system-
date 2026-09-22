@@ -1,175 +1,838 @@
-import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, DatePicker, Empty, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, message } from 'antd'
-import dayjs from 'dayjs'
-import { DeleteOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons'
-import { useAuth } from '../contexts/AuthContext'
-import { useEntityContext } from '../hooks/useEntityContext'
-import { productService } from '../services/product.service'
-import type { Product } from '../services/product.service'
-import LabelDesigner from '../features/sn-labels/LabelDesigner'
-import CartonPreview from '../features/sn-labels/CartonPreview'
-import { cartonEstimate, CONFIRMED_RULES, draftStorageKey, manufacturingYear, newDraft, parseDrafts, PENDING_RULES, sampleSerial, yearCode } from '../features/sn-labels/model'
-import type { SnDraft } from '../features/sn-labels/model'
-import './SnLabelsPage.css'
+import { useEffect, useMemo, useState } from "react";
+import {
+  Alert,
+  Button,
+  DatePicker,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Pagination,
+  Select,
+  Space,
+  Table,
+  Tabs,
+  Tag,
+  message,
+} from "antd";
+import dayjs from "dayjs";
+import { useAuth } from "../contexts/AuthContext";
+import { useEntityContext } from "../hooks/useEntityContext";
+import { productService } from "../services/product.service";
+import type { Product } from "../services/product.service";
+import LabelDesigner from "../features/sn-labels/LabelDesigner";
+import CartonPreview from "../features/sn-labels/CartonPreview";
+import {
+  CONFIRMED_RULES,
+  draftStorageKey,
+  newDraft,
+  parseDrafts,
+  sampleSerial,
+} from "../features/sn-labels/model";
+import type { SnDraft } from "../features/sn-labels/model";
+import { errorText, productDefaults, snApi } from "../features/sn-labels/api";
+import type { Detail, Entry } from "../features/sn-labels/api";
+import "./SnLabelsPage.css";
 
 export default function SnLabelsPage() {
-  const { user } = useAuth()
-  const entityId = useEntityContext()
-  if (!user || !entityId) return <Alert type="warning" message="請先確認登入公司，再開啟 SN 工作區。" />
-  return <SnWorkspace key={`${entityId}:${user.id}`} storageKey={draftStorageKey(entityId, user.id)} />
+  const { user } = useAuth(),
+    entityId = useEntityContext();
+  if (!user || !entityId)
+    return <Alert type="warning" message="請先確認登入公司" />;
+  const canWrite =
+    user.roles.some((r) => ["ADMIN", "SUPER_ADMIN"].includes(r)) ||
+    user.permissions.includes("inventory:update");
+  return (
+    <Workspace
+      key={`${entityId}:${user.id}`}
+      entityId={entityId}
+      storageKey={draftStorageKey(entityId, user.id)}
+      canWrite={canWrite}
+    />
+  );
 }
-
-function SnWorkspace({ storageKey }: { storageKey: string }) {
-  const [stored] = useState(() => {
+function Workspace({
+  entityId,
+  storageKey,
+  canWrite,
+}: {
+  entityId: string;
+  storageKey: string;
+  canWrite: boolean;
+}) {
+  const api = useMemo(() => snApi(entityId), [entityId]);
+  const [draft, setDraft] = useState(() => newDraft(crypto.randomUUID())),
+    [revision, setRevision] = useState(0),
+    [dirty, setDirty] = useState(false);
+  const [active, setActive] = useState<Detail | null>(null),
+    [busy, setBusy] = useState(false),
+    [tab, setTab] = useState("batch"),
+    [products, setProducts] = useState<Product[]>([]);
+  const [entries, setEntries] = useState<Entry[]>([]),
+    [total, setTotal] = useState(0),
+    [page, setPage] = useState(1),
+    [search, setSearch] = useState(""),
+    [status, setStatus] = useState(""),
+    [sort, setSort] = useState("desc"),
+    [dates, setDates] = useState<string[]>([]),
+    [refresh, setRefresh] = useState(0);
+  const [error, setError] = useState(""),
+    [productError, setProductError] = useState(""),
+    [cartonPage, setCartonPage] = useState(1);
+  const [from, setFrom] = useState(1),
+    [to, setTo] = useState(100),
+    [reason, setReason] = useState("initial");
+  const [columns, setColumns] = useState([
+    "一般序號",
+    "國際條碼",
+    "箱號",
+    "箱內順序",
+    "產品名稱",
+    "型號",
+    "款式",
+    "顏色",
+    "下單日期",
+    "製造日期",
+  ]);
+  const [masterOpen, setMasterOpen] = useState(false),
+    [masterForm] = Form.useForm();
+  const [msg, context] = message.useMessage(),
+    [modal, modalContext] = Modal.useModal();
+  const [localDrafts] = useState(() => {
     try {
-      const raw = localStorage.getItem(storageKey)
-      return { raw, drafts: parseDrafts(raw), error: '' }
-    } catch { return { raw: null, drafts: [] as SnDraft[], error: '無法讀取瀏覽器草稿；既有資料已保留，請勿清除瀏覽器資料。' } }
-  })
-  const [draft, setDraft] = useState(() => newDraft(crypto.randomUUID()))
-  const [saved, setSaved] = useState<SnDraft[]>(stored.drafts)
-  const [dirty, setDirty] = useState(false)
-  const [tab, setTab] = useState('batch')
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
-  const [productError, setProductError] = useState('')
-  const storageError = stored.error
-  const [reload, setReload] = useState(0)
-  const storageBaseline = useRef<string | null>(stored.raw)
-  const [messageApi, messageContext] = message.useMessage()
-  const [modal, modalContext] = Modal.useModal()
-  useEffect(() => {
-    let active = true
-    productService.findAll().then(rows => { if (active) setProducts(rows.filter(p => p.type !== 'SERVICE')) })
-      .catch(() => { if (active) { setProducts([]); setProductError('產品讀取失敗，請重新載入。草稿中的產品資訊可能已過期。') } })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [reload])
-  useEffect(() => {
-    if (!dirty) return
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty])
-  const update = (patch: Partial<SnDraft>) => { setDraft(d => ({ ...d, ...patch })); setDirty(true) }
-  const replace = (next: SnDraft) => {
-    const apply = () => { setDraft(next); setDirty(false); setTab('batch') }
-    if (dirty) modal.confirm({ title: '捨棄尚未儲存的變更？', okText: '捨棄變更', cancelText: '繼續編輯', onOk: apply })
-    else apply()
-  }
-  const persist = (next: SnDraft[]) => {
-    if (storageError) return false
-    try {
-      // Do not overwrite a newer draft list from another browser tab.
-      if (localStorage.getItem(storageKey) !== storageBaseline.current) {
-        messageApi.error('另一個分頁已更新草稿，請先儲存手邊內容至其他地方，再重新載入此頁。')
-        return false
-      }
-      const raw = JSON.stringify(next)
-      parseDrafts(raw)
-      localStorage.setItem(storageKey, raw)
-      storageBaseline.current = raw; setSaved(next)
-      return true
-    } catch { messageApi.error('草稿儲存失敗，請檢查瀏覽器儲存空間與欄位內容。'); return false }
-  }
-  const save = () => {
-    if (!draft.name.trim()) { messageApi.warning('請填寫批次名稱'); return }
-    const next = { ...draft, name: draft.name.trim(), updatedAt: new Date().toISOString() }
-    if (persist([next, ...saved.filter(d => d.id !== next.id)])) {
-      setDraft(next); setDirty(false); messageApi.success('草稿已儲存在此瀏覽器')
+      return parseDrafts(localStorage.getItem(storageKey));
+    } catch {
+      return [];
     }
+  });
+  useEffect(() => {
+    let live = true;
+    productService
+      .findAll()
+      .then((p) => {
+        if (live) {
+          setProducts(p.filter((p) => p.type !== "SERVICE"));
+          setProductError("");
+        }
+      })
+      .catch((e) => {
+        if (live) setProductError(errorText(e));
+      });
+    return () => {
+      live = false;
+    };
+  }, [refresh]);
+  useEffect(() => {
+    let live = true;
+    const timer = setTimeout(() => {
+      api
+        .list({ page, search, status, sort, start: dates[0], end: dates[1] })
+        .then((v) => {
+          if (live) {
+            setEntries(v.rows);
+            setTotal(v.total);
+            setError("");
+          }
+        })
+        .catch((e) => {
+          if (live) setError(errorText(e));
+        });
+    }, 200);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [api, page, search, status, sort, dates, refresh]);
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+  const update = (v: Partial<SnDraft>) => {
+    if (active) return;
+    setDraft((d) => ({ ...d, ...v }));
+    setDirty(true);
+  };
+  const run = async (fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fn();
+    } catch (e) {
+      msg.error(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const save = async () => {
+    const v = await api.save(draft, revision);
+    setRevision(v.revision);
+    setDirty(false);
+    setRefresh((n) => n + 1);
+    return v.revision;
+  };
+  const showActive = async (id: string) => {
+    const v = await api.detail(id);
+    setActive(v);
+    setDraft({ ...v.data, id, version: 2, updatedAt: "" });
+    setDirty(false);
+    setCartonPage(1);
+    setFrom(v.first);
+    setTo(Math.min(v.last, v.first + 9999));
+    setTab("output");
+  };
+  const replace = (fn: () => void) => {
+    if (dirty)
+      modal.confirm({
+        title: "捨棄尚未儲存的變更？",
+        okText: "捨棄",
+        cancelText: "取消",
+        onOk: fn,
+      });
+    else fn();
+  };
+  const open = (e: Entry) =>
+    replace(() => {
+      void run(async () => {
+        if (e.status === "active") await showActive(e.id);
+        else {
+          setActive(null);
+          setDraft({
+            ...e.data,
+            id: e.id,
+            version: 2,
+            updatedAt: e.updated_at,
+          });
+          setRevision(e.revision);
+          setDirty(false);
+          setTab("batch");
+        }
+      });
+    });
+  const create = () =>
+    replace(() => {
+      setDraft(newDraft(crypto.randomUUID()));
+      setRevision(0);
+      setActive(null);
+      setDirty(false);
+      setTab("batch");
+    });
+  const activate = () =>
+    modal.confirm({
+      title: "確認啟用並配發 SN？",
+      content: `本次 ${draft.quantity} 個 SN，依同組流水號接續。啟用後編碼、日期及箱內 SN 固定；重複送出不會再次配號。`,
+      okText: "確認配號",
+      cancelText: "取消",
+      onOk: () =>
+        run(async () => {
+          const r = dirty || !revision ? await save() : revision;
+          const v = await api.activate(draft.id, r);
+          await showActive(v.batchId);
+          setRefresh((n) => n + 1);
+          msg.success("已啟用並完成配號、裝箱");
+        }),
+    });
+  const append = () => {
+    if (!active) return;
+    setDraft({
+      ...active.data,
+      id: crypto.randomUUID(),
+      version: 2,
+      updatedAt: "",
+      quantity: 1,
+    });
+    setRevision(0);
+    setActive(null);
+    setDirty(true);
+    setTab("batch");
+    msg.info("請輸入本次追加數量；啟用後併入同日批次");
+  };
+  const output = (kind: string) =>
+    void run(async () => {
+      if (!active) return;
+      await api.export(active.id, { kind, from, to, reason, columns });
+      setActive(await api.detail(active.id, cartonPage));
+      msg.success("已產生檔案；實際列印結果請核對");
+    });
+  const importLegacy = () =>
+    void run(async () => {
+      let count = 0;
+      for (const d of localDrafts) {
+        try {
+          await api.save(d, 0);
+          count++;
+        } catch (e) {
+          if (
+            (e as { response?: { status?: number } }).response?.status !== 409
+          )
+            throw e;
+        }
+      }
+      setRefresh((n) => n + 1);
+      msg.success(`已匯入 ${count} 筆；既有伺服器草稿不覆寫，本機副本保留`);
+    });
+  const masterSave = () =>
+    void run(async () => {
+      const p = products.find((p) => p.id === draft.productId);
+      if (!p) return;
+      const values = await masterForm.validateFields();
+      const updated = await productService.updateSnProfile(p.id, values);
+      setProducts((rows) =>
+        rows.map((row) => (row.id === p.id ? updated : row)),
+      );
+      update(productDefaults(updated));
+      setMasterOpen(false);
+      msg.success("產品 SN 建檔資料已儲存");
+    });
+  const dateField = (key: "orderDate" | "manufactureDate", label: string) => (
+    <Form.Item label={label} required>
+      <DatePicker
+        aria-label={label}
+        value={draft[key] ? dayjs(draft[key]) : null}
+        onChange={(v) => update({ [key]: v?.format("YYYY-MM-DD") || "" })}
+      />
+    </Form.Item>
+  );
+  let sample = "",
+    sampleError = "";
+  try {
+    sample = sampleSerial(draft);
+  } catch (e) {
+    sampleError = errorText(e);
   }
-  const selectProduct = (id: string) => {
-    const p = products.find(p => p.id === id)
-    if (!p) return
-    update({ productId: p.id, productName: p.name, sku: p.sku, barcode: p.barcode || '', model: p.modelNumber || '',
-      style: '', color: '', modelCode: '', styleCode: '', colorCode: '' })
-  }
-  let preview = '', previewError = ''
-  try { preview = sampleSerial(draft) } catch (error) { previewError = (error as Error).message }
-  let yearDisplay = '請先填寫製造日期'
-  try { const year = manufacturingYear(draft.manufactureDate); yearDisplay = `${year} → ${yearCode(year)}` } catch { /* Incomplete draft. */ }
-  const packing = cartonEstimate(draft.quantity, draft.capacity)
-  const field = (key: 'modelCode' | 'styleCode' | 'colorCode', label: string) => <Form.Item label={label}>
-    <Input aria-label={label} maxLength={6} value={draft[key]} onChange={e => update({ [key]: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })} />
-  </Form.Item>
-  const dateField = (key: 'orderDate' | 'manufactureDate', label: string) => <Form.Item label={label}>
-    <DatePicker aria-label={label} placeholder="YYYY-MM-DD" format="YYYY-MM-DD" style={{ width: '100%' }}
-      minDate={dayjs('2000-01-01')} maxDate={dayjs('2099-12-31')} value={draft[key] ? dayjs(draft[key]) : null}
-      onChange={value => update({ [key]: value?.format('YYYY-MM-DD') || '' })} />
-  </Form.Item>
-  const rules = <div className="sn-rules">
-    <section className="sn-panel"><h2>編碼預覽</h2><Form layout="vertical">
-      <div className="sn-field-triple">{field('modelCode', '型號代碼')}{field('styleCode', '款式代碼')}{field('colorCode', '顏色代碼')}</div>
-      {dateField('manufactureDate', '製造日期')}
-      <Form.Item label="年份碼"><Input aria-label="年份碼" readOnly value={yearDisplay} /></Form.Item>
-    </Form><p className="sn-muted">依製造年取西元後兩碼反轉。型號、款式、顏色與製造年相同時接續流水號；不同組合各自累加。</p>
-      <div className="sn-code-parts"><span>品項代碼 4～6 碼</span><span>年份 2 碼</span><span>流水號 6 碼</span></div>
-      <output className="sn-code-preview">{preview || '完成編碼資料以預覽'}</output>
-      <p className="sn-muted">{preview ? `共 ${preview.length} 碼 · 000001 僅為格式樣張，尚未占用或配發號碼。` : previewError}</p>
-    </section>
-    <section className="sn-panel"><h2>已確認規則</h2><div className="sn-pending-list">{CONFIRMED_RULES.map(([name, description]) => <div key={name}><strong>{name}</strong><span>{description}</span><Tag>已確認</Tag></div>)}</div>
-      <h2 className="sn-section-title">待確認事項</h2><div className="sn-pending-list">{PENDING_RULES.map(([name, description]) => <div key={name}><strong>{name}</strong><span>{description}</span><Tag>待確認</Tag></div>)}</div></section>
-  </div>
-  return <div className="sn-workspace">
-    {messageContext}{modalContext}
-    <header className="sn-heading"><div><h1>SN 與標籤</h1><p>建立生產批次，設計產品序號標籤。</p></div>
-      <Space wrap><Tag>{dirty ? '尚未儲存' : draft.updatedAt ? '瀏覽器草稿' : '新草稿'}</Tag>
-        <Button icon={<PlusOutlined />} onClick={() => replace(newDraft(crypto.randomUUID()))}>新增草稿</Button>
-        <Button type="primary" icon={<SaveOutlined />} disabled={!!storageError} onClick={save}>儲存草稿</Button></Space>
-    </header>
-    <Alert type="info" showIcon message="目前為規劃草稿；正式發號與工廠列印尚未啟用。草稿只保存在此瀏覽器，請在離開前儲存。" />
-    {storageError && <Alert type="error" showIcon message={storageError} />}
-    {draft.legacyManualYear !== undefined && <Alert type="warning" showIcon message={`這份舊草稿的手填年份 ${draft.legacyManualYear} 已停用。預覽改依製造日期計算反轉年份碼，請重新核對標籤。`} />}
-    <Tabs activeKey={tab} onChange={setTab} destroyOnHidden items={[
-      { key: 'batch', label: '批次草稿', children: <>
-        <div className="sn-batch-grid"><section className="sn-panel"><h2>批次資料</h2><Form layout="vertical">
-          <Form.Item label="批次名稱" required><Input aria-label="批次名稱" maxLength={100} placeholder="例如：太空艙 9 月生產" value={draft.name} onChange={e => update({ name: e.target.value })} /></Form.Item>
-          <Form.Item label="產品"><Select aria-label="產品" showSearch optionFilterProp="label" loading={loading} value={draft.productId || undefined}
-            placeholder="搜尋產品名稱、SKU 或型號" onChange={selectProduct} options={products.map(p => ({ value: p.id, label: `${p.name} · ${p.sku}${p.modelNumber ? ' · ' + p.modelNumber : ''}` }))}
-            notFoundContent={loading ? '載入中' : productError ? '讀取失敗' : '沒有符合的產品'} /></Form.Item>
-          {productError && <Alert type="error" message={productError} action={<Button size="small" icon={<ReloadOutlined />} onClick={() => { setLoading(true); setProductError(''); setReload(n => n + 1) }}>重試</Button>} />}
-          <dl className="sn-product-info"><div><dt>ERP SKU</dt><dd>{draft.sku || '—'}</dd></div><div><dt>國際條碼／保固匯入 SKU</dt><dd>{draft.barcode || '未提供'}</dd></div></dl>
-          <div className="sn-field-triple">
-            <Form.Item label="型號"><Input aria-label="型號" maxLength={60} value={draft.model} onChange={e => update({ model: e.target.value })} /></Form.Item>
-            <Form.Item label="款式"><Input aria-label="款式" maxLength={60} value={draft.style} onChange={e => update({ style: e.target.value })} /></Form.Item>
-            <Form.Item label="顏色"><Input aria-label="顏色" maxLength={60} value={draft.color} onChange={e => update({ color: e.target.value })} /></Form.Item>
-          </div><p className="sn-muted">型號由產品帶入；款式與顏色先手動填寫，不會回寫產品資料。</p>
-          <div className="sn-field-pair">
-            {dateField('orderDate', '下單日期')}
-            {dateField('manufactureDate', '製造日期')}
-            <Form.Item label="預計 SN 數量"><InputNumber aria-label="預計 SN 數量" min={1} max={999999} precision={0} value={draft.quantity} onChange={v => v !== null && update({ quantity: v })} /></Form.Item>
-            <Form.Item label="每箱容量（選填）"><InputNumber aria-label="每箱容量" min={1} max={999999} precision={0} placeholder="待確認" value={draft.capacity} onChange={v => update({ capacity: v })} /></Form.Item>
-          </div>
-        </Form></section>
-        <section className="sn-panel sn-batch-summary"><h2>這批的準備進度</h2>
-          <div><span>產品資料</span><strong>{draft.productId ? '已選取' : '待選取'}</strong></div>
-          <div><span>編碼格式</span><strong>{preview ? '可預覽' : '待設定'}</strong></div>
-          <div><span>預計數量</span><strong>{draft.quantity.toLocaleString()} 件</strong></div>
-          <div><span>裝箱估算</span><strong>{packing ? `${packing.boxes} 箱` : '待填容量'}</strong></div>
-          <div><span>正式配號</span><Tag>尚未啟用</Tag></div>
-          <Button block onClick={() => setTab('rules')}>設定編碼</Button>
-          <Button block onClick={() => setTab('design')}>設計標籤</Button>
-          <p className="sn-muted">標籤與編碼設定隨草稿保存。尚未產生庫存、保固或箱號紀錄。</p>
-        </section></div>
-        <section className="sn-panel sn-saved"><h2>已存草稿 <span className="sn-muted">{saved.length}</span></h2>
-          <Table size="small" rowKey="id" dataSource={saved} pagination={{ pageSize: 5, hideOnSinglePage: true }} scroll={{ x: 600 }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未儲存草稿" /> }} columns={[
-            { title: '批次', dataIndex: 'name' }, { title: '產品', render: (_, d: SnDraft) => d.productName || '待選取' },
-            { title: '數量', dataIndex: 'quantity' }, { title: '更新時間', render: (_, d: SnDraft) => new Date(d.updatedAt).toLocaleString('zh-TW') },
-            { title: '操作', render: (_, d: SnDraft) => <Space><Button size="small" onClick={() => replace(d)}>開啟</Button><Button size="small" aria-label={`刪除草稿 ${d.name}`} icon={<DeleteOutlined />} onClick={() => modal.confirm({ title: `刪除草稿「${d.name}」？`, content: '僅刪除此瀏覽器的草稿。', okText: '刪除', cancelText: '取消', onOk: () => { if (persist(saved.filter(s => s.id !== d.id)) && draft.id === d.id) { setDraft(newDraft(crypto.randomUUID())); setDirty(false) } } })} /></Space> },
-          ]} />
-        </section>
-      </> },
-      { key: 'design', label: '標籤設計', children: <section className="sn-panel"><LabelDesigner draft={draft} onChange={label => update({ label })} /></section> },
-      { key: 'rules', label: '編碼規則', children: rules },
-      { key: 'cartons', label: '裝箱規劃', children: <section className="sn-panel"><h2>裝箱估算</h2>
-        {packing ? <><div className="sn-carton-metrics"><div><span>預計箱數</span><strong>{packing.boxes}</strong></div><div><span>完整箱</span><strong>{packing.full}</strong></div><div><span>尾箱件數</span><strong>{packing.remainder || '無尾箱'}</strong></div></div>
-          <p className="sn-muted">依 {draft.quantity} 件、每箱 {draft.capacity} 件估算。尚未建立箱號或分配箱內 SN。</p></> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="先在批次草稿填寫每箱容量，即可估算箱數。" />}
-        <CartonPreview key={JSON.stringify([draft.id, draft.quantity, draft.capacity, draft.modelCode, draft.styleCode, draft.colorCode, draft.manufactureDate])} draft={draft} />
-        <p className="sn-muted">出貨維持連號與固定箱內清單，不開放跳號或任意換箱。箱號沿用 CTN－下單日期－型號－箱序格式；同日多次下單的正式合併與配號尚未啟用。</p>
-        <div className="sn-pending-list">{PENDING_RULES.map(([name, description]) => <div key={name}><strong>{name}</strong><span>{description}</span><Tag>待確認</Tag></div>)}</div>
-        <Space wrap className="sn-future-actions"><Button disabled>產生箱號</Button><Button disabled>外箱 PDF</Button><Button disabled>倉儲匯入檔</Button><Button disabled>保固匯入檔</Button></Space>
-      </section> },
-    ]} />
-  </div>
+  const texts = (
+    keys: (
+      | "model"
+      | "style"
+      | "color"
+      | "modelCode"
+      | "styleCode"
+      | "colorCode"
+    )[],
+    labels: string[],
+  ) => (
+    <div className="sn-field-triple">
+      {keys.map((k, i) => (
+        <Form.Item key={k} label={labels[i]}>
+          <Input
+            aria-label={labels[i]}
+            value={draft[k]}
+            maxLength={k.endsWith("Code") ? 6 : 50}
+            onChange={(e) =>
+              update({
+                [k]: k.endsWith("Code")
+                  ? e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")
+                  : e.target.value,
+              })
+            }
+          />
+        </Form.Item>
+      ))}
+    </div>
+  );
+  return (
+    <div className="sn-workspace">
+      {context}
+      {modalContext}
+      <header className="sn-heading">
+        <div>
+          <h1>SN 與標籤</h1>
+          <p>生產配號、標籤與裝箱。</p>
+        </div>
+        <Space wrap>
+          <Tag color={active ? "green" : undefined}>
+            {active ? "已啟用" : dirty ? "尚未儲存" : "草稿"}
+          </Tag>
+          <Button onClick={create} disabled={busy}>
+            新增草稿
+          </Button>
+          {active ? (
+            <Button onClick={append} disabled={!canWrite || busy}>
+              追加數量
+            </Button>
+          ) : (
+            <>
+              <Button
+                onClick={() =>
+                  void run(async () => {
+                    await save();
+                    msg.success("已儲存至伺服器");
+                  })
+                }
+                disabled={!canWrite || busy}
+              >
+                儲存草稿
+              </Button>
+              <Button
+                type="primary"
+                onClick={activate}
+                loading={busy}
+                disabled={!canWrite}
+              >
+                啟用配號
+              </Button>
+            </>
+          )}
+        </Space>
+      </header>
+      {!canWrite && (
+        <Alert
+          type="info"
+          message="目前為唯讀權限；配號、建檔與匯出需庫存編輯權限。"
+        />
+      )}
+      {active && (
+        <Alert
+          type="success"
+          showIcon
+          message={`已配發 ${active.data.quantity} 個 SN／${active.cartons} 箱。漏印與破損補印沿用原 SN。`}
+        />
+      )}
+      <Tabs
+        activeKey={tab}
+        onChange={setTab}
+        items={[
+          {
+            key: "batch",
+            label: "批次資料",
+            children: (
+              <section className="sn-panel">
+                <Form
+                  layout="vertical"
+                  disabled={!!active || busy || !canWrite}
+                >
+                  <Form.Item label="批次名稱" required>
+                    <Input
+                      aria-label="批次名稱"
+                      value={draft.name}
+                      maxLength={100}
+                      onChange={(e) => update({ name: e.target.value })}
+                    />
+                  </Form.Item>
+                  <Form.Item label="產品" required>
+                    <Select
+                      aria-label="產品"
+                      showSearch
+                      optionFilterProp="label"
+                      value={draft.productId || undefined}
+                      placeholder="搜尋商品、國際條碼、SKU 或型號"
+                      options={products.map((p) => ({
+                        value: p.id,
+                        label: `${p.name} · ${p.barcode || ""} · ${p.sku} · ${p.modelNumber || ""}`,
+                      }))}
+                      onChange={(id) => {
+                        const p = products.find((p) => p.id === id);
+                        if (p) update(productDefaults(p));
+                      }}
+                    />
+                  </Form.Item>
+                  {productError && (
+                    <Alert
+                      type="error"
+                      message={`產品讀取失敗：${productError}`}
+                    />
+                  )}
+                  <Space wrap>
+                    <Tag>ERP SKU：{draft.sku || "—"}</Tag>
+                    <Tag>國際條碼：{draft.barcode || "—"}</Tag>
+                    <Button
+                      disabled={!draft.productId}
+                      onClick={() => {
+                        masterForm.setFieldsValue({
+                          modelNumber: draft.model,
+                          style: draft.style,
+                          color: draft.color,
+                          modelCode: draft.modelCode,
+                          styleCode: draft.styleCode,
+                          colorCode: draft.colorCode,
+                        });
+                        setMasterOpen(true);
+                      }}
+                    >
+                      產品 SN 建檔
+                    </Button>
+                  </Space>
+                  {texts(["model", "style", "color"], ["型號", "款式", "顏色"])}
+                  <div className="sn-field-pair">
+                    {dateField("orderDate", "下單日期")}
+                    {dateField("manufactureDate", "製造日期")}
+                  </div>
+                  <div className="sn-field-pair">
+                    <Form.Item label="本次 SN 數量" required>
+                      <InputNumber
+                        aria-label="SN 數量"
+                        min={1}
+                        max={10000}
+                        value={draft.quantity}
+                        onChange={(v) => v !== null && update({ quantity: v })}
+                      />
+                    </Form.Item>
+                    <Form.Item label="每箱容量" required>
+                      <InputNumber
+                        aria-label="每箱容量"
+                        min={1}
+                        max={100}
+                        value={draft.capacity}
+                        onChange={(v) => update({ capacity: v })}
+                      />
+                    </Form.Item>
+                  </div>
+                </Form>
+                <p className="sn-muted">
+                  同日、同產品與同編碼組合會併入同一批次；追加另建箱號，已配箱內清單保持固定。
+                </p>
+              </section>
+            ),
+          },
+          {
+            key: "rules",
+            label: "編碼規則",
+            children: (
+              <section className="sn-panel">
+                <Form
+                  layout="vertical"
+                  disabled={!!active || busy || !canWrite}
+                >
+                  {texts(
+                    ["modelCode", "styleCode", "colorCode"],
+                    ["型號代碼", "款式代碼（選填）", "顏色代碼"],
+                  )}
+                </Form>
+                <output className="sn-code-preview">
+                  {sample || sampleError}
+                </output>
+                <p className="sn-muted">
+                  上方為格式樣張。實際起號由伺服器交易決定。
+                </p>
+                <div className="sn-pending-list">
+                  {CONFIRMED_RULES.map(([name, description]) => (
+                    <div key={name}>
+                      <strong>{name}</strong>
+                      <span>{description}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ),
+          },
+          {
+            key: "design",
+            label: "標籤設計",
+            children: (
+              <section className="sn-panel">
+                {active && (
+                  <Alert
+                    type="info"
+                    message="此為啟用時的版面；正式檔案請從「配號與匯出」下載。"
+                  />
+                )}
+                <LabelDesigner
+                  draft={draft}
+                  onChange={(label) => update({ label })}
+                />
+              </section>
+            ),
+          },
+          {
+            key: "cartons",
+            label: "裝箱規劃",
+            children: (
+              <section className="sn-panel">
+                <Form
+                  layout="vertical"
+                  disabled={!!active || busy || !canWrite}
+                >
+                  <Form.Item label="規格箱貼紙寬度 mm（60 × 75 等比縮放）">
+                    <InputNumber
+                      min={60}
+                      max={120}
+                      value={draft.cartonWidth || 60}
+                      onChange={(v) =>
+                        v && update({ cartonWidth: v, cartonHeight: v * 1.25 })
+                      }
+                    />
+                  </Form.Item>
+                </Form>
+                {active ? (
+                  <Button onClick={() => setTab("output")}>
+                    查看實際箱號與箱內 SN
+                  </Button>
+                ) : (
+                  <CartonPreview draft={draft} />
+                )}
+                <p className="sn-muted">
+                  啟用後產生
+                  CTN－下單日期－型號－箱序；正式箱內明細請見配號與匯出。
+                </p>
+              </section>
+            ),
+          },
+          ...(active
+            ? [
+                {
+                  key: "output",
+                  label: "配號與匯出",
+                  children: (
+                    <section className="sn-panel">
+                      <h2>
+                        共 {active.data.quantity} 個 SN／{active.cartons} 箱
+                      </h2>
+                      <Space wrap>
+                        <span>流水號範圍</span>
+                        <InputNumber
+                          aria-label="匯出起號"
+                          min={active.first}
+                          max={active.last}
+                          value={from}
+                          onChange={(v) => v !== null && setFrom(v)}
+                        />
+                        <span>～</span>
+                        <InputNumber
+                          aria-label="匯出迄號"
+                          min={from}
+                          max={active.last}
+                          value={to}
+                          onChange={(v) => v !== null && setTo(v)}
+                        />
+                        <Select
+                          aria-label="輸出原因"
+                          value={reason}
+                          onChange={setReason}
+                          options={[
+                            { value: "initial", label: "首次輸出" },
+                            { value: "missed", label: "漏印補印" },
+                            { value: "damaged", label: "破損重印" },
+                            { value: "copy", label: "另存副本" },
+                          ]}
+                        />
+                      </Space>
+                      <p className="sn-muted">
+                        每次最多輸出 10,000 個既有 SN。外箱 PDF
+                        保留所選序號涉及之整箱內容。
+                      </p>
+                      <Space wrap>
+                        {[
+                          ["labels", "產品／彩盒 PDF"],
+                          ["cartons", "規格箱 PDF"],
+                          ["cartons-no-sn", "規格箱 PDF（無 SN）"],
+                          ["warranty", "保固匯入 XLSX"],
+                          ["warehouse", "倉儲 SN 明細 XLSX"],
+                        ].map(([k, label]) => (
+                          <Button
+                            key={k}
+                            disabled={!canWrite || busy}
+                            onClick={() => output(k)}
+                          >
+                            {label}
+                          </Button>
+                        ))}
+                      </Space>
+                      <Form layout="vertical" style={{ marginTop: 16 }}>
+                        <Form.Item label="倉儲明細欄位">
+                          <Select
+                            mode="multiple"
+                            value={columns}
+                            onChange={setColumns}
+                            options={[
+                              "一般序號",
+                              "SKU",
+                              "國際條碼",
+                              "ERP SKU",
+                              "箱號",
+                              "箱內順序",
+                              "產品名稱",
+                              "型號",
+                              "款式",
+                              "顏色",
+                              "下單日期",
+                              "製造日期",
+                            ].map((value) => ({ value, label: value }))}
+                          />
+                        </Form.Item>
+                      </Form>
+                      <Alert
+                        type="info"
+                        message="保固欄位為「一般序號、SKU」，SKU 使用國際條碼。倉儲檔為可設定的 SN 明細；不會自動入庫或建立出貨單。"
+                      />
+                      <Table
+                        rowKey="id"
+                        size="small"
+                        pagination={false}
+                        dataSource={active.boxes}
+                        scroll={{ x: 650 }}
+                        expandable={{
+                          expandedRowRender: (b) => (
+                            <div style={{ overflowWrap: "anywhere" }}>
+                              {b.serials.join(" · ")}
+                            </div>
+                          ),
+                        }}
+                        columns={[
+                          { title: "箱號", dataIndex: "id" },
+                          { title: "數量", dataIndex: "quantity" },
+                          { title: "起號", render: (_, b) => b.serials[0] },
+                          { title: "迄號", render: (_, b) => b.serials.at(-1) },
+                        ]}
+                      />
+                      <Pagination
+                        current={cartonPage}
+                        pageSize={20}
+                        total={active.cartons}
+                        showSizeChanger={false}
+                        onChange={(p) =>
+                          void run(async () => {
+                            setActive(await api.detail(active.id, p));
+                            setCartonPage(p);
+                          })
+                        }
+                      />
+                      <h2 className="sn-section-title">配號與輸出紀錄</h2>
+                      <Table
+                        rowKey={(_, i) => String(i)}
+                        size="small"
+                        dataSource={active.events}
+                        pagination={{ pageSize: 5 }}
+                        columns={[
+                          {
+                            title: "時間",
+                            dataIndex: "created_at",
+                            render: (v) => new Date(v).toLocaleString("zh-TW"),
+                          },
+                          {
+                            title: "操作",
+                            dataIndex: "action",
+                            render: (v) => (v === "ALLOCATE" ? "配號" : "輸出"),
+                          },
+                          {
+                            title: "明細",
+                            dataIndex: "data",
+                            render: (v) =>
+                              v.kind
+                                ? `${({ labels: "產品標籤", cartons: "規格箱標籤", "cartons-no-sn": "規格箱（無 SN）", warranty: "保固匯入", warehouse: "倉儲明細" } as Record<string, string>)[String(v.kind)] || v.kind} · ${v.from}～${v.to} · ${v.reason === "missed" ? "漏印補印" : v.reason === "damaged" ? "破損重印" : v.reason === "copy" ? "副本" : "首次輸出"}`
+                                : `${v.first}～${v.last}，共 ${v.quantity} 個`,
+                          },
+                        ]}
+                      />
+                    </section>
+                  ),
+                },
+              ]
+            : []),
+        ]}
+      />
+      <section className="sn-panel sn-saved">
+        <h2>批次查詢</h2>
+        <Space wrap style={{ marginBottom: 16 }}>
+          <Input.Search
+            aria-label="搜尋批次"
+            placeholder="商品、國際條碼、型號或批次名稱"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+          <Select
+            aria-label="批次狀態"
+            value={status}
+            onChange={(v) => {
+              setStatus(v);
+              setPage(1);
+            }}
+            options={[
+              { value: "", label: "全部狀態" },
+              { value: "draft", label: "草稿" },
+              { value: "active", label: "已啟用" },
+            ]}
+          />
+          <DatePicker.RangePicker
+            aria-label="下單日期篩選"
+            onChange={(v) => {
+              setDates(v?.map((d) => d?.format("YYYY-MM-DD") || "") || []);
+              setPage(1);
+            }}
+          />
+          <Select
+            aria-label="日期排序"
+            value={sort}
+            onChange={setSort}
+            options={[
+              { value: "desc", label: "下單日期新到舊" },
+              { value: "asc", label: "下單日期舊到新" },
+            ]}
+          />
+          <Button onClick={() => setRefresh((n) => n + 1)}>重新整理</Button>
+        </Space>
+        {error && <Alert type="error" message={error} />}
+        <Table
+          rowKey="id"
+          size="small"
+          dataSource={entries}
+          scroll={{ x: 650 }}
+          pagination={{
+            current: page,
+            total,
+            pageSize: 30,
+            showSizeChanger: false,
+            onChange: setPage,
+          }}
+          columns={[
+            { title: "批次", render: (_, e) => e.data.name },
+            { title: "商品", render: (_, e) => e.data.productName },
+            { title: "國際條碼", render: (_, e) => e.data.barcode },
+            { title: "下單日期", render: (_, e) => e.data.orderDate },
+            { title: "數量", render: (_, e) => e.data.quantity },
+            {
+              title: "狀態",
+              render: (_, e) => (
+                <Tag color={e.status === "active" ? "green" : undefined}>
+                  {e.status === "active" ? "已啟用" : "草稿"}
+                </Tag>
+              ),
+            },
+            {
+              title: "操作",
+              render: (_, e) => (
+                <Button size="small" disabled={busy} onClick={() => open(e)}>
+                  開啟
+                </Button>
+              ),
+            },
+          ]}
+        />
+        {!!localDrafts.length && (
+          <Button disabled={busy || !canWrite} onClick={importLegacy}>
+            匯入此瀏覽器舊草稿（{localDrafts.length}）
+          </Button>
+        )}
+      </section>
+      <Modal
+        title="產品 SN 建檔"
+        open={masterOpen}
+        onCancel={() => setMasterOpen(false)}
+        onOk={masterSave}
+        confirmLoading={busy}
+      >
+        <Form form={masterForm} layout="vertical">
+          {[
+            ["modelNumber", "型號"],
+            ["style", "款式"],
+            ["color", "顏色"],
+            ["modelCode", "型號代碼"],
+            ["styleCode", "款式代碼（選填）"],
+            ["colorCode", "顏色代碼"],
+          ].map(([key, label]) => (
+            <Form.Item key={key} name={key} label={label}>
+              <Input maxLength={key.endsWith("Code") ? 6 : 50} />
+            </Form.Item>
+          ))}
+        </Form>
+        <p>儲存在產品資料，之後選取產品會自動帶入。</p>
+      </Modal>
+    </div>
+  );
 }

@@ -76,13 +76,13 @@ const ProductsPage: React.FC = () => {
 
   const handleCreate = async (values: any) => {
     try {
-      const { attributesList, ...rest } = values
+      const { attributesList, snLabels, ...rest } = values
       const attributes = attributesList?.reduce((acc: any, curr: any) => {
         if (curr.key) acc[curr.key] = curr.value
         return acc
       }, {})
 
-      await productService.create({ ...rest, attributes })
+      await productService.create({ ...rest, attributes: { ...attributes, snLabels } })
       message.success('產品建立成功')
       setIsModalVisible(false)
       form.resetFields()
@@ -296,6 +296,8 @@ const ProductsPage: React.FC = () => {
           <Form.Item name="modelNumber" label="原廠型號 (Model No.)">
             <Input placeholder="例如: A2890" />
           </Form.Item>
+          <Divider>SN 建檔資料</Divider>
+          <Row gutter={12}>{[['style', '款式'], ['color', '顏色'], ['modelCode', '型號代碼'], ['styleCode', '款式代碼（選填）'], ['colorCode', '顏色代碼']].map(([key, label]) => <Col span={12} key={key}><Form.Item name={['snLabels', key]} label={label}><Input maxLength={key.endsWith('Code') ? 6 : 50} /></Form.Item></Col>)}</Row>
           <Form.Item name="hasSerialNumbers" valuePropName="checked">
             <Checkbox>啟用單品序號追蹤</Checkbox>
           </Form.Item>
@@ -304,17 +306,11 @@ const ProductsPage: React.FC = () => {
           </Form.Item>
           <Form.Item name="type" label="類型" rules={[{ required: true }]}>
             <Select>
-              <Option value="RAW_MATERIAL">原物料</Option>
-              <Option value="SEMI_FINISHED">半成品</Option>
-              <Option value="FINISHED_GOOD">製成品</Option>
+              <Option value="SIMPLE">一般產品</Option>
+              <Option value="BUNDLE">組合產品</Option>
+              <Option value="MANUFACTURED">製造產品</Option>
               <Option value="SERVICE">服務</Option>
             </Select>
-          </Form.Item>
-          <Form.Item name="unit" label="單位" rules={[{ required: true }]}>
-            <Input placeholder="例如: pcs, kg, m" />
-          </Form.Item>
-          <Form.Item name="minStockLevel" label="最低庫存水位">
-            <InputNumber className="w-full" min={0} />
           </Form.Item>
 
           <Divider orientation="left">物流與包裝資訊</Divider>

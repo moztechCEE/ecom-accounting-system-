@@ -54,6 +54,14 @@ export class ProductController {
     return this.productService.update(entityId, id, updateProductDto);
   }
 
+  @Patch(':id/sn-profile')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'inventory', action: 'update' })
+  async updateSnProfile(@Request() req, @Param('id') id: string, @Body() body: any, @Query('entityId') entity?: string) {
+    const company = await resolveCompanyRead(this.entityAccessService, req.user?.id, 'inventory', entity);
+    return this.productService.updateSnProfile(company, id, body);
+  }
+
   @Delete(':id')
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'inventory', action: 'update' })
