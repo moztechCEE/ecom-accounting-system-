@@ -28,7 +28,7 @@ gcloud run deploy corely-erp-api-dev --project="$PROJECT" --region="$REGION" \
 API_ORIGIN="$(gcloud run services describe corely-erp-api-dev --project="$PROJECT" --region="$REGION" --format='value(status.url)')"
 gcloud run deploy corely-erp-dev --project="$PROJECT" --region="$REGION" \
   --image="$WEB_IMAGE" --service-account="corely-erp-dev-web@$PROJECT.iam.gserviceaccount.com" \
-  --set-env-vars="API_URL=$API_ORIGIN/api/v1,WS_URL=$API_ORIGIN,DEFAULT_ENTITY_ID=tw-entity-001,ERP_DEV_ENVIRONMENT=true,ERP_DEV_SNAPSHOT_DATE=2026-09-21,STAGED_OPERATIONS_ENABLED=false" \
+  --set-env-vars="API_URL=$API_ORIGIN/api/v1,WS_URL=$API_ORIGIN,DEFAULT_ENTITY_ID=tw-entity-001,ERP_DEV_ENVIRONMENT=true,ERP_DEV_SNAPSHOT_DATE=2026-09-21,STAGED_OPERATIONS_ENABLED=false,WMS_PORTAL_URL=https://corely-wms-dev-sp5g377smq-de.a.run.app" \
   --port=8080 --memory=512Mi --cpu=1 --max-instances=2 --min-instances=0 \
   --allow-unauthenticated --labels=environment=dev,application=corely-erp --quiet
 gcloud run services describe corely-erp-dev --project="$PROJECT" --region="$REGION" --format='value(status.url)'
