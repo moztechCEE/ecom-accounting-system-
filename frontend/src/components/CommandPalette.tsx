@@ -13,7 +13,7 @@ export default function CommandPalette({ items }: { items?: NavigationItem[] }) 
   const pages = navigationLeaves(items || visibleNavigation(user)).filter((item) => item.label.includes(search.trim()))
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
+      if (event.key?.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault()
         setSearch('')
         setOpen((value) => !value)
@@ -27,7 +27,7 @@ export default function CommandPalette({ items }: { items?: NavigationItem[] }) 
     <Input id="operations-command-search" aria-label="搜尋功能" prefix={<SearchOutlined />}
       value={search} onChange={(event) => setSearch(event.target.value)} allowClear />
     <nav aria-label="功能搜尋結果" className="operations-command-results">
-      {pages.map((item) => <button type="button" key={item.key}
+      {pages.map((item) => item.externalUrl ? <a key={item.key} href={item.externalUrl} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>{item.label}</a> : <button type="button" key={item.key}
         onClick={() => { navigate(item.key); setOpen(false) }}>{item.label}</button>)}
       {!pages.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="沒有符合的功能" />}
     </nav>

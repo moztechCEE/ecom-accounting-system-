@@ -35,5 +35,5 @@
 }
 @media (prefers-reduced-motion: reduce) { .operations-sidebar, .operations-main { transition: none; } }
 .operations-command-results { display: grid; gap: 4px; margin-top: 12px; max-height: 360px; overflow: auto; }
-.operations-command-results button { text-align: left; border: 0; border-radius: 8px; background: transparent; color: var(--text-primary); padding: 9px 12px; cursor: pointer; }
-.operations-command-results button:hover, .operations-command-results button:focus-visible { background: #1687d914; outline: 2px solid #1687d9; outline-offset: -2px; }
+.operations-command-results button, .operations-command-results a { text-align: left; border: 0; border-radius: 8px; background: transparent; color: var(--text-primary); padding: 9px 12px; cursor: pointer; }
+.operations-command-results button:hover, .operations-command-results button:focus-visible, .operations-command-results a:hover, .operations-command-results a:focus-visible { background: #1687d914; outline: 2px solid #1687d9; outline-offset: -2px; }

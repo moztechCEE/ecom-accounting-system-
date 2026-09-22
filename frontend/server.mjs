@@ -64,6 +64,7 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     res.end(
       `window.__APP_CONFIG__ = ${JSON.stringify({
+        wmsPortalUrl: process.env.WMS_PORTAL_URL || '',
         apiUrl,
         wsUrl,
         defaultEntityId,

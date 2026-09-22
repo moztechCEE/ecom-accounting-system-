@@ -2,8 +2,9 @@ import type { User } from '../types'
 import { hasAnyPermission, isAdminUser } from '../utils/access'
 import { PERSONAL_PATHS, warehouseOnlyUser, hasWarehouseManagementAccess, WAREHOUSE_REPORTS } from './workspaces'
 import { stagedOperationsEnabled } from './release'
+import { wmsPortalLinks, wmsPortalOrigin } from './wms-portal'
 
-export type NavigationItem = { key: string; label: string; permissions?: string[]; adminOnly?: boolean; superAdminOnly?: boolean; children?: NavigationItem[] }
+export type NavigationItem = { key: string; label: string; externalUrl?: string; permissions?: string[]; adminOnly?: boolean; superAdminOnly?: boolean; children?: NavigationItem[] }
 export const NAVIGATION: NavigationItem[] = [
   { key: '/dashboard', label: '營運總覽' },
   { key: 'sales', label: '訂單銷售', children: [
@@ -66,7 +67,11 @@ export const NAVIGATION: NavigationItem[] = [
   { key: '/profile', label: '個人資料', permissions: ['profile_self:read'] },
 ]
 export function visibleNavigation(user: User | null | undefined, items = NAVIGATION, staged = stagedOperationsEnabled()): NavigationItem[] {
-  return items.flatMap((original) => {
+  return items.flatMap<NavigationItem>((original) => {
+    if (original.key === 'warehouse' && wmsPortalOrigin()) {
+      const children = wmsPortalLinks(user)
+      return children.length ? [{ ...original, children }] : []
+    }
     if (!staged && ['/warehouse/workstation', '/admin/after-sales-brands'].includes(original.key)) return []
     const item = !staged && original.key === 'service'
       ? {...original, children: [{key:'/sales/after-sales',label:'來回件',permissions:['after_sales_cases:read','sales_orders:read']}]}
@@ -85,7 +90,7 @@ export function workspaceNavigation(user: User | null | undefined, workspace: 'a
   const items = visibleNavigation(user)
   if (workspace === 'all' && !warehouseOnlyUser(user)) return items
   const personal = navigationLeaves(items).filter(item => PERSONAL_PATHS.includes(item.key))
-  return [...items.filter(item => item.key === 'warehouse').map(item => ({...item, children: item.children?.filter(child => child.key === '/warehouse' || child.key === '/warehouse/workstation')})),
+  return [...items.filter(item => item.key === 'warehouse').map(item => ({...item, children: wmsPortalOrigin() ? item.children : item.children?.filter(child => child.key === '/warehouse' || child.key === '/warehouse/workstation')})),
     ...(personal.length ? [{ key: 'personal', label: '我的資訊', children: personal }] : [])]
 }
 export function navigationLeaves(items: NavigationItem[]): NavigationItem[] {

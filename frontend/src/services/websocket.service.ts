@@ -9,6 +9,7 @@ declare global {
       defaultEntityId?: string
       wsUrl?: string
       stagedOperationsEnabled?: boolean
+      wmsPortalUrl?: string
       devEnvironment?: boolean
       dataSnapshotDate?: string
     }

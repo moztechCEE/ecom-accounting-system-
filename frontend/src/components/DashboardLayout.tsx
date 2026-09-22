@@ -62,7 +62,7 @@ export default function DashboardLayout() {
   })
   const shown = filter(items)
   const toMenu = (entries: NavigationItem[]): NonNullable<React.ComponentProps<typeof Menu>['items']> => entries.map((item) => ({
-    key: item.key, label: item.label, icon: icons[item.key],
+    key: item.key, label: item.externalUrl ? <a href={item.externalUrl} target="_blank" rel="noopener noreferrer">{item.label}</a> : item.label, icon: icons[item.key],
     children: item.children ? toMenu(item.children) : undefined,
   }))
   const menu = (collapsed = false) => <Menu
@@ -71,7 +71,7 @@ export default function DashboardLayout() {
       openKeys: shown.filter((item) => item.children && (menuSearch || !preferences.closed.includes(item.key))).map((item) => item.key),
       onOpenChange: (keys: string[]) => setPreferences((current) => ({ ...current, closed: items.filter((item) => item.children && !keys.includes(item.key)).map((item) => item.key) })),
     } : {})}
-    items={toMenu(shown)} onClick={({ key }) => { navigate(key); setMobileOpen(false); setMenuSearch('') }}
+    items={toMenu(shown)} onClick={({ key }) => { if (!shown.flatMap(item => item.children || [item]).find(item => item.key === key)?.externalUrl) navigate(key); setMobileOpen(false); setMenuSearch('') }}
   />
   const navContent = (collapsed = false) => <>
     <div className="operations-brand">
