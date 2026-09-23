@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Descriptions, Drawer, Input, Progress, Space, Table, Tag, Typography } from 'antd'
+import { Alert, Button, Descriptions, Drawer, Input, Progress, Select, Space, Table, Tag, Typography } from 'antd'
 import type { InputRef } from 'antd'
 import api from '../services/api'
 import { Link } from 'react-router-dom'
@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { hasPermission } from '../utils/access'
 import { WAREHOUSE_REPORTS } from '../config/workspaces'
 import type { WarehouseDetail, WarehouseRow, WorkItem, WorkStage } from '../services/warehouse.types'
+import { scanTarget } from '../services/warehouse-scan-target'
 
 export default function WarehouseOrderPanel({ order, entityId, station, stage, onClose }: {
   order: WarehouseRow; entityId: string; station: string; stage: WorkStage | null; onClose: () => void;
@@ -14,28 +15,33 @@ export default function WarehouseOrderPanel({ order, entityId, station, stage, o
   const { user } = useAuth()
   const [data, setData] = useState<WarehouseDetail | null>(null)
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [scan, setScan] = useState('')
+  const [selectedItemId, setSelectedItemId] = useState('')
   const [reload, setReload] = useState(0), [feedback, setFeedback] = useState('')
   const input = useRef<InputRef>(null), inFlight = useRef(false)
   useEffect(() => {
-    const abort = new AbortController(); setData(null); setError('')
+    const abort = new AbortController(); setData(null); setError(''); setSelectedItemId('')
     api.get<WarehouseDetail>(`/wms/workbench/orders/${encodeURIComponent(order.id)}`, { params: { entityId, area: station }, signal: abort.signal })
       .then(r => { if (!abort.signal.aborted) setData(r.data) })
       .catch(() => { if (!abort.signal.aborted) setError('無法載入作業明細') })
     return () => abort.abort()
   }, [order.id, entityId, station, reload])
   const action = (kind: string) => !!data?.allowedActions.includes(`${stage}:${kind}`)
+  const target = data && stage ? scanTarget(data.items, stage, scan, selectedItemId) : null
   useEffect(() => {
     if (!busy && stage && data?.allowedActions.includes(`${stage}:scan`)) input.current?.focus()
   }, [busy, stage, data])
   async function submit(kind: 'claim' | 'scan') {
     if (!data || !stage || !action(kind) || inFlight.current || kind === 'scan' && !scan.trim()) return
+    const selected = scanTarget(data.items, stage, scan, selectedItemId)
+    if (kind === 'scan' && selected.needsSelection) { setError('此條碼對應多筆訂單明細，請先選擇要核對的品項'); return }
     inFlight.current = true; setBusy(true); setError(''); setFeedback('')
     const value = scan.trim()
     try {
       const r = await api.post<WarehouseDetail>(`/wms/workbench/orders/${encodeURIComponent(order.id)}/${stage}/${kind}`, {
-        entityId, expectedRevision: data.revision, requestId: crypto.randomUUID(), ...(kind === 'scan' ? { scanValue: value } : {}),
+        entityId, expectedRevision: data.revision, requestId: crypto.randomUUID(),
+        ...(kind === 'scan' ? { scanValue: value, ...(selected.itemId ? { itemId: selected.itemId } : {}) } : {}),
       })
-      setData(r.data); setScan(''); setFeedback(kind === 'scan' ? '已核對 1 件' : '已開始作業')
+      setData(r.data); setScan(''); setSelectedItemId(''); setFeedback(kind === 'scan' ? '已核對 1 件' : '已開始作業')
     } catch (e: unknown) {
       const status = (e as {response?: {status?: number}}).response?.status
       setError(status === 409 ? '資料已變更、重複掃碼或尚未符合核對條件，請重新載入確認' : status === 400 ? '條碼不屬於此訂單，或需要掃描 SN' : '結果尚未確認，請重新載入核對，勿直接重送')
@@ -62,9 +68,22 @@ export default function WarehouseOrderPanel({ order, entityId, station, stage, o
           <Progress percent={data.required ? Math.round((done || 0) / data.required * 100) : 0} showInfo={false} strokeColor="#1677ff" />
           {action('claim') && <Button type="primary" loading={busy} onClick={() => submit('claim')}>{stage === 'pick' ? '開始揀貨' : '開始裝箱'}</Button>}
           <form onSubmit={e => { e.preventDefault(); void submit('scan') }} className="warehouse-scan-form">
-            <Input ref={input} aria-label="掃描商品條碼或 SN" placeholder="掃描商品條碼或 SN" value={scan} onChange={e => setScan(e.target.value)} disabled={busy || !action('scan')} autoComplete="off" />
-            <Button htmlType="submit" type="primary" loading={busy} disabled={!action('scan') || !scan.trim()}>核對</Button>
+            <Input ref={input} aria-label="掃描商品條碼或 SN" placeholder="掃描商品條碼或 SN" value={scan} onChange={e => { setScan(e.target.value); setSelectedItemId('') }} disabled={busy || !action('scan')} autoComplete="off" />
+            <Button htmlType="submit" type="primary" loading={busy} disabled={!action('scan') || !scan.trim() || !!target?.needsSelection}>核對</Button>
           </form>
+          {target?.ambiguous && <div>
+            <Alert type="warning" message="相同條碼對應多筆明細，請選擇本次核對的來源列" />
+            <Select
+              aria-label="選擇掃碼明細"
+              placeholder="選擇訂單明細"
+              style={{ width: '100%', marginTop: 8 }}
+              value={selectedItemId || undefined}
+              onChange={setSelectedItemId}
+              disabled={busy || !action('scan')}
+              options={target.matches.map(item => ({ value: item.id,
+                label: `${item.name} · ${item.sku} · 明細 ${item.id} · 待核 ${stage === 'pick' ? item.quantity - item.picked : item.picked - item.packed} 件` }))}
+            />
+          </div>}
           <div role="status" aria-live="polite">{feedback}</div>
         </div>}
         {data.blockers.length > 0 && <Alert type="warning" message={data.blockers.join('；')} />}

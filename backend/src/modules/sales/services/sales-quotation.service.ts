@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Product } from '@prisma/client';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import {
@@ -125,6 +125,8 @@ export class SalesQuotationService {
     status: string,
   ) {
     const existing = await this.findOne(entityId, id);
+    if (await this.prisma.b2bIssuedQuote.findUnique({ where: { quotationId: existing.id }, select: { id: true } }))
+      throw new ConflictException('B2B 正式報價狀態須由客戶確認流程更新');
     const nextStatus = status.trim();
 
     return this.prisma.salesQuotation.update({

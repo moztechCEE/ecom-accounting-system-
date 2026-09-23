@@ -35,6 +35,8 @@ export class WmsManagementQuery {
 }
 export class WmsScanDto extends WmsCommandDto {
   @IsString() @IsNotEmpty() @MaxLength(256) scanValue!: string;
+  // Source line identity disambiguates two order lines with the same barcode.
+  @IsOptional() @IsString() @Matches(/^[A-Za-z0-9_-]{1,128}$/) itemId?: string;
 }
 export class WmsDispatchDto {
   @IsString() @IsNotEmpty() @MaxLength(128) entityId!:string;

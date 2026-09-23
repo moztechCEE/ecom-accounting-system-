@@ -53,6 +53,47 @@ export interface B2BRequestDetail {
     lineTotal: string
   }>
   quotePath: string
+  quoteVersion: number | null
+  quoteStatus: 'sent' | 'accepted' | 'superseded' | 'withdrawn' | null
+  formalQuotePath: string | null
+}
+
+export interface B2BFormalQuote {
+  id: string
+  requestId: string
+  requestNumber: string
+  customerPoNumber: string
+  quotationNo: string
+  quotationDate: string
+  sellerName: string
+  sellerTaxId: string | null
+  buyerName: string
+  buyerTaxId: string | null
+  version: number
+  status: 'sent' | 'accepted' | 'superseded' | 'withdrawn'
+  validUntil: string | null
+  acceptedAt: string | null
+  withdrawnAt: string | null
+  withdrawalReason: string | null
+  currency: 'TWD'
+  subtotal: string
+  tax: string
+  total: string
+  deliveryDate: string | null
+  paymentTerms: string | null
+  deliveryTerms: string | null
+  items: Array<{
+    requestItemId: string
+    productId: string
+    sku: string
+    name: string
+    quantity: number
+    unitPrice: string
+    lineTotal: string
+    taxAmount: string
+    total: string
+  }>
+  quotePath: string
 }
 
 export interface B2BRequestInput {
@@ -133,6 +174,16 @@ export const b2bService = {
 
   async request(id: string): Promise<B2BRequestDetail> {
     const { data } = await b2bApi.get<B2BRequestDetail>(`/b2b/portal/requests/${encodeURIComponent(id)}`)
+    return data
+  },
+
+  async quote(requestId: string, version: number): Promise<B2BFormalQuote> {
+    const { data } = await b2bApi.get<B2BFormalQuote>(`/b2b/portal/requests/${encodeURIComponent(requestId)}/quotes/${encodeURIComponent(version)}`)
+    return data
+  },
+
+  async acceptQuote(requestId: string, version: number): Promise<B2BFormalQuote> {
+    const { data } = await b2bApi.post<B2BFormalQuote>(`/b2b/portal/requests/${encodeURIComponent(requestId)}/quotes/${encodeURIComponent(version)}/accept`)
     return data
   },
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert, Button, Empty, Input, Pagination, Switch, Tag } from "antd";
+import { Alert, Button, Empty, Input, Pagination, Select, Switch, Tag } from "antd";
 import type { InputRef } from "antd";
 import api from "../services/api";
 import type {
@@ -12,6 +12,7 @@ import {
   newReadyKeys,
   scanFeedback,
 } from "../services/warehouse-feedback";
+import { scanTarget } from "../services/warehouse-scan-target";
 
 export default function WarehouseStation({
   entityId,
@@ -32,6 +33,7 @@ export default function WarehouseStation({
     [error, setError] = useState(""),
     [queueError, setQueueError] = useState("");
   const [scan, setScan] = useState(""),
+    [selectedItemId, setSelectedItemId] = useState(""),
     [feedback, setFeedback] = useState(""),
     [tone, setTone] = useState(""),
     [busy, setBusy] = useState(false),
@@ -117,6 +119,7 @@ export default function WarehouseStation({
     setLocked(true);
     setCurrent(null);
     setScan("");
+    setSelectedItemId("");
     setFeedback("");
     try {
       const r = await api.get<WarehouseDetail>(
@@ -145,6 +148,7 @@ export default function WarehouseStation({
     (stage === "pick"
       ? ["picked", "packing", "completed"].includes(current.state)
       : current.state === "completed");
+  const target = current ? scanTarget(current.items, stage, scan, selectedItemId) : null;
   async function submit(kind: "claim" | "scan") {
     if (
       !current ||
@@ -153,6 +157,11 @@ export default function WarehouseStation({
       (kind === "scan" && !scan.trim())
     )
       return;
+    const selected = scanTarget(current.items, stage, scan, selectedItemId);
+    if (kind === "scan" && selected.needsSelection) {
+      setError("此條碼對應多筆訂單明細，請先選擇要核對的品項");
+      return;
+    }
     flight.current = true;
     setBusy(true);
     setError("");
@@ -166,13 +175,14 @@ export default function WarehouseStation({
           entityId,
           expectedRevision: current.revision,
           requestId: crypto.randomUUID(),
-          ...(kind === "scan" ? { scanValue: value } : {}),
+          ...(kind === "scan" ? { scanValue: value, ...(selected.itemId ? { itemId: selected.itemId } : {}) } : {}),
         },
       );
       if (!alive.current) return;
       setCurrent(r.data);
       setRows(rows=>rows.map(row=>row.id===r.data.id?{...row,...r.data}:row));
       setScan("");
+      setSelectedItemId("");
       if (kind === "scan") {
         const result = scanFeedback(before, r.data, stage);
         if (!result.accepted) {
@@ -391,18 +401,31 @@ export default function WarehouseStation({
                       placeholder="掃描商品條碼或 SN"
                       autoComplete="off"
                       value={scan}
-                      onChange={(e) => setScan(e.target.value)}
+                      onChange={(e) => { setScan(e.target.value); setSelectedItemId(""); }}
                       disabled={busy || !allowed("scan")}
                     />
                     <Button
                       type="primary"
                       htmlType="submit"
                       loading={busy}
-                      disabled={!allowed("scan") || !scan.trim()}
+                      disabled={!allowed("scan") || !scan.trim() || !!target?.needsSelection}
                     >
                       核對
                     </Button>
                   </form>
+                  {target?.ambiguous && <div>
+                    <Alert type="warning" message="相同條碼對應多筆明細，請選擇本次核對的來源列" />
+                    <Select
+                      aria-label="選擇掃碼明細"
+                      placeholder="選擇訂單明細"
+                      style={{ width: '100%', marginTop: 8 }}
+                      value={selectedItemId || undefined}
+                      onChange={setSelectedItemId}
+                      disabled={busy || !allowed("scan")}
+                      options={target.matches.map(item => ({ value: item.id,
+                        label: `${item.name} · ${item.sku} · 明細 ${item.id} · 待核 ${stage === 'pick' ? item.quantity - item.picked : item.picked - item.packed} 件` }))}
+                    />
+                  </div>}
                   <div className="station-items">
                     {[...current.items]
                       .sort(

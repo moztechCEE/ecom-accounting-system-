@@ -1,5 +1,5 @@
 import api from './api'
-import type { B2BRequestDetail } from './b2b.service'
+import type { B2BFormalQuote, B2BRequestDetail } from './b2b.service'
 
 export interface B2BAdminSetup {
   company: { id: string; name: string; loginCode: string }
@@ -52,6 +52,14 @@ export const b2bAdminService = {
   },
   async reviewRequest(id: string, input: { entityId: string; items: Array<{ id: string; confirmedQuantity: number }>; reviewNote?: string; deliveryDate?: string }): Promise<void> {
     await api.post(`/b2b/admin/requests/${encodeURIComponent(id)}/review`, input)
+  },
+  async issueQuote(id: string, input: { entityId: string; validUntil?: string; paymentTerms?: string; deliveryTerms?: string }): Promise<B2BFormalQuote> {
+    const { data } = await api.post<B2BFormalQuote>(`/b2b/admin/requests/${encodeURIComponent(id)}/quotes`, input)
+    return data
+  },
+  async withdrawQuote(id: string, version: number, input: { entityId: string; reason: string }): Promise<B2BFormalQuote> {
+    const { data } = await api.post<B2BFormalQuote>(`/b2b/admin/requests/${encodeURIComponent(id)}/quotes/${encodeURIComponent(version)}/withdraw`, input)
+    return data
   },
   async confirmRequest(id: string, input: { entityId: string; channelId: string; warehouseId: string }): Promise<{ salesOrderId: string; alreadyConfirmed: boolean }> {
     const { data } = await api.post<{ salesOrderId: string; alreadyConfirmed: boolean }>(`/b2b/admin/requests/${encodeURIComponent(id)}/confirm`, input)

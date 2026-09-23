@@ -50,10 +50,12 @@ import AttendanceAdminPage from './pages/attendance/AttendanceAdminPage'
 import ProductsPage from './pages/ProductsPage'
 import SnLabelsPage from './pages/SnLabelsPage'
 import PurchaseOrdersPage from './pages/PurchaseOrdersPage'
+import B2bProcurementPage from './pages/B2bProcurementPage'
+import SupplierAccountsPage from './pages/SupplierAccountsPage'
 import AssemblyPage from './pages/AssemblyPage'
 import CustomersPage from './pages/CustomersPage'
 import ProfilePage from './pages/ProfilePage'
-import { B2BLoginPage, B2BPortalLayout, B2BCatalogPage, B2BRequestsPage, B2BRequestDetailPage } from './pages/b2b/B2BPortal'
+import { B2BLoginPage, B2BPortalLayout, B2BCatalogPage, B2BRequestsPage, B2BRequestDetailPage, B2BFormalQuotePage } from './pages/b2b/B2BPortal'
 import B2bWorkbenchPage from './pages/b2b/B2bWorkbenchPage'
 import WmsHandoverReconciliationPage from './pages/WmsHandoverReconciliationPage'
 
@@ -74,6 +76,7 @@ const App: React.FC = () => {
           <Route path="catalog" element={<B2BCatalogPage />} />
           <Route path="requests" element={<B2BRequestsPage />} />
           <Route path="requests/:id" element={<B2BRequestDetailPage />} />
+          <Route path="requests/:id/quote/:version" element={<B2BFormalQuotePage />} />
         </Route>
         <Route element={<EmployeeProviders />}>
               <Route path="/login" element={<LoginPage />} />
@@ -126,6 +129,8 @@ const App: React.FC = () => {
                 <Route path="inventory/handover-reconciliation" element={<PermissionRoute anyPermissions={['inventory:read']}><WmsHandoverReconciliationPage /></PermissionRoute>} />
                 <Route path="inventory/sn-labels" element={<PermissionRoute anyPermissions={['inventory:read']}><SnLabelsPage /></PermissionRoute>} />
                 <Route path="purchasing/orders" element={<PermissionRoute anyPermissions={['purchase_orders:read']}><PurchaseOrdersPage /></PermissionRoute>} />
+                <Route path="purchasing/b2b-shortages" element={<PermissionRoute anyPermissions={['purchase_orders:create']}><B2bProcurementPage /></PermissionRoute>} />
+                <Route path="purchasing/supplier-accounts" element={<PermissionRoute anyPermissions={['purchase_orders:read']}><SupplierAccountsPage /></PermissionRoute>} />
                 <Route path="manufacturing/assembly" element={<PermissionRoute anyPermissions={['inventory:read']}><AssemblyPage /></PermissionRoute>} />
                 <Route path="sales/customers" element={<PermissionRoute anyPermissions={['sales_orders:read']}><CustomersPage /></PermissionRoute>} />
                 <Route path="sales/b2b" element={<PermissionRoute anyPermissions={['sales_orders:read']}><B2bWorkbenchPage /></PermissionRoute>} />

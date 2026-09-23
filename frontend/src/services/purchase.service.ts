@@ -3,6 +3,7 @@ import { resolveEntityId } from './entities.service'
 
 export interface PurchaseOrder {
   id: string
+  sourceB2bRequestId: string | null
   // poNumber: string // Backend doesn't seem to have poNumber, it uses id or maybe I missed it. Schema has id.
   vendorId: string
   vendor: { name: string }
@@ -93,7 +94,58 @@ export interface PurchaseOrderOptions {
   products: Array<{ id: string; sku: string; name: string }>
 }
 
+export interface B2BProcurementSummary {
+  requiresFreshReview: boolean
+  items: Array<{
+    requestItemId: string
+    requested: number
+    confirmed: number
+    shortage: number
+    ordered: number
+  }>
+  purchaseOrders: Array<{ id: string; status: string; vendorName: string; createdAt: string }>
+}
+
+export interface B2BShortageRequest {
+  id: string
+  requestNumber: string
+  createdAt: string
+  items: Array<{
+    requestItemId: string
+    sku: string
+    name: string
+    requested: number
+    confirmed: number
+    shortage: number
+  }>
+}
+
+export interface CreateB2BPurchaseOrderDto {
+  requestId: string
+  requestKey: string
+  vendorId: string
+  orderDate: string
+  currency: string
+  fxRate: number
+  items: Array<{ requestItemId: string; qty: number; unitCost: number }>
+}
+
 export const purchaseService = {
+  async b2bShortages(explicitEntityId?: string): Promise<B2BShortageRequest[]> {
+    const entityId = await resolveEntityId(explicitEntityId)
+    const response = await api.get<{ items: B2BShortageRequest[] }>('/purchase-orders/b2b-requests/shortages', { params: { entityId } })
+    return response.data.items
+  },
+  async procurementForB2BRequest(requestId: string, explicitEntityId?: string): Promise<B2BProcurementSummary> {
+    const entityId = await resolveEntityId(explicitEntityId)
+    const response = await api.get<B2BProcurementSummary>(`/purchase-orders/b2b-requests/${encodeURIComponent(requestId)}/procurement`, { params: { entityId } })
+    return response.data
+  },
+  async createFromB2BRequest(data: CreateB2BPurchaseOrderDto, explicitEntityId?: string): Promise<PurchaseOrder> {
+    const entityId = await resolveEntityId(explicitEntityId)
+    const response = await api.post<PurchaseOrder>('/purchase-orders/from-b2b-request', data, { params: { entityId } })
+    return response.data
+  },
   async options(explicitEntityId?: string) {
     const entityId = await resolveEntityId(explicitEntityId)
     const response = await api.get<PurchaseOrderOptions>('/purchase-orders/options', { params: { entityId } })

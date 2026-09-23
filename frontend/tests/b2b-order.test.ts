@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildRequestInput, canConfirmRequest, quotePath, statusText } from '../src/pages/b2b/order.ts'
+import { buildRequestInput, canConfirmRequest, canIssueQuote, formalQuotePath, isFormalQuoteExpired, quotePath, statusText } from '../src/pages/b2b/order.ts'
 import type { B2BCatalogItem } from '../src/services/b2b.service.ts'
 
 const catalog: B2BCatalogItem[] = [
@@ -25,16 +25,32 @@ test('invalid or hidden quantities cannot enter the purchase payload', () => {
   assert.throws(() => buildRequestInput('request-id', 'PO-102', '', { one: 0 }, catalog))
 })
 
-test('quote links point to a first-party login-protected route', () => {
+test('provisional and formal quote links use distinct login-protected routes', () => {
   assert.equal(quotePath('abc/def'), '/b2b/requests/abc%2Fdef')
+  assert.equal(formalQuotePath('abc/def', 2), '/b2b/requests/abc%2Fdef/quote/2')
   assert.equal(statusText.pending_stock_review, '待人工核對庫存與交期')
 })
 
-test('only a fully reviewed request can be confirmed into a sales order', () => {
-  const base = { status: 'stock_confirmed' as const, salesOrderId: null, items: [{ quantity: 2, confirmedQuantity: 2 }] }
-  assert(canConfirmRequest(base))
-  assert(!canConfirmRequest({ ...base, items: [{ quantity: 2, confirmedQuantity: 1 }] }))
-  assert(!canConfirmRequest({ ...base, status: 'needs_adjustment' }))
-  assert(!canConfirmRequest({ ...base, salesOrderId: 'existing' }))
-  assert(!canConfirmRequest({ ...base, items: [] }))
+test('formal quote requires full stock review; sales order requires explicit acceptance', () => {
+  const base = { status: 'stock_confirmed' as const, quoteVersion: null, quoteStatus: null as 'sent' | 'accepted' | 'withdrawn' | null, salesOrderId: null, items: [{ quantity: 2, confirmedQuantity: 2 }] }
+  assert(canIssueQuote(base))
+  assert(!canIssueQuote({ ...base, items: [{ quantity: 2, confirmedQuantity: 1 }] }))
+  assert(canIssueQuote({ ...base, quoteVersion: 1, quoteStatus: 'sent' }))
+  assert(!canIssueQuote({ ...base, quoteVersion: 1, quoteStatus: 'accepted' }))
+  assert(!canConfirmRequest(base))
+  assert(!canConfirmRequest({ ...base, quoteVersion: 1, quoteStatus: 'sent' }))
+  assert(!canConfirmRequest({ ...base, quoteStatus: 'accepted' }))
+  assert(canConfirmRequest({ ...base, quoteVersion: 1, quoteStatus: 'accepted' }))
+  assert(!canConfirmRequest({ ...base, quoteVersion: 1, quoteStatus: 'accepted', items: [{ quantity: 2, confirmedQuantity: 1 }] }))
+  assert(!canConfirmRequest({ ...base, quoteVersion: 1, quoteStatus: 'accepted', status: 'needs_adjustment' }))
+  assert(!canConfirmRequest({ ...base, quoteVersion: 1, quoteStatus: 'accepted', salesOrderId: 'existing' }))
+  assert(!canConfirmRequest({ ...base, quoteVersion: 1, quoteStatus: 'accepted', items: [] }))
+  assert(!canConfirmRequest({ ...base, quoteVersion: 1, quoteStatus: 'withdrawn' }))
+  assert(canIssueQuote({ ...base, quoteVersion: 1, quoteStatus: 'withdrawn' }))
+})
+
+test('formal quote expiry matches API Taiwan midnight boundary', () => {
+  assert.equal(isFormalQuoteExpired(null, Date.parse('2026-09-24T16:00:00Z')), false)
+  assert.equal(isFormalQuoteExpired('2026-09-24', Date.parse('2026-09-24T15:59:59.999Z')), false)
+  assert.equal(isFormalQuoteExpired('2026-09-24', Date.parse('2026-09-24T16:00:00.000Z')), true)
 })

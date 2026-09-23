@@ -1,4 +1,4 @@
-import type { B2BCatalogItem, B2BRequestInput, B2BRequestStatus } from '../../services/b2b.service'
+import type { B2BCatalogItem, B2BRequestDetail, B2BRequestInput, B2BRequestStatus } from '../../services/b2b.service'
 
 export const statusText: Record<B2BRequestStatus, string> = {
   pending_stock_review: '待人工核對庫存與交期',
@@ -41,11 +41,33 @@ export function quotePath(id: string): string {
   return `/b2b/requests/${encodeURIComponent(id)}`
 }
 
+export function formalQuotePath(id: string, version: number): string {
+  return `${quotePath(id)}/quote/${encodeURIComponent(version)}`
+}
+
+export function isFormalQuoteExpired(validUntil: string | null, now = Date.now()): boolean {
+  // The API closes a Taiwan-dated quote at 00:00 on the following day (16:00 UTC).
+  return Boolean(validUntil && now >= new Date(`${validUntil}T16:00:00.000Z`).getTime())
+}
+
 export function canConfirmRequest(request: {
   status: B2BRequestStatus
+  quoteVersion: number | null
+  quoteStatus: B2BRequestDetail['quoteStatus']
   salesOrderId: string | null
   items: Array<{ quantity: number; confirmedQuantity: number | null }>
 }): boolean {
-  return request.status === 'stock_confirmed' && !request.salesOrderId && request.items.length > 0 &&
+  return request.status === 'stock_confirmed' && Number.isSafeInteger(request.quoteVersion) && Number(request.quoteVersion) > 0 && request.quoteStatus === 'accepted' && !request.salesOrderId && request.items.length > 0 &&
+    request.items.every((item) => item.quantity > 0 && item.confirmedQuantity === item.quantity)
+}
+
+export function canIssueQuote(request: {
+  status: B2BRequestStatus
+  quoteVersion: number | null
+  quoteStatus: B2BRequestDetail['quoteStatus']
+  salesOrderId: string | null
+  items: Array<{ quantity: number; confirmedQuantity: number | null }>
+}): boolean {
+  return request.status === 'stock_confirmed' && request.quoteStatus !== 'accepted' && !request.salesOrderId && request.items.length > 0 &&
     request.items.every((item) => item.quantity > 0 && item.confirmedQuantity === item.quantity)
 }

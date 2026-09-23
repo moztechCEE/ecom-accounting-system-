@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
@@ -9,6 +10,42 @@ import { calculateLandedCost } from './landed-cost';
 import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
+import { CreateB2bPurchaseOrderDto } from './dto/create-b2b-purchase-order.dto';
+
+type PreparedPurchaseOrder = {
+  vendorId: string;
+  orderDate: Date;
+  currency: string;
+  fxRate: Prisma.Decimal;
+  notes: string | null;
+  items: {
+    productId: string;
+    qty: Prisma.Decimal;
+    unitCostOriginal: Prisma.Decimal;
+    unitCostCurrency: string;
+    unitCostFxRate: Prisma.Decimal;
+    unitCostBase: Prisma.Decimal;
+  }[];
+  productIds: string[];
+  totalAmountOriginal: Prisma.Decimal;
+  totalAmountBase: Prisma.Decimal;
+};
+
+type B2bSource = {
+  requestId: string;
+  requestKey: string;
+  payloadHash: string;
+  requestItemIds: string[];
+};
+
+const CLOSED_B2B_PURCHASE_STATUSES = ['cancelled', 'received', 'completed'];
+const RECEIVED_B2B_PURCHASE_STATUSES = ['received', 'completed'];
+
+function hasReceiptSinceReview(reviewedAt: Date, orders: Array<{ status: string; updatedAt: Date }>) {
+  return orders.some((order) =>
+    RECEIVED_B2B_PURCHASE_STATUSES.includes(order.status) &&
+    order.updatedAt.getTime() >= reviewedAt.getTime());
+}
 
 @Injectable()
 export class PurchaseService {
@@ -18,10 +55,14 @@ export class PurchaseService {
     private readonly costService: CostService,
   ) {}
 
-  async create(entityId: string, dto: CreatePurchaseOrderDto) {
+  private companyId(entityId: string) {
     const companyId = typeof entityId === 'string' ? entityId.trim() : '';
     if (!companyId || companyId.length > 128)
       throw new BadRequestException('entityId is required');
+    return companyId;
+  }
+
+  private preparePurchaseOrder(dto: CreatePurchaseOrderDto): PreparedPurchaseOrder {
     if (!dto || typeof dto !== 'object' || Array.isArray(dto))
       throw new BadRequestException('採購單內容格式錯誤');
     // Validate service callers as well as HTTP callers, and snapshot normalized
@@ -54,26 +95,228 @@ export class PurchaseService {
     if (totalAmountOriginal.gte(storageLimit) || totalAmountBase.gte(storageLimit))
       throw new BadRequestException('採購金額超過支援範圍');
 
-    return this.prisma.$transaction(async (tx) => {
-      const [entity, vendor, products] = await Promise.all([
-        tx.entity.findFirst({ where: { id: companyId, isActive: true }, select: { baseCurrency: true } }),
-        tx.vendor.findFirst({ where: { id: vendorId, entityId: companyId, isActive: true }, select: { id: true } }),
-        tx.product.findMany({ where: { id: { in: productIds }, entityId: companyId, isActive: true }, select: { id: true } }),
-      ]);
-      if (!entity || !vendor || products.length !== productIds.length)
-        throw new BadRequestException('供應商或商品不屬於目前公司，或公司／主檔已停用');
-      if (currency === entity.baseCurrency && !fxRate.equals(1))
-        throw new BadRequestException('採購幣別與公司本位幣相同時，匯率必須為 1');
-      return tx.purchaseOrder.create({
-        data: {
-          entityId: companyId, vendorId, orderDate, status: 'pending',
-          totalAmountOriginal, totalAmountCurrency: currency,
-          totalAmountFxRate: fxRate, totalAmountBase, notes,
-          items: { create: items },
-        },
-        include: { items: true, vendor: true },
-      });
-    }, { maxWait: 5_000, timeout: 20_000 });
+    return { vendorId, orderDate, currency, fxRate, notes, items,
+      productIds, totalAmountOriginal, totalAmountBase };
+  }
+
+  private async createInTransaction(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    draft: PreparedPurchaseOrder,
+    source?: B2bSource,
+  ) {
+    const [entity, vendor, products] = await Promise.all([
+      tx.entity.findFirst({ where: { id: companyId, isActive: true }, select: { baseCurrency: true } }),
+      tx.vendor.findFirst({ where: { id: draft.vendorId, entityId: companyId, isActive: true }, select: { id: true } }),
+      tx.product.findMany({ where: { id: { in: draft.productIds }, entityId: companyId, isActive: true }, select: { id: true } }),
+    ]);
+    if (!entity || !vendor || products.length !== draft.productIds.length)
+      throw new BadRequestException('供應商或商品不屬於目前公司，或公司／主檔已停用');
+    if (draft.currency === entity.baseCurrency && !draft.fxRate.equals(1))
+      throw new BadRequestException('採購幣別與公司本位幣相同時，匯率必須為 1');
+    return tx.purchaseOrder.create({
+      data: {
+        entityId: companyId, vendorId: draft.vendorId, orderDate: draft.orderDate, status: 'pending',
+        totalAmountOriginal: draft.totalAmountOriginal, totalAmountCurrency: draft.currency,
+        totalAmountFxRate: draft.fxRate, totalAmountBase: draft.totalAmountBase, notes: draft.notes,
+        ...(source ? {
+          sourceB2bRequestId: source.requestId,
+          sourceRequestKey: source.requestKey,
+          sourcePayloadHash: source.payloadHash,
+        } : {}),
+        items: { create: draft.items.map((item, index) => ({
+          ...item,
+          ...(source ? { sourceB2bRequestItemId: source.requestItemIds[index] } : {}),
+        })) },
+      },
+      include: { items: true, vendor: true },
+    });
+  }
+
+  async create(entityId: string, dto: CreatePurchaseOrderDto) {
+    const companyId = this.companyId(entityId);
+    const draft = this.preparePurchaseOrder(dto);
+    return this.prisma.$transaction(
+      (tx) => this.createInTransaction(tx, companyId, draft),
+      { maxWait: 5_000, timeout: 20_000 },
+    );
+  }
+
+  private b2bPayloadHash(input: {
+    entityId: string;
+    requestId: string;
+    vendorId: string;
+    orderDate: Date;
+    currency: string;
+    fxRate: number;
+    items: { requestItemId: string; qty: number; unitCost: number }[];
+  }) {
+    return createHash('sha256').update(JSON.stringify({
+      entityId: input.entityId,
+      requestId: input.requestId,
+      vendorId: input.vendorId,
+      orderDate: input.orderDate.toISOString(),
+      currency: input.currency,
+      fxRate: new Prisma.Decimal(input.fxRate).toFixed(6),
+      items: input.items.map((item) => ({
+        requestItemId: item.requestItemId,
+        qty: item.qty,
+        unitCost: new Prisma.Decimal(item.unitCost).toFixed(2),
+      })).sort((a, b) => a.requestItemId.localeCompare(b.requestItemId)),
+    })).digest('hex');
+  }
+
+  private assertSameB2bRequestKey<T extends {
+    sourceB2bRequestId: string | null;
+    sourcePayloadHash: string | null;
+  }>(
+    existing: T,
+    requestId: string,
+    payloadHash: string,
+  ): T {
+    if (existing.sourceB2bRequestId !== requestId || existing.sourcePayloadHash !== payloadHash)
+      throw new ConflictException('此採購請求編號已用於不同內容');
+    return existing;
+  }
+
+  async createFromB2bRequest(entityId: string, dto: CreateB2bPurchaseOrderDto) {
+    const companyId = this.companyId(entityId);
+    if (!dto || typeof dto !== 'object' || Array.isArray(dto))
+      throw new BadRequestException('採購單內容格式錯誤');
+    const input = plainToInstance(CreateB2bPurchaseOrderDto, dto);
+    if (validateSync(input, { whitelist: true, forbidNonWhitelisted: true }).length)
+      throw new BadRequestException('請確認需求、供應商、日期、幣別、正數數量／成本及匯率');
+    const requestId = input.requestId.toLowerCase();
+    const requestKey = input.requestKey.toLowerCase();
+    const selected = input.items.map((item) => ({
+      requestItemId: item.requestItemId.toLowerCase(), qty: item.qty, unitCost: item.unitCost,
+    }));
+    if (new Set(selected.map((item) => item.requestItemId)).size !== selected.length)
+      throw new BadRequestException('同一需求明細不可重複選取');
+    const orderDate = new Date(input.orderDate);
+    const vendorId = input.vendorId;
+    const currency = input.currency;
+    const fxRate = input.fxRate;
+    const payloadHash = this.b2bPayloadHash({
+      entityId: companyId, requestId, vendorId, orderDate, currency, fxRate, items: selected,
+    });
+
+    const loadExisting = (db: PrismaService | Prisma.TransactionClient) => db.purchaseOrder.findFirst({
+      where: { entityId: companyId, sourceRequestKey: requestKey },
+      include: { items: true, vendor: true },
+    });
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // The request row serializes shortage calculations against another PO
+        // creation or a concurrent staff review/confirmation.
+        await tx.$queryRaw`SELECT id FROM b2b_purchase_requests WHERE id=${requestId} AND entity_id=${companyId} FOR UPDATE`;
+        const request = await tx.b2bPurchaseRequest.findFirst({
+          where: { id: requestId, entityId: companyId },
+          select: { id: true, status: true, reviewedAt: true, items: { select: {
+            id: true, productId: true, quantity: true, confirmedQuantity: true,
+          } } },
+        });
+        if (!request) throw new NotFoundException('找不到此客戶需求');
+        const existing = await loadExisting(tx);
+        if (existing) return this.assertSameB2bRequestKey(existing, requestId, payloadHash);
+        if (request.status !== 'needs_adjustment')
+          throw new ConflictException('僅核庫不足的需求可建立供應商採購單');
+        const sourceItems = new Map(request.items.map((item) => [item.id, item]));
+        if (!request.reviewedAt || request.items.some((item) => item.confirmedQuantity === null ||
+          item.confirmedQuantity < 0 || item.confirmedQuantity > item.quantity))
+          throw new ConflictException('此需求尚未完成人工核庫');
+        const lastReviewAt = request.reviewedAt;
+        // Receipt claims a PO row before posting stock and its final status.
+        // Lock linked rows so the following status/timestamp check sees any
+        // concurrent receipt before permitting another order for this shortage.
+        await tx.$queryRaw`SELECT id FROM purchase_orders WHERE entity_id=${companyId} AND source_b2b_request_id=${requestId} FOR UPDATE`;
+        const priorOrders = await tx.purchaseOrder.findMany({
+          where: { entityId: companyId, sourceB2bRequestId: requestId },
+          select: { status: true, updatedAt: true, items: { select: { sourceB2bRequestItemId: true, qty: true } } },
+        });
+        if (hasReceiptSinceReview(lastReviewAt, priorOrders))
+          throw new ConflictException('採購單已於上次核庫後收貨，請先重新人工核庫');
+        const ordered = new Map<string, Prisma.Decimal>();
+        for (const order of priorOrders) {
+          if (CLOSED_B2B_PURCHASE_STATUSES.includes(order.status)) continue;
+          for (const item of order.items) {
+            if (!item.sourceB2bRequestItemId) continue;
+            ordered.set(item.sourceB2bRequestItemId,
+              (ordered.get(item.sourceB2bRequestItemId) || new Prisma.Decimal(0)).add(item.qty));
+          }
+        }
+        for (const item of selected) {
+          const source = sourceItems.get(item.requestItemId);
+          if (!source) throw new BadRequestException('採購明細不屬於此客戶需求');
+          const shortage = new Prisma.Decimal(source.quantity - source.confirmedQuantity!);
+          const remaining = shortage.sub(ordered.get(source.id) || 0);
+          if (new Prisma.Decimal(item.qty).gt(remaining))
+            throw new ConflictException('採購數量超過尚未採購的缺貨量');
+        }
+        const draft = this.preparePurchaseOrder({
+          vendorId, orderDate: orderDate.toISOString(), currency, fxRate,
+          items: selected.map((item) => ({
+            productId: sourceItems.get(item.requestItemId)!.productId,
+            qty: item.qty,
+            unitCost: item.unitCost,
+          })),
+        });
+        return this.createInTransaction(tx, companyId, draft, {
+          requestId, requestKey, payloadHash,
+          requestItemIds: selected.map((item) => item.requestItemId),
+        });
+      }, { maxWait: 5_000, timeout: 20_000 });
+    } catch (error) {
+      // A key can race across two *different* B2B request rows. The unique
+      // database constraint decides that race; compare the committed payload.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const existing = await loadExisting(this.prisma);
+        if (existing) return this.assertSameB2bRequestKey(existing, requestId, payloadHash);
+      }
+      throw error;
+    }
+  }
+
+  async b2bProcurement(entityId: string, requestId: string) {
+    const companyId = this.companyId(entityId);
+    const request = await this.prisma.b2bPurchaseRequest.findFirst({
+      where: { id: requestId, entityId: companyId },
+      select: { reviewedAt: true, items: { select: { id: true, quantity: true, confirmedQuantity: true } } },
+    });
+    if (!request) throw new NotFoundException('找不到此客戶需求');
+    if (!request.reviewedAt || request.items.some((item) => item.confirmedQuantity === null))
+      throw new ConflictException('此需求尚未完成人工核庫');
+    const orders = await this.prisma.purchaseOrder.findMany({
+      where: { entityId: companyId, sourceB2bRequestId: requestId },
+      select: {
+        id: true, status: true, createdAt: true, updatedAt: true,
+        vendor: { select: { name: true } },
+        items: { select: { sourceB2bRequestItemId: true, qty: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const ordered = new Map<string, Prisma.Decimal>();
+    for (const order of orders) {
+      if (CLOSED_B2B_PURCHASE_STATUSES.includes(order.status)) continue;
+      for (const item of order.items) {
+        if (!item.sourceB2bRequestItemId) continue;
+        ordered.set(item.sourceB2bRequestItemId,
+          (ordered.get(item.sourceB2bRequestItemId) || new Prisma.Decimal(0)).add(item.qty));
+      }
+    }
+    return {
+      requiresFreshReview: hasReceiptSinceReview(request.reviewedAt, orders),
+      items: request.items.map((item) => ({
+        requestItemId: item.id,
+        requested: item.quantity,
+        confirmed: item.confirmedQuantity!,
+        shortage: item.quantity - item.confirmedQuantity!,
+        ordered: (ordered.get(item.id) || new Prisma.Decimal(0)).toNumber(),
+      })),
+      purchaseOrders: orders.map((order) => ({
+        id: order.id, status: order.status, vendorName: order.vendor.name, createdAt: order.createdAt,
+      })),
+    };
   }
 
   async options(entityId: string) {

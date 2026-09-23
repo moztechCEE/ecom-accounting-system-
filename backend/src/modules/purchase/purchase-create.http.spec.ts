@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { PurchaseController } from './purchase.controller';
 import { PurchaseService } from './purchase.service';
+import { PurchaseB2bQueueService } from './purchase-b2b-queue.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { EntityAccessService } from '../../common/entity-access/entity-access.service';
 import { InventoryService } from '../inventory/inventory.service';
@@ -115,6 +116,13 @@ function fixture() {
         .map((k) => [k, row[k]]),
     );
   const db: any = {
+    b2bPurchaseRequest: {
+      findMany: jest.fn(async ({ where }: any) => where.entityId === 'entity-a' ? [{
+        id: 'b2b-a', requestNumber: 'B2B-001', createdAt: new Date('2026-09-24T00:00:00Z'),
+        customerId: 'private-customer', subtotal: '999.00',
+        items: [{ id: 'line-a', sku: 'A', name: 'Product A', quantity: 3, confirmedQuantity: 1, unitPrice: '999.00' }],
+      }] : []),
+    },
     entity: {
       findFirst: jest.fn(async ({ where }: any) =>
         where.id === 'entity-a' && where.isActive
@@ -198,6 +206,7 @@ describe('Manual purchase-order HTTP boundary', () => {
       controllers: [PurchaseController],
       providers: [
         PurchaseService,
+        PurchaseB2bQueueService,
         PurchaseTestStrategy,
         { provide: PrismaService, useValue: db },
         { provide: EntityAccessService, useValue: companyAccess },
@@ -264,6 +273,23 @@ describe('Manual purchase-order HTTP boundary', () => {
         { id: 'product-b', name: 'Product B', sku: 'B' },
       ],
     });
+  });
+
+  it('gives a purchasing-only creator a company-scoped shortage queue without sales prices', async () => {
+    const path = '/api/v1/purchase-orders/b2b-requests/shortages?entityId=entity-a';
+    const response = await request(app.getHttpServer())
+      .get(path).set('Authorization', auth()).expect(200);
+    expect(response.body).toEqual({ items: [{
+      id: 'b2b-a', requestNumber: 'B2B-001', createdAt: '2026-09-24T00:00:00.000Z',
+      items: [{ requestItemId: 'line-a', sku: 'A', name: 'Product A', requested: 3, confirmed: 1, shortage: 2 }],
+    }] });
+    expect(JSON.stringify(response.body)).not.toContain('private-customer');
+    expect(JSON.stringify(response.body)).not.toContain('999.00');
+    expect(db.b2bPurchaseRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { entityId: 'entity-a', status: 'needs_adjustment' } }));
+    expect(companyAccess.assertAccess).toHaveBeenCalledWith('buyer', 'purchasing', 'entity-a');
+    await request(app.getHttpServer()).get(path).set('Authorization', auth('reader')).expect(403);
+    await request(app.getHttpServer()).get(path).set('Authorization', auth('outsider')).expect(403);
+    await request(app.getHttpServer()).get('/api/v1/purchase-orders/b2b-requests/shortages?entityId=entity-b').set('Authorization', auth()).expect(403);
   });
 
   it('requires authentication and create permission for orders and options', async () => {
@@ -366,5 +392,74 @@ describe('Manual purchase-order HTTP boundary', () => {
       .expect(403);
     expect(inventory.adjustStock).not.toHaveBeenCalled();
     expect(cost.recordPurchaseCost).not.toHaveBeenCalled();
+  });
+
+  it('guards B2B procurement with purchasing company access and create permission, and routes before :id', async () => {
+    const service = app.get(PurchaseService);
+    const create = jest
+      .spyOn(service, 'createFromB2bRequest')
+      .mockResolvedValue({ id: 'po-b2b' } as any);
+    const summary = jest
+      .spyOn(service, 'b2bProcurement')
+      .mockResolvedValue({ items: [], purchaseOrders: [] });
+    const body = {
+      requestId: 'ff837db5-17ce-478b-bba7-0b6c14656c8f',
+      requestKey: '4cfce6a0-df94-4bda-9725-8e500e1f2777',
+      vendorId: 'vendor-a',
+      orderDate: '2026-09-24',
+      currency: 'TWD',
+      fxRate: 1,
+      items: [
+        {
+          requestItemId: '67e95b8e-0432-4754-b3ac-5e14bcc791f2',
+          qty: 1,
+          unitCost: 12,
+        },
+      ],
+    };
+    const poUrl = '/api/v1/purchase-orders/from-b2b-request?entityId=entity-a';
+    const summaryUrl = `/api/v1/purchase-orders/b2b-requests/${body.requestId}/procurement?entityId=entity-a`;
+    try {
+      await request(app.getHttpServer()).post(poUrl).send(body).expect(401);
+      await request(app.getHttpServer())
+        .post(poUrl)
+        .set('Authorization', auth('reader'))
+        .send(body)
+        .expect(403);
+      await request(app.getHttpServer())
+        .get(summaryUrl)
+        .set('Authorization', auth('reader'))
+        .expect(403);
+      await request(app.getHttpServer())
+        .post(poUrl.replace('entity-a', 'entity-b'))
+        .set('Authorization', auth())
+        .send(body)
+        .expect(403);
+      expect(create).not.toHaveBeenCalled();
+      expect(summary).not.toHaveBeenCalled();
+
+      await request(app.getHttpServer())
+        .post(poUrl)
+        .set('Authorization', auth())
+        .send(body)
+        .expect(201);
+      await request(app.getHttpServer())
+        .get(summaryUrl)
+        .set('Authorization', auth())
+        .expect(200);
+      expect(create).toHaveBeenCalledWith(
+        'entity-a',
+        expect.objectContaining(body),
+      );
+      expect(summary).toHaveBeenCalledWith('entity-a', body.requestId);
+      expect(companyAccess.assertAccess).toHaveBeenCalledWith(
+        'buyer',
+        'purchasing',
+        'entity-a',
+      );
+    } finally {
+      create.mockRestore();
+      summary.mockRestore();
+    }
   });
 });

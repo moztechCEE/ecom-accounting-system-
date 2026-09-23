@@ -31,6 +31,8 @@ export const NAVIGATION: NavigationItem[] = [
   ] },
   { key: 'inventory', label: '採購庫存', children: [
     { key: '/purchasing/orders', label: '採購訂單', permissions: ['purchase_orders:read'] },
+    { key: '/purchasing/b2b-shortages', label: '客戶缺貨採購', permissions: ['purchase_orders:create'] },
+    { key: '/purchasing/supplier-accounts', label: '供應商帳號', permissions: ['purchase_orders:read'] },
     { key: '/vendors', label: '供應商', permissions: ['purchase_orders:read', 'purchase_orders:create', 'accounts:read'] },
     { key: '/inventory/products', label: '產品與庫存', permissions: ['inventory:read'] },
     { key: '/inventory/handover-reconciliation', label: '交運待核銷', permissions: ['inventory:read'] },

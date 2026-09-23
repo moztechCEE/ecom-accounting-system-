@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Alert, Card, Typography, Table, Button, Tag, message, Modal, Form, Select, InputNumber, Space, Input } from 'antd'
 import { FileTextOutlined, ReloadOutlined, ScanOutlined, CalculatorOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import { motion } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
 import { purchaseService, PurchaseOrder } from '../services/purchase.service'
 import type { CreatePurchaseOrderDto, LandedCostInput, LandedCostPreview, PurchaseOrderOptions } from '../services/purchase.service'
@@ -277,6 +277,7 @@ const PurchaseOrdersPage: React.FC = () => {
 
   const columns = [
     { title: '採購單號', dataIndex: 'id', key: 'id', render: (id: string) => id.slice(0, 8) },
+    { title: '來源需求', dataIndex: 'sourceB2bRequestId', key: 'sourceB2bRequestId', render: (id: string | null) => id ? hasAnyPermission(user, ['sales_orders:read']) ? <Link to="/sales/b2b">B2B 需求 {id.slice(0, 8)}</Link> : `B2B 需求 ${id.slice(0, 8)}` : <Text type="secondary">手動建立</Text> },
     { 
       title: '供應商', 
       dataIndex: ['vendor', 'name'], 

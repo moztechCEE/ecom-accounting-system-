@@ -16,11 +16,13 @@ import {
   B2bAccountUpdateDto,
   B2bCatalogDto,
   B2bConfirmDto,
+  B2bIssueQuoteDto,
   B2bLoginDto,
   B2bPriceDto,
   B2bRequestDto,
   B2bReviewDto,
   B2bSupplierAccountDto,
+  B2bWithdrawQuoteDto,
 } from './b2b.dto';
 
 const sha256 = (value: string) =>
@@ -49,7 +51,13 @@ const accountSelect = {
 } as const;
 const includeRequest = {
   items: { orderBy: { sortOrder: 'asc' as const } },
-  customer: { select: { name: true, companyName: true } },
+  customer: { select: { name: true, companyName: true, taxId: true } },
+  issuedQuotes: { orderBy: { version: 'desc' as const }, take: 1,
+    select: { id: true, version: true, status: true, acceptedAt: true,
+      acceptedByAccountId: true } },
+} as const;
+const includeIssuedQuote = {
+  quotation: { include: { items: { orderBy: { sortOrder: 'asc' as const } } } },
 } as const;
 // Fixed dummy hash ensures absent accounts still perform the same bcrypt work.
 const dummyHash =
@@ -68,6 +76,7 @@ type RequestRecord = Prisma.B2bPurchaseRequestGetPayload<{
   include: typeof includeRequest;
 }>;
 export function publicRequest(row: RequestRecord) {
+  const latestQuote = row.issuedQuotes?.[0];
   return {
     id: row.id,
     requestNumber: row.requestNumber,
@@ -84,6 +93,9 @@ export function publicRequest(row: RequestRecord) {
     reviewNote: row.reviewNote,
     deliveryDate: row.deliveryDate,
     quotePath: `/b2b/requests/${row.id}`,
+    quoteVersion: latestQuote?.version || null,
+    quoteStatus: latestQuote?.status || null,
+    formalQuotePath: latestQuote ? `/b2b/requests/${row.id}/quote/${latestQuote.version}` : null,
     items: row.items.map((i) => ({
       id: i.id,
       productId: i.productId,
@@ -665,8 +677,8 @@ export class B2bService {
         include: includeRequest,
       });
       if (!row) throw new NotFoundException('找不到此報價需求');
-      if (row.status !== 'pending_stock_review')
-        throw new ConflictException('此需求已確認，請重新載入');
+      if (!['pending_stock_review', 'needs_adjustment'].includes(row.status))
+        throw new ConflictException('此需求已確認或已進入報價，請重新載入');
       const quantities = new Map(
         dto.items.map((i) => [i.id, i.confirmedQuantity]),
       );
@@ -683,6 +695,32 @@ export class B2bService {
       );
       if (!complete && !dto.reviewNote?.trim())
         throw new BadRequestException('數量不足時請填寫差異說明');
+      const openOrders = await tx.purchaseOrder.findMany({
+        where: { entityId: dto.entityId, sourceB2bRequestId: id,
+          status: { notIn: ['cancelled', 'received', 'completed'] } },
+        select: { id: true, items: { select: {
+          sourceB2bRequestItemId: true, qty: true,
+        } } },
+      });
+      const openByLine = new Map<string, { qty: Prisma.Decimal; orderIds: Set<string> }>();
+      for (const order of openOrders) for (const item of order.items) {
+        if (!item.sourceB2bRequestItemId) continue;
+        const prior = openByLine.get(item.sourceB2bRequestItemId) || {
+          qty: new Prisma.Decimal(0), orderIds: new Set<string>(),
+        };
+        prior.qty = prior.qty.add(item.qty);
+        prior.orderIds.add(order.id);
+        openByLine.set(item.sourceB2bRequestItemId, prior);
+      }
+      for (const item of row.items) {
+        const open = openByLine.get(item.id);
+        if (!open) continue;
+        const shortage = new Prisma.Decimal(item.quantity - quantities.get(item.id)!);
+        if (shortage.lt(open.qty))
+          throw new ConflictException(
+            `尚有未收採購單 ${[...open.orderIds].join('、')}，請先處理後再提高 ${item.sku} 的核庫數量`,
+          );
+      }
       for (const item of row.items)
         await tx.b2bRequestItem.update({
           where: { id: item.id },
@@ -701,9 +739,276 @@ export class B2bService {
         },
         include: includeRequest,
       });
+      await tx.b2bStockReview.create({
+        data: {
+          requestId: row.id,
+          reviewedBy: actorId,
+          resultStatus: updated.status,
+          confirmedQuantities: row.items.map((item) => ({
+            requestItemId: item.id,
+            confirmedQuantity: quantities.get(item.id)!,
+          })),
+          reviewNote: dto.reviewNote?.trim() || null,
+          deliveryDate: updated.deliveryDate,
+        },
+      });
       // Human review records availability only. No order, reservation, shipment, or ledger write occurs here.
       return publicRequest(updated);
     });
+  }
+
+  private publicFormalQuote(request: RequestRecord, issued: any) {
+    const quotation = issued.quotation;
+    return {
+      id: issued.id,
+      requestId: request.id,
+      requestNumber: request.requestNumber,
+      customerPoNumber: request.customerPoNumber,
+      quotationNo: quotation.quotationNo,
+      quotationDate: quotation.quotationDate.toISOString().slice(0, 10),
+      sellerName: issued.sellerName,
+      sellerTaxId: issued.sellerTaxId,
+      buyerName: issued.buyerName,
+      buyerTaxId: issued.buyerTaxId,
+      version: issued.version,
+      status: issued.status,
+      validUntil: quotation.validUntil?.toISOString().slice(0, 10) || null,
+      acceptedAt: issued.acceptedAt,
+      currency: 'TWD' as const,
+      subtotal: quotation.subtotalOriginal.toFixed(2),
+      tax: quotation.taxAmountOriginal.toFixed(2),
+      total: quotation.totalAmountOriginal.toFixed(2),
+      deliveryDate: issued.deliveryDate?.toISOString().slice(0, 10) || null,
+      withdrawnAt: issued.withdrawnAt,
+      withdrawalReason: issued.withdrawalReason,
+      paymentTerms: quotation.paymentTerms,
+      deliveryTerms: quotation.deliveryTerms,
+      items: request.items.map((item, index) => ({
+        requestItemId: item.id,
+        productId: item.productId,
+        sku: item.sku,
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice.toFixed(2),
+        lineTotal: item.lineTotal.toFixed(2),
+        taxAmount: quotation.items[index].taxAmountOriginal.toFixed(2),
+        total: quotation.items[index].lineTotalOriginal.toFixed(2),
+      })),
+      quotePath: `/b2b/requests/${request.id}/quote/${issued.version}`,
+    };
+  }
+
+  private async assertWmsReady(request: RequestRecord, tx: Prisma.TransactionClient) {
+    const productIds = request.items.map((item) => item.productId);
+    const products = await tx.product.findMany({
+      where: { id: { in: productIds }, entityId: request.entityId, isActive: true },
+      select: { id: true, type: true, hasSerialNumbers: true, barcode: true },
+    });
+    if (products.length !== productIds.length || products.some((product) =>
+      product.type !== ProductType.SIMPLE || product.hasSerialNumbers || !product.barcode?.trim())) {
+      throw new BadRequestException('部分商品尚未具備 WMS 條碼或序號配置，不能出具正式報價或確認接單');
+    }
+    let brandMapping: Record<string, Record<string, string>>;
+    try {
+      brandMapping = JSON.parse(process.env.WMS_DISPATCH_PRODUCT_BRANDS_JSON || '{}');
+      if (!brandMapping || typeof brandMapping !== 'object' || Array.isArray(brandMapping))
+        throw new Error('mapping must be an object');
+    } catch {
+      throw new BadRequestException('WMS 商品品牌對照尚未設定');
+    }
+    const brands = new Set(products.map((product) => brandMapping?.[request.entityId]?.[product.id]));
+    const brand = [...brands][0];
+    if (brands.size !== 1 || typeof brand !== 'string' || !brand.trim() || brand.length > 128)
+      throw new BadRequestException('商品缺少一致的 WMS 品牌對照，不能出具正式報價或確認接單');
+  }
+
+  async issueQuote(id: string, dto: B2bIssueQuoteDto, actorId: string) {
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM b2b_purchase_requests WHERE id=${id} AND entity_id=${dto.entityId} FOR UPDATE`;
+      const request = await tx.b2bPurchaseRequest.findFirst({
+        where: { id, entityId: dto.entityId }, include: includeRequest,
+      });
+      if (!request) throw new NotFoundException('找不到此報價需求');
+      if (request.status !== 'stock_confirmed' || !request.reviewedAt ||
+          request.items.some((item) => item.confirmedQuantity !== item.quantity))
+        throw new ConflictException('須先人工全數核庫，才可開立正式報價');
+      const date = dto.validUntil ? new Date(`${dto.validUntil}T00:00:00.000Z`) : null;
+      if (date && (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== dto.validUntil))
+        throw new BadRequestException('報價有效期限不是有效日期');
+      if (date && Date.now() >= new Date(`${dto.validUntil}T16:00:00.000Z`).getTime())
+        throw new BadRequestException('報價有效期限不得早於今日台灣時間');
+      const paymentTerms = dto.paymentTerms?.trim() || null;
+      const deliveryTerms = dto.deliveryTerms?.trim() || null;
+      const previous = await tx.b2bIssuedQuote.findFirst({
+        where: { requestId: id }, orderBy: { version: 'desc' }, include: includeIssuedQuote,
+      });
+      if (previous?.status === 'accepted')
+        throw new ConflictException('客戶已接受報價，不可重新開立版本');
+      if (previous?.status === 'sent' &&
+          (previous.quotation.validUntil?.toISOString().slice(0, 10) || null) === (dto.validUntil || null) &&
+          previous.quotation.paymentTerms === paymentTerms &&
+          previous.quotation.deliveryTerms === deliveryTerms)
+        return this.publicFormalQuote(request, previous);
+      await this.assertWmsReady(request, tx);
+      if (previous?.status === 'sent') {
+        await tx.b2bIssuedQuote.update({ where: { id: previous.id }, data: { status: 'superseded' } });
+        await tx.salesQuotation.update({ where: { id: previous.quotationId }, data: { status: 'expired' } });
+      }
+      const version = (previous?.version || 0) + 1;
+      const taxParts = request.items.map((item, index) => {
+        const exact = request.subtotal.isZero()
+          ? new Prisma.Decimal(0)
+          : request.tax.mul(100).mul(item.lineTotal).div(request.subtotal);
+        const cents = exact.floor().toNumber();
+        return { index, cents, remainder: exact.sub(cents) };
+      });
+      let remaining = request.tax.mul(100).toNumber() - taxParts.reduce((sum, part) => sum + part.cents, 0);
+      if (!Number.isSafeInteger(remaining) || remaining < 0)
+        throw new BadRequestException('報價稅額快照無法配置');
+      taxParts.sort((a, b) => b.remainder.comparedTo(a.remainder) || a.index - b.index);
+      for (const part of taxParts) {
+        if (remaining-- <= 0) break;
+        part.cents++;
+      }
+      const taxByIndex = new Map(taxParts.map((part) => [part.index, new Prisma.Decimal(part.cents).div(100)]));
+      const quotation = await tx.salesQuotation.create({
+        data: {
+          entityId: request.entityId,
+          customerId: request.customerId,
+          quotationNo: `B2B-QT-${request.id.toUpperCase()}-V${version}`,
+          quotationDate: new Date(),
+          validUntil: date,
+          currency: 'TWD',
+          status: 'sent',
+          paymentTerms,
+          deliveryTerms,
+          reference: request.requestNumber,
+          notes: request.reviewNote || request.note,
+          createdBy: actorId,
+          subtotalOriginal: request.subtotal,
+          discountAmountOriginal: new Prisma.Decimal(0),
+          taxAmountOriginal: request.tax,
+          totalAmountOriginal: request.total,
+          items: { create: request.items.map((item, index) => ({
+            productId: item.productId,
+            itemName: item.name,
+            itemSpec: item.sku,
+            quantity: item.quantity,
+            unitPriceOriginal: item.unitPrice,
+            discountOriginal: new Prisma.Decimal(0),
+            taxRate: new Prisma.Decimal(5),
+            taxAmountOriginal: taxByIndex.get(index)!,
+            lineTotalOriginal: item.lineTotal.add(taxByIndex.get(index)!),
+            sortOrder: index,
+          })) },
+        },
+        include: { items: { orderBy: { sortOrder: 'asc' } } },
+      });
+      const seller = await this.company(request.entityId, tx);
+      const issued = await tx.b2bIssuedQuote.create({
+        data: {
+          requestId: id, quotationId: quotation.id, version, issuedBy: actorId,
+          sellerName: seller.name, sellerTaxId: seller.taxId,
+          buyerName: request.customer.companyName || request.customer.name,
+          buyerTaxId: request.customer.taxId,
+          deliveryDate: request.deliveryDate,
+        },
+      });
+      return this.publicFormalQuote(request, { ...issued, quotation });
+    }, { maxWait: 5_000, timeout: 20_000 });
+  }
+
+  async formalQuote(identity: B2bIdentity, id: string, version: number) {
+    if (!Number.isSafeInteger(version) || version < 1)
+      throw new NotFoundException('找不到此正式報價');
+    const request = await this.db.b2bPurchaseRequest.findFirst({
+      where: { id, entityId: identity.entityId, customerId: identity.customerId },
+      include: includeRequest,
+    });
+    if (!request) throw new NotFoundException('找不到此正式報價');
+    const issued = await this.db.b2bIssuedQuote.findFirst({
+      where: { requestId: id, version }, include: includeIssuedQuote,
+    });
+    if (!issued) throw new NotFoundException('找不到此正式報價');
+    return this.publicFormalQuote(request, issued);
+  }
+
+  async acceptQuote(identity: B2bIdentity, id: string, version: number) {
+    if (!Number.isSafeInteger(version) || version < 1)
+      throw new NotFoundException('找不到此正式報價');
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM b2b_purchase_requests WHERE id=${id} AND entity_id=${identity.entityId} AND customer_id=${identity.customerId} FOR UPDATE`;
+      const request = await tx.b2bPurchaseRequest.findFirst({
+        where: { id, entityId: identity.entityId, customerId: identity.customerId },
+        include: includeRequest,
+      });
+      if (!request) throw new NotFoundException('找不到此正式報價');
+      const issued = await tx.b2bIssuedQuote.findFirst({
+        where: { requestId: id, version }, include: includeIssuedQuote,
+      });
+      if (!issued) throw new NotFoundException('找不到此正式報價');
+      if (request.issuedQuotes[0]?.id !== issued.id || issued.status === 'superseded' || issued.status === 'withdrawn')
+        throw new ConflictException('此報價版本已失效，請查看最新版本');
+      if (issued.status === 'accepted') {
+        if (!issued.acceptedAt || !issued.acceptedByAccountId)
+          throw new ConflictException('此報價缺少客戶接受紀錄，請人工查核');
+        return this.publicFormalQuote(request, issued);
+      }
+      const validUntil = issued.quotation.validUntil?.toISOString().slice(0, 10);
+      if (validUntil && Date.now() >= new Date(`${validUntil}T16:00:00.000Z`).getTime())
+        throw new ConflictException('正式報價已逾有效期限，請聯絡業務重新開立');
+      const acceptedAt = new Date();
+      const updated = await tx.b2bIssuedQuote.update({
+        where: { id: issued.id },
+        data: { status: 'accepted', acceptedAt, acceptedByAccountId: identity.id },
+      });
+      await tx.salesQuotation.update({ where: { id: issued.quotationId }, data: { status: 'accepted' } });
+      return this.publicFormalQuote(request, { ...updated, quotation: issued.quotation });
+    });
+  }
+
+  async withdrawQuote(id: string, version: number, dto: B2bWithdrawQuoteDto, actorId: string) {
+    if (!Number.isSafeInteger(version) || version < 1)
+      throw new NotFoundException('找不到此正式報價');
+    const reason = dto.reason?.trim();
+    if (!reason || reason.length < 10 || reason.length > 1000)
+      throw new BadRequestException('撤回理由至少 10 字且不可超過 1000 字');
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM b2b_purchase_requests WHERE id=${id} AND entity_id=${dto.entityId} FOR UPDATE`;
+      const request = await tx.b2bPurchaseRequest.findFirst({
+        where: { id, entityId: dto.entityId }, include: includeRequest,
+      });
+      if (!request) throw new NotFoundException('找不到此報價需求');
+      const issued = await tx.b2bIssuedQuote.findFirst({
+        where: { requestId: id, version }, include: includeIssuedQuote,
+      });
+      if (!issued) throw new NotFoundException('找不到此正式報價');
+      if (issued.status === 'withdrawn') {
+        if (issued.withdrawalReason !== reason)
+          throw new ConflictException('此報價已用不同理由撤回，請重新載入');
+        return this.publicFormalQuote(request, issued);
+      }
+      if (request.salesOrderId || request.status === 'order_confirmed')
+        throw new ConflictException('已建立銷售訂單，不可撤回已接受的報價');
+      if (request.status !== 'stock_confirmed' || request.issuedQuotes[0]?.id !== issued.id ||
+          issued.status !== 'accepted' || !issued.acceptedAt || !issued.acceptedByAccountId)
+        throw new ConflictException('只能撤回目前已接受且尚未接單的正式報價');
+      const withdrawnAt = new Date();
+      const withdrawn = await tx.b2bIssuedQuote.update({
+        where: { id: issued.id },
+        data: { status: 'withdrawn', withdrawnAt, withdrawnBy: actorId, withdrawalReason: reason },
+      });
+      await tx.salesQuotation.update({ where: { id: issued.quotationId }, data: { status: 'withdrawn' } });
+      await tx.b2bRequestItem.updateMany({
+        where: { requestId: id }, data: { confirmedQuantity: null },
+      });
+      await tx.b2bPurchaseRequest.update({
+        where: { id },
+        data: { status: 'pending_stock_review', reviewedAt: null, reviewedBy: null,
+          reviewNote: null, deliveryDate: null },
+      });
+      return this.publicFormalQuote(request, { ...withdrawn, quotation: issued.quotation });
+    }, { maxWait: 5_000, timeout: 20_000 });
   }
 
   async confirm(id: string, dto: B2bConfirmDto, actorId: string) {
@@ -738,6 +1043,9 @@ export class B2bService {
         row.items.some((item) => item.confirmedQuantity !== item.quantity || item.quantity < 1)) {
         throw new ConflictException('須先由人員全數核庫；數量有差異時應取得客戶重新確認');
       }
+      if (row.issuedQuotes[0]?.status !== 'accepted' ||
+        !row.issuedQuotes[0]?.acceptedAt || !row.issuedQuotes[0]?.acceptedByAccountId)
+        throw new ConflictException('須先開立正式報價並取得客戶登入確認');
       if (row.currency !== 'TWD' ||
         !row.items.reduce((sum, item) => sum.add(item.lineTotal), new Prisma.Decimal(0)).equals(row.subtotal) ||
         !row.subtotal.add(row.tax).equals(row.total)) {
@@ -746,27 +1054,7 @@ export class B2bService {
       const totalTaxCents = row.tax.mul(100).toNumber();
       if (!Number.isSafeInteger(totalTaxCents) || totalTaxCents < 0)
         throw new BadRequestException('報價稅額超出支援範圍');
-      const productIds = row.items.map((item) => item.productId);
-      const products = await tx.product.findMany({
-        where: { id: { in: productIds }, entityId: row.entityId, isActive: true },
-        select: { id: true, type: true, hasSerialNumbers: true, barcode: true },
-      });
-      if (products.length !== productIds.length || products.some((product) =>
-        product.type !== ProductType.SIMPLE || product.hasSerialNumbers || !product.barcode?.trim())) {
-        throw new BadRequestException('部分商品尚未具備 WMS 條碼或序號配置，不能確認接單');
-      }
-      let brandMapping: Record<string, Record<string, string>>;
-      try {
-        brandMapping = JSON.parse(process.env.WMS_DISPATCH_PRODUCT_BRANDS_JSON || '{}');
-        if (!brandMapping || typeof brandMapping !== 'object' || Array.isArray(brandMapping))
-          throw new Error('mapping must be an object');
-      } catch {
-        throw new BadRequestException('WMS 商品品牌對照尚未設定');
-      }
-      const brands = new Set(products.map((product) => brandMapping?.[row.entityId]?.[product.id]));
-      const brand = [...brands][0];
-      if (brands.size !== 1 || typeof brand !== 'string' || !brand.trim() || brand.length > 128)
-        throw new BadRequestException('商品缺少一致的 WMS 品牌對照，不能確認接單');
+      await this.assertWmsReady(row, tx);
       const taxParts = row.items.map((item, index) => {
         const exact = row.subtotal.isZero()
           ? new Prisma.Decimal(0)

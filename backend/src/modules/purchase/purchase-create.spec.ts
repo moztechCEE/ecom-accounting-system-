@@ -31,7 +31,7 @@ describe('Manual purchase-order creation', () => {
         create: jest
           .fn()
           .mockImplementation(({ data }) =>
-            Promise.resolve({ id: 'po-a', ...data }),
+            Promise.resolve({ id: 'po-a', ...data, items: data.items.create }),
           ),
       },
     };
@@ -100,11 +100,11 @@ describe('Manual purchase-order creation', () => {
     const result = await service.create('entity-a', input);
     expect(result.totalAmountCurrency).toBe('USD');
     expect(result.totalAmountOriginal.toFixed(2)).toBe('0.03');
-    expect(result.items.create[0].unitCostBase.toFixed(2)).toBe('0.02');
+    expect(result.items[0].unitCostBase.toFixed(2)).toBe('0.02');
     expect(result.totalAmountBase.toFixed(2)).toBe('0.06');
     expect(
       result.totalAmountBase.equals(
-        result.items.create[0].qty.mul(result.items.create[0].unitCostBase),
+        result.items[0].qty.mul(result.items[0].unitCostBase),
       ),
     ).toBe(true);
     expect(input.currency).toBe(' usd ');
@@ -115,7 +115,7 @@ describe('Manual purchase-order creation', () => {
     input.items[1].productId = 'product-a';
     tx.product.findMany.mockResolvedValue([{ id: 'product-a' }]);
     const result = await service.create('entity-a', input);
-    expect(result.items.create).toHaveLength(2);
+    expect(result.items).toHaveLength(2);
     expect(result.totalAmountOriginal.toFixed(2)).toBe('0.50');
   });
 
@@ -222,8 +222,8 @@ describe('Manual purchase-order creation', () => {
     expect(result.vendorId).toBe('vendor-a');
     expect(result.totalAmountCurrency).toBe('TWD');
     expect(result.totalAmountFxRate.equals(new Prisma.Decimal(1))).toBe(true);
-    expect(result.items.create[0].productId).toBe('product-a');
-    expect(result.items.create[0].qty.toNumber()).toBe(3);
+    expect(result.items[0].productId).toBe('product-a');
+    expect(result.items[0].qty.toNumber()).toBe(3);
   });
 
   it('returns only scoped active options with no costs or inventory fields selected', async () => {

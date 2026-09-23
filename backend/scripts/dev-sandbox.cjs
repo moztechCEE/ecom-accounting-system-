@@ -33,11 +33,15 @@ const warehouseFetchToken = Symbol('approved-dev-warehouse-fetch');
 function approvedWorkspaceFetch(url, options) {
   if (!warehouseWorkspaceEnabled || url.origin !== warehouseOrigin || url.username || url.password || url.hash ||
       (typeof options !== 'object' || !options) || options.redirect !== 'error') return false;
+  const commandEnabled = process.env.WMS_WORKSPACE_COMMANDS_ENABLED === 'true';
+  const workflowDetail = commandEnabled && options.method === 'GET' && !url.search &&
+    /^\/api\/integrations\/erp\/workflow\/v1\/orders\/[A-Za-z0-9_-]{1,128}$/.test(url.pathname);
   const read = options.method === 'GET' &&
     (/^\/api\/integrations\/erp\/v1\/orders(?:\/[A-Za-z0-9_-]{1,128})?$/.test(url.pathname) ||
-     /^\/api\/integrations\/erp\/v1\/management\/(?:overview|logs|exceptions|scan-errors|defects)$/.test(url.pathname));
-  const command = process.env.WMS_WORKSPACE_COMMANDS_ENABLED === 'true' && options.method === 'POST' &&
-    /^\/api\/integrations\/erp\/workflow\/v1\/orders\/[A-Za-z0-9_-]{1,128}\/(?:claim|scan|dispatch)$/.test(url.pathname);
+     /^\/api\/integrations\/erp\/v1\/management\/(?:overview|logs|exceptions|scan-errors|defects)$/.test(url.pathname) ||
+     workflowDetail);
+  const command = commandEnabled && options.method === 'POST' &&
+    /^\/api\/integrations\/erp\/workflow\/v1\/orders\/[A-Za-z0-9_-]{1,128}\/(?:dispatch|(?:pick|pack)\/(?:claim|scan))$/.test(url.pathname);
   if (!read && !command) return false;
   const keys = [...url.searchParams.keys()];
   if (command && keys.length || keys.length > 8 || new Set(keys).size !== keys.length ||
