@@ -43,5 +43,9 @@ describe('warehouse workspace permission boundary', () => {
       expect(validateSync(plainToInstance(WmsCommandDto,bad)).length).toBeGreaterThan(0);
     }
     expect(validateSync(plainToInstance(WmsScanDto,good)).length).toBeGreaterThan(0);
+    expect(validateSync(plainToInstance(WmsScanDto,{...good,scanValue:'1234'}))).toHaveLength(0);
+    expect(validateSync(plainToInstance(WmsScanDto,{...good,scanValue:'1234',itemId:'line-2'}))).toHaveLength(0);
+    for(const itemId of ['', '../other', 'line/2', 'x'.repeat(129)])
+      expect(validateSync(plainToInstance(WmsScanDto,{...good,scanValue:'1234',itemId})).length).toBeGreaterThan(0);
   });
 });
