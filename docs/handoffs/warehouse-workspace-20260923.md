@@ -22,4 +22,20 @@
 - Schema additions: ERP `20260923010000_warehouse_workspace`; WMS `034_erp_staff_identity.sql`. Existing business tables and history are preserved.
 
 ## Verification and release
-Pending final DEV release and authenticated browser acceptance. Source tests, migration transaction rehearsal and release receipts are recorded below when complete. Physical scanning, printing, stock changes and company-wide HR performance acceptance are not implied.
+- Deployed to DEV, all three Ready with 100% traffic: `corely-erp-api-dev-workspace-0923`, `corely-erp-dev-workspace-0923`, `corely-wms-dev-workspace-0923`.
+- ERP runtime source `8897ddcb`; UUID v4 schema correction source `1a4244cb`; WMS runtime source `eca381b`. ERP build `21d47c73-77a3-4cd3-b3c3-a19fbc89116c`; WMS build `d46440c2-dc7d-4714-a03e-99444156af84`.
+- Additional migration history `20260923020000_warehouse_role_identifiers` and `20260923030000_warehouse_role_uuid_v4` correct new role/permission IDs to existing DTO UUID v4 requirements. FK cascades preserve assigned roles/permissions. Previously applied migration files were not rewritten.
+- ERP: 18 navigation/access UI tests, 7 service/expense access tests, 21 isolated PostgreSQL cross-system assertions, DEV outbound sandbox check, Prisma validation and backend/frontend builds passed.
+- WMS: 280 backend tests, 272 frontend tests and production frontend build passed. The socket-session harness now verifies HTTP credentials are installed synchronously before task effects start.
+- Live DEV APIs: 11 checks passed for scoped role selection, replay, stable numeric actor identity, immediate role revocation, logout, self expense access and restricted internal staff lookup.
+- Legacy binding: 7 checks using a newly created, clearly labeled DEV legacy-style picker fixture. Binding preserved numeric ID; original password and old JWT lost access; rebind to another ERP user was rejected. No actual employee account was bound or changed.
+- Authenticated isolated Chrome context: real ERP login, compact sidebar, picking and packing popups without WMS password login, announcement region, return to ERP expense page, attendance/leave/expense pages and picker-only mobile entry passed; zero captured page errors. Real DEV task lists loaded. No order claim/scan/import/stock/payment was performed.
+- QA users (operator/picker/admin) and the two employee fixtures were disabled afterward; portal sessions revoked. WMS QA mappings point to inactive ERP accounts and cannot use legacy login. Private credentials remain only in local mode-0600 QA artifacts.
+- Production ERP API, ERP frontend and WMS specs/traffic match the preflight baseline. No push or GitHub merge. Other source worktrees unchanged.
+- Release receipt: `warehouse-workspace-release-20260923.json`; local evidence and screenshots under `/Users/moztecheason/Documents/ChatGPT/AI ERP 系統/artifacts/warehouse-workspace-20260923`.
+
+## Deployment coordination detail
+The ERP API's previous traffic configuration followed `latestRevision`. Replacing its configuration moved DEV traffic to the new candidate immediately; it was verified and then pinned explicitly. Frontend candidate preparation was corrected to pin the old revision before staging, and WMS was already revision-pinned. Future releases must resolve every `latestRevision` entry to the preflight revision before creating a candidate. This affected DEV only.
+
+## Human setup / remaining acceptance
+Assign each real warehouse employee one of the three templates and correct company membership in ERP. If they already have a WMS identity, explicitly bind it before first ERP workbench use so their existing tasks remain attached. Do not auto-grant all staff or infer mappings by name. Physical barcode scanning, printers, clock-in/leave/expense submission, real staff account mappings, management-report SSO/fine-grained supervisor role and company-wide performance analysis have not been accepted by this release.
