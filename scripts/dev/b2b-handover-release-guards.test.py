@@ -212,6 +212,11 @@ class GuardsTest(unittest.TestCase):
         path = self.directory / 'migration.json'
         r.private_json(path, receipt())
         self.assertEqual(r.migration_receipt(path, SOURCE)['sha256'], r.digest_file(path))
+        value = receipt()
+        value['migrations'][1]['finishedAt'] = '2026-01-01T00:00:00.87741+00:00'
+        value['validatedAt'] = '2026-01-01T00:00:01+00:00'
+        r.private_json(path, value)
+        self.assertEqual(r.migration_receipt(path, SOURCE)['sha256'], r.digest_file(path))
         cases = [lambda v: v.update(sourceSha=LIVE_SOURCE), lambda v: v.update(database='erp'),
                  lambda v: v['migrations'][0].update(sha256='0' * 64),
                  lambda v: v['migrations'][0].update(ledgerVerified=False),

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 
@@ -114,7 +114,7 @@ export class CustomerService {
       select: { id: true, code: true },
     });
     if (!existing) {
-      return null;
+      throw new NotFoundException('Customer not found');
     }
     const normalizedData = await this.prepareCustomerData(entityId, data, existing);
     const paymentTermDays = this.resolvePaymentTermDays(normalizedData);
@@ -131,14 +131,19 @@ export class CustomerService {
     } as Prisma.CustomerUpdateInput;
 
     return this.prisma.customer.update({
-      where: { id },
+      where: { id, entityId },
       data: updateData,
     });
   }
 
   async remove(entityId: string, id: string) {
+    const existing = await this.prisma.customer.findFirst({
+      where: { id, entityId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Customer not found');
     return this.prisma.customer.delete({
-      where: { id },
+      where: { id, entityId },
     });
   }
 

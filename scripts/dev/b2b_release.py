@@ -335,7 +335,12 @@ def verify_context(context):
 
 def parse_time(value):
     require(isinstance(value, str), 'Missing ISO timestamp')
-    date = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    normalized = value.replace('Z', '+00:00')
+    # Cloud SQL emits variable-width fractional seconds. Python 3.9 accepts
+    # only six digits here, so pad shorter fractions before parsing.
+    normalized = re.sub(r'\.(\d{1,6})(?=[+-]\d{2}:\d{2}$)',
+                        lambda match: '.' + match.group(1).ljust(6, '0'), normalized)
+    date = datetime.fromisoformat(normalized)
     require(date.tzinfo is not None and date.utcoffset() == timedelta(0), 'Timestamp must be UTC')
     require(date <= datetime.now(timezone.utc) + timedelta(minutes=5), 'Timestamp is in the future')
     return date

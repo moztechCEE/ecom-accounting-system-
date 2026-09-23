@@ -15,9 +15,15 @@ export class CustomerController {
     private readonly entityAccessService: EntityAccessService,
   ) {}
 
+  // The existing sales_orders:create grant covers customer-master writes; no
+  // separate update/delete grants exist in the current permission catalogue.
   @Post()
-  create(@Request() req, @Body() data: Prisma.CustomerCreateInput) {
-    return this.customerService.create(req.user.entityId, data);
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'sales_orders', action: 'create' })
+  async create(@Request() req, @Body() data: Prisma.CustomerCreateInput,
+    @Query('entityId') requestedEntityId?: string) {
+    const entityId = await resolveCompanyRead(this.entityAccessService, req.user?.id, 'sales', requestedEntityId);
+    return this.customerService.create(entityId, this.withoutCompanyOverride(data));
   }
 
   @Get()
@@ -46,12 +52,25 @@ export class CustomerController {
   }
 
   @Patch(':id')
-  update(@Request() req, @Param('id') id: string, @Body() data: Prisma.CustomerUpdateInput) {
-    return this.customerService.update(req.user.entityId, id, data);
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'sales_orders', action: 'create' })
+  async update(@Request() req, @Param('id') id: string, @Body() data: Prisma.CustomerUpdateInput,
+    @Query('entityId') requestedEntityId?: string) {
+    const entityId = await resolveCompanyRead(this.entityAccessService, req.user?.id, 'sales', requestedEntityId);
+    return this.customerService.update(entityId, id, this.withoutCompanyOverride(data));
   }
 
   @Delete(':id')
-  remove(@Request() req, @Param('id') id: string) {
-    return this.customerService.remove(req.user.entityId, id);
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'sales_orders', action: 'create' })
+  async remove(@Request() req, @Param('id') id: string, @Query('entityId') requestedEntityId?: string) {
+    const entityId = await resolveCompanyRead(this.entityAccessService, req.user?.id, 'sales', requestedEntityId);
+    return this.customerService.remove(entityId, id);
+  }
+
+  private withoutCompanyOverride<T extends Prisma.CustomerCreateInput | Prisma.CustomerUpdateInput>(data: T): T {
+    // Company comes only from verified actor membership/query scope. Prisma
+    // relation input and scalar entityId in a request body cannot override it.
+    return Object.fromEntries(Object.entries(data).filter(([key]) => key !== 'entity' && key !== 'entityId')) as T;
   }
 }
