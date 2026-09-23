@@ -143,6 +143,40 @@ describe('Expense supervisor workflow authorization and payment consistency', ()
     expect(prisma.expenseRequest.findMany.mock.calls[0][0].where).toEqual(expect.objectContaining({ entityId: { in: ['company'] }, OR: expect.arrayContaining([{ createdBy: 'manager' }]) }));
     await expect(service.listAccessibleRequests('manager', 'other')).rejects.toBeInstanceOf(ForbiddenException);
   });
+  it.each([undefined, 'company'])('lets company-scoped finance read other employees while preserving company/status filters (%s)', async (entityId) => {
+    actor = makeActor('cashier');
+    actor.accountingDataScope = 'ENTITY';
+    actor.roles[0].role.permissions.push({ permission: { resource: 'accounts', action: 'read' } });
+    request.status = 'approved';
+    // Prisma ignores empty objects inside OR; the unrestricted finance branch must omit OR.
+    prisma.expenseRequest.findMany.mockImplementation(async ({ where }) => {
+      expect(where).not.toHaveProperty('OR');
+      expect(where.entityId).toEqual(entityId || { in: ['company'] });
+      expect(where.status).toBe('approved');
+      return [request];
+    });
+    expect(await service.listAccessibleRequests('cashier', entityId, 'approved')).toEqual([
+      expect.objectContaining({ id: 'request', createdBy: 'staff', canReview: false }),
+    ]);
+    await expect(service.listAccessibleRequests('cashier', 'other')).rejects.toBeInstanceOf(ForbiddenException);
+  });
+  it.each([
+    { finance: true, scope: 'SELF', mine: false, department: false },
+    { finance: true, scope: 'DEPARTMENT', mine: false, department: true },
+    { finance: false, scope: 'ENTITY', mine: false, department: false },
+    { finance: true, scope: 'ENTITY', mine: true, department: false },
+  ])('retains visibility restrictions for $scope finance=$finance mine=$mine', async ({ finance, scope, mine, department }) => {
+    actor.accountingDataScope = scope;
+    if (finance) actor.roles[0].role.permissions.push({ permission: { resource: 'accounts', action: 'read' } });
+    await service.listAccessibleRequests('manager', undefined, undefined, mine);
+    const where = prisma.expenseRequest.findMany.mock.calls[0][0].where;
+    expect(where.entityId).toEqual({ in: ['company'] });
+    expect(where.OR).toContainEqual({ createdBy: 'manager' });
+    expect(where.OR).not.toContainEqual({});
+    if (mine) expect(where.OR).toEqual([{ createdBy: 'manager' }]);
+    else expect(where.OR).toHaveLength(department ? 3 : 2);
+    if (department) expect(where.OR).toContainEqual({ departmentId: 'dept' });
+  });
   it('requires treasury permission for payment records', async () => {
     request.status = 'approved';
     await expect(service.updatePaymentInfo('request', { paymentStatus: 'paid', amount: 100, bankAccountId: 'bank', paymentDate: new Date() }, { id: 'manager' })).rejects.toBeInstanceOf(ForbiddenException);

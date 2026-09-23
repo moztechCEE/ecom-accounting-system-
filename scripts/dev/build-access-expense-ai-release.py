@@ -63,7 +63,19 @@ def sha256_file(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def cloud_baseline():
+def load_release_state(path):
+    if path is None:
+        return None
+    check(not (path.parent / 'pending.json').exists(), 'Previous deployment has an unresolved mutation')
+    state = json.loads(path.read_text())
+    check(state.get('version') == 1 and state.get('project') == PROJECT and state.get('region') == REGION,
+          'Previous release state is for another environment')
+    check([item.get('phase') for item in state.get('completed', [])] == ['candidate-api', 'candidate-web'],
+          'Rebuild state must contain only the two completed candidates, before final web or promotion')
+    return state
+
+
+def cloud_baseline(release_state=None):
     snapshots = {}
     for folder, expected in BASES.items():
         name = expected['service']
@@ -72,12 +84,22 @@ def cloud_baseline():
         check(len(active) == 1 and active[0].get('percent') == 100 and
               active[0].get('revisionName') == expected['revision'],
               f'{name}: active DEV revision changed; review other work before rebuilding')
-        check(service['status'].get('latestReadyRevisionName') == expected['revision'],
-              f'{name}: another ready candidate exists; coordinate before rebuilding')
+        if release_state:
+            recorded = release_state['expected'][name]
+            check(service['metadata'].get('uid') == recorded['metadata'].get('uid') and
+                  service['spec'] == recorded['spec'], f'{name}: previous candidate configuration changed')
+            for field in ('latestReadyRevisionName', 'latestCreatedRevisionName'):
+                check(service['status'].get(field) == recorded['status'].get(field),
+                      f'{name}: previous candidate {field} changed')
+            check(any(c.get('type') == 'Ready' and c.get('status') == 'True'
+                      for c in service['status'].get('conditions', [])), f'{name}: candidate is not Ready')
+        else:
+            check(service['status'].get('latestReadyRevisionName') == expected['revision'],
+                  f'{name}: another ready candidate exists; coordinate before rebuilding')
         revision = cloud_json('run', 'revisions', 'describe', expected['revision'], '--region=' + REGION)
         image = REGISTRY + name + '@' + expected['digest']
         check(revision['status'].get('imageDigest') == image, f'{name}: reviewed image digest changed')
-        check(service['spec']['template']['spec']['containers'][0]['image'] == image,
+        check(release_state or service['spec']['template']['spec']['containers'][0]['image'] == image,
               f'{name}: service template no longer matches reviewed active image')
         if folder == 'backend':
             env = {item['name']: item.get('value') for item in revision['spec']['containers'][0].get('env', [])}
@@ -88,6 +110,8 @@ def cloud_baseline():
         snapshots[name] = {
             'revision': expected['revision'], 'image': image,
             'specSha256': hashlib.sha256(json.dumps(service['spec'], sort_keys=True).encode()).hexdigest(),
+            'latestReadyRevisionName': service['status'].get('latestReadyRevisionName'),
+            'latestCreatedRevisionName': service['status'].get('latestCreatedRevisionName'),
         }
     return snapshots
 
@@ -96,9 +120,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--submit', action='store_true', help='Submit Cloud Build after preparing; never deploy')
     parser.add_argument('--context-dir', type=Path, help='New directory for reviewable build context; defaults to a new temp directory')
+    parser.add_argument('--release-state', type=Path, help='Previous helper state.json with two zero-traffic candidates and SSO2 still at 100%%')
     args = parser.parse_args()
     check(not output(['git', 'status', '--porcelain']), 'Commit reviewed source first; working tree must be clean')
     sha = output(['git', 'rev-parse', 'HEAD'])
+    release_state = load_release_state(args.release_state)
+    if release_state:
+        check(subprocess.run(['git', 'merge-base', '--is-ancestor', release_state['sourceSha'], sha], cwd=ROOT,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0,
+              'The retry source must retain the previous candidate source')
     check(subprocess.run(['git', 'merge-base', '--is-ancestor', SSO_SOURCE, sha], cwd=ROOT,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0,
           'Merge the reviewed latest SSO source before building; never replace it with the older ERP baseline')
@@ -109,14 +139,14 @@ def main():
     subprocess.run(['node_modules/.bin/prisma', 'generate', '--schema=prisma/schema.prisma'],
                    cwd=ROOT / 'backend', check=True,
                    env={**os.environ, 'DATABASE_URL': 'postgresql://build:build@127.0.0.1:5432/unconnected?schema=public'})
-    before = cloud_baseline()
+    before = cloud_baseline(release_state)
 
     # Rebuild rather than trusting an old untracked dist directory.
     subprocess.run(['npm', 'run', 'build'], cwd=ROOT / 'backend', check=True)
     subprocess.run(['npm', 'run', 'build'], cwd=ROOT / 'frontend', check=True)
     check(output(['git', 'rev-parse', 'HEAD']) == sha and not output(['git', 'status', '--porcelain']),
           'Source changed during local compilation; review and start again')
-    check(cloud_baseline() == before, 'DEV configuration changed during compilation; coordinate and start again')
+    check(cloud_baseline(release_state) == before, 'DEV configuration changed during compilation; coordinate and start again')
 
     if args.context_dir:
         context = args.context_dir.expanduser().resolve()
@@ -150,6 +180,7 @@ def main():
     manifest = {
         'sourceSha': sha, 'requiredSsoSource': SSO_SOURCE, 'devOnly': True,
         'baseline': before, 'images': images,
+        'previousCandidateSource': release_state['sourceSha'] if release_state else None,
         'filesSha256': {str(file.relative_to(context)): sha256_file(file)
                         for file in sorted(context.rglob('*')) if file.is_file()},
         'doesNotDeployOrMigrate': True,
@@ -159,7 +190,7 @@ def main():
     if args.submit:
         check(output(['git', 'rev-parse', 'HEAD']) == sha and not output(['git', 'status', '--porcelain']),
               'Source changed after packaging; refusing submission')
-        check(cloud_baseline() == before, 'DEV configuration changed after packaging; refusing submission')
+        check(cloud_baseline(release_state) == before, 'DEV configuration changed after packaging; refusing submission')
         for relative, expected in manifest['filesSha256'].items():
             check(sha256_file(context / relative) == expected, 'Prepared build content changed: ' + relative)
         build_id = output(['gcloud', 'builds', 'submit', str(context), '--project=' + PROJECT,

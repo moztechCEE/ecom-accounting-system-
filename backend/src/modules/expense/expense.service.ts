@@ -371,15 +371,15 @@ Do not include markdown or explanation.
   async listAccessibleRequests(userId: string, entityId?: string, status?: string, mine = false) {
     const access = entityId ? await this.assertEntityAccess(userId, entityId) : await this.access(userId);
     const scope = access.roles.includes('SUPER_ADMIN') ? 'ENTITY' : access.user.accountingDataScope;
+    const canReadEntity = !mine && access.finance && scope === 'ENTITY';
     const visible: Prisma.ExpenseRequestWhereInput[] = [{ createdBy: userId }];
     if (!mine) {
       visible.push({ approvalSteps: { some: { OR: [{ approverUserId: userId }, { approverUserId: null, approverRoleCode: { in: access.roles } }] } } });
-      if (access.finance && scope === 'ENTITY') visible.push({});
       if (access.finance && scope === 'DEPARTMENT' && access.user.employee?.departmentId) visible.push({ departmentId: access.user.employee.departmentId });
     }
     const records = await this.prisma.expenseRequest.findMany({ where: {
       entityId: entityId || (access.roles.includes('SUPER_ADMIN') ? undefined : { in: access.entityIds }),
-      status, OR: visible,
+      status, ...(canReadEntity ? {} : { OR: visible }),
     }, include: EXPENSE_REQUEST_INCLUDE, orderBy: { createdAt: 'desc' } });
     return records.map((record) => ({ ...record, canReview: this.canReview(record, access), currentApprover: record.approvalSteps.find((s) => s.status === 'pending')?.approverUser || null }));
   }
