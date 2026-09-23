@@ -1,0 +1,39 @@
+{
+  "referenceSourceSha": "4dd0d938b86ee51106fbf7b929d4c6a383f355bd",
+  "deployedDevRuntimeSourceSha": "dd2a9e845293ecf40381a95ec4f3b0e1977b185d",
+  "reference": "Corely Claw document assistant; distinct from customer reply agent runtime",
+  "files": [
+    {
+      "path": "apps/ops-ui/src/components/claw/CorelyClaw.tsx",
+      "sha256": "2990102bbbadd836986519e969b24b8200df5f80a9158564a4e4427bc3b110fe"
+    },
+    {
+      "path": "apps/ops-ui/src/components/claw/ClawMascot.tsx",
+      "sha256": "afed7dd52ea4b8f8c23aa6f4d499eaaa5b001b4b02b52b9669f609b2c3e55c9c"
+    },
+    {
+      "path": "apps/ops-ui/src/components/claw/ClawPanel.tsx",
+      "sha256": "e199028c3ce5a4118b40cb4c6cec47f739f6c2a035b747b1a410d3cd86085c8c"
+    },
+    {
+      "path": "apps/ops-ui/src/components/claw/knowledge.ts",
+      "sha256": "2c84a55a87a4f385afe53894ce292cf67c52843c80aa8deb430a315025abf058"
+    },
+    {
+      "path": "apps/ops-ui/src/components/claw/scope.ts",
+      "sha256": "2965449df70e8e154cb7c79ebe80c0b8e525af1ad9460336f2b6e0939301739e"
+    },
+    {
+      "path": "apps/ops-ui/src/components/claw/claw.css",
+      "sha256": "be662587d1c19275e27e8636fbdd5d4d23d2ef19cdc6d05ed6a449c2ea18b43b"
+    },
+    {
+      "path": "apps/ops-ui/src/components/claw/mascot.css",
+      "sha256": "efaf5000d7be925a34a8f7622ca4ed2eb284c80db0fdba023c2b340dd011222d"
+    },
+    {
+      "path": "apps/ops-ui/src/components/ops/SetupHelp.tsx",
+      "sha256": "931bbe686ed359bd1ba5e4cd3b974e58037212408993345a87c93e19a1adf266"
+    }
+  ]
+}

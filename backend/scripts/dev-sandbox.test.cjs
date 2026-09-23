@@ -51,16 +51,16 @@ test('DEV AI remains closed by default, without a key, or without exact opt-in',
 
 test('DEV AI allows only approved generateContent POSTs with no redirects or custom transport', () => {
   isolatedAiCase(`
-    for (const model of ['gemini-2.5-flash', 'gemini-2.5-pro']) {
+    for (const model of ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro']) {
       await fetch(endpoint.replace('gemini-2.5-flash', model), { ...options, dispatcher: { unsafe: true } });
     }
-    assert.equal(calls.fetch.length, 2); assert.equal(calls.socket.length, 2);
+    assert.equal(calls.fetch.length, 4); assert.equal(calls.socket.length, 4);
     assert.ok(calls.fetch.every(call => call.options.redirect === 'error' && call.options.dispatcher === undefined));
     assert.ok(calls.fetch.every(call => Object.keys(call.options.headers).length === 2));
     // The context is released when the approved fetch completes.
     assert.throws(() => new net.Socket().connect({ host: 'generativelanguage.googleapis.com', port: 443 }), check);
     assert.throws(() => require('node:child_process').spawn('echo', ['test']), check);
-    assert.equal(calls.socket.length, 2);
+    assert.equal(calls.socket.length, 4);
   `);
 });
 
@@ -72,6 +72,9 @@ test('DEV AI rejects other hosts, non-HTTPS, unsupported paths, credentials and 
       endpoint.replace('googleapis.com', 'googleapis.com.evil.invalid'),
       endpoint.replace('googleapis.com', 'googleapis.com:8443'),
       endpoint.replace('gemini-2.5-flash', 'unapproved-model'),
+      endpoint.replace('gemini-2.5-flash', 'gemini-3.8-flash'),
+      endpoint.replace('gemini-2.5-flash', 'gemini-3.5-flash-preview'),
+      endpoint.replace('gemini-2.5-flash', 'gemini-3.5-flash-lite-extra'),
       endpoint.replace(':generateContent', ':streamGenerateContent'),
       endpoint.replace('/v1beta/models/', '/v1/models/'),
       endpoint + '?key=not-allowed', endpoint + '#fragment', endpoint.replace('https://', 'https://user:pass@'),

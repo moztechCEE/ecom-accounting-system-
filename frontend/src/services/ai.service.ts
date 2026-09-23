@@ -5,6 +5,7 @@ export interface AiModel {
   name: string;
   description?: string;
   isExperimental?: boolean;
+  mode?: "standard" | "deep";
 }
 
 export interface AiCopilotSource {
@@ -12,6 +13,9 @@ export interface AiCopilotSource {
   title: string;
   detail?: string;
   path?: string;
+  sourceVersion?: string;
+  sources?: Array<{ path: string; sha256: string }>;
+  availability?: 'staged' | 'preview-only' | 'wms-portal';
 }
 
 export interface AiStatus {
@@ -29,6 +33,34 @@ export interface AiCopilotReply {
   sources?: AiCopilotSource[];
 }
 
+export type KnowledgeLocale = "zh-TW" | "en";
+export interface AiKnowledgeExample {
+  id: string;
+  title: string;
+  filename: string;
+  contentType: string;
+  content: string;
+}
+export interface AiKnowledgeEntry {
+  id: string;
+  title: string;
+  summary: string;
+  category: string;
+  path?: string;
+  keywords?: string[];
+  sections: Array<{ title: string; body: string }>;
+  examples: AiKnowledgeExample[];
+  sources: Array<{ path: string; sha256: string }>;
+  sourceVersion: string;
+  availability?: 'staged' | 'preview-only' | 'wms-portal';
+}
+export interface AiKnowledgeLibrary {
+  version: string;
+  locale: KnowledgeLocale;
+  entries: AiKnowledgeEntry[];
+  checkedAt: string;
+}
+
 export interface DailyBriefingAlert {
   key: string;
   title: string;
@@ -38,6 +70,11 @@ export interface DailyBriefingAlert {
 }
 
 export const aiService = {
+  async getKnowledge(query = "", currentPath?: string, locale: KnowledgeLocale = "zh-TW", signal?: AbortSignal) {
+    return (await api.get<AiKnowledgeLibrary>("/ai/knowledge", {
+      params: { query, currentPath, locale }, signal,
+    })).data;
+  },
   async getGuide(query: string, currentPath?: string) {
     return (
       await api.get<AiCopilotReply>("/ai/guide", {
@@ -70,6 +107,8 @@ export const aiService = {
     modelId?: string,
     currentPath?: string,
     history?: Array<{ role: "user"; content: string }>,
+    locale?: KnowledgeLocale,
+    signal?: AbortSignal,
   ) {
     const response = await api.post<AiCopilotReply>(
       "/ai/copilot/chat",
@@ -79,8 +118,9 @@ export const aiService = {
         modelId,
         currentPath,
         history,
+        locale,
       },
-      { timeout: 60000 },
+      { timeout: 60000, signal },
     );
     return response.data;
   },

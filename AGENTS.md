@@ -7,4 +7,5 @@ User direction, confirmed 2026-09-23: all corrections go through DEV first. Depl
 - Keep DEV database, service accounts, secrets, and external-effect isolation separate from production. Keep migrations scoped to reviewed changes and preserve existing user assignments.
 - Publish candidate revisions, validate authentication, permissions, affected workflows, and the visible UI, then move DEV traffic. Keep a release receipt with source SHA, image digests, migrations, tests, and rollback revisions.
 - Local code, tests, pushed code, deployed DEV, and production acceptance are separate states. Report each accurately.
+- When a documented ERP workflow or route changes, review its Corely Claw guide in `backend/src/modules/ai/knowledge`, update both languages and source hashes only after that review, and run the knowledge coverage/drift check before release. A new guide does not automatically authorize a new AI data tool or business operation.
 - A DEV deployment request does not authorize production deployment, production migrations, or production traffic changes. Production integration requires the user's later confirmation.

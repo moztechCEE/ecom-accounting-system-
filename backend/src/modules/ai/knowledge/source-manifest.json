@@ -1,0 +1,483 @@
+{
+  "schemaVersion": 1,
+  "sourceVersion": "sha256:c1f63b5c120cf51d38ac0f06928b6ca85438c614f23aef80f4c2569feaa1bfd1",
+  "reviewedBaseCommit": "9165c7123b10750b598a95f9badfc9c00ed04abd",
+  "entryCount": 59,
+  "groups": [
+    "admin",
+    "dashboard",
+    "finance",
+    "inventory",
+    "people",
+    "profile",
+    "sales",
+    "service",
+    "warehouse"
+  ],
+  "locales": [
+    "zh-TW",
+    "en"
+  ],
+  "catalogSha256": "169a4f917ba3e4ed31acbb30ccbf0d01e351c811049bd929143928c25e53f717",
+  "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
+  "coverage": {
+    "routes": [
+      "/accounting/accounts",
+      "/accounting/journals",
+      "/accounting/periods",
+      "/accounting/workbench",
+      "/accounting/workbench?focus=missing-invoices",
+      "/admin/access-control",
+      "/admin/after-sales-brands",
+      "/admin/entities",
+      "/admin/reimbursement-items",
+      "/admin/settings",
+      "/ap/expense-review",
+      "/ap/expenses",
+      "/ap/payable",
+      "/attendance/admin",
+      "/attendance/dashboard",
+      "/attendance/leaves",
+      "/auth/change-password",
+      "/b2b",
+      "/b2b/catalog",
+      "/b2b/login",
+      "/b2b/requests",
+      "/banking",
+      "/dashboard",
+      "/import",
+      "/inventory/handover-reconciliation",
+      "/inventory/products",
+      "/inventory/sn-labels",
+      "/login",
+      "/manufacturing/assembly",
+      "/payroll/employees",
+      "/payroll/runs",
+      "/profile",
+      "/purchasing/orders",
+      "/reconciliation",
+      "/reconciliation/timeout",
+      "/reports",
+      "/reset-password",
+      "/sales/after-sales",
+      "/sales/after-sales/internal",
+      "/sales/after-sales/quotes",
+      "/sales/after-sales?type=CUSTOMER_ISSUE",
+      "/sales/after-sales?type=EXCHANGE_RETURN",
+      "/sales/after-sales?type=PRIVATE_PURCHASE",
+      "/sales/after-sales?type=REFUND_PICKUP",
+      "/sales/after-sales?type=REPAIR",
+      "/sales/after-sales?type=REPAIR&status=PENDING_QUOTE_CONFIRMATION",
+      "/sales/after-sales?type=RESHIPMENT",
+      "/sales/b2b",
+      "/sales/customers",
+      "/sales/invoices",
+      "/sales/orders",
+      "/sales/quotations",
+      "/vendors",
+      "/warehouse",
+      "/warehouse/completed",
+      "/warehouse/defects",
+      "/warehouse/dispatch",
+      "/warehouse/exceptions",
+      "/warehouse/intakes",
+      "/warehouse/logistics",
+      "/warehouse/logs",
+      "/warehouse/marketplace",
+      "/warehouse/overview",
+      "/warehouse/packing",
+      "/warehouse/picking",
+      "/warehouse/scan-errors",
+      "/warehouse/settings",
+      "/warehouse/team",
+      "/warehouse/users",
+      "/warehouse/workstation"
+    ],
+    "portalRoutes": [
+      "/warehouse",
+      "/warehouse/picking",
+      "/warehouse/packing",
+      "/warehouse/completed",
+      "/warehouse/dispatch",
+      "/warehouse/marketplace",
+      "/warehouse/intakes",
+      "/warehouse/overview",
+      "/warehouse/logs",
+      "/warehouse/exceptions",
+      "/warehouse/scan-errors",
+      "/warehouse/defects",
+      "/warehouse/logistics",
+      "/warehouse/team",
+      "/warehouse/users",
+      "/warehouse/settings"
+    ],
+    "dynamicRoutes": [
+      "/b2b/requests/:id",
+      "/warehouse/:report"
+    ],
+    "excludedRoutes": [
+      {
+        "path": "/",
+        "reason": "Authenticated role-dependent redirect; dashboard and warehouse are documented."
+      }
+    ]
+  },
+  "sources": [
+    {
+      "path": "backend/src/modules/accounting/accounting.controller.ts",
+      "sha256": "64ab5b7368c76d09c376fc4c47936601636add1d177f1ee1ce50a3335994540d"
+    },
+    {
+      "path": "backend/src/modules/ai/ai.service.ts",
+      "sha256": "205936f07978c988fb8f3f1312265416142f40324cf8edb86fffe57d76a09ad9"
+    },
+    {
+      "path": "backend/src/modules/ap/ap.controller.ts",
+      "sha256": "a517989b4ccd6ec86fd2f3cadb3d6cf5dbb252c5f91ef5783b82d9128955c454"
+    },
+    {
+      "path": "backend/src/modules/ar/ar.controller.ts",
+      "sha256": "2569bc7d0c961b04d347c83db0f24e23e487473c51d01af700c2cb94d84b26bf"
+    },
+    {
+      "path": "backend/src/modules/assembly/assembly.controller.ts",
+      "sha256": "1a76227add9b43a9cc308cb9c2962cef512a41d2910562ca0814c0924e870698"
+    },
+    {
+      "path": "backend/src/modules/attendance/controllers/attendance.controller.ts",
+      "sha256": "071fef904f9ee6b68c57d77a5c888134ea83f10851c34b84cad7ca1bc9f8d716"
+    },
+    {
+      "path": "backend/src/modules/attendance/controllers/leave.controller.ts",
+      "sha256": "eaf1b600d6feff8c9d301402c16d593b6beed2158650254544b77c669500b397"
+    },
+    {
+      "path": "backend/src/modules/auth/auth.controller.ts",
+      "sha256": "171d8792dfe1ee5ff1db5ed83a2d0a19168b8d8681bf5b8f65f949ef1bc23ffd"
+    },
+    {
+      "path": "backend/src/modules/b2b/b2b.controller.ts",
+      "sha256": "be2466d1e87439d57cf8a03701bac24bd6443efdce25d29fcdca2e9c32876155"
+    },
+    {
+      "path": "backend/src/modules/b2b/b2b.service.ts",
+      "sha256": "9df23c4b7d434074feaef8962a1eef35387ba25dd7dda2c0c0019b2c3445f3e0"
+    },
+    {
+      "path": "backend/src/modules/banking/banking.controller.ts",
+      "sha256": "66844729b8fd50e64a0f88d52150887a0e593bf34b70f0745cdd65f04febe66e"
+    },
+    {
+      "path": "backend/src/modules/banking/banking.service.ts",
+      "sha256": "dbd1a05786d9b113c1856aaaf0d5d1bcd26ee472e7957dece97c0f9f95fbed36"
+    },
+    {
+      "path": "backend/src/modules/entities/entities.controller.ts",
+      "sha256": "6a145285fd56e8a216fa62394925a9f5995df278068d1f13f40bd5ee7dbc8300"
+    },
+    {
+      "path": "backend/src/modules/expense/expense-receipt.controller.ts",
+      "sha256": "758cb54b0f5858900b950d307a9118f7af4d77f75c259e52767dfbd6d257e06f"
+    },
+    {
+      "path": "backend/src/modules/expense/expense.controller.ts",
+      "sha256": "928ccbb0acd345c6dce501953f608a55c9c8ab675d4f65a6178ceb10f7eab749"
+    },
+    {
+      "path": "backend/src/modules/expense/expense.service.ts",
+      "sha256": "4eb66b4f55419ab8a76e9a66b5a00a7ff447d1d78c9675d9f4a2d0cf5bae02fe"
+    },
+    {
+      "path": "backend/src/modules/integration/after-sales/after-sales-preparation.controller.ts",
+      "sha256": "d5ba5854a084eb3f1d7540f535bf7389136b04a07c47d78c693cfca6d4744cd4"
+    },
+    {
+      "path": "backend/src/modules/integration/after-sales/after-sales.controller.ts",
+      "sha256": "77fd198aa5c9127a3597b373701ebf4c8c8694aefd004b594211617629d08c5c"
+    },
+    {
+      "path": "backend/src/modules/integration/wms/wms-handover.module.ts",
+      "sha256": "a7bd1568cc7bd719b2c09ac20e6c0f85eda1a7723c42aec1f0164d1ca1de545e"
+    },
+    {
+      "path": "backend/src/modules/integration/wms/wms-handover.service.ts",
+      "sha256": "887c129a540aec57da711aa97b3153a0a9aa1950574b3586d310d21606f91ce7"
+    },
+    {
+      "path": "backend/src/modules/payroll/payroll.controller.ts",
+      "sha256": "18e20f4183ac8a2eaf8c84eeda50a568a09737bbb77a317d7b55d634e0e7762f"
+    },
+    {
+      "path": "backend/src/modules/payroll/payroll.service.ts",
+      "sha256": "405f3e8dd00b781b3407b3a15a374dab842deafe9d9c424e7d3ae50376492905"
+    },
+    {
+      "path": "backend/src/modules/product/product.controller.ts",
+      "sha256": "701f0da4056da81e23c4d0c26a5231c60049549ce4a61817dcbf2b5ec3700e3b"
+    },
+    {
+      "path": "backend/src/modules/purchase/purchase.controller.ts",
+      "sha256": "3b5f88253cd582c8a2744ad4206f524601e5e4dbe019103442714c60e4433c43"
+    },
+    {
+      "path": "backend/src/modules/purchase/purchase.service.ts",
+      "sha256": "3ac12a9beba7556baa7c114b17dc92d2eff382ddb5fad17fa4055ed3512c0c6e"
+    },
+    {
+      "path": "backend/src/modules/reconciliation/reconciliation.controller.ts",
+      "sha256": "81c079ab3f83d4979a783e4f9edb779203b5b453268abb7e8acf014cae9e0b6d"
+    },
+    {
+      "path": "backend/src/modules/reports/reports.controller.ts",
+      "sha256": "6c6589efbfb66f063efe0be69bc029df373f10cea70be4a9af3177e1b92b9030"
+    },
+    {
+      "path": "backend/src/modules/roles/roles.controller.ts",
+      "sha256": "1fa172314ffdc39f8403c6574d5a255369c33c5228e0f5ad1054fb90c46380f3"
+    },
+    {
+      "path": "backend/src/modules/sales/customer.controller.ts",
+      "sha256": "3af2d5cde8db889f5bf49b8d99e45c1b0e8702ca51ce2e9fc20c7184cf89d3fb"
+    },
+    {
+      "path": "backend/src/modules/sales/sales.controller.ts",
+      "sha256": "bd3b8895332c01cabe55f5aeeb907e4ae155abb17603b6e0ce2d57f35ddd4e7d"
+    },
+    {
+      "path": "backend/src/modules/sn-labels/sn-labels.controller.ts",
+      "sha256": "9135b6f0b462cc61f1d8301069fc9924bf0747acc9603bf275032a6a99126887"
+    },
+    {
+      "path": "backend/src/modules/users/users.controller.ts",
+      "sha256": "b3a886a1fd103b93ba8b95638b88eb2590817951e6046394ec474b36ec42280b"
+    },
+    {
+      "path": "backend/src/modules/vendor/vendor.controller.ts",
+      "sha256": "0bb94565a321b3a38c9bfd40d227bc00c4f80e1577a37539d3f5c9f88b236e51"
+    },
+    {
+      "path": "frontend/src/App.tsx",
+      "sha256": "69d58b29720ad8a7c7ecd184c06d28cf7f68587350a6b126ea430e6f9cf84f12"
+    },
+    {
+      "path": "frontend/src/config/navigation.ts",
+      "sha256": "37bcd9c9558c1d49b6d2a67cf341048e90b439b55541de9e2a8b78a7214ff437"
+    },
+    {
+      "path": "frontend/src/config/release.ts",
+      "sha256": "3e80fbcd1606914a95e11bac3893d33281503e783ee5d0f30bb888fafa44a3e0"
+    },
+    {
+      "path": "frontend/src/config/wms-portal.ts",
+      "sha256": "bdc77d5a04bc20b2efbf17e0f203449f4be6cf1c5f4c77d51722cfb14e0736bf"
+    },
+    {
+      "path": "frontend/src/config/workspaces.ts",
+      "sha256": "6eb05f03ef7d95ac4f5548ed149867381ac8e21c1f5f2bf5dd220eb2279a1d8e"
+    },
+    {
+      "path": "frontend/src/pages/AccessControlPage.tsx",
+      "sha256": "145ad8aa09db11734c76a159cf70e549a276022651dbd46e36db94806c74e863"
+    },
+    {
+      "path": "frontend/src/pages/AccountingPeriodsPage.tsx",
+      "sha256": "663023457a409325682da2332a7594ad87f18953951213147f5dcda4f3fd05ba"
+    },
+    {
+      "path": "frontend/src/pages/AccountingWorkbenchPage.tsx",
+      "sha256": "669e7706575273d5f34dc268783e843a94c6a2b27c970e3dd7e1cb43fd4b3c25"
+    },
+    {
+      "path": "frontend/src/pages/AccountsPage.tsx",
+      "sha256": "999241f9c459d008a59d252ecda50c25d60bf3e2a8745378d6b6ac8b925b7be4"
+    },
+    {
+      "path": "frontend/src/pages/AccountsPayablePage.tsx",
+      "sha256": "ac2e92b78e1e4a05863f37c79855445d3ff92318945e8908fea39aa060bc5750"
+    },
+    {
+      "path": "frontend/src/pages/AfterSalesBrandsPage.tsx",
+      "sha256": "89b5168f50d948cb75ba7ba15d229f7724355e7cf22d334287d649e09a0d3112"
+    },
+    {
+      "path": "frontend/src/pages/AfterSalesCasesPage.tsx",
+      "sha256": "1e81b4915ef76f47c8a521a3f8644436f2b4b8ae5fbfaeca2f98edae0cbc8b19"
+    },
+    {
+      "path": "frontend/src/pages/AfterSalesQuotesPage.tsx",
+      "sha256": "c9a472b0000bde47d4f744174a841363eeab14f04714a84ad5786eb5c6461aca"
+    },
+    {
+      "path": "frontend/src/pages/AfterSalesWorkbenchPage.tsx",
+      "sha256": "dccd85f59d8614b17e9170c4354201c162655e6c2e62a20bf7e5bb8306774708"
+    },
+    {
+      "path": "frontend/src/pages/ArInvoicesPage.tsx",
+      "sha256": "5ba8e60e5faaa24d3ce1342c757db89d795ab4a8d3012e33633185b1901bc61a"
+    },
+    {
+      "path": "frontend/src/pages/AssemblyPage.tsx",
+      "sha256": "792634597816daa70035d11bfbc896e864a513f0ca9d75d294bc2b90c2a97e4b"
+    },
+    {
+      "path": "frontend/src/pages/attendance/AttendanceAdminPage.tsx",
+      "sha256": "aec7651154170b6c2ee39cd80c5f5f34f450220410499a512375c4bc79e7ddb5"
+    },
+    {
+      "path": "frontend/src/pages/attendance/EmployeeDashboardPage.tsx",
+      "sha256": "4816079117bdd3c11e5d851f6eaad45c6321bb9ac8df079f8c9a444d408f92f3"
+    },
+    {
+      "path": "frontend/src/pages/attendance/LeaveRequestPage.tsx",
+      "sha256": "504879da75a7cd43bb5a5187f35044b950cd3fd174994474e906de45e98c0ea3"
+    },
+    {
+      "path": "frontend/src/pages/b2b/B2BPortal.tsx",
+      "sha256": "3f7b7845f81de80f619bd53139f90078a8dc6eb5aa6620c4bc13714a3d642bcf"
+    },
+    {
+      "path": "frontend/src/pages/b2b/B2bWorkbenchPage.tsx",
+      "sha256": "7b111533ef23ff12e834470e8ab289f9f4cbd9df77bbc0bc39e3aabd519610e7"
+    },
+    {
+      "path": "frontend/src/pages/b2b/order.ts",
+      "sha256": "302015322a7bf874680a44fc5eb0a0b03f3653dbf179b67cd37e57d6434ed9b1"
+    },
+    {
+      "path": "frontend/src/pages/BankingPage.tsx",
+      "sha256": "de0e6b142c951b08c67cec22952bbd79c13fe70a0c1490e52bf9cb050dd50196"
+    },
+    {
+      "path": "frontend/src/pages/BusinessEntitiesPage.tsx",
+      "sha256": "af5b43e4e924eee046e8ac91a906ffabe251319b640fd53172430dcf941b33de"
+    },
+    {
+      "path": "frontend/src/pages/CustomersPage.tsx",
+      "sha256": "ccb30a1f6a713a4ea623ab477145fc385912e5b0821804daf0eb004caa91c684"
+    },
+    {
+      "path": "frontend/src/pages/DashboardPage.tsx",
+      "sha256": "cf6387c282b6bf956530a29d8d812418c15d4f2cae43fbd1e8e67a0e688aa841"
+    },
+    {
+      "path": "frontend/src/pages/EmployeesPage.tsx",
+      "sha256": "2dd45bd8265e92d4241fdc83fa2ed27f8ac976fb2aa840e691c798d4396f54fe"
+    },
+    {
+      "path": "frontend/src/pages/ExpenseRequestsPage.tsx",
+      "sha256": "d9a1fcab540a5d7f380ba9e1ba5fed0cc10eef22765d49a7b891a90619044dc7"
+    },
+    {
+      "path": "frontend/src/pages/ExpenseReviewCenterPage.tsx",
+      "sha256": "1dab34b6a41abedc838edb75b90046dc3d1464189cab3a5fd4cbade9be53ef9f"
+    },
+    {
+      "path": "frontend/src/pages/ForcePasswordChangePage.tsx",
+      "sha256": "de67742fca9455d629d8047f516d44b2e0865c19fc39ee648e88c4b2ddfba296"
+    },
+    {
+      "path": "frontend/src/pages/ImportPage.tsx",
+      "sha256": "f3b84c03bf148a5fb1369e150d4eddea917249084b6f6acd00cb57336badc463"
+    },
+    {
+      "path": "frontend/src/pages/JournalEntriesPage.tsx",
+      "sha256": "cd0125c8c3ba9af49822939151abfa4026f37e8af22a3a34b38e977eb542fa90"
+    },
+    {
+      "path": "frontend/src/pages/LoginPage.tsx",
+      "sha256": "872101eafb274b646f39fc2d6ea9a2a05b4db7acf010c043cc7daaf207dcae1b"
+    },
+    {
+      "path": "frontend/src/pages/PayrollPage.tsx",
+      "sha256": "d56dc85ab05defd80a042d9b7d019ffd8728233d1e65daae745de29e9fea8419"
+    },
+    {
+      "path": "frontend/src/pages/ProductsPage.tsx",
+      "sha256": "c20b31e7124a28e8b526e911598d92e5820c605de733815113108d830e30b5c0"
+    },
+    {
+      "path": "frontend/src/pages/ProfilePage.tsx",
+      "sha256": "f386f965d0bb51ce69ab3d27c21657dcfd174a42fadf61de5ad14e35fbccaee2"
+    },
+    {
+      "path": "frontend/src/pages/PurchaseOrdersPage.tsx",
+      "sha256": "8a1b00748fc084b6d4c159d751d407b260006548be353e0fb612da1134ed2891"
+    },
+    {
+      "path": "frontend/src/pages/ReconciliationCenterPage.tsx",
+      "sha256": "0f2e1da8e328b35c63414d099991fc5dd75a8973a4649977ba64d70fcaefec41"
+    },
+    {
+      "path": "frontend/src/pages/ReimbursementItemsAdminPage.tsx",
+      "sha256": "a7a38018bd48a43498c62e6e347540cefc8af3cdd9b77b14189961ad2c484508"
+    },
+    {
+      "path": "frontend/src/pages/ReportsPage.tsx",
+      "sha256": "a27e7959d7f796ff5ec7127b19d9b83cbefe73cede0c0d9916abd5b53fc1d298"
+    },
+    {
+      "path": "frontend/src/pages/ResetPasswordPage.tsx",
+      "sha256": "98c44c9bd0b3a6e0a1088b11eaf6daafa5804c52e855058486dcf5230cbd1b73"
+    },
+    {
+      "path": "frontend/src/pages/SalesPage.tsx",
+      "sha256": "018e035491dfecc1114378f06ab6eda7f1a8d08e8ada7998f34a3fbd151f7c0a"
+    },
+    {
+      "path": "frontend/src/pages/SalesQuotationsPage.tsx",
+      "sha256": "766b9a67a110034e6999208a851a4aa7fae5bf7ba5b5f9086a64947f58191f75"
+    },
+    {
+      "path": "frontend/src/pages/SnLabelsPage.tsx",
+      "sha256": "4174d8bf15a7739df444f023d5b3bb88df3b5754e562ab6e5069a47530f9ebf4"
+    },
+    {
+      "path": "frontend/src/pages/SystemSettingsPage.tsx",
+      "sha256": "b32897a7f2fb8c708cb6b380fbfbe771a05a819e72e97712706e5b4a2dd31192"
+    },
+    {
+      "path": "frontend/src/pages/TimeoutReconciliationPage.tsx",
+      "sha256": "45c0c82c8b221becb83cfe1b4d3cba4a7e708bfff1ce25be8f8d7c990b9750d2"
+    },
+    {
+      "path": "frontend/src/pages/VendorsPage.tsx",
+      "sha256": "d66149dc8f44beeb9ac6974dbe6c1b3a26eda9cbc243e1d3580c7950cfbdb069"
+    },
+    {
+      "path": "frontend/src/pages/WarehouseCenterPage.tsx",
+      "sha256": "ef06f199d6d9adf15d349c9606357d3b588bbd238d8d8e61e303f71aa237a8ee"
+    },
+    {
+      "path": "frontend/src/pages/WarehousePortalPage.tsx",
+      "sha256": "c3f762446a7ccc1a718a693449085a4f47c54141a57cf4e3461264280f9e3509"
+    },
+    {
+      "path": "frontend/src/pages/WarehouseReportsPage.tsx",
+      "sha256": "b9563d326d290198065797a9ecca390c78c43ea687bc7c0acfff5c47a598f669"
+    },
+    {
+      "path": "frontend/src/pages/WarehouseWorkspacePage.tsx",
+      "sha256": "7c658d776776a6ef77fad15c8340091890ab21728d00ca68f14c2546e7d03ab1"
+    },
+    {
+      "path": "frontend/src/pages/WmsHandoverReconciliationPage.tsx",
+      "sha256": "5753d6ab5a30e71c9b3b5ba72087dfd775b617c89b91bf5e95b85510a51b0bc2"
+    },
+    {
+      "path": "frontend/src/services/b2b.service.ts",
+      "sha256": "043c0beb079bc2730123dc952a043f0f22cfcf417ccb71c28035ef57a042557c"
+    },
+    {
+      "path": "frontend/src/services/wms-reconciliation.service.ts",
+      "sha256": "21c197c7e0bbdc330afa06da213d3a69b69d2a92eca8aefeaef90e7eebfebba3"
+    },
+    {
+      "path": "frontend/src/utils/access.ts",
+      "sha256": "2483d387421429e10e5f2515eec6045b8509d9e1e98cbcc80eb964470833ede9"
+    },
+    {
+      "path": "frontend/src/utils/login-destination.ts",
+      "sha256": "3b2c45ba9c08cde04c01cb2793007f29c274ebd8341dcfd91496e8974d851e84"
+    }
+  ]
+}

@@ -48,6 +48,9 @@ const aiOrigin = 'https://generativelanguage.googleapis.com';
 const aiHost = new URL(aiOrigin).hostname;
 const aiEnabled = process.env.ERP_DEV_AI_ENABLED === 'true' && Boolean(process.env.GEMINI_API_KEY?.trim());
 const aiPaths = new Set([
+  '/v1beta/models/gemini-3.5-flash-lite:generateContent',
+  '/v1beta/models/gemini-3.5-flash:generateContent',
+  // Retain the reviewed legacy paths for older ERP AI entry points.
   '/v1beta/models/gemini-2.5-flash:generateContent',
   '/v1beta/models/gemini-2.5-pro:generateContent',
 ]);
