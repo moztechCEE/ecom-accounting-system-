@@ -97,7 +97,7 @@ const App: React.FC = () => {
                 <Route path="admin/after-sales-brands" element={staged?<PermissionRoute anyRoles={['ADMIN']}><AfterSalesBrandsPage /></PermissionRoute>:<Navigate to="/sales/after-sales" replace />} />
                 <Route path="sales/after-sales/internal" element={<PermissionRoute anyPermissions={['after_sales_cases:read']}><AfterSalesCasesPage /></PermissionRoute>} />
                 <Route path="reports" element={<PermissionRoute anyPermissions={['reports:read']}><ReportsPage /></PermissionRoute>} />
-                <Route path="vendors" element={<PermissionRoute anyPermissions={['purchase_orders:read', 'accounts:read']}><VendorsPage /></PermissionRoute>} />
+                <Route path="vendors" element={<PermissionRoute anyPermissions={['purchase_orders:read', 'purchase_orders:create', 'accounts:read']}><VendorsPage /></PermissionRoute>} />
                 
                 {/* New Module Routes */}
                 <Route path="sales/invoices" element={<PermissionRoute anyPermissions={['sales_orders:read', 'accounts:read']}><ArInvoicesPage /></PermissionRoute>} />

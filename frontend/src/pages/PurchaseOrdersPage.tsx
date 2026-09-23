@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react'
-import { Alert, Card, Typography, Table, Button, Tag, message, Modal, Form, Select, InputNumber, Space } from 'antd'
-import { FileTextOutlined, ReloadOutlined, ScanOutlined, CalculatorOutlined } from '@ant-design/icons'
+import { Alert, Card, Typography, Table, Button, Tag, message, Modal, Form, Select, InputNumber, Space, Input } from 'antd'
+import { FileTextOutlined, ReloadOutlined, ScanOutlined, CalculatorOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import dayjs from 'dayjs'
 import { purchaseService, PurchaseOrder } from '../services/purchase.service'
-import type { LandedCostInput, LandedCostPreview } from '../services/purchase.service'
+import type { CreatePurchaseOrderDto, LandedCostInput, LandedCostPreview, PurchaseOrderOptions } from '../services/purchase.service'
 import { inventoryService } from '../services/inventory.service'
 import { resolveEntityId } from '../services/entities.service'
 import { useAuth } from '../contexts/AuthContext'
+import { useEntityContext } from '../hooks/useEntityContext'
+import { hasAnyPermission } from '../utils/access'
+import { buildManualPurchaseOrder } from './manual-purchase-order'
 
 const { Title, Text } = Typography
 const decimal = (value: string | number) => Number(value || 0).toLocaleString('zh-TW', { maximumFractionDigits: 2 })
@@ -139,9 +143,19 @@ function LandedCostModal({ order, canEdit, onClose, onSaved }: { order: Purchase
 const PurchaseOrdersPage: React.FC = () => {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const entityId = useEntityContext()
   const canManagePurchase = Boolean(user?.roles?.some((role) => role === 'ADMIN' || role === 'OPERATOR'))
+  const canCreatePurchase = hasAnyPermission(user, ['purchase_orders:create'])
   const [orders, setOrders] = useState<PurchaseOrder[]>([])
   const [loading, setLoading] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [optionsLoading, setOptionsLoading] = useState(false)
+  const [vendors, setVendors] = useState<PurchaseOrderOptions['vendors']>([])
+  const [products, setProducts] = useState<PurchaseOrderOptions['products']>([])
+  const [createForm] = Form.useForm<CreatePurchaseOrderDto>()
+  const selectedCurrency = Form.useWatch('currency', createForm)
+  const selectedItems = Form.useWatch('items', createForm)
   const [receivingOrder, setReceivingOrder] = useState<PurchaseOrder | null>(null)
   const [warehouses, setWarehouses] = useState<Array<{ id: string; code: string; name: string }>>([])
   const [receiving, setReceiving] = useState(false)
@@ -152,7 +166,7 @@ const PurchaseOrdersPage: React.FC = () => {
   const openLandedCost = async (record: PurchaseOrder) => {
     try {
       setOpeningCostId(record.id)
-      setCostOrder(await purchaseService.findOne(record.id))
+      setCostOrder(await purchaseService.findOne(record.id, entityId))
     } catch (error) { message.error(purchaseError(error)) }
     finally { setOpeningCostId(null) }
   }
@@ -160,7 +174,7 @@ const PurchaseOrdersPage: React.FC = () => {
   const fetchOrders = async () => {
     setLoading(true)
     try {
-      const data = await purchaseService.findAll()
+      const data = await purchaseService.findAll(entityId)
       setOrders(data)
     } catch {
       message.error('無法載入採購訂單')
@@ -170,8 +184,39 @@ const PurchaseOrdersPage: React.FC = () => {
   }
 
   useEffect(() => {
-    fetchOrders()
-  }, [])
+    void fetchOrders()
+  }, [entityId])
+
+  const openCreate = async () => {
+    createForm.resetFields()
+    createForm.setFieldsValue({ orderDate: dayjs().format('YYYY-MM-DD'), currency: 'TWD', fxRate: 1, items: [{ productId: '', qty: 1, unitCost: 0 }] })
+    setCreateOpen(true)
+    setOptionsLoading(true)
+    setVendors([])
+    setProducts([])
+    try {
+      const options = await purchaseService.options(entityId)
+      setVendors(options.vendors)
+      setProducts(options.products)
+    } catch (error) {
+      message.error(`無法載入此公司的供應商或商品：${purchaseError(error)}`)
+    } finally { setOptionsLoading(false) }
+  }
+
+  const handleCreate = async () => {
+    try {
+      const values = await createForm.validateFields()
+      const payload = buildManualPurchaseOrder(values, vendors, products)
+      setCreating(true)
+      await purchaseService.create(payload, entityId)
+      message.success('採購單已建立，請接著設定運費與到岸成本。')
+      setCreateOpen(false)
+      createForm.resetFields()
+      await fetchOrders()
+    } catch (error) {
+      if (!(error && typeof error === 'object' && 'errorFields' in error)) message.error(purchaseError(error))
+    } finally { setCreating(false) }
+  }
 
   useEffect(() => {
     if (!receivingOrder) return
@@ -217,6 +262,7 @@ const PurchaseOrdersPage: React.FC = () => {
           productId: item.productId,
           serialNumbers: values.serialNumbers?.[item.productId] || [],
         })),
+        entityId,
       )
       message.success('採購單已完成收貨入庫')
       setReceivingOrder(null)
@@ -297,6 +343,7 @@ const PurchaseOrdersPage: React.FC = () => {
         </div>
         <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:w-auto lg:flex lg:flex-wrap lg:justify-end">
           <Button className="w-full lg:w-auto" icon={<ReloadOutlined />} onClick={fetchOrders}>重新整理</Button>
+          {canCreatePurchase ? <Button className="w-full lg:w-auto" type="primary" icon={<PlusOutlined />} onClick={() => void openCreate()}>建立採購單</Button> : null}
           <Button className="w-full lg:w-auto" icon={<FileTextOutlined />} onClick={() => navigate('/sales/quotations')}>
             客戶報價單
           </Button>
@@ -312,6 +359,31 @@ const PurchaseOrdersPage: React.FC = () => {
           scroll={{ x: 900 }}
         />
       </Card>
+
+      <Modal title="建立採購單" open={createOpen} width={860} confirmLoading={creating} okText="建立採購單" okButtonProps={{ disabled: optionsLoading || vendors.length === 0 || products.length === 0 }} onCancel={() => setCreateOpen(false)} onOk={() => void handleCreate()} destroyOnHidden>
+        <Alert showIcon type="info" style={{ marginBottom: 16 }} message="手動建立供應商採購單；核對商品與價格後再送出。建立後可設定運費，收貨時才會增加庫存。" />
+        <Form<CreatePurchaseOrderDto> form={createForm} layout="vertical">
+          <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+            <Form.Item name="vendorId" label="供應商" rules={[{ required: true, message: '請選擇供應商' }]}><Select loading={optionsLoading} showSearch optionFilterProp="label" placeholder="選擇目前公司的有效供應商" options={vendors.map((vendor) => ({ value: vendor.id, label: vendor.name }))} /></Form.Item>
+            <Form.Item name="orderDate" label="採購日期" rules={[{ required: true, message: '請選擇採購日期' }]}><Input type="date" /></Form.Item>
+            <Form.Item name="currency" label="採購幣別" rules={[{ required: true, message: '請選擇幣別' }]}><Select options={['TWD', 'CNY', 'USD', 'HKD', 'JPY', 'EUR'].map((value) => ({ value, label: value }))} onChange={(value) => createForm.setFieldValue('fxRate', value === 'TWD' ? 1 : undefined)} /></Form.Item>
+            <Form.Item name="fxRate" label="原幣換算本位幣匯率" rules={[{ required: true, message: '請填寫匯率' }, { type: 'number', min: 0.000001, max: 1000000, message: '匯率需大於 0 且不超過 1,000,000' }]}><InputNumber min={0.000001} max={1000000} precision={6} disabled={selectedCurrency === 'TWD'} style={{ width: '100%' }} /></Form.Item>
+          </div>
+          <Typography.Title level={5}>採購品項</Typography.Title>
+          <Form.List name="items" rules={[{ validator: async (_, rows) => { if (!Array.isArray(rows) || !rows.length) throw new Error('請至少加入一項商品') } }]}>{(fields, { add, remove }, { errors }) => <>
+            {fields.map((field) => <div key={field.key} className="grid grid-cols-1 gap-x-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-[minmax(0,1fr)_120px_150px_36px]">
+              <Form.Item name={[field.name, 'productId']} label="商品" rules={[{ required: true, message: '請選擇商品' }]}><Select loading={optionsLoading} showSearch optionFilterProp="label" options={products.map((product) => ({ value: product.id, label: `${product.sku} · ${product.name}` }))} /></Form.Item>
+              <Form.Item name={[field.name, 'qty']} label="數量" rules={[{ required: true, message: '請填數量' }, { type: 'integer', min: 1, max: 1000000, message: '需為 1 至 1,000,000 的整數' }]}><InputNumber min={1} max={1000000} precision={0} style={{ width: '100%' }} /></Form.Item>
+              <Form.Item name={[field.name, 'unitCost']} label="原幣單價" rules={[{ required: true, message: '請填單價' }, { type: 'number', min: 0.01, max: 100000000, message: '單價需大於 0 且不超過 100,000,000' }]}><InputNumber min={0.01} max={100000000} precision={2} style={{ width: '100%' }} /></Form.Item>
+              <Button aria-label="移除品項" icon={<DeleteOutlined />} disabled={fields.length === 1} onClick={() => remove(field.name)} style={{ alignSelf: 'center' }} />
+            </div>)}
+            <Form.ErrorList errors={errors} />
+            <Button icon={<PlusOutlined />} disabled={fields.length >= 1000} onClick={() => add({ productId: '', qty: 1, unitCost: 0 })}>新增品項</Button>
+          </>}</Form.List>
+          <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>商品金額估計：{selectedCurrency || 'TWD'} {decimal((selectedItems || []).reduce((sum, item) => sum + Number(item?.qty || 0) * Number(item?.unitCost || 0), 0))}；運費請在建單後另行試算。</Typography.Paragraph>
+          <Form.Item name="notes" label="備註"><Input.TextArea rows={2} maxLength={1000} /></Form.Item>
+        </Form>
+      </Modal>
 
       {costOrder ? <LandedCostModal key={costOrder.id} order={costOrder} canEdit={canManagePurchase} onClose={() => setCostOrder(null)} onSaved={async () => { setCostOrder(null); await fetchOrders() }} /> : null}
 

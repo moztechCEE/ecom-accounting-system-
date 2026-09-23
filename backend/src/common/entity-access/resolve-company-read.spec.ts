@@ -91,7 +91,9 @@ describe('Verified company read scope', () => {
       expect(Reflect.getMetadata(PERMISSIONS_KEY, method)).toEqual(['purchase_orders:read']);
       expect(Reflect.getMetadata(ROLES_KEY, method)).toBeUndefined();
     }
-    expect(Reflect.getMetadata(ROLES_KEY, PurchaseController.prototype.create)).toEqual(['ADMIN', 'OPERATOR']);
+    expect(Reflect.getMetadata(ROLES_KEY, PurchaseController.prototype.create)).toBeUndefined();
+    expect(Reflect.getMetadata(PERMISSIONS_KEY, PurchaseController.prototype.create)).toEqual(['purchase_orders:create']);
+    expect(Reflect.getMetadata(PERMISSIONS_KEY, PurchaseController.prototype.options)).toEqual(['purchase_orders:create']);
     expect(Reflect.getMetadata(ROLES_KEY, PurchaseController.prototype.receive)).toEqual(['ADMIN', 'OPERATOR']);
   });
 });

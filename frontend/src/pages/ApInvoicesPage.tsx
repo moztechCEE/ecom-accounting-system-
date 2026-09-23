@@ -138,7 +138,7 @@ const ApInvoicesPage_Deprecated: React.FC = () => {
     () =>
       vendors.map((vendor) => ({
         value: vendor.id,
-        label: `${vendor.name}${vendor.code ? ` (${vendor.code})` : ''}`,
+        label: vendor.name,
       })),
     [vendors],
   )

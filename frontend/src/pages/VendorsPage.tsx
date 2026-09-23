@@ -29,11 +29,17 @@ import {
 } from '@ant-design/icons'
 import { vendorService } from '../services/vendor.service'
 import { Vendor, CreateVendorDto } from '../types'
+import { useAuth } from '../contexts/AuthContext'
+import { useEntityContext } from '../hooks/useEntityContext'
+import { hasAnyPermission } from '../utils/access'
 
 const { Title, Text } = Typography
 const { Option } = Select
 
 const VendorsPage: React.FC = () => {
+  const { user } = useAuth()
+  const entityId = useEntityContext()
+  const canManage = hasAnyPermission(user, ['purchase_orders:create'])
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [loading, setLoading] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -44,7 +50,7 @@ const VendorsPage: React.FC = () => {
   const loadVendors = async () => {
     setLoading(true)
     try {
-      const data = await vendorService.findAll()
+      const data = await vendorService.findAll(entityId)
       setVendors(Array.isArray(data) ? data : [])
     } catch (error: any) {
       message.error(error.response?.data?.message || '載入失敗')
@@ -55,8 +61,8 @@ const VendorsPage: React.FC = () => {
   }
 
   useEffect(() => {
-    loadVendors()
-  }, [])
+    void loadVendors()
+  }, [entityId])
 
   const stats = useMemo(() => {
     const total = vendors.length
@@ -70,7 +76,6 @@ const VendorsPage: React.FC = () => {
     return vendors.filter(
       v =>
         v.name.toLowerCase().includes(lower) ||
-        v.code.toLowerCase().includes(lower) ||
         v.taxId?.includes(lower)
     )
   }, [vendors, searchKeyword])
@@ -78,7 +83,7 @@ const VendorsPage: React.FC = () => {
   const handleAdd = () => {
     setEditingVendor(null)
     form.resetFields()
-    form.setFieldsValue({ isActive: true, currency: 'TWD' })
+    form.setFieldsValue({ isActive: true, defaultCurrency: 'TWD' })
     setDrawerOpen(true)
   }
 
@@ -88,13 +93,13 @@ const VendorsPage: React.FC = () => {
     setDrawerOpen(true)
   }
 
-  const handleDelete = async (id: string) => {
+  const handleDeactivate = async (id: string) => {
     try {
-      await vendorService.remove(id)
-      message.success('刪除成功')
+      await vendorService.remove(id, entityId)
+      message.success('供應商已停用，歷史採購資料保留')
       loadVendors()
     } catch (error: any) {
-      message.error(error.response?.data?.message || '刪除失敗')
+      message.error(error.response?.data?.message || '停用失敗')
     }
   }
 
@@ -102,26 +107,26 @@ const VendorsPage: React.FC = () => {
     try {
       const values = await form.validateFields()
       if (editingVendor) {
-        await vendorService.update(editingVendor.id, values)
+        await vendorService.update(editingVendor.id, values, entityId)
         message.success('更新成功')
       } else {
-        await vendorService.create(values as CreateVendorDto)
+        await vendorService.create(values as CreateVendorDto, entityId)
         message.success('新增成功')
       }
       setDrawerOpen(false)
       loadVendors()
-    } catch (error) {
-      // Form validation error
+    } catch (error: any) {
+      if (!error?.errorFields) message.error(error?.response?.data?.message || '供應商儲存失敗')
     }
   }
 
   const columns = [
     {
-      title: '供應商代碼',
-      dataIndex: 'code',
-      key: 'code',
+      title: '國家／地區',
+      dataIndex: 'country',
+      key: 'country',
       width: 120,
-      render: (text: string) => <span className="font-mono text-gray-600">{text}</span>
+      render: (text: string) => text || '—'
     },
     {
       title: '名稱',
@@ -143,13 +148,13 @@ const VendorsPage: React.FC = () => {
     },
     {
       title: 'Email',
-      dataIndex: 'email',
-      key: 'email',
+      dataIndex: 'contactEmail',
+      key: 'contactEmail',
     },
     {
       title: '幣別',
-      dataIndex: 'currency',
-      key: 'currency',
+      dataIndex: 'defaultCurrency',
+      key: 'defaultCurrency',
       width: 80,
       render: (text: string) => <Tag>{text}</Tag>
     },
@@ -168,22 +173,22 @@ const VendorsPage: React.FC = () => {
       title: '操作',
       key: 'action',
       width: 120,
-      render: (_: any, record: Vendor) => (
+      render: (_: any, record: Vendor) => canManage ? (
         <Space size="small">
           <Button 
             type="text" 
             icon={<EditOutlined />} 
             onClick={() => handleEdit(record)}
           />
-          <Popconfirm
-            title="確認刪除"
-            description={`確定要刪除供應商 ${record.name} 嗎？`}
-            onConfirm={() => handleDelete(record.id)}
+          {record.isActive ? <Popconfirm
+            title="確認停用"
+            description={`確定要停用供應商 ${record.name} 嗎？歷史採購紀錄會保留。`}
+            onConfirm={() => handleDeactivate(record.id)}
           >
-            <Button type="text" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+            <Button type="text" danger icon={<DeleteOutlined />} aria-label={`停用 ${record.name}`} />
+          </Popconfirm> : null}
         </Space>
-      ),
+      ) : '—',
     },
   ]
 
@@ -195,7 +200,7 @@ const VendorsPage: React.FC = () => {
         </div>
         <Space>
           <Button icon={<ReloadOutlined />} onClick={loadVendors}>重新整理</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>新增供應商</Button>
+          {canManage && <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>新增供應商</Button>}
         </Space>
       </div>
 
@@ -228,7 +233,7 @@ const VendorsPage: React.FC = () => {
             <Input
               allowClear
               prefix={<SearchOutlined />}
-              placeholder="搜尋代碼、名稱或統編"
+              placeholder="搜尋名稱或統編"
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
               style={{ minWidth: 280 }}
@@ -263,20 +268,19 @@ const VendorsPage: React.FC = () => {
               <Row gutter={16}>
                 <Col span={12}>
                   <Form.Item
-                    name="code"
-                    label="供應商代碼"
-                    rules={[{ required: true, message: '請輸入代碼' }]}
+                    name="name"
+                    label="供應商名稱"
+                    rules={[{ required: true, whitespace: true, message: '請輸入名稱' }]}
                   >
-                    <Input placeholder="例如：V001" />
+                    <Input maxLength={200} placeholder="輸入公司名稱" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item
-                    name="name"
-                    label="供應商名稱"
-                    rules={[{ required: true, message: '請輸入名稱' }]}
+                    name="country"
+                    label="國家／地區"
                   >
-                    <Input placeholder="輸入公司名稱" />
+                    <Input maxLength={100} placeholder="例如：台灣" />
                   </Form.Item>
                 </Col>
               </Row>
@@ -303,14 +307,14 @@ const VendorsPage: React.FC = () => {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="phone" label="電話">
+                  <Form.Item name="contactPhone" label="電話">
                     <Input />
                   </Form.Item>
                 </Col>
               </Row>
               <Row gutter={16}>
                 <Col span={24}>
-                  <Form.Item name="email" label="Email" rules={[{ type: 'email' }]}>
+                  <Form.Item name="contactEmail" label="Email" rules={[{ type: 'email' }]}>
                     <Input />
                   </Form.Item>
                 </Col>
@@ -328,21 +332,12 @@ const VendorsPage: React.FC = () => {
               <div className="mb-4 font-semibold text-slate-800">財務設定</div>
               <Row gutter={16}>
                 <Col span={12}>
-                  <Form.Item name="currency" label="預設幣別">
+                  <Form.Item name="defaultCurrency" label="預設幣別">
                     <Select>
                       <Option value="TWD">TWD - 新台幣</Option>
                       <Option value="USD">USD - 美金</Option>
                       <Option value="EUR">EUR - 歐元</Option>
                       <Option value="JPY">JPY - 日圓</Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="paymentTerms" label="付款條件">
-                    <Select>
-                      <Option value="NET30">月結 30 天</Option>
-                      <Option value="NET60">月結 60 天</Option>
-                      <Option value="COD">貨到付款</Option>
                     </Select>
                   </Form.Item>
                 </Col>

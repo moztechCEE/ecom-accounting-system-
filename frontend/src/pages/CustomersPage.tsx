@@ -26,6 +26,9 @@ import {
 import { motion } from 'framer-motion'
 import dayjs from 'dayjs'
 import { customerService, Customer } from '../services/customer.service'
+import { useEntityContext } from '../hooks/useEntityContext'
+import { useAuth } from '../contexts/AuthContext'
+import { hasAnyPermission } from '../utils/access'
 
 const { Title, Text } = Typography
 const { Option } = Select
@@ -34,6 +37,9 @@ const formatCurrency = (value?: number | string | null) =>
   `NT$ ${Number(value || 0).toLocaleString('zh-TW', { maximumFractionDigits: 0 })}`
 
 const CustomersPage: React.FC = () => {
+  const entityId = useEntityContext()
+  const { user } = useAuth()
+  const canManage = hasAnyPermission(user, ['sales_orders:create'])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(false)
   const [searchText, setSearchText] = useState('')
@@ -46,7 +52,7 @@ const CustomersPage: React.FC = () => {
   const fetchCustomers = async () => {
     setLoading(true)
     try {
-      const data = await customerService.findAll()
+      const data = await customerService.findAll(entityId)
       setCustomers(data)
     } catch (error) {
       message.error('無法載入客戶列表')
@@ -57,7 +63,7 @@ const CustomersPage: React.FC = () => {
 
   useEffect(() => {
     fetchCustomers()
-  }, [])
+  }, [entityId])
 
   const sourceOptions = useMemo(() => {
     return Array.from(
@@ -129,10 +135,10 @@ const CustomersPage: React.FC = () => {
   const handleCreateOrUpdate = async (values: Partial<Customer>) => {
     try {
       if (editingId) {
-        await customerService.update(editingId, values)
+        await customerService.update(editingId, values, entityId)
         message.success('客戶更新成功')
       } else {
-        await customerService.create(values)
+        await customerService.create(values, entityId)
         message.success('客戶建立成功')
       }
       setIsModalVisible(false)
@@ -144,13 +150,13 @@ const CustomersPage: React.FC = () => {
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const handleDeactivate = async (id: string) => {
     try {
-      await customerService.delete(id)
-      message.success('客戶已刪除')
+      await customerService.delete(id, entityId)
+      message.success('客戶已停用，歷史銷售與 B2B 資料保留')
       fetchCustomers()
     } catch (error) {
-      message.error('刪除失敗')
+      message.error('停用失敗')
     }
   }
 
@@ -279,14 +285,14 @@ const CustomersPage: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      render: (_: unknown, record: Customer) => (
+      render: (_: unknown, record: Customer) => canManage ? (
         <Space size="middle">
           <Button icon={<EditOutlined />} onClick={() => openEditModal(record)} />
-          <Popconfirm title="確定要刪除嗎？" onConfirm={() => handleDelete(record.id)}>
-            <Button icon={<DeleteOutlined />} danger />
-          </Popconfirm>
+          {record.isActive ? <Popconfirm title="確定停用這位客戶嗎？歷史訂單會保留，顧客帳號將無法再進入採購前台。" onConfirm={() => handleDeactivate(record.id)}>
+            <Button icon={<DeleteOutlined />} danger aria-label={`停用 ${record.name}`} />
+          </Popconfirm> : null}
         </Space>
-      ),
+      ) : '—',
     },
   ]
 
@@ -323,7 +329,7 @@ const CustomersPage: React.FC = () => {
             ]}
           />
           <Button icon={<ReloadOutlined />} onClick={fetchCustomers}>重新整理</Button>
-          <Button
+          {canManage && <Button
             type="primary"
             icon={<PlusOutlined />}
             size="large"
@@ -334,7 +340,7 @@ const CustomersPage: React.FC = () => {
             }}
           >
             新增客戶
-          </Button>
+          </Button>}
         </Space>
       </div>
 

@@ -142,8 +142,10 @@ export class CustomerService {
       select: { id: true },
     });
     if (!existing) throw new NotFoundException('Customer not found');
-    return this.prisma.customer.delete({
+    // Keep orders, quotations and B2B account links for the audit trail.
+    return this.prisma.customer.update({
       where: { id, entityId },
+      data: { isActive: false },
     });
   }
 

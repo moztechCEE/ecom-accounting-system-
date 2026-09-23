@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:f92412065e76063261a4362daaf63eedb7c5b859359da331b36150ee2820d4f2",
+  "sourceVersion": "sha256:5c21d8b7492d7fddc593255e98b8f7f265e03444f40f17dfc4165b58a7b86d35",
   "reviewedBaseCommit": "9165c7123b10750b598a95f9badfc9c00ed04abd",
   "entryCount": 59,
   "groups": [
@@ -18,7 +18,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "ecb43e063448459173049f69e0060bfd3e10ad5d9825fa02eb2cdbc43eaa1024",
+  "catalogSha256": "fad612b7db54fc1a3703282dfa4d5983ab1d28af1d11c7de3cd17437760474bc",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -212,6 +212,10 @@
       "sha256": "887c129a540aec57da711aa97b3153a0a9aa1950574b3586d310d21606f91ce7"
     },
     {
+      "path": "backend/src/modules/inventory/inventory.controller.ts",
+      "sha256": "499abda49bea9b3dba7eccbc49cdd2976871f4ee20b528aa2950da6f231a6134"
+    },
+    {
       "path": "backend/src/modules/payroll/payroll.controller.ts",
       "sha256": "18e20f4183ac8a2eaf8c84eeda50a568a09737bbb77a317d7b55d634e0e7762f"
     },
@@ -225,11 +229,11 @@
     },
     {
       "path": "backend/src/modules/purchase/purchase.controller.ts",
-      "sha256": "3b5f88253cd582c8a2744ad4206f524601e5e4dbe019103442714c60e4433c43"
+      "sha256": "7aae75b1c8a04786ae7aa540fc1bd397e1a00cb79f690ffad39ab53c9420078c"
     },
     {
       "path": "backend/src/modules/purchase/purchase.service.ts",
-      "sha256": "3ac12a9beba7556baa7c114b17dc92d2eff382ddb5fad17fa4055ed3512c0c6e"
+      "sha256": "30f1ba3822a85d318c5646350c17d98997aae02aab9e7489c6e24a17385247f7"
     },
     {
       "path": "backend/src/modules/reconciliation/reconciliation.controller.ts",
@@ -245,7 +249,7 @@
     },
     {
       "path": "backend/src/modules/sales/customer.controller.ts",
-      "sha256": "3af2d5cde8db889f5bf49b8d99e45c1b0e8702ca51ce2e9fc20c7184cf89d3fb"
+      "sha256": "6afc0faaa7925cfa962058bf9a5e321a440d15948c89133c99ae125258fa6713"
     },
     {
       "path": "backend/src/modules/sales/sales.controller.ts",
@@ -261,15 +265,15 @@
     },
     {
       "path": "backend/src/modules/vendor/vendor.controller.ts",
-      "sha256": "0bb94565a321b3a38c9bfd40d227bc00c4f80e1577a37539d3f5c9f88b236e51"
+      "sha256": "edbc2a1adc3fc0fa13a4fc086fa350e01ba62248a2b80dcd8426b557ff6a1003"
     },
     {
       "path": "frontend/src/App.tsx",
-      "sha256": "01c7b4984c2beb8220054e73dbe74f4e6750bf0ce4f100a016bfd36fe2b9034b"
+      "sha256": "4d068c93fe9ea5538021df3884f1d683a9b29ab8c71f3ce06c10c71eedc24b89"
     },
     {
       "path": "frontend/src/config/navigation.ts",
-      "sha256": "3cc8e1dbabb85b239a692876fc12e3353b2beac2118e69f716a270fb9b5f4059"
+      "sha256": "01e362f1e77441994de8b5021d6fb7907275a9d10e48d2be07c360df58683688"
     },
     {
       "path": "frontend/src/config/release.ts",
@@ -365,7 +369,7 @@
     },
     {
       "path": "frontend/src/pages/CustomersPage.tsx",
-      "sha256": "ccb30a1f6a713a4ea623ab477145fc385912e5b0821804daf0eb004caa91c684"
+      "sha256": "e29af8846ce7b9da6c86f7f8a70c1d91ad833fffb228bbc059495fec0831c848"
     },
     {
       "path": "frontend/src/pages/DashboardPage.tsx",
@@ -405,7 +409,7 @@
     },
     {
       "path": "frontend/src/pages/ProductsPage.tsx",
-      "sha256": "c20b31e7124a28e8b526e911598d92e5820c605de733815113108d830e30b5c0"
+      "sha256": "ce15f9344f2030743895f4e1890b8f2a82a03380a7b5f1a1ba72116649e418d5"
     },
     {
       "path": "frontend/src/pages/ProfilePage.tsx",
@@ -413,7 +417,7 @@
     },
     {
       "path": "frontend/src/pages/PurchaseOrdersPage.tsx",
-      "sha256": "8a1b00748fc084b6d4c159d751d407b260006548be353e0fb612da1134ed2891"
+      "sha256": "718152a989cea00a1d6985c48151e731c56b935456f8a2d9657797c7fd3bb28f"
     },
     {
       "path": "frontend/src/pages/ReconciliationCenterPage.tsx",
@@ -453,7 +457,7 @@
     },
     {
       "path": "frontend/src/pages/VendorsPage.tsx",
-      "sha256": "d66149dc8f44beeb9ac6974dbe6c1b3a26eda9cbc243e1d3580c7950cfbdb069"
+      "sha256": "6e48769ff51ef2f8b0a41c1d504c5672924a89dfc0cab4e5e5695a61d35d1971"
     },
     {
       "path": "frontend/src/pages/WarehouseCenterPage.tsx",
@@ -478,6 +482,10 @@
     {
       "path": "frontend/src/services/b2b.service.ts",
       "sha256": "043c0beb079bc2730123dc952a043f0f22cfcf417ccb71c28035ef57a042557c"
+    },
+    {
+      "path": "frontend/src/services/inventory.service.ts",
+      "sha256": "f4205876a7f5617e644c5a6417f5fc24831eca1bc812c56087eb3bde48a81a58"
     },
     {
       "path": "frontend/src/services/wms-reconciliation.service.ts",

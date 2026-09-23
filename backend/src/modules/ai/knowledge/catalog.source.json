@@ -621,7 +621,7 @@
     {
       "id": "customers",
       "title": "客戶管理",
-      "summary": "查詢客戶基本資料、聯絡方式與客戶類型。",
+      "summary": "依授權公司建立與維護客戶基本資料、聯絡方式與客戶類型。",
       "keywords": [
         "客戶",
         "customer",
@@ -636,12 +636,12 @@
       "group": "sales",
       "sections": {
         "steps": [
-          "在客戶管理查看或搜尋客戶，先比對姓名、公司與聯絡資訊避免重複。",
-          "依畫面及個人權限維護客戶資料，再於訂單或報價選用。"
+          "先選擇公司，在客戶管理查看或搜尋客戶，比對姓名、公司與聯絡資訊避免重複。",
+          "依畫面及業務權限建立或維護該公司客戶資料，再於訂單或報價選用。"
         ],
         "boundaries": [
           "聯絡資訊是公司業務資料，只能在授權公司及業務範圍內使用。",
-          "建立或查看客戶不等於已寄送報價或訊息。"
+          "停用客戶會保留既有銷單與採購需求歷史，並阻止其客戶入口帳號後續使用；建立或查看客戶不等於已寄送報價或訊息。"
         ],
         "related": [
           "sales-orders",
@@ -651,7 +651,7 @@
       "translations": {
         "en": {
           "title": "Customers",
-          "summary": "Look up customer profiles, contact details and customer types.",
+          "summary": "Create and maintain customer profiles, contact details and customer types within an authorized company.",
           "category": "Sales",
           "keywords": [
             "Customers",
@@ -659,12 +659,12 @@
           ],
           "sections": {
             "steps": [
-              "Find a customer and compare name, company and contact details to avoid duplicates.",
-              "Maintain the customer where the page and your permissions allow, then select that record for an order or quotation."
+              "Select the company, then find a customer and compare name, company and contact details to avoid duplicates.",
+              "Create or maintain that company's customer where your sales permissions allow, then select the record for an order or quotation."
             ],
             "boundaries": [
               "Contact information is business data limited to authorized companies and purposes.",
-              "Creating or viewing a customer does not send a quotation or message."
+              "Deactivating a customer preserves sales and request history and blocks further customer-portal access. Creating or viewing a customer does not send a quotation or message."
             ],
             "related": [
               "sales-orders",
@@ -703,10 +703,11 @@
       "sections": {
         "steps": [
           "在產品與庫存頁確認公司，搜尋或查看 SKU 與產品資料。",
-          "比對產品名稱、規格及庫存快照，需要序號或箱標時進入 SN 與標籤。"
+          "比對產品名稱、規格及庫存快照，需要序號或箱標時進入 SN 與標籤；匯入舊 ERP 庫存前確認目前公司，預覽後若切換公司須重新預覽。"
         ],
         "boundaries": [
-          "庫存快照不等於實體盤點、預留量或已完成出庫。",
+          "庫存快照不等於實體盤點、預留量或已完成出庫；對外通用庫存調整、預留與釋放入口已關閉，正式銷單出庫須依交運核銷流程。",
+          "查詢需要庫存讀取權限；建倉與舊 ERP 匯入需要庫存更新權限，且只能操作授權公司。",
           "成本與售價依原功能權限；Copilot 敏感成本工具需要額外授權。"
         ],
         "related": [
@@ -728,10 +729,11 @@
           "sections": {
             "steps": [
               "Confirm the company and find the SKU or product record.",
-              "Compare name, specification and stock snapshot; use SN and labels for serial or carton work."
+              "Compare name, specification and stock snapshot; use SN and labels for serial or carton work. Confirm the selected company before previewing a legacy ERP stock import, and preview again if the company changes."
             ],
             "boundaries": [
-              "A stock snapshot does not prove a physical count, reservation or completed dispatch.",
+              "A stock snapshot does not prove a physical count, reservation or completed dispatch. Generic HTTP stock adjustment, reservation and release endpoints are closed; final sales stock posting follows handover reconciliation.",
+              "Reads require inventory read permission. Warehouse creation and legacy ERP import require inventory update permission within an authorized company.",
               "Cost and price access follow original permissions; sensitive Copilot cost lookup needs additional authorization."
             ],
             "related": [
@@ -747,7 +749,9 @@
         "frontend/src/config/navigation.ts",
         "frontend/src/App.tsx",
         "frontend/src/pages/ProductsPage.tsx",
-        "backend/src/modules/product/product.controller.ts"
+        "frontend/src/services/inventory.service.ts",
+        "backend/src/modules/product/product.controller.ts",
+        "backend/src/modules/inventory/inventory.controller.ts"
       ],
       "permissions": [
         "inventory:read"
@@ -756,13 +760,13 @@
     {
       "id": "vendors",
       "title": "供應商管理",
-      "summary": "查詢供應商聯絡方式、幣別與付款資訊。",
+      "summary": "依授權公司建立與維護供應商聯絡方式、統編及預設幣別。",
       "keywords": [
         "供應商",
         "vendor",
         "廠商",
         "聯絡人",
-        "付款資訊"
+        "預設幣別"
       ],
       "path": "/vendors",
       "module": "vendor",
@@ -770,11 +774,11 @@
       "group": "inventory",
       "sections": {
         "steps": [
-          "開啟供應商管理，搜尋供應商並比對公司名稱與聯絡資訊。",
-          "採購或請款前確認交易幣別與付款資訊，以原始文件核實。"
+          "先選擇公司，在供應商管理搜尋並比對名稱、統編與聯絡資訊，避免重複建檔。",
+          "有採購建立權限者可新增、修改或停用該公司供應商；採購或請款前，以原始文件核實交易幣別與收款資料。"
         ],
         "boundaries": [
-          "供應商主檔不是付款完成證明；收款帳戶變更應依公司的核實流程。",
+          "停用供應商會保留既有採購歷史；供應商主檔不是付款完成證明。此頁不編輯收款帳戶，變更帳戶應依公司的核實流程。",
           "可見供應商不代表可跨公司查詢或修改付款。"
         ],
         "related": [
@@ -785,7 +789,7 @@
       "translations": {
         "en": {
           "title": "Vendors",
-          "summary": "Look up vendor contacts, currencies and payment details.",
+          "summary": "Create and maintain vendor contacts, tax IDs and default currencies within an authorized company.",
           "category": "Purchasing and inventory",
           "keywords": [
             "Vendors",
@@ -793,11 +797,11 @@
           ],
           "sections": {
             "steps": [
-              "Find a vendor and compare company name and contact details.",
-              "Before purchasing or requesting payment, verify currency and payment information against original documents."
+              "Select the company, then compare vendor names, tax IDs and contacts to avoid duplicates.",
+              "Staff with purchase creation access can add, change or deactivate a vendor in that company. Verify currency and payee details against original documents before purchase or payment."
             ],
             "boundaries": [
-              "A vendor record is not evidence of payment; verify bank-detail changes through the company process.",
+              "Deactivating a vendor preserves purchase history. A vendor record is not evidence of payment. This page does not edit bank accounts; verify changes through the company process.",
               "Vendor visibility does not grant cross-company or payment-write access."
             ],
             "related": [
@@ -834,14 +838,14 @@
       "group": "inventory",
       "sections": {
         "steps": [
-          "選定供應商與公司，核對採購品項、數量、價格與幣別。",
+          "先選公司；有採購建立權限者在採購單頁選擇該公司有效供應商與商品，填入日期、原幣單價、正整數數量、幣別與匯率後建立採購單。若選項缺少主檔，先到供應商或商品管理建檔。",
           "在待收貨採購單開啟「運費與到岸成本」，逐品項填本次總計費重量，輸入每公斤運費、運費幣別與必要匯率，先試算再保存估算。",
           "選擇收貨倉庫並核對品項數量；需序號的商品填齊序號後確認收貨入庫，再查看已保存的成本分攤。"
         ],
         "boundaries": [
           "運費與到岸成本在收貨前可修改；試算或保存估算都不增加庫存，收貨才建立庫存與成本紀錄，收貨後只能查看估算。",
           "採購單、收貨、應付與付款不是同一狀態，不能只憑建立採購單認定已進貨。",
-          "異動需要原採購功能權限；指南不提供繞過 API 授權的直接執行。"
+          "建單需要採購建立權限與公司範圍；收貨及運費試算／保存另依既有採購角色授權，指南不提供繞過 API 授權的直接執行。"
         ],
         "related": [
           "vendors",
@@ -861,14 +865,14 @@
           ],
           "sections": {
             "steps": [
-              "Select the vendor and company, then verify items, quantities, prices and currency.",
+              "Select the company. Staff with purchase creation access choose an active vendor and products from that company, enter date, currency, exchange rate, unit costs and positive integer quantities, then create the purchase order. Create missing master records in Vendors or Products first.",
               "On a pending order, open Landed cost, enter each line's total chargeable weight, freight per kilogram, currency and any exchange rate; preview and then save the estimate.",
               "Choose the receiving warehouse and verify quantities. Enter serial numbers where required, receive the goods, and review the saved cost allocation."
             ],
             "boundaries": [
               "Landed cost can be changed before receipt. Previewing or saving an estimate does not add stock; receipt records inventory and cost, after which the estimate is read-only.",
               "A purchase order, receipt, payable and payment have separate states; creation alone does not prove receipt.",
-              "Changes require the purchasing feature authorization; a guide is not an API permission bypass."
+              "Creation requires purchase creation permission and company access. Receiving and landed-cost actions retain their purchasing role gate; this guide does not bypass API authorization."
             ],
             "related": [
               "vendors",
@@ -3837,7 +3841,7 @@
       "group": "sales",
       "sections": {
         "steps": [
-          "先選公司，建立與既有客戶或供應商主檔綁定的外部帳號；可停用帳號或設定新密碼，再發布商品目錄與客戶有效專屬價格。",
+          "先選公司；若客戶或供應商尚無主檔，先到客戶管理或供應商管理建立，回到此工作台重整後建立與主檔綁定的外部帳號；可停用帳號或設定新密碼，再發布商品目錄與客戶有效專屬價格。",
           "收到需求後逐行填入人工確認數量、交期與必要備註；可複製需登入的報價連結到 LINE 與客戶討論。",
           "只有每行數量全數確認的需求可選擇銷售通路與出貨倉庫並確認接單，建立 ERP 銷售訂單、預留庫存及後續 WMS 出貨交接。"
         ],
@@ -3857,7 +3861,7 @@
           "keywords": ["Customer accounts", "supplier accounts", "catalog publishing", "customer price", "stock review", "order confirmation"],
           "sections": {
             "steps": [
-              "Select a company; create external accounts linked to existing customer or supplier records, deactivate accounts or set new passwords, then publish catalog items and valid customer prices.",
+              "Select a company. Create missing customer or vendor master records on their respective pages, refresh this workbench, then create linked external accounts. You can deactivate accounts or set new passwords before publishing catalog items and valid customer prices.",
               "For each request, record manually confirmed quantities, delivery date and required notes. Copy the login-protected quote link for discussion with the customer through LINE.",
               "Only requests fully confirmed on every line can be accepted: choose a sales channel and shipping warehouse to create an ERP sales order, reserve stock and start WMS fulfilment handoff."
             ],

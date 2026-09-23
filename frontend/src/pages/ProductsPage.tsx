@@ -6,6 +6,7 @@ import { productService, Product } from '../services/product.service'
 import { errorText } from '../features/sn-labels/api'
 import { useAuth } from '../contexts/AuthContext'
 import { inventoryService } from '../services/inventory.service'
+import { resolveEntityId } from '../services/entities.service'
 
 const { Title } = Typography
 const { Option } = Select
@@ -62,6 +63,7 @@ const ProductsPage: React.FC = () => {
   const [importing, setImporting] = useState(false)
   const [previewingImport, setPreviewingImport] = useState(false)
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
+  const [pendingImportEntityId, setPendingImportEntityId] = useState<string | null>(null)
   const [importPreview, setImportPreview] = useState<InventoryImportPreview | null>(null)
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [form] = Form.useForm()
@@ -128,8 +130,10 @@ const ProductsPage: React.FC = () => {
   const handlePreviewImport = async (file: File) => {
     setPreviewingImport(true)
     try {
-      const result = await inventoryService.importErpInventory(file, { dryRun: true })
+      const entityId = await resolveEntityId()
+      const result = await inventoryService.importErpInventory(file, { entityId, dryRun: true })
       setPendingImportFile(file)
+      setPendingImportEntityId(entityId)
       setImportPreview(result)
       setImportModalOpen(true)
       message.success(`已預覽 ${result.rows ?? 0} 筆可匯入資料`)
@@ -142,17 +146,26 @@ const ProductsPage: React.FC = () => {
   }
 
   const handleConfirmImport = async () => {
-    if (!pendingImportFile || !importPreview) {
+    if (!pendingImportFile || !pendingImportEntityId || !importPreview) {
       message.warning('請先選擇檔案並完成預覽')
       return
     }
 
     setImporting(true)
     try {
-      await inventoryService.importErpInventory(pendingImportFile)
+      if (await resolveEntityId() !== pendingImportEntityId) {
+        message.warning('公司已切換，請重新選擇檔案並預覽後再匯入')
+        setImportModalOpen(false)
+        setPendingImportFile(null)
+        setPendingImportEntityId(null)
+        setImportPreview(null)
+        return
+      }
+      await inventoryService.importErpInventory(pendingImportFile, { entityId: pendingImportEntityId })
       message.success('批次匯入完成')
       setImportModalOpen(false)
       setPendingImportFile(null)
+      setPendingImportEntityId(null)
       setImportPreview(null)
       fetchProducts()
     } catch (error: any) {
@@ -268,7 +281,7 @@ const ProductsPage: React.FC = () => {
         okText="確認匯入"
         cancelText="取消"
         okButtonProps={{
-          disabled: !importPreview || !pendingImportFile || importing || previewingImport,
+          disabled: !importPreview || !pendingImportFile || !pendingImportEntityId || importing || previewingImport,
           loading: importing,
         }}
       >

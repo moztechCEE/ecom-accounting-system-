@@ -77,17 +77,28 @@ export interface PurchaseLandedCost {
 
 export interface CreatePurchaseOrderDto {
   vendorId: string
+  orderDate: string
   currency: string
+  fxRate: number
   items: {
     productId: string
-    quantity: number
-    unitPrice: number
+    qty: number
+    unitCost: number
   }[]
-  expectedDate?: string
   notes?: string
 }
 
+export interface PurchaseOrderOptions {
+  vendors: Array<{ id: string; name: string }>
+  products: Array<{ id: string; sku: string; name: string }>
+}
+
 export const purchaseService = {
+  async options(explicitEntityId?: string) {
+    const entityId = await resolveEntityId(explicitEntityId)
+    const response = await api.get<PurchaseOrderOptions>('/purchase-orders/options', { params: { entityId } })
+    return response.data
+  },
   async findAll(explicitEntityId?: string) {
     const entityId = await resolveEntityId(explicitEntityId)
     const response = await api.get<PurchaseOrder[]>('/purchase-orders', { params: { entityId } })

@@ -26,7 +26,8 @@ export class PurchaseController {
   }
 
   @Post()
-  @Roles('ADMIN', 'OPERATOR')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'purchase_orders', action: 'create' })
   create(@Query('entityId') entityId: string, @Body() dto: CreatePurchaseOrderDto) {
     return this.purchaseService.create(this.requireEntityId(entityId), dto);
   }
@@ -36,6 +37,13 @@ export class PurchaseController {
   @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
   findAll(@Query('entityId') entityId: string) {
     return this.purchaseService.findAll(this.requireEntityId(entityId));
+  }
+
+  @Get('options')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'purchase_orders', action: 'create' })
+  options(@Query('entityId') entityId: string) {
+    return this.purchaseService.options(this.requireEntityId(entityId));
   }
 
   @Get(':id')

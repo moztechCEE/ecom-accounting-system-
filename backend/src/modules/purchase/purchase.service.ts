@@ -7,6 +7,8 @@ import { CostService } from '../cost/cost.service';
 import { LandedCostDto } from './dto/landed-cost.dto';
 import { calculateLandedCost } from './landed-cost';
 import { Prisma } from '@prisma/client';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
 
 @Injectable()
 export class PurchaseService {
@@ -17,42 +19,71 @@ export class PurchaseService {
   ) {}
 
   async create(entityId: string, dto: CreatePurchaseOrderDto) {
-    // Calculate totals
-    let totalAmountOriginal = 0;
-    
-    // Verify items and calculate total
-    for (const item of dto.items) {
-      totalAmountOriginal += item.qty * item.unitCost;
-    }
-
-    const totalAmountBase = totalAmountOriginal * dto.fxRate;
-
-    return this.prisma.purchaseOrder.create({
-      data: {
-        entityId,
-        vendorId: dto.vendorId,
-        orderDate: new Date(dto.orderDate),
-        totalAmountOriginal,
-        totalAmountCurrency: dto.currency,
-        totalAmountFxRate: dto.fxRate,
-        totalAmountBase,
-        notes: dto.notes,
-        items: {
-          create: dto.items.map((item) => ({
-            productId: item.productId,
-            qty: item.qty,
-            unitCostOriginal: item.unitCost,
-            unitCostCurrency: dto.currency,
-            unitCostFxRate: dto.fxRate,
-            unitCostBase: item.unitCost * dto.fxRate,
-          })),
-        },
-      },
-      include: {
-        items: true,
-        vendor: true,
-      },
+    const companyId = typeof entityId === 'string' ? entityId.trim() : '';
+    if (!companyId || companyId.length > 128)
+      throw new BadRequestException('entityId is required');
+    if (!dto || typeof dto !== 'object' || Array.isArray(dto))
+      throw new BadRequestException('採購單內容格式錯誤');
+    // Validate service callers as well as HTTP callers, and snapshot normalized
+    // values before the first await so a mutable DTO cannot change the write.
+    const input = plainToInstance(CreatePurchaseOrderDto, dto);
+    if (validateSync(input, { whitelist: true, forbidNonWhitelisted: true }).length)
+      throw new BadRequestException('請確認供應商、日期、幣別、正數數量／成本及匯率');
+    const vendorId = input.vendorId;
+    const orderDate = new Date(input.orderDate);
+    const currency = input.currency;
+    const fxRate = new Prisma.Decimal(input.fxRate);
+    const notes = input.notes || null;
+    const items = input.items.map((item) => {
+      const qty = new Prisma.Decimal(item.qty);
+      const unitCostOriginal = new Prisma.Decimal(item.unitCost);
+      // Stored unit cost has two decimals. Sum the same rounded values that
+      // recordPurchaseCost consumes, so the PO header and receipt cost agree.
+      const unitCostBase = unitCostOriginal.mul(fxRate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+      return { productId: item.productId, qty, unitCostOriginal,
+        unitCostCurrency: currency, unitCostFxRate: fxRate, unitCostBase };
     });
+    if (items.some((item) => item.unitCostBase.isZero()))
+      throw new BadRequestException('換算後本位幣單價低於 0.01，請確認單價與匯率');
+    const productIds = [...new Set(items.map((item) => item.productId))];
+    const totalAmountOriginal = items.reduce(
+      (total, item) => total.add(item.qty.mul(item.unitCostOriginal)), new Prisma.Decimal(0));
+    const totalAmountBase = items.reduce(
+      (total, item) => total.add(item.qty.mul(item.unitCostBase)), new Prisma.Decimal(0));
+    const storageLimit = new Prisma.Decimal('10000000000000000');
+    if (totalAmountOriginal.gte(storageLimit) || totalAmountBase.gte(storageLimit))
+      throw new BadRequestException('採購金額超過支援範圍');
+
+    return this.prisma.$transaction(async (tx) => {
+      const [entity, vendor, products] = await Promise.all([
+        tx.entity.findFirst({ where: { id: companyId, isActive: true }, select: { baseCurrency: true } }),
+        tx.vendor.findFirst({ where: { id: vendorId, entityId: companyId, isActive: true }, select: { id: true } }),
+        tx.product.findMany({ where: { id: { in: productIds }, entityId: companyId, isActive: true }, select: { id: true } }),
+      ]);
+      if (!entity || !vendor || products.length !== productIds.length)
+        throw new BadRequestException('供應商或商品不屬於目前公司，或公司／主檔已停用');
+      if (currency === entity.baseCurrency && !fxRate.equals(1))
+        throw new BadRequestException('採購幣別與公司本位幣相同時，匯率必須為 1');
+      return tx.purchaseOrder.create({
+        data: {
+          entityId: companyId, vendorId, orderDate, status: 'pending',
+          totalAmountOriginal, totalAmountCurrency: currency,
+          totalAmountFxRate: fxRate, totalAmountBase, notes,
+          items: { create: items },
+        },
+        include: { items: true, vendor: true },
+      });
+    }, { maxWait: 5_000, timeout: 20_000 });
+  }
+
+  async options(entityId: string) {
+    const [vendors, products] = await Promise.all([
+      this.prisma.vendor.findMany({ where: { entityId, isActive: true },
+        select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+      this.prisma.product.findMany({ where: { entityId, isActive: true },
+        select: { id: true, name: true, sku: true }, orderBy: { sku: 'asc' } }),
+    ]);
+    return { vendors, products };
   }
 
   async findAll(entityId: string) {

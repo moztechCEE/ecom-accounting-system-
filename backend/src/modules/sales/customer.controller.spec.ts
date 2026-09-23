@@ -74,10 +74,11 @@ describe('Customer master write company boundaries', () => {
     expect(customer.update).not.toHaveBeenCalled();
     expect(customer.delete).not.toHaveBeenCalled();
   });
-  it('scopes deletion in both lookup and final mutation', async () => {
+  it('soft-disables within company without deleting order or B2B account history', async () => {
     await controller.remove(actor, customerId, entityId);
     expect(customer.findFirst).toHaveBeenCalledWith({ where: { id: customerId, entityId }, select: { id: true } });
-    expect(customer.delete).toHaveBeenCalledWith({ where: { id: customerId, entityId } });
+    expect(customer.update).toHaveBeenCalledWith({ where: { id: customerId, entityId }, data: { isActive: false } });
+    expect(customer.delete).not.toHaveBeenCalled();
   });
   it('requires the existing sales_orders:create grant for every customer-master write', () => {
     for (const method of ['create', 'update', 'remove'] as const) {

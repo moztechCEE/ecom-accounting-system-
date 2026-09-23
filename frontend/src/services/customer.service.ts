@@ -1,4 +1,5 @@
 import api from './api'
+import { resolveEntityId } from './entities.service'
 
 export interface Customer {
   id: string
@@ -33,28 +34,33 @@ export interface Customer {
 }
 
 export const customerService = {
-  async findAll() {
-    const response = await api.get<Customer[]>('/customers')
+  async findAll(explicitEntityId?: string) {
+    const entityId = await resolveEntityId(explicitEntityId)
+    const response = await api.get<Customer[]>('/customers', { params: { entityId } })
     return response.data
   },
 
-  async findOne(id: string) {
-    const response = await api.get<Customer>(`/customers/${id}`)
+  async findOne(id: string, explicitEntityId?: string) {
+    const entityId = await resolveEntityId(explicitEntityId)
+    const response = await api.get<Customer>(`/customers/${id}`, { params: { entityId } })
     return response.data
   },
 
-  async create(data: Partial<Customer>) {
-    const response = await api.post<Customer>('/customers', data)
+  async create(data: Partial<Customer>, explicitEntityId?: string) {
+    const entityId = await resolveEntityId(explicitEntityId)
+    const response = await api.post<Customer>('/customers', data, { params: { entityId } })
     return response.data
   },
 
-  async update(id: string, data: Partial<Customer>) {
-    const response = await api.patch<Customer>(`/customers/${id}`, data)
+  async update(id: string, data: Partial<Customer>, explicitEntityId?: string) {
+    const entityId = await resolveEntityId(explicitEntityId)
+    const response = await api.patch<Customer>(`/customers/${id}`, data, { params: { entityId } })
     return response.data
   },
 
-  async delete(id: string) {
-    const response = await api.delete(`/customers/${id}`)
+  async delete(id: string, explicitEntityId?: string) {
+    const entityId = await resolveEntityId(explicitEntityId)
+    const response = await api.delete(`/customers/${id}`, { params: { entityId } })
     return response.data
   }
 }

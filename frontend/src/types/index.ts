@@ -156,30 +156,29 @@ export interface Account {
 
 export interface Vendor {
   id: string;
-  code: string;
+  entityId: string;
   name: string;
+  country?: string | null;
+  defaultCurrency?: string | null;
   taxId?: string;
-  contactPerson?: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  paymentTerms?: string;
-  currency: string;
+  contactPerson?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  address?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CreateVendorDto {
-  code: string;
   name: string;
+  country?: string;
+  defaultCurrency?: string;
   taxId?: string;
   contactPerson?: string;
-  email?: string;
-  phone?: string;
+  contactEmail?: string;
+  contactPhone?: string;
   address?: string;
-  paymentTerms?: string;
-  currency?: string;
   isActive?: boolean;
 }
 
