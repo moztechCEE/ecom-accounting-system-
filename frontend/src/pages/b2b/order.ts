@@ -41,11 +41,28 @@ export function quotePath(id: string): string {
   return `/b2b/requests/${encodeURIComponent(id)}`
 }
 
+export function formalQuotePath(id: string, version: number): string {
+  return `${quotePath(id)}/quote/${encodeURIComponent(version)}`
+}
+
 export function canConfirmRequest(request: {
   status: B2BRequestStatus
+  quoteVersion: number | null
+  quoteStatus: 'sent' | 'accepted' | 'superseded' | null
   salesOrderId: string | null
   items: Array<{ quantity: number; confirmedQuantity: number | null }>
 }): boolean {
-  return request.status === 'stock_confirmed' && !request.salesOrderId && request.items.length > 0 &&
+  return request.status === 'stock_confirmed' && Number.isSafeInteger(request.quoteVersion) && Number(request.quoteVersion) > 0 && request.quoteStatus === 'accepted' && !request.salesOrderId && request.items.length > 0 &&
+    request.items.every((item) => item.quantity > 0 && item.confirmedQuantity === item.quantity)
+}
+
+export function canIssueQuote(request: {
+  status: B2BRequestStatus
+  quoteVersion: number | null
+  quoteStatus: 'sent' | 'accepted' | 'superseded' | null
+  salesOrderId: string | null
+  items: Array<{ quantity: number; confirmedQuantity: number | null }>
+}): boolean {
+  return request.status === 'stock_confirmed' && request.quoteStatus !== 'accepted' && !request.salesOrderId && request.items.length > 0 &&
     request.items.every((item) => item.quantity > 0 && item.confirmedQuantity === item.quantity)
 }

@@ -118,3 +118,13 @@ export class B2bConfirmDto extends B2bEntityDto {
   @IsString() @IsNotEmpty() @MaxLength(128) channelId!: string;
   @IsString() @IsNotEmpty() @MaxLength(128) warehouseId!: string;
 }
+
+export class B2bIssueQuoteDto extends B2bEntityDto {
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
+  validUntil?: string;
+
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(500) paymentTerms?: string;
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(500) deliveryTerms?: string;
+}

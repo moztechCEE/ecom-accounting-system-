@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:44af5850ac6be6e832fc757d0d2902997732dfae6a847a612eb8f8d4c2f644d9",
+  "sourceVersion": "sha256:9365217efac003f0b043de4e0ed8010b04b688f14d449efdde4ca92b20b8584a",
   "reviewedBaseCommit": "9165c7123b10750b598a95f9badfc9c00ed04abd",
   "entryCount": 59,
   "groups": [
@@ -18,7 +18,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "38589d4e22b1c337e01e679ed48d6d4635effdd818912655a69bba5e9bd6cb96",
+  "catalogSha256": "3812caff54356380acead28d872a119138233004a685d74badc9fd9288dfa37c",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -113,6 +113,7 @@
     ],
     "dynamicRoutes": [
       "/b2b/requests/:id",
+      "/b2b/requests/:id/quote/:version",
       "/warehouse/:report"
     ],
     "excludedRoutes": [
@@ -165,11 +166,11 @@
     },
     {
       "path": "backend/src/modules/b2b/b2b.controller.ts",
-      "sha256": "0445706fd2a431046c61051ea86d782805cf05fad99e1555c5ce4d11da7fd8b0"
+      "sha256": "50289f1dcfde14425fd1544ded02dd4395203ab4187442aeb199faa584dd9323"
     },
     {
       "path": "backend/src/modules/b2b/b2b.service.ts",
-      "sha256": "5ade2be650c7f44ac4693906f3ab825e2812a9bd791d642489aecb44ebd5b1aa"
+      "sha256": "07f8d1beff3929ac7c1eee0cb1e2bbcdcc0ec619894c31d0e2c45dab916e9e19"
     },
     {
       "path": "backend/src/modules/banking/banking.controller.ts",
@@ -229,11 +230,11 @@
     },
     {
       "path": "backend/src/modules/purchase/purchase.controller.ts",
-      "sha256": "7aae75b1c8a04786ae7aa540fc1bd397e1a00cb79f690ffad39ab53c9420078c"
+      "sha256": "d4165c3b7c74cb60c3794f3f7f731913dd2b503c90ec57a899106c3905e9d7a8"
     },
     {
       "path": "backend/src/modules/purchase/purchase.service.ts",
-      "sha256": "30f1ba3822a85d318c5646350c17d98997aae02aab9e7489c6e24a17385247f7"
+      "sha256": "ac74785ab84a07dcd4690ce8cf5b85966d7aa5a6b6cd4e39cdfa860f274c7c49"
     },
     {
       "path": "backend/src/modules/reconciliation/reconciliation.controller.ts",
@@ -260,6 +261,10 @@
       "sha256": "e6eeb9e6191b411c705a4924977858e6735300ef6bcc6cb06537e4c0ea46ab77"
     },
     {
+      "path": "backend/src/modules/sales/services/sales-quotation.service.ts",
+      "sha256": "e11a24eee3951689e49c611243983f151235d0de935c4753269800470e9f45ef"
+    },
+    {
       "path": "backend/src/modules/sn-labels/sn-labels.controller.ts",
       "sha256": "9135b6f0b462cc61f1d8301069fc9924bf0747acc9603bf275032a6a99126887"
     },
@@ -273,7 +278,7 @@
     },
     {
       "path": "frontend/src/App.tsx",
-      "sha256": "4d068c93fe9ea5538021df3884f1d683a9b29ab8c71f3ce06c10c71eedc24b89"
+      "sha256": "833e46e0290484c75975091a2b99a9b6df52e3cc8d18d7a6abfc55a7fd210bcb"
     },
     {
       "path": "frontend/src/config/navigation.ts",
@@ -353,15 +358,15 @@
     },
     {
       "path": "frontend/src/pages/b2b/B2BPortal.tsx",
-      "sha256": "3f7b7845f81de80f619bd53139f90078a8dc6eb5aa6620c4bc13714a3d642bcf"
+      "sha256": "63b0aaf7638fa923edf41732546e067384144a69f0ca61c2e74632048624ac2d"
     },
     {
       "path": "frontend/src/pages/b2b/B2bWorkbenchPage.tsx",
-      "sha256": "22e609498aa16abf26edf9f0c8319cd9b588238c48ba3274e6c4b925973eed9f"
+      "sha256": "7adb18cf1fa65a357a1ee6886049846732b1dafeb69da568aa4e801ea522adc4"
     },
     {
       "path": "frontend/src/pages/b2b/order.ts",
-      "sha256": "302015322a7bf874680a44fc5eb0a0b03f3653dbf179b67cd37e57d6434ed9b1"
+      "sha256": "c131cf1dc708622dcdb93c99dd9c05973fb73b3468e7b40160518aa92f062552"
     },
     {
       "path": "frontend/src/pages/BankingPage.tsx",
@@ -421,7 +426,7 @@
     },
     {
       "path": "frontend/src/pages/PurchaseOrdersPage.tsx",
-      "sha256": "718152a989cea00a1d6985c48151e731c56b935456f8a2d9657797c7fd3bb28f"
+      "sha256": "38160bf87893b03d9481bb2b3437b90469e577cfa8bea9b25c5638cf52be8beb"
     },
     {
       "path": "frontend/src/pages/ReconciliationCenterPage.tsx",
@@ -485,7 +490,7 @@
     },
     {
       "path": "frontend/src/services/b2b.service.ts",
-      "sha256": "043c0beb079bc2730123dc952a043f0f22cfcf417ccb71c28035ef57a042557c"
+      "sha256": "e1d4e1f394ebca778dc1fdde82a8852b2fe46523027c6caf350dc26a94cce989"
     },
     {
       "path": "frontend/src/services/inventory.service.ts",

@@ -53,7 +53,7 @@ import PurchaseOrdersPage from './pages/PurchaseOrdersPage'
 import AssemblyPage from './pages/AssemblyPage'
 import CustomersPage from './pages/CustomersPage'
 import ProfilePage from './pages/ProfilePage'
-import { B2BLoginPage, B2BPortalLayout, B2BCatalogPage, B2BRequestsPage, B2BRequestDetailPage } from './pages/b2b/B2BPortal'
+import { B2BLoginPage, B2BPortalLayout, B2BCatalogPage, B2BRequestsPage, B2BRequestDetailPage, B2BFormalQuotePage } from './pages/b2b/B2BPortal'
 import B2bWorkbenchPage from './pages/b2b/B2bWorkbenchPage'
 import WmsHandoverReconciliationPage from './pages/WmsHandoverReconciliationPage'
 
@@ -74,6 +74,7 @@ const App: React.FC = () => {
           <Route path="catalog" element={<B2BCatalogPage />} />
           <Route path="requests" element={<B2BRequestsPage />} />
           <Route path="requests/:id" element={<B2BRequestDetailPage />} />
+          <Route path="requests/:id/quote/:version" element={<B2BFormalQuotePage />} />
         </Route>
         <Route element={<EmployeeProviders />}>
               <Route path="/login" element={<LoginPage />} />

@@ -367,4 +367,73 @@ describe('Manual purchase-order HTTP boundary', () => {
     expect(inventory.adjustStock).not.toHaveBeenCalled();
     expect(cost.recordPurchaseCost).not.toHaveBeenCalled();
   });
+
+  it('guards B2B procurement with purchasing company access and create permission, and routes before :id', async () => {
+    const service = app.get(PurchaseService);
+    const create = jest
+      .spyOn(service, 'createFromB2bRequest')
+      .mockResolvedValue({ id: 'po-b2b' } as any);
+    const summary = jest
+      .spyOn(service, 'b2bProcurement')
+      .mockResolvedValue({ items: [], purchaseOrders: [] });
+    const body = {
+      requestId: 'ff837db5-17ce-478b-bba7-0b6c14656c8f',
+      requestKey: '4cfce6a0-df94-4bda-9725-8e500e1f2777',
+      vendorId: 'vendor-a',
+      orderDate: '2026-09-24',
+      currency: 'TWD',
+      fxRate: 1,
+      items: [
+        {
+          requestItemId: '67e95b8e-0432-4754-b3ac-5e14bcc791f2',
+          qty: 1,
+          unitCost: 12,
+        },
+      ],
+    };
+    const poUrl = '/api/v1/purchase-orders/from-b2b-request?entityId=entity-a';
+    const summaryUrl = `/api/v1/purchase-orders/b2b-requests/${body.requestId}/procurement?entityId=entity-a`;
+    try {
+      await request(app.getHttpServer()).post(poUrl).send(body).expect(401);
+      await request(app.getHttpServer())
+        .post(poUrl)
+        .set('Authorization', auth('reader'))
+        .send(body)
+        .expect(403);
+      await request(app.getHttpServer())
+        .get(summaryUrl)
+        .set('Authorization', auth('reader'))
+        .expect(403);
+      await request(app.getHttpServer())
+        .post(poUrl.replace('entity-a', 'entity-b'))
+        .set('Authorization', auth())
+        .send(body)
+        .expect(403);
+      expect(create).not.toHaveBeenCalled();
+      expect(summary).not.toHaveBeenCalled();
+
+      await request(app.getHttpServer())
+        .post(poUrl)
+        .set('Authorization', auth())
+        .send(body)
+        .expect(201);
+      await request(app.getHttpServer())
+        .get(summaryUrl)
+        .set('Authorization', auth())
+        .expect(200);
+      expect(create).toHaveBeenCalledWith(
+        'entity-a',
+        expect.objectContaining(body),
+      );
+      expect(summary).toHaveBeenCalledWith('entity-a', body.requestId);
+      expect(companyAccess.assertAccess).toHaveBeenCalledWith(
+        'buyer',
+        'purchasing',
+        'entity-a',
+      );
+    } finally {
+      create.mockRestore();
+      summary.mockRestore();
+    }
+  });
 });

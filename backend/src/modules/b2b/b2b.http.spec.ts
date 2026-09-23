@@ -242,6 +242,7 @@ function fixture() {
         return row;
       },
     },
+    b2bStockReview: { create: async ({ data }: any) => ({ id: randomUUID(), ...data }) },
     b2bRequestItem: {
       update: async ({ where, data }: any) => {
         for (const r of requests.values())
@@ -439,6 +440,14 @@ describe('B2B HTTP flow with isolated repository fixture', () => {
       .get(`/api/v1/b2b/portal/requests/${sent.body.id}`)
       .set('Authorization', `Bearer ${other.body.token}`)
       .expect(404);
+    const formalPath = `/api/v1/b2b/portal/requests/${sent.body.id}/quotes/1`;
+    await request(http).get(formalPath).expect(401);
+    await request(http).get(formalPath).set(staff).expect(401);
+    await request(http).get(formalPath)
+      .set('Authorization', `Bearer ${other.body.token}`).expect(404);
+    await request(http).post(`${formalPath}/accept`).expect(401);
+    await request(http).post(`${formalPath}/accept`)
+      .set('Authorization', `Bearer ${other.body.token}`).expect(404);
     const reviewed = await request(http)
       .post(`/api/v1/b2b/admin/requests/${sent.body.id}/review`)
       .set(staff)

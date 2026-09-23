@@ -49,6 +49,9 @@ function requestRow(overrides: Record<string, unknown> = {}) {
     reviewNote: null,
     deliveryDate: null,
     customer: { name: 'Customer A', companyName: null },
+    issuedQuotes: overrides.status === 'stock_confirmed'
+      ? [{ id: 'issued-quote', version: 1, status: 'accepted' }]
+      : [],
     items: [
       {
         id: lineId,
@@ -134,6 +137,9 @@ function makeDb() {
       update: jest.fn(),
     },
     b2bRequestItem: { update: jest.fn() },
+    b2bStockReview: { create: jest.fn().mockResolvedValue({ id: 'review-event' }) },
+    b2bIssuedQuote: { findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+    salesQuotation: { create: jest.fn(), update: jest.fn() },
     inventorySnapshot: { update: jest.fn() },
     inventoryTransaction: { create: jest.fn(), findFirst: jest.fn() },
     salesOrder: { create: jest.fn(), findFirst: jest.fn() },
@@ -677,4 +683,111 @@ describe('B2B account and request boundaries', () => {
       expect(db.b2bPurchaseRequest.update).not.toHaveBeenCalled();
     },
   );
+  it('requires an accepted formal quote before reserving stock', async () => {
+    const reviewed = requestRow({ status: 'stock_confirmed', reviewedAt: new Date(), issuedQuotes: [] });
+    reviewed.items[0].confirmedQuantity = 3 as never;
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
+    await expect(service.confirm(requestId, {
+      entityId: 'entity-a', warehouseId: 'warehouse-a', channelId: 'b2b-channel',
+    }, 'staff')).rejects.toThrow('須先開立正式報價並取得客戶登入確認');
+    expect(salesOrders.createSalesOrder).not.toHaveBeenCalled();
+  });
+  it('issues an immutable quotation from reviewed snapshot and replays identical terms', async () => {
+    const reviewed = requestRow({ status: 'stock_confirmed', reviewedAt: new Date() });
+    reviewed.items[0].confirmedQuantity = 3 as never;
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
+    let createdQuotation: any;
+    db.b2bIssuedQuote.findFirst.mockResolvedValueOnce(null).mockImplementation(async () => ({
+      id: 'issued-q', requestId, quotationId: 'quotation-q', version: 1, status: 'sent',
+      acceptedAt: null, quotation: createdQuotation,
+    }));
+    db.salesQuotation.create.mockImplementation(async ({ data }: any) => {
+      createdQuotation = { ...data, id: 'quotation-q', items: data.items.create };
+      return createdQuotation;
+    });
+    db.b2bIssuedQuote.create.mockResolvedValue({ id: 'issued-q', requestId,
+      quotationId: 'quotation-q', version: 1, status: 'sent', acceptedAt: null });
+    const input = { entityId: 'entity-a', validUntil: '2099-12-31',
+      paymentTerms: '月結', deliveryTerms: '確認後出貨' };
+    const first = await service.issueQuote(requestId, input, 'staff');
+    expect(first).toMatchObject({ version: 1, status: 'sent', total: '31.53',
+      quotePath: `/b2b/requests/${requestId}/quote/1` });
+    expect(first.items[0]).toMatchObject({ quantity: 3, lineTotal: '30.03', taxAmount: '1.50' });
+    expect(db.salesQuotation.create.mock.calls[0][0].data).toMatchObject({
+      entityId: 'entity-a', customerId: 'customer-a', status: 'sent',
+      subtotalOriginal: D('30.03'), taxAmountOriginal: D('1.50'), totalAmountOriginal: D('31.53'),
+    });
+    const retry = await service.issueQuote(requestId, input, 'staff');
+    expect(retry.id).toBe(first.id);
+    expect(db.salesQuotation.create).toHaveBeenCalledTimes(1);
+    expect(db.inventoryTransaction.create).not.toHaveBeenCalled();
+  });
+  it('records customer acceptance only for the latest visible quote and scopes it to that customer', async () => {
+    const reviewed = requestRow({ status: 'stock_confirmed', reviewedAt: new Date(),
+      issuedQuotes: [{ id: 'issued-q', version: 1, status: 'sent' }] });
+    reviewed.items[0].confirmedQuantity = 3 as never;
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
+    const quotation = { id: 'quotation-q', quotationNo: 'B2B-QT',
+      validUntil: new Date('2099-12-31T00:00:00Z'), paymentTerms: null,
+      deliveryTerms: null, subtotalOriginal: D('30.03'), taxAmountOriginal: D('1.50'),
+      totalAmountOriginal: D('31.53'), items: [{ taxAmountOriginal: D('1.50'), lineTotalOriginal: D('31.53') }] };
+    db.b2bIssuedQuote.findFirst.mockResolvedValue({ id: 'issued-q', version: 1, status: 'sent',
+      quotationId: 'quotation-q', acceptedAt: null, quotation });
+    db.b2bIssuedQuote.update.mockResolvedValue({ id: 'issued-q', version: 1, status: 'accepted',
+      quotationId: 'quotation-q', acceptedAt: new Date(), quotation });
+    const accepted = await service.acceptQuote(identity, requestId, 1);
+    expect(accepted.status).toBe('accepted');
+    expect(db.b2bIssuedQuote.update.mock.calls[0][0].data.acceptedByAccountId).toBe('account-a');
+    expect(db.salesQuotation.update).toHaveBeenCalledWith({ where: { id: 'quotation-q' }, data: { status: 'accepted' } });
+    expect(salesOrders.createSalesOrder).not.toHaveBeenCalled();
+    db.b2bPurchaseRequest.findFirst.mockResolvedValueOnce(null);
+    await expect(service.formalQuote({ ...identity, customerId: 'customer-b' }, requestId, 1)).rejects.toThrow(NotFoundException);
+  });
+  it('accepts through the Taiwan expiry date and rejects at the next local midnight', async () => {
+    const reviewed = requestRow({ status: 'stock_confirmed', reviewedAt: new Date(),
+      issuedQuotes: [{ id: 'issued-q', version: 1, status: 'sent' }] });
+    reviewed.items[0].confirmedQuantity = 3 as never;
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
+    const quotation = { id: 'quotation-q', quotationNo: 'B2B-QT',
+      validUntil: new Date('2030-03-20T00:00:00Z'), paymentTerms: null,
+      deliveryTerms: null, subtotalOriginal: D('30.03'), taxAmountOriginal: D('1.50'),
+      totalAmountOriginal: D('31.53'), items: [{ taxAmountOriginal: D('1.50'), lineTotalOriginal: D('31.53') }] };
+    db.b2bIssuedQuote.findFirst.mockResolvedValue({ id: 'issued-q', version: 1, status: 'sent',
+      quotationId: 'quotation-q', acceptedAt: null, quotation });
+    db.b2bIssuedQuote.update.mockResolvedValue({ id: 'issued-q', version: 1, status: 'accepted',
+      quotationId: 'quotation-q', acceptedAt: new Date(), quotation });
+    const clock = jest.spyOn(Date, 'now');
+    try {
+      clock.mockReturnValue(new Date('2030-03-20T15:59:59.999Z').getTime());
+      expect((await service.acceptQuote(identity, requestId, 1)).status).toBe('accepted');
+      clock.mockReturnValue(new Date('2030-03-20T16:00:00.000Z').getTime());
+      await expect(service.acceptQuote(identity, requestId, 1)).rejects.toThrow('正式報價已逾有效期限');
+      expect(db.b2bIssuedQuote.update).toHaveBeenCalledTimes(1);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+  it('rejects accepting an older quote version after a replacement was issued', async () => {
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(requestRow({ status: 'stock_confirmed',
+      issuedQuotes: [{ id: 'issued-v2', version: 2, status: 'sent' }] }));
+    db.b2bIssuedQuote.findFirst.mockResolvedValue({ id: 'issued-v1', version: 1,
+      status: 'superseded', quotationId: 'quotation-v1' });
+    await expect(service.acceptQuote(identity, requestId, 1)).rejects.toThrow('此報價版本已失效');
+    expect(db.b2bIssuedQuote.update).not.toHaveBeenCalled();
+  });
+  it('allows a shortage to be manually reviewed again while retaining review history', async () => {
+    const short = requestRow({ status: 'needs_adjustment', reviewedAt: new Date() });
+    short.items[0].confirmedQuantity = 1 as never;
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(short);
+    db.b2bPurchaseRequest.update.mockImplementation(async ({ data }: any) => ({
+      ...short, ...data, items: short.items.map((item: any) => ({ ...item, confirmedQuantity: 3 })),
+    }));
+    const result = await service.review(requestId, { entityId: 'entity-a',
+      items: [{ id: lineId, confirmedQuantity: 3 }], reviewNote: '收貨後重查' }, 'staff');
+    expect(result.status).toBe('stock_confirmed');
+    expect(db.b2bStockReview.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      requestId, reviewedBy: 'staff', resultStatus: 'stock_confirmed',
+      confirmedQuantities: [{ requestItemId: lineId, confirmedQuantity: 3 }],
+    }) });
+  });
 });

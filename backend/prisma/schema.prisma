@@ -712,6 +712,7 @@ model SalesQuotation {
   @@index([entityId, quotationDate])
   @@index([entityId, status])
   @@index([customerId])
+  b2bIssuedQuote B2bIssuedQuote?
   @@map("sales_quotations")
 }
 
@@ -1525,6 +1526,12 @@ model PurchaseOrder {
   landedCost     PurchaseLandedCost?
 
   @@index([entityId, orderDate])
+  sourceB2bRequestId String? @map("source_b2b_request_id")
+  sourceRequestKey String? @map("source_request_key")
+  sourcePayloadHash String? @map("source_payload_hash")
+  sourceB2bRequest B2bPurchaseRequest? @relation(fields:[sourceB2bRequestId],references:[id],onDelete:Restrict)
+  @@index([sourceB2bRequestId])
+  @@unique([entityId,sourceRequestKey])
   @@map("purchase_orders")
 }
 
@@ -1546,6 +1553,9 @@ model PurchaseOrderItem {
   landedCostLine PurchaseLandedCostLine?
 
   @@index([purchaseOrderId])
+  sourceB2bRequestItemId String? @map("source_b2b_request_item_id")
+  sourceB2bRequestItem B2bRequestItem? @relation(fields:[sourceB2bRequestItemId],references:[id],onDelete:Restrict)
+  @@index([sourceB2bRequestItemId])
   @@map("purchase_order_items")
 }
 
@@ -2593,6 +2603,7 @@ model B2bAccount {
   requests B2bPurchaseRequest[]
   @@unique([entityId,email])
   @@index([customerId])
+  acceptedQuotes B2bIssuedQuote[]
   @@map("b2b_accounts")
 }
 model B2bSession {
@@ -2663,6 +2674,9 @@ model B2bPurchaseRequest {
   items B2bRequestItem[]
   @@unique([entityId,customerId,requestId])
   @@index([entityId,status,createdAt])
+  stockReviews B2bStockReview[]
+  issuedQuotes B2bIssuedQuote[]
+  purchaseOrders PurchaseOrder[]
   @@map("b2b_purchase_requests")
 }
 model B2bRequestItem {
@@ -2678,7 +2692,41 @@ model B2bRequestItem {
   sortOrder Int @map("sort_order")
   request B2bPurchaseRequest @relation(fields:[requestId],references:[id],onDelete:Cascade)
   @@unique([requestId,productId])
+  purchaseOrderItems PurchaseOrderItem[]
   @@map("b2b_request_items")
+}
+
+model B2bStockReview {
+  id                  String             @id @default(uuid())
+  requestId           String             @map("request_id")
+  reviewedAt          DateTime           @default(now()) @map("reviewed_at") @db.Timestamptz
+  reviewedBy          String             @map("reviewed_by")
+  resultStatus        String             @map("result_status")
+  confirmedQuantities Json               @map("confirmed_quantities")
+  reviewNote          String?            @map("review_note")
+  deliveryDate        DateTime?          @map("delivery_date") @db.Date
+  request             B2bPurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+
+  @@index([requestId, reviewedAt])
+  @@map("b2b_stock_reviews")
+}
+model B2bIssuedQuote {
+  id                  String             @id @default(uuid())
+  requestId           String             @map("request_id")
+  quotationId         String             @unique @map("quotation_id")
+  version             Int
+  status              String             @default("sent")
+  issuedAt            DateTime           @default(now()) @map("issued_at") @db.Timestamptz
+  issuedBy            String             @map("issued_by")
+  acceptedAt          DateTime?          @map("accepted_at") @db.Timestamptz
+  acceptedByAccountId String?            @map("accepted_by_account_id")
+  request             B2bPurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  quotation           SalesQuotation     @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  acceptedByAccount   B2bAccount?        @relation(fields: [acceptedByAccountId], references: [id], onDelete: Restrict)
+
+  @@unique([requestId, version])
+  @@index([status, issuedAt])
+  @@map("b2b_issued_quotes")
 }
 
 // Immutable accepted WMS handover evidence. Receipt is acknowledgement, never inventory posting.

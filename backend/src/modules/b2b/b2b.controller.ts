@@ -5,6 +5,7 @@ import {
   Header,
   Param,
   ParseUUIDPipe,
+  ParseIntPipe,
   Patch,
   Post,
   Put,
@@ -25,6 +26,7 @@ import {
   B2bCatalogDto,
   B2bConfirmDto,
   B2bEntityDto,
+  B2bIssueQuoteDto,
   B2bLoginDto,
   B2bPriceDto,
   B2bProductOptionsDto,
@@ -78,6 +80,24 @@ export class B2bPortalController {
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ) {
     return this.service.detail(req.b2b, id);
+  }
+  @Get('requests/:id/quotes/:version')
+  @Header('Cache-Control', 'no-store')
+  formalQuote(
+    @Req() req: CustomerRequest,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('version', ParseIntPipe) version: number,
+  ) {
+    return this.service.formalQuote(req.b2b, id, version);
+  }
+  @Post('requests/:id/quotes/:version/accept')
+  @Header('Cache-Control', 'no-store')
+  acceptQuote(
+    @Req() req: CustomerRequest,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('version', ParseIntPipe) version: number,
+  ) {
+    return this.service.acceptQuote(req.b2b, id, version);
   }
 }
 @Controller('b2b/admin')
@@ -150,6 +170,16 @@ export class B2bAdminController {
     @Req() req: StaffRequest,
   ) {
     return this.service.review(id, dto, req.user.id);
+  }
+
+  @Post('requests/:id/quotes')
+  @RequirePermissions({ resource: 'sales_orders', action: 'create' })
+  issueQuote(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: B2bIssueQuoteDto,
+    @Req() req: StaffRequest,
+  ) {
+    return this.service.issueQuote(id, dto, req.user.id);
   }
 
   @Post('requests/:id/confirm')
