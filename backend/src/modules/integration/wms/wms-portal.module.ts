@@ -1,5 +1,5 @@
 import { Body, Controller, ForbiddenException, Get, Header, Headers, Injectable, Module, Post, Req, ServiceUnavailableException, UnauthorizedException, UseGuards } from '@nestjs/common';
-import { IsIn, IsInt, IsString, Matches, Min } from 'class-validator';
+import { IsIn, IsInt, IsString, IsOptional, Matches, Min } from 'class-validator';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
@@ -8,9 +8,30 @@ import { Public } from '../../../common/decorators/public.decorator';
 
 const roles = { picker: 'wms_picking:execute', packer: 'wms_packing:execute', dispatcher: 'wms_orders:create' } as const;
 type Station = keyof typeof roles;
+const entries = {
+  tasks: { path: '/tasks', permissions: ['wms_tasks:read'] },
+  picking: { path: '/tasks?group=pick', permissions: ['wms_picking:execute'], station: 'picker' },
+  packing: { path: '/tasks?group=pack', permissions: ['wms_packing:execute'], station: 'packer' },
+  completed: { path: '/tasks?view=completed', permissions: ['wms_tasks:read'] },
+  dispatch: { path: '/admin', permissions: ['wms_orders:create'], station: 'dispatcher' },
+  marketplace: { path: '/admin/marketplace-converter', permissions: ['wms_orders:create'], station: 'dispatcher' },
+  intakes: { path: '/warehouse-intakes', permissions: ['wms_orders:create','wms_picking:execute','wms_packing:execute'] },
+  overview: { path: '/admin/analytics', permissions: ['wms_overview:read'] },
+  logs: { path: '/admin/operation-logs', permissions: ['wms_logs:read'] },
+  exceptions: { path: '/admin/exceptions', permissions: ['wms_exceptions:read'] },
+  'scan-errors': { path: '/admin/scan-errors', permissions: ['wms_scan_errors:read'] },
+  defects: { path: '/admin/defects', permissions: ['wms_defects:read'] },
+  logistics: { path: '/settings/logistics', permissions: [], adminOnly: true },
+  team: { path: '/team', permissions: ['wms_tasks:read'] },
+  users: { path: '/admin/users', permissions: [], adminOnly: true },
+  settings: { path: '/settings', permissions: ['wms_tasks:read'] },
+} satisfies Record<string, {path:string; permissions:string[]; station?:Station; adminOnly?:boolean}>;
+type Entry = keyof typeof entries;
+const roleEntries = { picker:'picking', packer:'packing', dispatcher:'dispatch' } as const;
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
 class TicketDto {
-  @IsIn(['picker', 'packer', 'dispatcher']) role!: Station;
+  @IsOptional() @IsIn(['picker', 'packer', 'dispatcher']) role?: Station;
+  @IsOptional() @IsIn(Object.keys(entries)) entry?: Entry;
   @IsString() @Matches(/^[a-f0-9]{64}$/) nonce!: string;
 }
 class ExchangeDto {
@@ -47,17 +68,34 @@ export class WmsPortalService {
     const allowed = (Object.keys(roles) as Station[]).filter(role => admin || (permissions.has('wms_tasks:read') && permissions.has(roles[role])));
     if (station && !allowed.includes(station)) throw new ForbiddenException('沒有此作業權限');
     const personalPaths = [['/attendance/dashboard','attendance_self:read'],['/attendance/leaves','leave_self:read'],['/ap/expenses','expense_self:read'],['/profile','profile_self:read']].filter(([,permission])=>admin || permissions.has(permission)).map(([path])=>path);
-    return { userId: user.id, name: user.name, entityId, roles: allowed, personalPaths, passwordVersion: hash(user.passwordHash) };
+    return { userId: user.id, name: user.name, entityId, roles: allowed, personalPaths, admin, permissions: [...permissions], passwordVersion: hash(user.passwordHash) };
   }
   async access(userId: string) {
     this.enabled(); const { passwordVersion, ...identity } = await this.identity(userId); return identity;
   }
+  private destination(actor: Awaited<ReturnType<WmsPortalService['identity']>>, entry: Entry) {
+    const target: {path:string; permissions:string[]; station?:Station; adminOnly?:boolean} = entries[entry];
+    if (!target || (!actor.admin && (!actor.permissions.includes('wms_tasks:read') || target.adminOnly || !target.permissions.some(p => actor.permissions.includes(p))))) throw new ForbiddenException('沒有此儲運功能權限');
+    // A report permission never becomes WMS admin. Portal viewers are read-only.
+    const role = target.station || (actor.admin ? 'admin' : entry === 'intakes' ? actor.roles.find(r => r === 'dispatcher') || actor.roles[0] : 'viewer');
+    if (!role) throw new ForbiddenException('請先指派儲運作業權限');
+    return { role, destination: target.path, permissions: actor.admin ? ['wms_admin'] : actor.permissions.filter(p => p.startsWith('wms_')) };
+  }
+  private async sessionIdentity(record: any) {
+    const actor = await this.identity(record.user_id);
+    const access = this.destination(actor, record.entry_key || roleEntries[record.station as Station]);
+    if (actor.passwordVersion !== record.password_version || actor.entityId !== record.entity_id) throw new UnauthorizedException();
+    return { userId:actor.userId, name:actor.name, entityId:actor.entityId, personalPaths:actor.personalPaths, ...access, expiresAt:record.expires_at };
+  }
   async ticket(userId: string, input: TicketDto) {
-    this.enabled(); const actor = await this.identity(userId, input.role);
+    this.enabled(); const actor = await this.identity(userId);
+    const entry = input.entry || (input.role && roleEntries[input.role]);
+    if (!entry || (input.entry && input.role)) throw new ForbiddenException('請指定一個儲運入口');
+    this.destination(actor, entry);
     const ticket = randomBytes(32).toString('hex');
     await this.db.$executeRaw`INSERT INTO wms_portal_sessions
-      (id, user_id, entity_id, station, nonce, password_version, ticket_expires_at, expires_at)
-      VALUES (${hash(ticket)}, ${userId}, ${actor.entityId!}, ${input.role}, ${input.nonce}, ${actor.passwordVersion}, NOW() + INTERVAL '60 seconds', NOW() + INTERVAL '8 hours')`;
+      (id, user_id, entity_id, station, entry_key, nonce, password_version, ticket_expires_at, expires_at)
+      VALUES (${hash(ticket)}, ${userId}, ${actor.entityId!}, ${input.role || 'portal'}, ${entry}, ${input.nonce}, ${actor.passwordVersion}, NOW() + INTERVAL '60 seconds', NOW() + INTERVAL '8 hours')`;
     return { ticket };
   }
   async consume(input: ExchangeDto) {
@@ -67,18 +105,16 @@ export class WmsPortalService {
       WHERE id = ${hash(input.ticket)} AND nonce = ${input.nonce} AND consumed_at IS NULL
       AND revoked_at IS NULL AND ticket_expires_at > NOW() RETURNING *`;
     const record = rows[0]; if (!record) throw new UnauthorizedException('工作台連線已逾時，請重新開啟');
-    const actor = await this.identity(record.user_id, record.station);
-    if (actor.passwordVersion !== record.password_version || actor.entityId !== record.entity_id) throw new UnauthorizedException();
+    const actor = await this.sessionIdentity(record);
     // One active warehouse identity per ERP account; old tabs cannot keep a previous role.
     await this.db.$executeRaw`UPDATE wms_portal_sessions SET revoked_at = NOW() WHERE user_id = ${record.user_id} AND id <> ${record.id} AND consumed_at IS NOT NULL AND revoked_at IS NULL`;
-    return { session, userId: actor.userId, name: actor.name, role: record.station, entityId: actor.entityId, personalPaths: actor.personalPaths, expiresAt: record.expires_at };
+    return { session, ...actor };
   }
   async inspect(session: string) {
     const rows = await this.db.$queryRaw<any[]>`SELECT * FROM wms_portal_sessions WHERE session_hash = ${hash(session)} AND consumed_at IS NOT NULL AND revoked_at IS NULL AND expires_at > NOW()`;
     const record = rows[0]; if (!record) throw new UnauthorizedException('儲運登入已失效，請回工作台重新選擇');
-    const actor = await this.identity(record.user_id, record.station);
-    if (actor.passwordVersion !== record.password_version || actor.entityId !== record.entity_id) throw new UnauthorizedException();
-    return { userId: actor.userId, name: actor.name, role: record.station, entityId: actor.entityId, personalPaths: actor.personalPaths, expiresAt: record.expires_at };
+    const actor = await this.sessionIdentity(record);
+    return actor;
   }
   async staffCommand(action:'staff'|'bind', body?:BindDto) {
     this.enabled();

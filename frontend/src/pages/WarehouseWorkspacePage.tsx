@@ -4,7 +4,7 @@ import { InboxOutlined, ScanOutlined } from '@ant-design/icons'
 import { useAuth } from '../contexts/AuthContext'
 import { hasAnyPermission } from '../utils/access'
 import api from '../services/api'
-import { openWarehouseWork, type WorkRole } from '../services/wms-workspace'
+import { openWarehouseEntry, openWarehouseWork, type WorkRole } from '../services/wms-workspace'
 import { wmsPortalLinks } from '../config/wms-portal'
 
 export default function WarehouseWorkspacePage() {
@@ -42,6 +42,6 @@ export default function WarehouseWorkspacePage() {
     </div>
     {loading && <Card loading style={{ marginTop: 20 }} />}
     {!loading && !error && !roles.length && <Alert type="info" message="尚未指派揀貨或裝箱權限，請聯絡管理員。" />}
-    {hasAnyPermission(user, ['wms_orders:create','wms_exceptions:read']) && operationLinks.length > 0 && <Card title="出貨與例外" style={{ marginTop: 24 }}><Space wrap>{operationLinks.map(link => <Button key={link.key} href={link.externalUrl} target="_blank" rel="noopener noreferrer">{link.label}</Button>)}</Space></Card>}
+    {hasAnyPermission(user, ['wms_orders:create','wms_exceptions:read']) && operationLinks.length > 0 && <Card title="出貨與例外" style={{ marginTop: 24 }}><Space wrap>{operationLinks.map(link => <Button key={link.key} onClick={() => void openWarehouseEntry(link.key).catch(e => setError(e.response?.data?.message || e.message))}>{link.label}</Button>)}</Space></Card>}
   </div>
 }

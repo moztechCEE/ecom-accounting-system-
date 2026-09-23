@@ -15,7 +15,7 @@ describe('warehouse identity and personal access', () => {
   });
   it('only offers permitted work; choosing pack never elevates a picker',async()=>{
     expect((await service.access('staff')).roles).toEqual(['picker']);
-    await expect(service.ticket('staff',{role:'packer',nonce:'a'.repeat(64)})).rejects.toThrow('沒有此作業權限');
+    await expect(service.ticket('staff',{role:'packer',nonce:'a'.repeat(64)})).rejects.toThrow('沒有此儲運功能權限');
     expect(db.$executeRaw).not.toHaveBeenCalled();
   });
   it('blocks removed company access, disabled accounts and password-change accounts',async()=>{
@@ -35,7 +35,7 @@ describe('warehouse identity and personal access', () => {
   });
   it('rechecks permissions and password version on an existing session',async()=>{
     db.$queryRaw.mockResolvedValue([{user_id:'staff',station:'packer',entity_id:'warehouse',password_version:'old'}]);
-    await expect(service.inspect('s')).rejects.toThrow('沒有此作業權限');
+    await expect(service.inspect('s')).rejects.toThrow('沒有此儲運功能權限');
     db.$queryRaw.mockResolvedValue([{user_id:'staff',station:'picker',entity_id:'warehouse',password_version:'old'}]);
     await expect(service.inspect('s')).rejects.toThrow();
   });

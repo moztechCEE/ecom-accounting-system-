@@ -4,7 +4,9 @@ import { wmsPortalOrigin } from '../config/wms-portal'
 export type WorkRole = 'picker' | 'packer' | 'dispatcher'
 // The ticket is transferred only to the popup we opened, after checking its
 // origin and nonce. Passwords, ERP tokens and tickets never enter a URL.
-export function openWarehouseWork(role: WorkRole): Promise<void> {
+export function openWarehouseWork(role: WorkRole): Promise<void> { return openPortal({role}) }
+export function openWarehouseEntry(key: string): Promise<void> { return openPortal({entry: key.replace(/^\/warehouse\/?/, '') || 'tasks'}) }
+function openPortal(target: {role?:WorkRole; entry?:string}): Promise<void> {
   const origin = wmsPortalOrigin()
   if (!origin) return Promise.reject(new Error('尚未設定儲運工作台'))
   const popup = window.open(origin + '/erp-entry', '_blank')
@@ -19,7 +21,7 @@ export function openWarehouseWork(role: WorkRole): Promise<void> {
       if (event.data?.type !== 'corely-wms-ready' || issued || !/^[a-f0-9]{64}$/.test(event.data?.nonce || '')) return
       issued = true
       try {
-        const { data } = await api.post('/wms/portal/ticket', { role, nonce: event.data.nonce })
+        const { data } = await api.post('/wms/portal/ticket', { ...target, nonce: event.data.nonce })
         popup.postMessage({ type: 'corely-erp-ticket', ticket: data.ticket, nonce: event.data.nonce }, origin)
       } catch (error) { cleanup(); popup.close(); reject(error) }
     }
