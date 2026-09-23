@@ -33,6 +33,17 @@ export class B2bLoginDto {
 export class B2bEntityDto {
   @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(128) entityId!: string;
 }
+export class B2bProductOptionsDto extends B2bEntityDto {
+  @IsOptional()
+  @Transform(({ obj, key }) => obj[key])
+  @IsString() @MaxLength(200)
+  search?: string;
+
+  @IsOptional()
+  @Transform(({ obj, key }) => obj[key])
+  @IsString() @Matches(/^(?:[1-9][0-9]?|100)$/)
+  limit?: string;
+}
 export class B2bAccountDto extends B2bEntityDto {
   @IsString() @IsNotEmpty() @MaxLength(128) customerId!: string;
   @Transform(trim) @IsEmail() @MaxLength(254) email!: string;

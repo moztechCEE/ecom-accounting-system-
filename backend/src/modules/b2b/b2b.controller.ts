@@ -27,6 +27,7 @@ import {
   B2bEntityDto,
   B2bLoginDto,
   B2bPriceDto,
+  B2bProductOptionsDto,
   B2bRequestDto,
   B2bReviewDto,
   B2bSupplierAccountDto,
@@ -89,6 +90,11 @@ export class B2bAdminController {
   @Header('Cache-Control', 'no-store')
   setup(@Query() query: B2bEntityDto) {
     return this.service.setup(query.entityId);
+  }
+  @Get('product-options')
+  @Header('Cache-Control', 'no-store')
+  productOptions(@Query() query: B2bProductOptionsDto) {
+    return this.service.productOptions(query.entityId, query.search, query.limit);
   }
   @Post('accounts')
   @RequirePermissions({ resource: 'sales_orders', action: 'create' })

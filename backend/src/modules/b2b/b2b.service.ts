@@ -154,6 +154,27 @@ export class B2bService {
       throw new BadRequestException('密碼至少 12 字元，且不可超過 72 bytes');
     return bcrypt.hash(value, 12);
   }
+  async productOptions(entityId: string, rawSearch?: string, rawLimit?: string) {
+    if (rawLimit !== undefined && (typeof rawLimit !== 'string' || !/^(?:[1-9][0-9]?|100)$/.test(rawLimit)))
+      throw new BadRequestException('Product option limit must be 1 to 100');
+    if (rawSearch !== undefined && (typeof rawSearch !== 'string' || rawSearch.length > 200))
+      throw new BadRequestException('Product search must be a string of at most 200 characters');
+    const limit = rawLimit === undefined ? 20 : Number(rawLimit);
+    const search = rawSearch?.trim() || '';
+    await this.company(entityId);
+    const where: Prisma.ProductWhereInput = { entityId, isActive: true, type: ProductType.SIMPLE,
+      ...(search ? { OR: [
+        { sku: { contains: search, mode: 'insensitive' as const } },
+        { name: { contains: search, mode: 'insensitive' as const } },
+      ] } : {}) };
+    const [rows, total] = await Promise.all([
+      this.db.product.findMany({ where, select: { id: true, sku: true, name: true },
+        orderBy: [{ sku: 'asc' }, { id: 'asc' }], take: limit }),
+      this.db.product.count({ where }),
+    ]);
+    return { rows, total, limit, hasMore: rows.length < total };
+  }
+
   async setup(entityId: string) {
     const entity = await this.company(entityId);
     const [customers, products, accounts, catalog, prices, vendors, channels, warehouses] =

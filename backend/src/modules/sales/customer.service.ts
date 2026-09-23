@@ -1,6 +1,23 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { Prisma } from '@prisma/client';
+import { Customer, Prisma } from '@prisma/client';
+
+type RecentCustomerOrder = {
+  id: string; orderDate: Date; externalOrderId: string | null; notes: string | null;
+  channel: { code: string | null; name: string | null } | null;
+};
+type CustomerWithSummary = Customer & {
+  salesOrders: RecentCustomerOrder[];
+  _count: { salesOrders: number };
+};
+type CustomerOrderSummaryRow = {
+  customerId: string; id: string; orderDate: Date; externalOrderId: string | null;
+  notes: string | null; channelCode: string | null; channelName: string | null;
+  totalOrders: bigint;
+};
+
+export type CustomerListQuery = { limit?: string; offset?: string; search?: string };
+
 
 @Injectable()
 export class CustomerService {
@@ -32,65 +49,81 @@ export class CustomerService {
     return { rows, limit, offset, hasMore, nextOffset: hasMore ? offset + rows.length : null };
   }
 
-  async findAll(entityId: string) {
-    const customers = await this.prisma.customer.findMany({
-      where: { entityId },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        salesOrders: {
-          where: { entityId },
-          select: {
-            id: true,
-            orderDate: true,
-            externalOrderId: true,
-            notes: true,
-            channel: {
-              select: {
-                code: true,
-                name: true,
-              },
-            },
-          },
-          orderBy: {
-            orderDate: 'desc',
-          },
-        },
-      },
-    });
-
-    return customers.map((customer) => this.enrichCustomer(customer));
+  async findAll(entityId: string, query: CustomerListQuery = {}) {
+    const pageNumber = (value: unknown, fallback: number, minimum: number, maximum: number) => {
+      if (value === undefined) return fallback;
+      if (typeof value !== 'string' || !/^(0|[1-9][0-9]{0,9})$/.test(value)
+          || Number(value) < minimum || Number(value) > maximum) {
+        throw new BadRequestException('Invalid customer pagination');
+      }
+      return Number(value);
+    };
+    const limit = pageNumber(query.limit, 50, 1, 100);
+    const offset = pageNumber(query.offset, 0, 0, 1_000_000_000);
+    if (query.search !== undefined && (typeof query.search !== 'string' || query.search.length > 200))
+      throw new BadRequestException('Customer search must be a string of at most 200 characters');
+    const search = query.search?.trim() || '';
+    const where: Prisma.CustomerWhereInput = {
+      entityId,
+      ...(search ? { OR: [
+        'name', 'code', 'email', 'phone', 'phoneExtension', 'mobile', 'taxId',
+        'companyName', 'contactPerson', 'address', 'summary',
+      ].map((field) => ({ [field]: { contains: search, mode: 'insensitive' as const } })) } : {}),
+    };
+    const [customers, total] = await Promise.all([
+      this.prisma.customer.findMany({
+        where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit, skip: offset,
+      }),
+      this.prisma.customer.count({ where }),
+    ]);
+    const rows = await this.withOrderSummaries(entityId, customers);
+    const hasMore = rows.length > 0 && offset + rows.length < total;
+    return { rows, total, limit, offset, hasMore,
+      nextOffset: hasMore ? offset + rows.length : null };
   }
 
   async findOne(entityId: string, id: string) {
     const customer = await this.prisma.customer.findFirst({
       where: { id, entityId },
-      include: {
-        salesOrders: {
-          where: { entityId },
-          select: {
-            id: true,
-            orderDate: true,
-            externalOrderId: true,
-            notes: true,
-            channel: {
-              select: {
-                code: true,
-                name: true,
-              },
-            },
-          },
-          orderBy: {
-            orderDate: 'desc',
-          },
-        },
-      },
     });
+    return customer ? (await this.withOrderSummaries(entityId, [customer]))[0] : null;
+  }
 
-    if (!customer) {
-      return null;
-    }
-
-    return this.enrichCustomer(customer);
+  private async withOrderSummaries(entityId: string, customers: Customer[]) {
+    if (!customers.length) return [];
+    // Never hydrate customer -> all orders -> channels. Even a nested Prisma
+    // take can be applied in memory depending on relation-loading strategy.
+    // This query has <= 101 bind values, one database-side ranking pass, and
+    // returns <= 100 rows, regardless of the number of historical sales orders.
+    const summaries = await this.prisma.$queryRaw<CustomerOrderSummaryRow[]>(Prisma.sql`
+      SELECT ranked.customer_id AS "customerId", ranked.id,
+        ranked.order_date AS "orderDate", ranked.external_order_id AS "externalOrderId",
+        ranked.notes, ranked.total_orders AS "totalOrders",
+        channel.code AS "channelCode", channel.name AS "channelName"
+      FROM (
+        SELECT id, entity_id, customer_id, channel_id, order_date, external_order_id, notes,
+          COUNT(*) OVER (PARTITION BY customer_id) AS total_orders,
+          ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date DESC, id DESC) AS position
+        FROM sales_orders
+        WHERE entity_id=${entityId} AND customer_id IN (${Prisma.join(customers.map((row) => row.id))})
+      ) ranked
+      LEFT JOIN sales_channels channel
+        ON channel.id=ranked.channel_id AND channel.entity_id=ranked.entity_id
+      WHERE ranked.position=1
+    `);
+    const byCustomer = new Map(summaries.map((summary) => [summary.customerId, summary]));
+    return customers.map((customer) => {
+      const summary = byCustomer.get(customer.id);
+      const salesOrders: RecentCustomerOrder[] = summary ? [{
+        id: summary.id, orderDate: summary.orderDate, externalOrderId: summary.externalOrderId,
+        notes: summary.notes, channel: summary.channelCode === null ? null : {
+          code: summary.channelCode, name: summary.channelName,
+        },
+      }] : [];
+      return this.enrichCustomer({ ...customer, salesOrders,
+        _count: { salesOrders: summary ? Number(summary.totalOrders) : 0 } });
+    });
   }
 
   async create(entityId: string, data: Prisma.CustomerCreateInput) {
@@ -149,26 +182,7 @@ export class CustomerService {
     });
   }
 
-  private enrichCustomer(
-    customer: Prisma.CustomerGetPayload<{
-      include: {
-        salesOrders: {
-          select: {
-            id: true;
-            orderDate: true;
-            externalOrderId: true;
-            notes: true;
-            channel: {
-              select: {
-                code: true;
-                name: true;
-              };
-            };
-          };
-        };
-      };
-    }>,
-  ) {
+  private enrichCustomer(customer: CustomerWithSummary) {
     const sourceMap = new Map<
       string,
       { label: string; brand: string; channelCode: string | null }
@@ -189,9 +203,11 @@ export class CustomerService {
       channelCode: null,
     };
 
+    const { _count, ...publicCustomer } = customer;
     return {
-      ...customer,
-      totalOrders: customer.salesOrders.length,
+      ...publicCustomer,
+      totalOrders: _count.salesOrders,
+      sourceScope: 'latest_order' as const,
       lastOrderDate: customer.salesOrders[0]?.orderDate?.toISOString() || null,
       sourceLabels: sources.length
         ? sources.map((source) => source.label)
@@ -237,26 +253,8 @@ export class CustomerService {
       : 0;
   }
 
-  private buildPaymentSummary(
-    customer: Prisma.CustomerGetPayload<{
-      include: {
-        salesOrders: {
-          select: {
-            id: true;
-            orderDate: true;
-            externalOrderId: true;
-            notes: true;
-            channel: {
-              select: {
-                code: true;
-                name: true;
-              };
-            };
-          };
-        };
-      };
-    }>,
-  ) {
+  private buildPaymentSummary(customer: Pick<Customer,
+    'isMonthlyBilling' | 'paymentTermDays' | 'paymentTerms' | 'type'>) {
     if (customer.isMonthlyBilling || customer.paymentTermDays > 0) {
       return `月結 ${customer.paymentTermDays || 30} 天`;
     }

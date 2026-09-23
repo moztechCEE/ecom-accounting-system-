@@ -56,7 +56,7 @@ describe('Verified company read scope', () => {
     const req = { user:{ id:'service' } };
     await controller.findAll(req);
     await controller.findOne(req, 'customer-1', 'tw-entity-001');
-    expect(service.findAll).toHaveBeenCalledWith('tw-entity-001');
+    expect(service.findAll).toHaveBeenCalledWith('tw-entity-001', { limit: undefined, offset: undefined, search: undefined });
     expect(service.findOne).toHaveBeenCalledWith('tw-entity-001', 'customer-1');
     getContext.mockResolvedValue({ entityId:'foreign', noAccess:true });
     await expect(controller.findAll(req, 'foreign')).rejects.toBeInstanceOf(ForbiddenException);

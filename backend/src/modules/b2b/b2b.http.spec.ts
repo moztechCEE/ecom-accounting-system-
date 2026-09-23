@@ -62,6 +62,7 @@ function fixture() {
   const product = {
     id: 'product-a',
     sku: 'SKU-1',
+    type: 'SIMPLE',
     name: 'Test product',
     description: 'Description',
     isActive: true,
@@ -111,6 +112,8 @@ function fixture() {
       },
     },
     product: {
+      findMany: async ({ where, select: fields }: any) => where.entityId === entity.id ? [select(product, fields)] : [],
+      count: async ({ where }: any) => where.entityId === entity.id ? 1 : 0,
       findFirst: async ({ where }: any) =>
         where.id === product.id && where.entityId === entity.id
           ? product
@@ -308,6 +311,20 @@ describe('B2B HTTP flow with isolated repository fixture', () => {
     if (before === undefined) delete process.env.B2B_PORTAL_ENABLED;
     else process.env.B2B_PORTAL_ENABLED = before;
   });
+  it('scopes bounded product options to authenticated staff and validates query arrays', async () => {
+    const path = '/api/v1/b2b/admin/product-options';
+    await request(app.getHttpServer()).get(`${path}?entityId=entity-a`).expect(401);
+    const response = await request(app.getHttpServer()).get(`${path}?entityId=entity-a&limit=20&search=SKU`)
+      .set('Authorization', `Bearer ${staffToken}`).expect(200);
+    expect(response.body).toEqual({ rows: [{ id: 'product-a', sku: 'SKU-1', name: 'Test product' }], total: 1, limit: 20, hasMore: false });
+    for (const invalid of ['limit=101', 'limit=1&limit=2', 'search=a&search=b']) {
+      await request(app.getHttpServer()).get(`${path}?entityId=entity-a&${invalid}`)
+        .set('Authorization', `Bearer ${staffToken}`).expect(400);
+    }
+    await request(app.getHttpServer()).get(`${path}?entityId=foreign`)
+      .set('Authorization', `Bearer ${staffToken}`).expect(401);
+  });
+
   it('account -> login -> customer prices -> PO -> scoped link -> staff review -> revocation', async () => {
     const http = app.getHttpServer();
     const staff = { Authorization: `Bearer ${staffToken}` };

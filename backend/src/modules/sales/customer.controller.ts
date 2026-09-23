@@ -29,9 +29,10 @@ export class CustomerController {
   @Get()
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'sales_orders', action: 'read' })
-  async findAll(@Request() req, @Query('entityId') requestedEntityId?: string) {
+  async findAll(@Request() req, @Query('entityId') requestedEntityId?: string,
+    @Query('limit') limit?: string, @Query('offset') offset?: string, @Query('search') search?: string) {
     const entityId = await resolveCompanyRead(this.entityAccessService, req.user?.id, 'sales', requestedEntityId);
-    return this.customerService.findAll(entityId);
+    return this.customerService.findAll(entityId, { limit, offset, search });
   }
 
   @Get('business-records')
