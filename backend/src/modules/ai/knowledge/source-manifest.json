@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:88d565d6225d679d4e26b976c1870c4281f57e348591279a692b1c37f2f93de4",
+  "sourceVersion": "sha256:f92412065e76063261a4362daaf63eedb7c5b859359da331b36150ee2820d4f2",
   "reviewedBaseCommit": "9165c7123b10750b598a95f9badfc9c00ed04abd",
   "entryCount": 59,
   "groups": [
@@ -18,7 +18,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "8397895351741355dc471a9a7e37ca0207a79f04ad6c022a5184718798e6dc08",
+  "catalogSha256": "ecb43e063448459173049f69e0060bfd3e10ad5d9825fa02eb2cdbc43eaa1024",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -169,7 +169,7 @@
     },
     {
       "path": "backend/src/modules/b2b/b2b.service.ts",
-      "sha256": "9df23c4b7d434074feaef8962a1eef35387ba25dd7dda2c0c0019b2c3445f3e0"
+      "sha256": "19c6a85abc18b56048b6cade885651bad8f4b22772cfabecd921393741d8c19d"
     },
     {
       "path": "backend/src/modules/banking/banking.controller.ts",

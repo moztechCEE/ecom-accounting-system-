@@ -26,6 +26,18 @@ import {
 const sha256 = (value: string) =>
   createHash('sha256').update(value).digest('hex');
 const emailKey = (value: string) => value.trim().toLowerCase();
+// The workbench's date input means "through this calendar day" in Taiwan.
+// Persist the next Taipei midnight as an exclusive UTC cutoff; catalog uses > now.
+function priceValidUntil(value?: string): Date | null {
+  if (!value) return null;
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const cutoff = new Date(dateOnly ? `${value}T16:00:00.000Z` : value);
+  if (!Number.isFinite(cutoff.getTime()) ||
+      (dateOnly && cutoff.toISOString().slice(0, 10) !== value)) {
+    throw new BadRequestException('客戶專屬價有效期限不是有效日期');
+  }
+  return cutoff;
+}
 const accountSelect = {
   id: true,
   accountType: true,
@@ -318,7 +330,7 @@ export class B2bService {
     await this.company(dto.entityId);
     await this.customer(dto.entityId, dto.customerId);
     await this.product(dto.entityId, dto.productId);
-    const validUntil = dto.validUntil ? new Date(dto.validUntil) : null;
+    const validUntil = priceValidUntil(dto.validUntil);
     if (validUntil && validUntil.getTime() <= Date.now() && dto.isActive)
       throw new BadRequestException('有效期限必須晚於現在');
     const key = {

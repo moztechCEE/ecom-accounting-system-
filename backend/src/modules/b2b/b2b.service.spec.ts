@@ -121,6 +121,7 @@ function makeDb() {
       ]),
     },
     b2bCustomerPrice: {
+      upsert: jest.fn(),
       findMany: jest
         .fn()
         .mockResolvedValue([{ productId: 'p1', unitPrice: D('10.01') }]),
@@ -253,6 +254,33 @@ describe('B2B account and request boundaries', () => {
   it('uses explicitly published catalog price when no currently effective customer override exists', async () => {
     db.b2bCustomerPrice.findMany.mockResolvedValue([]);
     expect((await service.catalog(identity)).items[0].unitPrice).toBe('20.00');
+  });
+  it('keeps a date-only customer price through the full Taiwan day, then expires at midnight', async () => {
+    const cutoff = new Date('2026-09-23T16:00:00.000Z'); // Sep 24 00:00 Asia/Taipei
+    const input = {
+      entityId: 'entity-a', customerId: 'customer-a', productId: 'p1',
+      unitPrice: 10.01, isActive: true, validUntil: '2026-09-23',
+    };
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-23T15:59:59.999Z'));
+    try {
+      db.b2bCustomerPrice.upsert.mockResolvedValue({});
+      await service.setPrice(input, 'staff');
+      expect(db.b2bCustomerPrice.upsert.mock.calls[0][0].create.validUntil).toEqual(cutoff);
+      expect(db.b2bCustomerPrice.upsert.mock.calls[0][0].update.validUntil).toEqual(cutoff);
+      db.b2bCustomerPrice.findMany.mockImplementation(({ where }: any) =>
+        cutoff > where.OR[1].validUntil.gt
+          ? [{ productId: 'p1', unitPrice: D('10.01') }]
+          : [],
+      );
+      expect((await service.catalog(identity)).items[0].unitPrice).toBe('10.01');
+      jest.setSystemTime(cutoff);
+      expect((await service.catalog(identity)).items[0].unitPrice).toBe('20.00');
+      await expect(service.setPrice(input, 'staff')).rejects.toThrow('有效期限必須晚於現在');
+      await expect(service.setPrice({ ...input, validUntil: '2026-02-31' }, 'staff'))
+        .rejects.toThrow('有效期限不是有效日期');
+    } finally {
+      jest.useRealTimers();
+    }
   });
   it('snapshots server prices with decimal tax and writes no inventory/order records on customer PO submission', async () => {
     db.b2bPurchaseRequest.create.mockImplementation(({ data }: any) => ({

@@ -3842,6 +3842,7 @@
           "只有每行數量全數確認的需求可選擇銷售通路與出貨倉庫並確認接單，建立 ERP 銷售訂單、預留庫存及後續 WMS 出貨交接。"
         ],
         "boundaries": [
+          "專屬價的「有效至」為台灣日期，設定當天結束前仍有效；隔日零時起不再套用該專屬價，回到已發布目錄價。",
           "人工核庫結果本身不保留、不扣正式庫存；數量有異動時必填核對備註，且不能直接按全數確認接單。",
           "客戶帳號使用獨立登入。供應商帳號目前只有建檔、停用與重設密碼，供應商登入及查採購單尚未開放；供應商帳號操作還需採購權限。",
           "員工建立帳號時的初始密碼不會在頁面持續顯示；此工作台不會直接發送 LINE 訊息或證明 WMS 已出貨。"
@@ -3861,6 +3862,7 @@
               "Only requests fully confirmed on every line can be accepted: choose a sales channel and shipping warehouse to create an ERP sales order, reserve stock and start WMS fulfilment handoff."
             ],
             "boundaries": [
+              "A customer price's Valid through date is a Taiwan calendar date. The override remains effective for that entire day; from the following midnight, the published catalog price applies instead.",
               "Manual stock review alone does not reserve or deduct posted inventory. Quantity changes require a review note and cannot be accepted as a fully confirmed order.",
               "Customer accounts have a separate login. Supplier accounts can currently be created, deactivated and reset, but supplier login and purchase-order viewing are not open; supplier account changes also require purchasing access.",
               "The initial password does not remain visible on the page. This workbench does not send LINE messages or prove WMS shipment."
