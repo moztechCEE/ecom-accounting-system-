@@ -565,7 +565,7 @@
         ],
         "boundaries": [
           "來源平台同步與手動建立的訂單須保留來源識別；訂單金額不是銀行實收。",
-          "確認接單會預留庫存；WMS 裝箱或交運事件不等於 ERP 正式扣庫，須在交運待核銷逐行核准。",
+          "B2B 確認接單會預留庫存，從接單起就不能用舊整單出庫入口扣庫；WMS 裝箱或交運事件不等於 ERP 正式扣庫，須在交運待核銷逐行核准。",
           "Copilot 查單僅限已註冊且通過授權的讀取工具，不能據此聲稱已出貨。"
         ],
         "related": [
@@ -594,7 +594,7 @@
             ],
             "boundaries": [
               "Preserve platform or manual source identifiers; order value is not bank cash received.",
-              "Confirming an order reserves stock; WMS packing or a handover event does not post the final ERP inventory deduction. Approve each line in handover reconciliation.",
+              "Confirming a B2B order reserves stock and blocks the legacy whole-order fulfilment action immediately. WMS packing or a handover event does not post the final ERP inventory deduction; approve each line in handover reconciliation.",
               "Copilot order lookup uses registered authorized read tools and is not proof of shipment."
             ],
             "related": [
@@ -612,7 +612,8 @@
         "frontend/src/config/navigation.ts",
         "frontend/src/App.tsx",
         "frontend/src/pages/SalesPage.tsx",
-        "backend/src/modules/sales/sales.controller.ts"
+        "backend/src/modules/sales/sales.controller.ts",
+        "backend/src/modules/sales/sales.service.ts"
       ],
       "permissions": [
         "sales_orders:read"

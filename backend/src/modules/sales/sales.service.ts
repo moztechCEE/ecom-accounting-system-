@@ -66,21 +66,38 @@ export class SalesService {
   }) {
     const { entityId, warehouseId, salesOrderId, itemSerialNumbers } = params;
     return this.prisma.$transaction(async (tx) => {
+      // Dispatch holds FOR SHARE on this same row; handover posting holds
+      // FOR UPDATE. Lock before reading ownership so no dispatch can slip
+      // between the intent check and a legacy whole-order inventory write.
+      await tx.$queryRaw`
+        SELECT id FROM sales_orders
+        WHERE id=${salesOrderId} AND entity_id=${entityId} FOR UPDATE
+      `;
       const order = await tx.salesOrder.findFirst({
         where: { id: salesOrderId, entityId },
-        include: { items: { include: { product: true } } },
+        include: {
+          items: { include: { product: true } },
+          b2bRequest: { select: { id: true } },
+          wmsHandoverInbox: { take: 1, select: { id: true } },
+        },
       });
       if (!order) throw new NotFoundException('Sales order not found for entity');
-      if (order.status === 'shipped' || order.status === 'completed') {
-        return { success: true, alreadyFulfilled: true, status: order.status };
-      }
-      if (['cancelled', 'refunded'].includes(order.status)) {
-        throw new BadRequestException(`Sales order cannot be fulfilled from status ${order.status}`);
+
+      // B2B confirm creates the source marker and request link atomically with
+      // reservations. Its inventory owner is WMS even before dispatch exists.
+      // Retain both markers so editing a displayed order number cannot bypass
+      // an existing request link, and incomplete historical links fail closed.
+      const b2bManaged = Boolean(order.b2bRequest) ||
+        order.externalOrderId?.trim().startsWith('B2B:') ||
+        order.sourceOrderKey?.startsWith(`${order.channelId}:B2B:`);
+      if (b2bManaged || order.wmsHandoverInbox.length > 0) {
+        throw new BadRequestException(
+          '此訂單由 B2B／WMS 管理，請依實際交運明細完成晚間核銷，不能整單直接扣庫',
+        );
       }
 
-      // WMS-managed orders must be posted from verified shipment lines after
-      // warehouse reconciliation. The legacy whole-order action would deduct
-      // every ordered unit before actual handover and could post twice.
+      // Any durable dispatch intent transfers inventory posting to verified
+      // shipment lines, including unknown or not-yet-acknowledged dispatches.
       const dispatchIntents = await tx.$queryRaw<Array<{ status: string }>>`
         SELECT status FROM wms_dispatch_intents
         WHERE entity_id=${entityId} AND sales_order_id=${salesOrderId}
@@ -90,6 +107,13 @@ export class SalesService {
         throw new BadRequestException(
           '此訂單已送 WMS，請依實際交運明細完成晚間核銷，不能整單直接扣庫',
         );
+      }
+
+      if (order.status === 'shipped' || order.status === 'completed') {
+        return { success: true, alreadyFulfilled: true, status: order.status };
+      }
+      if (['cancelled', 'refunded'].includes(order.status)) {
+        throw new BadRequestException(`Sales order cannot be fulfilled from status ${order.status}`);
       }
 
       const existingOutbound = await tx.inventoryTransaction.count({

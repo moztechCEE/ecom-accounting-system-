@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:5c21d8b7492d7fddc593255e98b8f7f265e03444f40f17dfc4165b58a7b86d35",
+  "sourceVersion": "sha256:f818a61fe4c627397618d74e7583d8e9ad591575fcacad3e9a527b643a9a6722",
   "reviewedBaseCommit": "9165c7123b10750b598a95f9badfc9c00ed04abd",
   "entryCount": 59,
   "groups": [
@@ -18,7 +18,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "fad612b7db54fc1a3703282dfa4d5983ab1d28af1d11c7de3cd17437760474bc",
+  "catalogSha256": "315462b8d43ceeb8c1317a6ff508012bd5db8634467654fd53873f590372acbe",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -253,7 +253,11 @@
     },
     {
       "path": "backend/src/modules/sales/sales.controller.ts",
-      "sha256": "bd3b8895332c01cabe55f5aeeb907e4ae155abb17603b6e0ce2d57f35ddd4e7d"
+      "sha256": "841490abbfd7afdc67765fc463d5929ded5886afe64d05701f17e033ffc4a683"
+    },
+    {
+      "path": "backend/src/modules/sales/sales.service.ts",
+      "sha256": "e6eeb9e6191b411c705a4924977858e6735300ef6bcc6cb06537e4c0ea46ab77"
     },
     {
       "path": "backend/src/modules/sn-labels/sn-labels.controller.ts",

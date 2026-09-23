@@ -281,6 +281,8 @@ export class SalesController {
    * 訂單出貨 (扣減庫存)
    */
   @Post('orders/:id/fulfill')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'sales_orders', action: 'create' })
   @ApiOperation({ summary: '訂單出貨 (扣減庫存)' })
   @ApiQuery({ name: 'entityId', required: true })
   async fulfillSalesOrder(
