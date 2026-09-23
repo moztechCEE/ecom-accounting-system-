@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:f818a61fe4c627397618d74e7583d8e9ad591575fcacad3e9a527b643a9a6722",
+  "sourceVersion": "sha256:44af5850ac6be6e832fc757d0d2902997732dfae6a847a612eb8f8d4c2f644d9",
   "reviewedBaseCommit": "9165c7123b10750b598a95f9badfc9c00ed04abd",
   "entryCount": 59,
   "groups": [
@@ -18,7 +18,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "315462b8d43ceeb8c1317a6ff508012bd5db8634467654fd53873f590372acbe",
+  "catalogSha256": "38589d4e22b1c337e01e679ed48d6d4635effdd818912655a69bba5e9bd6cb96",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -165,11 +165,11 @@
     },
     {
       "path": "backend/src/modules/b2b/b2b.controller.ts",
-      "sha256": "be2466d1e87439d57cf8a03701bac24bd6443efdce25d29fcdca2e9c32876155"
+      "sha256": "0445706fd2a431046c61051ea86d782805cf05fad99e1555c5ce4d11da7fd8b0"
     },
     {
       "path": "backend/src/modules/b2b/b2b.service.ts",
-      "sha256": "19c6a85abc18b56048b6cade885651bad8f4b22772cfabecd921393741d8c19d"
+      "sha256": "5ade2be650c7f44ac4693906f3ab825e2812a9bd791d642489aecb44ebd5b1aa"
     },
     {
       "path": "backend/src/modules/banking/banking.controller.ts",
@@ -249,7 +249,7 @@
     },
     {
       "path": "backend/src/modules/sales/customer.controller.ts",
-      "sha256": "6afc0faaa7925cfa962058bf9a5e321a440d15948c89133c99ae125258fa6713"
+      "sha256": "c4f97871d0af98225647f6b5573910e7d0dc9c2c8c0fef2f7df66de86bc1e0d4"
     },
     {
       "path": "backend/src/modules/sales/sales.controller.ts",
@@ -317,7 +317,7 @@
     },
     {
       "path": "frontend/src/pages/AfterSalesCasesPage.tsx",
-      "sha256": "1e81b4915ef76f47c8a521a3f8644436f2b4b8ae5fbfaeca2f98edae0cbc8b19"
+      "sha256": "6938d214a61521ece28698356366b980dec68c2e08cc16a399a9ba5f57fffc35"
     },
     {
       "path": "frontend/src/pages/AfterSalesQuotesPage.tsx",
@@ -357,7 +357,7 @@
     },
     {
       "path": "frontend/src/pages/b2b/B2bWorkbenchPage.tsx",
-      "sha256": "7b111533ef23ff12e834470e8ab289f9f4cbd9df77bbc0bc39e3aabd519610e7"
+      "sha256": "22e609498aa16abf26edf9f0c8319cd9b588238c48ba3274e6c4b925973eed9f"
     },
     {
       "path": "frontend/src/pages/b2b/order.ts",
@@ -373,7 +373,7 @@
     },
     {
       "path": "frontend/src/pages/CustomersPage.tsx",
-      "sha256": "e29af8846ce7b9da6c86f7f8a70c1d91ad833fffb228bbc059495fec0831c848"
+      "sha256": "11f0b904b54f27e57fc599516a2619cd59f3952c3f969c480640fae5fe5c1477"
     },
     {
       "path": "frontend/src/pages/DashboardPage.tsx",
@@ -445,7 +445,7 @@
     },
     {
       "path": "frontend/src/pages/SalesQuotationsPage.tsx",
-      "sha256": "766b9a67a110034e6999208a851a4aa7fae5bf7ba5b5f9086a64947f58191f75"
+      "sha256": "5aa5802986d075a1f26018eb2af1f1b3b9d793ecf8c1ae5b130e355d8b022a73"
     },
     {
       "path": "frontend/src/pages/SnLabelsPage.tsx",

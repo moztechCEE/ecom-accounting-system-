@@ -637,10 +637,11 @@
       "group": "sales",
       "sections": {
         "steps": [
-          "先選擇公司，在客戶管理查看或搜尋客戶，比對姓名、公司與聯絡資訊避免重複。",
+          "先選擇公司，在客戶管理以伺服器搜尋及分頁查找客戶，比對姓名、公司與聯絡資訊避免重複。",
           "依畫面及業務權限建立或維護該公司客戶資料，再於訂單或報價選用。"
         ],
         "boundaries": [
+          "客戶列表的來源欄只取最近一張銷售訂單；總訂單數涵蓋該公司的全部訂單，來源欄不能當作所有訂單來源。",
           "聯絡資訊是公司業務資料，只能在授權公司及業務範圍內使用。",
           "停用客戶會保留既有銷單與採購需求歷史，並阻止其客戶入口帳號後續使用；建立或查看客戶不等於已寄送報價或訊息。"
         ],
@@ -660,10 +661,11 @@
           ],
           "sections": {
             "steps": [
-              "Select the company, then find a customer and compare name, company and contact details to avoid duplicates.",
+              "Select the company, then use server-side search and pagination to find a customer and compare name, company and contact details to avoid duplicates.",
               "Create or maintain that company's customer where your sales permissions allow, then select the record for an order or quotation."
             ],
             "boundaries": [
+              "The source shown in the customer list comes from the latest sales order only; the total order count covers all orders in that company and the source does not describe every order.",
               "Contact information is business data limited to authorized companies and purposes.",
               "Deactivating a customer preserves sales and request history and blocks further customer-portal access. Creating or viewing a customer does not send a quotation or message."
             ],
@@ -1730,7 +1732,7 @@
       "group": "sales",
       "sections": {
         "steps": [
-          "選擇客戶、報價日期、有效期限與幣別，填寫付款及交貨條件。",
+          "以公司內的客戶搜尋選擇對象，設定報價日期、有效期限與幣別，填寫付款及交貨條件。",
           "加入品項、數量與價格並儲存，開啟報價預覽後列印或存成 PDF。"
         ],
         "boundaries": [
@@ -1753,7 +1755,7 @@
           ],
           "sections": {
             "steps": [
-              "Choose the customer, quotation date, validity and currency, then enter payment and delivery terms.",
+              "Search for a customer in the selected company, set the quotation date, validity and currency, then enter payment and delivery terms.",
               "Add lines, quantities and prices, save, and open the preview to print or save a PDF."
             ],
             "boundaries": [
@@ -3842,7 +3844,7 @@
       "group": "sales",
       "sections": {
         "steps": [
-          "先選公司；若客戶或供應商尚無主檔，先到客戶管理或供應商管理建立，回到此工作台重整後建立與主檔綁定的外部帳號；可停用帳號或設定新密碼，再發布商品目錄與客戶有效專屬價格。",
+          "先選公司；若客戶或供應商尚無主檔，先到客戶管理或供應商管理建立，回到此工作台搜尋主檔並建立綁定的外部帳號；可停用帳號或設定新密碼，再搜尋商品發布目錄與設定客戶有效專屬價格。",
           "收到需求後逐行填入人工確認數量、交期與必要備註；可複製需登入的報價連結到 LINE 與客戶討論。",
           "只有每行數量全數確認的需求可選擇銷售通路與出貨倉庫並確認接單，建立 ERP 銷售訂單、預留庫存及後續 WMS 出貨交接。"
         ],
@@ -3862,7 +3864,7 @@
           "keywords": ["Customer accounts", "supplier accounts", "catalog publishing", "customer price", "stock review", "order confirmation"],
           "sections": {
             "steps": [
-              "Select a company. Create missing customer or vendor master records on their respective pages, refresh this workbench, then create linked external accounts. You can deactivate accounts or set new passwords before publishing catalog items and valid customer prices.",
+              "Select a company. Create missing customer or vendor master records on their respective pages, then search for those records in this workbench to create linked external accounts. You can deactivate accounts or set new passwords, then search for products to publish catalog items and set valid customer prices.",
               "For each request, record manually confirmed quantities, delivery date and required notes. Copy the login-protected quote link for discussion with the customer through LINE.",
               "Only requests fully confirmed on every line can be accepted: choose a sales channel and shipping warehouse to create an ERP sales order, reserve stock and start WMS fulfilment handoff."
             ],
