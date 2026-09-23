@@ -55,6 +55,7 @@ import CustomersPage from './pages/CustomersPage'
 import ProfilePage from './pages/ProfilePage'
 import { B2BLoginPage, B2BPortalLayout, B2BCatalogPage, B2BRequestsPage, B2BRequestDetailPage } from './pages/b2b/B2BPortal'
 import B2bWorkbenchPage from './pages/b2b/B2bWorkbenchPage'
+import WmsHandoverReconciliationPage from './pages/WmsHandoverReconciliationPage'
 
 function HomeEntry({ dashboard = false }: { dashboard?: boolean }) {
   const { user, loading } = useAuth()
@@ -122,6 +123,7 @@ const App: React.FC = () => {
                 <Route path="warehouse/workstation" element={<PermissionRoute anyPermissions={['wms_tasks:read']}>{wmsPortalOrigin() ? <WarehouseWorkspacePage /> : <WarehouseCenterPage workstationOnly />}</PermissionRoute>} />
                 <Route path="warehouse/:report" element={<PermissionRoute anyPermissions={['wms_tasks:read']}>{wmsPortalOrigin() ? <WarehousePortalPage /> : <WarehouseReportsPage />}</PermissionRoute>} />
                 <Route path="inventory/products" element={<PermissionRoute anyPermissions={['inventory:read']}><ProductsPage /></PermissionRoute>} />
+                <Route path="inventory/handover-reconciliation" element={<PermissionRoute anyPermissions={['inventory:read']}><WmsHandoverReconciliationPage /></PermissionRoute>} />
                 <Route path="inventory/sn-labels" element={<PermissionRoute anyPermissions={['inventory:read']}><SnLabelsPage /></PermissionRoute>} />
                 <Route path="purchasing/orders" element={<PermissionRoute anyPermissions={['purchase_orders:read']}><PurchaseOrdersPage /></PermissionRoute>} />
                 <Route path="manufacturing/assembly" element={<PermissionRoute anyPermissions={['inventory:read']}><AssemblyPage /></PermissionRoute>} />

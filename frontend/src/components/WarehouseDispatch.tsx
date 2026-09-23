@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Select, Table } from "antd";
 import { Link } from "react-router-dom";
 import api from "../services/api";
+import { openCorelyIntake } from "../services/wms-workspace";
 type Preview = {
   orderNumber: string;
   brand: string;
@@ -28,7 +29,8 @@ export default function WarehouseDispatch({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [success, setSuccess] = useState(""),
-    [prepickUrl, setPrepickUrl] = useState<string | null>(null);
+    [prepickTarget, setPrepickTarget] = useState<{ salesOrderId: string; nativeIntakeId: number } | null>(null),
+    [openingPrepick, setOpeningPrepick] = useState(false);
   const [options, setOptions] = useState<{ id: string; orderNumber: string }[]>(
       [],
     ),
@@ -63,15 +65,21 @@ export default function WarehouseDispatch({
     setBusy(true);
     setError("");
     setSuccess("");
-    setPrepickUrl(null);
+    setPrepickTarget(null);
     try {
       if (confirm) {
-        const response = await api.post<{ prepickUrl?: string | null; workBarcode?: string; reservationAccepted?: boolean }>(
+        const response = await api.post<{ nativeIntakeId?: number; workBarcode?: string; reservationAccepted?: boolean }>(
           `/wms/workbench/dispatch/${encodeURIComponent(id.trim())}`,
           { entityId, sourceHash: preview!.sourceHash, requestId: key.current },
         );
         setSuccess(`訂單 ${preview!.orderNumber} 已送達 WMS 預揀${response.data.workBarcode ? ` · 工作條碼 ${response.data.workBarcode}` : ""}`);
-        setPrepickUrl(response.data.prepickUrl || null);
+        setPrepickTarget(
+          response.data.reservationAccepted === true &&
+          Number.isSafeInteger(response.data.nativeIntakeId) &&
+          (response.data.nativeIntakeId || 0) > 0
+            ? { salesOrderId: id.trim(), nativeIntakeId: response.data.nativeIntakeId! }
+            : null,
+        );
         setPreview(null);
         onDispatched();
       } else {
@@ -121,7 +129,7 @@ export default function WarehouseDispatch({
               setId(value);
               setPreview(null);
               setSuccess("");
-              setPrepickUrl(null);
+              setPrepickTarget(null);
               setError("");
             }}
           />
@@ -132,7 +140,18 @@ export default function WarehouseDispatch({
       </div>
       {error && <Alert type="warning" message={error} />}{" "}
       {success && <Alert type="success" message={success} />}
-      {prepickUrl && <a href={prepickUrl} target="_blank" rel="noopener noreferrer">打開 WMS 預揀工作單 →</a>}
+      {prepickTarget && <Button type="link" loading={openingPrepick} onClick={async () => {
+        setOpeningPrepick(true);
+        setError("");
+        try {
+          await openCorelyIntake(prepickTarget.salesOrderId, prepickTarget.nativeIntakeId);
+        } catch (reason) {
+          const response = (reason as { response?: { data?: { message?: string } } }).response;
+          setError(response?.data?.message || (reason instanceof Error ? reason.message : "無法開啟 WMS 預揀工作單，請稍後重試"));
+        } finally {
+          setOpeningPrepick(false);
+        }
+      }}>使用儲運統一登入開啟 WMS 預揀工作單 →</Button>}
       {preview && (
         <>
           <h3>

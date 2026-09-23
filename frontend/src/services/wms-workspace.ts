@@ -6,7 +6,13 @@ export type WorkRole = 'picker' | 'packer' | 'dispatcher'
 // origin and nonce. Passwords, ERP tokens and tickets never enter a URL.
 export function openWarehouseWork(role: WorkRole): Promise<void> { return openPortal({role}) }
 export function openWarehouseEntry(key: string): Promise<void> { return openPortal({entry: key.replace(/^\/warehouse\/?/, '') || 'tasks'}) }
-function openPortal(target: {role?:WorkRole; entry?:string}): Promise<void> {
+export function openCorelyIntake(salesOrderId: string, nativeIntakeId: number): Promise<void> {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(salesOrderId) || !Number.isSafeInteger(nativeIntakeId) || nativeIntakeId < 1 || nativeIntakeId > 999999999) {
+    return Promise.reject(new Error('預揀工作單來源資料不完整，請重新查詢訂單。'))
+  }
+  return openPortal({entry:'native-intake', salesOrderId, nativeIntakeId})
+}
+function openPortal(target: {role?:WorkRole; entry?:string; salesOrderId?:string; nativeIntakeId?:number}): Promise<void> {
   const origin = wmsPortalOrigin()
   if (!origin) return Promise.reject(new Error('尚未設定儲運工作台'))
   const popup = window.open(origin + '/erp-entry', '_blank')
