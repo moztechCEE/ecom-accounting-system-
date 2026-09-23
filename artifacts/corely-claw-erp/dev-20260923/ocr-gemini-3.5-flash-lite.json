@@ -1,0 +1,41 @@
+{
+  "tag": "090F273F",
+  "entityId": "8190bb9a-519e-4033-b4a2-e73e4727cf6e",
+  "apiBase": "https://claw-d366985f-candidate---corely-erp-api-dev-sp5g377smq-de.a.run.app/api/v1",
+  "mode": "read-only",
+  "withAi": true,
+  "syntheticOnly": true,
+  "startedAt": "2026-09-23T13:56:43.460184+00:00",
+  "checks": [
+    "Synthetic OCR correct; human confirmation required"
+  ],
+  "createdRoleIds": [],
+  "expenseRequestId": null,
+  "passed": true,
+  "dbVerification": "not_run",
+  "fullSsoExchange": "not_run_use_existing_SSO_acceptance",
+  "recognition": {
+    "status": "needs_confirmation",
+    "modelId": "gemini-3.5-flash-lite",
+    "recognizedAt": "2026-09-23T13:56:50.881Z",
+    "fingerprints": [
+      "160398da70d3ea1d4f08008479880675564be83be8d85066c8989997bfe504ba"
+    ],
+    "confidence": 0.95,
+    "warnings": [],
+    "possibleDuplicate": false,
+    "fields": {
+      "supplierName": "Test Office Supplies",
+      "description": "Office pens x 10",
+      "amountOriginal": 1200,
+      "currency": "TWD",
+      "taxAmount": 0,
+      "expenseDate": "2026-09-23",
+      "invoiceNo": "TEST0923001",
+      "sellerTaxId": null,
+      "buyerTaxId": null,
+      "receiptType": "RECEIPT",
+      "suggestedItemId": null
+    }
+  }
+}

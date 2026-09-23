@@ -43,5 +43,9 @@
     "tests": 6,
     "passed": true
   },
-  "providerCompatibility": "Updated standard/deep models; synthetic direct readiness passed; full candidate API acceptance pending"
+  "providerCompatibility": "Standard guide/live/browser and both-model OCR passed; deep text provider HTTP503 remains unaccepted",
+  "releaseHelperGuards": {
+    "tests": 8,
+    "passed": true
+  }
 }

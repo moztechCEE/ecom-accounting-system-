@@ -1,0 +1,496 @@
+{
+  "tag": "090F273F",
+  "entityId": "8190bb9a-519e-4033-b4a2-e73e4727cf6e",
+  "apiBase": "https://claw-d366985f-candidate---corely-erp-api-dev-sp5g377smq-de.a.run.app/api/v1",
+  "mode": "read-only",
+  "withAi": true,
+  "syntheticOnly": true,
+  "startedAt": "2026-09-23T13:54:34.814919+00:00",
+  "checks": [
+    "DEV ready; anonymous knowledge rejected",
+    "employee normal authenticated login",
+    "employee versioned guide library",
+    "employee full articles with source provenance",
+    "employee deployed catalog matches accepted source version",
+    "employee source hashes match reviewed checkout and examples complete",
+    "admin normal authenticated login",
+    "admin versioned guide library",
+    "admin full articles with source provenance",
+    "admin deployed catalog matches accepted source version",
+    "admin source hashes match reviewed checkout and examples complete",
+    "employee receives no restricted admin articles",
+    "admin library reflects greater authorized scope",
+    "employee can read own expense guide",
+    "zh-TW search resolves expense article",
+    "en search resolves expense article",
+    "untrusted page and search cannot bypass knowledge ACL",
+    "unsupported locale rejected",
+    "offline guide uses sourced library",
+    "real DEV AI provider enabled",
+    "real AI grounded-guide returns evidence",
+    "AI workflow answer cites versioned guide evidence",
+    "real AI live-scope returns evidence",
+    "AI live query returns isolated empty QA company and SELF scope"
+  ],
+  "createdRoleIds": [],
+  "expenseRequestId": null,
+  "passed": true,
+  "dbVerification": "not_run",
+  "fullSsoExchange": "not_run_use_existing_SSO_acceptance",
+  "scope": "Corely Claw knowledge and read-only AI; no business writes",
+  "modelId": "server-default",
+  "knowledge": {
+    "employee": {
+      "count": 5,
+      "version": "erp-claw-6fe41131897b80f4",
+      "ids": [
+        "dashboard",
+        "expense-requests",
+        "expense-review",
+        "ai-principles",
+        "account-security"
+      ]
+    },
+    "admin": {
+      "count": 54,
+      "version": "erp-claw-6fe41131897b80f4",
+      "ids": [
+        "dashboard",
+        "expense-requests",
+        "expense-review",
+        "accounts-payable",
+        "reimbursement-items",
+        "system-settings",
+        "access-control",
+        "sales-orders",
+        "customers",
+        "products",
+        "vendors",
+        "purchase-orders",
+        "banking",
+        "employee-supervisor",
+        "payroll",
+        "attendance",
+        "ai-principles",
+        "warehouse",
+        "sn-labels",
+        "accounting-workbench",
+        "reconciliation",
+        "reports",
+        "profile",
+        "leave",
+        "sales-quotations",
+        "after-sales",
+        "after-sales-quotes",
+        "after-sales-internal",
+        "after-sales-brands",
+        "receivables",
+        "chart-of-accounts",
+        "journal-entries",
+        "accounting-periods",
+        "timeout-reconciliation",
+        "attendance-admin",
+        "assembly",
+        "import-preview",
+        "account-security",
+        "warehouse-workstation",
+        "warehouse-picking",
+        "warehouse-packing",
+        "warehouse-completed",
+        "warehouse-dispatch",
+        "warehouse-marketplace",
+        "warehouse-intakes",
+        "warehouse-overview",
+        "warehouse-logs",
+        "warehouse-exceptions",
+        "warehouse-scan-errors",
+        "warehouse-defects",
+        "warehouse-logistics",
+        "warehouse-team",
+        "warehouse-users",
+        "warehouse-settings"
+      ]
+    }
+  },
+  "aiAnswers": {
+    "grounded-guide": {
+      "status": "answered",
+      "checkedAt": "2026-09-23T13:54:56.936Z",
+      "scope": "系統操作指南",
+      "reply": "申請費用請至**費用申請**（`/ap/expenses`）頁面，依下列步驟操作：\n\n1. **選擇付款方式**：選擇「員工代墊」或「廠商直付」，並填寫受款與費用資料。\n2. **上傳憑證**：上傳圖片或 PDF 憑證，系統辨識後請逐欄核對（AI 建議可修改）。\n3. **填寫細節並送出**：選擇報銷項目，確認金額、幣別、日期及直屬主管設定後送出。\n\n送出後，直屬主管會至**費用審核中心**（`/ap/expense-review`）進行審核。\n\n---\n\n### 關於「費用核准」與「付款」的差別\n\n* **費用核准（審核）**：由主管在審核中心進行核准或退回。主管核准代表同意該筆申請進入後續流程，**並不等於已經付款**。\n* **待付款任務與實際付款**：全部必要審批核准後，ERP 才會建立「待付款任務」供出納處理。實際銀行匯款需透過外部銀行流程完成，出納隨後會在 ERP 登記已完成付款以更新狀態。\n\n*(註：費用審核、付款登記與會計入帳皆為獨立流程，彼此不互相替代或自動完成。)*",
+      "data": [
+        {
+          "id": "expense-requests",
+          "title": "費用申請",
+          "summary": "建立費用時先選員工代墊或廠商直付、上傳憑證並確認辨識草稿，再選報銷項目、金額、幣別、日期與說明後送出。AI 辨識或分類只是建議，需核對憑證，不會自動付款。",
+          "category": "財務會計",
+          "keywords": [
+            "費用申請",
+            "報銷",
+            "請款",
+            "代墊",
+            "直付",
+            "expense",
+            "reimbursement"
+          ],
+          "path": "/ap/expenses",
+          "sections": [
+            {
+              "title": "操作步驟",
+              "body": "選擇員工代墊或廠商直付，填寫受款與費用資料。\n上傳圖片或 PDF 憑證，辨識完成後逐欄核對；AI 建議可修改。\n選擇可用報銷項目，確認金額、幣別、日期及直屬主管設定後送出，於清單追蹤狀態。\n全部必要審批核准後，ERP 才建立待付款任務，供出納後續處理。\n實際銀行匯款由出納依公司外部銀行流程完成；費用核准或待付款任務不會自動向銀行匯款。\n外部銀行付款完成後，出納再於 ERP 登記已完成的付款，填入實際銀行、日期及完整金額；此登記更新費用與待付款任務狀態。\n會計入帳另走獨立流程，由具有分錄建立及核准權限的人員建立、審核分錄並完成過帳；不會因費用核准或付款登記而自動完成。"
+            },
+            {
+              "title": "適用範圍與限制",
+              "body": "必須有新增費用權限、有效員工與可審批的同公司主管；不可自己審核自己的申請。\nAI 辨識與科目推薦不是憑證真偽確認、核准、付款或入帳。限制角色或部門的項目不能越權使用。\n費用核准、待付款任務、外部銀行匯款、ERP 付款登記與會計過帳各有獨立狀態與憑據，不能由其中一項推定其他項目已完成；銀行匯款與會計過帳也不是二選一的替代動作。"
+            },
+            {
+              "title": "相關指南",
+              "body": "費用審核中心 (/ap/expense-review)"
+            }
+          ],
+          "examples": [
+            {
+              "id": "expense-requests-1",
+              "title": "虛構填表範例（不是 API 請求）",
+              "filename": "expense-requests-1.json",
+              "contentType": "application/json",
+              "content": "{\n  \"exampleOnly\": true,\n  \"description\": \"示範辦公耗材\",\n  \"amountOriginal\": 1200,\n  \"amountCurrency\": \"TWD\",\n  \"expenseDate\": \"2026-09-01\"\n}"
+            }
+          ],
+          "sources": [
+            {
+              "path": "frontend/src/config/navigation.ts",
+              "sha256": "97ef022f16a21a0aa174e3319c9ebaf21401f3c8106025f20da683af84908988"
+            },
+            {
+              "path": "frontend/src/App.tsx",
+              "sha256": "6140dee8953d5a80e43b360dc7fec03f8341dca7a6e9d87ac9cb9db1f9f38370"
+            },
+            {
+              "path": "frontend/src/pages/ExpenseRequestsPage.tsx",
+              "sha256": "d9a1fcab540a5d7f380ba9e1ba5fed0cc10eef22765d49a7b891a90619044dc7"
+            },
+            {
+              "path": "backend/src/modules/expense/expense.controller.ts",
+              "sha256": "928ccbb0acd345c6dce501953f608a55c9c8ab675d4f65a6178ceb10f7eab749"
+            },
+            {
+              "path": "backend/src/modules/expense/expense-receipt.controller.ts",
+              "sha256": "758cb54b0f5858900b950d307a9118f7af4d77f75c259e52767dfbd6d257e06f"
+            },
+            {
+              "path": "backend/src/modules/expense/expense.service.ts",
+              "sha256": "4eb66b4f55419ab8a76e9a66b5a00a7ff447d1d78c9675d9f4a2d0cf5bae02fe"
+            },
+            {
+              "path": "backend/src/modules/accounting/accounting.controller.ts",
+              "sha256": "64ab5b7368c76d09c376fc4c47936601636add1d177f1ee1ce50a3335994540d"
+            }
+          ],
+          "sourceVersion": "sha256:0838d8a5b84f6dc585a1d2b770603b87de987405862efe637e827a6015000198"
+        },
+        {
+          "id": "expense-review",
+          "title": "費用審核中心",
+          "summary": "主管在費用審核中心查看指派給自己的申請與憑證、核准或退回。直屬主管來自員工資料的主管設定，未設定或無有效審批人員時須先由管理員補齊；主管核准後，若該報銷項目有額外審批政策，仍須完成後續審批；全部核准後才進入出納待付款。",
+          "category": "財務會計",
+          "keywords": [
+            "審核",
+            "簽核",
+            "複核",
+            "pending",
+            "expense review",
+            "費用審核"
+          ],
+          "path": "/ap/expense-review",
+          "sections": [
+            {
+              "title": "操作步驟",
+              "body": "在費用審核中心開啟指派給自己的待審申請，閱讀金額、說明與原始憑證。\n核對後核准或退回並填寫需要的意見；一般主管不需替會計決定正式入帳科目。\n歷史待審單若尚無審批步驟，由授權管理員預覽目前主管並確認建立審批；既有已指派案件不可任意重派。\n全部必要審批核准後，ERP 才建立待付款任務，供出納後續處理。\n實際銀行匯款由出納依公司外部銀行流程完成；費用核准或待付款任務不會自動向銀行匯款。\n外部銀行付款完成後，出納再於 ERP 登記已完成的付款，填入實際銀行、日期及完整金額；此登記更新費用與待付款任務狀態。\n會計入帳另走獨立流程，由具有分錄建立及核准權限的人員建立、審核分錄並完成過帳；不會因費用核准或付款登記而自動完成。"
+            },
+            {
+              "title": "適用範圍與限制",
+              "body": "只有目前有效指派的審批人可處理該步驟；送出時的主管快照不隨人事異動自動改派。\n全部必要步驟核准後才建立待付款任務。核准本身不觸發銀行匯款或會計過帳。\n費用核准、待付款任務、外部銀行匯款、ERP 付款登記與會計過帳各有獨立狀態與憑據，不能由其中一項推定其他項目已完成；銀行匯款與會計過帳也不是二選一的替代動作。"
+            },
+            {
+              "title": "相關指南",
+              "body": "費用申請 (/ap/expenses)"
+            }
+          ],
+          "examples": [],
+          "sources": [
+            {
+              "path": "frontend/src/config/navigation.ts",
+              "sha256": "97ef022f16a21a0aa174e3319c9ebaf21401f3c8106025f20da683af84908988"
+            },
+            {
+              "path": "frontend/src/App.tsx",
+              "sha256": "6140dee8953d5a80e43b360dc7fec03f8341dca7a6e9d87ac9cb9db1f9f38370"
+            },
+            {
+              "path": "frontend/src/pages/ExpenseReviewCenterPage.tsx",
+              "sha256": "1dab34b6a41abedc838edb75b90046dc3d1464189cab3a5fd4cbade9be53ef9f"
+            },
+            {
+              "path": "backend/src/modules/expense/expense.controller.ts",
+              "sha256": "928ccbb0acd345c6dce501953f608a55c9c8ab675d4f65a6178ceb10f7eab749"
+            },
+            {
+              "path": "backend/src/modules/expense/expense.service.ts",
+              "sha256": "4eb66b4f55419ab8a76e9a66b5a00a7ff447d1d78c9675d9f4a2d0cf5bae02fe"
+            },
+            {
+              "path": "backend/src/modules/accounting/accounting.controller.ts",
+              "sha256": "64ab5b7368c76d09c376fc4c47936601636add1d177f1ee1ce50a3335994540d"
+            }
+          ],
+          "sourceVersion": "sha256:0838d8a5b84f6dc585a1d2b770603b87de987405862efe637e827a6015000198"
+        },
+        {
+          "id": "ai-principles",
+          "title": "AI 助手原則",
+          "summary": "核心原則是少即是多，大道至簡：先理解問題，再找最相關的資料與最短答案。",
+          "category": "個人與助手",
+          "keywords": [
+            "AI 原則",
+            "少即是多",
+            "大道至簡",
+            "agent",
+            "copilot",
+            "知識"
+          ],
+          "sections": [
+            {
+              "title": "操作步驟",
+              "body": "用具體問題說明要了解的功能、公司、日期或單號；操作指南會附可前往的功能入口。\n需要即時數字時，先選定公司，依目前帳號可用的查詢工具取得資料。\n核對引用來源及資料時間；問題超出已接入工具時，回到原功能查證。"
+            },
+            {
+              "title": "適用範圍與限制",
+              "body": "操作知識涵蓋功能入口，不代表每個模組都已具備 AI 即時查詢或執行工具。\n只有註冊且授權的工具可查資料；一般指南不授予權限，也不表示已核准、付款、發送或過帳。\n不要貼上密碼、驗證碼、金鑰或不必要的個資；AI 無法連線時不得假装使用即時資料。"
+            },
+            {
+              "title": "相關指南",
+              "body": "儀表板總覽 (/dashboard)"
+            }
+          ],
+          "examples": [],
+          "sources": [
+            {
+              "path": "frontend/src/config/navigation.ts",
+              "sha256": "97ef022f16a21a0aa174e3319c9ebaf21401f3c8106025f20da683af84908988"
+            },
+            {
+              "path": "frontend/src/App.tsx",
+              "sha256": "6140dee8953d5a80e43b360dc7fec03f8341dca7a6e9d87ac9cb9db1f9f38370"
+            },
+            {
+              "path": "backend/src/modules/ai/ai.service.ts",
+              "sha256": "205936f07978c988fb8f3f1312265416142f40324cf8edb86fffe57d76a09ad9"
+            }
+          ],
+          "sourceVersion": "sha256:0838d8a5b84f6dc585a1d2b770603b87de987405862efe637e827a6015000198"
+        },
+        {
+          "id": "account-security",
+          "title": "首次登入與密碼變更",
+          "summary": "首次登入依表單修改臨時密碼，完成後以新密碼重新登入。",
+          "category": "個人與助手",
+          "keywords": [
+            "首次登入與密碼變更",
+            "First login and password change"
+          ],
+          "sections": [
+            {
+              "title": "操作步驟",
+              "body": "被導向首次登入修改密碼時，填寫本人信箱、目前密碼、新密碼及確認密碼。\n新密碼至少八碼且兩次輸入一致；儲存成功後重新登入。\n忘記密碼請使用登入頁提供的重設流程，依收到的重設連結完成。"
+            },
+            {
+              "title": "適用範圍與限制",
+              "body": "密碼、重設連結與一次性驗證資料僅由本人在驗證頁輸入，不應交給 AI。\n此指南不會代改密碼、略過登入或重設他人帳號。"
+            }
+          ],
+          "examples": [],
+          "sources": [
+            {
+              "path": "frontend/src/config/navigation.ts",
+              "sha256": "97ef022f16a21a0aa174e3319c9ebaf21401f3c8106025f20da683af84908988"
+            },
+            {
+              "path": "frontend/src/App.tsx",
+              "sha256": "6140dee8953d5a80e43b360dc7fec03f8341dca7a6e9d87ac9cb9db1f9f38370"
+            },
+            {
+              "path": "frontend/src/pages/ForcePasswordChangePage.tsx",
+              "sha256": "de67742fca9455d629d8047f516d44b2e0865c19fc39ee648e88c4b2ddfba296"
+            },
+            {
+              "path": "frontend/src/pages/LoginPage.tsx",
+              "sha256": "872101eafb274b646f39fc2d6ea9a2a05b4db7acf010c043cc7daaf207dcae1b"
+            },
+            {
+              "path": "frontend/src/pages/ResetPasswordPage.tsx",
+              "sha256": "98c44c9bd0b3a6e0a1088b11eaf6daafa5804c52e855058486dcf5230cbd1b73"
+            },
+            {
+              "path": "backend/src/modules/auth/auth.controller.ts",
+              "sha256": "171d8792dfe1ee5ff1db5ed83a2d0a19168b8d8681bf5b8f65f949ef1bc23ffd"
+            }
+          ],
+          "sourceVersion": "sha256:0838d8a5b84f6dc585a1d2b770603b87de987405862efe637e827a6015000198"
+        }
+      ],
+      "sources": [
+        {
+          "kind": "knowledge",
+          "title": "費用申請",
+          "detail": "建立費用時先選員工代墊或廠商直付、上傳憑證並確認辨識草稿，再選報銷項目、金額、幣別、日期與說明後送出。AI 辨識或分類只是建議，需核對憑證，不會自動付款。",
+          "path": "/ap/expenses",
+          "sourceVersion": "sha256:0838d8a5b84f6dc585a1d2b770603b87de987405862efe637e827a6015000198",
+          "documents": [
+            {
+              "path": "frontend/src/config/navigation.ts",
+              "sha256": "97ef022f16a21a0aa174e3319c9ebaf21401f3c8106025f20da683af84908988"
+            },
+            {
+              "path": "frontend/src/App.tsx",
+              "sha256": "6140dee8953d5a80e43b360dc7fec03f8341dca7a6e9d87ac9cb9db1f9f38370"
+            },
+            {
+              "path": "frontend/src/pages/ExpenseRequestsPage.tsx",
+              "sha256": "d9a1fcab540a5d7f380ba9e1ba5fed0cc10eef22765d49a7b891a90619044dc7"
+            },
+            {
+              "path": "backend/src/modules/expense/expense.controller.ts",
+              "sha256": "928ccbb0acd345c6dce501953f608a55c9c8ab675d4f65a6178ceb10f7eab749"
+            },
+            {
+              "path": "backend/src/modules/expense/expense-receipt.controller.ts",
+              "sha256": "758cb54b0f5858900b950d307a9118f7af4d77f75c259e52767dfbd6d257e06f"
+            },
+            {
+              "path": "backend/src/modules/expense/expense.service.ts",
+              "sha256": "4eb66b4f55419ab8a76e9a66b5a00a7ff447d1d78c9675d9f4a2d0cf5bae02fe"
+            },
+            {
+              "path": "backend/src/modules/accounting/accounting.controller.ts",
+              "sha256": "64ab5b7368c76d09c376fc4c47936601636add1d177f1ee1ce50a3335994540d"
+            }
+          ]
+        },
+        {
+          "kind": "knowledge",
+          "title": "費用審核中心",
+          "detail": "主管在費用審核中心查看指派給自己的申請與憑證、核准或退回。直屬主管來自員工資料的主管設定，未設定或無有效審批人員時須先由管理員補齊；主管核准後，若該報銷項目有額外審批政策，仍須完成後續審批；全部核准後才進入出納待付款。",
+          "path": "/ap/expense-review",
+          "sourceVersion": "sha256:0838d8a5b84f6dc585a1d2b770603b87de987405862efe637e827a6015000198",
+          "documents": [
+            {
+              "path": "frontend/src/config/navigation.ts",
+              "sha256": "97ef022f16a21a0aa174e3319c9ebaf21401f3c8106025f20da683af84908988"
+            },
+            {
+              "path": "frontend/src/App.tsx",
+              "sha256": "6140dee8953d5a80e43b360dc7fec03f8341dca7a6e9d87ac9cb9db1f9f38370"
+            },
+            {
+              "path": "frontend/src/pages/ExpenseReviewCenterPage.tsx",
+              "sha256": "1dab34b6a41abedc838edb75b90046dc3d1464189cab3a5fd4cbade9be53ef9f"
+            },
+            {
+              "path": "backend/src/modules/expense/expense.controller.ts",
+              "sha256": "928ccbb0acd345c6dce501953f608a55c9c8ab675d4f65a6178ceb10f7eab749"
+            },
+            {
+              "path": "backend/src/modules/expense/expense.service.ts",
+              "sha256": "4eb66b4f55419ab8a76e9a66b5a00a7ff447d1d78c9675d9f4a2d0cf5bae02fe"
+            },
+            {
+              "path": "backend/src/modules/accounting/accounting.controller.ts",
+              "sha256": "64ab5b7368c76d09c376fc4c47936601636add1d177f1ee1ce50a3335994540d"
+            }
+          ]
+        },
+        {
+          "kind": "knowledge",
+          "title": "AI 助手原則",
+          "detail": "核心原則是少即是多，大道至簡：先理解問題，再找最相關的資料與最短答案。",
+          "sourceVersion": "sha256:0838d8a5b84f6dc585a1d2b770603b87de987405862efe637e827a6015000198",
+          "documents": [
+            {
+              "path": "frontend/src/config/navigation.ts",
+              "sha256": "97ef022f16a21a0aa174e3319c9ebaf21401f3c8106025f20da683af84908988"
+            },
+            {
+              "path": "frontend/src/App.tsx",
+              "sha256": "6140dee8953d5a80e43b360dc7fec03f8341dca7a6e9d87ac9cb9db1f9f38370"
+            },
+            {
+              "path": "backend/src/modules/ai/ai.service.ts",
+              "sha256": "205936f07978c988fb8f3f1312265416142f40324cf8edb86fffe57d76a09ad9"
+            }
+          ]
+        },
+        {
+          "kind": "knowledge",
+          "title": "首次登入與密碼變更",
+          "detail": "首次登入依表單修改臨時密碼，完成後以新密碼重新登入。",
+          "sourceVersion": "sha256:0838d8a5b84f6dc585a1d2b770603b87de987405862efe637e827a6015000198",
+          "documents": [
+            {
+              "path": "frontend/src/config/navigation.ts",
+              "sha256": "97ef022f16a21a0aa174e3319c9ebaf21401f3c8106025f20da683af84908988"
+            },
+            {
+              "path": "frontend/src/App.tsx",
+              "sha256": "6140dee8953d5a80e43b360dc7fec03f8341dca7a6e9d87ac9cb9db1f9f38370"
+            },
+            {
+              "path": "frontend/src/pages/ForcePasswordChangePage.tsx",
+              "sha256": "de67742fca9455d629d8047f516d44b2e0865c19fc39ee648e88c4b2ddfba296"
+            },
+            {
+              "path": "frontend/src/pages/LoginPage.tsx",
+              "sha256": "872101eafb274b646f39fc2d6ea9a2a05b4db7acf010c043cc7daaf207dcae1b"
+            },
+            {
+              "path": "frontend/src/pages/ResetPasswordPage.tsx",
+              "sha256": "98c44c9bd0b3a6e0a1088b11eaf6daafa5804c52e855058486dcf5230cbd1b73"
+            },
+            {
+              "path": "backend/src/modules/auth/auth.controller.ts",
+              "sha256": "171d8792dfe1ee5ff1db5ed83a2d0a19168b8d8681bf5b8f65f949ef1bc23ffd"
+            }
+          ]
+        }
+      ]
+    },
+    "live-scope": {
+      "status": "answered",
+      "checkedAt": "2026-09-23T13:55:22.093Z",
+      "scope": "自己的費用申請",
+      "reply": "您好，您本月（2026年9月）目前沒有任何費用申請記錄。\n\n如有疑問，建議可至「費用申請」頁面確認是否有尚未送出的草稿。",
+      "data": {
+        "startDate": "2026-09-01",
+        "endDate": "2026-09-23",
+        "total": 0,
+        "count": 0
+      },
+      "sources": [
+        {
+          "kind": "metric",
+          "title": "費用申請",
+          "detail": "2026-09-01 至 2026-09-23",
+          "path": "/ap/expenses"
+        }
+      ]
+    }
+  },
+  "semanticReview": {
+    "accepted": true,
+    "reviewedAnswers": [
+      "grounded-guide",
+      "live-scope"
+    ],
+    "review": "Approval, payable task, external transfer, ERP registration and accounting posting remain distinct. Live data has exact isolated SELF scope and zero records/total. Browser independently rendered own expense result and date/evidence."
+  }
+}

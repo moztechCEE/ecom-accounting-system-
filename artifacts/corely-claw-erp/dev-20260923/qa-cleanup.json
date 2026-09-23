@@ -1,0 +1,12 @@
+{
+  "at": "2026-09-23T14:01:47.256934+00:00",
+  "tag": "090F273F",
+  "phase": "disabled",
+  "usersDisabled": 4,
+  "activeQaUsers": 0,
+  "unrevokedWmsSessions": 0,
+  "remainingTemporaryRoles": 0,
+  "businessExpensesCreated": 0,
+  "passwordsRemovedFromPrivateManifest": true,
+  "auditRecordsRetained": true
+}

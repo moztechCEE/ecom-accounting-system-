@@ -1,0 +1,41 @@
+{
+  "verifiedAt": "2026-09-23T14:01:46.924872+00:00",
+  "sourceSha": "d366985f8c02afd11d01c60e0fd927885611b7f2",
+  "buildId": "814bc342-b782-40d0-a1ac-f82f200dca07",
+  "active": {
+    "corely-erp-api-dev": [
+      [
+        "corely-erp-api-dev-claw-d366985f-c",
+        100
+      ]
+    ],
+    "corely-erp-dev": [
+      [
+        "corely-erp-dev-claw-d366985f-f",
+        100
+      ]
+    ]
+  },
+  "images": {
+    "corely-erp-api-dev": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev@sha256:715b499020285794ca69336b9930a1c1692817d9c3e855ff7b8b58a87ec8f9c3",
+    "corely-erp-dev": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:da98334697d2f1057eb3131202d58cd022c423bb2b8920d35fba5ab0ae965b8d"
+  },
+  "productionAndWmsUnchanged": true,
+  "scope": "ERP DEV only; standard AI and browser accepted, deep text provider limitation retained",
+  "webUrl": "https://corely-erp-dev-sp5g377smq-de.a.run.app",
+  "migration": "none",
+  "iamChanges": "none",
+  "configuration": "Existing secrets, service identities, WMS bridge, external-effect sandbox, environment and prior tags preserved; only release image, candidate CORS and web API URLs changed as reviewed.",
+  "functionalEvidence": {
+    "standardAi": "candidate-api.json: 24 checks plus manual semantics and browser answer",
+    "deepAi": "candidate-deep-api.json: not accepted, provider HTTP 503 twice",
+    "ocr": "ocr-gemini-3.5-flash-lite.json and ocr-gemini-3.5-flash.json: both passed synthetic TWD1200/date/fingerprint",
+    "stableApi": "stable-api.json: 19 authenticated knowledge/ACL/source checks"
+  },
+  "qaCleanup": "qa-cleanup.json: all 4 QA users disabled, 2 exact temporary roles removed; zero active QA sessions or business expenses",
+  "rollback": {
+    "api": "corely-erp-api-dev-entry-audit-0923",
+    "web": "corely-erp-dev-entry-audit-0923",
+    "warning": "Recheck current DEV owner/revision before any rollback; no production rollback or DB mutation authorized"
+  }
+}

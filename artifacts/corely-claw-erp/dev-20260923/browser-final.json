@@ -1,0 +1,35 @@
+{
+  "sourceSha": "d366985f8c02afd11d01c60e0fd927885611b7f2",
+  "candidateUrl": "https://claw-d366985f-candidate---corely-erp-dev-sp5g377smq-de.a.run.app",
+  "syntheticIdentityOnly": true,
+  "checks": [
+    "Normal company/employee/password login, remember-me disabled",
+    "Expense page help opens current full article with distinct approval, payment registration and accounting stages",
+    "Current company matches isolated QA company",
+    "AI tab shows standard/deep modes from backend catalog",
+    "Standard AI quick question returns zero own expense records, date range and SELF-source scope in visible UI",
+    "Desktop guide and AI panel screenshots saved and visually reviewed"
+  ],
+  "inheritedUnchangedUiChecks": [
+    "320x740 panel containment",
+    "Keyboard focus wrap and Escape restoration",
+    "English article translation",
+    "Synthetic JSON download content",
+    "Home, browse and permitted category filtering"
+  ],
+  "limitations": [
+    "Deep text AI returned provider HTTP 503 on two bounded attempts; not accepted",
+    "Physical mobile keyboard not exercised",
+    "Existing low-privilege dashboard shows partial KPI warnings; guides do not grant KPI data access"
+  ],
+  "stableAcceptance": {
+    "url": "https://corely-erp-dev-sp5g377smq-de.a.run.app/dashboard",
+    "authenticatedUserSessionPreserved": true,
+    "newTabOpenedToPreserveExistingSettingsForm": true,
+    "clawHomeVisible": true,
+    "guideVersion": "erp-claw-6fe41131897b80f4",
+    "qaCompanyAbsentAfterCleanup": true,
+    "candidateTabsClosed": true,
+    "viewportOverrideReset": true
+  }
+}
