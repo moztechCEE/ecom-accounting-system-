@@ -1,0 +1,72 @@
+{
+  "verifiedAt": "2026-09-23T12:21:24.231509+00:00",
+  "sourceSha": "637518d0e39702065633b8877ad3c9ea5c75eb3c",
+  "buildId": "8a6f8a0e-fcab-491d-97fc-b82960cfac4c",
+  "active": {
+    "corely-erp-api-dev": [
+      [
+        "corely-erp-api-dev-aex-637518d0-c",
+        100
+      ]
+    ],
+    "corely-erp-dev": [
+      [
+        "corely-erp-dev-aex-637518d0-f",
+        100
+      ]
+    ]
+  },
+  "images": {
+    "corely-erp-api-dev": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev@sha256:abf7a2a52e6eb57d4ff63b92e8d4827f3dc0c2416b2ab31747d999cf28a62fdf",
+    "corely-erp-dev": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:7d168b651b05523067f410142731fa8120b8c935849201dc4e17e3babfa69586"
+  },
+  "productionAndWmsUnchanged": true,
+  "scope": "Cloud configuration only; functional QA is separate",
+  "branch": "codex/access-expense-ai-20260923",
+  "pushed": true,
+  "migration": "20260923013000_expense_supervisor_workflow",
+  "migrationChecksum": "46b86793aa7fd051c356662afff29a9c428be6fa266f1492e7639138c1bf6dc7",
+  "initialCandidateSource": "c3c29e25511549e25ab7ba919e5b9688aa09c177",
+  "initialBuildId": "6cb09191-ce10-4d73-a6d0-098cc23e6137",
+  "fixedDuringDevAcceptance": "Prisma ignores empty object in OR; company finance view now omits OR while preserving company restrictions. Employee/department/mine limits retained.",
+  "backendTests": 337,
+  "backendSuites": 59,
+  "stableAuthenticatedChecks": 14,
+  "resumedWorkflowChecks": 20,
+  "databaseChecks": 5,
+  "qaExpenseId": "5e1a4ee9-36d9-4091-871e-292678e72b22",
+  "qaSyntheticOnly": true,
+  "actualTransferOrJournal": false,
+  "devAi": {
+    "sandbox": true,
+    "explicitAiOptIn": true,
+    "provider": "Gemini",
+    "secretRef": "ecom-accounting-gemini-api-key:1",
+    "realReceiptRecognitionPassed": true,
+    "realCopilotAggregatePassed": {
+      "count": 1,
+      "total": 1200
+    }
+  },
+  "productionActive": {
+    "api": "ecom-accounting-backend-00506-ray",
+    "web": "ecom-accounting-frontend-00270-vob"
+  },
+  "rollbackDevRevisions": {
+    "api": "corely-erp-api-dev-account-sso2-0923",
+    "web": "corely-erp-dev-account-sso2-0923"
+  },
+  "productionDeploymentAuthorized": false,
+  "nextReleaseRule": "DEV first; production only after user confirms DEV acceptance.",
+  "qaCleanup": {
+    "qaTag": "9D613DFA",
+    "qaAccountsDisabled": 4,
+    "unusedQaRolesRemoved": 2,
+    "qaCompanyDisabled": true,
+    "qaRoleAssignmentsRemaining": 0,
+    "expenseAndPaymentAuditPreserved": true,
+    "passwordsRemovedFromPrivateManifest": true
+  },
+  "finalBrowserUrl": "https://corely-erp-dev-sp5g377smq-de.a.run.app/login",
+  "finalBrowserState": "Logged out; business code 900324 selected; no QA credentials remembered"
+}

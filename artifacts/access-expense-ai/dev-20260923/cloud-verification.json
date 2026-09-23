@@ -1,0 +1,25 @@
+{
+  "verifiedAt": "2026-09-23T12:21:24.231509+00:00",
+  "sourceSha": "637518d0e39702065633b8877ad3c9ea5c75eb3c",
+  "buildId": "8a6f8a0e-fcab-491d-97fc-b82960cfac4c",
+  "active": {
+    "corely-erp-api-dev": [
+      [
+        "corely-erp-api-dev-aex-637518d0-c",
+        100
+      ]
+    ],
+    "corely-erp-dev": [
+      [
+        "corely-erp-dev-aex-637518d0-f",
+        100
+      ]
+    ]
+  },
+  "images": {
+    "corely-erp-api-dev": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev@sha256:abf7a2a52e6eb57d4ff63b92e8d4827f3dc0c2416b2ab31747d999cf28a62fdf",
+    "corely-erp-dev": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:7d168b651b05523067f410142731fa8120b8c935849201dc4e17e3babfa69586"
+  },
+  "productionAndWmsUnchanged": true,
+  "scope": "Cloud configuration only; functional QA is separate"
+}

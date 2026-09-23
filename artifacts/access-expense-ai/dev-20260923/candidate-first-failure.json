@@ -1,0 +1,45 @@
+{
+  "tag": "9D613DFA",
+  "entityId": "aa5d0253-6cf6-4f44-91d2-3d3750275b04",
+  "apiBase": "https://aex-c3c29e25-candidate---corely-erp-api-dev-sp5g377smq-de.a.run.app/api/v1",
+  "mode": "qa",
+  "withAi": true,
+  "syntheticOnly": true,
+  "startedAt": "2026-09-23T12:08:45.073766+00:00",
+  "checks": [
+    "health ready and anonymous access denied",
+    "employee identity and effective permission union",
+    "manager identity and effective permission union",
+    "cashier identity and effective permission union",
+    "admin identity and effective permission union",
+    "role template and actor-aware deletion metadata",
+    "access-control user list matches only isolated QA actors",
+    "employee cannot read permission administration",
+    "employee company selector is QA-only",
+    "eligible QA reimbursement item",
+    "cashier sees only the QA TWD bank",
+    "unknown company refused before expense data access",
+    "static Copilot guide reports source status",
+    "expense-only QA account cannot enter the existing WMS company",
+    "template copies exact permissions",
+    "only QA employee receives combined roles",
+    "used role deletion and privileged code mutation denied",
+    "QA role assignment restored and unused clone removed",
+    "real AI recognized synthetic TEST receipt and requires confirmation",
+    "direct manager sees assigned approval and original TEST evidence",
+    "self-approval and unassigned cashier approval denied",
+    "manager approval succeeds once; repeat approval refused"
+  ],
+  "createdRoleIds": [
+    "c1d553b4-d1ea-4c0e-ad4e-f414b90b659b"
+  ],
+  "expenseRequestId": "5e1a4ee9-36d9-4091-871e-292678e72b22",
+  "passed": false,
+  "dbVerification": "required",
+  "fullSsoExchange": "not_run_use_existing_SSO_acceptance",
+  "removedRoleIds": [
+    "c1d553b4-d1ea-4c0e-ad4e-f414b90b659b"
+  ],
+  "failure": "PUT /expense/requests/5e1a4ee9-36d9-4091-871e-292678e72b22/payment-info returned 403, expected (400,)",
+  "finishedAt": "2026-09-23T12:09:16.533985+00:00"
+}

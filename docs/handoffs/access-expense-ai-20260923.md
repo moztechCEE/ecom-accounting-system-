@@ -1,6 +1,8 @@
 # 人員權限、費用申請與 ERP Copilot 交付紀錄
 
-日期：2026-09-23（Asia/Taipei）。狀態：本地實作與驗證；本次未 push、合併、部署或對 DEV／正式資料庫執行 migration。
+日期：2026-09-23（Asia/Taipei）。更新：已合入最新 DEV SSO、push 獨立分支、套用 DEV migration，並完成 DEV 100% 流量部署。正式環境未變更。部署版本 `637518d0e39702065633b8877ad3c9ea5c75eb3c`；20:21 Asia/Taipei 核對兩服務 Ready／100%。
+
+使用者確認的流程：所有修正先到 DEV，驗收滿意後，才另行整合正式環境。已記入 repo `AGENTS.md`。完整映像、流量與驗收見 [發布收據](access-expense-ai-release-20260923.json)。
 
 ## 版本與協作界線
 
@@ -8,7 +10,7 @@
 - 分支：`codex/access-expense-ai-20260923`
 - 起始版本：`8897ddcbc5c6c3a1128f0ad81df6c611202ca1b8`，當時最新倉庫整合版本。
 - 原始主 checkout `/Users/moztecheason/ecom-accounting-system-` 有其他工作，未修改其原始碼。
-- 收尾檢查發現倉庫分支已前進至 `04d0e6f9`（新增兩個倉庫 role UUID migration 與 release 紀錄）；另有 `codex/product-save-feedback-20260923`、SN feedback、倉庫 SSO 等平行分支。本分支未擅自混入或覆蓋這些變更，部署前須重新選定整合基準並檢查衝突。
+- 部署前重新核對共享 DEV，合入 `fc82e903`（SSO runtime `70702171`），保留最新雙重驗證、帳戶資料修改、倉儲人員／出貨 SSO、角色刪除保護、產品儲存修正與四個既有倉儲 migrations。B2B／庫存平行工作未混入。
 - 遠端 main 為 `a3791c48`；既有 PR #1–#3 不屬於本次工作。
 
 ## 完成的行為
@@ -55,7 +57,7 @@ flowchart LR
 
 指南需隨功能變更維護；本版沒有動態讀取所有原始碼／外部知識庫、全模組資料工具、跨工具完整分析或讓 Copilot 修改設定／核准／付款。不能稱為「已完整了解整套 ERP 並全面以真實業務資料驗收」。費用統計依申請建立日與本位幣，銀行值是匯入交易淨額，薪資批次人數可能跨批次重複；並非完整財務報表。
 
-## 驗證紀錄
+## 初次本機驗證紀錄（部署驗收另見下節）
 
 - 權限與資料範圍：backend 5 suites／29 tests；frontend access/navigation/WMS 19 tests，全通過。
 - 費用工作流、主管、項目資格、憑證辨識：backend 5 suites／56 tests，全通過。
@@ -105,21 +107,28 @@ npm run build
 - [歷史申請補建審批確認](../../artifacts/access-expense-ai/legacy-supervisor-confirm.png)
 - [Copilot 桌面](../../artifacts/access-expense-ai/copilot-desktop.png)／[手機](../../artifacts/access-expense-ai/copilot-mobile.png)
 
-## DEV 上線與真實人員驗收尚待完成
+## DEV 部署與實際驗收
 
-1. 協調共享 DEV 版本，整合倉庫最新 UUID migrations、產品存檔修正及其他必要變更，重新檢查相同檔案衝突。
-2. 檢查 `20260923013000_expense_supervisor_workflow` migration 的重複付款任務 preflight。若有同申請多個任務，migration 主動停止且不刪資料；由財會核對後處理。
-3. 套 migration 後設定主管、員工／主管讀取與申請權限、出納角色及銀行資料範圍／帳戶 ACL。新增 EXPENSE_EMPLOYEE／CASHIER 範本不會自動授權既有人員；若已有同名角色，不更動其既有權限。
-4. 目前 DEV AI 仍預設關閉。本次已實作受控開關：保留 `ERP_DEV_SANDBOX=true`，另設 `ERP_DEV_AI_ENABLED=true` 並以 Secret Manager 注入 ERP 的 `GEMINI_API_KEY` 才啟用。sandbox 僅允許兩個既有 Gemini 模型的 HTTPS generateContent POST，禁止 redirect；TCP 例外限定在通過檢查的 fetch 非同步執行範圍，其他外連／子程序限制與 WMS bridge 規則保持。部署時由管理員明確啟用；本次未更動 cloud 設定。
-5. 以實際登入的員工、主管、出納、管理員完成上傳→核對→送出→核准→唯一待付款→付款登錄，核對歷程、跨公司拒絕與資料範圍；另驗 AI provider 失敗與歷史待審案件處置。
+- Cloud Build `8a6f8a0e-fcab-491d-97fc-b82960cfac4c` 成功；前後端以原 SSO immutable image 為依賴基底，重新編譯並在 Linux image 產生 Prisma client。前端最終指向 stable DEV API。
+- DEV API `corely-erp-api-dev-aex-637518d0-c`、web `corely-erp-dev-aex-637518d0-f` 各接收 100% 流量。正式 ERP 與 DEV／正式 WMS 的 configuration/traffic 比對均未變。
+- 僅在 `erp_dev_20260921` 套本次 expense migration：preflight 無重複 PaymentTask、無未完成 migration、無歷史零步驟待審單；schema、checksum、FK/check/unique index 均核對通過。未自動修改任何既有使用者角色或主管。
+- 保留 DEV sandbox 與所有既有 WMS／DB/JWT secrets；明確開啟 `ERP_DEV_AI_ENABLED=true`，僅賦予 DEV runtime 讀取指定 Gemini secret 的權限。其餘外連隔離與排程停用設定不變。
+- 隔離 QA 公司四個身分完成真實 HTTP／Prisma／DEV PostgreSQL：角色範本／effective permission、合成 PDF 真 Gemini 辨識、主管快照及原檔查看、禁止自審／無關審批、核准、出納付款、重複付款拒絕。無銀行匯款、正式分錄、真實憑證或真實人員異動。
+- 第一個候選驗收找到公司範圍出納看不到已核准申請，原因為 Prisma 忽略 `OR` 內空物件。修復後新增 6 項範圍回歸；保留原失敗證據，以原同一筆申請續測，未重送。
+- 修正版 337 tests／59 suites、candidate 續測 20 checks、stable DEV 14 個登入／唯讀檢查、資料庫 5 個唯一性檢查通過。資料庫證明恰一筆付款任務及恰一筆付款歷程。
+- 真 Copilot 查詢 QA 員工資料得出 1 筆／TWD 1,200，回答含範圍與來源。瀏覽器以實際登入驗證浮動入口、權限矩陣／搜尋／可見介面及真 AI 操作指南回答，未攔截或 mock 回應。
+- Stable DEV 瀏覽器以公司代號／員工代碼登入出納帳號，實際看到 TWD 1,200 已付款申請、原始 PDF 連結及員工提交／主管核准／出納登錄歷程。四個 QA 帳號／公司已停用、session／角色已撤銷、兩個臨時角色移除；費用與付款稽核保留。已登出並保留 DEV 登入頁。
+- 證據：[`artifacts/access-expense-ai/dev-20260923`](../../artifacts/access-expense-ai/dev-20260923)。本機合成 UI 與真 DEV 驗收分開保存；原 HTTP failure 不刪除。
 
-2026-09-23 收尾唯讀查詢到的流量：DEV API 100% `corely-erp-api-dev-account-sso2-0923`；DEV web 100% `corely-erp-dev-account-sso2-0923`（其他工作已更新，查詢時間 19:28 Asia/Taipei）；正式 API 100% `ecom-accounting-backend-00506-ray`、web 100% `ecom-accounting-frontend-00270-vob`。本次沒有修改任何流量，部署時須再次查詢。
+正式導入前仍需由管理者依真實組織設定直屬主管、員工／主管權限、出納資料範圍與銀行 ACL，並由使用者在 DEV 確認實際作業。24 篇指南／9 個讀取工具不代表全部 ERP 模組已接通或整站業務驗收；未驗真銀行轉帳、正式分錄／對帳、現場倉庫操作或每個既有儀表板資料區塊。
+
+回退僅可將 DEV API／web 分別切回 `corely-erp-api-dev-account-sso2-0923`、`corely-erp-dev-account-sso2-0923`。新增 schema 向後相容，回退不刪除費用／付款／審批資料。執行前仍需重新核對其他工作是否已更新 DEV。
 
 ## 本機依賴處理紀錄
 
 最初複製 node_modules 時，來源本身是 symlink，Prisma generate 曾更新共享的產生檔。發現後已將本 worktree 的前後端依賴轉成獨立實體目錄；完成時先比對共享產生 schema 沒有他人介入變更，再以既有 `8897ddcb` schema 恢復共享 Prisma generated client（以無連線假 DATABASE_URL 執行 generate，不連 DB）。原始碼及 migration 未被改動，本 worktree 的 generated client 保留本次新 schema。此後全部 build/tests 使用獨立依賴。
 
-## 收尾驗證
+## 初次本機收尾驗證（歷史記錄）
 
 - Backend build 通過；Frontend TypeScript + production build 通過。
 - Backend 合計 115 個聚焦 unit tests 通過；另 8 個費用管理 API e2e tests 通過。
