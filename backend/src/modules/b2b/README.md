@@ -4,7 +4,7 @@
 
 ## 啟用與邊界
 
-- 新增 migration：`20260923040000_b2b_customer_portal`。先在指定測試資料庫檢查及套用；本次程式與測試不會替正式或 DEV 資料庫執行 migration。
+- 新增 migration：`20260923080000_b2b_customer_portal`。先在指定測試資料庫檢查及套用；本次程式與測試不會替正式或 DEV 資料庫執行 migration。
 - 明確設定 `B2B_PORTAL_ENABLED=true` 才開放客戶入口；預設關閉。既有 DEV 公開註冊及外部 webhook 封鎖仍保留。
 - `companyCode` 是銷售公司 `Entity.loginCode`，不是客戶代碼。員工 setup 回應的 `company.loginCode` 可用於提供登入資訊。
 - 第一期僅台幣公司、一般商品、稅外加 5%；價格來自已發布目錄或目前有效的客戶專屬價。尚未支援多幣別、級距／促銷疊加或其他稅別。

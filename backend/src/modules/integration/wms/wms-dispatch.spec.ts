@@ -2,6 +2,7 @@ import { prepareDispatch, WmsDispatchService } from './wms-dispatch.service';
 import { createHash } from 'node:crypto';
 const product = {
   id: 'p',
+  type: 'SIMPLE',
   entityId: 'company',
   isActive: true,
   sku: 'CABLE',
@@ -48,6 +49,9 @@ describe('ERP canonical dispatch', () => {
         prepareDispatch(bad, 'company', { company: { p: 'TEST' } }),
       ).toThrow();
     expect(() => prepareDispatch(order, 'company', {})).toThrow();
+  });
+  it.each(['BUNDLE', 'MANUFACTURED', 'SERVICE'])('rejects %s before dispatch instead of stranding a WMS handover', type => {
+    expect(() => prepareDispatch({ ...order, items: [{ ...order.items[0], product: { ...product, type } }] }, 'company', { company: { p: 'TEST' } })).toThrow('只支援一般商品');
   });
   it('changes snapshot checksum on authoritative item edits', () => {
     expect(

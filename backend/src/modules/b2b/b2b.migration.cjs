@@ -9,7 +9,7 @@ const {PGlite}=require(process.env.PGLITE_MODULE || '@electric-sql/pglite');
   const reject=async(sql,params,code)=>{await assert.rejects(db.query(sql,params),error=>error.code===code);checks++;};
   try{
     await db.exec("CREATE TABLE entities(id text primary key); CREATE TABLE customers(id text primary key); CREATE TABLE vendors(id text primary key); CREATE TABLE products(id text primary key); CREATE TABLE sales_orders(id text primary key); INSERT INTO entities VALUES('entity'); INSERT INTO customers VALUES('customer'); INSERT INTO vendors VALUES('vendor'); INSERT INTO products VALUES('product'); INSERT INTO sales_orders VALUES('order');");
-    await db.exec(readFileSync(path.join(__dirname,'../../../prisma/migrations/20260923040000_b2b_customer_portal/migration.sql'),'utf8'));checks++;
+    await db.exec(readFileSync(path.join(__dirname,'../../../prisma/migrations/20260923080000_b2b_customer_portal/migration.sql'),'utf8'));checks++;
     const createAccount="INSERT INTO b2b_accounts(id,entity_id,account_type,customer_id,vendor_id,email,name,password_hash,created_by,updated_at) VALUES($1,'entity',$2,$3,$4,$5,'QA','hash','staff',NOW())";
     await db.query(createAccount,['account','CUSTOMER','customer',null,'a@example.test']);checks++;
     await db.query(createAccount,['supplier','SUPPLIER',null,'vendor','s@example.test']);checks++;

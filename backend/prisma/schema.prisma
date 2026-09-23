@@ -23,6 +23,7 @@ enum TaxType {
 // ============================================
 
 model User {
+  wmsShipmentPostings WmsShipmentPosting[]
   id                          String    @id @default(uuid())
   email                       String    @unique
   passwordHash                String    @map("password_hash")
@@ -176,6 +177,8 @@ model AuditLog {
 
 // 公司實體（支援多公司營運）
 model Entity {
+  shipmentLines ShipmentLine[]
+  wmsHandoverInbox WmsHandoverInbox[]
   id           String  @id @default(uuid())
   loginCode    String  @unique @map("login_code")
   name         String
@@ -453,6 +456,7 @@ enum ProductType {
 
 // 商品
 model Product {
+  shipmentLines ShipmentLine[]
   id          String      @id @default(uuid())
   entityId    String      @map("entity_id")
   sku         String
@@ -602,6 +606,7 @@ model AssemblyOrder {
 
 // 倉庫（多倉管理：公司倉、3PL、平台倉等）
 model Warehouse {
+  wmsHandoverInbox WmsHandoverInbox[]
   id        String   @id @default(uuid())
   entityId  String   @map("entity_id")
   code      String
@@ -646,6 +651,8 @@ model InventorySnapshot {
 
 // 庫存異動流水（入庫/出庫/預留/釋放/調整）
 model InventoryTransaction {
+  wmsOutPosting WmsShipmentPosting? @relation("WmsOut")
+  wmsReleasePosting WmsShipmentPosting? @relation("WmsRelease")
   id            String   @id @default(uuid())
   entityId      String   @map("entity_id")
   warehouseId   String   @map("warehouse_id")
@@ -899,6 +906,7 @@ model AfterSalesQuoteDraft {
 }
 
 model SalesOrder {
+  wmsHandoverInbox WmsHandoverInbox[]
   b2bRequest B2bPurchaseRequest?
   id              String   @id @default(uuid())
   entityId        String   @map("entity_id")
@@ -964,6 +972,7 @@ model SalesOrder {
 
 // 銷售訂單明細
 model SalesOrderItem {
+  shipmentLines ShipmentLine[]
   id           String  @id @default(uuid())
   salesOrderId String  @map("sales_order_id")
   productId    String  @map("product_id")
@@ -996,6 +1005,8 @@ model SalesOrderItem {
 
 // 出貨紀錄
 model Shipment {
+  handoverInbox WmsHandoverInbox?
+  lines ShipmentLine[]
   id           String   @id @default(uuid())
   entityId     String   @map("entity_id")
   salesOrderId String   @map("sales_order_id")
@@ -2660,4 +2671,74 @@ model B2bRequestItem {
   request B2bPurchaseRequest @relation(fields:[requestId],references:[id],onDelete:Cascade)
   @@unique([requestId,productId])
   @@map("b2b_request_items")
+}
+
+// Immutable accepted WMS handover evidence. Receipt is acknowledgement, never inventory posting.
+model WmsHandoverInbox {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  eventId String @map("event_id")
+  wmsShipmentId String @map("wms_shipment_id")
+  shipmentId String @unique @map("shipment_id")
+  warehouseId String @map("warehouse_id")
+  salesOrderId String @map("sales_order_id")
+  nativeIntakeId Int @map("native_intake_id")
+  wmsOrderId Int @map("wms_order_id")
+  sourceHash String @map("source_hash")
+  bodyHash String @map("body_hash")
+  payload Json
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz
+  entity Entity @relation(fields:[entityId], references:[id], onDelete:Restrict)
+  warehouse Warehouse @relation(fields:[warehouseId], references:[id], onDelete:Restrict)
+  salesOrder SalesOrder @relation(fields:[salesOrderId], references:[id], onDelete:Restrict)
+  shipment Shipment @relation(fields:[shipmentId], references:[id], onDelete:Restrict)
+  lines ShipmentLine[]
+  @@unique([entityId,eventId])
+  @@unique([entityId,wmsShipmentId])
+  @@index([entityId,receivedAt])
+  @@map("wms_handover_inbox")
+}
+
+model ShipmentLine {
+  entity Entity @relation(fields:[entityId], references:[id], onDelete:Restrict)
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  shipmentLineId String @map("shipment_line_id")
+  inboxId String @map("inbox_id")
+  shipmentId String @map("shipment_id")
+  salesOrderLineId String @map("sales_order_line_id")
+  productId String @map("product_id")
+  sku String
+  productName String @map("product_name")
+  quantity Decimal @db.Decimal(18,2)
+  packages Json
+  inbox WmsHandoverInbox @relation(fields:[inboxId], references:[id], onDelete:Restrict)
+  shipment Shipment @relation(fields:[shipmentId], references:[id], onDelete:Restrict)
+  salesOrderLine SalesOrderItem @relation(fields:[salesOrderLineId], references:[id], onDelete:Restrict)
+  product Product @relation(fields:[productId], references:[id], onDelete:Restrict)
+  posting WmsShipmentPosting?
+  @@unique([entityId,shipmentLineId])
+  @@index([salesOrderLineId])
+  @@index([inboxId])
+  @@map("shipment_lines")
+}
+
+// One receipt per accepted line; all effects are committed in the same transaction.
+model WmsShipmentPosting {
+  actor User @relation(fields:[postedBy], references:[id], onDelete:Restrict)
+  id String @id @default(uuid())
+  shipmentLineId String @unique @map("shipment_line_id")
+  quantity Decimal @db.Decimal(18,2)
+  unitCostBase Decimal @map("unit_cost_base") @db.Decimal(18,4)
+  totalCostBase Decimal @map("total_cost_base") @db.Decimal(18,2)
+  inventoryOutId String @unique @map("inventory_out_id")
+  inventoryReleaseId String @unique @map("inventory_release_id")
+  postedBy String @map("posted_by")
+  postedAt DateTime @default(now()) @map("posted_at") @db.Timestamptz
+  note String?
+  line ShipmentLine @relation(fields:[shipmentLineId], references:[id], onDelete:Restrict)
+  inventoryOut InventoryTransaction @relation("WmsOut", fields:[inventoryOutId], references:[id], onDelete:Restrict)
+  inventoryRelease InventoryTransaction @relation("WmsRelease", fields:[inventoryReleaseId], references:[id], onDelete:Restrict)
+  @@map("wms_shipment_postings")
 }

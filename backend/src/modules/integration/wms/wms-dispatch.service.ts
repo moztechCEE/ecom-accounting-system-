@@ -40,8 +40,8 @@ export function prepareDispatch(
       // ERP SalesOrderItem currently has no authoritative SN allocation. Never silently downgrade tracking.
       if (p.hasSerialNumbers)
         throw new BadRequestException('需序號商品尚缺訂單 SN 配置，暫不可拋單');
-      if (['BUNDLE', 'SERVICE'].includes(p.type))
-        throw new BadRequestException('組合或服務商品需先確認實體揀貨品項');
+      if (p.type !== 'SIMPLE')
+        throw new BadRequestException('此版本只支援一般商品，組合／製成／服務商品需先確認實體揀貨品項');
       brands.add(brand);
       return {
         id: i.id,

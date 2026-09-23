@@ -1,3 +1,4 @@
+import { WMS_HANDOVER_AUTH, authenticateWmsHandover } from '../integration/wms/wms-handover.auth';
 import { ExecutionContext, Injectable, SetMetadata } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -18,6 +19,9 @@ export class B2bAwareJwtAuthGuard extends JwtAuthGuard {
     super(b2bReflector);
   }
   canActivate(context: ExecutionContext) {
+    if (this.b2bReflector.getAllAndOverride<boolean>(WMS_HANDOVER_AUTH, [context.getHandler(), context.getClass()])) {
+      return authenticateWmsHandover(context.switchToHttp().getRequest());
+    }
     const mode = this.b2bReflector.getAllAndOverride<string>(B2B_AUTH_MODE, [
       context.getHandler(),
       context.getClass(),

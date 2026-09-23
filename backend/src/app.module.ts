@@ -53,6 +53,7 @@ import { AssemblyModule } from './modules/assembly/assembly.module';
 import { InvoiceSyncModule } from './modules/invoice-sync/invoice-sync.module';
 import { AfterSalesIntegrationModule } from './modules/integration/after-sales/after-sales.module';
 import { WmsPortalModule } from './modules/integration/wms/wms-portal.module';
+import { WmsHandoverModule } from './modules/integration/wms/wms-handover.module';
 import { WmsWorkbenchModule } from './modules/integration/wms/wms-workbench.module';
 
 /**
@@ -131,6 +132,7 @@ import { WmsWorkbenchModule } from './modules/integration/wms/wms-workbench.modu
     Ga4IntegrationModule,
     AfterSalesIntegrationModule,
     WmsWorkbenchModule,
+    WmsHandoverModule,
     WmsPortalModule,
     NotificationModule,
     AiModule,
