@@ -150,5 +150,84 @@
     }
   ],
   "noMigration": true,
-  "environmentPreserved": true
+  "environmentPreserved": true,
+  "frontendFollowup": {
+    "build": "816a57f2-4bb1-4405-8e76-8e557746f160",
+    "commit": "6042ad3d88f927ee3896895d19f0356fd8000e9d",
+    "before": {
+      "service": "corely-erp-dev",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "corely-erp-dev-00006-rjs"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:a7d100845df6f8d19ff3b06d895071178e5e3823e9b71b2861d04a5a7514de55"
+    },
+    "after": {
+      "service": "corely-erp-dev",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "corely-erp-dev-00007-vnm"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:39176e4641eaf9b669f0133bdc553ad6ff551fad66991d9cd5d97c0cf0bc428c"
+    },
+    "otherServicesUnchanged": true
+  },
+  "liveAcceptance": {
+    "tag": "C136",
+    "productId": "806514fa-d41d-4636-8b33-49bd87b284cd",
+    "batchId": "7c883195-774c-4067-94f5-3a51e345a341",
+    "nsiBatchId": "2a7d8a03-e157-4a1c-b0b7-ce67f38ac7fa",
+    "draftId": "e88efa46-2ced-4b19-998b-69f7508fb93f",
+    "checks": [
+      "full product creation",
+      "duplicate SKU clearly explains edit path",
+      "product edit persists barcode and preserves unrelated attributes",
+      "reloading product reuses last saved SN profile and barcode",
+      "preview never reserves numbers",
+      "upcoming preview shows correct continued SN and carton",
+      "stale preview rejection consumes nothing; fresh preview allocates correctly",
+      "existing tail carton unchanged",
+      "draft deletion removes only target draft",
+      "manufacturing date filter returns correct batches",
+      "NSI product disables individual SN tracking",
+      "NSI creates only boxes, no serials",
+      "NSI tail carton PDF and forbidden warranty export"
+    ],
+    "retainedForReview": true
+  },
+  "browserAcceptance": {
+    "createdProductId": "1187840d-9ea4-4707-85fd-be57fac334d9",
+    "productSku": "DEV-SNV2-UI-0923",
+    "account": "existing TEST account",
+    "checks": [
+      "create product via modal",
+      "edit barcode/color/code via modal",
+      "choose product in SN loads saved UI923/white/W and barcode",
+      "draft preview shows 26-27 and carton 004",
+      "carton contents 26/27",
+      "manufacture-date filter excludes then restores rows",
+      "NSI output has only no-SN carton PDF",
+      "carton contents modal remained open beyond 30 seconds after frontend follow-up; manual close succeeds"
+    ]
+  },
+  "nsiPdf": {
+    "pages": 1,
+    "widthMm": 60,
+    "heightMm": 45,
+    "rasterImages": 0,
+    "decoded": [
+      "04711299273087",
+      "CTN-260923-NC136-002"
+    ]
+  },
+  "finalServingRevisions": {
+    "corely-erp-api-dev": "corely-erp-api-dev-00004-nt4",
+    "corely-erp-dev": "corely-erp-dev-00007-vnm"
+  }
 }
