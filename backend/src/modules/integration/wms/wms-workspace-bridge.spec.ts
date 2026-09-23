@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { WmsWorkspaceBridge,projectWorkspaceResponse } from './wms-workspace-bridge';
 import { JwtService } from '@nestjs/jwt';
+import { Logger } from '@nestjs/common';
 const keys=generateKeyPairSync('rsa',{modulusLength:2048});
 const env={WMS_WORKSPACE_READ_ENABLED:'true',WMS_WORKSPACE_URL:'https://wms.example/',WMS_WORKSPACE_ISSUER:'erp-test',WMS_WORKSPACE_AUDIENCE:'wms-test',
   WMS_WORKSPACE_PRIVATE_KEY:keys.privateKey.export({type:'pkcs8',format:'pem'}).toString()};
@@ -46,6 +47,28 @@ describe('ERP WMS source bridge',()=>{
     }
     expect(()=>projectWorkspaceResponse({...page,mode:'write'},false)).toThrow();
     expect(projectWorkspaceResponse({...page,privateCustomer:'not forwarded'},false)).not.toHaveProperty('privateCustomer');
+  });
+  it('logs only safe transport diagnostics and non-OK status while preserving the unknown command result',async()=>{
+    const warn=jest.spyOn(Logger.prototype,'warn').mockImplementation(()=>undefined);
+    try {
+      const networkError=Object.assign(new TypeError('Bearer secret-token at https://private.invalid/order'),{
+        cause:{code:'ENOTFOUND',message:'private URL and credentials'},
+      });
+      const bridge=new WmsWorkspaceBridge(prisma(['wms_tasks:read','wms_orders:create']),{...env,WMS_WORKSPACE_COMMANDS_ENABLED:'true'},jest.fn().mockRejectedValue(networkError));
+      await expect(bridge.command('employee','company','sale-1','dispatch','dispatch',{requestId:'stable-request'}))
+        .rejects.toMatchObject({response:{code:'WMS_COMMAND_RESULT_UNKNOWN'}});
+      expect(JSON.parse(String(warn.mock.calls[0][0]))).toEqual({
+        event:'WMS_BRIDGE_FETCH_FAILURE',operation:'command',stage:'transport',errorClass:'TypeError',causeCode:'ENOTFOUND',
+      });
+      expect(String(warn.mock.calls[0][0])).not.toMatch(/secret-token|private\.invalid|credentials|stable-request/);
+
+      await expect(new WmsWorkspaceBridge(prisma(),env,jest.fn().mockResolvedValue(new Response('sensitive upstream body',{status:503})))
+        .read('employee',{entityId:'company'})).rejects.toMatchObject({response:{code:'WMS_SOURCE_UNAVAILABLE'}});
+      expect(JSON.parse(String(warn.mock.calls[1][0]))).toEqual({
+        event:'WMS_BRIDGE_FETCH_FAILURE',operation:'read',stage:'http',errorClass:'Error',causeCode:'unknown',upstreamStatus:503,
+      });
+      expect(String(warn.mock.calls[1][0])).not.toContain('sensitive upstream body');
+    } finally { warn.mockRestore(); }
   });
   it('preserves the complete native intake receipt on a signed dispatch while dropping unlisted fields',async()=>{
     const body={requestId:'stable-request',order:{sourceHash:'a'.repeat(64)}};

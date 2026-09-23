@@ -1,5 +1,5 @@
 import { DEPARTMENT_ACCESS_SELECT, effectivePermissionKeys } from '../../../common/department-access/department-access';
-import { ForbiddenException, ServiceUnavailableException, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
+import { ForbiddenException, ServiceUnavailableException, BadRequestException, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { createPrivateKey, createHash } from 'node:crypto';
 import { PrismaService } from '../../../common/prisma/prisma.service';
@@ -10,6 +10,12 @@ export type Station = keyof typeof permissions;
 type Query = {area?:string;view?:string;search?:string;page?:number;pageSize?:number;entityId:string;days?:number;status?:string;pickPage?:number;packPage?:number};
 const unavailable=()=>new ServiceUnavailableException({code:'WMS_SOURCE_NOT_APPROVED',message:'WMS 安全連線與員工對照尚未開通'});
 const invalid=()=>new ServiceUnavailableException({code:'WMS_RESPONSE_INVALID',message:'WMS 回應格式不符，請勿依此作業'});
+const diagnosticToken=(value:unknown)=>typeof value==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value)?value:'unknown';
+function diagnosticError(error:unknown) {
+  const value=error&&typeof error==='object'?error as Record<string,unknown>:{};
+  const cause=value.cause&&typeof value.cause==='object'?value.cause as Record<string,unknown>:{};
+  return {errorClass:diagnosticToken(value.name),causeCode:diagnosticToken(cause.code??value.code)};
+}
 function record(value:unknown):Record<string,unknown>{if(!value||typeof value!=='object'||Array.isArray(value))throw invalid();return value as Record<string,unknown>;}
 function text(value:unknown,max=256):string {if(typeof value!=='string'||value.length>max)throw invalid();return value;}
 function count(value:unknown):number {if(typeof value!=='number'||!Number.isSafeInteger(value)||value<0)throw invalid();return value;}
@@ -61,6 +67,7 @@ export function projectWorkspaceResponse(value:unknown,detail:boolean,expectedId
   return {...row(data),source:'wms',revision:0,items,allowedActions:[],blockers:['作業寫入尚未啟用']};
 }
 export class WmsWorkspaceBridge {
+  private readonly logger=new Logger(WmsWorkspaceBridge.name);
   constructor(private readonly prisma:PrismaService,private readonly env:NodeJS.ProcessEnv=process.env,private readonly fetcher:typeof fetch=fetch){}
   async stations(actorId:string):Promise<Station[]> {
     const actor=await this.prisma.user.findUnique({where:{id:actorId},select:{isActive:true,mustChangePassword:true,employee:{select:DEPARTMENT_ACCESS_SELECT}}});
@@ -104,8 +111,12 @@ export class WmsWorkspaceBridge {
       ...(writable?{method,path:suffix,bodyHash:createHash('sha256').update(JSON.stringify(body)).digest('hex')}:{})},
       {privateKey,algorithm:'RS256',issuer:this.env.WMS_WORKSPACE_ISSUER,audience:this.env.WMS_WORKSPACE_AUDIENCE,subject:actorId,expiresIn:45});
     let result:unknown;
+    let failureStage:'transport'|'http'|'response'='transport';
+    let upstreamStatus:number|undefined;
     try {
       const response=await this.fetcher(url,{method,headers:{Authorization:`Bearer ${token}`,Accept:'application/json',...(command?{'Content-Type':'application/json'}:{})},...(command?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(10000)});
+      failureStage=response.ok?'response':'http';
+      if(!response.ok)upstreamStatus=response.status;
       if(response.status===403)throw new ForbiddenException('WMS_SCOPE_DENIED');
       if(response.status===404)throw new NotFoundException('WMS_ORDER_NOT_ACCESSIBLE');
       if(response.status===409)throw new ConflictException('WMS_REVISION_OR_REQUEST_CONFLICT');
@@ -115,7 +126,12 @@ export class WmsWorkspaceBridge {
       try {for(;;){const {done,value}=await reader.read();if(done)break;length+=value.byteLength;if(length>1048576)throw Error();chunks.push(value);}}
       finally{await reader.cancel();}
       result=JSON.parse(Buffer.concat(chunks).toString('utf8'));
-    }catch(e){if(e instanceof ForbiddenException||e instanceof NotFoundException||e instanceof ConflictException||e instanceof BadRequestException)throw e;throw new ServiceUnavailableException({code:command?'WMS_COMMAND_RESULT_UNKNOWN':'WMS_SOURCE_UNAVAILABLE',message:command?'結果尚未確認，請核對原請求紀錄':'WMS 連線未完成，請稍後重試'});}
+    }catch(e){
+      if(e instanceof ForbiddenException||e instanceof NotFoundException||e instanceof ConflictException||e instanceof BadRequestException)throw e;
+      // Never log the thrown message, URL, bearer token, request, or upstream body.
+      this.logger.warn(JSON.stringify({event:'WMS_BRIDGE_FETCH_FAILURE',operation:command?'command':'read',stage:failureStage,...diagnosticError(e),...(upstreamStatus===undefined?{}:{upstreamStatus})}));
+      throw new ServiceUnavailableException({code:command?'WMS_COMMAND_RESULT_UNKNOWN':'WMS_SOURCE_UNAVAILABLE',message:command?'結果尚未確認，請核對原請求紀錄':'WMS 連線未完成，請稍後重試'});
+    }
     return management?projectManagement(result,management):projectWorkspaceResponse(result,!!id,id,writable,area);
   }
 }
