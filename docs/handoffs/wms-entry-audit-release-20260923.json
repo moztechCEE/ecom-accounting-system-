@@ -1,0 +1,113 @@
+{
+  "deployedDev": {
+    "corely-erp-api-dev": {
+      "revision": "corely-erp-api-dev-entry-audit-0923",
+      "traffic": 100,
+      "images": {
+        "app": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev@sha256:63814da9ce650f20c2038303118c4eeda1398389e9f7d9191ff9ccc17f78ace0"
+      }
+    },
+    "corely-erp-dev": {
+      "revision": "corely-erp-dev-entry-audit-0923",
+      "traffic": 100,
+      "images": {
+        "app": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:15784ad5c94e44461073b870cf74e6b84b9bfda516eacf020a67911037d77234"
+      }
+    },
+    "corely-wms-dev": {
+      "revision": "corely-wms-dev-entry-audit2-0923",
+      "traffic": 100,
+      "images": {
+        "web": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-frontend@sha256:deec59c37e0ea9a3174d54bb1d8a09f07d82e9670809a5733cb8ab322b65b266",
+        "api": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-backend@sha256:e3bfe2d0826d630e7ae8d251386fab3a004e3716731df4009f4dc1acd319b949"
+      }
+    }
+  },
+  "productionUnchanged": {
+    "ecom-accounting-backend": [
+      [
+        "ecom-accounting-backend-00506-ray",
+        100
+      ]
+    ],
+    "ecom-accounting-frontend": [
+      [
+        "ecom-accounting-frontend-00270-vob",
+        100
+      ]
+    ],
+    "corely-wms": [
+      [
+        "corely-wms-import-footer-20260917",
+        100
+      ]
+    ]
+  },
+  "source": {
+    "erpRuntime": "fa04a2bd",
+    "wmsApi": "dd69666",
+    "wmsWeb": "92f49ff"
+  },
+  "tests": {
+    "erpBackend": 41,
+    "erpFrontend": 14,
+    "erpSandbox": 9,
+    "erpWmsPostgreSQL": 55,
+    "wmsBackend": 284,
+    "wmsFrontend": 274,
+    "auditSnapshotPostgreSQL": 7
+  },
+  "notCompleted": [
+    "Central company-wide audit schema, outbox and UI are planned, not deployed",
+    "Full ERP module event coverage and export auditing remain future work",
+    "Physical warehouse and factory workflows were not changed or accepted by these login tests"
+  ],
+  "liveApi": {
+    "passed": 43,
+    "notes": [
+      "SSO settings → /settings",
+      "SSO logs → /admin/operation-logs",
+      "SSO dispatch → /admin",
+      "SSO marketplace → /admin/marketplace-converter",
+      "SSO overview → /admin/analytics",
+      "SSO exceptions → /admin/exceptions",
+      "SSO scan-errors → /admin/scan-errors",
+      "SSO defects → /admin/defects",
+      "SSO logistics → /settings/logistics",
+      "SSO users → /admin/users",
+      "SSO team → /team",
+      "SSO completed → /tasks?view=completed",
+      "SSO intakes → /warehouse-intakes"
+    ],
+    "erp": "https://corely-erp-api-dev-sp5g377smq-de.a.run.app/api/v1",
+    "wms": "https://corely-wms-dev-sp5g377smq-de.a.run.app"
+  },
+  "browser": {
+    "notes": [
+      "儲運設定 actual ERP click opens exact WMS page without credentials; sidebar manually collapses at 1002px",
+      "操作日誌 actual ERP click opens exact WMS page without credentials; sidebar manually collapses at 1002px",
+      "出貨管理 actual ERP click opens exact WMS page without credentials; sidebar manually collapses at 1002px",
+      "direct WMS bookmark has ERP return preserving requested report, no WMS password form"
+    ],
+    "errors": [],
+    "candidate": false
+  },
+  "multitab": {
+    "passed": 7,
+    "oldTabReturnedToErp": true,
+    "currentTabSurvivedOldExpiryAndReload": true,
+    "separateStationStorage": true,
+    "candidate": null,
+    "pageErrors": []
+  },
+  "qaCleanup": {
+    "disabled": 3,
+    "roleLinksRemoved": true,
+    "sessionsRevoked": true,
+    "temporaryReaderRoleRemoved": true
+  },
+  "migrations": [
+    "20260923070000_wms_portal_entries",
+    "035_erp_portal_audit.sql"
+  ]
+}

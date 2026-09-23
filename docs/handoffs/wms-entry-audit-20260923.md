@@ -24,3 +24,5 @@
 回滾：ERP API/web 回 `corely-erp-api-dev-aex-637518d0-c`／`corely-erp-dev-aex-637518d0-f`，WMS 回 `corely-wms-dev-account-sso-0923`。先檢查是否已有更新的 DEV 功能，協調後才以固定 revision 切換；不回滾或刪除新增 audit 資料，舊 session 可由 ERP 重新開啟。只退回分頁修正可回 WMS `corely-wms-dev-entry-audit-0923`。
 
 尚未完成：全公司中央操作日誌 UI、各模組事件覆蓋、outbox／去重、敏感模組範圍與匯出審計；具體需求及順序已列在 `docs/plans/company-operation-audit.md`。本次不宣稱 WMS 全部業務流程、工廠印製或實體倉儲驗收完成。
+
+最終收據：`docs/handoffs/wms-entry-audit-release-20260923.json`。3 個 QA 帳號已停用、session 全數撤銷、暫時角色與指派已移除。兩個專案均已推送獨立 `codex/wms-entry-audit-20260923` 分支；未合併 main。DEV 最後一輪免登入、多分頁及正式服務不變核對通過。
