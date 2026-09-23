@@ -1,0 +1,141 @@
+{
+  "source": {
+    "sha": "0cc070b7bf892dbac9f21be52442bbf6eee46102",
+    "integrated": [
+      "53188aab",
+      "d366985f"
+    ],
+    "images": [
+      "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev:department-0cc070b7bf89",
+      "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev:department-0cc070b7bf89"
+    ]
+  },
+  "buildId": "e62dafd3-ae4a-4760-b532-4a5420403227",
+  "images": [
+    {
+      "artifactRegistryPackage": "projects/moztech-main-db/locations/asia-east1/repositories/cloud-run/packages/corely-erp-api-dev/versions/sha256:45a779c6a8212a00693a4858147b0932f575915f043506e2d33794c6297d038a",
+      "digest": "sha256:45a779c6a8212a00693a4858147b0932f575915f043506e2d33794c6297d038a",
+      "name": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev:department-0cc070b7bf89",
+      "pushTiming": {
+        "endTime": "2026-09-23T14:16:00.561685008Z",
+        "startTime": "2026-09-23T14:15:47.003734254Z"
+      }
+    },
+    {
+      "artifactRegistryPackage": "projects/moztech-main-db/locations/asia-east1/repositories/cloud-run/packages/corely-erp-dev/versions/sha256:1e5ddb4dcf080f959aed099a320598b1518cc1de56170d532ccb725c3bfb0fe5",
+      "digest": "sha256:1e5ddb4dcf080f959aed099a320598b1518cc1de56170d532ccb725c3bfb0fe5",
+      "name": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev:department-0cc070b7bf89",
+      "pushTiming": {
+        "endTime": "2026-09-23T14:16:10.800143345Z",
+        "startTime": "2026-09-23T14:16:00.561817164Z"
+      }
+    }
+  ],
+  "dev": {
+    "corely-erp-api-dev": {
+      "active": [
+        {
+          "revision": "corely-erp-api-dev-department2-0923",
+          "percent": 100
+        }
+      ],
+      "rollback": "corely-erp-api-dev-claw-d366985f-c"
+    },
+    "corely-erp-dev": {
+      "active": [
+        {
+          "revision": "corely-erp-dev-department2-0923",
+          "percent": 100
+        }
+      ],
+      "rollback": "corely-erp-dev-claw-d366985f-f"
+    }
+  },
+  "productionUnchanged": {
+    "ecom-accounting-backend": true,
+    "ecom-accounting-frontend": true,
+    "corely-wms": true
+  },
+  "migration": {
+    "name": "20260923110000_department_supervisors",
+    "checksum": "16f9bd7f0a1cbd5cb17cb821b71573c4bb5c15befa9868ffbbdde1dcba62e98e",
+    "database": "erp_dev_20260921",
+    "rollbackValidation": true
+  },
+  "tests": {
+    "backend": 163,
+    "frontend": 23
+  },
+  "api": {
+    "base": "https://corely-erp-api-dev-sp5g377smq-de.a.run.app/api/v1",
+    "passed": 48,
+    "checks": [
+      "login admin",
+      "login manager",
+      "login staff",
+      "login outside",
+      "supervisor flag persisted",
+      "derived attendance department scope",
+      "salary scope remains self",
+      "shared member and supervisor wms_tasks:read",
+      "shared member and supervisor wms_picking:execute",
+      "shared member and supervisor wms_packing:execute",
+      "shared member and supervisor expense_self:read",
+      "supervisor additional operation only",
+      "no inherited sensitive payroll_admin:read",
+      "no inherited sensitive banking:read",
+      "no inherited sensitive access_control:update",
+      "no inherited sensitive wms_logs:read",
+      "no inherited sensitive attendance_admin:update",
+      "WMS keeps both operator stations",
+      "manager sees department attendance",
+      "other department excluded",
+      "attendance omits private HR fields",
+      "member denied team attendance API",
+      "no derived access /attendance/admin/policies",
+      "no derived access /payroll/employees",
+      "no derived access /roles",
+      "no derived access /attendance/leaves/admin/balances",
+      "department leave list restricted",
+      "leave responses omit confidential fields",
+      "cross-department review rejected",
+      "self approval rejected",
+      "manager can review department leave",
+      "member cannot promote self",
+      "supervisor requires department",
+      "invalid boolean rejected",
+      "administrator can demote",
+      "existing login loses supervisor operation on demotion",
+      "existing login loses team attendance on demotion",
+      "administrator can move department",
+      "existing login immediately follows new department",
+      "fixture department restored",
+      "administrator can disable department",
+      "disabled department loses derived grants",
+      "fixture department re-enabled",
+      "privileged department binding rejected",
+      "role bound to department cannot be deleted",
+      "administrator can deactivate employee",
+      "inactive employment loses derived team rights",
+      "fixture employment restored"
+    ]
+  },
+  "browser": {
+    "candidate": false,
+    "checks": [
+      "Employee edit shows saved department and supervisor switch",
+      "Administrator changes supervisor status off and on through actual employee form saves",
+      "Department editor shows shared and supervisor operation roles",
+      "Supervisor sees only department leave, self-review disabled, compact attendance workspace",
+      "Department attendance tab filters actual DEV rows"
+    ],
+    "errors": []
+  },
+  "cleanup": {
+    "disabledUsers": 4,
+    "removedRoleAssignments": true,
+    "removedSyntheticAttendanceAndLeave": true,
+    "removedDepartments": 2,
+    "retainedAuditEvidence": true
+  }
+}
