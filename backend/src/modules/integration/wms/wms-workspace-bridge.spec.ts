@@ -32,6 +32,32 @@ describe('ERP WMS source bridge',()=>{
     await expect(bridge.read('employee',{entityId:'company',area:'dispatch'})).rejects.toThrow('WMS_STATION_DENIED');
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
+  it('signs actionable detail on the workflow read route and stage-specific pick/pack commands',async()=>{
+    const signed: Array<{url:string;method:string;claims:Record<string,unknown>}> = [];
+    const fetcher=jest.fn().mockImplementation(async(url,options)=>{
+      const claims=await new JwtService().verifyAsync(options.headers.Authorization.slice(7),{publicKey:keys.publicKey.export({type:'spki',format:'pem'}).toString(),algorithms:['RS256'],issuer:'erp-test',audience:'wms-test'});
+      signed.push({url:String(url),method:options.method,claims});
+      return new Response(JSON.stringify(options.method==='GET'&&String(url).endsWith('/orders')?page:dispatchReceipt),{headers:{'content-type':'application/json'}});
+    });
+    const bridge=new WmsWorkspaceBridge(prisma(),{...env,WMS_WORKSPACE_COMMANDS_ENABLED:'true'},fetcher);
+    await bridge.read('employee',{entityId:'company',area:'pick'});
+    await bridge.read('employee',{entityId:'company',area:'pick'},'sale-1');
+    for(const stage of ['pick','pack'] as const)for(const kind of ['claim','scan'] as const){
+      const body={entityId:'company',expectedRevision:1,requestId:`${stage}-${kind}`,...(kind==='scan'?{scanValue:'000123'}:{})};
+      await bridge.command('employee','company','sale-1',stage,kind,body);
+      const call=signed.at(-1)!;
+      expect(call.url).toBe(`https://wms.example/api/integrations/erp/workflow/v1/orders/sale-1/${stage}/${kind}`);
+      expect(call.method).toBe('POST');
+      expect(call.claims).toMatchObject({scope:'wms.workspace.command',station:stage,method:'POST',path:`/orders/sale-1/${stage}/${kind}`,
+        bodyHash:createHash('sha256').update(JSON.stringify(body)).digest('hex')});
+    }
+    expect(signed[0]).toMatchObject({url:'https://wms.example/api/integrations/erp/v1/orders',method:'GET',claims:{scope:'wms.workspace.read',station:'pick'}});
+    expect(signed[1]).toMatchObject({url:'https://wms.example/api/integrations/erp/workflow/v1/orders/sale-1',method:'GET',claims:{scope:'wms.workspace.command',station:'pick',method:'GET',path:'/orders/sale-1'}});
+    expect(signed[0].claims).not.toHaveProperty('bodyHash');
+    expect(signed[1].claims).toHaveProperty('bodyHash',createHash('sha256').update('{}').digest('hex'));
+    await expect(bridge.command('employee','company','sale-1','pick','dispatch',{})).rejects.toThrow('WMS_COMMAND_INVALID');
+    expect(fetcher).toHaveBeenCalledTimes(6);
+  });
   it('does not connect when disabled, revoked, inactive, or transport config is unsafe',async()=>{
     const fetcher=jest.fn(),p=prisma(['wms_tasks:read','wms_picking:execute']);
     await expect(new WmsWorkspaceBridge(p,{},fetcher).read('employee',{entityId:'company'})).rejects.toThrow();

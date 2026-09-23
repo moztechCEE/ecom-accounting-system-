@@ -92,6 +92,8 @@ export class WmsWorkspaceBridge {
     const allowed=await this.stations(actorId);
     const area=query.area||allowed[0];
     if(!area||!allowed.includes(area as Station))throw new ForbiddenException('WMS_STATION_DENIED');
+    if(command&&!((area==='dispatch'&&command.kind==='dispatch')||((area==='pick'||area==='pack')&&['claim','scan'].includes(command.kind))))
+      throw new BadRequestException('WMS_COMMAND_INVALID');
     let base:URL, privateKey:string;
     try {
       base=new URL(this.env.WMS_WORKSPACE_URL||'');
@@ -103,7 +105,8 @@ export class WmsWorkspaceBridge {
     }catch{throw unavailable();}
     const writable=!!id&&['pick','pack','dispatch'].includes(area)&&this.env.WMS_WORKSPACE_COMMANDS_ENABLED==='true';
     const method=command?'POST':'GET',body=command?.body||{};
-    const suffix=management?'/management/'+management:'/orders'+(id?'/'+encodeURIComponent(id):'')+(command?'/'+command.kind:'');
+    const commandAction=command?(area==='dispatch'?'/dispatch':`/${area}/${command.kind}`):'';
+    const suffix=management?'/management/'+management:'/orders'+(id?'/'+encodeURIComponent(id):'')+commandAction;
     const url=new URL((writable?'/api/integrations/erp/workflow/v1':'/api/integrations/erp/v1')+suffix,base);
     if(!writable)for(const key of ['view','search','page','pageSize'] as const)if(query[key]!==undefined)url.searchParams.set(key,String(query[key]));
     if(management){url.searchParams.delete('view');url.searchParams.delete('pageSize');for(const key of ['days','status','pickPage','packPage'] as const)if(query[key]!==undefined)url.searchParams.set(key,String(query[key]));}

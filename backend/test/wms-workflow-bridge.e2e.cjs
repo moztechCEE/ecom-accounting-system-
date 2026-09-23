@@ -282,7 +282,7 @@ test('ERP durable intent -> signed HTTP -> WMS -> independent picking and packin
         requestId: 'tamper',
         scanValue: 'CABLE',
       },
-      suffix = '/orders/erp-flow/scan';
+      suffix = '/orders/erp-flow/pack/scan';
     const token = jwt.sign(
       {
         entityId: 'test-company',
