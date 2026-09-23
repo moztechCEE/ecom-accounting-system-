@@ -4,6 +4,7 @@ export const RESOURCE_TRANSLATIONS: Record<string, string> = {
   sales_orders: '銷售訂單',
   purchase_orders: '採購訂單',
   inventory: '庫存管理',
+  expense_self: '個人費用申請',
   wms_tasks: '儲運工作區',
   wms_orders: '訂單調度',
   wms_picking: '揀貨作業',

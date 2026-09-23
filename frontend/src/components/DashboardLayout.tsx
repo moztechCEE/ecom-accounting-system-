@@ -125,7 +125,7 @@ export default function DashboardLayout() {
             { key: 'profile', label: '個人資料', icon: <UserOutlined />, onClick: () => navigate('/profile') },
             { key: 'preferences', label: '介面設定', icon: <SettingOutlined />, onClick: () => setSettingsOpen(true) },
             { type: 'divider' },
-            { key: 'logout', label: '登出', icon: <LogoutOutlined />, onClick: () => { logout(); navigate('/login') } },
+            { key: 'logout', label: '登出', icon: <LogoutOutlined />, onClick: async () => { if (await logout()) navigate('/login') } },
           ] }}>
             <button type="button" className="operations-user" aria-label="帳號選單">
               <Avatar size={30} icon={<UserOutlined />} src={user?.avatar} />

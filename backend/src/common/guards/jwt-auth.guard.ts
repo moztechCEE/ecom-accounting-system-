@@ -26,6 +26,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         const request = context.switchToHttp().getRequest();
         const route = `${request.method} ${request.path.replace(/\/+$/, '')}`;
         const allowed = ['POST /api/v1/auth/login', 'GET /api/v1/auth/login-entities',
+          'POST /api/v1/wms/portal/consume', 'POST /api/v1/wms/portal/inspect', 'POST /api/v1/wms/portal/revoke',
           'GET /api/v1/health', 'GET /api/v1/health/ready'];
         if (!allowed.includes(route)) throw new ForbiddenException('DEV 停用公開註冊、回呼與外部作業入口');
       }

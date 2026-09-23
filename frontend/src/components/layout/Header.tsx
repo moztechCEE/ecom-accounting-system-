@@ -32,9 +32,8 @@ const Header: React.FC<HeaderProps> = ({
   const navigate = useNavigate()
   const { token } = theme.useToken()
 
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
+  const handleLogout = async () => {
+    if (await logout()) navigate('/login')
   }
 
   const userMenu: MenuProps['items'] = [

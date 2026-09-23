@@ -1,3 +1,5 @@
+import WarehouseIdentityButton from '../components/WarehouseIdentityButton'
+import { wmsPortalOrigin } from '../config/wms-portal'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
@@ -496,6 +498,7 @@ const UsersTab = ({
             </Text>
           ) : (
             <>
+          {canManageDataScopes && wmsPortalOrigin() && <WarehouseIdentityButton userId={record.id} name={record.name} />}
           <Tooltip title="設定角色">
             <Button
               type="text"
@@ -753,7 +756,7 @@ const UsersTab = ({
             </Form.Item>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <Form.Item name="roleIds" label="指派角色" className="mb-0">
+            <Form.Item name="roleIds" label="指派角色" extra="儲運作業員可選揀貨或裝箱；揀貨員與裝箱員只開放對應作業。" className="mb-0">
               <Select
                 mode="multiple"
                 placeholder="選擇角色"
@@ -785,7 +788,7 @@ const UsersTab = ({
       >
         <Form form={assignForm} layout="vertical" className="pt-4">
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <Form.Item name="roleIds" label="角色" className="mb-0">
+            <Form.Item name="roleIds" label="角色" extra="儲運作業員可選揀貨或裝箱；揀貨員與裝箱員只開放對應作業。" className="mb-0">
               <Select
                 mode="multiple"
                 placeholder="選擇角色"

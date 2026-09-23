@@ -5,6 +5,7 @@ import { loginDestination } from './utils/login-destination'
 import { warehouseOnlyUser } from './config/workspaces'
 import WarehouseReportsPage from './pages/WarehouseReportsPage'
 import WarehousePortalPage from './pages/WarehousePortalPage'
+import WarehouseWorkspacePage from './pages/WarehouseWorkspacePage'
 import { wmsPortalOrigin } from './config/wms-portal'
 import { stagedOperationsEnabled } from './config/release'
 import { ThemeProvider } from './contexts/ThemeContext'
@@ -111,8 +112,8 @@ const App: React.FC = () => {
                 <Route path="attendance/admin" element={<PermissionRoute anyPermissions={['attendance_admin:read']}><AttendanceAdminPage /></PermissionRoute>} />
 
                 {/* Supply Chain Routes */}
-                <Route path="warehouse" element={<PermissionRoute anyPermissions={['wms_tasks:read']}>{wmsPortalOrigin() ? <WarehousePortalPage /> : <WarehouseCenterPage />}</PermissionRoute>} />
-                <Route path="warehouse/workstation" element={<PermissionRoute anyPermissions={['wms_tasks:read']}>{wmsPortalOrigin() ? <WarehousePortalPage /> : <WarehouseCenterPage workstationOnly />}</PermissionRoute>} />
+                <Route path="warehouse" element={<PermissionRoute anyPermissions={['wms_tasks:read']}>{wmsPortalOrigin() ? <WarehouseWorkspacePage /> : <WarehouseCenterPage />}</PermissionRoute>} />
+                <Route path="warehouse/workstation" element={<PermissionRoute anyPermissions={['wms_tasks:read']}>{wmsPortalOrigin() ? <WarehouseWorkspacePage /> : <WarehouseCenterPage workstationOnly />}</PermissionRoute>} />
                 <Route path="warehouse/:report" element={<PermissionRoute anyPermissions={['wms_tasks:read']}>{wmsPortalOrigin() ? <WarehousePortalPage /> : <WarehouseReportsPage />}</PermissionRoute>} />
                 <Route path="inventory/products" element={<PermissionRoute anyPermissions={['inventory:read']}><ProductsPage /></PermissionRoute>} />
                 <Route path="inventory/sn-labels" element={<PermissionRoute anyPermissions={['inventory:read']}><SnLabelsPage /></PermissionRoute>} />

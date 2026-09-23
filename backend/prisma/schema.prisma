@@ -48,6 +48,7 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
+  wmsPortalSessions             WmsPortalSession[]
   roles                         UserRole[]
   entityMemberships             UserEntityMembership[]
   createdJournalEntries         JournalEntry[]                 @relation("CreatedBy")
@@ -187,6 +188,7 @@ model Entity {
   contactPhone String? @map("contact_phone")
 
   // Relations
+  wmsPortalSessions          WmsPortalSession[]
   accounts                   Account[]
   journalEntries             JournalEntry[]
   periods                    Period[]
@@ -2467,4 +2469,25 @@ model AttendanceAnomaly {
 
   @@index([entityId, resolvedStatus])
   @@map("attendance_anomalies")
+}
+
+// Short-lived one-use handoffs and revocable warehouse work sessions.
+model WmsPortalSession {
+  id String @id
+  userId String @map("user_id")
+  entityId String @map("entity_id")
+  station String
+  nonce String
+  passwordVersion String @map("password_version")
+  sessionHash String? @unique @map("session_hash")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  ticketExpiresAt DateTime @map("ticket_expires_at") @db.Timestamptz
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  entity Entity @relation(fields:[entityId],references:[id])
+  @@index([userId],map:"wms_portal_sessions_user_idx")
+  @@index([expiresAt],map:"wms_portal_sessions_expiry_idx")
+  @@map("wms_portal_sessions")
 }

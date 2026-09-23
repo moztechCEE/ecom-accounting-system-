@@ -35,8 +35,7 @@ const ForcePasswordChangePage: React.FC = () => {
       })
       await refreshCurrentUser()
       message.success('密碼已更新，請重新使用新密碼登入')
-      logout()
-      navigate('/login', { replace: true })
+      if (await logout()) navigate('/login', { replace: true })
     } catch (error: any) {
       const errorMsg =
         error?.response?.data?.message ||

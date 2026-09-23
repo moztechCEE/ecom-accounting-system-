@@ -41,7 +41,7 @@ export const NAVIGATION: NavigationItem[] = [
     { key: '/sales/invoices', label: '應收帳款', permissions: ['sales_orders:read', 'accounts:read'] },
     { key: '/accounting/workbench?focus=missing-invoices', label: '發票核對', permissions: ['accounts:read', 'journal_entries:read'] },
     { key: '/ap/payable', label: '費用付款', permissions: ['purchase_orders:read', 'accounts:read'] },
-    { key: '/ap/expenses', label: '費用申請', permissions: ['purchase_orders:read', 'accounts:read'] },
+    { key: '/ap/expenses', label: '費用申請', permissions: ['expense_self:read', 'purchase_orders:read', 'accounts:read'] },
     { key: '/ap/expense-review', label: '費用審核', permissions: ['purchase_orders:read', 'accounts:read'] },
     { key: '/banking', label: '銀行帳戶', permissions: ['banking:read'] },
     { key: '/accounting/journals', label: '會計分錄', permissions: ['journal_entries:read'] },
@@ -68,9 +68,22 @@ export const NAVIGATION: NavigationItem[] = [
 ]
 export function visibleNavigation(user: User | null | undefined, items = NAVIGATION, staged = stagedOperationsEnabled()): NavigationItem[] {
   return items.flatMap<NavigationItem>((original) => {
-    if (original.key === 'warehouse' && wmsPortalOrigin()) {
-      const children = wmsPortalLinks(user)
-      return children.length ? [{ ...original, children }] : []
+    if (wmsPortalOrigin()) {
+      const portal = wmsPortalLinks(user)
+      if (original.key === 'warehouse') {
+        if (!hasAnyPermission(user, ['wms_tasks:read'])) return []
+        return [{ ...original, children: [
+          { key: '/warehouse', label: '作業工作台' },
+          ...portal.filter(link => ['/warehouse/dispatch','/warehouse/overview'].includes(link.key)),
+        ] }]
+      }
+      const destinations: Record<string,string[]> = {
+        sales: ['/warehouse/logistics'], inventory: ['/warehouse/defects'],
+        people: ['/warehouse/scan-errors'], admin: ['/warehouse/logs','/warehouse/settings'],
+      }
+      if (original.children && destinations[original.key]) {
+        original = { ...original, children: [...original.children, ...portal.filter(link => destinations[original.key].includes(link.key))] }
+      }
     }
     if (!staged && ['/warehouse/workstation', '/admin/after-sales-brands'].includes(original.key)) return []
     const item = !staged && original.key === 'service'
@@ -90,7 +103,7 @@ export function workspaceNavigation(user: User | null | undefined, workspace: 'a
   const items = visibleNavigation(user)
   if (workspace === 'all' && !warehouseOnlyUser(user)) return items
   const personal = navigationLeaves(items).filter(item => PERSONAL_PATHS.includes(item.key))
-  return [...items.filter(item => item.key === 'warehouse').map(item => ({...item, children: wmsPortalOrigin() ? item.children : item.children?.filter(child => child.key === '/warehouse' || child.key === '/warehouse/workstation')})),
+  return [...items.filter(item => item.key === 'warehouse').map(item => ({...item, children: wmsPortalOrigin() ? item.children?.filter(child => child.key === '/warehouse') : item.children?.filter(child => child.key === '/warehouse' || child.key === '/warehouse/workstation')})),
     ...(personal.length ? [{ key: 'personal', label: '我的資訊', children: personal }] : [])]
 }
 export function navigationLeaves(items: NavigationItem[]): NavigationItem[] {

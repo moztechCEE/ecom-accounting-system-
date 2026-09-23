@@ -1,4 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import api from '../services/api'
+import { message } from 'antd'
+import { wmsPortalOrigin } from '../config/wms-portal'
 import { authService } from '../services/auth.service'
 import { webSocketService } from '../services/websocket.service'
 import { User, LoginRequest } from '../types'
@@ -7,7 +10,7 @@ interface AuthContextType {
   user: User | null
   loading: boolean
   login: (data: LoginRequest) => Promise<User>
-  logout: () => void
+  logout: () => Promise<boolean>
   refreshCurrentUser: () => Promise<User | null>
 }
 
@@ -70,10 +73,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return response.user
   }
 
-  const logout = () => {
+  const logout = async () => {
+    if (wmsPortalOrigin()) {
+      try { await api.post('/wms/portal/logout') }
+      catch { message.error('無法完成登出，請稍後重試'); return false }
+    }
     authService.logout()
     setUser(null)
     webSocketService.disconnect()
+    return true
   }
 
   return (

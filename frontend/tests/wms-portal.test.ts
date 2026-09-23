@@ -10,7 +10,8 @@ Object.defineProperty(globalThis, 'window', { value: { __APP_CONFIG__: { devEnvi
 
 test('all sections lead to WMS routes without ERP credentials', () => {
   const links = navigationLeaves(workspaceNavigation(admin, 'all')).filter(x => x.externalUrl)
-  assert.equal(links.length, WMS_PORTAL_SECTIONS.length)
+  assert(!links.some(link => ['/warehouse/picking','/warehouse/packing','/warehouse/completed','/warehouse/team','/warehouse/users'].includes(link.key)))
+  assert(navigationLeaves(workspaceNavigation(admin, 'all')).some(link=>link.key==='/warehouse' && !link.externalUrl))
   for (const link of links) {
     assert.equal(new URL(link.externalUrl!).origin, origin)
     assert(!/token|password|email|entityId/.test(link.externalUrl!))
@@ -20,7 +21,8 @@ test('all sections lead to WMS routes without ERP credentials', () => {
 })
 test('operators retain only authorized sections and personal pages', () => {
   const links = navigationLeaves(workspaceNavigation(picker, 'warehouse'))
-  assert(links.some(x => x.key === '/warehouse/picking'))
+  assert(links.some(x => x.key === '/warehouse' && !x.externalUrl))
+  assert(!links.some(x => x.key === '/warehouse/picking'))
   assert(links.some(x => x.key === '/profile'))
   assert(!links.some(x => ['/warehouse/packing','/warehouse/dispatch','/warehouse/overview','/warehouse/users','/warehouse/logistics'].includes(x.key)))
   assert.equal(wmsPortalDestination(picker, '/warehouse/users'), undefined)
@@ -40,4 +42,9 @@ test('DEV rejects production, arbitrary hosts and credential-bearing URLs', () =
   assert.equal(wmsPortalOrigin(), config.wmsPortalUrl)
   config.devEnvironment = true
   config.wmsPortalUrl = origin
+})
+
+test('self expense permission keeps warehouse staff in the compact workspace', () => {
+  const worker = {...picker, permissions:[...picker.permissions,'attendance_self:read','leave_self:read','expense_self:read','expense_self:create']}
+  assert.deepEqual(navigationLeaves(workspaceNavigation(worker, 'all')).map(x=>x.key), ['/warehouse','/ap/expenses','/attendance/dashboard','/attendance/leaves','/profile'])
 })

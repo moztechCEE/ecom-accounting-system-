@@ -15,14 +15,27 @@ function blocked() {
   error.code = 'ERP_DEV_EXTERNAL_EFFECT_BLOCKED';
   throw error;
 }
+const warehouseOrigin = 'https://corely-wms-dev-sp5g377smq-de.a.run.app';
+const warehouseHost = new URL(warehouseOrigin).hostname;
+const warehouseEnabled = process.env.WMS_PORTAL_SSO_ENABLED === 'true' && process.env.WMS_PORTAL_SERVICE_URL === warehouseOrigin;
 const connect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function (...args) {
   // Node can pass normalized [options, callback] arguments to Socket.connect.
   const first = Array.isArray(args[0]) ? args[0][0] : args[0];
   const path = typeof first === 'object' && first ? first.path : typeof first === 'string' ? first : '';
-  if (!path || !path.startsWith(`/cloudsql/${process.env.CLOUDSQL_INSTANCE}/.s.PGSQL.`)) blocked();
+  const warehouseConnection = warehouseEnabled && typeof first === 'object' &&
+    Number(first.port) === 443 && (first.host === warehouseHost || first.servername === warehouseHost);
+  if (!warehouseConnection && (!path || !path.startsWith(`/cloudsql/${process.env.CLOUDSQL_INSTANCE}/.s.PGSQL.`))) blocked();
   return connect.apply(this, args);
 };
-globalThis.fetch = async () => blocked();
+const fetch = globalThis.fetch;
+globalThis.fetch = async (input, options = {}) => {
+  // Only the internal DEV account-link bridge is allowed. Shopify, email,
+  // accounting integrations, production WMS, callbacks and subprocesses stay blocked.
+  const url = new URL(typeof input === 'string' ? input : input.url);
+  if (!warehouseEnabled || url.origin !== warehouseOrigin || url.username || url.password || url.search || url.hash ||
+      !['/api/auth/erp/staff','/api/auth/erp/bind'].includes(url.pathname) || options.method !== 'POST' || options.redirect !== 'error') blocked();
+  return fetch(input, options);
+};
 for (const method of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) childProcess[method] = blocked;
 syncBuiltinESMExports();

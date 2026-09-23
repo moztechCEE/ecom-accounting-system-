@@ -1,5 +1,6 @@
 import {
   Controller,
+  ForbiddenException,
   Get,
   Post,
   Body,
@@ -17,6 +18,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PrismaService } from '../../common/prisma/prisma.service';
 import { ExpenseService } from './expense.service';
 import { CreateExpenseRequestDto } from './dto/create-expense-request.dto';
 import { ApproveExpenseRequestDto } from './dto/approve-expense-request.dto';
@@ -41,7 +43,20 @@ import { Public } from '../../common/decorators/public.decorator';
 @UseGuards(JwtAuthGuard)
 @Controller('expense')
 export class ExpenseController {
-  constructor(private readonly expenseService: ExpenseService) {}
+  constructor(private readonly expenseService: ExpenseService, private readonly prisma: PrismaService) {}
+
+  private async expenseAccess(req?: Request) {
+    const id = (req?.user as any)?.id;
+    const user = id ? await this.prisma.user.findUnique({where:{id},include:{entityMemberships:true,employee:{select:{entityId:true}},roles:{include:{role:{include:{permissions:{include:{permission:true}}}}}}}}) : null;
+    if (!user?.isActive) throw new ForbiddenException();
+    const manager = user.roles.some(r => ['ADMIN','SUPER_ADMIN','ACCOUNTANT'].includes(r.role.code) || r.role.permissions.some(p => ['accounts','purchase_orders'].includes(p.permission.resource) && p.permission.action==='read'));
+    return {user, manager};
+  }
+  private async assertExpenseRead(id:string, req:Request) {
+    const {user,manager} = await this.expenseAccess(req);
+    const record=await this.prisma.expenseRequest.findUnique({where:{id},select:{createdBy:true}});
+    if (!record || (!manager && record.createdBy!==user.id)) throw new ForbiddenException('無法查看其他人員的費用申請');
+  }
 
   @Get('requests')
   @ApiOperation({ summary: '查詢費用請款列表' })
@@ -51,17 +66,16 @@ export class ExpenseController {
     @Query('status') status?: string,
     @Req() req?: Request,
   ) {
-    const createdBy =
-      req?.query?.mine === 'true' && req?.user
-        ? (req.user as any).id
-        : undefined;
+    const {user,manager} = await this.expenseAccess(req);
+    const createdBy = !manager || req?.query?.mine === 'true' ? user.id : undefined;
     return this.expenseService.getExpenseRequests(entityId, status, createdBy);
   }
 
   @Get('requests/:id')
   @ApiOperation({ summary: '查詢單一費用請款' })
   @ApiResponse({ status: 200, description: '成功取得費用請款詳情' })
-  async getExpenseRequest(@Param('id') id: string) {
+  async getExpenseRequest(@Param('id') id: string, @Req() req: Request) {
+    await this.assertExpenseRead(id, req);
     return this.expenseService.getExpenseRequest(id);
   }
 
@@ -72,6 +86,8 @@ export class ExpenseController {
     @Body() data: CreateExpenseRequestDto,
     @Req() req: Request,
   ) {
+    const {user:actor,manager} = await this.expenseAccess(req);
+    if (!manager && !actor.entityMemberships.some(m=>m.entityId===data.entityId) && actor.employee?.entityId!==data.entityId) throw new ForbiddenException('沒有此公司的費用申請權限');
     const user = req.user as any;
     return this.expenseService.submitIntelligentExpenseRequest(data, {
       id: user.id,
@@ -165,7 +181,8 @@ export class ExpenseController {
   @Get('requests/:id/history')
   @ApiOperation({ summary: '取得費用申請歷程' })
   @ApiResponse({ status: 200, description: '成功取得歷程' })
-  async getExpenseHistory(@Param('id') id: string) {
+  async getExpenseHistory(@Param('id') id: string, @Req() req: Request) {
+    await this.assertExpenseRead(id, req);
     return this.expenseService.getExpenseRequestHistory(id);
   }
 
