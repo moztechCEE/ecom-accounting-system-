@@ -54,6 +54,7 @@ const ProductsPage: React.FC = () => {
   const canWrite = !!user && (user.roles.some(r => ['ADMIN', 'SUPER_ADMIN'].includes(r)) || user.permissions.includes('inventory:update'))
   const [editing, setEditing] = useState<Product | null>(null)
   const [saving, setSaving] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
@@ -83,6 +84,7 @@ const ProductsPage: React.FC = () => {
 
   const editProduct = (product: Product | null) => {
     setEditing(product)
+    setSubmitError(null)
     form.resetFields()
     if (product) {
       const attrs = product.attributes || {}
@@ -94,6 +96,7 @@ const ProductsPage: React.FC = () => {
   }
   const handleCreate = async (values: any) => {
     if (saving) return
+    setSubmitError(null)
     setSaving(true)
     try {
       const { attributesList, snLabels, ...rest } = values
@@ -112,7 +115,9 @@ const ProductsPage: React.FC = () => {
       form.resetFields()
       fetchProducts()
     } catch (error) {
-      message.error(errorText(error))
+      const detail = errorText(error)
+      setSubmitError(detail)
+      message.error(detail)
     } finally { setSaving(false) }
   }
 
@@ -312,11 +317,23 @@ const ProductsPage: React.FC = () => {
         confirmLoading={saving}
         okText="儲存"
         cancelText="取消"
+        styles={{ body: { maxHeight: 'min(70vh, 700px)', overflowY: 'auto' } }}
         onCancel={() => setIsModalVisible(false)}
         onOk={() => form.submit()}
       >
-        <Form form={form} layout="vertical" onFinish={handleCreate}>
-          <Form.Item name="sku" label="SKU" rules={[{ required: true }]}>
+        {submitError && <Alert className="sticky top-0 z-10 mb-4" type="error" showIcon message="無法儲存產品" description={submitError} />}
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleCreate}
+          onFinishFailed={({ errorFields }) => {
+            const details = errorFields.slice(0, 3).map(field => field.errors[0]).filter(Boolean).join('；')
+            setSubmitError(`請修正 ${errorFields.length} 個欄位${details ? `：${details}` : ''}`)
+          }}
+          onValuesChange={() => setSubmitError(null)}
+          scrollToFirstError={{ block: 'center', behavior: 'smooth' }}
+        >
+          <Form.Item name="sku" label="SKU" rules={[{ required: true, whitespace: true, message: '請填寫 SKU' }]}>
             <Input disabled={!!editing} placeholder="例如: PB-001" />
           </Form.Item>
           <Form.Item name="barcode" label="國際條碼" rules={[{ required: true, message: '國際條碼為必填' }, { pattern: /^\d{8,14}$/, message: '請填寫 8～14 碼數字，保留開頭的 0' }]}>
@@ -330,10 +347,10 @@ const ProductsPage: React.FC = () => {
           <Form.Item name="hasSerialNumbers" valuePropName="checked">
             <Checkbox>啟用單品序號追蹤</Checkbox>
           </Form.Item>
-          <Form.Item name="name" label="產品名稱" rules={[{ required: true }]}>
+          <Form.Item name="name" label="產品名稱" rules={[{ required: true, whitespace: true, message: '請填寫產品名稱' }]}>
             <Input placeholder="例如: Power Bank 10000mAh" />
           </Form.Item>
-          <Form.Item name="type" label="類型" rules={[{ required: true }]}>
+          <Form.Item name="type" label="類型" rules={[{ required: true, message: '請選擇產品類型' }]}>
             <Select>
               <Option value="SIMPLE">一般產品</Option>
               <Option value="BUNDLE">組合產品</Option>
@@ -411,14 +428,14 @@ const ProductsPage: React.FC = () => {
                     <Form.Item
                       {...restField}
                       name={[name, 'key']}
-                      rules={[{ required: true, message: 'Missing key' }]}
+                      rules={[{ required: true, whitespace: true, message: '請填寫屬性名稱' }]}
                     >
                       <Input placeholder="屬性 (如: Color)" />
                     </Form.Item>
                     <Form.Item
                       {...restField}
                       name={[name, 'value']}
-                      rules={[{ required: true, message: 'Missing value' }]}
+                      rules={[{ required: true, whitespace: true, message: '請填寫屬性值' }]}
                     >
                       <Input placeholder="值 (如: Red)" />
                     </Form.Item>
