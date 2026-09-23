@@ -1,6 +1,8 @@
 import {
   Controller,
   Post,
+  Patch,
+  Header,
   Body,
   HttpCode,
   HttpStatus,
@@ -10,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
+import { UpdateProfileDto, EnableTwoFactorDto } from './dto/account-settings.dto';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
@@ -92,24 +95,23 @@ export class AuthController {
     return this.authService.changePassword(req.user.id, dto);
   }
 
-  @ApiBearerAuth()
+  @Patch('profile')
   @UseGuards(JwtAuthGuard)
-  @Get('2fa/setup')
-  @ApiOperation({ summary: '取得 2FA 設定資料 (QR Code URL)' })
-  async setupTwoFactor(@Req() req: Request & { user: { email: string } }) {
-    // req.user is populated by JwtStrategy
-    const email = req.user.email;
-    return this.authService.generateTwoFactorSecret(email);
+  updateProfile(@Req() req: Request & { user: { id: string } }, @Body() dto: UpdateProfileDto) {
+    return this.authService.updateProfile(req.user.id, dto.name);
   }
 
-  @ApiBearerAuth()
+  @Get('2fa/setup')
   @UseGuards(JwtAuthGuard)
+  @Header('Cache-Control', 'no-store')
+  setupTwoFactor(@Req() req: Request & { user: { id: string } }) {
+    return this.authService.generateTwoFactorSecret(req.user.id);
+  }
+
   @Post('2fa/enable')
-  @ApiOperation({ summary: '啟用 2FA' })
-  async enableTwoFactor(
-    @Req() req: Request & { user: { userId: string } },
-    @Body() body: { token: string; secret: string },
-  ) {
-    return this.authService.enableTwoFactor(req.user.userId, body.token, body.secret);
+  @UseGuards(JwtAuthGuard)
+  @Header('Cache-Control', 'no-store')
+  enableTwoFactor(@Req() req: Request & { user: { id: string } }, @Body() body: EnableTwoFactorDto) {
+    return this.authService.enableTwoFactor(req.user.id, body.token, body.setupToken, body.currentPassword);
   }
 }

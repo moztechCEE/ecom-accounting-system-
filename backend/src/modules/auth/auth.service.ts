@@ -226,6 +226,10 @@ export class AuthService {
       throw new UnauthorizedException('User account is disabled');
     }
 
+    if (user.isTwoFactorEnabled && (!user.twoFactorSecret || !loginDto.twoFactorToken || !this.verifyTwoFactorToken(loginDto.twoFactorToken, user.twoFactorSecret))) {
+      throw new UnauthorizedException({ code: 'TWO_FACTOR_REQUIRED', message: loginDto.twoFactorToken ? '驗證碼不正確或已過期' : '請輸入驗證器的六位數驗證碼' });
+    }
+
     this.logger.log(`User logged in: ${normalizedEmail || employeeNoInput || platformLoginIdInput}`);
 
     // 產生 JWT token
@@ -365,11 +369,18 @@ export class AuthService {
   /**
    * 產生 2FA Secret
    */
-  async generateTwoFactorSecret(userEmail: string) {
+  async updateProfile(userId: string, name: string) {
+    return this.prisma.user.update({ where: { id: userId }, data: { name }, select: { id: true, name: true, email: true } });
+  }
+
+  async generateTwoFactorSecret(userId: string) {
+    const user = await this.usersService.findForAuthById(userId);
+    if (!user?.isActive) throw new UnauthorizedException();
+    if (user.isTwoFactorEnabled) throw new BadRequestException('此帳號已啟用兩步驟驗證');
     const secret = new OTPAuth.Secret({ size: 20 });
     const totp = new OTPAuth.TOTP({
-      issuer: 'EcomAccounting',
-      label: userEmail,
+      issuer: 'Corely AI',
+      label: user.email,
       algorithm: 'SHA1',
       digits: 6,
       period: 30,
@@ -379,6 +390,7 @@ export class AuthService {
     return {
       secret: secret.base32,
       otpauthUrl: totp.toString(),
+      setupToken: await this.jwtService.signAsync({ sub: userId, purpose: '2fa-setup', secret: secret.base32, passwordVersion: crypto.createHash('sha256').update(user.passwordHash).digest('hex') }, { expiresIn: '10m', audience: 'corely-2fa-setup' }),
     };
   }
 
@@ -387,7 +399,7 @@ export class AuthService {
    */
   verifyTwoFactorToken(token: string, secret: string): boolean {
     const totp = new OTPAuth.TOTP({
-      issuer: 'EcomAccounting',
+      issuer: 'Corely AI',
       algorithm: 'SHA1',
       digits: 6,
       period: 30,
@@ -401,12 +413,17 @@ export class AuthService {
   /**
    * 啟用 2FA (需先驗證 Token)
    */
-  async enableTwoFactor(userId: string, token: string, secret: string) {
-    const isValid = this.verifyTwoFactorToken(token, secret);
-    if (!isValid) {
-      throw new BadRequestException('Invalid authentication code');
-    }
-    await this.usersService.updateTwoFactorConfig(userId, secret, true);
-    return true;
+  async enableTwoFactor(userId: string, token: string, setupToken: string, currentPassword: string) {
+    const user = await this.usersService.findForAuthById(userId);
+    if (!user?.isActive || !await bcrypt.compare(currentPassword, user.passwordHash)) throw new UnauthorizedException('目前密碼不正確');
+    if (user.isTwoFactorEnabled) throw new BadRequestException('此帳號已啟用兩步驟驗證');
+    let setup: { sub: string; purpose: string; secret: string; passwordVersion: string };
+    try { setup = await this.jwtService.verifyAsync(setupToken, { audience: 'corely-2fa-setup' }); }
+    catch { throw new BadRequestException('設定已逾時，請重新取得 QR Code'); }
+    if (setup.sub !== userId || setup.purpose !== '2fa-setup' || setup.passwordVersion !== crypto.createHash('sha256').update(user.passwordHash).digest('hex')) throw new BadRequestException('設定已失效，請重新開始');
+    if (!this.verifyTwoFactorToken(token, setup.secret)) throw new BadRequestException('驗證碼不正確或已過期');
+    const result = await this.prisma.user.updateMany({ where: { id: userId, isTwoFactorEnabled: false, passwordHash: user.passwordHash }, data: { twoFactorSecret: setup.secret, isTwoFactorEnabled: true } });
+    if (result.count !== 1) throw new BadRequestException('設定已變更，請重新整理');
+    return { success: true };
   }
 }

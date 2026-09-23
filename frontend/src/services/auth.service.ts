@@ -24,6 +24,7 @@ const mapManagedUserToUser = (managed: ManagedUser): User => {
     email: managed.email,
     name: managed.name,
     mustChangePassword: managed.mustChangePassword,
+    isTwoFactorEnabled: managed.isTwoFactorEnabled,
     employeeDataScope: managed.employeeDataScope,
     attendanceDataScope: managed.attendanceDataScope,
     payrollDataScope: managed.payrollDataScope,
@@ -71,15 +72,17 @@ export const authService = {
     return mapManagedUserToUser(response.data)
   },
 
+  async updateProfile(name: string) { return (await api.patch('/auth/profile', { name })).data },
+
   async get2FASetup() {
-    const response = await api.get<{ secret: string; otpauthUrl: string }>(
+    const response = await api.get<{ secret: string; otpauthUrl: string; setupToken: string }>(
       '/auth/2fa/setup',
     )
     return response.data
   },
 
-  async enable2FA(token: string, secret: string) {
-    const response = await api.post('/auth/2fa/enable', { token, secret })
+  async enable2FA(token: string, setupToken: string, currentPassword: string) {
+    const response = await api.post('/auth/2fa/enable', { token, setupToken, currentPassword })
     return response.data
   },
 

@@ -11,6 +11,7 @@ import { stagedOperationsEnabled } from '../config/release'
 import CommandPalette from './CommandPalette'
 import NotificationCenter from './NotificationCenter'
 import SettingsDrawer from './SettingsDrawer'
+import WarehouseLink from './WarehouseLink'
 import './OperationsLayout.css'
 
 const STORAGE_KEY = 'corely.operations.navigation.v1'
@@ -62,7 +63,7 @@ export default function DashboardLayout() {
   })
   const shown = filter(items)
   const toMenu = (entries: NavigationItem[]): NonNullable<React.ComponentProps<typeof Menu>['items']> => entries.map((item) => ({
-    key: item.key, label: item.externalUrl ? <a href={item.externalUrl} target="_blank" rel="noopener noreferrer">{item.label}</a> : item.label, icon: icons[item.key],
+    key: item.key, label: item.externalUrl ? <WarehouseLink item={item} /> : item.label, icon: icons[item.key],
     children: item.children ? toMenu(item.children) : undefined,
   }))
   const menu = (collapsed = false) => <Menu

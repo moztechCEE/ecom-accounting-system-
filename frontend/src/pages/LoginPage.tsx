@@ -20,6 +20,7 @@ const PLATFORM_ADMIN_LOGIN_IDS = new Set([
 const LoginPage: React.FC = () => {
   const navigate = useNavigate()
   const { login } = useAuth()
+  const [needsTwoFactor, setNeedsTwoFactor] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const reducedMotion = useReducedMotion()
   const [forgotOpen, setForgotOpen] = React.useState(false)
@@ -51,14 +52,15 @@ const LoginPage: React.FC = () => {
             entityId: values.entityId?.trim(),
             employeeNo: loginId,
           }),
-      password: values.password.trim()
+      password: values.password,
+      ...(needsTwoFactor ? { twoFactorToken: values.twoFactorToken } : {})
     }
     try {
       const currentUser = await login(cleanValues)
       message.success('登入成功')
       navigate(loginDestination(currentUser))
     } catch (error: any) {
-      console.error('Login error:', error)
+      if (error.response?.data?.code === 'TWO_FACTOR_REQUIRED') setNeedsTwoFactor(true)
       let errorMsg = '登入失敗'
       
       if (error.response) {
@@ -191,6 +193,7 @@ const LoginPage: React.FC = () => {
             </a>
           </div>
 
+          {needsTwoFactor && <Form.Item name="twoFactorToken" label="驗證器驗證碼" rules={[{ required: true, pattern: /^\d{6}$/, message: '請輸入六位數驗證碼' }]}><Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="六位數驗證碼" /></Form.Item>}
           <Form.Item className="mb-6">
             <Button 
               type="primary" 

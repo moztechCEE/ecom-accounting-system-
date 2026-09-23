@@ -21,6 +21,8 @@ export interface RolePermissionLink {
 }
 
 export interface Role {
+  assignedUserCount?: number;
+  deletionReason?: string | null;
   id: string;
   code: string;
   name: string;
@@ -53,6 +55,7 @@ export interface ManagedUser {
   name: string;
   isActive: boolean;
   mustChangePassword?: boolean;
+  isTwoFactorEnabled?: boolean;
   employeeDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   attendanceDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   payrollDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
@@ -83,6 +86,7 @@ export interface User {
   name: string;
   avatar?: string;
   mustChangePassword?: boolean;
+  isTwoFactorEnabled?: boolean;
   employeeDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   attendanceDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   payrollDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
@@ -96,6 +100,7 @@ export interface User {
 }
 
 export interface LoginRequest {
+  twoFactorToken?: string;
   email?: string;
   entityId?: string;
   employeeNo?: string;
@@ -327,6 +332,7 @@ export interface Employee {
     name: string;
     email?: string;
     mustChangePassword?: boolean;
+  isTwoFactorEnabled?: boolean;
   } | null;
 }
 

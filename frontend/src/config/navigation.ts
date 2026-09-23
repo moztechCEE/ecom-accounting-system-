@@ -4,7 +4,7 @@ import { PERSONAL_PATHS, warehouseOnlyUser, hasWarehouseManagementAccess, WAREHO
 import { stagedOperationsEnabled } from './release'
 import { wmsPortalLinks, wmsPortalOrigin } from './wms-portal'
 
-export type NavigationItem = { key: string; label: string; externalUrl?: string; permissions?: string[]; adminOnly?: boolean; superAdminOnly?: boolean; children?: NavigationItem[] }
+export type NavigationItem = { key: string; label: string; externalUrl?: string; workRole?: 'dispatcher'; permissions?: string[]; adminOnly?: boolean; superAdminOnly?: boolean; children?: NavigationItem[] }
 export const NAVIGATION: NavigationItem[] = [
   { key: '/dashboard', label: '營運總覽' },
   { key: 'sales', label: '訂單銷售', children: [

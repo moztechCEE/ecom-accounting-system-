@@ -1,7 +1,7 @@
 import api from './api'
 import { wmsPortalOrigin } from '../config/wms-portal'
 
-export type WorkRole = 'picker' | 'packer'
+export type WorkRole = 'picker' | 'packer' | 'dispatcher'
 // The ticket is transferred only to the popup we opened, after checking its
 // origin and nonce. Passwords, ERP tokens and tickets never enter a URL.
 export function openWarehouseWork(role: WorkRole): Promise<void> {

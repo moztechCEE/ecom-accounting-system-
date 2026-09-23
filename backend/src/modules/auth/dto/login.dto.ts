@@ -1,7 +1,8 @@
-import { IsEmail, IsOptional, IsString, MinLength, ValidateIf } from 'class-validator';
+import { IsEmail, IsOptional, IsString, Matches, MinLength, ValidateIf } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class LoginDto {
+  @IsOptional() @IsString() @Matches(/^\d{6}$/) twoFactorToken?: string;
   @ApiProperty({ example: 'user@example.com', description: '使用者 Email', required: false })
   @ValidateIf((dto: LoginDto) => !dto.employeeNo && !dto.platformLoginId)
   @IsEmail()

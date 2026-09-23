@@ -964,6 +964,8 @@ const RolesTab = ({
       render: (value: any) =>
         typeof value === 'number' ? <Tag>{value}</Tag> : '—',
     },
+    { title: '使用帳號', key: 'assignedUserCount', render: (_value: any, record: Role) => <Text>{record.assignedUserCount ?? 0} 個帳號</Text> },
+    { title: '刪除狀態', key: 'deletionReason', render: (_value: any, record: Role) => <Text type="secondary">{record.deletionReason || '可刪除'}</Text> },
     {
       title: '權限數量',
       key: 'permissionCount',
@@ -1011,13 +1013,13 @@ const RolesTab = ({
           <Popconfirm
             title="確認刪除此角色？"
             onConfirm={() => handleDelete(record)}
-            disabled={record.code === 'SUPER_ADMIN'}
+            disabled={Boolean(record.deletionReason) || record.code === 'SUPER_ADMIN'}
           >
-            <Tooltip title="刪除">
+            <Tooltip title={record.deletionReason || "刪除"}>
               <Button
                 type="text"
                 danger
-                disabled={record.code === 'SUPER_ADMIN'}
+                disabled={Boolean(record.deletionReason) || record.code === 'SUPER_ADMIN'}
                 icon={<DeleteOutlined />}
               />
             </Tooltip>
