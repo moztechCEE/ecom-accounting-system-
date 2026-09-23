@@ -756,7 +756,7 @@ const UsersTab = ({
             </Form.Item>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <Form.Item name="roleIds" label="指派角色" extra="儲運作業員可選揀貨或裝箱；揀貨員與裝箱員只開放對應作業。" className="mb-0">
+            <Form.Item name="roleIds" label="指派角色" extra="倉儲人員進入工作台後，可選擇今天負責揀貨或裝箱。" className="mb-0">
               <Select
                 mode="multiple"
                 placeholder="選擇角色"
@@ -788,7 +788,7 @@ const UsersTab = ({
       >
         <Form form={assignForm} layout="vertical" className="pt-4">
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <Form.Item name="roleIds" label="角色" extra="儲運作業員可選揀貨或裝箱；揀貨員與裝箱員只開放對應作業。" className="mb-0">
+            <Form.Item name="roleIds" label="角色" extra="倉儲人員進入工作台後，可選擇今天負責揀貨或裝箱。" className="mb-0">
               <Select
                 mode="multiple"
                 placeholder="選擇角色"

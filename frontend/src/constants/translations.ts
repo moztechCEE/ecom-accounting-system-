@@ -44,7 +44,8 @@ export const ACTION_TRANSLATIONS: Record<string, string> = {
 }
 
 export const ROLE_TRANSLATIONS: Record<string, string> = {
-  SUPER_ADMIN: '超級管理員',
+  SUPER_ADMIN: '最高管理員',
+  WAREHOUSE_OPERATOR: '倉儲人員',
   ADMIN: '系統管理員',
   ACCOUNTANT: '會計人員',
   OPERATOR: '一般操作員',
