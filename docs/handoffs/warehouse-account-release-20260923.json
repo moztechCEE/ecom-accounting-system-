@@ -1,0 +1,120 @@
+{
+  "erpSource": "70702171",
+  "wmsSource": "86550cc",
+  "dev": {
+    "corely-erp-api-dev": {
+      "traffic": [
+        {
+          "revision": "corely-erp-api-dev-account-sso2-0923",
+          "percent": 100
+        }
+      ],
+      "images": [
+        {
+          "container": "default",
+          "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev@sha256:7de1f261014cfe50d6c85e41dba6733b906fb1c38c9eab657df3f5f6e95680c8"
+        }
+      ]
+    },
+    "corely-erp-dev": {
+      "traffic": [
+        {
+          "revision": "corely-erp-dev-account-sso2-0923",
+          "percent": 100
+        }
+      ],
+      "images": [
+        {
+          "container": "default",
+          "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:d5b12ba596235b08df9ee695009e6c4a08eb56984628a329a2e7de4732a00102"
+        }
+      ]
+    },
+    "corely-wms-dev": {
+      "traffic": [
+        {
+          "revision": "corely-wms-dev-account-sso-0923",
+          "percent": 100
+        }
+      ],
+      "images": [
+        {
+          "container": "web",
+          "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-frontend@sha256:1eb9711fb68d29ead30ed6068e046c86d667897bd6f79f070dcc77d16dbefaf3"
+        },
+        {
+          "container": "api",
+          "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-backend@sha256:e0b62d7f90b3c4b31ee2eed318b35505f13d67c6a84b8ba4cd23e671fa27ff4c"
+        }
+      ]
+    }
+  },
+  "production": {
+    "ecom-accounting-backend": {
+      "unchanged": true,
+      "traffic": [
+        {
+          "revision": "ecom-accounting-backend-00506-ray",
+          "percent": 100
+        }
+      ]
+    },
+    "ecom-accounting-frontend": {
+      "unchanged": true,
+      "traffic": [
+        {
+          "revision": "ecom-accounting-frontend-00270-vob",
+          "percent": 100
+        }
+      ]
+    },
+    "corely-wms": {
+      "unchanged": true,
+      "traffic": [
+        {
+          "revision": "corely-wms-import-footer-20260917",
+          "percent": 100
+        }
+      ]
+    }
+  },
+  "mainMerged": false,
+  "pushed": false,
+  "migrations": [
+    "20260923040000_warehouse_dispatch",
+    "20260923050000_warehouse_staff_role"
+  ],
+  "apiAcceptance": {
+    "checks": 17,
+    "notes": [
+      "single warehouse role offers picking and packing",
+      "used roles show reason; warehouse templates consolidated",
+      "2FA enrollment bound to user and password; subsequent login enforces OTP"
+    ]
+  },
+  "handoffAcceptance": {
+    "checks": 18,
+    "dispatchStableIdentity": true,
+    "stationStableIdentity": true,
+    "permissionsEnforced": true,
+    "replayDenied": true,
+    "logoutRevokes": true
+  },
+  "browserAcceptance": {
+    "notes": [
+      "倉儲人員 has picking/packing choices without dispatch permission",
+      "actual ERP 出貨管理 click opens WMS /admin in fresh WMS session without login",
+      "highest admin without employee record saves own name without 2FA; persists reload",
+      "2FA setup UI enables with password/OTP and displays persisted enabled state",
+      "fresh mobile login requests OTP and succeeds with correct code",
+      "role UI shows consolidated warehouse role and deletion reasons"
+    ],
+    "pageErrors": []
+  },
+  "qaCleanup": {
+    "allFourDisabled": true,
+    "workSessionsRevoked": true,
+    "temporaryAssignmentsRemoved": true,
+    "realUsers2FAChanged": false
+  }
+}
