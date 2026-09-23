@@ -71,12 +71,8 @@
         "frontend/src/config/navigation.ts",
         "frontend/src/App.tsx",
         "frontend/src/pages/DashboardPage.tsx",
-        "frontend/src/utils/login-destination.ts"
-      ],
-      "permissions": [
-        "reports:read",
-        "accounts:read",
-        "sales_orders:read"
+        "frontend/src/utils/login-destination.ts",
+        "frontend/src/config/workspaces.ts"
       ]
     },
     {
@@ -100,11 +96,16 @@
         "steps": [
           "選擇員工代墊或廠商直付，填寫受款與費用資料。",
           "上傳圖片或 PDF 憑證，辨識完成後逐欄核對；AI 建議可修改。",
-          "選擇可用報銷項目，確認金額、幣別、日期及直屬主管設定後送出，於清單追蹤狀態。"
+          "選擇可用報銷項目，確認金額、幣別、日期及直屬主管設定後送出，於清單追蹤狀態。",
+          "全部必要審批核准後，ERP 才建立待付款任務，供出納後續處理。",
+          "實際銀行匯款由出納依公司外部銀行流程完成；費用核准或待付款任務不會自動向銀行匯款。",
+          "外部銀行付款完成後，出納再於 ERP 登記已完成的付款，填入實際銀行、日期及完整金額；此登記更新費用與待付款任務狀態。",
+          "會計入帳另走獨立流程，由具有分錄建立及核准權限的人員建立、審核分錄並完成過帳；不會因費用核准或付款登記而自動完成。"
         ],
         "boundaries": [
           "必須有新增費用權限、有效員工與可審批的同公司主管；不可自己審核自己的申請。",
-          "AI 辨識與科目推薦不是憑證真偽確認、核准、付款或入帳。限制角色或部門的項目不能越權使用。"
+          "AI 辨識與科目推薦不是憑證真偽確認、核准、付款或入帳。限制角色或部門的項目不能越權使用。",
+          "費用核准、待付款任務、外部銀行匯款、ERP 付款登記與會計過帳各有獨立狀態與憑據，不能由其中一項推定其他項目已完成；銀行匯款與會計過帳也不是二選一的替代動作。"
         ],
         "related": [
           "expense-review",
@@ -125,11 +126,16 @@
             "steps": [
               "Select employee reimbursement or direct vendor payment and fill in the payee and expense details.",
               "Upload image or PDF evidence and check every suggested field; AI suggestions remain editable.",
-              "Select an eligible reimbursement item, verify amount, currency, date and supervisor setup, then submit and track status."
+              "Select an eligible reimbursement item, verify amount, currency, date and supervisor setup, then submit and track status.",
+              "ERP creates a pending payment task only after every required approval is complete, for the cashier to handle.",
+              "The cashier completes the actual bank transfer through the company’s external banking process. Expense approval and a pending payment task do not initiate a bank transfer.",
+              "After external bank payment is complete, the cashier records that completed payment in ERP with the actual bank account, date and full amount. This updates the expense and payment-task status.",
+              "Accounting posting follows a separate workflow: staff with journal-create and journal-approve permissions create and review the journal for posting. Expense approval or payment recording does not complete this automatically."
             ],
             "boundaries": [
               "Creation requires the expense-create permission, an active employee relationship and an eligible supervisor in the same company. Self-approval is prohibited.",
-              "Extraction and account suggestions do not validate authenticity, approve, pay or post the expense. Restricted items require eligibility."
+              "Extraction and account suggestions do not validate authenticity, approve, pay or post the expense. Restricted items require eligibility.",
+              "Expense approval, the pending payment task, external bank transfer, ERP payment recording and accounting posting each have separate statuses and evidence. None proves the others are complete; a bank transfer and accounting posting are not interchangeable alternatives."
             ],
             "related": [
               "expense-review",
@@ -145,7 +151,8 @@
         "frontend/src/pages/ExpenseRequestsPage.tsx",
         "backend/src/modules/expense/expense.controller.ts",
         "backend/src/modules/expense/expense-receipt.controller.ts",
-        "backend/src/modules/expense/expense.service.ts"
+        "backend/src/modules/expense/expense.service.ts",
+        "backend/src/modules/accounting/accounting.controller.ts"
       ],
       "permissions": [
         "expense_self:read",
@@ -181,11 +188,16 @@
         "steps": [
           "在費用審核中心開啟指派給自己的待審申請，閱讀金額、說明與原始憑證。",
           "核對後核准或退回並填寫需要的意見；一般主管不需替會計決定正式入帳科目。",
-          "歷史待審單若尚無審批步驟，由授權管理員預覽目前主管並確認建立審批；既有已指派案件不可任意重派。"
+          "歷史待審單若尚無審批步驟，由授權管理員預覽目前主管並確認建立審批；既有已指派案件不可任意重派。",
+          "全部必要審批核准後，ERP 才建立待付款任務，供出納後續處理。",
+          "實際銀行匯款由出納依公司外部銀行流程完成；費用核准或待付款任務不會自動向銀行匯款。",
+          "外部銀行付款完成後，出納再於 ERP 登記已完成的付款，填入實際銀行、日期及完整金額；此登記更新費用與待付款任務狀態。",
+          "會計入帳另走獨立流程，由具有分錄建立及核准權限的人員建立、審核分錄並完成過帳；不會因費用核准或付款登記而自動完成。"
         ],
         "boundaries": [
           "只有目前有效指派的審批人可處理該步驟；送出時的主管快照不隨人事異動自動改派。",
-          "全部必要步驟核准後才建立待付款任務。核准本身不觸發銀行匯款或會計過帳。"
+          "全部必要步驟核准後才建立待付款任務。核准本身不觸發銀行匯款或會計過帳。",
+          "費用核准、待付款任務、外部銀行匯款、ERP 付款登記與會計過帳各有獨立狀態與憑據，不能由其中一項推定其他項目已完成；銀行匯款與會計過帳也不是二選一的替代動作。"
         ],
         "related": [
           "expense-requests",
@@ -206,11 +218,16 @@
             "steps": [
               "Open an assigned pending request and inspect the amount, description and original evidence.",
               "Approve or reject after review and record the required comments; a supervisor need not determine the final posting account.",
-              "For a legacy pending request without steps, an authorized administrator previews and confirms assignment to the current eligible supervisor. Existing assignments are not freely reassigned."
+              "For a legacy pending request without steps, an authorized administrator previews and confirms assignment to the current eligible supervisor. Existing assignments are not freely reassigned.",
+              "ERP creates a pending payment task only after every required approval is complete, for the cashier to handle.",
+              "The cashier completes the actual bank transfer through the company’s external banking process. Expense approval and a pending payment task do not initiate a bank transfer.",
+              "After external bank payment is complete, the cashier records that completed payment in ERP with the actual bank account, date and full amount. This updates the expense and payment-task status.",
+              "Accounting posting follows a separate workflow: staff with journal-create and journal-approve permissions create and review the journal for posting. Expense approval or payment recording does not complete this automatically."
             ],
             "boundaries": [
               "Only the currently assigned approver can act on a step. The submitted supervisor snapshot does not change automatically with HR edits.",
-              "A payment task is created only after all required steps pass; approval neither transfers money nor posts a journal."
+              "A payment task is created only after all required steps pass; approval neither transfers money nor posts a journal.",
+              "Expense approval, the pending payment task, external bank transfer, ERP payment recording and accounting posting each have separate statuses and evidence. None proves the others are complete; a bank transfer and accounting posting are not interchangeable alternatives."
             ],
             "related": [
               "expense-requests",
@@ -225,7 +242,8 @@
         "frontend/src/App.tsx",
         "frontend/src/pages/ExpenseReviewCenterPage.tsx",
         "backend/src/modules/expense/expense.controller.ts",
-        "backend/src/modules/expense/expense.service.ts"
+        "backend/src/modules/expense/expense.service.ts",
+        "backend/src/modules/accounting/accounting.controller.ts"
       ],
       "permissions": [
         "expense_self:read",

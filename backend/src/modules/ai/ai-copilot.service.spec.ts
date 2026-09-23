@@ -390,6 +390,54 @@ describe('Copilot authorization and grounded queries', () => {
     });
   });
 
+  it.each([
+    ['search_system_knowledge', { query: '費用申請' }],
+    ['get_expense_stats', { status: 'approved' }],
+  ])(
+    'keeps approval, bank transfer, payment registration and posting distinct when composing %s',
+    async (tool, params) => {
+      const f = setup();
+      f.intent(tool, params);
+      const result = await f.service.processChat(
+        'entity-a',
+        'user-a',
+        '費用核准後，出納匯款或會計過帳就表示全部完成嗎？',
+      );
+      expect(result.status).toBe('answered');
+      const compositionPrompt = f.ai.generateContent.mock.calls[1][0];
+      expect(compositionPrompt).toContain(
+        'After final expense approval, ERP creates a pending payment task.',
+      );
+      expect(compositionPrompt).toContain(
+        'The actual bank transfer is performed through a bank or external payment process.',
+      );
+      expect(compositionPrompt).toContain(
+        'the cashier records payment that has already been completed; that registration does not itself execute a bank transfer.',
+      );
+      expect(compositionPrompt).toContain(
+        "Accounting posting is a separate step performed under accounting permissions. It is neither the cashier's payment step nor an alternative to payment.",
+      );
+      expect(compositionPrompt).toContain(
+        'Never infer that approval, actual payment, payment registration or accounting posting is complete merely because another step is complete.',
+      );
+      expect(compositionPrompt).toContain(
+        'State only the particular status supported by the retrieved evidence; otherwise say it has not been verified.',
+      );
+      expect(compositionPrompt).toContain(
+        'there are no write receipts in this request.',
+      );
+      if (tool === 'get_expense_stats') {
+        expect(compositionPrompt).toContain(
+          'Expense requests (not posted expenses or cash payments)',
+        );
+        expect(result.sources?.[0].kind).toBe('metric');
+      } else {
+        expect(compositionPrompt).toContain('Authorized full guide documents');
+        expect(result.sources?.[0].sourceVersion).toMatch(/^sha256:/);
+      }
+    },
+  );
+
   it('cannot reveal admin guides through a forged page hint or model search instruction', async () => {
     const f = setup();
     f.intent('search_system_knowledge', {

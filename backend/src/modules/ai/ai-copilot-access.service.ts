@@ -100,6 +100,10 @@ export class AiCopilotAccessService {
       return false;
     const pathname = path.split('?')[0];
     if (pathname === '/auth/change-password') return true;
+    // Match frontend/config/workspaces.ts: dashboard navigation is available
+    // to signed-in users except warehouse-only operators. This is guide access,
+    // not authorization for dashboard metrics or any live Copilot data tool.
+    if (pathname === '/dashboard') return !this.isWarehouseOnlyActor(actor);
     if (pathname === '/admin/entities') return actor.isSuperAdmin;
     if (
       [
@@ -111,7 +115,6 @@ export class AiCopilotAccessService {
     )
       return actor.isAdmin;
     const routes: Record<string, string[]> = {
-      '/dashboard': ['reports:read', 'accounts:read', 'sales_orders:read'],
       '/ap/expenses': [
         'expense_self:read',
         'accounts:read',
@@ -214,6 +217,31 @@ export class AiCopilotAccessService {
       return false;
     return routes[pathname].some((permission) =>
       actor.permissions.includes(permission),
+    );
+  }
+
+  private isWarehouseOnlyActor(actor: CopilotActor): boolean {
+    if (actor.isAdmin || !actor.permissions.includes('wms_tasks:read'))
+      return false;
+    const management = [
+      'wms_overview:read',
+      'wms_logs:read',
+      'wms_exceptions:read',
+      'wms_scan_errors:read',
+      'wms_defects:read',
+    ];
+    if (management.some((permission) => actor.permissions.includes(permission)))
+      return false;
+    const personal = [
+      'attendance_self:read',
+      'leave_self:read',
+      'profile_self:read',
+      'expense_self:read',
+      'expense_self:create',
+    ];
+    return !actor.permissions.some(
+      (permission) =>
+        !permission.startsWith('wms_') && !personal.includes(permission),
     );
   }
 

@@ -30,6 +30,91 @@ describe('Knowledge ACL and route parity', () => {
   });
 
   it.each([
+    { permissions: ['expense_self:read'], roles: ['EMPLOYEE'], visible: true },
+    { permissions: [], roles: ['EMPLOYEE'], visible: true },
+    {
+      permissions: [
+        'wms_tasks:read',
+        'wms_picking:execute',
+        'expense_self:read',
+      ],
+      roles: ['EMPLOYEE'],
+      visible: false,
+    },
+    {
+      permissions: ['wms_tasks:read', 'inventory:read'],
+      roles: ['EMPLOYEE'],
+      visible: true,
+    },
+    {
+      permissions: ['wms_tasks:read', 'wms_overview:read'],
+      roles: ['EMPLOYEE'],
+      visible: true,
+    },
+    { permissions: ['wms_tasks:read'], roles: ['ADMIN'], visible: true },
+  ])(
+    'matches dashboard navigation for $roles with $permissions',
+    ({ permissions, roles, visible }) => {
+      const current = actor(permissions, roles);
+      expect(access.canOpenPath(current, '/dashboard')).toBe(visible);
+      const results = knowledge.search(
+        '這頁怎麼用',
+        512,
+        '/dashboard',
+        'zh-TW',
+        (entry) => access.canReadKnowledge(current, entry),
+      );
+      expect(results.some((entry) => entry.id === 'dashboard')).toBe(visible);
+      if (visible) expect(results[0].id).toBe('dashboard');
+    },
+  );
+
+  it('does not grant financial tools or expand expense scope through dashboard guide access', async () => {
+    const assertAccess = jest.fn().mockResolvedValue({
+      entityId: 'entity-a',
+      scope: 'ENTITY',
+      departmentId: 'dept-a',
+      isSuperAdmin: false,
+    });
+    const service = new AiCopilotAccessService(
+      {
+        user: {
+          findUnique: jest.fn().mockResolvedValue({
+            isActive: true,
+            roles: [
+              {
+                role: {
+                  code: 'EMPLOYEE',
+                  permissions: [
+                    {
+                      permission: { resource: 'expense_self', action: 'read' },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        },
+      } as unknown as PrismaService,
+      { assertAccess } as unknown as EntityAccessService,
+    );
+    const employee = await service.getActor('user-a');
+    expect(service.canOpenPath(employee, '/dashboard')).toBe(true);
+    expect(employee.tools).toEqual(['get_expense_stats']);
+    await expect(
+      service.authorize(employee, 'get_sales_stats', 'entity-a'),
+    ).rejects.toThrow();
+    expect(assertAccess).not.toHaveBeenCalled();
+    await expect(
+      service.authorize(employee, 'get_expense_stats', 'entity-a'),
+    ).resolves.toEqual({
+      entityId: 'entity-a',
+      filter: { createdBy: 'user-a' },
+      scope: '自己的費用申請',
+    });
+  });
+
+  it.each([
     ['/sales/quotations', 'purchase_orders:read'],
     ['/sales/invoices', 'accounts:read'],
     ['/sales/after-sales/quotes', 'after_sales_cases:read'],

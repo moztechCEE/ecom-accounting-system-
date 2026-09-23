@@ -1,0 +1,19 @@
+{
+  "sourceSha": "ff5e636ed20a520ebe379ee84ea17dda2b0438e8",
+  "candidateOnly": true,
+  "checks": [
+    "Isolated employee signs in through normal company and employee form with remember-me disabled",
+    "Page help opens exact expense article and correctly selects QA company",
+    "Article sections, authorized related guide, source hashes and date visible",
+    "Synthetic JSON downloaded and file contents checked; browser download event observer timed out but native download succeeded",
+    "Same article switched to English with translated sections",
+    "320x740 viewport: panel right 312 <= viewport 320 and footer controls visible",
+    "Mobile Shift+Tab and Tab cycle between first greeting button and last search button",
+    "Escape closes and restores focus to page help button",
+    "Viewport override reset; no Claw console errors"
+  ],
+  "limitations": [
+    "Physical mobile virtual keyboard not exercised",
+    "Initial candidate AI prose failed separate manual finance semantics review and is being corrected before promotion"
+  ]
+}

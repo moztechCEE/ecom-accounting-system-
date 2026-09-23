@@ -34,6 +34,8 @@ def run(args):
             entries = library.get('entries', [])
             test.check(bool(entries) and bool(library.get('version')) and bool(library.get('checkedAt')), actor + ' versioned guide library')
             test.check(all(e.get('sections') and e.get('sourceVersion') and e.get('sources') for e in entries), actor + ' full articles with source provenance')
+            source_version = json.loads((ROOT / 'backend/src/modules/ai/knowledge/source-manifest.json').read_text())['sourceVersion']
+            test.check(all(e['sourceVersion'] == source_version for e in entries), actor + ' deployed catalog matches accepted source version')
             for entry in entries:
                 for source in entry['sources']:
                     path = ROOT / source['path']
@@ -66,7 +68,7 @@ def run(args):
                 ('grounded-guide','如何申請費用並交給直屬主管審核？請說明步驟與付款的差別。'),
                 ('live-scope','請查詢我自己本月的費用申請總筆數與金額。'),
             ]:
-                answer = test.call('/ai/copilot/chat', 'employee', 'POST', {'message':question,'entityId':manifest['entityId'],'currentPath':'/ap/expenses'})
+                answer = test.call('/ai/copilot/chat', 'employee', 'POST', {'message':question,'entityId':manifest['entityId'],'currentPath':'/ap/expenses'}, expected=(200, 201))
                 test.check(answer.get('status') == 'answered' and bool(answer.get('sources')) and bool(answer.get('checkedAt')), 'real AI ' + label + ' returns evidence')
                 if label == 'grounded-guide':
                     test.check(all(s.get('kind') == 'knowledge' and s.get('sourceVersion') for s in answer['sources']), 'AI workflow answer cites versioned guide evidence')

@@ -9,8 +9,8 @@ Examples (after merging the latest DEV source, reviewing, generating Prisma loca
   python3 scripts/dev/build-corely-claw-release.py
   python3 scripts/dev/build-corely-claw-release.py --submit
 
-The generated images still require an independently reviewed DEV migration and
-zero-traffic candidate deployment. Do not use the legacy deploy-built.sh wrapper.
+The generated images require zero-traffic candidate deployment and acceptance.
+This port needs no migration. Do not use the legacy deploy-built.sh wrapper.
 """
 import argparse
 import hashlib
