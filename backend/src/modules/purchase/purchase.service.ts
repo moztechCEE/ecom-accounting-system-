@@ -39,6 +39,13 @@ type B2bSource = {
 };
 
 const CLOSED_B2B_PURCHASE_STATUSES = ['cancelled', 'received', 'completed'];
+const RECEIVED_B2B_PURCHASE_STATUSES = ['received', 'completed'];
+
+function hasReceiptSinceReview(reviewedAt: Date, orders: Array<{ status: string; updatedAt: Date }>) {
+  return orders.some((order) =>
+    RECEIVED_B2B_PURCHASE_STATUSES.includes(order.status) &&
+    order.updatedAt.getTime() >= reviewedAt.getTime());
+}
 
 @Injectable()
 export class PurchaseService {
@@ -227,9 +234,7 @@ export class PurchaseService {
           where: { entityId: companyId, sourceB2bRequestId: requestId },
           select: { status: true, updatedAt: true, items: { select: { sourceB2bRequestItemId: true, qty: true } } },
         });
-        if (priorOrders.some((order) =>
-          ['received', 'completed'].includes(order.status) &&
-          order.updatedAt.getTime() >= lastReviewAt.getTime()))
+        if (hasReceiptSinceReview(lastReviewAt, priorOrders))
           throw new ConflictException('採購單已於上次核庫後收貨，請先重新人工核庫');
         const ordered = new Map<string, Prisma.Decimal>();
         for (const order of priorOrders) {
@@ -276,15 +281,15 @@ export class PurchaseService {
     const companyId = this.companyId(entityId);
     const request = await this.prisma.b2bPurchaseRequest.findFirst({
       where: { id: requestId, entityId: companyId },
-      select: { items: { select: { id: true, quantity: true, confirmedQuantity: true } } },
+      select: { reviewedAt: true, items: { select: { id: true, quantity: true, confirmedQuantity: true } } },
     });
     if (!request) throw new NotFoundException('找不到此客戶需求');
-    if (request.items.some((item) => item.confirmedQuantity === null))
+    if (!request.reviewedAt || request.items.some((item) => item.confirmedQuantity === null))
       throw new ConflictException('此需求尚未完成人工核庫');
     const orders = await this.prisma.purchaseOrder.findMany({
       where: { entityId: companyId, sourceB2bRequestId: requestId },
       select: {
-        id: true, status: true, createdAt: true,
+        id: true, status: true, createdAt: true, updatedAt: true,
         vendor: { select: { name: true } },
         items: { select: { sourceB2bRequestItemId: true, qty: true } },
       },
@@ -300,6 +305,7 @@ export class PurchaseService {
       }
     }
     return {
+      requiresFreshReview: hasReceiptSinceReview(request.reviewedAt, orders),
       items: request.items.map((item) => ({
         requestItemId: item.id,
         requested: item.quantity,

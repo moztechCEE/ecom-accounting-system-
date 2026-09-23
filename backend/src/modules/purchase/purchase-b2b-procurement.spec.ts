@@ -312,6 +312,7 @@ describe('B2B shortage to supplier purchase order', () => {
         status: 'received',
         vendor: { name: 'Supplier B' },
         createdAt: new Date('2026-09-23T12:00:00.000Z'),
+        updatedAt: new Date('2026-09-24T08:59:59.999Z'),
         items: [
           { sourceB2bRequestItemId: requestItemId, qty: new Prisma.Decimal(2) },
         ],
@@ -327,6 +328,7 @@ describe('B2B shortage to supplier purchase order', () => {
       },
     ]);
     expect(await service.b2bProcurement('entity-a', requestId)).toEqual({
+      requiresFreshReview: false,
       items: [
         { requestItemId, requested: 5, confirmed: 2, shortage: 3, ordered: 2 },
         {
@@ -363,5 +365,23 @@ describe('B2B shortage to supplier purchase order', () => {
         where: { entityId: 'entity-a', sourceB2bRequestId: requestId },
       }),
     );
+  });
+
+  it.each(['received', 'completed'])('flags a %s PO at the review boundary until staff re-review', async (status) => {
+    const receiptAt = new Date('2026-09-24T09:00:00.000Z');
+    tx.purchaseOrder.findMany.mockResolvedValue([{
+      id: 'po-received', status, vendor: { name: 'Supplier A' },
+      createdAt: new Date('2026-09-24T08:00:00.000Z'), updatedAt: receiptAt,
+      items: [{ sourceB2bRequestItemId: requestItemId, qty: new Prisma.Decimal(2) }],
+    }]);
+    const beforeReview = await service.b2bProcurement('entity-a', requestId);
+    expect(beforeReview.requiresFreshReview).toBe(true);
+    expect(beforeReview.items[0]).toMatchObject({ shortage: 3, ordered: 0 });
+    expect(beforeReview.purchaseOrders).toHaveLength(1);
+
+    request.reviewedAt = new Date('2026-09-24T09:00:00.001Z');
+    const afterReview = await service.b2bProcurement('entity-a', requestId);
+    expect(afterReview.requiresFreshReview).toBe(false);
+    expect(afterReview.items[0]).toMatchObject({ shortage: 3, ordered: 0 });
   });
 });

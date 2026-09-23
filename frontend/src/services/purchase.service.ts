@@ -95,6 +95,7 @@ export interface PurchaseOrderOptions {
 }
 
 export interface B2BProcurementSummary {
+  requiresFreshReview: boolean
   items: Array<{
     requestItemId: string
     requested: number

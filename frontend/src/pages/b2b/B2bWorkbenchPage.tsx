@@ -12,6 +12,7 @@ import type { B2BAdminRequest, B2BAdminSetup } from '../../services/b2b-admin.se
 import { canConfirmRequest, canIssueQuote, formalQuotePath, quotePath, statusText } from './order'
 import { purchaseService } from '../../services/purchase.service'
 import type { B2BProcurementSummary } from '../../services/purchase.service'
+import { availableProcurementLines, remainingProcurementQuantity } from './procurement'
 import CustomerSearchSelect from '../../components/CustomerSearchSelect'
 import ProductSearchSelect from './ProductSearchSelect'
 
@@ -283,7 +284,7 @@ export default function B2bWorkbenchPage() {
       setProcurement(summary)
       procurementForm.setFieldsValue({
         orderDate: dayjs().format('YYYY-MM-DD'), currency: 'TWD', fxRate: 1,
-        items: summary.items.filter((item) => item.shortage - item.ordered > 0).map((item) => ({
+        items: availableProcurementLines(summary).map((item) => ({
           qty: item.shortage - item.ordered,
           unitCost: 0,
         })),
@@ -294,9 +295,21 @@ export default function B2bWorkbenchPage() {
 
   const saveProcurement = async () => {
     if (!entityId || !procurementRequest || !procurement || !canManageSupplier) return
+    if (procurement.requiresFreshReview) { message.warning('採購單已收貨，請先重新人工核庫再評估缺口。'); return }
     try {
       const values = await procurementForm.validateFields()
-      const available = procurement.items.filter((item) => item.shortage - item.ordered > 0)
+      setSaving(true)
+      const available = availableProcurementLines(procurement)
+      const latest = await purchaseService.procurementForB2BRequest(procurementRequest.id, entityId)
+      setProcurement(latest)
+      if (latest.requiresFreshReview) { message.warning('採購單已收貨，請先重新人工核庫再評估缺口。'); return }
+      const latestAvailable = availableProcurementLines(latest)
+      if (latestAvailable.length !== available.length || latestAvailable.some((line, index) =>
+        line.requestItemId !== available[index]?.requestItemId ||
+        line.shortage - line.ordered !== available[index].shortage - available[index].ordered)) {
+        message.warning('採購缺口已有更新，請關閉後重新開啟，確認最新數量。')
+        return
+      }
       const items = available.map((line, index) => ({ requestItemId: line.requestItemId, qty: values.items[index]?.qty, unitCost: values.items[index]?.unitCost }))
         .filter((item) => item.qty > 0)
       const remainingByItem = new Map(available.map((line) => [line.requestItemId, line.shortage - line.ordered]))
@@ -304,7 +317,6 @@ export default function B2bWorkbenchPage() {
         message.error('請填至少一項未採購的缺口數量與有效原幣單價。')
         return
       }
-      setSaving(true)
       await purchaseService.createFromB2BRequest({
         requestId: procurementRequest.id,
         requestKey: procurementKeys.current[procurementRequest.id],
@@ -409,28 +421,29 @@ export default function B2bWorkbenchPage() {
       <Input.TextArea id="b2b-withdraw-reason" rows={3} maxLength={1000} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} style={{ marginTop: 8 }} />
     </Modal>
 
-    <Modal title={`轉供應商採購單 · ${procurementRequest?.requestNumber || ''}`} open={Boolean(procurementRequest)} confirmLoading={saving} width={850} onCancel={() => { setProcurementRequest(null); setProcurement(null) }} onOk={() => void saveProcurement()} okText="建立來源關聯採購單" okButtonProps={{ disabled: procurementLoading || !procurement?.items.some((item) => item.shortage > item.ordered) }} destroyOnHidden>
+    <Modal title={`轉供應商採購單 · ${procurementRequest?.requestNumber || ''}`} open={Boolean(procurementRequest)} confirmLoading={saving} width={850} onCancel={() => { setProcurementRequest(null); setProcurement(null) }} onOk={() => void saveProcurement()} okText="建立來源關聯採購單" okButtonProps={{ disabled: procurementLoading || !availableProcurementLines(procurement).length }} destroyOnHidden>
       <Alert type="warning" showIcon style={{ marginBottom: 16 }} message="依人工核庫缺口向供應商採購；建立採購單不會自動替客戶確認庫存、出具報價或預留庫存。收貨入庫後請重新人工核庫。" />
       {procurementLoading ? <Text>正在載入缺口與既有採購單…</Text> : null}
       {!procurementLoading && !procurement ? <Alert type="error" message="無法取得採購缺口，請關閉後重試。" /> : null}
       {procurement ? <>
+        {procurement.requiresFreshReview ? <Alert type="warning" showIcon style={{ marginBottom: 16 }} message="收貨後請重新核庫" description="此需求的關聯採購單已在上次人工核庫後收貨。原缺口已失效，請先點「重新人工核庫」確認現有庫存；完成前不可再建立來源關聯採購單。" /> : null}
         <Table size="small" pagination={false} rowKey="requestItemId" dataSource={procurement.items} columns={[
           { title: '商品', key: 'product', render: (_, line) => { const item = procurementRequest?.items.find((entry) => entry.id === line.requestItemId); return item ? `${item.sku} · ${item.name}` : line.requestItemId } },
           { title: '申購', dataIndex: 'requested', key: 'requested' },
           { title: '人工確認', dataIndex: 'confirmed', key: 'confirmed' },
           { title: '缺口', dataIndex: 'shortage', key: 'shortage' },
-          { title: '已開採購', dataIndex: 'ordered', key: 'ordered' },
-          { title: '尚可採購', key: 'remaining', render: (_, line) => Math.max(0, line.shortage - line.ordered) },
+          { title: '已開未收採購', dataIndex: 'ordered', key: 'ordered' },
+          { title: '尚可採購', key: 'remaining', render: (_, line) => remainingProcurementQuantity(procurement, line) ?? '待重核' },
         ]} scroll={{ x: 650 }} />
         {procurement.purchaseOrders.length ? <div style={{ margin: '16px 0' }}><Text strong>已關聯採購單</Text>{procurement.purchaseOrders.map((order) => <div key={order.id}><Link to="/purchasing/orders">{order.id.slice(0, 8)}</Link> · {order.vendorName} · {order.status} · {dayjs(order.createdAt).format('YYYY-MM-DD')}</div>)}</div> : null}
-        {procurement.items.some((item) => item.shortage > item.ordered) ? <Form form={procurementForm} layout="vertical" style={{ marginTop: 20 }}>
+        {availableProcurementLines(procurement).length ? <Form form={procurementForm} layout="vertical" style={{ marginTop: 20 }}>
           <Space wrap style={{ width: '100%' }}>
             <Form.Item name="vendorId" label="供應商" rules={[{ required: true, message: '請選擇供應商' }]}><Select style={{ width: 220 }} showSearch optionFilterProp="label" options={setup?.vendors.map((vendor) => ({ value: vendor.id, label: vendor.name }))} /></Form.Item>
             <Form.Item name="orderDate" label="採購日期" rules={[{ required: true, message: '請填採購日期' }]}><Input type="date" /></Form.Item>
             <Form.Item name="currency" label="幣別" rules={[{ required: true, message: '請選擇幣別' }]}><Select style={{ width: 100 }} options={['TWD', 'CNY', 'USD', 'HKD', 'JPY', 'EUR'].map((value) => ({ value, label: value }))} onChange={(value) => procurementForm.setFieldValue('fxRate', value === 'TWD' ? 1 : undefined)} /></Form.Item>
             <Form.Item name="fxRate" label="原幣換算本位幣匯率" rules={[{ required: true, message: '請填匯率' }, { type: 'number', min: 0.000001, message: '匯率須大於 0' }]}><InputNumber min={0.000001} precision={6} disabled={procurementCurrency === 'TWD'} /></Form.Item>
           </Space>
-          {procurement.items.filter((item) => item.shortage - item.ordered > 0).map((line, index) => {
+          {availableProcurementLines(procurement).map((line, index) => {
             const requestItem = procurementRequest?.items.find((item) => item.id === line.requestItemId)
             return <div key={line.requestItemId} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, alignItems: 'center' }}>
               <Text>{requestItem ? `${requestItem.sku} · ${requestItem.name}` : line.requestItemId}<br /><Text type="secondary">最多 {line.shortage - line.ordered} 件</Text></Text>
@@ -438,7 +451,7 @@ export default function B2bWorkbenchPage() {
               <Form.Item name={['items', index, 'unitCost']} label="原幣單價" rules={[{ required: true, message: '請填單價，未採購可填 0' }, { type: 'number', min: 0, message: '單價不可為負數' }]}><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item>
             </div>
           })}
-        </Form> : <Alert style={{ marginTop: 16 }} type="info" message="全部缺口已有關聯採購單。待完成收貨後重新人工核庫。" />}
+        </Form> : !procurement.requiresFreshReview ? <Alert style={{ marginTop: 16 }} type="info" message="全部缺口已有關聯採購單。待完成收貨後重新人工核庫。" /> : null}
       </> : null}
     </Modal>
 
