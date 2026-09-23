@@ -51,6 +51,7 @@ export interface UserEntityMembership {
 
 export interface ManagedUser {
   effectivePermissions?: string[];
+  effectiveAttendanceDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   departmentAccess?: { departmentId: string | null; departmentName: string | null; employeeId: string | null; isSupervisor: boolean; roleNames: string[] };
 
   id: string;
@@ -85,6 +86,7 @@ export interface PaginatedResult<T> {
 
 export interface User {
   effectivePermissions?: string[];
+  effectiveAttendanceDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   departmentAccess?: { departmentId: string | null; departmentName: string | null; employeeId: string | null; isSupervisor: boolean; roleNames: string[] };
 
   id: string;

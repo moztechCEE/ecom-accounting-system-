@@ -27,7 +27,7 @@ const mapManagedUserToUser = (managed: ManagedUser): User => {
     mustChangePassword: managed.mustChangePassword,
     isTwoFactorEnabled: managed.isTwoFactorEnabled,
     employeeDataScope: managed.employeeDataScope,
-    attendanceDataScope: managed.attendanceDataScope,
+    attendanceDataScope: managed.effectiveAttendanceDataScope ?? managed.attendanceDataScope,
     payrollDataScope: managed.payrollDataScope,
     accountingDataScope: managed.accountingDataScope,
     inventoryDataScope: managed.inventoryDataScope,

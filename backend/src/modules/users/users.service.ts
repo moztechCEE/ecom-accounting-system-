@@ -124,7 +124,7 @@ export class UsersService {
     return { ...rest, effectivePermissions: effectivePermissionKeys(user), departmentAccess: {
       departmentId: user.employee?.departmentId ?? null, departmentName: user.employee?.department?.name ?? null,
       isSupervisor: access.isSupervisor, roleNames: access.roleNames, employeeId: user.employee?.id ?? null,
-    }, attendanceDataScope: access.isSupervisor && rest.attendanceDataScope === 'SELF' ? 'DEPARTMENT' : rest.attendanceDataScope };
+    }, effectiveAttendanceDataScope: access.isSupervisor && rest.attendanceDataScope === 'SELF' ? 'DEPARTMENT' : rest.attendanceDataScope };
   }
 
   private sanitizeUsers(users: UserWithRelations[]) {
