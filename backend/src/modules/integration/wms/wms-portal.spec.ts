@@ -1,4 +1,5 @@
 import { WmsPortalService } from './wms-portal.module';
+import { createHash } from 'node:crypto';
 import { ExpenseController } from '../../expense/expense.controller';
 import { ExpenseService } from '../../expense/expense.service';
 
@@ -32,6 +33,28 @@ describe('warehouse identity and personal access', () => {
   it('refuses an expired or already consumed ticket',async()=>{
     db.$queryRaw.mockResolvedValue([]);
     await expect(service.consume({ticket:'a'.repeat(64),nonce:'b'.repeat(64)})).rejects.toThrow();
+  });
+  it('issues a native pre-pick link only for the acknowledged ERP order and WMS intake',async()=>{
+    db.user.findUnique.mockResolvedValue(actor(['wms_tasks:read','wms_orders:create']));
+    const request = {entry:'native-intake' as const,salesOrderId:'erp-order',nativeIntakeId:42,nonce:'a'.repeat(64)};
+    db.$queryRaw.mockResolvedValue([]);
+    await expect(service.ticket('staff',request)).rejects.toThrow('未連結至已拋轉');
+    expect(db.$executeRaw).not.toHaveBeenCalled();
+    db.$queryRaw.mockResolvedValue([{matched:1}]);
+    await expect(service.ticket('staff',request)).resolves.toEqual({ticket:expect.stringMatching(/^[a-f0-9]{64}$/)});
+    const query = db.$queryRaw.mock.calls[db.$queryRaw.mock.calls.length - 1];
+    expect(query.slice(1)).toEqual(['warehouse','erp-order','42']);
+    const insert = db.$executeRaw.mock.calls[0];
+    expect(insert.slice(1)).toContain('native-intake:erp-order:42');
+    await expect(service.ticket('staff',{entry:'intakes',nativeIntakeId:42,nonce:'a'.repeat(64)})).rejects.toThrow();
+  });
+  it('rechecks the original dispatch before reopening a native pre-pick session',async()=>{
+    db.user.findUnique.mockResolvedValue(actor(['wms_tasks:read','wms_orders:create']));
+    const record={user_id:'staff',station:'portal',entity_id:'warehouse',entry_key:'native-intake:erp-order:42',password_version:createHash('sha256').update('hash').digest('hex'),expires_at:new Date()};
+    db.$queryRaw.mockResolvedValueOnce([record]).mockResolvedValueOnce([{matched:1}]);
+    await expect(service.inspect('session')).resolves.toMatchObject({role:'dispatcher',destination:'/corely-intakes/42'});
+    db.$queryRaw.mockResolvedValueOnce([record]).mockResolvedValueOnce([]);
+    await expect(service.inspect('session')).rejects.toThrow('未連結至已拋轉');
   });
   it('rechecks permissions and password version on an existing session',async()=>{
     db.$queryRaw.mockResolvedValue([{user_id:'staff',station:'packer',entity_id:'warehouse',password_version:'old'}]);

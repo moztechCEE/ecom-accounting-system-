@@ -116,6 +116,50 @@ test('DEV AI exception preserves the separately configured WMS account-link brid
   `, { WMS_PORTAL_SSO_ENABLED: 'true', WMS_PORTAL_SERVICE_URL: 'https://corely-wms-dev-sp5g377smq-de.a.run.app' });
 });
 
+function isolatedWorkspaceCase(source, patch = {}) {
+  const result = spawnSync(process.execPath, ['-e', fakeTransportSource + '(async () => {' + source + '})().catch(error => { console.error(error); process.exitCode = 1; });'], {
+    env: { ...env, WMS_PORTAL_SSO_ENABLED: 'false', ERP_DEV_AI_ENABLED: 'false',
+      WMS_WORKSPACE_READ_ENABLED: 'true', WMS_WORKSPACE_COMMANDS_ENABLED: 'true',
+      WMS_WORKSPACE_URL: 'https://corely-wms-dev-sp5g377smq-de.a.run.app/', ...patch },
+  });
+  assert.equal(result.status, 0, result.stderr.toString());
+}
+
+test('DEV permits only signed-bridge shaped WMS DEV reads and commands through fetch', () => {
+  isolatedWorkspaceCase(`
+    const host='https://corely-wms-dev-sp5g377smq-de.a.run.app';
+    const headers={Authorization:'Bearer a.b.c',Accept:'application/json','Content-Type':'application/json'};
+    const command=host+'/api/integrations/erp/workflow/v1/orders/erp-order/dispatch';
+    const read=host+'/api/integrations/erp/v1/orders?search=test&page=1';
+    await fetch(command,{method:'POST',redirect:'error',headers,body:'{}',dispatcher:{unsafe:true}});
+    await fetch(read,{method:'GET',redirect:'error',headers:{Authorization:'Bearer a.b.c',Accept:'application/json'}});
+    assert.equal(calls.fetch.length,2); assert.equal(calls.socket.length,2);
+    assert.ok(calls.fetch.every(call=>call.options.dispatcher===undefined));
+    assert.throws(()=>new net.Socket().connect({host:new URL(host).hostname,port:443}),check);
+  `);
+});
+
+test('DEV warehouse integration rejects unapproved hosts, routes, credentials and disabled commands', () => {
+  isolatedWorkspaceCase(`
+    const host='https://corely-wms-dev-sp5g377smq-de.a.run.app';
+    const options={method:'POST',redirect:'error',headers:{Authorization:'Bearer a.b.c',Accept:'application/json','Content-Type':'application/json'},body:'{}'};
+    const command=host+'/api/integrations/erp/workflow/v1/orders/erp-order/dispatch';
+    for(const url of [command.replace('corely-wms-dev','corely-wms'),command.replace('https:','http:'),
+      command.replace('/dispatch','/delete'),command+'?token=secret',command+'#fragment',
+      command.replace('https://','https://user:pass@')]) await assert.rejects(fetch(url,options),check);
+    for(const patch of [{method:'GET'},{redirect:'follow'},{headers:{Accept:'application/json','Content-Type':'application/json'}},
+      {headers:{...options.headers,Host:'elsewhere'}},{body:undefined}]) await assert.rejects(fetch(command,{...options,...patch}),check);
+    await assert.rejects(fetch(new Request(command,options)),check);
+    assert.throws(()=>new net.Socket().connect({host:new URL(host).hostname,port:443}),check);
+    assert.equal(calls.fetch.length,0); assert.equal(calls.socket.length,0);
+  `);
+  isolatedWorkspaceCase(`
+    const url='https://corely-wms-dev-sp5g377smq-de.a.run.app/api/integrations/erp/workflow/v1/orders/order/dispatch';
+    await assert.rejects(fetch(url,{method:'POST',redirect:'error',headers:{Authorization:'Bearer a.b.c',Accept:'application/json','Content-Type':'application/json'},body:'{}'}),check);
+    assert.equal(calls.fetch.length,0);
+  `,{WMS_WORKSPACE_COMMANDS_ENABLED:'false'});
+});
+
 test('DEV AI exception preserves isolated Cloud SQL Unix sockets and rejects other local sockets', () => {
   isolatedAiCase(`
     new net.Socket().connect({ path: '/cloudsql/test:region:instance/.s.PGSQL.5432' });

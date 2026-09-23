@@ -1,5 +1,5 @@
 import { Body, Controller, ForbiddenException, Get, Header, Headers, Injectable, Module, Post, Req, ServiceUnavailableException, UnauthorizedException, UseGuards } from '@nestjs/common';
-import { IsIn, IsInt, IsString, IsOptional, Matches, Min } from 'class-validator';
+import { IsIn, IsInt, IsString, IsOptional, Matches, Max, Min } from 'class-validator';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
@@ -27,11 +27,15 @@ const entries = {
   settings: { path: '/settings', permissions: ['wms_tasks:read'] },
 } satisfies Record<string, {path:string; permissions:string[]; station?:Station; adminOnly?:boolean}>;
 type Entry = keyof typeof entries;
+type PortalEntry = Entry | 'native-intake';
 const roleEntries = { picker:'picking', packer:'packing', dispatcher:'dispatch' } as const;
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
+const nativeIntakeKey = /^native-intake:([A-Za-z0-9_-]{1,128}):([1-9]\d{0,8})$/;
 class TicketDto {
   @IsOptional() @IsIn(['picker', 'packer', 'dispatcher']) role?: Station;
-  @IsOptional() @IsIn(Object.keys(entries)) entry?: Entry;
+  @IsOptional() @IsIn([...Object.keys(entries), 'native-intake']) entry?: PortalEntry;
+  @IsOptional() @IsString() @Matches(/^[A-Za-z0-9_-]{1,128}$/) salesOrderId?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(999999999) nativeIntakeId?: number;
   @IsString() @Matches(/^[a-f0-9]{64}$/) nonce!: string;
 }
 class ExchangeDto {
@@ -81,9 +85,23 @@ export class WmsPortalService {
     if (!role) throw new ForbiddenException('請先指派儲運作業權限');
     return { role, destination: target.path, permissions: actor.admin ? ['wms_admin'] : actor.permissions.filter(p => p.startsWith('wms_')) };
   }
+  private async resolvedDestination(actor: Awaited<ReturnType<WmsPortalService['identity']>>, entryKey: string) {
+    const intake = nativeIntakeKey.exec(entryKey);
+    if (!intake) return this.destination(actor, entryKey as Entry);
+    // A document link is issued only for a dispatch acknowledged by WMS for
+    // the warehouse company. Recheck on consume and inspect, not only at issue.
+    const access = this.destination(actor, 'dispatch');
+    const [, salesOrderId, nativeIntakeId] = intake;
+    const rows = await this.db.$queryRaw<any[]>`SELECT 1 FROM wms_dispatch_intents
+      WHERE entity_id = ${actor.entityId} AND sales_order_id = ${salesOrderId}
+      AND status = 'acknowledged' AND response->>'nativeIntakeId' = ${nativeIntakeId}
+      LIMIT 1`;
+    if (!rows.length) throw new ForbiddenException('此 WMS 預揀工作單未連結至已拋轉的 ERP 訂單');
+    return { ...access, destination: `/corely-intakes/${nativeIntakeId}` };
+  }
   private async sessionIdentity(record: any) {
     const actor = await this.identity(record.user_id);
-    const access = this.destination(actor, record.entry_key || roleEntries[record.station as Station]);
+    const access = await this.resolvedDestination(actor, record.entry_key || roleEntries[record.station as Station]);
     if (actor.passwordVersion !== record.password_version || actor.entityId !== record.entity_id) throw new UnauthorizedException();
     return { userId:actor.userId, name:actor.name, entityId:actor.entityId, personalPaths:actor.personalPaths, ...access, expiresAt:record.expires_at };
   }
@@ -91,11 +109,17 @@ export class WmsPortalService {
     this.enabled(); const actor = await this.identity(userId);
     const entry = input.entry || (input.role && roleEntries[input.role]);
     if (!entry || (input.entry && input.role)) throw new ForbiddenException('請指定一個儲運入口');
-    this.destination(actor, entry);
+    const native = entry === 'native-intake';
+    if ((native && (input.salesOrderId === undefined || input.nativeIntakeId === undefined)) ||
+        (!native && (input.salesOrderId !== undefined || input.nativeIntakeId !== undefined)))
+      throw new ForbiddenException('預揀工作單需要對應的 ERP 訂單與 WMS 單號');
+    if (native && (!/^[A-Za-z0-9_-]{1,128}$/.test(input.salesOrderId!) || !Number.isSafeInteger(input.nativeIntakeId) || input.nativeIntakeId! < 1 || input.nativeIntakeId! > 999999999)) throw new ForbiddenException('預揀工作單識別錯誤');
+    const entryKey = native ? `native-intake:${input.salesOrderId}:${input.nativeIntakeId}` : entry;
+    await this.resolvedDestination(actor, entryKey);
     const ticket = randomBytes(32).toString('hex');
     await this.db.$executeRaw`INSERT INTO wms_portal_sessions
       (id, user_id, entity_id, station, entry_key, nonce, password_version, ticket_expires_at, expires_at)
-      VALUES (${hash(ticket)}, ${userId}, ${actor.entityId!}, ${input.role || 'portal'}, ${entry}, ${input.nonce}, ${actor.passwordVersion}, NOW() + INTERVAL '60 seconds', NOW() + INTERVAL '8 hours')`;
+      VALUES (${hash(ticket)}, ${userId}, ${actor.entityId!}, ${input.role || 'portal'}, ${entryKey}, ${input.nonce}, ${actor.passwordVersion}, NOW() + INTERVAL '60 seconds', NOW() + INTERVAL '8 hours')`;
     return { ticket };
   }
   async consume(input: ExchangeDto) {
