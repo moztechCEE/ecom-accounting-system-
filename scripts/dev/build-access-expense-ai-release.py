@@ -15,6 +15,7 @@ zero-traffic candidate deployment. Do not use the legacy deploy-built.sh wrapper
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -103,9 +104,11 @@ def main():
           'Merge the reviewed latest SSO source before building; never replace it with the older ERP baseline')
     check(not output(['git', 'diff', SSO_SOURCE, '--', *UNCHANGED_RUNTIME]),
           'Dependencies/startup/assets/server changed: this reviewed overlay is insufficient; use a newly reviewed full build')
-    client_schema = ROOT / 'backend/node_modules/.prisma/client/schema.prisma'
-    check(client_schema.is_file() and client_schema.read_bytes() == (ROOT / 'backend/prisma/schema.prisma').read_bytes(),
-          'Generate the current Prisma client locally before building (use a non-connecting placeholder DATABASE_URL)')
+    # Prisma normalizes schema formatting in the generated copy, so byte equality
+    # is not a reliable freshness check. Generate from the exact source instead.
+    subprocess.run(['node_modules/.bin/prisma', 'generate', '--schema=prisma/schema.prisma'],
+                   cwd=ROOT / 'backend', check=True,
+                   env={**os.environ, 'DATABASE_URL': 'postgresql://build:build@127.0.0.1:5432/unconnected?schema=public'})
     before = cloud_baseline()
 
     # Rebuild rather than trusting an old untracked dist directory.
