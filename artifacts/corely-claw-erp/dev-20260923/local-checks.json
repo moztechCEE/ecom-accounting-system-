@@ -1,0 +1,42 @@
+{
+  "verifiedAt": "2026-09-23T13:04:26.453741+00:00",
+  "backend": {
+    "suites": 60,
+    "tests": 359,
+    "passed": true
+  },
+  "aiFocused": {
+    "suites": 3,
+    "tests": 52,
+    "passed": true
+  },
+  "frontendNavigation": {
+    "tests": 19,
+    "passed": true
+  },
+  "frontendBuild": true,
+  "sandbox": {
+    "tests": 9,
+    "passed": true
+  },
+  "knowledgeGenerator": {
+    "tests": 9,
+    "passed": true
+  },
+  "knowledgeCoverage": {
+    "entries": 55,
+    "locales": [
+      "zh-TW",
+      "en"
+    ],
+    "groups": 9,
+    "routeEntries": 64,
+    "reviewedSources": 78
+  },
+  "scope": "Local tests only; live DEV and browser acceptance recorded separately.",
+  "frontendClaw": {
+    "tests": 10,
+    "passed": true
+  },
+  "frontendTypecheck": true
+}
