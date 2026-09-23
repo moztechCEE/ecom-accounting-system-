@@ -12,6 +12,7 @@ import CommandPalette from './CommandPalette'
 import NotificationCenter from './NotificationCenter'
 import SettingsDrawer from './SettingsDrawer'
 import AICopilotWidget from './AICopilotWidget'
+import { ClawHelpButton } from './claw/ClawHelpButton'
 import WarehouseLink from './WarehouseLink'
 import './OperationsLayout.css'
 
@@ -123,6 +124,7 @@ export default function DashboardLayout() {
           <span>{active?.label || PRODUCT.name}</span>
         </div>
         <div className="operations-header-actions">
+          <ClawHelpButton>這頁怎麼用</ClawHelpButton>
           <NotificationCenter />
           <Dropdown trigger={['click']} menu={{ items: [
             { key: 'profile', label: '個人資料', icon: <UserOutlined />, onClick: () => navigate('/profile') },

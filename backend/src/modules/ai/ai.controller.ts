@@ -8,6 +8,7 @@ import {
   Param,
   Delete,
   Query,
+  Header,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -76,11 +77,25 @@ export class AiController {
   }
 
   @Get('guide')
+  @Header('Cache-Control', 'no-store')
   getGuide(@Req() req: Request, @Query() query: CopilotGuideDto) {
     return this.copilotService.getGuide(
       (req.user as any).id,
       query.query,
       query.currentPath,
+      query.locale,
+    );
+  }
+
+  @Get('knowledge')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: '取得目前帳號可讀取的完整操作知識庫' })
+  getKnowledge(@Req() req: Request, @Query() query: CopilotGuideDto) {
+    return this.copilotService.getKnowledge(
+      (req.user as { id: string }).id,
+      query.query,
+      query.currentPath,
+      query.locale,
     );
   }
 
@@ -98,6 +113,7 @@ export class AiController {
       body.modelId,
       body.currentPath,
       body.history,
+      body.locale,
     );
   }
 

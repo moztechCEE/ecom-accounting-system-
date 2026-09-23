@@ -1,430 +1,145 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  Alert,
-  Button,
-  Drawer,
-  Empty,
-  Input,
-  Select,
-  Spin,
-  Tag,
-  Tooltip,
-} from "antd";
-import { ClearOutlined, RobotOutlined, SendOutlined } from "@ant-design/icons";
-import { useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext";
-import { useAI } from "../contexts/AIContext";
-import {
-  aiService,
-  type AiCopilotReply,
-  type AiStatus,
-} from "../services/ai.service";
-import { listEntities, type Entity } from "../services/entities.service";
-import { hasAnyPermission } from "../utils/access";
-import "./AICopilotWidget.css";
-
-type ChatMessage = {
-  id: number;
-  role: "user" | "assistant";
-  content: string;
-  result?: AiCopilotReply;
-};
-const quickPrompts = [
-  "這個頁面可以做什麼？",
-  "如何申請費用並交給主管審核？",
-  "如何設定人員能看到的功能？",
-];
-const unavailableReason = (status: AiStatus) =>
-  status.reason === "sandbox_disabled"
-    ? "這個測試環境尚未開放 AI 連線。可先使用下方功能入口；AI 問答與即時查詢尚未啟用。"
-    : "AI 尚未完成連線設定，請管理員完成設定後使用。";
+import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { CloseOutlined, BookOutlined, MessageOutlined } from '@ant-design/icons';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { listEntities, type Entity } from '../services/entities.service';
+import type { KnowledgeLocale } from '../services/ai.service';
+import type { User } from '../types';
+import { ClawGreeting, ClawMascot } from './claw/ClawMascot';
+import ClawGuideLibrary from './claw/ClawGuideLibrary';
+import ClawChatPanel from './claw/ClawChatPanel';
+import { clawText } from './claw/copy';
+import { CLAW_HELP_EVENT, clawScopeKey, focusWrapIndex, helpArticleId, safeGuidePath } from './claw/state';
+import './AICopilotWidget.css';
+import './claw/mascot.css';
 
 export default function AICopilotWidget() {
   const { user } = useAuth();
-  const currentUserId = user?.id;
-  const { selectedModelId, setSelectedModelId, availableModels } = useAI();
+  return user ? <ClawWidget key={clawScopeKey(user)} user={user} /> : null;
+}
+
+function ClawWidget({ user }: { user: User }) {
+  const [open, setOpen] = useState(false);
+  const [openVersion, setOpenVersion] = useState(0);
+  const [tab, setTab] = useState<'guides' | 'chat'>('guides');
+  const [locale, setLocale] = useState<KnowledgeLocale>('zh-TW');
+  const [entities, setEntities] = useState<Entity[]>([]);
+  const [entityId, setEntityId] = useState<string>();
+  const [companyError, setCompanyError] = useState(false);
+  const [help, setHelp] = useState<{ id?: string; nonce: number; currentPage?: boolean }>({ nonce: 0 });
+  const [mobile, setMobile] = useState(() => matchMedia('(max-width: 640px)').matches);
+  const [composerFocused, setComposerFocused] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<AiStatus | null>(null);
-  const [entities, setEntities] = useState<Entity[]>([]);
-  const [entityId, setEntityId] = useState<string | undefined>();
-  const [error, setError] = useState("");
-  const sequence = useRef(0);
-  const end = useRef<HTMLDivElement>(null);
+  const id = useId();
+  const t = (key: Parameters<typeof clawText>[1]) => clawText(locale, key);
+  const show = () => { setOpenVersion(value => value + 1); setOpen(true); };
 
   useEffect(() => {
-    sequence.current += 1;
-    setMessages([]);
-    setInput("");
-    setLoading(false);
-    setError("");
-  }, [currentUserId, entityId]);
-
-  useEffect(() => {
-    if (!open || !currentUserId) return;
-    let cancelled = false;
-    aiService
-      .getStatus()
-      .then((result) => {
-        if (!cancelled) setStatus(result);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setStatus(null);
-          setError("無法確認 AI 連線狀態，請重新開啟助手。");
-        }
-      });
-    listEntities({ isActive: true })
-      .then((result) => {
-        if (cancelled) return;
-        setEntities(result);
-        setEntityId((current) =>
-          result.some((entity) => entity.id === current)
-            ? current
-            : result.find(
-                (entity) => entity.id === localStorage.getItem("entityId"),
-              )?.id || result[0]?.id,
-        );
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setEntities([]);
-          setEntityId(undefined);
-        }
-      });
-    return () => {
-      cancelled = true;
+    const onHelp = (event: Event) => {
+      const detail: unknown = (event as CustomEvent).detail;
+      const article = helpArticleId(detail);
+      if (!article && (detail as { article?: unknown } | null)?.article !== undefined) return;
+      setHelp(current => ({ id: article ?? undefined, nonce: current.nonce + 1, currentPage: !article }));
+      setTab('guides'); setOpenVersion(value => value + 1); setOpen(true);
     };
-  }, [open, currentUserId]);
+    window.addEventListener(CLAW_HELP_EVENT, onHelp);
+    return () => window.removeEventListener(CLAW_HELP_EVENT, onHelp);
+  }, []);
 
   useEffect(() => {
-    end.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, loading]);
+    if (!open) return;
+    let cancelled = false;
+    listEntities({ isActive: true }).then(result => {
+      if (cancelled) return;
+      setEntities(result); setCompanyError(false);
+      setEntityId(current => result.some(entity => entity.id === current) ? current
+        : result.find(entity => entity.id === localStorage.getItem('entityId'))?.id || result[0]?.id);
+    }).catch(() => { if (!cancelled) { setEntities([]); setEntityId(undefined); setCompanyError(true); } });
+    return () => { cancelled = true; };
+  }, [open, openVersion]);
 
-  const send = async (question = input) => {
-    const text = question.trim();
-    if (!text || loading || status?.available === false) return;
-    const requestSequence = ++sequence.current;
-    const history = messages
-      .filter((message) => message.role === "user")
-      .slice(-6)
-      .map((message) => ({ role: "user" as const, content: message.content }));
-    setMessages((current) => [
-      ...current,
-      { id: Date.now(), role: "user", content: text },
-    ]);
-    setInput("");
-    setLoading(true);
-    setError("");
-    try {
-      const result = await aiService.chat(
-        text,
-        entityId,
-        selectedModelId,
-        location.pathname,
-        history,
-      );
-      if (sequence.current !== requestSequence) return;
-      setMessages((current) => [
-        ...current,
-        {
-          id: Date.now() + 1,
-          role: "assistant",
-          content: result.reply,
-          result,
-        },
-      ]);
-    } catch (failure: unknown) {
-      if (sequence.current !== requestSequence) return;
-      const response = (failure as { response?: { status?: number } }).response;
-      const content =
-        response?.status === 403
-          ? "目前沒有這個公司或資料範圍的查詢權限。請切換公司，或由管理員確認你的權限。"
-          : response?.status === 400
-            ? "查詢條件無法使用，請縮短問題或指定一年以內的有效日期區間。"
-            : "AI 或資料查詢暫時無法完成，請稍後再試。";
-      setMessages((current) => [
-        ...current,
-        { id: Date.now() + 1, role: "assistant", content },
-      ]);
-    } finally {
-      if (sequence.current === requestSequence) setLoading(false);
-    }
-  };
+  useEffect(() => {
+    const media = matchMedia('(max-width: 640px)');
+    const viewport = window.visualViewport;
+    const updateMobile = () => setMobile(media.matches);
+    const updateViewport = () => {
+      root.current?.style.setProperty('--claw-vh', `${viewport?.height ?? window.innerHeight}px`);
+      root.current?.style.setProperty('--claw-vtop', `${viewport?.offsetTop ?? 0}px`);
+    };
+    const focus = () => queueMicrotask(() => {
+      if (!root.current) return;
+      const active = document.activeElement;
+      setComposerFocused(Boolean(active && !root.current.contains(active) && active.matches('input, textarea, [contenteditable="true"]')));
+    });
+    updateViewport();
+    media.addEventListener('change', updateMobile);
+    viewport?.addEventListener('resize', updateViewport); viewport?.addEventListener('scroll', updateViewport);
+    window.addEventListener('resize', updateViewport);
+    document.addEventListener('focusin', focus); document.addEventListener('focusout', focus);
+    return () => {
+      media.removeEventListener('change', updateMobile);
+      viewport?.removeEventListener('resize', updateViewport); viewport?.removeEventListener('scroll', updateViewport);
+      window.removeEventListener('resize', updateViewport);
+      document.removeEventListener('focusin', focus); document.removeEventListener('focusout', focus);
+    };
+  }, []);
 
-  const showGuide = async (query: string) => {
-    const requestSequence = ++sequence.current;
-    setLoading(true);
-    setError("");
-    try {
-      const result = await aiService.getGuide(query, location.pathname);
-      if (sequence.current === requestSequence)
-        setMessages((current) => [
-          ...current,
-          { id: Date.now(), role: "assistant", content: result.reply, result },
-        ]);
-    } catch {
-      if (sequence.current === requestSequence)
-        setError("無法讀取內建指南，請稍後再試。");
-    } finally {
-      if (sequence.current === requestSequence) setLoading(false);
-    }
-  };
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    if (mobile) document.body.style.overflow = 'hidden';
+    closeButton.current?.focus();
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); setOpen(false); }
+      if (!mobile || event.key !== 'Tab') return;
+      const nodes = Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), summary, [tabindex="0"]') ?? []).filter(node => node.tabIndex >= 0 && node.getClientRects().length > 0);
+      const next = focusWrapIndex(nodes.length, nodes.indexOf(document.activeElement as HTMLElement), event.shiftKey);
+      if (next !== null) { event.preventDefault(); nodes[next]?.focus(); }
+    };
+    document.addEventListener('keydown', keyboard);
+    return () => {
+      document.removeEventListener('keydown', keyboard);
+      if (mobile) document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [open, mobile]);
 
-  const links = [
-    {
-      label: "費用申請",
-      path: "/ap/expenses",
-      permissions: [
-        "expense_self:read",
-        "purchase_orders:read",
-        "accounts:read",
-      ],
-    },
-    {
-      label: "權限管理",
-      path: "/admin/access-control",
-      permissions: ["access_control:read", "access_control:update"],
-    },
-    { label: "個人資料", path: "/profile", permissions: ["profile_self:read"] },
-  ].filter((link) => hasAnyPermission(user, link.permissions));
-
-  if (!user) return null;
-  return (
-    <>
-      <Tooltip title="詢問 ERP 操作與即時資料" placement="left">
-        <button
-          className="erp-copilot-launcher"
-          aria-label="開啟 ERP Copilot"
-          aria-expanded={open}
-          onClick={() => setOpen(true)}
-        >
-          <RobotOutlined />
-          <span>Copilot</span>
-        </button>
-      </Tooltip>
-      <Drawer
-        title={
-          <span>
-            <RobotOutlined /> ERP Copilot
-          </span>
-        }
-        open={open}
-        onClose={() => setOpen(false)}
-        width="min(440px, 100vw)"
-        className="erp-copilot-drawer"
-        extra={
-          <Button
-            type="text"
-            icon={<ClearOutlined />}
-            aria-label="清除 Copilot 對話"
-            disabled={loading}
-            onClick={() => {
-              sequence.current += 1;
-              setMessages([]);
-              setError("");
-            }}
-          />
-        }
-      >
-        <div className="erp-copilot-context">
-          <p>詢問怎麼操作，或查詢你有權限的資料。</p>
-          <Select
-            aria-label="Copilot 查詢公司"
-            value={entityId}
-            placeholder="選擇查詢公司"
-            allowClear
-            disabled={loading}
-            onChange={setEntityId}
-            options={entities.map((entity) => ({
-              value: entity.id,
-              label: entity.name,
-            }))}
-          />
-          <Select
-            aria-label="Copilot AI 模式"
-            value={selectedModelId}
-            disabled={loading || availableModels.length === 0}
-            onChange={setSelectedModelId}
-            options={availableModels.map((model) => ({
-              value: model.id,
-              label: model.name,
-            }))}
-          />
-          <span className="erp-copilot-caption">
-            操作指南 · 唯讀查詢 · 不會自動審批或付款
-          </span>
-        </div>
-        {status?.available === false && (
-          <Alert type="info" showIcon message={unavailableReason(status)} />
-        )}
-        {error && <Alert type="warning" showIcon message={error} />}
-        <div className="erp-copilot-links">
-          <Button
-            size="small"
-            disabled={loading}
-            onClick={() => void showGuide("這個頁面可以做什麼？")}
-          >
-            內建操作指南
-          </Button>
-          {links.map((link) => (
-            <Button
-              key={link.path}
-              size="small"
-              onClick={() => {
-                navigate(link.path);
-                setOpen(false);
-              }}
-            >
-              {link.label}
-            </Button>
-          ))}
-        </div>
-        {status?.available === false && (
-          <div className="erp-copilot-links">
-            {["費用申請", "主管審核", "權限管理"].map((topic) => (
-              <Button
-                key={topic}
-                size="small"
-                disabled={loading}
-                onClick={() => void showGuide(topic)}
-              >
-                {topic}指南
-              </Button>
-            ))}
-          </div>
-        )}
-        <div
-          className="erp-copilot-messages"
-          role="log"
-          aria-live="polite"
-          aria-label="Copilot 對話"
-        >
-          {!messages.length && (
-            <>
-              <Empty
-                image={
-                  <RobotOutlined style={{ fontSize: 40, color: "#468276" }} />
-                }
-                description="從一個問題開始"
-              />
-              <div className="erp-copilot-prompts">
-                {[
-                  ...quickPrompts,
-                  ...(hasAnyPermission(user, [
-                    "expense_self:read",
-                    "accounts:read",
-                    "purchase_orders:read",
-                  ])
-                    ? ["本月我的費用申請總額是多少？"]
-                    : []),
-                ].map((prompt) => (
-                  <Button
-                    key={prompt}
-                    disabled={loading || status?.available === false}
-                    onClick={() => void send(prompt)}
-                  >
-                    {prompt}
-                  </Button>
-                ))}
-              </div>
-            </>
-          )}
-          {messages.map((message) => (
-            <article
-              key={message.id}
-              className={`erp-copilot-message erp-copilot-message--${message.role}`}
-            >
-              <strong>
-                {message.role === "user"
-                  ? "你"
-                  : message.result?.status === "guide"
-                    ? "內建操作指南"
-                    : "Copilot"}
-              </strong>
-              {message.result?.status === "unavailable" && (
-                <Tag color="orange">尚未完成</Tag>
-              )}
-              <p>{message.content}</p>
-              {message.result?.sources?.map((source, index) => (
-                <div
-                  className="erp-copilot-source"
-                  key={`${source.title}-${index}`}
-                >
-                  {source.path && /^\/[a-zA-Z0-9/_-]*$/.test(source.path) ? (
-                    <Button
-                      type="link"
-                      size="small"
-                      onClick={() => {
-                        navigate(source.path!);
-                        setOpen(false);
-                      }}
-                    >
-                      {source.title}
-                    </Button>
-                  ) : (
-                    <span>{source.title}</span>
-                  )}
-                  <small>
-                    {source.kind === "knowledge" ? "內建指南" : "即時資料查詢"}{" "}
-                    · {source.detail}
-                  </small>
-                </div>
-              ))}
-              {message.result && (
-                <small className="erp-copilot-caption">
-                  {message.result.scope ? `${message.result.scope} · ` : ""}
-                  {new Date(message.result.checkedAt).toLocaleString("zh-TW", {
-                    hour12: false,
-                  })}
-                </small>
-              )}
-            </article>
-          ))}
-          {loading && (
-            <div className="erp-copilot-thinking">
-              <Spin size="small" /> 正在確認權限並整理資料…
-            </div>
-          )}
-          <div ref={end} />
-        </div>
-        <form
-          className="erp-copilot-composer"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void send();
-          }}
-        >
-          <Input.TextArea
-            aria-label="詢問 ERP Copilot"
-            placeholder="輸入問題，例如：怎麼申請費用？"
-            value={input}
-            maxLength={2000}
-            autoSize={{ minRows: 2, maxRows: 5 }}
-            disabled={loading || status?.available === false}
-            onChange={(event) => setInput(event.target.value)}
-            onPressEnter={(event) => {
-              if (!event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                void send();
-              }
-            }}
-          />
-          <Button
-            type="primary"
-            htmlType="submit"
-            icon={<SendOutlined />}
-            loading={loading}
-            disabled={!input.trim() || status?.available === false}
-          >
-            送出
-          </Button>
-        </form>
-      </Drawer>
-    </>
-  );
+  const go = (path: string) => { const destination = safeGuidePath(path); if (destination) { navigate(destination); setOpen(false); } };
+  return createPortal(<div className="erp-claw" ref={root}>
+    <button type="button" hidden={open} className={`claw-launcher mascot-interaction${composerFocused ? ' composer-focused' : ''}`} aria-label={t('open')} title={t('open')} aria-haspopup="dialog" aria-expanded={open} onClick={show}>
+      <ClawMascot variant="launcher" /><span className="launcher-label">Corely Claw</span>
+    </button>
+    {open && mobile && <div className="claw-backdrop" aria-hidden="true" onClick={() => setOpen(false)} />}
+    <section className="claw-panel" ref={panel} hidden={!open} role="dialog" aria-modal={mobile || undefined} aria-labelledby={`${id}-title`}>
+      <header className="claw-header"><ClawGreeting label={t('greeting')} /><div className="claw-heading"><h2 id={`${id}-title`}>Corely Claw</h2><span>{t('mode')}</span></div>
+        <select className="claw-locale" aria-label="語言 / Language" value={locale} onChange={event => setLocale(event.target.value as KnowledgeLocale)}><option value="zh-TW">繁中</option><option value="en">EN</option></select>
+        <button ref={closeButton} type="button" className="claw-icon-button" aria-label={t('close')} onClick={() => setOpen(false)}><CloseOutlined /></button>
+      </header>
+      <div className="claw-company"><label htmlFor={`${id}-company`}>{t('company')}</label><select id={`${id}-company`} value={entityId ?? ''} disabled={!entities.length} onChange={event => { setEntityId(event.target.value); setHelp({ nonce: 0 }); }}>
+        {!entityId && <option value="">{t('chooseCompany')}</option>}{entities.map(entity => <option key={entity.id} value={entity.id}>{entity.name}</option>)}
+      </select></div>
+      {companyError && <div className="claw-notice" role="alert">{t('companyError')}</div>}
+      <div className="claw-tabs" role="tablist" aria-label="Corely Claw" onKeyDown={event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 'guides' : event.key === 'End' ? 'chat' : tab === 'guides' ? 'chat' : 'guides';
+        setTab(next); document.getElementById(`${id}-${next}-tab`)?.focus();
+      }}>
+        <button type="button" role="tab" id={`${id}-guides-tab`} tabIndex={tab === 'guides' ? 0 : -1} aria-controls={`${id}-guides`} aria-selected={tab === 'guides'} onClick={() => setTab('guides')}><BookOutlined />{t('guides')}</button>
+        <button type="button" role="tab" id={`${id}-chat-tab`} tabIndex={tab === 'chat' ? 0 : -1} aria-controls={`${id}-chat`} aria-selected={tab === 'chat'} onClick={() => setTab('chat')}><MessageOutlined />{t('chat')}</button>
+      </div>
+      <div className="claw-tab-panel" id={`${id}-guides`} role="tabpanel" aria-labelledby={`${id}-guides-tab`} hidden={tab !== 'guides'}>
+        <ClawGuideLibrary key={`${entityId ?? ''}:${help.nonce}`} active={open && tab === 'guides'} currentPath={location.pathname} locale={locale} companyName={entities.find(entity => entity.id === entityId)?.name} initialArticle={help.id} currentPageHelp={help.currentPage} refreshVersion={openVersion} onNavigate={go} />
+      </div>
+      <div className="claw-tab-panel" id={`${id}-chat`} role="tabpanel" aria-labelledby={`${id}-chat-tab`} hidden={tab !== 'chat'}>
+        <ClawChatPanel key={entityId ?? ''} active={open && tab === 'chat'} user={user} entityId={entityId} currentPath={location.pathname} locale={locale} onNavigate={go} onGuides={() => setTab('guides')} />
+      </div>
+    </section>
+  </div>, document.body);
 }

@@ -22,6 +22,10 @@ export class CopilotHistoryDto {
 }
 
 export class CopilotChatDto {
+  @IsOptional()
+  @IsIn(['zh-TW', 'en'])
+  locale?: 'zh-TW' | 'en';
+
   @IsString()
   @MinLength(1)
   @MaxLength(2000)
@@ -54,6 +58,10 @@ export class CopilotChatDto {
 }
 
 export class CopilotGuideDto {
+  @IsOptional()
+  @IsIn(['zh-TW', 'en'])
+  locale?: 'zh-TW' | 'en';
+
   @IsOptional()
   @IsString()
   @MaxLength(2000)

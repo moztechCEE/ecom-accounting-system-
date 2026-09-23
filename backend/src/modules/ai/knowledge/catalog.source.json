@@ -1,0 +1,3710 @@
+{
+  "schemaVersion": 1,
+  "reviewedBaseCommit": "9165c7123b10750b598a95f9badfc9c00ed04abd",
+  "locales": [
+    "zh-TW",
+    "en"
+  ],
+  "legacyPathOverrides": {
+    "ai-principles": null
+  },
+  "entries": [
+    {
+      "id": "dashboard",
+      "title": "儀表板總覽",
+      "summary": "依期間查看營運、財務、毛利與待辦，追蹤資料狀態並連到來源功能。",
+      "keywords": [
+        "dashboard",
+        "首頁",
+        "總覽",
+        "營收",
+        "毛利",
+        "待辦",
+        "儀表板"
+      ],
+      "path": "/dashboard",
+      "module": "dashboard",
+      "category": "營運總覽",
+      "group": "dashboard",
+      "sections": {
+        "steps": [
+          "開啟營運總覽，先確認所選公司與資料日期。",
+          "由待辦或指標進入原功能核對，留意載入中、部分資料與資料可能過期等提示。"
+        ],
+        "boundaries": [
+          "儀表板數字與 AI 摘要不能替代原單據；載入失敗或沒有資料不表示金額為零。",
+          "儲運專用角色可能直接進入儲運工作區；不是所有人都有同一首頁。"
+        ],
+        "related": [
+          "reports",
+          "warehouse",
+          "ai-principles"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Dashboard overview",
+          "summary": "Review operations, finance, gross profit and work queues by period, checking data status and source features.",
+          "category": "Overview",
+          "keywords": [
+            "Dashboard overview",
+            "dashboard"
+          ],
+          "sections": {
+            "steps": [
+              "Open the dashboard and check the selected company and data date.",
+              "Follow a work item or metric to its source feature and check loading, partial-data and stale-data indicators."
+            ],
+            "boundaries": [
+              "Metrics and AI summaries do not replace source documents; failed or missing data is not a zero balance.",
+              "Warehouse-only users may land in their warehouse workspace instead."
+            ],
+            "related": [
+              "reports",
+              "warehouse",
+              "ai-principles"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/DashboardPage.tsx",
+        "frontend/src/utils/login-destination.ts",
+        "frontend/src/config/workspaces.ts"
+      ]
+    },
+    {
+      "id": "expense-requests",
+      "title": "費用申請",
+      "summary": "建立費用時先選員工代墊或廠商直付、上傳憑證並確認辨識草稿，再選報銷項目、金額、幣別、日期與說明後送出。AI 辨識或分類只是建議，需核對憑證，不會自動付款。",
+      "keywords": [
+        "費用申請",
+        "報銷",
+        "請款",
+        "代墊",
+        "直付",
+        "expense",
+        "reimbursement"
+      ],
+      "path": "/ap/expenses",
+      "module": "expense",
+      "category": "財務會計",
+      "group": "finance",
+      "sections": {
+        "steps": [
+          "選擇員工代墊或廠商直付，填寫受款與費用資料。",
+          "上傳圖片或 PDF 憑證，辨識完成後逐欄核對；AI 建議可修改。",
+          "選擇可用報銷項目，確認金額、幣別、日期及直屬主管設定後送出，於清單追蹤狀態。",
+          "全部必要審批核准後，ERP 才建立待付款任務，供出納後續處理。",
+          "實際銀行匯款由出納依公司外部銀行流程完成；費用核准或待付款任務不會自動向銀行匯款。",
+          "外部銀行付款完成後，出納再於 ERP 登記已完成的付款，填入實際銀行、日期及完整金額；此登記更新費用與待付款任務狀態。",
+          "會計入帳另走獨立流程，由具有分錄建立及核准權限的人員建立、審核分錄並完成過帳；不會因費用核准或付款登記而自動完成。"
+        ],
+        "boundaries": [
+          "必須有新增費用權限、有效員工與可審批的同公司主管；不可自己審核自己的申請。",
+          "AI 辨識與科目推薦不是憑證真偽確認、核准、付款或入帳。限制角色或部門的項目不能越權使用。",
+          "費用核准、待付款任務、外部銀行匯款、ERP 付款登記與會計過帳各有獨立狀態與憑據，不能由其中一項推定其他項目已完成；銀行匯款與會計過帳也不是二選一的替代動作。"
+        ],
+        "related": [
+          "expense-review",
+          "employee-supervisor",
+          "accounts-payable"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Expense requests",
+          "summary": "Choose employee reimbursement or direct vendor payment, upload evidence, review AI suggestions, and submit the item, amount, currency, date and description. AI does not make payments.",
+          "category": "Finance and accounting",
+          "keywords": [
+            "Expense requests",
+            "expense"
+          ],
+          "sections": {
+            "steps": [
+              "Select employee reimbursement or direct vendor payment and fill in the payee and expense details.",
+              "Upload image or PDF evidence and check every suggested field; AI suggestions remain editable.",
+              "Select an eligible reimbursement item, verify amount, currency, date and supervisor setup, then submit and track status.",
+              "ERP creates a pending payment task only after every required approval is complete, for the cashier to handle.",
+              "The cashier completes the actual bank transfer through the company’s external banking process. Expense approval and a pending payment task do not initiate a bank transfer.",
+              "After external bank payment is complete, the cashier records that completed payment in ERP with the actual bank account, date and full amount. This updates the expense and payment-task status.",
+              "Accounting posting follows a separate workflow: staff with journal-create and journal-approve permissions create and review the journal for posting. Expense approval or payment recording does not complete this automatically."
+            ],
+            "boundaries": [
+              "Creation requires the expense-create permission, an active employee relationship and an eligible supervisor in the same company. Self-approval is prohibited.",
+              "Extraction and account suggestions do not validate authenticity, approve, pay or post the expense. Restricted items require eligibility.",
+              "Expense approval, the pending payment task, external bank transfer, ERP payment recording and accounting posting each have separate statuses and evidence. None proves the others are complete; a bank transfer and accounting posting are not interchangeable alternatives."
+            ],
+            "related": [
+              "expense-review",
+              "employee-supervisor",
+              "accounts-payable"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/ExpenseRequestsPage.tsx",
+        "backend/src/modules/expense/expense.controller.ts",
+        "backend/src/modules/expense/expense-receipt.controller.ts",
+        "backend/src/modules/expense/expense.service.ts",
+        "backend/src/modules/accounting/accounting.controller.ts"
+      ],
+      "permissions": [
+        "expense_self:read",
+        "purchase_orders:read",
+        "accounts:read"
+      ],
+      "examples": [
+        {
+          "format": "json",
+          "title": "虛構填表範例（不是 API 請求）",
+          "titleEn": "Synthetic form example (not an API request)",
+          "content": "{\n  \"exampleOnly\": true,\n  \"description\": \"示範辦公耗材\",\n  \"amountOriginal\": 1200,\n  \"amountCurrency\": \"TWD\",\n  \"expenseDate\": \"2026-09-01\"\n}"
+        }
+      ]
+    },
+    {
+      "id": "expense-review",
+      "title": "費用審核中心",
+      "summary": "主管在費用審核中心查看指派給自己的申請與憑證、核准或退回。直屬主管來自員工資料的主管設定，未設定或無有效審批人員時須先由管理員補齊；主管核准後，若該報銷項目有額外審批政策，仍須完成後續審批；全部核准後才進入出納待付款。",
+      "keywords": [
+        "審核",
+        "簽核",
+        "複核",
+        "pending",
+        "expense review",
+        "費用審核"
+      ],
+      "path": "/ap/expense-review",
+      "module": "expense",
+      "category": "財務會計",
+      "group": "finance",
+      "sections": {
+        "steps": [
+          "在費用審核中心開啟指派給自己的待審申請，閱讀金額、說明與原始憑證。",
+          "核對後核准或退回並填寫需要的意見；一般主管不需替會計決定正式入帳科目。",
+          "歷史待審單若尚無審批步驟，由授權管理員預覽目前主管並確認建立審批；既有已指派案件不可任意重派。",
+          "全部必要審批核准後，ERP 才建立待付款任務，供出納後續處理。",
+          "實際銀行匯款由出納依公司外部銀行流程完成；費用核准或待付款任務不會自動向銀行匯款。",
+          "外部銀行付款完成後，出納再於 ERP 登記已完成的付款，填入實際銀行、日期及完整金額；此登記更新費用與待付款任務狀態。",
+          "會計入帳另走獨立流程，由具有分錄建立及核准權限的人員建立、審核分錄並完成過帳；不會因費用核准或付款登記而自動完成。"
+        ],
+        "boundaries": [
+          "只有目前有效指派的審批人可處理該步驟；送出時的主管快照不隨人事異動自動改派。",
+          "全部必要步驟核准後才建立待付款任務。核准本身不觸發銀行匯款或會計過帳。",
+          "費用核准、待付款任務、外部銀行匯款、ERP 付款登記與會計過帳各有獨立狀態與憑據，不能由其中一項推定其他項目已完成；銀行匯款與會計過帳也不是二選一的替代動作。"
+        ],
+        "related": [
+          "expense-requests",
+          "employee-supervisor",
+          "accounts-payable"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Expense review",
+          "summary": "Review assigned evidence and approve or reject. Supervisor assignment is based on employee setup; additional item policies may require further approvals before payment is queued.",
+          "category": "Finance and accounting",
+          "keywords": [
+            "Expense review",
+            "expense"
+          ],
+          "sections": {
+            "steps": [
+              "Open an assigned pending request and inspect the amount, description and original evidence.",
+              "Approve or reject after review and record the required comments; a supervisor need not determine the final posting account.",
+              "For a legacy pending request without steps, an authorized administrator previews and confirms assignment to the current eligible supervisor. Existing assignments are not freely reassigned.",
+              "ERP creates a pending payment task only after every required approval is complete, for the cashier to handle.",
+              "The cashier completes the actual bank transfer through the company’s external banking process. Expense approval and a pending payment task do not initiate a bank transfer.",
+              "After external bank payment is complete, the cashier records that completed payment in ERP with the actual bank account, date and full amount. This updates the expense and payment-task status.",
+              "Accounting posting follows a separate workflow: staff with journal-create and journal-approve permissions create and review the journal for posting. Expense approval or payment recording does not complete this automatically."
+            ],
+            "boundaries": [
+              "Only the currently assigned approver can act on a step. The submitted supervisor snapshot does not change automatically with HR edits.",
+              "A payment task is created only after all required steps pass; approval neither transfers money nor posts a journal.",
+              "Expense approval, the pending payment task, external bank transfer, ERP payment recording and accounting posting each have separate statuses and evidence. None proves the others are complete; a bank transfer and accounting posting are not interchangeable alternatives."
+            ],
+            "related": [
+              "expense-requests",
+              "employee-supervisor",
+              "accounts-payable"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/ExpenseReviewCenterPage.tsx",
+        "backend/src/modules/expense/expense.controller.ts",
+        "backend/src/modules/expense/expense.service.ts",
+        "backend/src/modules/accounting/accounting.controller.ts"
+      ],
+      "permissions": [
+        "expense_self:read",
+        "purchase_orders:read",
+        "accounts:read"
+      ]
+    },
+    {
+      "id": "accounts-payable",
+      "title": "應付與待付款中心",
+      "summary": "已完成必要審核的費用進入出納待付款任務。出納應核對受款人、幣別、應付金額與付款方式，實際付款後再登錄付款資訊。申請、憑證、審核、付款與正式會計入帳是不同狀態，核准不表示已付款或已入帳。",
+      "keywords": [
+        "應付",
+        "付款",
+        "ap",
+        "payable",
+        "待付款",
+        "付款中心"
+      ],
+      "path": "/ap/payable",
+      "module": "ap",
+      "category": "財務會計",
+      "group": "finance",
+      "sections": {
+        "steps": [
+          "在費用付款頁查看待付費用與應付單據，核對到期日、受款人及金額。",
+          "費用實際付款後，選擇有權限的同公司、同幣別出帳銀行與付款日期，再登錄付款。",
+          "返回單據檢查付款狀態；費用只允許一次完整付款登記。"
+        ],
+        "boundaries": [
+          "出納登記需銀行修改權限及帳戶可見權；頁面入口不等於銀行操作授權。",
+          "費用登記不呼叫真實銀行付款。應付發票與費用是不同來源，不可重複支付同一義務。"
+        ],
+        "related": [
+          "expense-review",
+          "banking",
+          "accounting-workbench"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Payables and payment queue",
+          "summary": "Completed approvals produce cashier tasks. Check payee, currency, amount and payment method, then record an actual payment. Approval, payment and accounting posting are separate states.",
+          "category": "Finance and accounting",
+          "keywords": [
+            "Payables and payment queue",
+            "ap"
+          ],
+          "sections": {
+            "steps": [
+              "Review pending expenses and payable documents, including due date, payee and amount.",
+              "After an expense is actually paid, select an accessible bank account in the same company and currency and record the payment date.",
+              "Verify the resulting status; an expense permits one full payment record."
+            ],
+            "boundaries": [
+              "Recording payment requires banking-update access and account visibility, beyond page access.",
+              "Expense recording does not invoke a bank transfer. Payable invoices and expense requests have distinct sources; do not pay the same obligation twice."
+            ],
+            "related": [
+              "expense-review",
+              "banking",
+              "accounting-workbench"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/AccountsPayablePage.tsx",
+        "backend/src/modules/expense/expense.controller.ts",
+        "backend/src/modules/expense/expense.service.ts",
+        "backend/src/modules/ap/ap.controller.ts"
+      ],
+      "permissions": [
+        "purchase_orders:read",
+        "accounts:read"
+      ]
+    },
+    {
+      "id": "reimbursement-items",
+      "title": "報銷項目管理",
+      "summary": "管理報銷項目、關鍵字、對應科目、憑證與使用限制，並可建立預設庫。",
+      "keywords": [
+        "報銷項目",
+        "預設庫",
+        "reimbursement item",
+        "關鍵字",
+        "會計科目",
+        "憑證",
+        "使用限制"
+      ],
+      "path": "/admin/reimbursement-items",
+      "module": "expense",
+      "category": "系統管理",
+      "group": "admin",
+      "sections": {
+        "steps": [
+          "選定公司後新增或編輯報銷項目，填入名稱、描述、關鍵字及對應科目。",
+          "依制度設定金額上限、憑證類型、允許角色與部門、額外審批政策，再儲存。",
+          "不再使用時停用項目；使用「建立預設庫」前先確認目前公司與既有項目。"
+        ],
+        "boundaries": [
+          "項目限制同時影響員工選項與送出資格；設定項目不等於替員工指派角色或主管。",
+          "AI 分類只提供建議，正式會計科目與入帳仍需依流程確認。"
+        ],
+        "related": [
+          "expense-requests",
+          "expense-review",
+          "chart-of-accounts"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Reimbursement items",
+          "summary": "Manage reimbursement items, keywords, mapped accounts, receipts and eligibility, and load starter items.",
+          "category": "Administration",
+          "keywords": [
+            "Reimbursement items",
+            "expense"
+          ],
+          "sections": {
+            "steps": [
+              "Select the company and create or edit an item with name, description, keywords and mapped account.",
+              "Set amount limits, receipt types, eligible roles and departments, and additional approval policy, then save.",
+              "Disable retired items. Before using Load starter items, check the company and existing records."
+            ],
+            "boundaries": [
+              "Eligibility applies to both displayed choices and submission. Item configuration does not assign employee roles or supervisors.",
+              "AI classification is advisory; the final account and posting still require their workflow."
+            ],
+            "related": [
+              "expense-requests",
+              "expense-review",
+              "chart-of-accounts"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/ReimbursementItemsAdminPage.tsx",
+        "backend/src/modules/expense/expense.controller.ts"
+      ],
+      "roles": [
+        "ADMIN",
+        "SUPER_ADMIN"
+      ]
+    },
+    {
+      "id": "system-settings",
+      "title": "系統設定",
+      "summary": "個人介面設定可由右上角帳號選單開啟；系統設定由管理員維護。Copilot 支援標準與深度模式，AI 連線由部署環境的管理員設定，畫面不會提供或顯示金鑰。",
+      "keywords": [
+        "設定",
+        "system settings",
+        "AI 模式",
+        "標準模式",
+        "深度模式",
+        "通知",
+        "安全性"
+      ],
+      "path": "/admin/settings",
+      "module": "settings",
+      "category": "系統管理",
+      "group": "admin",
+      "sections": {
+        "steps": [
+          "開啟系統設定，先成功載入目前的薪資規則。",
+          "核對月薪工時、加班倍率與相關保險自付比例後，使用「儲存薪資規則」。",
+          "AI 連線由部署管理員設定，使用者只選擇畫面提供的標準或深度模式。"
+        ],
+        "boundaries": [
+          "通知、安全與一般設定頁籤目前為預覽，不會儲存到後端。",
+          "薪資規則載入失敗時不可覆寫；不要在對話中提供 AI 金鑰或密碼。"
+        ],
+        "related": [
+          "payroll",
+          "profile",
+          "ai-principles"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "System settings",
+          "summary": "Personal presentation settings are available from the account menu; administrators manage system settings. AI modes use deployment configuration and never expose provider keys.",
+          "category": "Administration",
+          "keywords": [
+            "System settings",
+            "settings"
+          ],
+          "sections": {
+            "steps": [
+              "Open system settings and first load the existing payroll rules successfully.",
+              "Check monthly hours, overtime multipliers and insurance contribution rates, then save payroll rules.",
+              "Provider connection is configured by deployment administrators; users choose the available standard or deep mode."
+            ],
+            "boundaries": [
+              "Notification, security and general-setting tabs are previews and do not persist to the backend.",
+              "Do not overwrite payroll rules after a failed load, or share provider keys or passwords in chat."
+            ],
+            "related": [
+              "payroll",
+              "profile",
+              "ai-principles"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/SystemSettingsPage.tsx",
+        "backend/src/modules/payroll/payroll.controller.ts",
+        "backend/src/modules/ai/ai.service.ts"
+      ],
+      "roles": [
+        "ADMIN",
+        "SUPER_ADMIN"
+      ]
+    },
+    {
+      "id": "access-control",
+      "title": "權限管理",
+      "summary": "在權限管理先選人員、設定角色，再點「可見介面」預覽。需要新組合時，在角色頁新增角色、選擇範本，以模組矩陣勾選讀取、新增、修改等操作後儲存，再指派給人員；多角色權限取聯集。公司與八類資料範圍只有最高管理員能設定，資料範圍分自己、部門、公司。主管另外在員工管理維護；看得到選單不代表可以修改或核准。",
+      "keywords": [
+        "權限",
+        "角色",
+        "使用者",
+        "rbac",
+        "access control",
+        "權限管理"
+      ],
+      "path": "/admin/access-control",
+      "module": "auth",
+      "category": "系統管理",
+      "group": "admin",
+      "sections": {
+        "steps": [
+          "在人員頁選擇使用者與角色，儲存後用「可見介面」預覽。",
+          "新增角色時選擇範本，再逐模組勾選讀取、新增、修改等操作；儲存角色後另行指派人員。",
+          "最高管理員依業務需要設定公司及自己、部門、公司資料範圍；主管另到員工資料設定。"
+        ],
+        "boundaries": [
+          "多角色權限取聯集；畫面可見不代表可修改、審批或查看所有公司的資料。",
+          "可選範本不會自動授權現有員工。不得藉由 Copilot 繞過原有資料範圍。"
+        ],
+        "related": [
+          "employee-supervisor",
+          "business-entities",
+          "expense-requests"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Access control",
+          "summary": "Assign roles to people and preview visible pages. Use the module matrix to edit reusable role templates. Roles combine; only super administrators change company access and data scopes. Supervisors are configured separately.",
+          "category": "Administration",
+          "keywords": [
+            "Access control",
+            "auth"
+          ],
+          "sections": {
+            "steps": [
+              "Select a user and roles, save, then preview visible pages.",
+              "When creating a role, choose a template and select module actions. Saving a role and assigning it to a person are separate steps.",
+              "A super administrator sets company access and self, department or entity scopes. Configure supervisors in employee records."
+            ],
+            "boundaries": [
+              "Role permissions combine. Page visibility does not imply write, approval or cross-company access.",
+              "Optional templates do not automatically grant existing employees access. Copilot must retain original data scopes."
+            ],
+            "related": [
+              "employee-supervisor",
+              "business-entities",
+              "expense-requests"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/AccessControlPage.tsx",
+        "backend/src/modules/roles/roles.controller.ts",
+        "backend/src/modules/users/users.controller.ts",
+        "frontend/src/utils/access.ts"
+      ],
+      "permissions": [
+        "access_control:read",
+        "access_control:update"
+      ]
+    },
+    {
+      "id": "sales-orders",
+      "title": "銷售訂單",
+      "summary": "查看訂單狀態、客戶、渠道與銷售金額的主要頁面。",
+      "keywords": [
+        "訂單",
+        "sales order",
+        "銷售",
+        "order",
+        "客戶訂單",
+        "平台訂單"
+      ],
+      "path": "/sales/orders",
+      "module": "sales",
+      "category": "訂單銷售",
+      "group": "sales",
+      "sections": {
+        "steps": [
+          "確認公司，依訂單日期、渠道或狀態查詢訂單。",
+          "開啟訂單查看品項、金額及來源，追蹤付款、發票與出貨的各別狀態。"
+        ],
+        "boundaries": [
+          "來源平台同步與手動建立的訂單須保留來源識別；訂單金額不是銀行實收。",
+          "Copilot 查單僅限已註冊且通過授權的讀取工具，不能據此聲稱已出貨。"
+        ],
+        "related": [
+          "customers",
+          "sales-quotations",
+          "receivables",
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Sales orders",
+          "summary": "View order status, customers, channels and sales amounts.",
+          "category": "Sales",
+          "keywords": [
+            "Sales orders",
+            "sales"
+          ],
+          "sections": {
+            "steps": [
+              "Confirm the company and filter orders by date, channel or status.",
+              "Open an order to inspect lines, amounts and source, tracking payment, invoicing and fulfilment separately."
+            ],
+            "boundaries": [
+              "Preserve platform or manual source identifiers; order value is not bank cash received.",
+              "Copilot order lookup uses registered authorized read tools and is not proof of shipment."
+            ],
+            "related": [
+              "customers",
+              "sales-quotations",
+              "receivables",
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/SalesPage.tsx",
+        "backend/src/modules/sales/sales.controller.ts"
+      ],
+      "permissions": [
+        "sales_orders:read"
+      ]
+    },
+    {
+      "id": "customers",
+      "title": "客戶管理",
+      "summary": "查詢客戶基本資料、聯絡方式與客戶類型。",
+      "keywords": [
+        "客戶",
+        "customer",
+        "客戶管理",
+        "聯絡方式",
+        "公司",
+        "個人"
+      ],
+      "path": "/sales/customers",
+      "module": "sales",
+      "category": "訂單銷售",
+      "group": "sales",
+      "sections": {
+        "steps": [
+          "在客戶管理查看或搜尋客戶，先比對姓名、公司與聯絡資訊避免重複。",
+          "依畫面及個人權限維護客戶資料，再於訂單或報價選用。"
+        ],
+        "boundaries": [
+          "聯絡資訊是公司業務資料，只能在授權公司及業務範圍內使用。",
+          "建立或查看客戶不等於已寄送報價或訊息。"
+        ],
+        "related": [
+          "sales-orders",
+          "sales-quotations"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Customers",
+          "summary": "Look up customer profiles, contact details and customer types.",
+          "category": "Sales",
+          "keywords": [
+            "Customers",
+            "sales"
+          ],
+          "sections": {
+            "steps": [
+              "Find a customer and compare name, company and contact details to avoid duplicates.",
+              "Maintain the customer where the page and your permissions allow, then select that record for an order or quotation."
+            ],
+            "boundaries": [
+              "Contact information is business data limited to authorized companies and purposes.",
+              "Creating or viewing a customer does not send a quotation or message."
+            ],
+            "related": [
+              "sales-orders",
+              "sales-quotations"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/CustomersPage.tsx",
+        "backend/src/modules/sales/customer.controller.ts"
+      ],
+      "permissions": [
+        "sales_orders:read"
+      ]
+    },
+    {
+      "id": "products",
+      "title": "商品管理",
+      "summary": "查看商品 SKU、名稱、成本、售價與庫存快照。",
+      "keywords": [
+        "商品",
+        "product",
+        "sku",
+        "成本",
+        "售價",
+        "庫存",
+        "品項"
+      ],
+      "path": "/inventory/products",
+      "module": "inventory",
+      "category": "採購庫存",
+      "group": "inventory",
+      "sections": {
+        "steps": [
+          "在產品與庫存頁確認公司，搜尋或查看 SKU 與產品資料。",
+          "比對產品名稱、規格及庫存快照，需要序號或箱標時進入 SN 與標籤。"
+        ],
+        "boundaries": [
+          "庫存快照不等於實體盤點、預留量或已完成出庫。",
+          "成本與售價依原功能權限；Copilot 敏感成本工具需要額外授權。"
+        ],
+        "related": [
+          "purchase-orders",
+          "sn-labels",
+          "assembly",
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Products and inventory",
+          "summary": "View SKUs, names, costs, prices and inventory snapshots.",
+          "category": "Purchasing and inventory",
+          "keywords": [
+            "Products and inventory",
+            "inventory"
+          ],
+          "sections": {
+            "steps": [
+              "Confirm the company and find the SKU or product record.",
+              "Compare name, specification and stock snapshot; use SN and labels for serial or carton work."
+            ],
+            "boundaries": [
+              "A stock snapshot does not prove a physical count, reservation or completed dispatch.",
+              "Cost and price access follow original permissions; sensitive Copilot cost lookup needs additional authorization."
+            ],
+            "related": [
+              "purchase-orders",
+              "sn-labels",
+              "assembly",
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/ProductsPage.tsx",
+        "backend/src/modules/product/product.controller.ts"
+      ],
+      "permissions": [
+        "inventory:read"
+      ]
+    },
+    {
+      "id": "vendors",
+      "title": "供應商管理",
+      "summary": "查詢供應商聯絡方式、幣別與付款資訊。",
+      "keywords": [
+        "供應商",
+        "vendor",
+        "廠商",
+        "聯絡人",
+        "付款資訊"
+      ],
+      "path": "/vendors",
+      "module": "vendor",
+      "category": "採購庫存",
+      "group": "inventory",
+      "sections": {
+        "steps": [
+          "開啟供應商管理，搜尋供應商並比對公司名稱與聯絡資訊。",
+          "採購或請款前確認交易幣別與付款資訊，以原始文件核實。"
+        ],
+        "boundaries": [
+          "供應商主檔不是付款完成證明；收款帳戶變更應依公司的核實流程。",
+          "可見供應商不代表可跨公司查詢或修改付款。"
+        ],
+        "related": [
+          "purchase-orders",
+          "accounts-payable"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Vendors",
+          "summary": "Look up vendor contacts, currencies and payment details.",
+          "category": "Purchasing and inventory",
+          "keywords": [
+            "Vendors",
+            "vendor"
+          ],
+          "sections": {
+            "steps": [
+              "Find a vendor and compare company name and contact details.",
+              "Before purchasing or requesting payment, verify currency and payment information against original documents."
+            ],
+            "boundaries": [
+              "A vendor record is not evidence of payment; verify bank-detail changes through the company process.",
+              "Vendor visibility does not grant cross-company or payment-write access."
+            ],
+            "related": [
+              "purchase-orders",
+              "accounts-payable"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/VendorsPage.tsx",
+        "backend/src/modules/vendor/vendor.controller.ts"
+      ],
+      "permissions": [
+        "purchase_orders:read",
+        "accounts:read"
+      ]
+    },
+    {
+      "id": "purchase-orders",
+      "title": "採購單",
+      "summary": "建立與追蹤採購單，管理採購流程與進貨。",
+      "keywords": [
+        "採購",
+        "purchase order",
+        "進貨",
+        "採購單"
+      ],
+      "path": "/purchasing/orders",
+      "module": "purchase",
+      "category": "採購庫存",
+      "group": "inventory",
+      "sections": {
+        "steps": [
+          "選定供應商與公司，核對採購品項、數量、價格與幣別。",
+          "於採購單清單追蹤狀態，依畫面提供的動作處理後續流程並核對收貨資料。"
+        ],
+        "boundaries": [
+          "採購單、收貨、應付與付款不是同一狀態，不能只憑建立採購單認定已進貨。",
+          "異動需要原採購功能權限；指南不提供繞過 API 授權的直接執行。"
+        ],
+        "related": [
+          "vendors",
+          "products",
+          "accounts-payable",
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Purchase orders",
+          "summary": "Create and track purchase orders and inbound purchasing work.",
+          "category": "Purchasing and inventory",
+          "keywords": [
+            "Purchase orders",
+            "purchase"
+          ],
+          "sections": {
+            "steps": [
+              "Select the vendor and company, then verify items, quantities, prices and currency.",
+              "Track the order in the list and use the available workflow actions, checking actual receiving records."
+            ],
+            "boundaries": [
+              "A purchase order, receipt, payable and payment have separate states; creation alone does not prove receipt.",
+              "Changes require the purchasing feature authorization; a guide is not an API permission bypass."
+            ],
+            "related": [
+              "vendors",
+              "products",
+              "accounts-payable",
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/PurchaseOrdersPage.tsx",
+        "backend/src/modules/purchase/purchase.controller.ts"
+      ],
+      "permissions": [
+        "purchase_orders:read"
+      ]
+    },
+    {
+      "id": "banking",
+      "title": "銀行帳務",
+      "summary": "查看銀行帳戶餘額、資金流與對帳資訊。",
+      "keywords": [
+        "銀行",
+        "banking",
+        "餘額",
+        "對帳",
+        "資金",
+        "帳戶"
+      ],
+      "path": "/banking",
+      "module": "banking",
+      "category": "財務會計",
+      "group": "finance",
+      "sections": {
+        "steps": [
+          "選擇可見銀行帳戶，核對公司、幣別、餘額與交易日期。",
+          "處理對帳單前先查看匯入預覽；將交易與來源單據核對後再依授權對帳。"
+        ],
+        "boundaries": [
+          "帳戶另有可見人員限制；資料範圍或銀行讀取權限不保證可查看每個帳戶。",
+          "匯入、對帳與付款記錄是不同動作；Copilot 目前的銀行工具只彙總系統已匯入交易淨額，不是銀行即時可用餘額，也不會執行付款。"
+        ],
+        "related": [
+          "accounts-payable",
+          "reconciliation"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Banking",
+          "summary": "Review bank accounts, balances, transactions and reconciliation.",
+          "category": "Finance and accounting",
+          "keywords": [
+            "Banking",
+            "banking"
+          ],
+          "sections": {
+            "steps": [
+              "Select a visible bank account and verify company, currency, balance and transaction date.",
+              "Preview a statement before import, then compare transactions with source documents before authorized reconciliation."
+            ],
+            "boundaries": [
+              "Account-level visibility lists apply in addition to banking scopes and permissions.",
+              "Import, reconciliation and payment recording are distinct. The current Copilot bank tool totals imported transactions; it is not a live available bank balance and does not transfer funds."
+            ],
+            "related": [
+              "accounts-payable",
+              "reconciliation"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/BankingPage.tsx",
+        "backend/src/modules/banking/banking.controller.ts",
+        "backend/src/modules/banking/banking.service.ts"
+      ],
+      "permissions": [
+        "banking:read"
+      ]
+    },
+    {
+      "id": "employee-supervisor",
+      "title": "員工資料與直屬主管設定",
+      "summary": "具備員工管理權限的人員到員工管理編輯員工，在「直屬主管」選擇同公司的有效主管後儲存。主管須有啟用的登入帳號和費用介面讀取權限；管理員可在權限管理指派費用申請與主管審批角色，再檢查可見介面。不得自己當主管或形成循環。變更主管只影響新送出的申請，既有已指派申請仍交給原審批人。",
+      "keywords": [
+        "員工",
+        "人員",
+        "直屬主管",
+        "主管設定",
+        "費用審批",
+        "組織",
+        "employees"
+      ],
+      "path": "/payroll/employees",
+      "module": "employees",
+      "category": "人資考勤",
+      "group": "people",
+      "sections": {
+        "steps": [
+          "在員工與部門開啟員工編輯，確認所屬公司、部門及啟用狀態。",
+          "從直屬主管欄選擇同公司的有效員工，儲存後確認結果。",
+          "由權限管理确认主管帳號已啟用且能讀取費用，再讓員工送出新申請。"
+        ],
+        "boundaries": [
+          "主管不得為本人或形成循環；不能由 AI 猜測或自動替全員指定主管。",
+          "現有申請沿用送出時指派。缺主管或費用權限時先修正人事設定，不可跳過審批。"
+        ],
+        "related": [
+          "access-control",
+          "expense-review",
+          "attendance-admin"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Employees and direct supervisors",
+          "summary": "Authorized HR staff maintain active same-company supervisors. Supervisors need active login accounts and expense access; no self or circular reporting. Changes affect new requests, not existing assignments.",
+          "category": "People and attendance",
+          "keywords": [
+            "Employees and direct supervisors",
+            "employees"
+          ],
+          "sections": {
+            "steps": [
+              "Edit the employee and verify company, department and active status.",
+              "Choose an active employee from the same company as direct supervisor and save.",
+              "Verify the supervisor has an active login and expense-read access before the employee submits a new request."
+            ],
+            "boundaries": [
+              "A supervisor cannot be the same employee or create a cycle; AI must not guess reporting lines.",
+              "Existing requests retain their assignment. Fix missing supervisor or access before submission rather than bypassing approval."
+            ],
+            "related": [
+              "access-control",
+              "expense-review",
+              "attendance-admin"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/EmployeesPage.tsx",
+        "backend/src/modules/payroll/payroll.controller.ts",
+        "backend/src/modules/payroll/payroll.service.ts"
+      ],
+      "permissions": [
+        "employees_admin:read"
+      ]
+    },
+    {
+      "id": "payroll",
+      "title": "薪資管理",
+      "summary": "查看薪資批次、薪資成本與員工薪資相關資料。",
+      "keywords": [
+        "薪資",
+        "payroll",
+        "薪資成本",
+        "員工成本",
+        "薪資批次"
+      ],
+      "path": "/payroll/runs",
+      "module": "payroll",
+      "category": "人資考勤",
+      "group": "people",
+      "sections": {
+        "steps": [
+          "在薪資管理選擇月份或批次，檢查薪資項目及批次狀態。",
+          "有管理權限者依原流程計算、確認或核准；員工只查看獲授權的個人內容。"
+        ],
+        "boundaries": [
+          "計算、核准、過帳與實際發薪應分開核實。",
+          "薪資是敏感資料；Copilot 薪資彙總採更嚴格授權，不能用一般指南取得他人薪資。"
+        ],
+        "related": [
+          "system-settings",
+          "employee-supervisor",
+          "attendance-admin"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Payroll",
+          "summary": "Review payroll runs, costs and authorized employee pay information.",
+          "category": "People and attendance",
+          "keywords": [
+            "Payroll",
+            "payroll"
+          ],
+          "sections": {
+            "steps": [
+              "Select the month or run and inspect payroll items and status.",
+              "Authorized payroll managers use the original calculation and approval workflow; employees see only permitted personal information."
+            ],
+            "boundaries": [
+              "Calculation, approval, posting and actual disbursement require separate verification.",
+              "Payroll is sensitive. Copilot summaries have stricter authorization and guides do not reveal other employees’ salaries."
+            ],
+            "related": [
+              "system-settings",
+              "employee-supervisor",
+              "attendance-admin"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/PayrollPage.tsx",
+        "backend/src/modules/payroll/payroll.controller.ts"
+      ],
+      "permissions": [
+        "payroll_self:read",
+        "payroll_admin:read"
+      ]
+    },
+    {
+      "id": "attendance",
+      "title": "出勤與請假",
+      "summary": "處理出勤、請假與人員日常出勤管理。",
+      "keywords": [
+        "出勤",
+        "請假",
+        "attendance",
+        "leave",
+        "打卡"
+      ],
+      "path": "/attendance/dashboard",
+      "module": "attendance",
+      "category": "人資考勤",
+      "group": "people",
+      "sections": {
+        "steps": [
+          "先確認帳號已連結有效員工，在我的出勤查看今日紀錄與個人假別資料。",
+          "按實際上下班時間使用打卡；加班申請填日期、分鐘數與原因並追蹤審核。"
+        ],
+        "boundaries": [
+          "打卡規則會使用班表、位置與其他政策；載入失敗不表示無假期餘額。",
+          "AI 不能替代本人打卡或保證加班核准。"
+        ],
+        "related": [
+          "leave",
+          "attendance-admin",
+          "profile"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "My attendance",
+          "summary": "Manage daily attendance and personal leave-related information.",
+          "category": "People and attendance",
+          "keywords": [
+            "My attendance",
+            "attendance"
+          ],
+          "sections": {
+            "steps": [
+              "Confirm an active employee link and review today’s records and personal leave information.",
+              "Clock in or out for actual attendance. Enter date, minutes and reason for overtime and track its review."
+            ],
+            "boundaries": [
+              "Attendance uses schedule, location and other policies; a failed load is not a zero leave balance.",
+              "AI does not clock in for you or guarantee overtime approval."
+            ],
+            "related": [
+              "leave",
+              "attendance-admin",
+              "profile"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/attendance/EmployeeDashboardPage.tsx",
+        "backend/src/modules/attendance/controllers/attendance.controller.ts"
+      ],
+      "permissions": [
+        "attendance_self:read"
+      ]
+    },
+    {
+      "id": "ai-principles",
+      "title": "AI 助手原則",
+      "summary": "核心原則是少即是多，大道至簡：先理解問題，再找最相關的資料與最短答案。",
+      "keywords": [
+        "AI 原則",
+        "少即是多",
+        "大道至簡",
+        "agent",
+        "copilot",
+        "知識"
+      ],
+      "module": "ai",
+      "category": "個人與助手",
+      "group": "profile",
+      "sections": {
+        "steps": [
+          "用具體問題說明要了解的功能、公司、日期或單號；操作指南會附可前往的功能入口。",
+          "需要即時數字時，先選定公司，依目前帳號可用的查詢工具取得資料。",
+          "核對引用來源及資料時間；問題超出已接入工具時，回到原功能查證。"
+        ],
+        "boundaries": [
+          "操作知識涵蓋功能入口，不代表每個模組都已具備 AI 即時查詢或執行工具。",
+          "只有註冊且授權的工具可查資料；一般指南不授予權限，也不表示已核准、付款、發送或過帳。",
+          "不要貼上密碼、驗證碼、金鑰或不必要的個資；AI 無法連線時不得假装使用即時資料。"
+        ],
+        "related": [
+          "dashboard",
+          "profile"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "AI assistant principles",
+          "summary": "Start by understanding the question, retrieve relevant evidence, and answer clearly and briefly.",
+          "category": "Personal and assistant",
+          "keywords": [
+            "AI assistant principles",
+            "ai"
+          ],
+          "sections": {
+            "steps": [
+              "Ask a specific question with the feature, company, date or document reference; guides link to relevant features.",
+              "For current figures, select the company and use only queries available to your account.",
+              "Check source and date. When the question exceeds connected tools, verify it in the original feature."
+            ],
+            "boundaries": [
+              "Coverage of operating guides does not mean every module has a live AI query or executor.",
+              "Only registered authorized tools may retrieve data. A guide grants no permission and proves no approval, payment, sending or posting.",
+              "Do not share passwords, verification codes, keys or unnecessary personal data. A disconnected AI provider must not be presented as a live result."
+            ],
+            "related": [
+              "dashboard",
+              "profile"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "backend/src/modules/ai/ai.service.ts"
+      ]
+    },
+    {
+      "id": "warehouse",
+      "title": "儲運工作區",
+      "summary": "依角色開放儲運工作站、收貨、揀貨、出貨與報表；資料由目前已連線的 WMS 來源提供。沒有實際串接資料不能當成完成出貨。",
+      "keywords": [
+        "儲運",
+        "倉庫",
+        "揀貨",
+        "出貨",
+        "WMS",
+        "工作站"
+      ],
+      "path": "/warehouse",
+      "module": "warehouse",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台查看可用的作業與功能卡片。",
+          "已設定 WMS 入口時，點選需要的功能並使用目前營運帳號進入授權的 WMS；未連線時只依實際載入內容判讀。"
+        ],
+        "boundaries": [
+          "ERP 入口與 WMS 內部權限都需通過。各環境只能進入對應的允許來源。",
+          "本目錄只說明 ERP 入口與已知來源，不保證 WMS 內部步驟、任務或庫存已完成。"
+        ],
+        "related": [
+          "warehouse-workstation",
+          "warehouse-picking",
+          "warehouse-packing",
+          "warehouse-overview"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Warehouse workspace",
+          "summary": "Access authorized warehouse stations, receiving, picking, dispatch and reports through the connected WMS. A disconnected source is not proof of shipment.",
+          "category": "Warehouse",
+          "keywords": [
+            "Warehouse workspace",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Open the warehouse workspace to see available work and feature cards.",
+              "When a WMS portal is configured, open the relevant destination using the current operations account; otherwise rely only on actually loaded data."
+            ],
+            "boundaries": [
+              "Both ERP entry permissions and WMS permissions apply. Each environment only opens its allowlisted source.",
+              "This catalog documents ERP entry points and known destinations, not completion of internal WMS work or inventory."
+            ],
+            "related": [
+              "warehouse-workstation",
+              "warehouse-picking",
+              "warehouse-packing",
+              "warehouse-overview"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehouseCenterPage.tsx"
+      ],
+      "permissions": [
+        "wms_tasks:read"
+      ]
+    },
+    {
+      "id": "sn-labels",
+      "title": "SN 序號與箱標",
+      "summary": "在 SN 標籤頁建立序號批次、配對外箱並下載標籤。序號、箱號與產品必須可追溯；下載 PDF 不代表已完成工廠印刷或掃碼驗收。",
+      "keywords": [
+        "SN",
+        "序號",
+        "箱號",
+        "箱標",
+        "條碼",
+        "標籤"
+      ],
+      "path": "/inventory/sn-labels",
+      "module": "inventory",
+      "category": "採購庫存",
+      "group": "inventory",
+      "sections": {
+        "steps": [
+          "選擇產品並填入批次資料，先檢查序號規則與標籤預覽。",
+          "有庫存修改權限者將草稿儲存成正式批次，再依批次進行箱號配對與標籤下載。",
+          "核對匯出的欄位、產品、序號與箱內順序，再進行實際列印與掃描驗收。"
+        ],
+        "boundaries": [
+          "瀏覽器草稿與伺服器批次分開；看到預覽不表示已建立正式序號。",
+          "請保留 SKU、序號、箱號來源關係；目前指南不代表支援任意倉庫 Excel 匯入。"
+        ],
+        "related": [
+          "products",
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Serial numbers and carton labels",
+          "summary": "Create serial batches, pair cartons and download labels with product and carton traceability. PDF export is not factory printing or scanner acceptance.",
+          "category": "Purchasing and inventory",
+          "keywords": [
+            "Serial numbers and carton labels",
+            "inventory"
+          ],
+          "sections": {
+            "steps": [
+              "Choose the product, fill in batch data and check serial rules and label preview.",
+              "With inventory-update access, save the draft as a persisted batch, then pair cartons and download labels.",
+              "Check exported fields, products, serials and carton order before physical printing and scanner acceptance."
+            ],
+            "boundaries": [
+              "Browser drafts and persisted batches are distinct; a preview is not a registered serial batch.",
+              "Preserve SKU, serial and carton links. This guide does not imply arbitrary warehouse Excel import support."
+            ],
+            "related": [
+              "products",
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/SnLabelsPage.tsx",
+        "backend/src/modules/sn-labels/sn-labels.controller.ts"
+      ],
+      "permissions": [
+        "inventory:read"
+      ]
+    },
+    {
+      "id": "accounting-workbench",
+      "title": "會計工作台",
+      "summary": "集中檢查來源單據、科目、傳票與差異。費用項目是員工申請選項，會計科目是入帳分類；分類不確定時交由會計確認，不可直接以 AI 建議當成正式入帳。",
+      "keywords": [
+        "會計",
+        "科目",
+        "入帳",
+        "傳票",
+        "分錄"
+      ],
+      "path": "/accounting/workbench",
+      "module": "accounting",
+      "category": "財務會計",
+      "group": "finance",
+      "sections": {
+        "steps": [
+          "在會計工作台選擇資料範圍，查看來源單据與待辦。",
+          "由缺發票或差異追溯訂單、憑證、付款及傳票，確認歸屬日期與科目。",
+          "分類不確定時交由會計核實，再依正式入帳與核准流程處理。"
+        ],
+        "boundaries": [
+          "報銷項目、憑證、應付、付款、會計分錄是不同資料層次。",
+          "AI 建議、核准費用或標記發票存在都不能單獨視為正式過帳。"
+        ],
+        "related": [
+          "journal-entries",
+          "chart-of-accounts",
+          "reconciliation",
+          "reports"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Accounting workbench",
+          "summary": "Review source documents, accounts, journals and differences. Expense items are employee choices; accounting accounts classify posting. Uncertain AI suggestions require accounting review.",
+          "category": "Finance and accounting",
+          "keywords": [
+            "Accounting workbench",
+            "accounting"
+          ],
+          "sections": {
+            "steps": [
+              "Select the data range in the accounting workbench and review source documents and pending work.",
+              "Trace missing invoices or differences to orders, evidence, payments and journals; verify dates and accounts.",
+              "Have accounting resolve uncertain classifications before formal posting and approval."
+            ],
+            "boundaries": [
+              "Reimbursement items, evidence, payables, payments and journals represent different records.",
+              "AI suggestions, expense approval or an invoice-present flag alone do not prove formal posting."
+            ],
+            "related": [
+              "journal-entries",
+              "chart-of-accounts",
+              "reconciliation",
+              "reports"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/AccountingWorkbenchPage.tsx",
+        "backend/src/modules/accounting/accounting.controller.ts"
+      ],
+      "permissions": [
+        "accounts:read",
+        "journal_entries:read"
+      ],
+      "aliases": [
+        "/accounting/workbench?focus=missing-invoices"
+      ]
+    },
+    {
+      "id": "reconciliation",
+      "title": "對帳中心",
+      "summary": "核對訂單、收款、發票、退款與手續費，依差異追溯來源單據。營收、收款、應收與銀行餘額的口徑不同，請以原單據及對帳狀態確認。",
+      "keywords": [
+        "對帳",
+        "差異",
+        "收款",
+        "發票",
+        "退款",
+        "手續費"
+      ],
+      "path": "/reconciliation",
+      "module": "accounting",
+      "category": "財務會計",
+      "group": "finance",
+      "sections": {
+        "steps": [
+          "確認公司與日期範圍，查看各平台及來源的對帳摘要與差異。",
+          "由異常明細核對訂單、交易編號、收款、發票與退款；需要銀行資料時回到銀行帳務。"
+        ],
+        "boundaries": [
+          "對帳、清帳與重跑同步是不同動作，可能需要 ADMIN 或 ACCOUNTANT；頁面讀取權限不足時由授權人員處理。",
+          "平台付款狀態不是銀行已入帳，超收或相同金額多筆需查證，不能直接刪除。"
+        ],
+        "related": [
+          "banking",
+          "receivables",
+          "timeout-reconciliation",
+          "reports"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Reconciliation center",
+          "summary": "Compare orders, receipts, invoices, refunds and fees, tracing differences to source documents. Revenue, receipts, receivables and bank balances are different measures.",
+          "category": "Finance and accounting",
+          "keywords": [
+            "Reconciliation center",
+            "accounting"
+          ],
+          "sections": {
+            "steps": [
+              "Confirm company and date range, then inspect summaries and differences by platform and source.",
+              "Trace exceptions through orders, transaction references, receipts, invoices and refunds; use Banking for account detail."
+            ],
+            "boundaries": [
+              "Reconciliation, clearing and resync are distinct actions that may require ADMIN or ACCOUNTANT, beyond page access.",
+              "Platform payment status is not proof of bank settlement. Investigate overpayments or repeated amounts before altering records."
+            ],
+            "related": [
+              "banking",
+              "receivables",
+              "timeout-reconciliation",
+              "reports"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/ReconciliationCenterPage.tsx",
+        "backend/src/modules/reconciliation/reconciliation.controller.ts"
+      ],
+      "permissions": [
+        "banking:read",
+        "reports:read",
+        "accounts:read"
+      ]
+    },
+    {
+      "id": "reports",
+      "title": "營運與財務報表",
+      "summary": "依公司與日期區間查看報表，先確認資料來源、幣別與計算口徑。Copilot 目前支援單次授權資料查詢，尚未提供所有報表的跨模組分析。",
+      "keywords": [
+        "報表",
+        "損益",
+        "營運",
+        "分析",
+        "reports"
+      ],
+      "path": "/reports",
+      "module": "reports",
+      "category": "財務會計",
+      "group": "finance",
+      "sections": {
+        "steps": [
+          "在營運報表選擇公司、期間與需要的報表類型。",
+          "查看管理、電商歷史、損益、資產負債、試算或總分類帳等已提供頁籤。",
+          "追溯異常指標至來源明細，核對費用是否完整與期間是否一致。"
+        ],
+        "boundaries": [
+          "報表平衡檢查不等於完成正式結帳；淨利受成本、應計與費用完整性影響。",
+          "統計口徑、幣別與日期區間不同時不可直接相加或比較。"
+        ],
+        "related": [
+          "accounting-workbench",
+          "accounting-periods",
+          "reconciliation"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Operational and financial reports",
+          "summary": "Select the company and date range, then verify source, currency and definitions. Copilot currently offers authorized individual queries, not every cross-module report analysis.",
+          "category": "Finance and accounting",
+          "keywords": [
+            "Operational and financial reports",
+            "reports"
+          ],
+          "sections": {
+            "steps": [
+              "Select company, period and report type.",
+              "Use available management, ecommerce history, income statement, balance sheet, trial balance or general-ledger views.",
+              "Trace unusual metrics to detail and verify expense completeness and consistent periods."
+            ],
+            "boundaries": [
+              "A balanced report is not formal period close; profit depends on complete costs, accruals and expenses.",
+              "Do not combine or compare figures with incompatible definitions, currencies or date ranges."
+            ],
+            "related": [
+              "accounting-workbench",
+              "accounting-periods",
+              "reconciliation"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/ReportsPage.tsx",
+        "backend/src/modules/reports/reports.controller.ts",
+        "backend/src/modules/accounting/accounting.controller.ts"
+      ],
+      "permissions": [
+        "reports:read"
+      ]
+    },
+    {
+      "id": "profile",
+      "title": "個人資料",
+      "summary": "由右上角帳號選單進入個人資料，確認自己的基本資料。需要調整角色、所屬公司、部門或直屬主管時，請具備人員管理權限的管理員處理。",
+      "keywords": [
+        "個人",
+        "帳號",
+        "密碼",
+        "資料",
+        "主管",
+        "部門"
+      ],
+      "path": "/profile",
+      "module": "profile",
+      "category": "個人與助手",
+      "group": "profile",
+      "sections": {
+        "steps": [
+          "由右上角帳號選單開啟個人資料，核對並儲存畫面允許修改的個人資料。",
+          "需要二階段驗證時由本人依頁面完成設定與驗證；到職文件依頁面下載或上傳。"
+        ],
+        "boundaries": [
+          "角色、所屬公司、部門與主管由授權人員維護，個人頁面不會讓自己擴權。",
+          "不要把目前密碼、驗證碼、二階段驗證 QR 或備援資訊貼到 AI 對話。"
+        ],
+        "related": [
+          "account-security",
+          "attendance",
+          "ai-principles"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "My profile",
+          "summary": "Use the account menu to view personal details. Authorized staff handle roles, company, department and supervisor changes.",
+          "category": "Personal and assistant",
+          "keywords": [
+            "My profile",
+            "profile"
+          ],
+          "sections": {
+            "steps": [
+              "Open My profile from the account menu, review your information and save fields the page permits you to edit.",
+              "Set up two-factor verification yourself using the page instructions; download or upload onboarding documents where available."
+            ],
+            "boundaries": [
+              "Authorized staff maintain roles, company, department and supervisor; the profile page does not grant self-escalation.",
+              "Never paste current passwords, verification codes, authenticator QR data or recovery information into AI chat."
+            ],
+            "related": [
+              "account-security",
+              "attendance",
+              "ai-principles"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/ProfilePage.tsx",
+        "backend/src/modules/auth/auth.controller.ts"
+      ],
+      "permissions": [
+        "profile_self:read"
+      ]
+    },
+    {
+      "id": "leave",
+      "title": "請假申請",
+      "summary": "在請假申請填寫假別、起迄日期及原因，送出後查看申請狀態；假別額度與審批結果以系統即時資料為準。",
+      "keywords": [
+        "請假",
+        "假別",
+        "休假",
+        "leave"
+      ],
+      "path": "/attendance/leaves",
+      "module": "attendance",
+      "category": "人資考勤",
+      "group": "people",
+      "sections": {
+        "steps": [
+          "選擇假別與起迄時間，查看可用額度後填寫原因。",
+          "送出申請並於清單查看審核狀態；需要更正時依原頁面允許的流程處理。"
+        ],
+        "boundaries": [
+          "假別額度以系統計算與人資核定為準，AI 不能保證可休或核准。",
+          "費用的直屬主管審批規則不能直接套用為請假審核規則。"
+        ],
+        "related": [
+          "attendance",
+          "attendance-admin"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Leave requests",
+          "summary": "Enter the leave type, dates and reason, submit and track the request. Current balances and review results come from live system records.",
+          "category": "People and attendance",
+          "keywords": [
+            "Leave requests",
+            "attendance"
+          ],
+          "sections": {
+            "steps": [
+              "Choose the leave type and start/end time, check the balance and provide a reason.",
+              "Submit and track review status in the list; use the original page’s permitted correction workflow."
+            ],
+            "boundaries": [
+              "Balances depend on system calculation and HR review; AI cannot promise availability or approval.",
+              "Do not assume expense supervisor-approval rules also govern leave review."
+            ],
+            "related": [
+              "attendance",
+              "attendance-admin"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/attendance/LeaveRequestPage.tsx",
+        "backend/src/modules/attendance/controllers/leave.controller.ts"
+      ],
+      "permissions": [
+        "leave_self:read"
+      ]
+    },
+    {
+      "id": "sales-quotations",
+      "title": "銷售報價",
+      "summary": "建立客戶報價、查看狀態並輸出列印或 PDF。",
+      "keywords": [
+        "銷售報價",
+        "Sales quotations"
+      ],
+      "module": "sales",
+      "path": "/sales/quotations",
+      "category": "訂單銷售",
+      "group": "sales",
+      "sections": {
+        "steps": [
+          "選擇客戶、報價日期、有效期限與幣別，填寫付款及交貨條件。",
+          "加入品項、數量與價格並儲存，開啟報價預覽後列印或存成 PDF。"
+        ],
+        "boundaries": [
+          "內部備註與顧客列印備註用途不同；輸出前先檢查顧客版內容。",
+          "儲存或下載報價不表示已寄出、客戶接受、轉訂單或收到款項。"
+        ],
+        "related": [
+          "customers",
+          "sales-orders"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Sales quotations",
+          "summary": "Create customer quotations, review status and export a print or PDF.",
+          "category": "Sales",
+          "keywords": [
+            "Sales quotations",
+            "sales"
+          ],
+          "sections": {
+            "steps": [
+              "Choose the customer, quotation date, validity and currency, then enter payment and delivery terms.",
+              "Add lines, quantities and prices, save, and open the preview to print or save a PDF."
+            ],
+            "boundaries": [
+              "Internal notes and customer-facing print notes serve different purposes; inspect the customer view before export.",
+              "Saving or downloading a quotation does not prove sending, acceptance, order conversion or payment."
+            ],
+            "related": [
+              "customers",
+              "sales-orders"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/SalesQuotationsPage.tsx",
+        "backend/src/modules/sales/sales.controller.ts"
+      ],
+      "permissions": [
+        "sales_orders:read",
+        "purchase_orders:read"
+      ]
+    },
+    {
+      "id": "after-sales",
+      "title": "售後案件工作台",
+      "summary": "按案件類型與狀態追蹤售後來源、處理進度、待辦角色與承辦人。",
+      "keywords": [
+        "售後案件工作台",
+        "After-sales case workspace"
+      ],
+      "module": "after-sales",
+      "path": "/sales/after-sales",
+      "category": "售後管理",
+      "group": "service",
+      "sections": {
+        "steps": [
+          "選擇案件類型或狀態篩選，開啟案件詳情查看來源及進度。",
+          "新版工作台啟用時，維修、漏寄補寄、來回件、退款派車、私下購買與客戶問題共用此入口；需要報價時依已提供動作建立草稿。"
+        ],
+        "boundaries": [
+          "staged 功能未啟用的部署使用既有來回件頁面，可能沒有新版分類或草稿入口。",
+          "ERP 顯示來源資料不表示已在客服來源系統發送訊息、完成退款或實際取送件。"
+        ],
+        "related": [
+          "after-sales-quotes",
+          "after-sales-internal",
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "After-sales case workspace",
+          "summary": "Track after-sales sources, progress, pending roles and owners by case type and status.",
+          "category": "After-sales",
+          "keywords": [
+            "After-sales case workspace",
+            "after-sales"
+          ],
+          "sections": {
+            "steps": [
+              "Filter by case type or status and inspect the source and progress in case details.",
+              "When the staged workspace is enabled, repair, reshipment, exchange/return, refund pickup, private purchase and customer issues share this entry. Use the provided action to prepare a quote draft."
+            ],
+            "boundaries": [
+              "Deployments without staged features show the existing case page and may lack the newer categories or draft entry.",
+              "Displayed source data does not prove a message was sent, a refund completed or a pickup/delivery performed in the source system."
+            ],
+            "related": [
+              "after-sales-quotes",
+              "after-sales-internal",
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/AfterSalesWorkbenchPage.tsx",
+        "frontend/src/pages/AfterSalesCasesPage.tsx",
+        "backend/src/modules/integration/after-sales/after-sales.controller.ts",
+        "frontend/src/config/release.ts"
+      ],
+      "permissions": [
+        "after_sales_cases:read",
+        "sales_orders:read"
+      ],
+      "aliases": [
+        "/sales/after-sales?type=REPAIR",
+        "/sales/after-sales?type=REPAIR&status=PENDING_QUOTE_CONFIRMATION",
+        "/sales/after-sales?type=RESHIPMENT",
+        "/sales/after-sales?type=EXCHANGE_RETURN",
+        "/sales/after-sales?type=REFUND_PICKUP",
+        "/sales/after-sales?type=PRIVATE_PURCHASE",
+        "/sales/after-sales?type=CUSTOMER_ISSUE"
+      ]
+    },
+    {
+      "id": "after-sales-quotes",
+      "title": "售後案件報價草稿",
+      "summary": "為既有維修案件選擇品牌、編寫報價項目並保存未發送的草稿。",
+      "keywords": [
+        "售後案件報價草稿",
+        "After-sales quote drafts"
+      ],
+      "module": "after-sales",
+      "path": "/sales/after-sales/quotes",
+      "category": "售後管理",
+      "group": "service",
+      "sections": {
+        "steps": [
+          "在已啟用新版售後功能的部署，由案件建立報價草稿或在案件報價頁新增。",
+          "選擇維修案件及品牌，核對項目、數量、單價與顧客說明，查看顧客版預覽後保存草稿。"
+        ],
+        "boundaries": [
+          "此功能受 staged 開關控制，未啟用時會導回售後案件頁。",
+          "顧客版預覽明確標示未發送；保存草稿不會寄送報價，也不等於客戶確認。"
+        ],
+        "related": [
+          "after-sales",
+          "after-sales-brands"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "After-sales quote drafts",
+          "summary": "Choose a brand for a repair case, prepare quote lines and save an unsent draft.",
+          "category": "After-sales",
+          "keywords": [
+            "After-sales quote drafts",
+            "after-sales"
+          ],
+          "sections": {
+            "steps": [
+              "In a deployment with staged after-sales enabled, create a draft from a case or the case-quote page.",
+              "Choose the repair case and brand, check lines, quantities, prices and customer note, preview the customer version and save the draft."
+            ],
+            "boundaries": [
+              "This route requires the staged feature; otherwise it redirects to the case page.",
+              "The customer preview is explicitly unsent. Saving a draft neither sends a quote nor records customer acceptance."
+            ],
+            "related": [
+              "after-sales",
+              "after-sales-brands"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/AfterSalesQuotesPage.tsx",
+        "backend/src/modules/integration/after-sales/after-sales-preparation.controller.ts",
+        "frontend/src/config/release.ts"
+      ],
+      "permissions": [
+        "after_sales_cases:read"
+      ],
+      "availability": "staged"
+    },
+    {
+      "id": "after-sales-internal",
+      "title": "內部售後案件",
+      "summary": "查看與維護 ERP 內部的來回件及售後處理紀錄。",
+      "keywords": [
+        "內部售後案件",
+        "Internal after-sales cases"
+      ],
+      "module": "after-sales",
+      "path": "/sales/after-sales/internal",
+      "category": "售後管理",
+      "group": "service",
+      "sections": {
+        "steps": [
+          "進入內部案件清單，依案件種類或狀態找到需要處理的案件。",
+          "開啟案件核對客戶、品項、付款與倉庫進度，再依有權限的原頁面動作處理。"
+        ],
+        "boundaries": [
+          "內部案件與外部客服來源案件可能使用不同識別及狀態，請先確認來源。",
+          "沒有來源回執不能認定已發送、出貨、退款或開票。"
+        ],
+        "related": [
+          "after-sales",
+          "sales-orders",
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Internal after-sales cases",
+          "summary": "View and maintain internal ERP exchange/return and after-sales records.",
+          "category": "After-sales",
+          "keywords": [
+            "Internal after-sales cases",
+            "after-sales"
+          ],
+          "sections": {
+            "steps": [
+              "Open the internal case list and locate a record by type or status.",
+              "Inspect customer, lines, payment and warehouse progress before using authorized page actions."
+            ],
+            "boundaries": [
+              "Internal and externally sourced cases may use different identifiers and statuses; check the source first.",
+              "Without source confirmation, do not claim sending, shipping, refunding or invoicing is complete."
+            ],
+            "related": [
+              "after-sales",
+              "sales-orders",
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/AfterSalesCasesPage.tsx",
+        "backend/src/modules/sales/sales.controller.ts"
+      ],
+      "permissions": [
+        "after_sales_cases:read"
+      ]
+    },
+    {
+      "id": "after-sales-brands",
+      "title": "售後品牌設定",
+      "summary": "維護售後報價使用的品牌設定，保存時保留版本檢查。",
+      "keywords": [
+        "售後品牌設定",
+        "After-sales brand settings"
+      ],
+      "module": "after-sales",
+      "path": "/admin/after-sales-brands",
+      "category": "系統管理",
+      "group": "admin",
+      "sections": {
+        "steps": [
+          "在已啟用新版售後功能的部署，由管理員開啟品牌設定並載入現有版本。",
+          "編輯需要的品牌資訊後保存；如果版本衝突，先重新載入並核對他人的修改。"
+        ],
+        "boundaries": [
+          "此頁限管理員，並受 staged 開關控制；未啟用時導回售後案件。",
+          "品牌設定與案件報價草稿不會自動發送到顧客。"
+        ],
+        "related": [
+          "after-sales-quotes",
+          "access-control"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "After-sales brand settings",
+          "summary": "Maintain brand settings used by after-sales quotes, with version checks when saving.",
+          "category": "Administration",
+          "keywords": [
+            "After-sales brand settings",
+            "after-sales"
+          ],
+          "sections": {
+            "steps": [
+              "In a staged-enabled deployment, an administrator opens brand settings and loads the existing version.",
+              "Edit the necessary brand information and save; on a version conflict, reload and inspect concurrent changes."
+            ],
+            "boundaries": [
+              "The page is administrator-only and gated by the staged feature; otherwise it redirects to cases.",
+              "Brand settings and case quote drafts do not automatically send anything to customers."
+            ],
+            "related": [
+              "after-sales-quotes",
+              "access-control"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/AfterSalesBrandsPage.tsx",
+        "backend/src/modules/integration/after-sales/after-sales-preparation.controller.ts",
+        "frontend/src/config/release.ts"
+      ],
+      "roles": [
+        "ADMIN",
+        "SUPER_ADMIN"
+      ],
+      "availability": "staged"
+    },
+    {
+      "id": "receivables",
+      "title": "應收帳款與收款",
+      "summary": "查看訂單應收、收款與發票，追蹤超收或疑似重複收款。",
+      "keywords": [
+        "應收帳款與收款",
+        "Receivables and receipts"
+      ],
+      "module": "ar",
+      "path": "/sales/invoices",
+      "category": "財務會計",
+      "group": "finance",
+      "sections": {
+        "steps": [
+          "選擇日期區間查看未收應收、金流費用及發票狀態。",
+          "B2B 應收需填客戶、對帳單號、金額與到期日；有實際入款後才記錄收款。",
+          "發現超收時開啟明細，依付款批次與交易編號比對，可匯出審核清單。"
+        ],
+        "boundaries": [
+          "超收或相同金額不必然是重複交易，可能是合併收款，必須核實。",
+          "查詢金流狀態、同步資料與記錄收款不同；Copilot 不會代替這些写入操作。"
+        ],
+        "related": [
+          "sales-orders",
+          "reconciliation",
+          "banking"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Receivables and receipts",
+          "summary": "Review order receivables, payments and invoices, including overpayment or possible duplicate receipts.",
+          "category": "Finance and accounting",
+          "keywords": [
+            "Receivables and receipts",
+            "ar"
+          ],
+          "sections": {
+            "steps": [
+              "Select a date range and review open receivables, payment fees and invoice status.",
+              "For a B2B receivable, enter customer, statement reference, amount and due date; record a receipt only after actual payment.",
+              "Inspect overpayment details by payment batch and transaction reference, exporting the review list if needed."
+            ],
+            "boundaries": [
+              "An overpayment or repeated amount may be a combined payment rather than a duplicate; investigate.",
+              "Provider status lookup, sync and receipt recording are distinct; Copilot does not execute these writes."
+            ],
+            "related": [
+              "sales-orders",
+              "reconciliation",
+              "banking"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/ArInvoicesPage.tsx",
+        "backend/src/modules/ar/ar.controller.ts"
+      ],
+      "permissions": [
+        "sales_orders:read",
+        "accounts:read"
+      ]
+    },
+    {
+      "id": "chart-of-accounts",
+      "title": "會計科目表",
+      "summary": "查看科目代碼、名稱、類別、幣別餘額與啟用狀態。",
+      "keywords": [
+        "會計科目表",
+        "Chart of accounts"
+      ],
+      "module": "accounting",
+      "path": "/accounting/accounts",
+      "category": "財務會計",
+      "group": "finance",
+      "sections": {
+        "steps": [
+          "開啟會計科目表並重新載入目前公司科目。",
+          "依科目代碼、名稱與類別核對要使用的科目，再到分錄或報銷項目處理分類。"
+        ],
+        "boundaries": [
+          "目前「新增科目」按鈕與搜尋框尚未接上操作事件，不可描述為已完成新增或篩選功能。",
+          "科目主檔與正式過帳餘額需配合總分類帳、日期及幣別核對。"
+        ],
+        "related": [
+          "journal-entries",
+          "reimbursement-items",
+          "reports"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Chart of accounts",
+          "summary": "Review account codes, names, types, currency balances and active status.",
+          "category": "Finance and accounting",
+          "keywords": [
+            "Chart of accounts",
+            "accounting"
+          ],
+          "sections": {
+            "steps": [
+              "Open the chart of accounts and reload accounts for the current company.",
+              "Check code, name and type, then use the appropriate account in journals or reimbursement setup."
+            ],
+            "boundaries": [
+              "The current Add account button and search field have no connected action; do not describe them as working creation or filtering features.",
+              "Reconcile account records and posted balances with the ledger, date range and currency."
+            ],
+            "related": [
+              "journal-entries",
+              "reimbursement-items",
+              "reports"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/AccountsPage.tsx",
+        "backend/src/modules/accounting/accounting.controller.ts"
+      ],
+      "permissions": [
+        "accounts:read"
+      ]
+    },
+    {
+      "id": "journal-entries",
+      "title": "會計分錄",
+      "summary": "建立與檢查手動分錄，依權限完成核准。",
+      "keywords": [
+        "會計分錄",
+        "Journal entries"
+      ],
+      "module": "accounting",
+      "path": "/accounting/journals",
+      "category": "財務會計",
+      "group": "finance",
+      "sections": {
+        "steps": [
+          "查詢分錄並核對傳票日期、摘要及狀態。",
+          "有新增權限時填日期、摘要與各行借貸科目金額，核對平衡後提交。",
+          "核准人需檢查來源憑證、科目及期間，再使用原頁面核准動作。"
+        ],
+        "boundaries": [
+          "讀取、新增、核准分錄是獨立權限；借貸平衡不等於分類或稅務正確。",
+          "AI 或費用核准建議不能直接替代會計核准與入帳。"
+        ],
+        "related": [
+          "chart-of-accounts",
+          "accounting-periods",
+          "accounting-workbench"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Journal entries",
+          "summary": "Create and inspect manual journals and approve them where authorized.",
+          "category": "Finance and accounting",
+          "keywords": [
+            "Journal entries",
+            "accounting"
+          ],
+          "sections": {
+            "steps": [
+              "Find the journal and inspect its date, description and status.",
+              "With create access, enter date, description and debit/credit lines, verify balance and submit.",
+              "An approver checks source evidence, accounts and period before approving through the original page."
+            ],
+            "boundaries": [
+              "Read, create and approve are separate permissions; balance alone does not prove correct classification or tax treatment.",
+              "AI advice and expense approval do not replace accounting approval or posting."
+            ],
+            "related": [
+              "chart-of-accounts",
+              "accounting-periods",
+              "accounting-workbench"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/JournalEntriesPage.tsx",
+        "backend/src/modules/accounting/accounting.controller.ts"
+      ],
+      "permissions": [
+        "journal_entries:read"
+      ]
+    },
+    {
+      "id": "accounting-periods",
+      "title": "會計期間與關鎖帳",
+      "summary": "查看期間狀態，由管理員依序執行關帳與鎖帳。",
+      "keywords": [
+        "會計期間與關鎖帳",
+        "Accounting periods and closing"
+      ],
+      "module": "accounting",
+      "path": "/accounting/periods",
+      "category": "財務會計",
+      "group": "finance",
+      "sections": {
+        "steps": [
+          "使用全部、開放、已結帳、已鎖定篩選期間，核對起迄日期。",
+          "管理員完成必要會計檢核後，對開放期間執行關帳，再對已結帳期間執行鎖帳。"
+        ],
+        "boundaries": [
+          "只有 ADMIN 或 SUPER_ADMIN 可呼叫關帳與鎖帳；可讀取期間不代表可關帳。",
+          "本頁沒有解鎖或自動修正漏帳的操作；先核對單據完整性。"
+        ],
+        "related": [
+          "reports",
+          "journal-entries",
+          "accounting-workbench"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Accounting periods and closing",
+          "summary": "View accounting-period status; administrators close and lock periods in sequence.",
+          "category": "Finance and accounting",
+          "keywords": [
+            "Accounting periods and closing",
+            "accounting"
+          ],
+          "sections": {
+            "steps": [
+              "Filter all, open, closed or locked periods and verify their dates.",
+              "After required accounting checks, an administrator closes an open period, then locks a closed period."
+            ],
+            "boundaries": [
+              "Closing and locking require ADMIN or SUPER_ADMIN, beyond period-read access.",
+              "This page has no unlock or automatic missing-entry repair action; check document completeness first."
+            ],
+            "related": [
+              "reports",
+              "journal-entries",
+              "accounting-workbench"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/AccountingPeriodsPage.tsx",
+        "backend/src/modules/accounting/accounting.controller.ts"
+      ],
+      "permissions": [
+        "accounts:read"
+      ]
+    },
+    {
+      "id": "timeout-reconciliation",
+      "title": "逾期對帳追蹤",
+      "summary": "查看逾期案件、維護付款連結與備註，依流程交回會計。",
+      "keywords": [
+        "逾期對帳追蹤",
+        "Overdue reconciliation follow-up"
+      ],
+      "module": "reconciliation",
+      "path": "/reconciliation/timeout",
+      "category": "財務會計",
+      "group": "finance",
+      "sections": {
+        "steps": [
+          "開啟逾期對帳案件，核對訂單、付款狀態與既有追蹤紀錄。",
+          "必要時維護付款連結或備註；需退回會計時填原因與說明。",
+          "重送付款連結會使用原系統的明確動作，執行前核對對象與內容。"
+        ],
+        "boundaries": [
+          "API 另限制 ADMIN、ACCOUNTANT 或 CUSTOMER_SERVICE；一般頁面可見權限不保證可執行全部操作。",
+          "AI 操作說明不會代發付款提醒；DEV 沙盒可能封鎖外部發送。"
+        ],
+        "related": [
+          "reconciliation",
+          "receivables",
+          "sales-orders"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Overdue reconciliation follow-up",
+          "summary": "Review overdue cases, maintain payment links and notes, and return cases to accounting.",
+          "category": "Finance and accounting",
+          "keywords": [
+            "Overdue reconciliation follow-up",
+            "reconciliation"
+          ],
+          "sections": {
+            "steps": [
+              "Inspect the overdue case, order, payment status and follow-up history.",
+              "Maintain the payment link or notes where needed; include a reason when returning it to accounting.",
+              "Resending a payment link is an explicit original-system action; verify recipient and content first."
+            ],
+            "boundaries": [
+              "The API additionally restricts access to ADMIN, ACCOUNTANT or CUSTOMER_SERVICE; page visibility alone does not authorize every action.",
+              "AI guidance does not send reminders; the DEV sandbox may block external delivery."
+            ],
+            "related": [
+              "reconciliation",
+              "receivables",
+              "sales-orders"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/TimeoutReconciliationPage.tsx",
+        "backend/src/modules/reconciliation/reconciliation.controller.ts"
+      ],
+      "permissions": [
+        "reconciliation_timeout:read",
+        "accounts:read",
+        "journal_entries:read"
+      ]
+    },
+    {
+      "id": "attendance-admin",
+      "title": "出勤審核與班表政策",
+      "summary": "審核請假與加班、查看出勤明細，維護班表與假別額度。",
+      "keywords": [
+        "出勤審核與班表政策",
+        "Attendance review and policies"
+      ],
+      "module": "attendance",
+      "path": "/attendance/admin",
+      "category": "人資考勤",
+      "group": "people",
+      "sections": {
+        "steps": [
+          "選擇日期、員工及出勤類型，查看明細及待審假單或加班。",
+          "核對原因與時數後逐筆或依頁面提供的批次動作審核。",
+          "具修改權限者可維護班表、打卡政策、統一放假宣告與年度額度；保存後核對適用對象。"
+        ],
+        "boundaries": [
+          "查詢需要 attendance_admin:read，政策與審核異動另需要 update，且仍受公司資料範圍限制。",
+          "人工補正、加班核准與薪資計算是不同狀態，不應自動推定已發薪。"
+        ],
+        "related": [
+          "attendance",
+          "leave",
+          "payroll",
+          "employee-supervisor"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Attendance review and policies",
+          "summary": "Review leave and overtime, inspect attendance records, and maintain schedules and leave balances.",
+          "category": "People and attendance",
+          "keywords": [
+            "Attendance review and policies",
+            "attendance"
+          ],
+          "sections": {
+            "steps": [
+              "Filter date, employee and attendance type to inspect records and pending leave or overtime.",
+              "Check reasons and hours before individual review or available bulk review.",
+              "With update access, maintain schedules, clocking policies, closures and annual balances, then verify who they apply to."
+            ],
+            "boundaries": [
+              "Read requires attendance_admin:read; policy and review changes require update and remain company-scoped.",
+              "Manual adjustments, overtime approval and payroll calculation are distinct states and do not prove disbursement."
+            ],
+            "related": [
+              "attendance",
+              "leave",
+              "payroll",
+              "employee-supervisor"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/attendance/AttendanceAdminPage.tsx",
+        "backend/src/modules/attendance/controllers/attendance.controller.ts",
+        "backend/src/modules/attendance/controllers/leave.controller.ts"
+      ],
+      "permissions": [
+        "attendance_admin:read"
+      ]
+    },
+    {
+      "id": "assembly",
+      "title": "組裝工單",
+      "summary": "查看組裝工單編號、產品、預計產量及狀態。",
+      "keywords": [
+        "組裝工單",
+        "Assembly orders"
+      ],
+      "module": "assembly",
+      "path": "/manufacturing/assembly",
+      "category": "採購庫存",
+      "group": "inventory",
+      "sections": {
+        "steps": [
+          "開啟組裝與製造頁，使用重新整理載入工單。",
+          "核對生產產品、預計產量、狀態與開始日期，必要時由授權作業人員追溯原工單。"
+        ],
+        "boundaries": [
+          "目前「建立工單」按鈕沒有接上表單或事件；頁面只能依已載入工單查閱，不能宣稱可完成建立。",
+          "後端另有 ADMIN／ACCOUNTANT／OPERATOR 角色要求；庫存頁面權限不等於執行組裝權限。"
+        ],
+        "related": [
+          "products",
+          "purchase-orders",
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Assembly orders",
+          "summary": "View assembly order numbers, products, planned quantities and status.",
+          "category": "Purchasing and inventory",
+          "keywords": [
+            "Assembly orders",
+            "assembly"
+          ],
+          "sections": {
+            "steps": [
+              "Open Assembly and manufacturing and refresh the order list.",
+              "Check product, planned quantity, status and start date; have an authorized operator trace the source order as needed."
+            ],
+            "boundaries": [
+              "The current Create order button has no form or handler; the page supports viewing loaded orders, not a completed creation flow.",
+              "The backend additionally checks ADMIN, ACCOUNTANT or OPERATOR roles; inventory page access does not authorize assembly execution."
+            ],
+            "related": [
+              "products",
+              "purchase-orders",
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/AssemblyPage.tsx",
+        "backend/src/modules/assembly/assembly.controller.ts"
+      ],
+      "permissions": [
+        "inventory:read"
+      ]
+    },
+    {
+      "id": "business-entities",
+      "title": "公司管理",
+      "summary": "由最高管理員維護公司登入代碼、基本資料、幣別及啟用狀態。",
+      "keywords": [
+        "公司管理",
+        "Company management"
+      ],
+      "module": "entities",
+      "path": "/admin/entities",
+      "category": "系統管理",
+      "group": "admin",
+      "sections": {
+        "steps": [
+          "最高管理員開啟公司管理，確認要新增或編輯的公司。",
+          "填寫登入代碼、名稱、國別、基準幣別及必要聯絡資料；核對後儲存。",
+          "建立初始管理員時依表單填寫必要資訊，另行安全交付初始登入資訊。"
+        ],
+        "boundaries": [
+          "限 SUPER_ADMIN；一般 ADMIN 不能藉由知識指南建立公司或取得其他公司資料。",
+          "停用公司會影響登入與業務存取，先確認目標；不要把初始密碼貼入對話。"
+        ],
+        "related": [
+          "access-control",
+          "employee-supervisor"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Company management",
+          "summary": "Super administrators maintain company login codes, details, currency and active status.",
+          "category": "Administration",
+          "keywords": [
+            "Company management",
+            "entities"
+          ],
+          "sections": {
+            "steps": [
+              "A super administrator opens company management and identifies the company to create or edit.",
+              "Enter login code, name, country, base currency and required contacts, verify and save.",
+              "When creating an initial administrator, fill required fields and deliver initial login information through a secure separate process."
+            ],
+            "boundaries": [
+              "Only SUPER_ADMIN may manage companies; a guide does not grant ordinary admins company creation or cross-company access.",
+              "Disabling a company affects access. Verify the target and never paste initial passwords into chat."
+            ],
+            "related": [
+              "access-control",
+              "employee-supervisor"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/BusinessEntitiesPage.tsx",
+        "backend/src/modules/entities/entities.controller.ts"
+      ],
+      "roles": [
+        "SUPER_ADMIN"
+      ]
+    },
+    {
+      "id": "import-preview",
+      "title": "資料匯入預覽",
+      "summary": "在本機預覽薪資或固定費用試算表；目前不寫入系統。",
+      "keywords": [
+        "資料匯入預覽",
+        "Data import preview"
+      ],
+      "module": "import",
+      "path": "/import",
+      "category": "系統管理",
+      "group": "admin",
+      "sections": {
+        "steps": [
+          "选择薪資或固定費用類型，再選擇符合欄位的試算表。",
+          "檢查第一張工作表的預覽列；可移除檔案或重新開始。"
+        ],
+        "boundaries": [
+          "目前頁面僅使用瀏覽器解析試算表，沒有後端匯入請求；上傳或預覽不代表已建立薪資或費用。",
+          "範例只有虛構資料；不得用真實員工或銀行資訊製作公開測試檔。"
+        ],
+        "related": [
+          "payroll",
+          "expense-requests"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Data import preview",
+          "summary": "Preview payroll or fixed-expense spreadsheets locally; this page does not persist records.",
+          "category": "Administration",
+          "keywords": [
+            "Data import preview",
+            "import"
+          ],
+          "sections": {
+            "steps": [
+              "Choose payroll or fixed-expense type, then select a spreadsheet with matching columns.",
+              "Inspect the preview of the first worksheet; remove the file or reset as needed."
+            ],
+            "boundaries": [
+              "The page only parses spreadsheets in the browser and has no backend import request. Upload or preview does not create payroll or expense records.",
+              "Examples are synthetic; do not place real employee or bank information in public test files."
+            ],
+            "related": [
+              "payroll",
+              "expense-requests"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/ImportPage.tsx"
+      ],
+      "roles": [
+        "ADMIN",
+        "SUPER_ADMIN"
+      ],
+      "examples": [
+        {
+          "format": "csv",
+          "title": "虛構薪資預覽 CSV",
+          "titleEn": "Synthetic payroll preview CSV",
+          "content": "employeeId,name,baseSalary,bonus,deduction,paymentDate\nQA0001,Example Employee,30000,1000,0,2026-09-01\n"
+        },
+        {
+          "format": "csv",
+          "title": "虛構固定費用預覽 CSV",
+          "titleEn": "Synthetic fixed-expense preview CSV",
+          "content": "description,amount,currency,vendor,date,category\nExample office supplies,1200,TWD,Example Vendor,2026-09-01,office\n"
+        }
+      ],
+      "availability": "preview-only"
+    },
+    {
+      "id": "account-security",
+      "title": "首次登入與密碼變更",
+      "summary": "首次登入依表單修改臨時密碼，完成後以新密碼重新登入。",
+      "keywords": [
+        "首次登入與密碼變更",
+        "First login and password change"
+      ],
+      "module": "auth",
+      "category": "個人與助手",
+      "group": "profile",
+      "sections": {
+        "steps": [
+          "被導向首次登入修改密碼時，填寫本人信箱、目前密碼、新密碼及確認密碼。",
+          "新密碼至少八碼且兩次輸入一致；儲存成功後重新登入。",
+          "忘記密碼請使用登入頁提供的重設流程，依收到的重設連結完成。"
+        ],
+        "boundaries": [
+          "密碼、重設連結與一次性驗證資料僅由本人在驗證頁輸入，不應交給 AI。",
+          "此指南不會代改密碼、略過登入或重設他人帳號。"
+        ],
+        "related": [
+          "profile"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "First login and password change",
+          "summary": "Replace your temporary password on first login, then sign in again with the new password.",
+          "category": "Personal and assistant",
+          "keywords": [
+            "First login and password change",
+            "auth"
+          ],
+          "sections": {
+            "steps": [
+              "When prompted at first login, enter your email, current password, new password and confirmation.",
+              "Use at least eight characters and matching new-password entries, then sign in again after a successful update.",
+              "For forgotten passwords, use the login-page reset flow and the reset link you receive."
+            ],
+            "boundaries": [
+              "Enter passwords, reset links and one-time verification data only on the authentication page, never in AI chat.",
+              "This guide does not change passwords, bypass login or reset another person’s account."
+            ],
+            "related": [
+              "profile"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/ForcePasswordChangePage.tsx",
+        "frontend/src/pages/LoginPage.tsx",
+        "frontend/src/pages/ResetPasswordPage.tsx",
+        "backend/src/modules/auth/auth.controller.ts"
+      ],
+      "aliases": [
+        "/auth/change-password",
+        "/login",
+        "/reset-password"
+      ]
+    },
+    {
+      "id": "warehouse-workstation",
+      "title": "作業工作站入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「作業工作站」。",
+      "keywords": [
+        "作業工作站入口",
+        "Work station entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/workstation",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「作業工作站」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「作業工作站」再開啟，以目前營運帳號進入。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Work station entry",
+          "summary": "Use the authorized ERP entry to open WMS work station.",
+          "category": "Warehouse",
+          "keywords": [
+            "Work station entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Work station from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Work station destination and open it using your current operations account."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx"
+      ],
+      "permissions": [
+        "wms_orders:create",
+        "wms_picking:execute",
+        "wms_packing:execute"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-picking",
+      "title": "揀貨作業入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「揀貨作業」。",
+      "keywords": [
+        "揀貨作業入口",
+        "Picking entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/picking",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「揀貨作業」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「揀貨作業」再開啟，以目前營運帳號進入。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Picking entry",
+          "summary": "Use the authorized ERP entry to open WMS picking.",
+          "category": "Warehouse",
+          "keywords": [
+            "Picking entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Picking from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Picking destination and open it using your current operations account."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx"
+      ],
+      "permissions": [
+        "wms_picking:execute"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-packing",
+      "title": "裝箱核對入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「裝箱核對」。",
+      "keywords": [
+        "裝箱核對入口",
+        "Packing checks entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/packing",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「裝箱核對」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「裝箱核對」再開啟，以目前營運帳號進入。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Packing checks entry",
+          "summary": "Use the authorized ERP entry to open WMS packing checks.",
+          "category": "Warehouse",
+          "keywords": [
+            "Packing checks entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Packing checks from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Packing checks destination and open it using your current operations account."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx"
+      ],
+      "permissions": [
+        "wms_packing:execute"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-completed",
+      "title": "完成紀錄入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「完成紀錄」。",
+      "keywords": [
+        "完成紀錄入口",
+        "Completed work entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/completed",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「完成紀錄」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「完成紀錄」再開啟，以目前營運帳號進入。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "任務顯示完成不等於承運商已送達、顧客簽收或會計入帳。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Completed work entry",
+          "summary": "Use the authorized ERP entry to open WMS completed work.",
+          "category": "Warehouse",
+          "keywords": [
+            "Completed work entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Completed work from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Completed work destination and open it using your current operations account."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "A completed task does not prove carrier delivery, customer receipt or accounting posting."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx"
+      ],
+      "permissions": [
+        "wms_tasks:read"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-dispatch",
+      "title": "出貨管理入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「出貨管理」。",
+      "keywords": [
+        "出貨管理入口",
+        "Dispatch management entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/dispatch",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「出貨管理」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「出貨管理」再開啟，以目前營運帳號進入。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Dispatch management entry",
+          "summary": "Use the authorized ERP entry to open WMS dispatch management.",
+          "category": "Warehouse",
+          "keywords": [
+            "Dispatch management entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Dispatch management from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Dispatch management destination and open it using your current operations account."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx"
+      ],
+      "permissions": [
+        "wms_orders:create"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-marketplace",
+      "title": "通路訂單轉檔入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「通路訂單轉檔」。",
+      "keywords": [
+        "通路訂單轉檔入口",
+        "Marketplace conversion entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/marketplace",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「通路訂單轉檔」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「通路訂單轉檔」再開啟，以目前營運帳號進入。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "轉檔、匯出、正式匯入與 ERP／ECOUNT 過帳是不同階段；需以目的系統回執確認。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Marketplace conversion entry",
+          "summary": "Use the authorized ERP entry to open WMS marketplace conversion.",
+          "category": "Warehouse",
+          "keywords": [
+            "Marketplace conversion entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Marketplace conversion from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Marketplace conversion destination and open it using your current operations account."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Conversion, export, formal import and ERP/ECOUNT posting are separate stages; verify the destination receipt."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx"
+      ],
+      "permissions": [
+        "wms_orders:create"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-intakes",
+      "title": "預揀與倉庫放行入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「預揀與倉庫放行」。",
+      "keywords": [
+        "預揀與倉庫放行入口",
+        "Pre-picking and warehouse release entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/intakes",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「預揀與倉庫放行」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「預揀與倉庫放行」再開啟，以目前營運帳號進入。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Pre-picking and warehouse release entry",
+          "summary": "Use the authorized ERP entry to open WMS pre-picking and warehouse release.",
+          "category": "Warehouse",
+          "keywords": [
+            "Pre-picking and warehouse release entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Pre-picking and warehouse release from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Pre-picking and warehouse release destination and open it using your current operations account."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx"
+      ],
+      "permissions": [
+        "wms_orders:create",
+        "wms_picking:execute",
+        "wms_packing:execute"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-overview",
+      "title": "儲運分析入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「儲運分析」。",
+      "keywords": [
+        "儲運分析入口",
+        "Warehouse analytics entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/overview",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「儲運分析」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「儲運分析」再開啟，以目前營運帳號進入。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Warehouse analytics entry",
+          "summary": "Use the authorized ERP entry to open WMS warehouse analytics.",
+          "category": "Warehouse",
+          "keywords": [
+            "Warehouse analytics entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Warehouse analytics from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Warehouse analytics destination and open it using your current operations account."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx"
+      ],
+      "permissions": [
+        "wms_overview:read"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-logs",
+      "title": "操作日誌入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「操作日誌」。",
+      "keywords": [
+        "操作日誌入口",
+        "Operation logs entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/logs",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「操作日誌」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「操作日誌」再開啟，以目前營運帳號進入。",
+          "未配置 WMS 入口且使用 ERP 報表時，依可用的期間與篩選查看紀錄，開啟詳情追溯時間、單號與操作人。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "資料未載入或來源不可用時，不能視為沒有例外或作業正常。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Operation logs entry",
+          "summary": "Use the authorized ERP entry to open WMS operation logs.",
+          "category": "Warehouse",
+          "keywords": [
+            "Operation logs entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Operation logs from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Operation logs destination and open it using your current operations account.",
+              "When the ERP report is used without a WMS portal, filter available periods and inspect record details such as time, order and actor."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Missing data or an unavailable source does not mean there are no exceptions."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/pages/WarehouseReportsPage.tsx"
+      ],
+      "permissions": [
+        "wms_logs:read"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-exceptions",
+      "title": "例外總覽入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「例外總覽」。",
+      "keywords": [
+        "例外總覽入口",
+        "Exception overview entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/exceptions",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「例外總覽」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「例外總覽」再開啟，以目前營運帳號進入。",
+          "未配置 WMS 入口且使用 ERP 報表時，依可用的期間與篩選查看紀錄，開啟詳情追溯時間、單號與操作人。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "資料未載入或來源不可用時，不能視為沒有例外或作業正常。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Exception overview entry",
+          "summary": "Use the authorized ERP entry to open WMS exception overview.",
+          "category": "Warehouse",
+          "keywords": [
+            "Exception overview entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Exception overview from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Exception overview destination and open it using your current operations account.",
+              "When the ERP report is used without a WMS portal, filter available periods and inspect record details such as time, order and actor."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Missing data or an unavailable source does not mean there are no exceptions."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/pages/WarehouseReportsPage.tsx"
+      ],
+      "permissions": [
+        "wms_exceptions:read"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-scan-errors",
+      "title": "刷錯分析入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「刷錯分析」。",
+      "keywords": [
+        "刷錯分析入口",
+        "Scan error analysis entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/scan-errors",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「刷錯分析」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「刷錯分析」再開啟，以目前營運帳號進入。",
+          "未配置 WMS 入口且使用 ERP 報表時，依可用的期間與篩選查看紀錄，開啟詳情追溯時間、單號與操作人。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "資料未載入或來源不可用時，不能視為沒有例外或作業正常。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Scan error analysis entry",
+          "summary": "Use the authorized ERP entry to open WMS scan error analysis.",
+          "category": "Warehouse",
+          "keywords": [
+            "Scan error analysis entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Scan error analysis from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Scan error analysis destination and open it using your current operations account.",
+              "When the ERP report is used without a WMS portal, filter available periods and inspect record details such as time, order and actor."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Missing data or an unavailable source does not mean there are no exceptions."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/pages/WarehouseReportsPage.tsx"
+      ],
+      "permissions": [
+        "wms_scan_errors:read"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-defects",
+      "title": "新品不良分析入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「新品不良分析」。",
+      "keywords": [
+        "新品不良分析入口",
+        "New-product defect analysis entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/defects",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「新品不良分析」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「新品不良分析」再開啟，以目前營運帳號進入。",
+          "未配置 WMS 入口且使用 ERP 報表時，依可用的期間與篩選查看紀錄，開啟詳情追溯時間、單號與操作人。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "資料未載入或來源不可用時，不能視為沒有例外或作業正常。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "New-product defect analysis entry",
+          "summary": "Use the authorized ERP entry to open WMS new-product defect analysis.",
+          "category": "Warehouse",
+          "keywords": [
+            "New-product defect analysis entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select New-product defect analysis from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the New-product defect analysis destination and open it using your current operations account.",
+              "When the ERP report is used without a WMS portal, filter available periods and inspect record details such as time, order and actor."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Missing data or an unavailable source does not mean there are no exceptions."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/pages/WarehouseReportsPage.tsx"
+      ],
+      "permissions": [
+        "wms_defects:read"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-logistics",
+      "title": "物流查詢入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「物流查詢」。",
+      "keywords": [
+        "物流查詢入口",
+        "Logistics lookup entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/logistics",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「物流查詢」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「物流查詢」再開啟，以目前營運帳號進入。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "此入口不會自動改動物流設定或授權人員；需由目的頁授權人員操作。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Logistics lookup entry",
+          "summary": "Use the authorized ERP entry to open WMS logistics lookup.",
+          "category": "Warehouse",
+          "keywords": [
+            "Logistics lookup entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Logistics lookup from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Logistics lookup destination and open it using your current operations account."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Opening this entry does not change logistics settings or user access; authorized staff act in the destination."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx"
+      ],
+      "roles": [
+        "ADMIN",
+        "SUPER_ADMIN"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-team",
+      "title": "團隊公告入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「團隊公告」。",
+      "keywords": [
+        "團隊公告入口",
+        "Team announcements entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/team",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「團隊公告」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「團隊公告」再開啟，以目前營運帳號進入。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Team announcements entry",
+          "summary": "Use the authorized ERP entry to open WMS team announcements.",
+          "category": "Warehouse",
+          "keywords": [
+            "Team announcements entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Team announcements from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Team announcements destination and open it using your current operations account."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx"
+      ],
+      "permissions": [
+        "wms_tasks:read"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-users",
+      "title": "儲運人員入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「儲運人員」。",
+      "keywords": [
+        "儲運人員入口",
+        "Warehouse users entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/users",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「儲運人員」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「儲運人員」再開啟，以目前營運帳號進入。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "此入口不會自動改動物流設定或授權人員；需由目的頁授權人員操作。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Warehouse users entry",
+          "summary": "Use the authorized ERP entry to open WMS warehouse users.",
+          "category": "Warehouse",
+          "keywords": [
+            "Warehouse users entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Warehouse users from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Warehouse users destination and open it using your current operations account."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Opening this entry does not change logistics settings or user access; authorized staff act in the destination."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx"
+      ],
+      "roles": [
+        "ADMIN",
+        "SUPER_ADMIN"
+      ],
+      "availability": "wms-portal"
+    },
+    {
+      "id": "warehouse-settings",
+      "title": "儲運設定入口",
+      "summary": "使用已授權的 ERP 入口前往 WMS「儲運設定」。",
+      "keywords": [
+        "儲運設定入口",
+        "Warehouse settings entry"
+      ],
+      "module": "warehouse",
+      "path": "/warehouse/settings",
+      "category": "儲運管理",
+      "group": "warehouse",
+      "sections": {
+        "steps": [
+          "從儲運工作台選擇「儲運設定」，或開啟對應的 ERP 功能入口。",
+          "WMS 已連線時，確認目的功能為「儲運設定」再開啟，以目前營運帳號進入。"
+        ],
+        "boundaries": [
+          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
+          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "此入口不會自動改動物流設定或授權人員；需由目的頁授權人員操作。"
+        ],
+        "related": [
+          "warehouse"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Warehouse settings entry",
+          "summary": "Use the authorized ERP entry to open WMS warehouse settings.",
+          "category": "Warehouse",
+          "keywords": [
+            "Warehouse settings entry",
+            "warehouse"
+          ],
+          "sections": {
+            "steps": [
+              "Select Warehouse settings from the warehouse workspace or open its ERP entry point.",
+              "When connected, verify the Warehouse settings destination and open it using your current operations account."
+            ],
+            "boundaries": [
+              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
+              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Opening this entry does not change logistics settings or user access; authorized staff act in the destination."
+            ],
+            "related": [
+              "warehouse"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/config/wms-portal.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/pages/WarehouseWorkspacePage.tsx",
+        "frontend/src/pages/WarehousePortalPage.tsx"
+      ],
+      "permissions": [
+        "wms_tasks:read"
+      ],
+      "availability": "wms-portal"
+    }
+  ],
+  "legacyContentOverrideReasons": {
+    "dashboard": "DashboardPage now shows operational and finance metrics by period, not an AI yesterday briefing.",
+    "reimbursement-items": "Use the actual starter-library label and configured fields instead of claiming an AI question library."
+  }
+}
