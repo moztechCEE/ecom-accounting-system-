@@ -28,7 +28,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
-import { customerService, Customer } from '../services/customer.service'
+import CustomerSearchSelect from '../components/CustomerSearchSelect'
 import { productService, Product } from '../services/product.service'
 import {
   AfterSalesCase,
@@ -75,7 +75,6 @@ const AfterSalesCasesPage: React.FC = () => {
   const [status, setStatus] = useState<StatusFilter>('all')
   const [search, setSearch] = useState('')
   const [cases, setCases] = useState<AfterSalesCase[]>([])
-  const [customers, setCustomers] = useState<Customer[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [createOpen, setCreateOpen] = useState(false)
   const [shipCase, setShipCase] = useState<AfterSalesCase | null>(null)
@@ -109,12 +108,8 @@ const AfterSalesCasesPage: React.FC = () => {
   }
 
   const loadOptions = async () => {
-    const [customerRows, productRows] = await Promise.allSettled([
-      customerService.findAll(),
-      productService.findAll(),
-    ])
-    if (customerRows.status === 'fulfilled') setCustomers(customerRows.value)
-    if (productRows.status === 'fulfilled') setProducts(productRows.value)
+    try { setProducts(await productService.findAll()) }
+    catch { message.error('無法載入商品選項') }
   }
 
   useEffect(() => {
@@ -523,16 +518,7 @@ const AfterSalesCasesPage: React.FC = () => {
               </Form.Item>
             </div>
             <Form.Item name="customerId" label="客戶">
-              <Select
-                allowClear
-                showSearch
-                placeholder="選擇客戶"
-                optionFilterProp="label"
-                options={customers.map((customer) => ({
-                  value: customer.id,
-                  label: `${customer.code ? `${customer.code} ` : ''}${customer.name}`,
-                }))}
-              />
+              <CustomerSearchSelect enabled={createOpen} allowClear />
             </Form.Item>
             <Form.Item name="notes" label="備註">
               <TextArea rows={3} placeholder="客服可記錄來回件狀況、客戶說明或出貨注意事項" />

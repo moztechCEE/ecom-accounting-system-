@@ -3,7 +3,6 @@ import {
   Button,
   Col,
   DatePicker,
-  Divider,
   Drawer,
   Empty,
   Form,
@@ -33,6 +32,7 @@ import { motion } from 'framer-motion'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
 import { customerService, Customer } from '../services/customer.service'
+import CustomerSearchSelect from '../components/CustomerSearchSelect'
 import { productService, Product } from '../services/product.service'
 import {
   CreateSalesQuotationPayload,
@@ -232,7 +232,7 @@ const writeQuotationPrintWindow = (
 
 const SalesQuotationsPage: React.FC = () => {
   const [quotations, setQuotations] = useState<SalesQuotation[]>([])
-  const [customers, setCustomers] = useState<Customer[]>([])
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -253,17 +253,15 @@ const SalesQuotationsPage: React.FC = () => {
     setLoading(true)
     try {
       const entityId = localStorage.getItem('entityId')?.trim() || 'tw-entity-001'
-      const [quotationRows, customerRows, productRows] = await Promise.all([
+      const [quotationRows, productRows] = await Promise.all([
         salesService.findQuotations({
           entityId,
           status: statusFilter === 'all' ? undefined : statusFilter,
           search: searchText || undefined,
         }),
-        customerService.findAll(),
         productService.findAll(),
       ])
       setQuotations(quotationRows)
-      setCustomers(customerRows)
       setProducts(productRows)
     } catch (error: any) {
       message.error(error?.response?.data?.message || '無法載入報價單資料')
@@ -284,19 +282,6 @@ const SalesQuotationsPage: React.FC = () => {
       pending: quotations.filter((item) => item.status === 'pending').length,
     }
   }, [quotations])
-
-  const customerOptions = customers.map((customer) => ({
-    value: customer.id,
-    label: [
-      customer.code,
-      customer.name,
-      customer.companyName,
-      customer.taxId,
-      customer.phone || customer.mobile,
-    ]
-      .filter(Boolean)
-      .join(' · '),
-  }))
 
   const productOptions = products.map((product) => ({
     value: product.id,
@@ -356,7 +341,7 @@ const SalesQuotationsPage: React.FC = () => {
       const values = await customerForm.validateFields()
       setCustomerSubmitting(true)
       const created = await customerService.create(values)
-      setCustomers((current) => [created, ...current])
+      setSelectedCustomer(created)
       form.setFieldValue('customerId', created.id)
       setCustomerModalOpen(false)
       customerForm.resetFields()
@@ -688,28 +673,11 @@ const SalesQuotationsPage: React.FC = () => {
             </Col>
             <Col span={12}>
               <Form.Item name="customerId" label="客戶" rules={[{ required: true, message: '請選擇客戶' }]}>
-                <Select
-                  showSearch
-                  optionFilterProp="label"
-                  options={customerOptions}
-                  placeholder="選擇客戶"
-                  onSearch={setCustomerSearch}
-                  notFoundContent={<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="找不到客戶" />}
-                  dropdownRender={(menu) => (
-                    <>
-                      {menu}
-                      <Divider className="!my-2" />
-                      <Button
-                        type="text"
-                        block
-                        icon={<PlusOutlined />}
-                        className="!justify-start"
-                        onClick={openCustomerModal}
-                      >
-                        新增客戶資訊
-                      </Button>
-                    </>
-                  )}
+                <CustomerSearchSelect
+                  enabled={drawerOpen}
+                  selectedCustomer={selectedCustomer}
+                  onSearchTextChange={setCustomerSearch}
+                  onCreateCustomer={openCustomerModal}
                 />
               </Form.Item>
             </Col>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Card,
   Typography,
@@ -30,7 +30,7 @@ import { useEntityContext } from '../hooks/useEntityContext'
 import { useAuth } from '../contexts/AuthContext'
 import { hasAnyPermission } from '../utils/access'
 
-const { Title, Text } = Typography
+const { Title } = Typography
 const { Option } = Select
 
 const formatCurrency = (value?: number | string | null) =>
@@ -41,76 +41,44 @@ const CustomersPage: React.FC = () => {
   const { user } = useAuth()
   const canManage = hasAnyPermission(user, ['sales_orders:create'])
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [loading, setLoading] = useState(false)
   const [searchText, setSearchText] = useState('')
-  const [sourceFilter, setSourceFilter] = useState<string>('all')
+  const [search, setSearch] = useState('')
+  const [refreshVersion, setRefreshVersion] = useState(0)
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form] = Form.useForm()
   const watchedTaxId = Form.useWatch('taxId', form)
 
-  const fetchCustomers = async () => {
-    setLoading(true)
-    try {
-      const data = await customerService.findAll(entityId)
-      setCustomers(data)
-    } catch (error) {
-      message.error('無法載入客戶列表')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const fetchCustomers = () => setRefreshVersion((current) => current + 1)
 
   useEffect(() => {
-    fetchCustomers()
+    const timer = window.setTimeout(() => { setPage(1); setCustomers([]); setTotal(0) }, 0)
+    return () => window.clearTimeout(timer)
   }, [entityId])
-
-  const sourceOptions = useMemo(() => {
-    return Array.from(
-      new Set(
-        customers.flatMap((customer) => customer.sourceLabels || []),
-      ),
-    ).sort((left, right) => left.localeCompare(right, 'zh-Hant'))
-  }, [customers])
-
-  const filteredCustomers = useMemo(() => {
-    const keyword = searchText.trim().toLowerCase()
-
-    return customers.filter((customer) => {
-      const sourceLabels = customer.sourceLabels || []
-      const sourceBrands = customer.sourceBrands || []
-      const matchesSource =
-        sourceFilter === 'all' || sourceLabels.includes(sourceFilter)
-
-      if (!matchesSource) {
-        return false
-      }
-
-      if (!keyword) {
-        return true
-      }
-
-      return [
-        customer.name,
-        customer.code,
-        customer.email,
-        customer.phone,
-        customer.phoneExtension,
-        customer.mobile,
-        customer.taxId,
-        customer.companyName,
-        customer.contactPerson,
-        customer.address,
-        customer.summary,
-        customer.primarySourceLabel,
-        customer.primarySourceBrand,
-        ...sourceLabels,
-        ...sourceBrands,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(keyword))
-    })
-  }, [customers, searchText, sourceFilter])
+  useEffect(() => {
+    const timer = window.setTimeout(() => { setPage(1); setSearch(searchText.trim()) }, 300)
+    return () => window.clearTimeout(timer)
+  }, [searchText])
+  useEffect(() => {
+    let active = true
+    const loadingTimer = window.setTimeout(() => { if (active) setLoading(true) }, 0)
+    customerService.findPage({ entityId, limit: pageSize, offset: (page - 1) * pageSize, search })
+      .then((result) => {
+        if (!active) return
+        setCustomers(result.rows)
+        setTotal(result.total)
+        if (page > 1 && result.rows.length === 0 && result.total > 0) {
+          setPage(Math.ceil(result.total / pageSize))
+        }
+      })
+      .catch(() => { if (active) { setCustomers([]); setTotal(0); message.error('無法載入客戶列表') } })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false; window.clearTimeout(loadingTimer) }
+  }, [entityId, page, pageSize, search, refreshVersion])
 
   useEffect(() => {
     if (!isModalVisible) {
@@ -145,7 +113,7 @@ const CustomersPage: React.FC = () => {
       form.resetFields()
       setEditingId(null)
       fetchCustomers()
-    } catch (error) {
+    } catch {
       message.error('操作失敗')
     }
   }
@@ -155,7 +123,7 @@ const CustomersPage: React.FC = () => {
       await customerService.delete(id, entityId)
       message.success('客戶已停用，歷史銷售與 B2B 資料保留')
       fetchCustomers()
-    } catch (error) {
+    } catch {
       message.error('停用失敗')
     }
   }
@@ -201,7 +169,7 @@ const CustomersPage: React.FC = () => {
       ),
     },
     {
-      title: '來源',
+      title: '最近訂單來源',
       key: 'source',
       render: (_: unknown, record: Customer) => (
         <div className="space-y-2">
@@ -310,23 +278,12 @@ const CustomersPage: React.FC = () => {
         <Space wrap>
           <Input
             allowClear
-            placeholder="搜尋客戶、Email、電話、來源"
+            placeholder="搜尋客戶、Email、電話、統編"
+            maxLength={200}
             prefix={<SearchOutlined className="text-gray-400" />}
             className="w-72"
             value={searchText}
             onChange={(event) => setSearchText(event.target.value)}
-          />
-          <Select
-            value={sourceFilter}
-            onChange={setSourceFilter}
-            className="min-w-[220px]"
-            options={[
-              { label: '全部來源', value: 'all' },
-              ...sourceOptions.map((source) => ({
-                label: source,
-                value: source,
-              })),
-            ]}
           />
           <Button icon={<ReloadOutlined />} onClick={fetchCustomers}>重新整理</Button>
           {canManage && <Button
@@ -346,13 +303,13 @@ const CustomersPage: React.FC = () => {
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card className="shadow-sm rounded-xl border-0">
-          <div className="text-xs text-slate-400">客戶總數</div>
+          <div className="text-xs text-slate-400">{search ? '符合條件客戶' : '客戶總數'}</div>
           <div className="mt-2 text-2xl font-semibold text-slate-900">
-            {customers.length}
+            {total}
           </div>
         </Card>
         <Card className="shadow-sm rounded-xl border-0">
-          <div className="text-xs text-slate-400">MOZTECH 官網</div>
+          <div className="text-xs text-slate-400">本頁最近訂單來源：MOZTECH 官網</div>
           <div className="mt-2 text-2xl font-semibold text-slate-900">
             {customers.filter((customer) =>
               (customer.sourceLabels || []).some((source) => source.includes('MOZTECH 官網')),
@@ -360,7 +317,7 @@ const CustomersPage: React.FC = () => {
           </div>
         </Card>
         <Card className="shadow-sm rounded-xl border-0">
-          <div className="text-xs text-slate-400">萬魔未來工學院 / 團購</div>
+          <div className="text-xs text-slate-400">本頁最近訂單品牌：萬魔</div>
           <div className="mt-2 text-2xl font-semibold text-slate-900">
             {customers.filter((customer) =>
               (customer.sourceBrands || []).some((brand) => brand.includes('萬魔')),
@@ -368,7 +325,7 @@ const CustomersPage: React.FC = () => {
           </div>
         </Card>
         <Card className="shadow-sm rounded-xl border-0">
-          <div className="text-xs text-slate-400">未歸戶 / 手動建立</div>
+          <div className="text-xs text-slate-400">本頁未歸戶 / 手動建立</div>
           <div className="mt-2 text-2xl font-semibold text-slate-900">
             {customers.filter((customer) => !customer.totalOrders).length}
           </div>
@@ -378,10 +335,10 @@ const CustomersPage: React.FC = () => {
       <Card className="shadow-sm rounded-xl border-0">
         <Table
           columns={columns}
-          dataSource={filteredCustomers}
+          dataSource={customers}
           rowKey="id"
           loading={loading}
-          pagination={{ pageSize: 10 }}
+          pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (count) => `共 ${count} 位客戶`, onChange: (nextPage, nextSize) => { setPage(nextSize !== pageSize ? 1 : nextPage); setPageSize(nextSize) } }}
         />
       </Card>
 

@@ -1,5 +1,7 @@
 import api from './api'
 import { resolveEntityId } from './entities.service'
+import { customerPageParams, parseCustomerPage } from './customer-page'
+import type { CustomerPage } from './customer-page'
 
 export interface Customer {
   id: string
@@ -31,13 +33,14 @@ export interface Customer {
   sourceBrands?: string[]
   primarySourceLabel?: string
   primarySourceBrand?: string
+  sourceScope?: 'latest_order'
 }
 
 export const customerService = {
-  async findAll(explicitEntityId?: string) {
-    const entityId = await resolveEntityId(explicitEntityId)
-    const response = await api.get<Customer[]>('/customers', { params: { entityId } })
-    return response.data
+  async findPage(input: { entityId?: string; limit?: number; offset?: number; search?: string } = {}): Promise<CustomerPage<Customer>> {
+    const entityId = await resolveEntityId(input.entityId)
+    const response = await api.get<unknown>('/customers', { params: { entityId, ...customerPageParams(input) } })
+    return parseCustomerPage<Customer>(response.data)
   },
 
   async findOne(id: string, explicitEntityId?: string) {

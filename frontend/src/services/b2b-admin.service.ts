@@ -17,7 +17,13 @@ export interface B2BAdminRequest extends B2BRequestDetail {
   customerName: string
 }
 
+export interface B2BProductOption { id: string; sku: string; name: string }
+
 export const b2bAdminService = {
+  async productOptions(entityId: string, search = '', limit = 20): Promise<{ rows: B2BProductOption[]; total: number; limit: number; hasMore: boolean }> {
+    const { data } = await api.get('/b2b/admin/product-options', { params: { entityId, search: search.trim().slice(0, 200), limit } })
+    return data
+  },
   async setup(entityId: string): Promise<B2BAdminSetup> {
     const { data } = await api.get<B2BAdminSetup>('/b2b/admin/setup', { params: { entityId } })
     return data
