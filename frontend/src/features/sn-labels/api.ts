@@ -7,11 +7,20 @@ export type Entry = {
   data: SnDraft;
   updated_at: string;
 };
+export type AllocationPreview = {
+  first: number | null;
+  last: number | null;
+  noSerial: boolean;
+  token: string;
+  total: number;
+  checkedAt: string;
+  rows: { id: string; ordinal: number; quantity: number; serials: string[] }[];
+};
 export type Detail = {
   id: string;
   data: SnDraft;
-  first: number;
-  last: number;
+  first: number | null;
+  last: number | null;
   cartons: number;
   boxes: { id: string; ordinal: number; quantity: number; serials: string[] }[];
   events: {
@@ -36,11 +45,26 @@ export const snApi = (entityId: string) => ({
         { params: { entityId } },
       )
     ).data,
-  activate: async (id: string, revision: number) =>
+  preview: async (data: SnDraft, page = 1) =>
+    (
+      await api.post<AllocationPreview>(
+        "/sn-labels/preview",
+        { data, page },
+        { params: { entityId } },
+      )
+    ).data,
+  remove: async (id: string, revision: number) =>
+    (
+      await api.delete(`/sn-labels/drafts/${id}`, {
+        data: { revision },
+        params: { entityId },
+      })
+    ).data,
+  activate: async (id: string, revision: number, previewToken: string) =>
     (
       await api.post<{ batchId: string }>(
         `/sn-labels/drafts/${id}/activate`,
-        { revision },
+        { revision, previewToken },
         { params: { entityId } },
       )
     ).data,

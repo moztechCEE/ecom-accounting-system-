@@ -3,6 +3,8 @@ import { Card, Typography, Table, Button, Tag, Space, Modal, Form, Input, Select
 import { PlusOutlined, BarcodeOutlined, ReloadOutlined, MinusCircleOutlined, UploadOutlined, DownloadOutlined } from '@ant-design/icons'
 import { motion } from 'framer-motion'
 import { productService, Product } from '../services/product.service'
+import { errorText } from '../features/sn-labels/api'
+import { useAuth } from '../contexts/AuthContext'
 import { inventoryService } from '../services/inventory.service'
 
 const { Title } = Typography
@@ -48,6 +50,11 @@ const downloadCsv = (filename: string, rows: Array<Array<string | number>>) => {
 }
 
 const ProductsPage: React.FC = () => {
+  const { user } = useAuth()
+  const canWrite = !!user && (user.roles.some(r => ['ADMIN', 'SUPER_ADMIN'].includes(r)) || user.permissions.includes('inventory:update'))
+  const [editing, setEditing] = useState<Product | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [search, setSearch] = useState('')
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
   const [isModalVisible, setIsModalVisible] = useState(false)
@@ -74,7 +81,20 @@ const ProductsPage: React.FC = () => {
     fetchProducts()
   }, [])
 
+  const editProduct = (product: Product | null) => {
+    setEditing(product)
+    form.resetFields()
+    if (product) {
+      const attrs = product.attributes || {}
+      const values: Record<string, unknown> = { ...product, snLabels: attrs.snLabels || {}, attributesList: Object.entries(attrs).filter(([k,v]) => k !== 'snLabels' && typeof v === 'string').map(([key,value]) => ({key,value})) }
+      for (const k of ['packageLength','packageWidth','packageHeight','weight','grossWeight','netWeight']) values[k] = product[k as keyof Product] == null ? null : Number(product[k as keyof Product])
+      form.setFieldsValue(values)
+    } else form.setFieldsValue({ type: 'SIMPLE', hasSerialNumbers: false })
+    setIsModalVisible(true)
+  }
   const handleCreate = async (values: any) => {
+    if (saving) return
+    setSaving(true)
     try {
       const { attributesList, snLabels, ...rest } = values
       const attributes = attributesList?.reduce((acc: any, curr: any) => {
@@ -82,14 +102,18 @@ const ProductsPage: React.FC = () => {
         return acc
       }, {})
 
-      await productService.create({ ...rest, attributes: { ...attributes, snLabels } })
-      message.success('產品建立成功')
+      const data = { ...rest, name: rest.name.trim(), barcode: rest.barcode.trim(), modelNumber: rest.modelNumber?.trim(), attributes: { ...attributes, snLabels } }
+      if (editing) {
+        delete data.sku
+        await productService.update(editing.id, data)
+      } else await productService.create({ ...data, sku: rest.sku.trim() })
+      message.success(editing ? '產品已更新，下次選取會帶入儲存的 SN 建檔資料' : '產品建立成功')
       setIsModalVisible(false)
       form.resetFields()
       fetchProducts()
     } catch (error) {
-      message.error('建立失敗')
-    }
+      message.error(errorText(error))
+    } finally { setSaving(false) }
   }
 
   const handleDownloadTemplate = () => {
@@ -135,6 +159,7 @@ const ProductsPage: React.FC = () => {
   }
 
   const columns = [
+    { title: '操作', key: 'actions', render: (_: unknown, p: Product) => <Button disabled={!canWrite} onClick={() => editProduct(p)}>編輯</Button> },
     { title: 'SKU', dataIndex: 'sku', key: 'sku' },
     { title: '國際條碼', dataIndex: 'barcode', key: 'barcode' },
     { title: '原廠型號', dataIndex: 'modelNumber', key: 'modelNumber' },
@@ -204,7 +229,7 @@ const ProductsPage: React.FC = () => {
               預覽匯入 Excel/CSV
             </Button>
           </Upload>
-          <Button className="w-full lg:w-auto" type="primary" icon={<PlusOutlined />} size="large" onClick={() => setIsModalVisible(true)}>
+          <Button className="w-full lg:w-auto" type="primary" icon={<PlusOutlined />} size="large" disabled={!canWrite} onClick={() => editProduct(null)}>
             新增產品
           </Button>
         </div>
@@ -220,9 +245,10 @@ const ProductsPage: React.FC = () => {
             description="請先新增產品，或下載匯入範本整理 SKU、條碼、倉庫與初始庫存。批次匯入會先預覽，不會在確認前寫入產品或庫存。"
           />
         )}
+        <Input.Search className="mb-4" aria-label="搜尋產品" placeholder="搜尋名稱、SKU、國際條碼或型號" value={search} onChange={e => setSearch(e.target.value)} />
         <Table 
           columns={columns} 
-          dataSource={products} 
+          dataSource={products.filter(p => [p.name,p.sku,p.barcode,p.modelNumber].some(v => v?.toLowerCase().includes(search.trim().toLowerCase())))}
           rowKey="id" 
           loading={loading}
           scroll={{ x: 980 }}
@@ -281,23 +307,26 @@ const ProductsPage: React.FC = () => {
       </Modal>
 
       <Modal
-        title="新增產品"
+        title={editing ? "編輯產品" : "新增產品"}
         open={isModalVisible}
+        confirmLoading={saving}
+        okText="儲存"
+        cancelText="取消"
         onCancel={() => setIsModalVisible(false)}
         onOk={() => form.submit()}
       >
         <Form form={form} layout="vertical" onFinish={handleCreate}>
           <Form.Item name="sku" label="SKU" rules={[{ required: true }]}>
-            <Input placeholder="例如: PB-001" />
+            <Input disabled={!!editing} placeholder="例如: PB-001" />
           </Form.Item>
-          <Form.Item name="barcode" label="國際條碼" rules={[{ required: true, message: '國際條碼為必填' }]}>
+          <Form.Item name="barcode" label="國際條碼" rules={[{ required: true, message: '國際條碼為必填' }, { pattern: /^\d{8,14}$/, message: '請填寫 8～14 碼數字，保留開頭的 0' }]}>
             <Input placeholder="例如: 4710000000000" prefix={<BarcodeOutlined />} />
           </Form.Item>
           <Form.Item name="modelNumber" label="原廠型號 (Model No.)">
             <Input placeholder="例如: A2890" />
           </Form.Item>
           <Divider>SN 建檔資料</Divider>
-          <Row gutter={12}>{[['style', '款式'], ['color', '顏色'], ['modelCode', '型號代碼'], ['styleCode', '款式代碼（選填）'], ['colorCode', '顏色代碼']].map(([key, label]) => <Col span={12} key={key}><Form.Item name={['snLabels', key]} label={label}><Input maxLength={key.endsWith('Code') ? 6 : 50} /></Form.Item></Col>)}</Row>
+          <Row gutter={12}>{[['style', '款式'], ['color', '顏色'], ['modelCode', '型號代碼'], ['styleCode', '款式代碼（選填）'], ['colorCode', '顏色代碼']].map(([key, label]) => <Col span={12} key={key}><Form.Item name={['snLabels', key]} label={label} extra={key === 'modelCode' ? '無SN.產品，請填入NSI' : undefined}><Input maxLength={key.endsWith('Code') ? 6 : 50} /></Form.Item></Col>)}</Row>
           <Form.Item name="hasSerialNumbers" valuePropName="checked">
             <Checkbox>啟用單品序號追蹤</Checkbox>
           </Form.Item>

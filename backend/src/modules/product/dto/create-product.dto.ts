@@ -97,6 +97,18 @@ export class CreateProductDto {
 export class UpdateProductDto {
   @IsString()
   @IsOptional()
+  barcode?: string;
+
+  @IsString()
+  @IsOptional()
+  modelNumber?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  hasSerialNumbers?: boolean;
+
+  @IsString()
+  @IsOptional()
   name?: string;
 
   @IsEnum(ProductType)

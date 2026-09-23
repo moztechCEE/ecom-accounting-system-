@@ -138,16 +138,19 @@ export function validateDraft(input: any): SnData {
     throw new BadRequestException('規格箱標籤請依 60 × 75 mm 等比縮放');
   return data;
 }
+export const isNoSerial = (d: Pick<SnData, 'modelCode'>) =>
+  d.modelCode === 'NSI';
 export function allocationRule(entity: string, d: SnData) {
   const year = dateYear(d.manufactureDate);
   dateYear(d.orderDate);
   if (!d.productId || !d.model || !/^[A-Za-z0-9_-]{1,40}$/.test(d.model))
     throw new BadRequestException('箱號型號需為 1～40 碼英數字、- 或 _');
   if (
-    !/^[A-Z0-9]+$/.test(d.modelCode) ||
-    !/^[A-Z0-9]*$/.test(d.styleCode) ||
-    !/^[A-Z0-9]+$/.test(d.colorCode) ||
-    !/^[A-Z0-9]{4,6}$/.test(d.modelCode + d.styleCode + d.colorCode)
+    !isNoSerial(d) &&
+    (!/^[A-Z0-9]+$/.test(d.modelCode) ||
+      !/^[A-Z0-9]*$/.test(d.styleCode) ||
+      !/^[A-Z0-9]+$/.test(d.colorCode) ||
+      !/^[A-Z0-9]{4,6}$/.test(d.modelCode + d.styleCode + d.colorCode))
   )
     throw new BadRequestException(
       '型號與顏色代碼必填；款式選填，合计 4～6 碼大寫英數字',
@@ -170,6 +173,7 @@ export function allocationRule(entity: string, d: SnData) {
     year,
   ]);
   return {
+    noSerial: isNoSerial(d),
     prefix,
     scope,
     mergeKey: JSON.stringify([entity, d.productId, scope, d.orderDate]),

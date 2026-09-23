@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { cartonEstimate, constrainLayout, defaultLayout, draftStorageKey, manufacturingYear, newDraft, parseDrafts, previewCartons, samplePayload, sampleSerial, sequenceScopeKey, yearCode } from '../src/features/sn-labels/model.ts'
+import { isNoSerial, cartonEstimate, constrainLayout, defaultLayout, draftStorageKey, manufacturingYear, newDraft, parseDrafts, previewCartons, samplePayload, sampleSerial, sequenceScopeKey, yearCode } from '../src/features/sn-labels/model.ts'
 
 const draftForTest = () => ({ ...newDraft('test'), modelCode: 'A16', styleCode: 'L', colorCode: 'K', manufactureDate: '2026-09-21' })
 
@@ -81,4 +81,12 @@ test('label geometry bounds drag/resize and enforces QR on retail packaging', ()
   assert.equal(l.showQr, true); assert.equal(l.textX, 0); assert(l.textY >= 0)
   assert(l.qrX + l.qrSize <= l.width); assert(l.qrY + l.qrSize <= l.height - 1)
   assert.equal(constrainLayout({ ...defaultLayout(), target: 'device', showQr: false }).showQr, false)
+})
+
+test('NSI marks non-serialized products and prevents sample SN generation', () => {
+  const d = {...draftForTest(), modelCode:'NSI',styleCode:'',colorCode:''}
+  assert.equal(isNoSerial(d), true)
+  assert.throws(() => sampleSerial(d), /NSI/)
+  assert.throws(() => samplePayload(d), /NSI/)
+  assert.equal(isNoSerial(draftForTest()), false)
 })

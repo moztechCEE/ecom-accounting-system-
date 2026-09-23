@@ -19,15 +19,17 @@ export class ProductService {
     });
 
     if (existing) {
-      throw new ConflictException(`Product with SKU ${dto.sku} already exists`);
+      throw new ConflictException(`SKU「${dto.sku}」已存在，請在產品列表開啟「編輯」，補上國際條碼與 SN 建檔資料`);
     }
 
-    return this.prisma.product.create({
-      data: {
-        entityId,
-        ...dto,
-      },
-    });
+    try {
+      return await this.prisma.product.create({ data: { entityId, ...dto,
+        ...(dto.attributes?.snLabels?.modelCode?.trim().toUpperCase() === 'NSI' ? { hasSerialNumbers: false } : {}),
+      } });
+    } catch (e) {
+      if (e?.code === 'P2002') throw new ConflictException(`SKU「${dto.sku}」已存在，請編輯既有產品`);
+      throw e;
+    }
   }
 
   async findAll(entityId: string, query?: { type?: ProductType; category?: string }) {
@@ -66,11 +68,14 @@ export class ProductService {
   }
 
   async update(entityId: string, id: string, dto: UpdateProductDto) {
-    await this.findOne(entityId, id); // Ensure exists
-
-    return this.prisma.product.update({
-      where: { id },
-      data: dto,
+    return this.prisma.$transaction(async tx => {
+      const rows = await tx.$queryRaw<any[]>`SELECT id,attributes FROM products WHERE id=${id} AND entity_id=${entityId} FOR UPDATE`;
+      if (!rows.length) throw new NotFoundException('找不到此公司的產品');
+      const old = rows[0].attributes || {}, attrs = dto.attributes;
+      const attributes = attrs ? { ...old, ...attrs, ...(attrs.snLabels ? { snLabels: { ...old.snLabels, ...attrs.snLabels } } : {}) } : undefined;
+      return tx.product.update({ where: { id }, data: { ...dto, attributes,
+        ...(attributes?.snLabels?.modelCode?.trim().toUpperCase() === 'NSI' ? { hasSerialNumbers: false } : {}),
+      } });
     });
   }
 
@@ -82,7 +87,8 @@ export class ProductService {
       profile[key] = key.endsWith('Code') ? body[key].trim().toUpperCase() : body[key].trim();
       if (key.endsWith('Code') && !/^[A-Z0-9]*$/.test(profile[key])) throw new BadRequestException('代碼限英數字');
     }
-    const updated = await this.prisma.$executeRaw`UPDATE products SET attributes=jsonb_set(CASE WHEN jsonb_typeof(attributes)='object' THEN attributes ELSE '{}'::jsonb END,'{snLabels}',${JSON.stringify(profile)}::jsonb), model_number=${body.modelNumber.trim()}, updated_at=now() WHERE id=${id} AND entity_id=${entityId}`;
+    if (body.barcode !== undefined && (typeof body.barcode !== 'string' || !/^\d{8,14}$/.test(body.barcode.trim()))) throw new BadRequestException('國際條碼需為 8～14 碼數字');
+    const updated = await this.prisma.$executeRaw`UPDATE products SET barcode=COALESCE(${body.barcode?.trim() ?? null},barcode), has_serial_numbers=CASE WHEN ${profile.modelCode === 'NSI'} THEN false ELSE has_serial_numbers END, attributes=jsonb_set(CASE WHEN jsonb_typeof(attributes)='object' THEN attributes ELSE '{}'::jsonb END,'{snLabels}',${JSON.stringify(profile)}::jsonb), model_number=${body.modelNumber.trim()}, updated_at=now() WHERE id=${id} AND entity_id=${entityId}`;
     if (!updated) throw new NotFoundException('Product not found');
     return this.findOne(entityId,id);
   }

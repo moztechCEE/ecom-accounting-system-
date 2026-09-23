@@ -7,7 +7,13 @@ root=Path(__file__).resolve().parents[2]
 assert not subprocess.check_output(['git','status','--porcelain'],cwd=root).strip(),'Commit reviewed source before build'
 sha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root).decode().strip()
 registry='asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/'
-bases={'backend':('corely-erp-api-dev','6ecf1c792716faeead87ed89945b96f61969fc786e3b166f326628498ab0ea05'),'frontend':('corely-erp-dev','f508452e2cf5da4951d258e89a34c02513e1532aa71c643070cfcf315eb0825a')}
+bases={'backend':('corely-erp-api-dev','a137b99bc82b48f12de0ac06fda20cdfe762f15c11b87ed4983281f932a84236'),'frontend':('corely-erp-dev','402a73a0c489446fe2e1cfb223298e25d65a5c9c6b39fd3284f4e9b9a13d080b')}
+for service,digest in bases.values():
+ live=json.loads(subprocess.check_output(['gcloud','run','services','describe',service,'--project=moztech-main-db','--region=asia-east1','--format=json'],stderr=subprocess.DEVNULL))
+ traffic=[t for t in live['status']['traffic'] if t.get('percent',0)]
+ assert len(traffic)==1 and traffic[0]['percent']==100, 'DEV traffic changed; review before build'
+ revision=json.loads(subprocess.check_output(['gcloud','run','revisions','describe',traffic[0]['revisionName'],'--project=moztech-main-db','--region=asia-east1','--format=json'],stderr=subprocess.DEVNULL))
+ assert revision['status']['imageDigest'].endswith(digest), 'DEV base changed; review other work before build'
 with tempfile.TemporaryDirectory(prefix='sn-dev-release-') as temp:
  ctx=Path(temp);steps=[];images=[]
  for folder,(service,digest) in bases.items():

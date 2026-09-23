@@ -47,7 +47,9 @@ export function manufacturingYear(date: string): number {
   yearCode(year)
   return year
 }
+export const isNoSerial = (draft: Pick<SnDraft, 'modelCode'>) => draft.modelCode === 'NSI'
 function itemPrefix(draft: SnDraft) {
+  if (isNoSerial(draft)) throw new Error('NSI 無 SN 產品，不產生單品序號')
   const codes = [draft.modelCode, draft.styleCode, draft.colorCode]
   if (!/^[A-Z0-9]+$/.test(codes[0]) || !/^[A-Z0-9]*$/.test(codes[1]) || !/^[A-Z0-9]+$/.test(codes[2]) || !/^[A-Z0-9]{4,6}$/.test(codes.join(''))) {
     throw new Error('型號與顏色代碼必填；款式選填，合計需為 4～6 碼大寫英數字')

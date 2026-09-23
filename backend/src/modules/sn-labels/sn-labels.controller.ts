@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -37,6 +38,34 @@ export class SnLabelsController {
   async list(@Request() req, @Query() q: any) {
     return this.service.list(await this.company(req, q.entityId), q);
   }
+  @Post('preview')
+  @RequirePermissions({ resource: 'inventory', action: 'read' })
+  async preview(
+    @Request() req,
+    @Body() body: any,
+    @Query('entityId') e?: string,
+  ) {
+    return this.service.preview(
+      await this.company(req, e),
+      body?.data,
+      body?.page,
+    );
+  }
+  @Delete('drafts/:id')
+  @RequirePermissions({ resource: 'inventory', action: 'update' })
+  async remove(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Query('entityId') e?: string,
+  ) {
+    return this.service.remove(
+      await this.company(req, e),
+      req.user.id,
+      id,
+      body?.revision,
+    );
+  }
   @Put('drafts/:id')
   @RequirePermissions({ resource: 'inventory', action: 'update' })
   async save(
@@ -60,6 +89,7 @@ export class SnLabelsController {
       req.user.id,
       id,
       body?.revision,
+      body?.previewToken,
     );
   }
   @Get('batches/:id')

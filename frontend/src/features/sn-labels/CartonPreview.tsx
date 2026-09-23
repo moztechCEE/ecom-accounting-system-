@@ -1,33 +1,153 @@
-import { useState } from 'react'
-import { Alert, Button, List, Modal, Table } from 'antd'
-import { previewCartons, sampleSerial } from './model'
-import type { PreviewCarton, SnDraft } from './model'
+import { useEffect, useMemo, useState } from "react";
+import { Alert, Button, List, Modal, Table } from "antd";
+import { errorText, snApi } from "./api";
+import type { AllocationPreview } from "./api";
+import type { SnDraft } from "./model";
 
-export default function CartonPreview({ draft }: { draft: SnDraft }) {
-  const [page, setPage] = useState(1)
-  const [selected, setSelected] = useState<PreviewCarton | null>(null)
-  const [serialPage, setSerialPage] = useState(1)
-  let cartons: ReturnType<typeof previewCartons> | undefined, error = ''
-  try { cartons = previewCartons(draft, page) } catch (e) { error = (e as Error).message }
-  if (!cartons) return <Alert type="info" showIcon message={`箱內 SN 預覽：${error}`} />
-  // Enumerate only the visible page, even for a carton containing many serials.
-  const offset = (serialPage - 1) * 20
-  const serials = selected ? Array.from({ length: Math.min(20, Math.max(0, selected.quantity - offset)) },
-    (_, i) => sampleSerial(draft, selected.firstSequence + offset + i)) : []
-  return <>
-    <p className="sn-muted">以下以 000001 起號展示本批裝箱方式，並非正式配號或跨訂單接續結果。</p>
-    <Table size="small" rowKey="index" dataSource={cartons.rows} scroll={{ x: 680 }} pagination={{ current: page, pageSize: 10, total: cartons.total, showSizeChanger: false, onChange: setPage }} columns={[
-      { title: '箱序（預覽）', dataIndex: 'index', render: (index: number) => `第 ${index} 箱` },
-      { title: '型號／款式／顏色', render: () => [draft.model || draft.modelCode, draft.style || draft.styleCode, draft.color || draft.colorCode].join('／') },
-      { title: '實際數量', dataIndex: 'quantity' },
-      { title: '起始 SN', dataIndex: 'firstSn' }, { title: '結束 SN', dataIndex: 'lastSn' },
-      { title: '箱內清單', render: (_, carton: PreviewCarton) => <Button size="small" onClick={() => { setSelected(carton); setSerialPage(1) }}>查看序號</Button> },
-    ]} />
-    <Modal title={selected ? `第 ${selected.index} 箱 · ${selected.quantity} 件（預覽）` : ''} open={!!selected} onCancel={() => setSelected(null)} footer={null}>
-      <List size="small" dataSource={serials} renderItem={sn => <List.Item><code>{sn}</code></List.Item>} />
-      <div className="sn-export"><Button disabled={serialPage === 1} onClick={() => setSerialPage(p => p - 1)}>上一頁</Button>
-        <span>{serialPage} / {Math.ceil((selected?.quantity || 1) / 20)}</span>
-        <Button disabled={!selected || offset + 20 >= selected.quantity} onClick={() => setSerialPage(p => p + 1)}>下一頁</Button></div>
-    </Modal>
-  </>
+export default function CartonPreview({
+  draft,
+  entityId,
+}: {
+  draft: SnDraft;
+  entityId: string;
+}) {
+  const api = useMemo(() => snApi(entityId), [entityId]);
+  const [page, setPage] = useState(1),
+    [refresh, setRefresh] = useState(0);
+  const [result, setResult] = useState<{
+    key: string;
+    value: AllocationPreview;
+  } | null>(null);
+  const [failure, setFailure] = useState<{
+    key: string;
+    message: string;
+  } | null>(null);
+  const [selected, setSelected] = useState<
+    AllocationPreview["rows"][number] | null
+  >(null);
+  const key = JSON.stringify([draft, page, refresh]);
+  useEffect(() => {
+    let live = true;
+    const timer = setTimeout(() => {
+      api
+        .preview(draft, page)
+        .then((value) => {
+          if (live) {
+            setResult({ key, value });
+            setFailure(null);
+          }
+        })
+        .catch((e) => {
+          if (live) setFailure({ key, message: errorText(e) });
+        });
+    }, 200);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [api, draft, page, key]);
+  useEffect(() => {
+    const update = () => {
+      setSelected(null);
+      setRefresh((n) => n + 1);
+    };
+    window.addEventListener("focus", update);
+    const interval = window.setInterval(update, 30000);
+    return () => {
+      window.removeEventListener("focus", update);
+      clearInterval(interval);
+    };
+  }, []);
+  const value = result?.key === key ? result.value : null;
+  const error = failure?.key === key ? failure.message : "";
+  return (
+    <>
+      <Alert
+        type={error ? "warning" : "info"}
+        showIcon
+        message={
+          error ||
+          (value
+            ? value.noSerial
+              ? "NSI 無 SN 產品：只建立箱號與數量，不配發單品序號。"
+              : `目前可接續流水號 ${value.first}～${value.last}，未占用號碼。啟用前會再次核對。`
+            : "正在讀取目前可配號碼…")
+        }
+      />
+      <Button
+        style={{ margin: "12px 0" }}
+        onClick={() => {
+          setSelected(null);
+          setRefresh((n) => n + 1);
+        }}
+      >
+        更新裝箱預覽
+      </Button>
+      <Table
+        size="small"
+        rowKey="id"
+        loading={!value && !error}
+        dataSource={value?.rows || []}
+        scroll={{ x: 700 }}
+        pagination={{
+          current: page,
+          pageSize: 10,
+          total: value?.total || 0,
+          showSizeChanger: false,
+          onChange: (p) => {
+            setPage(p);
+            setSelected(null);
+          },
+        }}
+        columns={[
+          { title: "預計箱號", dataIndex: "id" },
+          { title: "實際數量", dataIndex: "quantity" },
+          ...(!value?.noSerial
+            ? [
+                {
+                  title: "起始 SN",
+                  render: (_: unknown, c: AllocationPreview["rows"][number]) =>
+                    c.serials[0],
+                },
+                {
+                  title: "結束 SN",
+                  render: (_: unknown, c: AllocationPreview["rows"][number]) =>
+                    c.serials.at(-1),
+                },
+                {
+                  title: "箱內清單",
+                  render: (
+                    _: unknown,
+                    c: AllocationPreview["rows"][number],
+                  ) => (
+                    <Button size="small" onClick={() => setSelected(c)}>
+                      查看序號
+                    </Button>
+                  ),
+                },
+              ]
+            : []),
+        ]}
+      />
+      <Modal
+        title={
+          selected ? `${selected.id} · ${selected.quantity} 件（預覽）` : ""
+        }
+        open={!!selected && !!value}
+        onCancel={() => setSelected(null)}
+        footer={null}
+      >
+        <List
+          size="small"
+          pagination={{ pageSize: 20 }}
+          dataSource={selected?.serials || []}
+          renderItem={(sn) => (
+            <List.Item>
+              <code>{sn}</code>
+            </List.Item>
+          )}
+        />
+      </Modal>
+    </>
+  );
 }

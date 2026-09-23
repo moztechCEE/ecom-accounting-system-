@@ -241,6 +241,55 @@ async function rejected(fn, msg) {
     () => svc.save('test-company', 'actor', id, { revision: 1, data: base }),
     'activated source cannot be overwritten',
   );
+  // Feedback v2 regressions: preview must be read-only and match allocation.
+  const previewData = { ...base, orderDate: '2026-09-24', quantity: 3 };
+  const preview1 = await svc.preview('test-company', previewData);
+  ok(preview1.first === 31 && preview1.last === 33 && preview1.rows[0].serials[0] === 'HL1K62000031', 'preview continues server counter before activation');
+  const preview2 = await svc.preview('test-company', previewData);
+  ok(preview2.token === preview1.token, 'preview does not reserve serial or carton numbers');
+  const previewId = await draft(previewData);
+  const freshAllocation = await svc.activate('test-company', 'actor', previewId, 1, preview1.token);
+  ok(freshAllocation.first === preview1.first && freshAllocation.last === preview1.last, 'confirmed preview matches allocated range');
+  const staleId = await draft(previewData);
+  await rejected(() => svc.activate('test-company', 'actor', staleId, 1, preview1.token), 'stale preview rejects rather than silently allocating another range');
+  const preview3 = await svc.preview('test-company', previewData);
+  ok(preview3.first === 34 && preview3.rows[0].id.endsWith('-002'), 'same-day preview continues carton IDs and preserves existing tail');
+  await rejected(() => svc.preview('other-company', previewData), 'cross-company preview rejected');
+
+  const removable = await draft({ name: 'discardable draft' });
+  await rejected(() => svc.remove('other-company', 'actor', removable, 1), 'cross-company deletion rejected');
+  await rejected(() => svc.remove('test-company', 'actor', removable, 2), 'stale draft deletion rejected');
+  await svc.remove('test-company', 'actor', removable, 1);
+  const deleted = await db.$queryRaw`SELECT id FROM sn_label_drafts WHERE id=${removable}`;
+  const deletionLog = await db.$queryRaw`SELECT data FROM sn_label_events WHERE action='DELETE_DRAFT' AND data->>'draftId'=${removable}`;
+  ok(!deleted.length && deletionLog[0].data.data.name === 'discardable draft', 'draft deletion retains audit snapshot');
+  await rejected(() => svc.remove('test-company', 'actor', id, 1), 'activated draft cannot be deleted');
+  const racing = await draft({ orderDate: '2026-09-25', quantity: 1 });
+  const race = await Promise.allSettled([svc.activate('test-company', 'actor', racing, 1), svc.remove('test-company', 'actor', racing, 1)]);
+  ok(race.filter(r => r.status === 'fulfilled').length === 1, 'activation/deletion race has only one winner');
+  const mfilter = await svc.list('test-company', {status:'active', manufactureStart:'2027-01-01',manufactureEnd:'2027-01-01'});
+  ok(mfilter.rows.length === 1 && mfilter.rows[0].id === nextYear.batchId, 'manufacture date filter independent of order date');
+
+  const nsi = { ...base, modelCode:'NSI', styleCode:'', colorCode:'', quantity:23, orderDate:'2026-10-01' };
+  const nsip = await svc.preview('test-company', nsi);
+  ok(nsip.noSerial && nsip.first === null && nsip.rows.every(b => b.serials.length === 0), 'NSI preview never fabricates serial numbers');
+  const nsid = await draft(nsi), nsia = await svc.activate('test-company','actor',nsid,1,nsip.token);
+  const nsib = await svc.detail('test-company',nsia.batchId);
+  ok(nsib.cartons === 2 && nsib.data.quantity === 23 && nsib.last === null && nsib.boxes[1].quantity === 3, 'NSI persists full/tail cartons without serials');
+  const nsiCounters = await db.$queryRaw`SELECT * FROM sn_label_counters WHERE prefix LIKE 'NSI%'`;
+  ok(nsiCounters.length === 0, 'NSI consumes no SN counters');
+  const nsie = await svc.exportData('test-company',nsia.batchId,2,2,'cartons-no-sn');
+  fs.writeFileSync(folder + '/nsi-carton.pdf',await exporter.pdf('cartons-no-sn',nsie.data,nsie.items,nsie.boxes));
+  ok(nsie.boxes.length === 1 && nsie.boxes[0].quantity === 3, 'NSI reprint selects original carton by ordinal');
+  await rejected(() => svc.exportData('test-company',nsia.batchId,1,2,'warranty'), 'NSI cannot export fabricated warranty SN');
+
+  const { ProductService } = require('../dist/src/modules/product/product.service');
+  const products = new ProductService(db);
+  await db.$executeRaw`UPDATE products SET attributes='{"external":{"keep":true},"snLabels":{"color":"白"}}'::jsonb WHERE id=${base.productId}`;
+  const edited = await products.update('test-company',base.productId,{barcode:'04711299273088',modelNumber:'HL2',attributes:{snLabels:{modelCode:'HL2',styleCode:'',colorCode:'K'}}});
+  ok(edited.barcode === '04711299273088' && edited.modelNumber === 'HL2' && edited.attributes.external.keep && edited.attributes.snLabels.color === '白', 'product barcode/model/SN edits persist without removing unrelated attributes');
+  await rejected(() => products.update('other-company',base.productId,{barcode:'04711299273089'}), 'cross-company product edit rejected');
+  await products.update('test-company',base.productId,{barcode:base.barcode});
   await db.$executeRaw`UPDATE sn_label_counters SET last_value=999999 WHERE prefix='HL1K62'`;
   const overflow = await draft({ quantity: 1, orderDate: '2026-09-24' });
   await rejected(

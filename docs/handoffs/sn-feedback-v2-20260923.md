@@ -1,0 +1,21 @@
+# SN staff feedback v2 — 2026-09-23
+
+Source: Google Sheet `1Y-niNgfQWu1JyLbUev5mCC3grlLb0jIrS6_P-ZR_9_0`, tab `20260923-測試回饋v.2`, gid 1167790544, rows 3–9, including both linked Drive screenshots. Sheet not edited.
+
+## Ownership and baseline
+Isolated worktree `/Users/moztecheason/ecom-sn-feedback-v2-20260923`, branch `codex/sn-feedback-v2-20260923`, base f204b33d. Remote main a3791c48 / operations 2ec8282d unchanged at inspection. Other dirty worktrees preserved. No push/merge.
+DEV baseline API 00003-2l2 / web 00005-zf8 each 100%; production serving API 00506-ray / web 00270-vob. WMS DEV independently advanced to corely-wms-dev-batch-16d7668-0923; no WMS changes. Shared files: product DTO/service, ProductsPage; remaining changes confined to SN module/UI/tests and DEV build script.
+
+## Changes
+- Read-only server preview uses same allocation rules/counters as activation, real upcoming carton IDs and per-carton serial list. No reservation; stale confirmation token rejects under allocation lock. UI refreshes on edits, focus/30 seconds and explicit refresh; activation retrieves a fresh confirmation range.
+- NSI model code means non-serialized product. Hint added in coding and product profile. Activation creates only boxes and actual quantities, no serial rows/counters. Only no-SN carton PDF is offered; reprints select existing carton ordinals.
+- Product create logs showed HTTP 409 conflicts; the only application 409 path was duplicate company SKU. Added specific Chinese duplicate message, edit/search UI, submit loading guard, barcode/model/serial-tracking update DTO fields and preservation of unrelated attributes. No SKU guessing or automatic conversion of internal SKU to barcode.
+- Product SN profile includes editable international barcode. Server stores profile; choosing a product fetches current saved values. User clarified row 9 means reuse the last saved product profile, not WMS/warranty sync.
+- Company-scoped draft deletion with revision check, row lock and audit snapshot; activated drafts cannot be deleted. Existing allocated serials/cartons never change.
+- Independent manufacture-date range filter and visible manufacturing date in batch results; order-date filter remains.
+
+## Validation
+44 PostgreSQL integration assertions passed in disposable DEV schema, including concurrent allocations, stale preview rejection, activation/delete race, cross-company checks, NSI no counter use/carton reprint, product attribute preservation and manufacturing filters. 22 frontend tests passed. Backend/frontend builds and targeted SN ESLint passed. No migration needed.
+
+## Release / pending
+Not deployed yet; this section will be updated after release and authenticated API/browser checks. Physical printer/scanner and final warehouse/warranty import acceptance remain separate from this feedback fix. No external inventory/accounting writes.

@@ -26,6 +26,7 @@ import {
   CONFIRMED_RULES,
   draftStorageKey,
   newDraft,
+  isNoSerial,
   parseDrafts,
   sampleSerial,
 } from "../features/sn-labels/model";
@@ -64,6 +65,7 @@ function Workspace({
   const [draft, setDraft] = useState(() => newDraft(crypto.randomUUID())),
     [revision, setRevision] = useState(0),
     [dirty, setDirty] = useState(false);
+  const noSerial = isNoSerial(draft);
   const [active, setActive] = useState<Detail | null>(null),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("batch"),
@@ -75,6 +77,7 @@ function Workspace({
     [status, setStatus] = useState(""),
     [sort, setSort] = useState("desc"),
     [dates, setDates] = useState<string[]>([]),
+    [manufactureDates, setManufactureDates] = useState<string[]>([]),
     [refresh, setRefresh] = useState(0);
   const [error, setError] = useState(""),
     [productError, setProductError] = useState(""),
@@ -126,7 +129,16 @@ function Workspace({
     let live = true;
     const timer = setTimeout(() => {
       api
-        .list({ page, search, status, sort, start: dates[0], end: dates[1] })
+        .list({
+          page,
+          search,
+          status,
+          sort,
+          start: dates[0],
+          end: dates[1],
+          manufactureStart: manufactureDates[0],
+          manufactureEnd: manufactureDates[1],
+        })
         .then((v) => {
           if (live) {
             setEntries(v.rows);
@@ -142,7 +154,7 @@ function Workspace({
       live = false;
       clearTimeout(timer);
     };
-  }, [api, page, search, status, sort, dates, refresh]);
+  }, [api, page, search, status, sort, dates, manufactureDates, refresh]);
   useEffect(() => {
     if (!dirty) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -181,8 +193,12 @@ function Workspace({
     setDraft({ ...v.data, id, version: 2, updatedAt: "" });
     setDirty(false);
     setCartonPage(1);
-    setFrom(v.first);
-    setTo(Math.min(v.last, v.first + 9999));
+    setFrom(isNoSerial(v.data) ? 1 : v.first!);
+    setTo(
+      isNoSerial(v.data)
+        ? Math.min(v.cartons, 10000)
+        : Math.min(v.last!, v.first! + 9999),
+    );
     setTab("output");
   };
   const replace = (fn: () => void) => {
@@ -221,20 +237,48 @@ function Workspace({
       setDirty(false);
       setTab("batch");
     });
-  const activate = () =>
+  const removeDraft = (entry: Entry) =>
     modal.confirm({
-      title: "確認啟用並配發 SN？",
-      content: `本次 ${draft.quantity} 個 SN，依同組流水號接續。啟用後編碼、日期及箱內 SN 固定；重複送出不會再次配號。`,
-      okText: "確認配號",
+      title: `刪除草稿「${entry.data.name}」？`,
+      content: "只刪除尚未啟用的草稿，不影響已配發序號與箱號。",
+      okText: "刪除",
       cancelText: "取消",
+      okButtonProps: { danger: true },
       onOk: () =>
         run(async () => {
-          const r = dirty || !revision ? await save() : revision;
-          const v = await api.activate(draft.id, r);
-          await showActive(v.batchId);
+          await api.remove(entry.id, entry.revision);
+          if (!active && draft.id === entry.id) {
+            setDraft(newDraft(crypto.randomUUID()));
+            setRevision(0);
+            setDirty(false);
+          }
           setRefresh((n) => n + 1);
-          msg.success("已啟用並完成配號、裝箱");
+          msg.success("草稿已刪除");
         }),
+    });
+  const activate = () =>
+    void run(async () => {
+      if (!draft.name.trim()) throw new Error("請填寫批次名稱");
+      const preview = await api.preview(draft);
+      modal.confirm({
+        title: noSerial ? "確認啟用無 SN 裝箱？" : "確認啟用並配發 SN？",
+        content: noSerial
+          ? `本次 ${draft.quantity} 件，共 ${preview.total} 箱；不產生單品 SN。`
+          : `本次 ${draft.quantity} 個 SN，接續流水號 ${preview.first}～${preview.last}，共 ${preview.total} 箱。啟用後箱內 SN 固定。`,
+        okText: noSerial ? "確認裝箱" : "確認配號",
+        cancelText: "取消",
+        onOk: () =>
+          run(async () => {
+            const r = dirty || !revision ? await save() : revision;
+            try {
+              const v = await api.activate(draft.id, r, preview.token);
+              await showActive(v.batchId);
+              msg.success("已啟用並完成裝箱");
+            } finally {
+              setRefresh((n) => n + 1);
+            }
+          }),
+      });
     });
   const append = () => {
     if (!active) return;
@@ -317,7 +361,11 @@ function Workspace({
   ) => (
     <div className="sn-field-triple">
       {keys.map((k, i) => (
-        <Form.Item key={k} label={labels[i]}>
+        <Form.Item
+          key={k}
+          label={labels[i]}
+          extra={k === "modelCode" ? "無SN.產品，請填入NSI" : undefined}
+        >
           <Input
             aria-label={labels[i]}
             value={draft[k]}
@@ -373,7 +421,7 @@ function Workspace({
                 loading={busy}
                 disabled={!canWrite}
               >
-                啟用配號
+                {noSerial ? "啟用裝箱" : "啟用配號"}
               </Button>
             </>
           )}
@@ -389,7 +437,11 @@ function Workspace({
         <Alert
           type="success"
           showIcon
-          message={`已配發 ${active.data.quantity} 個 SN／${active.cartons} 箱。漏印與破損補印沿用原 SN。`}
+          message={
+            noSerial
+              ? `已建立 ${active.data.quantity} 件／${active.cartons} 箱，無單品 SN。`
+              : `已配發 ${active.data.quantity} 個 SN／${active.cartons} 箱。漏印與破損補印沿用原 SN。`
+          }
         />
       )}
       <Tabs
@@ -424,10 +476,15 @@ function Workspace({
                         value: p.id,
                         label: `${p.name} · ${p.barcode || ""} · ${p.sku} · ${p.modelNumber || ""}`,
                       }))}
-                      onChange={(id) => {
-                        const p = products.find((p) => p.id === id);
-                        if (p) update(productDefaults(p));
-                      }}
+                      onChange={(id) =>
+                        void run(async () => {
+                          const p = await productService.findOne(id);
+                          setProducts((rows) =>
+                            rows.map((row) => (row.id === p.id ? p : row)),
+                          );
+                          update(productDefaults(p));
+                        })
+                      }
                     />
                   </Form.Item>
                   {productError && (
@@ -444,6 +501,7 @@ function Workspace({
                       onClick={() => {
                         masterForm.setFieldsValue({
                           modelNumber: draft.model,
+                          barcode: draft.barcode,
                           style: draft.style,
                           color: draft.color,
                           modelCode: draft.modelCode,
@@ -462,7 +520,10 @@ function Workspace({
                     {dateField("manufactureDate", "製造日期")}
                   </div>
                   <div className="sn-field-pair">
-                    <Form.Item label="本次 SN 數量" required>
+                    <Form.Item
+                      label={noSerial ? "本次產品數量" : "本次 SN 數量"}
+                      required
+                    >
                       <InputNumber
                         aria-label="SN 數量"
                         min={1}
@@ -530,10 +591,17 @@ function Workspace({
                     message="此為啟用時的版面；正式檔案請從「配號與匯出」下載。"
                   />
                 )}
-                <LabelDesigner
-                  draft={draft}
-                  onChange={(label) => update({ label })}
-                />
+                {noSerial ? (
+                  <Alert
+                    type="info"
+                    message="NSI 無 SN 產品使用規格箱標籤，不產生單品序號標籤。"
+                  />
+                ) : (
+                  <LabelDesigner
+                    draft={draft}
+                    onChange={(label) => update({ label })}
+                  />
+                )}
               </section>
             ),
           },
@@ -562,7 +630,11 @@ function Workspace({
                     查看實際箱號與箱內 SN
                   </Button>
                 ) : (
-                  <CartonPreview draft={draft} />
+                  <CartonPreview
+                    key={`${JSON.stringify(draft)}:${refresh}`}
+                    draft={draft}
+                    entityId={entityId}
+                  />
                 )}
                 <p className="sn-muted">
                   啟用後產生
@@ -579,14 +651,15 @@ function Workspace({
                   children: (
                     <section className="sn-panel">
                       <h2>
-                        共 {active.data.quantity} 個 SN／{active.cartons} 箱
+                        共 {active.data.quantity} {noSerial ? "件" : "個 SN"}／
+                        {active.cartons} 箱
                       </h2>
                       <Space wrap>
-                        <span>流水號範圍</span>
+                        <span>{noSerial ? "箱序範圍" : "流水號範圍"}</span>
                         <InputNumber
                           aria-label="匯出起號"
-                          min={active.first}
-                          max={active.last}
+                          min={noSerial ? 1 : active.first!}
+                          max={noSerial ? active.cartons : active.last!}
                           value={from}
                           onChange={(v) => v !== null && setFrom(v)}
                         />
@@ -594,7 +667,7 @@ function Workspace({
                         <InputNumber
                           aria-label="匯出迄號"
                           min={from}
-                          max={active.last}
+                          max={noSerial ? active.cartons : active.last!}
                           value={to}
                           onChange={(v) => v !== null && setTo(v)}
                         />
@@ -611,8 +684,9 @@ function Workspace({
                         />
                       </Space>
                       <p className="sn-muted">
-                        每次最多輸出 10,000 個既有 SN。外箱 PDF
-                        保留所選序號涉及之整箱內容。
+                        {noSerial
+                          ? "依箱序選擇需要列印的箱號。"
+                          : "每次最多輸出 10,000 個既有 SN；外箱 PDF 保留所選序號涉及之整箱內容。"}
                       </p>
                       <Space wrap>
                         {[
@@ -621,17 +695,25 @@ function Workspace({
                           ["cartons-no-sn", "規格箱 PDF（無 SN）"],
                           ["warranty", "保固匯入 XLSX"],
                           ["warehouse", "倉儲 SN 明細 XLSX"],
-                        ].map(([k, label]) => (
-                          <Button
-                            key={k}
-                            disabled={!canWrite || busy}
-                            onClick={() => output(k)}
-                          >
-                            {label}
-                          </Button>
-                        ))}
+                        ]
+                          .filter(([k]) => !noSerial || k === "cartons-no-sn")
+                          .map(([k, label]) => (
+                            <Button
+                              key={k}
+                              disabled={!canWrite || busy}
+                              onClick={() => output(k)}
+                            >
+                              {label}
+                            </Button>
+                          ))}
                       </Space>
-                      <Form layout="vertical" style={{ marginTop: 16 }}>
+                      <Form
+                        layout="vertical"
+                        style={{
+                          marginTop: 16,
+                          display: noSerial ? "none" : undefined,
+                        }}
+                      >
                         <Form.Item label="倉儲明細欄位">
                           <Select
                             mode="multiple"
@@ -656,7 +738,11 @@ function Workspace({
                       </Form>
                       <Alert
                         type="info"
-                        message="保固欄位為「一般序號、SKU」，SKU 使用國際條碼。倉儲檔為可設定的 SN 明細；不會自動入庫或建立出貨單。"
+                        message={
+                          noSerial
+                            ? "無 SN 產品只提供規格箱標籤，依所選箱序輸出；重印沿用原箱號。"
+                            : "保固欄位為「一般序號、SKU」，SKU 使用國際條碼。倉儲檔為可設定的 SN 明細；不會自動入庫或建立出貨單。"
+                        }
                       />
                       <Table
                         rowKey="id"
@@ -665,6 +751,7 @@ function Workspace({
                         dataSource={active.boxes}
                         scroll={{ x: 650 }}
                         expandable={{
+                          rowExpandable: (b) => b.serials.length > 0,
                           expandedRowRender: (b) => (
                             <div style={{ overflowWrap: "anywhere" }}>
                               {b.serials.join(" · ")}
@@ -674,8 +761,14 @@ function Workspace({
                         columns={[
                           { title: "箱號", dataIndex: "id" },
                           { title: "數量", dataIndex: "quantity" },
-                          { title: "起號", render: (_, b) => b.serials[0] },
-                          { title: "迄號", render: (_, b) => b.serials.at(-1) },
+                          {
+                            title: "起號",
+                            render: (_, b) => b.serials[0] || "—",
+                          },
+                          {
+                            title: "迄號",
+                            render: (_, b) => b.serials.at(-1) || "—",
+                          },
                         ]}
                       />
                       <Pagination
@@ -713,7 +806,9 @@ function Workspace({
                             render: (v) =>
                               v.kind
                                 ? `${({ labels: "產品標籤", cartons: "規格箱標籤", "cartons-no-sn": "規格箱（無 SN）", warranty: "保固匯入", warehouse: "倉儲明細" } as Record<string, string>)[String(v.kind)] || v.kind} · ${v.from}～${v.to} · ${v.reason === "missed" ? "漏印補印" : v.reason === "damaged" ? "破損重印" : v.reason === "copy" ? "副本" : "首次輸出"}`
-                                : `${v.first}～${v.last}，共 ${v.quantity} 個`,
+                                : v.first === null
+                                  ? `無 SN 裝箱，共 ${v.quantity} 件`
+                                  : `${v.first}～${v.last}，共 ${v.quantity} 個`,
                           },
                         ]}
                       />
@@ -751,8 +846,19 @@ function Workspace({
           />
           <DatePicker.RangePicker
             aria-label="下單日期篩選"
+            placeholder={["下單日期起", "下單日期迄"]}
             onChange={(v) => {
               setDates(v?.map((d) => d?.format("YYYY-MM-DD") || "") || []);
+              setPage(1);
+            }}
+          />
+          <DatePicker.RangePicker
+            aria-label="製造日期篩選"
+            placeholder={["製造日期起", "製造日期迄"]}
+            onChange={(v) => {
+              setManufactureDates(
+                v?.map((d) => d?.format("YYYY-MM-DD") || "") || [],
+              );
               setPage(1);
             }}
           />
@@ -785,6 +891,7 @@ function Workspace({
             { title: "商品", render: (_, e) => e.data.productName },
             { title: "國際條碼", render: (_, e) => e.data.barcode },
             { title: "下單日期", render: (_, e) => e.data.orderDate },
+            { title: "製造日期", render: (_, e) => e.data.manufactureDate },
             { title: "數量", render: (_, e) => e.data.quantity },
             {
               title: "狀態",
@@ -797,9 +904,21 @@ function Workspace({
             {
               title: "操作",
               render: (_, e) => (
-                <Button size="small" disabled={busy} onClick={() => open(e)}>
-                  開啟
-                </Button>
+                <Space>
+                  <Button size="small" disabled={busy} onClick={() => open(e)}>
+                    開啟
+                  </Button>
+                  {e.status === "draft" && canWrite && (
+                    <Button
+                      danger
+                      size="small"
+                      disabled={busy}
+                      onClick={() => removeDraft(e)}
+                    >
+                      刪除草稿
+                    </Button>
+                  )}
+                </Space>
               ),
             },
           ]}
@@ -818,6 +937,16 @@ function Workspace({
         confirmLoading={busy}
       >
         <Form form={masterForm} layout="vertical">
+          <Form.Item
+            name="barcode"
+            label="國際條碼"
+            rules={[
+              { required: true, message: "請填寫國際條碼" },
+              { pattern: /^\d{8,14}$/, message: "請填寫 8～14 碼數字" },
+            ]}
+          >
+            <Input maxLength={14} />
+          </Form.Item>
           {[
             ["modelNumber", "型號"],
             ["style", "款式"],
@@ -826,7 +955,12 @@ function Workspace({
             ["styleCode", "款式代碼（選填）"],
             ["colorCode", "顏色代碼"],
           ].map(([key, label]) => (
-            <Form.Item key={key} name={key} label={label}>
+            <Form.Item
+              key={key}
+              name={key}
+              label={label}
+              extra={key === "modelCode" ? "無SN.產品，請填入NSI" : undefined}
+            >
               <Input maxLength={key.endsWith("Code") ? 6 : 50} />
             </Form.Item>
           ))}
