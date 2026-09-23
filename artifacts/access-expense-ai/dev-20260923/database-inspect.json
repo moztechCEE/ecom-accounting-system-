@@ -1,0 +1,62 @@
+{
+  "identity": {
+    "database": "erp_dev_20260921",
+    "username": "erp_dev_runtime",
+    "schema": "public"
+  },
+  "missingTables": [],
+  "expectedChecksum": "46b86793aa7fd051c356662afff29a9c428be6fa266f1492e7639138c1bf6dc7",
+  "ledger": [
+    {
+      "migration_name": "20260923013000_expense_supervisor_workflow",
+      "checksum": "46b86793aa7fd051c356662afff29a9c428be6fa266f1492e7639138c1bf6dc7",
+      "finished_at": "2026-09-23T11:51:49.412166+00:00",
+      "rolled_back_at": null
+    }
+  ],
+  "unfinishedMigrations": [],
+  "duplicateExpensePaymentGroups": 0,
+  "objects": {
+    "supervisor_column": true,
+    "supervisor_fk": true,
+    "supervisor_check": true,
+    "unique_payable": true
+  },
+  "tableOwnership": [
+    {
+      "table_name": "employees",
+      "owner": "erp_dev_runtime",
+      "can_alter": true
+    },
+    {
+      "table_name": "payment_tasks",
+      "owner": "erp_dev_runtime",
+      "can_alter": true
+    }
+  ],
+  "insertPrivileges": [
+    {
+      "table_name": "roles",
+      "can_insert": true
+    },
+    {
+      "table_name": "permissions",
+      "can_insert": true
+    },
+    {
+      "table_name": "role_permissions",
+      "can_insert": true
+    },
+    {
+      "table_name": "_prisma_migrations",
+      "can_insert": true
+    }
+  ],
+  "dataScopeColumns": [
+    "accounting_data_scope",
+    "banking_data_scope",
+    "employee_data_scope"
+  ],
+  "legacyPendingWithoutSteps": 0,
+  "canMigrate": true
+}

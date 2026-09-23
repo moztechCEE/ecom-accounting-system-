@@ -1,0 +1,31 @@
+{
+  "tag": "9D613DFA",
+  "entityId": "aa5d0253-6cf6-4f44-91d2-3d3750275b04",
+  "apiBase": "https://aex-c3c29e25-candidate---corely-erp-api-dev-sp5g377smq-de.a.run.app/api/v1",
+  "mode": "read-only",
+  "withAi": false,
+  "syntheticOnly": true,
+  "startedAt": "2026-09-23T12:08:28.116639+00:00",
+  "checks": [
+    "health ready and anonymous access denied",
+    "employee identity and effective permission union",
+    "manager identity and effective permission union",
+    "cashier identity and effective permission union",
+    "admin identity and effective permission union",
+    "role template and actor-aware deletion metadata",
+    "access-control user list matches only isolated QA actors",
+    "employee cannot read permission administration",
+    "employee company selector is QA-only",
+    "eligible QA reimbursement item",
+    "cashier sees only the QA TWD bank",
+    "unknown company refused before expense data access",
+    "static Copilot guide reports source status",
+    "expense-only QA account cannot enter the existing WMS company"
+  ],
+  "createdRoleIds": [],
+  "expenseRequestId": null,
+  "passed": true,
+  "dbVerification": "not_run",
+  "fullSsoExchange": "not_run_use_existing_SSO_acceptance",
+  "finishedAt": "2026-09-23T12:08:37.867488+00:00"
+}

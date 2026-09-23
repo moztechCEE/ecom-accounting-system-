@@ -1,0 +1,45 @@
+{
+  "tag": "9D613DFA",
+  "entityId": "aa5d0253-6cf6-4f44-91d2-3d3750275b04",
+  "apiBase": "https://aex-637518d0-candidate---corely-erp-api-dev-sp5g377smq-de.a.run.app/api/v1",
+  "mode": "qa",
+  "withAi": true,
+  "syntheticOnly": true,
+  "startedAt": "2026-09-23T12:17:58.018252+00:00",
+  "checks": [
+    "health ready and anonymous access denied",
+    "employee identity and effective permission union",
+    "manager identity and effective permission union",
+    "cashier identity and effective permission union",
+    "admin identity and effective permission union",
+    "role template and actor-aware deletion metadata",
+    "access-control user list matches only isolated QA actors",
+    "employee cannot read permission administration",
+    "employee company selector is QA-only",
+    "eligible QA reimbursement item",
+    "cashier sees only the QA TWD bank",
+    "unknown company refused before expense data access",
+    "static Copilot guide reports source status",
+    "expense-only QA account cannot enter the existing WMS company",
+    "resume existing approved QA request; cashier can access it and no payment has been recorded",
+    "payment permission and full-amount validation enforced",
+    "cashier records QA payment once with one payment history event",
+    "employee sees persisted payment status",
+    "expense-only QA account cannot obtain dispatcher SSO ticket",
+    "real Copilot retrieves only the QA employee expense aggregate"
+  ],
+  "createdRoleIds": [
+    "c1d553b4-d1ea-4c0e-ad4e-f414b90b659b"
+  ],
+  "expenseRequestId": "5e1a4ee9-36d9-4091-871e-292678e72b22",
+  "passed": true,
+  "dbVerification": "required",
+  "fullSsoExchange": "not_run_use_existing_SSO_acceptance",
+  "resumedFrom": "/tmp/corely-access-expense-ai-qa/http-write.json",
+  "priorFailure": "PUT /expense/requests/5e1a4ee9-36d9-4091-871e-292678e72b22/payment-info returned 403, expected (400,)",
+  "priorCheckCount": 22,
+  "removedRoleIds": [
+    "c1d553b4-d1ea-4c0e-ad4e-f414b90b659b"
+  ],
+  "finishedAt": "2026-09-23T12:18:25.067613+00:00"
+}

@@ -1,0 +1,30 @@
+{
+  "checkedAt": "2026-09-23T12:17:37.340449+00:00",
+  "environment": "tagged DEV candidate c3c29e25",
+  "method": "cua browser, actual QA login, no mocked responses",
+  "checks": [
+    "QA admin normal login succeeds",
+    "global floating Copilot visible",
+    "access control role assignment counts and deletion reasons visible",
+    "expense employee and cashier templates visible",
+    "QA staff module checkbox matrix and search filter visible",
+    "role visibility preview shows expense submit and approval interfaces",
+    "Copilot company selector resolves QA company",
+    "Copilot real AI guide answer displays sources and timestamp"
+  ],
+  "mutations": "No permission changes submitted in browser",
+  "laterFix": "Company finance expense query fixed in 637518d0; UI assets are unchanged by that fix",
+  "limitation": "This does not certify all existing dashboard modules, all ERP data scopes or a full successful WMS ticket exchange",
+  "stableDevCheckedAt": "2026-09-23T12:27:51.536518+00:00",
+  "stableDevChecks": [
+    "actual QA admin login at stable DEV succeeds",
+    "actual QA cashier login via company code + employee number succeeds",
+    "cashier menu excludes access administration",
+    "cashier expense review status filter shows exactly one QA expense TWD 1200 paid",
+    "detail shows original TEST PDF open/download links and QA bank identifier",
+    "actual detail timeline shows employee submission, direct manager approval and cashier payment recorded exactly once"
+  ],
+  "qaLoginObservation": "QA admin email login uses default company context; cashier company-code/employee-number login selected the QA company correctly. Existing dashboard partial-data display is not certified by this release.",
+  "finishedAt": "2026-09-23T12:31:04.964953+00:00",
+  "handoff": "Stable DEV login page, logged out, business code 900324 selected"
+}

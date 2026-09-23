@@ -1,0 +1,12 @@
+{
+  "tag": "9D613DFA",
+  "expenseRequestId": "5e1a4ee9-36d9-4091-871e-292678e72b22",
+  "checks": {
+    "qaIdentityConfirmed": true,
+    "expensePaid": true,
+    "exactlyOnePaymentTask": true,
+    "taskPaidAndAmountsMatch": true,
+    "exactlyOnePaymentHistory": true
+  },
+  "passed": true
+}

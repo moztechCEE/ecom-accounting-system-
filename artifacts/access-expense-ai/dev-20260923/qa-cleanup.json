@@ -1,0 +1,9 @@
+{
+  "qaTag": "9D613DFA",
+  "qaAccountsDisabled": 4,
+  "unusedQaRolesRemoved": 2,
+  "qaCompanyDisabled": true,
+  "qaRoleAssignmentsRemaining": 0,
+  "expenseAndPaymentAuditPreserved": true,
+  "passwordsRemovedFromPrivateManifest": true
+}
