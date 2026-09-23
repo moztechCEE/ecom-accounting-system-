@@ -34,6 +34,7 @@ export default function B2bWorkbenchPage() {
   const entityId = useEntityContext()
   const { user } = useAuth()
   const canWrite = hasAnyPermission(user, ['sales_orders:create'])
+  const canManageSupplier = hasAnyPermission(user, ['purchase_orders:create'])
   const [setup, setSetup] = useState<B2BAdminSetup | null>(null)
   const [requests, setRequests] = useState<B2BAdminRequest[]>([])
   const [loading, setLoading] = useState(false)
@@ -90,6 +91,7 @@ export default function B2bWorkbenchPage() {
       setSaving(true)
       const common = { entityId, email: values.email.trim().toLowerCase(), name: values.name.trim(), password: values.password }
       if (values.accountType === 'SUPPLIER') {
+        if (!canManageSupplier) throw new Error('需要採購單建立權限才能管理供應商帳號。')
         if (!values.vendorId) throw new Error('請選擇供應商。')
         await b2bAdminService.createSupplierAccount({ ...common, vendorId: values.vendorId })
       } else {
@@ -105,10 +107,11 @@ export default function B2bWorkbenchPage() {
     } finally { setSaving(false) }
   }
 
-  const updateAccount = async (id: string, isActive: boolean) => {
+  const updateAccount = async (account: B2BAdminSetup['accounts'][number], isActive: boolean) => {
     if (!entityId) return
     try {
-      await b2bAdminService.updateAccount(id, { entityId, isActive })
+      const update = account.accountType === 'SUPPLIER' ? b2bAdminService.updateSupplierAccount : b2bAdminService.updateAccount
+      await update(account.id, { entityId, isActive })
       message.success(isActive ? '帳號已啟用' : '帳號已停用')
       await load()
     } catch (reason) { message.error(errorText(reason)) }
@@ -119,7 +122,8 @@ export default function B2bWorkbenchPage() {
     try {
       const values = await resetForm.validateFields()
       setSaving(true)
-      await b2bAdminService.updateAccount(resetAccount.id, { entityId, isActive: resetAccount.isActive, password: values.password })
+      const update = resetAccount.accountType === 'SUPPLIER' ? b2bAdminService.updateSupplierAccount : b2bAdminService.updateAccount
+      await update(resetAccount.id, { entityId, isActive: resetAccount.isActive, password: values.password })
       resetForm.resetFields()
       setResetAccount(null)
       message.success('密碼已更新，原有登入已失效。')
@@ -230,7 +234,7 @@ export default function B2bWorkbenchPage() {
     { title: '姓名', dataIndex: 'name', key: 'name' },
     { title: '電子郵件', dataIndex: 'email', key: 'email' },
     { title: '狀態', dataIndex: 'isActive', key: 'isActive', render: (value: boolean) => <Tag color={value ? 'green' : 'default'}>{value ? '啟用' : '停用'}</Tag> },
-    { title: '操作', key: 'actions', render: (_, account) => canWrite ? <Space><Popconfirm title={account.isActive ? '停用這個帳號？' : '重新啟用這個帳號？'} onConfirm={() => void updateAccount(account.id, !account.isActive)}><Button size="small">{account.isActive ? '停用' : '啟用'}</Button></Popconfirm><Button size="small" onClick={() => { resetForm.resetFields(); setResetAccount(account) }}>設定新密碼</Button></Space> : null },
+    { title: '操作', key: 'actions', render: (_, account) => (account.accountType === 'SUPPLIER' ? canManageSupplier : canWrite) ? <Space><Popconfirm title={account.isActive ? '停用這個帳號？' : '重新啟用這個帳號？'} onConfirm={() => void updateAccount(account, !account.isActive)}><Button size="small">{account.isActive ? '停用' : '啟用'}</Button></Popconfirm><Button size="small" onClick={() => { resetForm.resetFields(); setResetAccount(account) }}>設定新密碼</Button></Space> : null },
   ]
 
   return <div className="page-section-stack" style={{ maxWidth: 1500, margin: '0 auto', padding: '10px 4px 50px' }}>
@@ -240,12 +244,12 @@ export default function B2bWorkbenchPage() {
     {setup ? <Alert type="info" showIcon message={`公司登入代碼：${setup.company.loginCode}`} description="請將此代碼與客戶帳號提供給對應窗口。供應商帳號目前可建檔與停用；供應商登入與採購單查看入口仍在後續階段。" /> : null}
     <Card><Tabs items={[
       { key: 'requests', label: `採購需求 (${requests.filter((item) => item.status === 'pending_stock_review').length} 待核對)`, children: <><Alert type="warning" showIcon style={{ marginBottom: 18 }} message="人工核對只記錄確認數量與交期；不會預留或扣除正式庫存。" /><Table rowKey="id" loading={loading} columns={requestColumns} dataSource={requests} scroll={{ x: 960 }} expandable={{ expandedRowRender: (request) => <div><Text strong>商品明細</Text>{request.items.map((item) => <div key={item.id} style={{ padding: '5px 0' }}>{item.sku} · {item.name}：申購 {item.quantity}，確認 {item.confirmedQuantity ?? '待核對'}，單價 {amount(item.unitPrice)}</div>)}{request.note ? <p>客戶備註：{request.note}</p> : null}{request.reviewNote ? <p>核對備註：{request.reviewNote}</p> : null}</div> }} /></> },
-      { key: 'accounts', label: '客戶與供應商帳號', children: <><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { setAccountType('CUSTOMER'); accountForm.resetFields(); accountForm.setFieldsValue({ accountType: 'CUSTOMER' }); setAccountOpen(true) }}>建立外部帳號</Button> : null}</div><Table rowKey="id" loading={loading} columns={accountColumns} dataSource={setup?.accounts || []} scroll={{ x: 850 }} /></> },
+      { key: 'accounts', label: '客戶與供應商帳號', children: <><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite || canManageSupplier ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { const defaultType = canWrite ? 'CUSTOMER' : 'SUPPLIER'; setAccountType(defaultType); accountForm.resetFields(); accountForm.setFieldsValue({ accountType: defaultType }); setAccountOpen(true) }}>建立外部帳號</Button> : null}</div><Table rowKey="id" loading={loading} columns={accountColumns} dataSource={setup?.accounts || []} scroll={{ x: 850 }} /></> },
       { key: 'catalog', label: '商品發布', children: <><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { catalogForm.resetFields(); catalogForm.setFieldsValue({ isPublished: true }); setCatalogOpen(true) }}>設定商品</Button> : null}</div><Table rowKey="id" loading={loading} dataSource={setup?.products || []} columns={[{ title: '商品', key: 'product', render: (_, product) => `${product.sku} · ${product.name}` }, { title: '目錄單價', key: 'price', render: (_, product) => { const row = setup?.catalog.find((item) => item.productId === product.id); return row ? amount(row.unitPrice) : '未設定' } }, { title: '對外發布', key: 'published', render: (_, product) => { const row = setup?.catalog.find((item) => item.productId === product.id); return <Tag color={row?.isPublished ? 'green' : 'default'}>{row?.isPublished ? '已發布' : '未發布'}</Tag> } }, { title: '操作', key: 'actions', render: (_, product) => canWrite ? <Button size="small" onClick={() => { const row = setup?.catalog.find((item) => item.productId === product.id); catalogForm.setFieldsValue({ productId: product.id, unitPrice: Number(row?.unitPrice || 0), isPublished: row?.isPublished || false }); setCatalogOpen(true) }}>設定</Button> : null }]} /></> },
       { key: 'prices', label: '客戶專屬價格', children: <><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { priceForm.resetFields(); priceForm.setFieldsValue({ isActive: true }); setPriceOpen(true) }}>設定專屬價</Button> : null}</div><Table rowKey={(row) => `${row.customerId}:${row.productId}`} loading={loading} dataSource={setup?.prices || []} columns={[{ title: '客戶', dataIndex: 'customerId', key: 'customer', render: customerName }, { title: '商品', dataIndex: 'productId', key: 'product', render: productName }, { title: '專屬單價', dataIndex: 'unitPrice', key: 'price', render: amount }, { title: '有效至', dataIndex: 'validUntil', key: 'until', render: (value: string | null) => value?.slice(0, 10) || '未設定' }, { title: '狀態', dataIndex: 'isActive', key: 'active', render: (value: boolean) => <Tag color={value ? 'green' : 'default'}>{value ? '啟用' : '停用'}</Tag> }, { title: '操作', key: 'actions', render: (_, row) => canWrite ? <Button size="small" onClick={() => { priceForm.setFieldsValue({ customerId: row.customerId, productId: row.productId, unitPrice: Number(row.unitPrice), isActive: row.isActive, validUntil: row.validUntil?.slice(0, 10) || undefined }); setPriceOpen(true) }}>設定</Button> : null }]} scroll={{ x: 820 }} /></> },
     ]} /></Card>
 
-    <Modal title="建立外部帳號" open={accountOpen} confirmLoading={saving} onCancel={() => { setAccountOpen(false); accountForm.resetFields() }} onOk={() => void saveAccount()} okText="建立帳號" destroyOnHidden><Form form={accountForm} layout="vertical" autoComplete="off"><Form.Item name="accountType" label="帳號類型" rules={[{ required: true }]}><Select onChange={(value) => setAccountType(value)} options={[{ value: 'CUSTOMER', label: '客戶帳號' }, { value: 'SUPPLIER', label: '供應商帳號（入口待建置）' }]} /></Form.Item>{accountType === 'CUSTOMER' ? <Form.Item name="customerId" label="客戶" rules={[{ required: true, message: '請選擇客戶' }]}><Select showSearch optionFilterProp="label" options={setup?.customers.map((item) => ({ value: item.id, label: item.companyName || item.name }))} /></Form.Item> : <Form.Item name="vendorId" label="供應商" rules={[{ required: true, message: '請選擇供應商' }]}><Select showSearch optionFilterProp="label" options={setup?.vendors.map((item) => ({ value: item.id, label: item.name }))} /></Form.Item>}<Form.Item name="name" label="使用者姓名" rules={[{ required: true, message: '請填寫姓名' }]}><Input maxLength={80} /></Form.Item><Form.Item name="email" label="登入電子郵件" rules={[{ required: true, type: 'email', message: '請填寫有效電子郵件' }]}><Input autoComplete="off" /></Form.Item><Form.Item name="password" label="初始密碼" rules={passwordRules}><Input.Password autoComplete="new-password" /></Form.Item><Text type="secondary">建立後不會在頁面保存或再次顯示密碼，請透過既有安全流程交付。</Text></Form></Modal>
+    <Modal title="建立外部帳號" open={accountOpen} confirmLoading={saving} onCancel={() => { setAccountOpen(false); accountForm.resetFields() }} onOk={() => void saveAccount()} okText="建立帳號" destroyOnHidden><Form form={accountForm} layout="vertical" autoComplete="off"><Form.Item name="accountType" label="帳號類型" rules={[{ required: true }]}><Select onChange={(value) => setAccountType(value)} options={[{ value: 'CUSTOMER', label: '客戶帳號', disabled: !canWrite }, { value: 'SUPPLIER', label: '供應商帳號（入口待建置）', disabled: !canManageSupplier }]} /></Form.Item>{accountType === 'CUSTOMER' ? <Form.Item name="customerId" label="客戶" rules={[{ required: true, message: '請選擇客戶' }]}><Select showSearch optionFilterProp="label" options={setup?.customers.map((item) => ({ value: item.id, label: item.companyName || item.name }))} /></Form.Item> : <Form.Item name="vendorId" label="供應商" rules={[{ required: true, message: '請選擇供應商' }]}><Select showSearch optionFilterProp="label" options={setup?.vendors.map((item) => ({ value: item.id, label: item.name }))} /></Form.Item>}<Form.Item name="name" label="使用者姓名" rules={[{ required: true, message: '請填寫姓名' }]}><Input maxLength={80} /></Form.Item><Form.Item name="email" label="登入電子郵件" rules={[{ required: true, type: 'email', message: '請填寫有效電子郵件' }]}><Input autoComplete="off" /></Form.Item><Form.Item name="password" label="初始密碼" rules={passwordRules}><Input.Password autoComplete="new-password" /></Form.Item><Text type="secondary">建立後不會在頁面保存或再次顯示密碼，請透過既有安全流程交付。</Text></Form></Modal>
 
     <Modal title={`設定新密碼 · ${resetAccount?.name || ''}`} open={Boolean(resetAccount)} confirmLoading={saving} onCancel={() => { resetForm.resetFields(); setResetAccount(null) }} onOk={() => void resetPassword()} okText="更新密碼" destroyOnHidden><Form form={resetForm} layout="vertical" autoComplete="off"><Form.Item name="password" label="新密碼" rules={passwordRules}><Input.Password autoComplete="new-password" /></Form.Item></Form><Alert type="info" message="更新密碼後，這個帳號現有的登入會立即失效。" /></Modal>
 

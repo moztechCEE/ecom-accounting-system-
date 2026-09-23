@@ -436,9 +436,19 @@ describe('B2B account and request boundaries', () => {
   it('revokes all existing sessions when an account is deactivated', async () => {
     db.b2bAccount.findFirst.mockResolvedValue({ id: 'a' });
     await service.updateAccount('a', { entityId: 'entity-a', isActive: false });
+    expect(db.b2bAccount.findFirst).toHaveBeenCalledWith({
+      where: { id: 'a', entityId: 'entity-a', accountType: 'CUSTOMER' },
+    });
     expect(db.b2bSession.updateMany).toHaveBeenCalledWith({
       where: { accountId: 'a', revokedAt: null },
       data: { revokedAt: expect.any(Date) },
+    });
+  });
+  it('keeps supplier account mutation separate from customer account mutation', async () => {
+    db.b2bAccount.findFirst.mockResolvedValue({ id: 'supplier-a' });
+    await service.updateAccount('supplier-a', { entityId: 'entity-a', isActive: false }, 'SUPPLIER');
+    expect(db.b2bAccount.findFirst).toHaveBeenCalledWith({
+      where: { id: 'supplier-a', entityId: 'entity-a', accountType: 'SUPPLIER' },
     });
   });
   it('public quote projection strips internal account, hash, reviewer and customer graph', () => {

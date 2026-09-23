@@ -35,6 +35,9 @@ export const b2bAdminService = {
   async updateAccount(id: string, input: { entityId: string; isActive: boolean; password?: string }): Promise<void> {
     await api.patch(`/b2b/admin/accounts/${encodeURIComponent(id)}`, input)
   },
+  async updateSupplierAccount(id: string, input: { entityId: string; isActive: boolean; password?: string }): Promise<void> {
+    await api.patch(`/b2b/admin/supplier-accounts/${encodeURIComponent(id)}`, input)
+  },
   async saveCatalog(input: { entityId: string; productId: string; unitPrice: number; isPublished: boolean }): Promise<void> {
     await api.put('/b2b/admin/catalog', input)
   },

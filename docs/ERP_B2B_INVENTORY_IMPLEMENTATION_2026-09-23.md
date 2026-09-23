@@ -32,7 +32,7 @@ flowchart LR
 ## 本次可操作的入口
 
 - 客戶：`/b2b/login`、`/b2b/catalog`、`/b2b/requests`、`/b2b/requests/:id`。客戶帳號與員工帳號分離；LINE 由業務自行貼受登入保護的連結，不自動發訊。
-- 員工：`/sales/b2b` 管理外部帳號、發布商品、客戶專屬價、需求核庫與確認接單。供應商帳號可建檔、停用及重設密碼，**供應商入口尚未開放**。
+- 員工：`/sales/b2b` 管理外部帳號、發布商品、客戶專屬價、需求核庫與確認接單。供應商帳號可建檔、停用及重設密碼，操作另需採購公司存取與採購單建立權限；**供應商入口尚未開放**。
 - 採購：既有採購單頁增加每行重量與運費試算／保存。`POST /purchase-orders/:id/landed-cost/preview` 只試算；`PUT /purchase-orders/:id/landed-cost` 在未收貨時保存。收貨後唯讀。
 - 出貨：ERP 的「訂單拋轉」送至 WMS 原生接單 API。成功回執含預揀單、WMS 工作單與 WT 工作條碼；ERP 可連到 WMS `/corely-intakes/:id`，由現有倉庫工作台接續揀貨與裝箱。
 

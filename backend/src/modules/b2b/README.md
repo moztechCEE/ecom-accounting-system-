@@ -41,13 +41,14 @@
 | `POST /b2b/admin/accounts` | 客戶帳號；密碼至少 12 字元且 UTF-8 ≤72 bytes |
 | `POST /b2b/admin/supplier-accounts` | 供應商帳號準備；沒有開放供應商入口 |
 | `PATCH /b2b/admin/accounts/:id` | `{entityId,isActive,password?}`；不允許更換公司／客戶／角色 |
+| `PATCH /b2b/admin/supplier-accounts/:id` | `{entityId,isActive,password?}`；僅採購權限可管理供應商帳號 |
 | `PUT /b2b/admin/catalog` | `{entityId,productId,unitPrice,isPublished}` |
 | `PUT /b2b/admin/prices` | `{entityId,customerId,productId,unitPrice,isActive,validUntil?}` |
 | `GET /b2b/admin/requests?entityId=...` | 公司最近 100 筆需求與人工核庫待辦 |
 | `POST /b2b/admin/requests/:id/review` | `{entityId,items:[{id,confirmedQuantity}],reviewNote?,deliveryDate?}` |
 | `POST /b2b/admin/requests/:id/confirm` | `{entityId,channelId,warehouseId}`；正式接單及預留 |
 
-內部 API 使用員工 JWT、sales 公司存取檢查及 sales_orders 讀／建權限。`requestId` 必須 UUID v4；相同客戶相同提交鍵、相同內容回傳原快照，不同內容回 409。外部 DTO 拒收 unitPrice、entityId、customerId、內部註記或其他未知欄位。
+內部 API 使用員工 JWT；客戶價格與訂單使用 sales 公司存取檢查及 sales_orders 讀／建權限，供應商帳號新增與修改另需 purchasing 公司存取與 purchase_orders 建立權限。`requestId` 必須 UUID v4；相同客戶相同提交鍵、相同內容回傳原快照，不同內容回 409。外部 DTO 拒收 unitPrice、entityId、customerId、內部註記或其他未知欄位。
 
 ## 驗證範圍
 

@@ -267,13 +267,13 @@ export class B2bService {
       throw error;
     }
   }
-  async updateAccount(id: string, dto: B2bAccountUpdateDto) {
+  async updateAccount(id: string, dto: B2bAccountUpdateDto, accountType: 'CUSTOMER' | 'SUPPLIER' = 'CUSTOMER') {
     const passwordHash = dto.password
       ? await this.password(dto.password)
       : undefined;
     return this.db.$transaction(async (tx) => {
       const account = await tx.b2bAccount.findFirst({
-        where: { id, entityId: dto.entityId },
+        where: { id, entityId: dto.entityId, accountType },
       });
       if (!account) throw new NotFoundException('客戶帳號不存在');
       const result = await tx.b2bAccount.update({

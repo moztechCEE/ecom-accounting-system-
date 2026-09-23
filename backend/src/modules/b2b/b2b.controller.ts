@@ -96,7 +96,8 @@ export class B2bAdminController {
     return this.service.createAccount(dto, req.user.id);
   }
   @Post('supplier-accounts')
-  @RequirePermissions({ resource: 'sales_orders', action: 'create' })
+  @RequireEntityAccess('purchasing')
+  @RequirePermissions({ resource: 'purchase_orders', action: 'create' })
   createSupplierAccount(
     @Body() dto: B2bSupplierAccountDto,
     @Req() req: StaffRequest,
@@ -110,6 +111,15 @@ export class B2bAdminController {
     @Body() dto: B2bAccountUpdateDto,
   ) {
     return this.service.updateAccount(id, dto);
+  }
+  @Patch('supplier-accounts/:id')
+  @RequireEntityAccess('purchasing')
+  @RequirePermissions({ resource: 'purchase_orders', action: 'create' })
+  updateSupplierAccount(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: B2bAccountUpdateDto,
+  ) {
+    return this.service.updateAccount(id, dto, 'SUPPLIER');
   }
   @Put('catalog')
   @RequirePermissions({ resource: 'sales_orders', action: 'create' })
