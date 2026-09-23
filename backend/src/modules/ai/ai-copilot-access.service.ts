@@ -1,3 +1,4 @@
+import { DEPARTMENT_ACCESS_SELECT, effectivePermissionKeys } from '../../common/department-access/department-access';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
@@ -59,6 +60,7 @@ export class AiCopilotAccessService {
       where: { id: userId },
       select: {
         isActive: true,
+        employee: { select: DEPARTMENT_ACCESS_SELECT },
         roles: {
           include: {
             role: {
@@ -72,11 +74,7 @@ export class AiCopilotAccessService {
     const codes = user.roles.map(({ role }) => role.code);
     const isSuperAdmin = codes.includes('SUPER_ADMIN');
     const isAdmin = isSuperAdmin || codes.includes('ADMIN');
-    const permissions = user.roles.flatMap(({ role }) =>
-      role.permissions.map(
-        ({ permission }) => `${permission.resource}:${permission.action}`,
-      ),
-    );
+    const permissions = effectivePermissionKeys(user);
     const tools = Object.entries(TOOL_ACCESS)
       .filter(
         ([, rule]) =>
@@ -167,7 +165,7 @@ export class AiCopilotAccessService {
       '/payroll/runs': ['payroll_self:read', 'payroll_admin:read'],
       '/attendance/dashboard': ['attendance_self:read'],
       '/attendance/leaves': ['leave_self:read'],
-      '/attendance/admin': ['attendance_admin:read'],
+      '/attendance/admin': ['attendance_admin:read', 'attendance_team:read'],
       '/profile': ['profile_self:read'],
       '/accounting/workbench': ['accounts:read', 'journal_entries:read'],
       '/accounting/accounts': ['accounts:read'],

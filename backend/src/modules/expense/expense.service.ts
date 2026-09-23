@@ -1,3 +1,4 @@
+import { effectivePermissionKeys } from '../../common/department-access/department-access';
 import { createHash } from 'node:crypto';
 import { AssignLegacyApprovalDto } from './dto/assign-legacy-approval.dto';
 import { parseReceiptFiles } from './receipt-files';
@@ -341,13 +342,13 @@ Do not include markdown or explanation.
 
   async access(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, include: {
-      employee: { include: { supervisor: { include: { user: { select: { id: true, name: true, isActive: true } } } } } },
+      employee: { include: { department: { include: { memberRole: { include: { permissions: { include: { permission: true } } } }, supervisorRole: { include: { permissions: { include: { permission: true } } } } } }, supervisor: { include: { user: { select: { id: true, name: true, isActive: true } } } } } },
       entityMemberships: true,
       roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
     } });
     if (!user?.isActive) throw new ForbiddenException('登入帳號未啟用');
     const roles = user.roles.map((r) => r.role.code);
-    const permissions = user.roles.flatMap((r) => r.role.permissions.map((p) => `${p.permission.resource}:${p.permission.action}`));
+    const permissions = effectivePermissionKeys(user);
     const admin = roles.some((r) => ['ADMIN', 'SUPER_ADMIN'].includes(r));
     const finance = admin || permissions.some((p) => ['accounts:read', 'purchase_orders:read'].includes(p));
     if (!finance && !permissions.includes('expense_self:read')) throw new ForbiddenException('沒有費用申請介面的使用權限');

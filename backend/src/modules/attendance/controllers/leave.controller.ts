@@ -51,7 +51,7 @@ export class LeaveController {
 
   @Patch(':id/status')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'attendance_admin', action: 'update' })
+  @RequirePermissions({ resource: 'attendance_team', action: 'review' })
   async updateLeaveStatus(
     @Request() req: any,
     @Param('id') id: string,
@@ -67,7 +67,7 @@ export class LeaveController {
 
   @Get('admin/requests')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
+  @RequirePermissions({ resource: 'attendance_team', action: 'read' })
   async getAdminLeaveRequests(
     @Request() req: any,
     @Query('status') status?: string,

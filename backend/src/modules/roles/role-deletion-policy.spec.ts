@@ -10,7 +10,7 @@ describe('safe role removal', () => {
   });
   it('locks role before checking assignments, never cascades away existing users', async () => {
     const order: string[] = [];
-    const tx: any = { $queryRaw: jest.fn(async () => { order.push('lock') }), role: { findUnique: jest.fn(async () => ({ code: 'ADMIN' })), delete: jest.fn() }, userRole: { count: jest.fn(async () => { order.push('count'); return 1 }) } };
+    const tx: any = { department: { count: jest.fn(async () => 0) }, $queryRaw: jest.fn(async () => { order.push('lock') }), role: { findUnique: jest.fn(async () => ({ code: 'ADMIN' })), delete: jest.fn() }, userRole: { count: jest.fn(async () => { order.push('count'); return 1 }) } };
     const service = new RolesService({ $transaction: (fn: any) => fn(tx) } as any);
     await expect(service.remove('admin', 'self')).rejects.toThrow('帳號');
     expect(order[0]).toBe('lock');expect(tx.role.delete).not.toHaveBeenCalled();

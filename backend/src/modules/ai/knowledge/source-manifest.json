@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:c1f63b5c120cf51d38ac0f06928b6ca85438c614f23aef80f4c2569feaa1bfd1",
+  "sourceVersion": "sha256:88d565d6225d679d4e26b976c1870c4281f57e348591279a692b1c37f2f93de4",
   "reviewedBaseCommit": "9165c7123b10750b598a95f9badfc9c00ed04abd",
   "entryCount": 59,
   "groups": [
@@ -18,7 +18,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "169a4f917ba3e4ed31acbb30ccbf0d01e351c811049bd929143928c25e53f717",
+  "catalogSha256": "8397895351741355dc471a9a7e37ca0207a79f04ad6c022a5184718798e6dc08",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -124,6 +124,14 @@
   },
   "sources": [
     {
+      "path": "backend/src/common/department-access/attendance-selection.ts",
+      "sha256": "e1b8fadcc9b50976389aec6aac9d22f05c5ef0e9d5dac11cdda7276d6de37b8e"
+    },
+    {
+      "path": "backend/src/common/department-access/department-access.ts",
+      "sha256": "68dcc1692ab3c45472aba6d9753829a6d3e830dc9bf981d0595f017bbf306984"
+    },
+    {
       "path": "backend/src/modules/accounting/accounting.controller.ts",
       "sha256": "64ab5b7368c76d09c376fc4c47936601636add1d177f1ee1ce50a3335994540d"
     },
@@ -145,11 +153,11 @@
     },
     {
       "path": "backend/src/modules/attendance/controllers/attendance.controller.ts",
-      "sha256": "071fef904f9ee6b68c57d77a5c888134ea83f10851c34b84cad7ca1bc9f8d716"
+      "sha256": "5d97bc6969ed961574982044b64a43bd3211502d73932d65d5cb483803aebe6f"
     },
     {
       "path": "backend/src/modules/attendance/controllers/leave.controller.ts",
-      "sha256": "eaf1b600d6feff8c9d301402c16d593b6beed2158650254544b77c669500b397"
+      "sha256": "2c6172c6f34c87efc2219a9edaa7ea4a7c0d846c5e5940c9bf381f5c05883d0a"
     },
     {
       "path": "backend/src/modules/auth/auth.controller.ts",
@@ -185,7 +193,7 @@
     },
     {
       "path": "backend/src/modules/expense/expense.service.ts",
-      "sha256": "4eb66b4f55419ab8a76e9a66b5a00a7ff447d1d78c9675d9f4a2d0cf5bae02fe"
+      "sha256": "b3e44d23f5e7db87e86a8439210e3b06c310b8d404b9df7dad201c01944809e3"
     },
     {
       "path": "backend/src/modules/integration/after-sales/after-sales-preparation.controller.ts",
@@ -209,7 +217,7 @@
     },
     {
       "path": "backend/src/modules/payroll/payroll.service.ts",
-      "sha256": "405f3e8dd00b781b3407b3a15a374dab842deafe9d9c424e7d3ae50376492905"
+      "sha256": "35744b0886e31099e419cb1a22cfb3f727d174ee1fcbb62ac7560f819d923789"
     },
     {
       "path": "backend/src/modules/product/product.controller.ts",
@@ -257,11 +265,11 @@
     },
     {
       "path": "frontend/src/App.tsx",
-      "sha256": "69d58b29720ad8a7c7ecd184c06d28cf7f68587350a6b126ea430e6f9cf84f12"
+      "sha256": "01c7b4984c2beb8220054e73dbe74f4e6750bf0ce4f100a016bfd36fe2b9034b"
     },
     {
       "path": "frontend/src/config/navigation.ts",
-      "sha256": "37bcd9c9558c1d49b6d2a67cf341048e90b439b55541de9e2a8b78a7214ff437"
+      "sha256": "3cc8e1dbabb85b239a692876fc12e3353b2beac2118e69f716a270fb9b5f4059"
     },
     {
       "path": "frontend/src/config/release.ts",
@@ -277,7 +285,7 @@
     },
     {
       "path": "frontend/src/pages/AccessControlPage.tsx",
-      "sha256": "145ad8aa09db11734c76a159cf70e549a276022651dbd46e36db94806c74e863"
+      "sha256": "91197ccf9f2cf6316c28b130a63eba881dcb83e8004c8197c4d4d88b4225ee26"
     },
     {
       "path": "frontend/src/pages/AccountingPeriodsPage.tsx",
@@ -321,7 +329,11 @@
     },
     {
       "path": "frontend/src/pages/attendance/AttendanceAdminPage.tsx",
-      "sha256": "aec7651154170b6c2ee39cd80c5f5f34f450220410499a512375c4bc79e7ddb5"
+      "sha256": "2b503b8a727bdc29a84cd6593d5db3880845ed3dab88b855f1aaa8ccaf79e954"
+    },
+    {
+      "path": "frontend/src/pages/attendance/DepartmentAttendancePage.tsx",
+      "sha256": "63b2778f3cbea12a6507a3a201f8b864ddc9da7faeb08bee9a58040997b3877f"
     },
     {
       "path": "frontend/src/pages/attendance/EmployeeDashboardPage.tsx",
@@ -361,7 +373,7 @@
     },
     {
       "path": "frontend/src/pages/EmployeesPage.tsx",
-      "sha256": "2dd45bd8265e92d4241fdc83fa2ed27f8ac976fb2aa840e691c798d4396f54fe"
+      "sha256": "d6d56635165f56ed2581cebdd79895dd4daaf5ee2ebc099ba7dcc027a277c56f"
     },
     {
       "path": "frontend/src/pages/ExpenseRequestsPage.tsx",

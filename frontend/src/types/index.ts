@@ -50,6 +50,10 @@ export interface UserEntityMembership {
 }
 
 export interface ManagedUser {
+  effectivePermissions?: string[];
+  effectiveAttendanceDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  departmentAccess?: { departmentId: string | null; departmentName: string | null; employeeId: string | null; isSupervisor: boolean; roleNames: string[] };
+
   id: string;
   email: string;
   name: string;
@@ -81,6 +85,10 @@ export interface PaginatedResult<T> {
 }
 
 export interface User {
+  effectivePermissions?: string[];
+  effectiveAttendanceDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
+  departmentAccess?: { departmentId: string | null; departmentName: string | null; employeeId: string | null; isSupervisor: boolean; roleNames: string[] };
+
   id: string;
   email: string;
   name: string;
@@ -302,6 +310,8 @@ export interface BankTransaction {
 }
 
 export interface Department {
+  memberRoleId?: string | null;
+  supervisorRoleId?: string | null;
   id: string;
   name: string;
   costCenterId?: string;
@@ -309,6 +319,7 @@ export interface Department {
 }
 
 export interface Employee {
+  isDepartmentSupervisor?: boolean;
   entityId?: string;
   supervisorEmployeeId?: string | null;
   supervisor?: { id: string; name: string; userId?: string | null } | null;

@@ -1,3 +1,5 @@
+import { rolesService } from "../services/roles.service";
+import type { Role } from "../types";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -339,6 +341,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     null,
   );
   const [form] = Form.useForm();
+  const canBindDepartment = hasPermission(user, "access_control:update");
   const canManageEmployees = hasPermission(user, "employees_admin:update");
 
   const fetchEmployees = async () => {
@@ -394,7 +397,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     mailingAddress: employee?.mailingAddress || "",
     emergencyContactName: employee?.emergencyContactName || "",
     emergencyContactPhone: employee?.emergencyContactPhone || "",
-    departmentId: employee?.departmentId || undefined,
+    departmentId: employee?.departmentId || null,
+    isDepartmentSupervisor: employee?.isDepartmentSupervisor ?? false,
     supervisorEmployeeId: employee?.supervisorEmployeeId || null,
     attendanceType: employee?.attendanceType || "INTERNAL",
     hireDate: employee?.hireDate ? dayjs(employee.hireDate) : undefined,
@@ -484,7 +488,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     setEmployeeSaveErrorDetails([]);
     setEmployeeSaveLoading(true);
     try {
-      const values = await form.validateFields();
+      await form.validateFields();
+      // Preserve initialized values from tabs that have not been opened.
+      const values = form.getFieldsValue(true);
       const {
         loginEmail,
         loginPassword,
@@ -556,7 +562,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     try {
       setEmployeeSaveError(null);
       setEmployeeSaveErrorDetails([]);
-      const values = await form.validateFields();
+      await form.validateFields();
+      // Preserve initialized values from tabs that have not been opened.
+      const values = form.getFieldsValue(true);
       const {
         loginEmail,
         loginPassword,
@@ -565,7 +573,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       } = values;
       const loginUpdates: { loginEmail?: string; loginPassword?: string } = {};
       const normalizedLoginEmail = loginEmail?.trim() || "";
-      if (normalizedLoginEmail !== (selectedEmployee.user?.email || "")) {
+      if (loginEmail !== undefined && normalizedLoginEmail !== (selectedEmployee.user?.email || "")) {
         loginUpdates.loginEmail = normalizedLoginEmail;
       }
       if (loginPassword?.trim()) {
@@ -580,7 +588,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           : undefined,
         terminateDate: employeeValues.terminateDate
           ? employeeValues.terminateDate.toISOString()
-          : null,
+          : employeeValues.terminateDate === null ? null : undefined,
         nationalId: employeeValues.nationalId,
         mailingAddress: employeeValues.mailingAddress,
         emergencyContactName: employeeValues.emergencyContactName,
@@ -765,6 +773,11 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         departments.find((department) => department.id === deptId)?.name || "-",
     },
     {
+      title: "部門職責",
+      key: "departmentSupervisor",
+      render: (_: unknown, record: Employee) => <Tag color={record.isDepartmentSupervisor ? "blue" : "default"}>{record.isDepartmentSupervisor ? "部門主管" : "部門人員"}</Tag>,
+    },
+    {
       title: "本薪",
       dataIndex: "salaryBaseOriginal",
       key: "salaryBaseOriginal",
@@ -895,14 +908,19 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
               ]}
             />
           </Form.Item>
-          <Form.Item name="departmentId" label="部門">
+          <Form.Item name="departmentId" label="所屬部門">
             <Select
               allowClear
-              options={departments.map((department) => ({
+              disabled={!canBindDepartment}
+              onClear={() => form.setFieldValue("departmentId", null)}
+              options={departments.filter(d => d.isActive || d.id === selectedEmployee?.departmentId).map((department) => ({
                 label: department.name,
                 value: department.id,
               }))}
             />
+          </Form.Item>
+          <Form.Item name="isDepartmentSupervisor" label="部門主管" valuePropName="checked" extra="保留部門共同作業，再加入主管權限；薪資、財務與系統設定另外授權。">
+            <Switch disabled={!canBindDepartment} checkedChildren="是" unCheckedChildren="否" />
           </Form.Item>
           <Form.Item name="supervisorEmployeeId" label="直屬主管" extra="費用申請會送至此主管；未設定時無法送審。主管變更不會改派已送出的申請。">
             <Select allowClear showSearch optionFilterProp="label"
@@ -1296,6 +1314,20 @@ const DepartmentsTab = ({
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] =
     useState<Department | null>(null);
+  const { user } = useAuth();
+  const canBindDepartment = hasPermission(user, "access_control:update");
+  const [roles, setRoles] = useState<Role[]>([]);
+  useEffect(() => { if (canBindDepartment) void rolesService.list().then(setRoles).catch(() => message.error("無法載入部門角色")); }, [canBindDepartment]);
+  const roleOptions = roles.filter(role => !["ADMIN","SUPER_ADMIN"].includes(role.code)).map(role => ({ label: role.name, value: role.id }));
+  const roleFields = <>
+    <Form.Item name="memberRoleId" label="部門共同作業角色" extra="人員與主管都會取得此角色的作業權限。">
+      <Select allowClear disabled={!canBindDepartment} options={roleOptions} onClear={() => form.setFieldValue("memberRoleId", null)} />
+    </Form.Item>
+    <Form.Item name="supervisorRoleId" label="主管額外作業角色" extra="主管保留共同作業，另外加入此角色；財務、薪資、帳號管理與完整操作日誌仍須個別授權。">
+      <Select allowClear disabled={!canBindDepartment} options={roleOptions} onClear={() => form.setFieldValue("supervisorRoleId", null)} />
+    </Form.Item>
+  </>;
+
   const [form] = Form.useForm();
 
   const handleCreate = async () => {
@@ -1320,6 +1352,8 @@ const DepartmentsTab = ({
     form.setFieldsValue({
       name: record.name,
       costCenterId: record.costCenterId,
+      memberRoleId: record.memberRoleId,
+      supervisorRoleId: record.supervisorRoleId,
     });
     setEditOpen(true);
   };
@@ -1368,6 +1402,8 @@ const DepartmentsTab = ({
 
   const columns = [
     { title: "部門名稱", dataIndex: "name", key: "name" },
+    { title: "共同作業角色", key: "memberRole", render: (_: unknown, record: Department) => roles.find(r => r.id === record.memberRoleId)?.name || (record.memberRoleId ? "已設定" : "未設定") },
+    { title: "主管額外角色", key: "supervisorRole", render: (_: unknown, record: Department) => roles.find(r => r.id === record.supervisorRoleId)?.name || (record.supervisorRoleId ? "已設定" : "未設定") },
     { title: "成本中心代碼", dataIndex: "costCenterId", key: "costCenterId" },
     {
       title: "狀態",
@@ -1442,6 +1478,7 @@ const DepartmentsTab = ({
           <Form.Item name="costCenterId" label="成本中心代碼">
             <Input />
           </Form.Item>
+          {roleFields}
         </Form>
       </Modal>
 
@@ -1463,6 +1500,7 @@ const DepartmentsTab = ({
           <Form.Item name="costCenterId" label="成本中心代碼">
             <Input />
           </Form.Item>
+          {roleFields}
         </Form>
       </Modal>
     </div>

@@ -27,6 +27,7 @@ export const RESOURCE_TRANSLATIONS: Record<string, string> = {
   payroll_self_breakdown: '個人薪資明細',
   profile_self: '個人資料',
   employees_admin: '員工與部門管理',
+  attendance_team: '部門出勤與請假',
   attendance_admin: '考勤後臺',
   payroll_admin: '薪資管理',
   access_control: '帳號與權限',

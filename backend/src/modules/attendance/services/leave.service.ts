@@ -1,3 +1,4 @@
+import { ATTENDANCE_EMPLOYEE_SELECT } from '../../../common/department-access/attendance-selection';
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { NotificationService } from '../../notification/notification.service';
@@ -485,6 +486,10 @@ export class LeaveService {
       throw new BadRequestException('Leave request not found');
     }
 
+    if (existingRequest.employee.userId === reviewerId) {
+      throw new BadRequestException('不能審核自己的請假申請');
+    }
+
     const access = await this.getAdminAccessContext(
       reviewerId,
       existingRequest.entityId,
@@ -575,7 +580,7 @@ export class LeaveService {
         },
       },
       include: {
-        employee: true,
+        employee: { select: ATTENDANCE_EMPLOYEE_SELECT },
         leaveType: true,
       },
     });
@@ -683,19 +688,15 @@ export class LeaveService {
               : {}),
       },
       include: {
-        employee: {
-          include: {
-            department: true,
-          },
-        },
+        employee: { select: ATTENDANCE_EMPLOYEE_SELECT },
         leaveType: true,
-        reviewer: true,
+        reviewer: { select: { id: true, name: true } },
         documents: {
           orderBy: [{ uploadedAt: 'desc' }],
         },
         histories: {
           include: {
-            actor: true,
+            actor: { select: { id: true, name: true } },
           },
           orderBy: [{ createdAt: 'desc' }],
         },
@@ -943,11 +944,7 @@ export class LeaveService {
       },
       include: {
         leaveType: true,
-        employee: {
-          include: {
-            department: true,
-          },
-        },
+        employee: { select: { ...ATTENDANCE_EMPLOYEE_SELECT, gender: true } },
       },
       orderBy: [{ periodStart: 'desc' }, { employeeId: 'asc' }],
     });

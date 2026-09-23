@@ -5,8 +5,9 @@ import { effectiveAccess } from '../utils/access-preview'
 import { isAdminUser } from '../utils/access'
 import { getActionName, getResourceName } from '../constants/translations'
 
-export default function AccessPreview({ roles }: { roles: Role[] }) {
+export default function AccessPreview({ roles, permissions = [] }: { roles: Role[]; permissions?: string[] }) {
   const user = effectiveAccess(roles)
+  user.permissions = [...new Set([...user.permissions, ...permissions])]
   const items = workspaceNavigation(user, 'all')
   const pageCount = navigationLeaves(items).length
   return <div className="mt-4 space-y-3" aria-label="可見功能預覽">

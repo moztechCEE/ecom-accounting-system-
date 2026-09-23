@@ -116,7 +116,7 @@ const App: React.FC = () => {
                 {/* Attendance Routes */}
                 <Route path="attendance/dashboard" element={<PermissionRoute anyPermissions={['attendance_self:read']}><EmployeeDashboardPage /></PermissionRoute>} />
                 <Route path="attendance/leaves" element={<PermissionRoute anyPermissions={['leave_self:read']}><LeaveRequestPage /></PermissionRoute>} />
-                <Route path="attendance/admin" element={<PermissionRoute anyPermissions={['attendance_admin:read']}><AttendanceAdminPage /></PermissionRoute>} />
+                <Route path="attendance/admin" element={<PermissionRoute anyPermissions={['attendance_admin:read', 'attendance_team:read']}><AttendanceAdminPage /></PermissionRoute>} />
 
                 {/* Supply Chain Routes */}
                 <Route path="warehouse" element={<PermissionRoute anyPermissions={['wms_tasks:read']}>{wmsPortalOrigin() ? <WarehouseWorkspacePage /> : <WarehouseCenterPage />}</PermissionRoute>} />

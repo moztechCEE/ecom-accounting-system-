@@ -1,3 +1,4 @@
+import { DEPARTMENT_ACCESS_SELECT, effectivePermissionKeys } from '../../../common/department-access/department-access';
 import { ForbiddenException, ServiceUnavailableException, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { createPrivateKey, createHash } from 'node:crypto';
@@ -62,11 +63,11 @@ export function projectWorkspaceResponse(value:unknown,detail:boolean,expectedId
 export class WmsWorkspaceBridge {
   constructor(private readonly prisma:PrismaService,private readonly env:NodeJS.ProcessEnv=process.env,private readonly fetcher:typeof fetch=fetch){}
   async stations(actorId:string):Promise<Station[]> {
-    const actor=await this.prisma.user.findUnique({where:{id:actorId},select:{isActive:true,mustChangePassword:true}});
+    const actor=await this.prisma.user.findUnique({where:{id:actorId},select:{isActive:true,mustChangePassword:true,employee:{select:DEPARTMENT_ACCESS_SELECT}}});
     if(!actor?.isActive||actor.mustChangePassword)throw new ForbiddenException('WMS_ACTOR_INACTIVE');
     const roles=await this.prisma.userRole.findMany({where:{userId:actorId},include:{role:{include:{permissions:{include:{permission:true}}}}}});
     const all=roles.some(r=>['ADMIN','SUPER_ADMIN'].includes(r.role.code));
-    const held=new Set(roles.flatMap(r=>r.role.permissions.map(p=>`${p.permission.resource}:${p.permission.action}`)));
+    const held=new Set(effectivePermissionKeys({roles,employee:actor.employee}));
     if(!all&&!held.has('wms_tasks:read'))throw new ForbiddenException('WMS_TASK_ACCESS_REQUIRED');
     return (Object.keys(permissions) as Station[]).filter(s=>all||held.has(permissions[s]));
   }

@@ -3,7 +3,7 @@ import { LoginRequest, LoginResponse, ManagedUser, User } from '../types'
 
 const mapManagedUserToUser = (managed: ManagedUser): User => {
   const roleSet = new Set<string>()
-  const permissionSet = new Set<string>()
+  const permissionSet = new Set<string>(managed.effectivePermissions ?? [])
 
   managed.roles?.forEach((userRole) => {
     const roleCode = userRole.role?.code
@@ -21,12 +21,13 @@ const mapManagedUserToUser = (managed: ManagedUser): User => {
 
   return {
     id: managed.id,
+    departmentAccess: managed.departmentAccess,
     email: managed.email,
     name: managed.name,
     mustChangePassword: managed.mustChangePassword,
     isTwoFactorEnabled: managed.isTwoFactorEnabled,
     employeeDataScope: managed.employeeDataScope,
-    attendanceDataScope: managed.attendanceDataScope,
+    attendanceDataScope: managed.effectiveAttendanceDataScope ?? managed.attendanceDataScope,
     payrollDataScope: managed.payrollDataScope,
     accountingDataScope: managed.accountingDataScope,
     inventoryDataScope: managed.inventoryDataScope,

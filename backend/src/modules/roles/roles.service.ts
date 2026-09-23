@@ -34,9 +34,9 @@ export class RolesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(actorId?: string) {
-    const roles = await this.prisma.role.findMany({ orderBy: { hierarchyLevel: 'asc' }, include: { ...ROLE_INCLUDE, _count: { select: { users: true } } } });
+    const roles = await this.prisma.role.findMany({ orderBy: { hierarchyLevel: 'asc' }, include: { ...ROLE_INCLUDE, _count: { select: { users: true, memberDepartments: true, supervisorDepartments: true } } } });
     const superAdmin = Boolean(actorId && await this.prisma.userRole.count({ where: { userId: actorId, role: { code: 'SUPER_ADMIN' } } }));
-    return roles.map(role => ({ ...role, assignedUserCount: role._count.users, deletionReason: roleDeletionReason(role.code, role._count.users, superAdmin) }));
+    return roles.map(role => ({ ...role, assignedUserCount: role._count.users, deletionReason: (role._count.memberDepartments + role._count.supervisorDepartments > 0) ? '此角色仍綁定部門，請先調整部門設定' : roleDeletionReason(role.code, role._count.users, superAdmin) }));
   }
 
   async findById(id: string) {
@@ -113,6 +113,7 @@ export class RolesService {
       await tx.$queryRaw`SELECT id FROM roles WHERE id = ${id} FOR UPDATE`;
       const role = await tx.role.findUnique({ where: { id } });
       if (!role) throw new NotFoundException('角色不存在');
+      if (await tx.department.count({ where: { OR: [{ memberRoleId: id }, { supervisorRoleId: id }] } })) throw new BadRequestException('此角色仍綁定部門，請先調整部門設定');
       const assigned = await tx.userRole.count({ where: { roleId: id } });
       const superAdmin = Boolean(actorId && await tx.userRole.count({ where: { userId: actorId, role: { code: 'SUPER_ADMIN' } } }));
       const reason = roleDeletionReason(role.code, assigned, superAdmin);
