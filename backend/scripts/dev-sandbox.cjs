@@ -3,6 +3,7 @@
 // browser/subprocess automation are unavailable in this environment.
 const net = require('node:net');
 const childProcess = require('node:child_process');
+const { AsyncLocalStorage } = require('node:async_hooks');
 const { syncBuiltinESMExports } = require('node:module');
 
 if (process.env.ERP_DEV_SANDBOX !== 'true' || !/^erp_dev_[a-z0-9_]+$/.test(process.env.DB_NAME || '') ||
@@ -18,6 +19,17 @@ function blocked() {
 const warehouseOrigin = 'https://corely-wms-dev-sp5g377smq-de.a.run.app';
 const warehouseHost = new URL(warehouseOrigin).hostname;
 const warehouseEnabled = process.env.WMS_PORTAL_SSO_ENABLED === 'true' && process.env.WMS_PORTAL_SERVICE_URL === warehouseOrigin;
+// This exception is intentionally independent of every other DEV integration.
+// Merely enabling the flag cannot open a socket: only a validated fetch gets the token.
+const aiOrigin = 'https://generativelanguage.googleapis.com';
+const aiHost = new URL(aiOrigin).hostname;
+const aiEnabled = process.env.ERP_DEV_AI_ENABLED === 'true' && Boolean(process.env.GEMINI_API_KEY?.trim());
+const aiPaths = new Set([
+  '/v1beta/models/gemini-2.5-flash:generateContent',
+  '/v1beta/models/gemini-2.5-pro:generateContent',
+]);
+const aiFetchContext = new AsyncLocalStorage();
+const aiFetchToken = Symbol('approved-dev-ai-fetch');
 const connect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function (...args) {
   // Node can pass normalized [options, callback] arguments to Socket.connect.
@@ -25,14 +37,28 @@ net.Socket.prototype.connect = function (...args) {
   const path = typeof first === 'object' && first ? first.path : typeof first === 'string' ? first : '';
   const warehouseConnection = warehouseEnabled && typeof first === 'object' &&
     Number(first.port) === 443 && (first.host === warehouseHost || first.servername === warehouseHost);
-  if (!warehouseConnection && (!path || !path.startsWith(`/cloudsql/${process.env.CLOUDSQL_INSTANCE}/.s.PGSQL.`))) blocked();
+  const aiConnection = aiEnabled && aiFetchContext.getStore() === aiFetchToken && typeof first === 'object' &&
+    Number(first.port) === 443 && first.host === aiHost && (!first.servername || first.servername === aiHost);
+  if (!warehouseConnection && !aiConnection && (!path || !path.startsWith(`/cloudsql/${process.env.CLOUDSQL_INSTANCE}/.s.PGSQL.`))) blocked();
   return connect.apply(this, args);
 };
 const fetch = globalThis.fetch;
 globalThis.fetch = async (input, options = {}) => {
-  // Only the internal DEV account-link bridge is allowed. Shopify, email,
-  // accounting integrations, production WMS, callbacks and subprocesses stay blocked.
-  const url = new URL(typeof input === 'string' ? input : input.url);
+  const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
+  if (aiEnabled && url.origin === aiOrigin && !url.username && !url.password && !url.search && !url.hash &&
+      aiPaths.has(url.pathname) && (typeof input === 'string' || input instanceof URL) && options.method === 'POST' &&
+      (options.redirect === undefined || options.redirect === 'error') && typeof options.body === 'string') {
+    const headers = new Headers(options.headers);
+    if (headers.get('x-goog-api-key') !== process.env.GEMINI_API_KEY || headers.get('content-type') !== 'application/json') blocked();
+    // Rebuild options so callers cannot supply a custom dispatcher, Host header or redirect behavior.
+    // Both the validated URL and headers are snapshots, not mutable Request objects.
+    return aiFetchContext.run(aiFetchToken, () => fetch(url.href, {
+      method: 'POST', redirect: 'error', signal: options.signal, body: options.body,
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+    }));
+  }
+  // The existing internal DEV account-link bridge remains the only other HTTP exception.
+  // Shopify, email, production WMS, callbacks and subprocesses remain blocked.
   if (!warehouseEnabled || url.origin !== warehouseOrigin || url.username || url.password || url.search || url.hash ||
       !['/api/auth/erp/staff','/api/auth/erp/bind'].includes(url.pathname) || options.method !== 'POST' || options.redirect !== 'error') blocked();
   return fetch(input, options);

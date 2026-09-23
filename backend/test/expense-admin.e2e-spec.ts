@@ -52,6 +52,8 @@ describe('Expense Admin Routes (e2e)', () => {
     getReimbursementItemAdmin: jest.fn(),
     getReimbursementItems: jest.fn(),
     getExpenseRequests: jest.fn(),
+    previewLegacyApprovalRoute: jest.fn(),
+    assignLegacyApprovalRoute: jest.fn(),
   } as unknown as ExpenseService;
 
   beforeAll(async () => {
@@ -124,6 +126,25 @@ describe('Expense Admin Routes (e2e)', () => {
     await request(app.getHttpServer())
       .get('/expense/admin/reimbursement-items')
       .expect(403);
+  });
+
+  it('blocks accountants from previewing or assigning legacy approval routes', async () => {
+    currentUser = { id: 'accountant-1', roles: ['ACCOUNTANT'] };
+    await request(app.getHttpServer()).get('/expense/requests/legacy-1/legacy-approval-route').expect(403);
+    await request(app.getHttpServer()).put('/expense/requests/legacy-1/legacy-approval-route').send({}).expect(403);
+    expect(expenseService.previewLegacyApprovalRoute).not.toHaveBeenCalled();
+    expect(expenseService.assignLegacyApprovalRoute).not.toHaveBeenCalled();
+  });
+
+  it('passes the authenticated administrator and confirmed preview to legacy assignment', async () => {
+    currentUser = { id: 'admin-1', roles: ['ADMIN'] };
+    const confirmation = { expectedUpdatedAt: '2026-09-23T00:00:00.000Z', routeToken: 'a'.repeat(64) };
+    (expenseService.previewLegacyApprovalRoute as jest.Mock).mockResolvedValue({ requestId: 'legacy-1', ...confirmation });
+    (expenseService.assignLegacyApprovalRoute as jest.Mock).mockResolvedValue({ id: 'legacy-1', status: 'pending' });
+    await request(app.getHttpServer()).get('/expense/requests/legacy-1/legacy-approval-route').expect(200);
+    await request(app.getHttpServer()).put('/expense/requests/legacy-1/legacy-approval-route').send(confirmation).expect(200);
+    expect(expenseService.previewLegacyApprovalRoute).toHaveBeenCalledWith('legacy-1', 'admin-1');
+    expect(expenseService.assignLegacyApprovalRoute).toHaveBeenCalledWith('legacy-1', 'admin-1', confirmation);
   });
 
   it('creates reimbursement items via admin endpoint', async () => {

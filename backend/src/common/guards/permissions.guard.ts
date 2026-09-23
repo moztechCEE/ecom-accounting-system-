@@ -76,6 +76,12 @@ export class PermissionsGuard implements CanActivate {
       }
     }
 
+    // Managing access includes reading the users, roles and permissions needed
+    // by that workflow; it does not imply read access to other modules.
+    if (userPermissions.includes('access_control:update')) {
+      userPermissions.push('access_control:read');
+    }
+
     // 檢查是否擁有所有所需權限
     const hasAllPermissions = requiredPermissions.every((perm) =>
       userPermissions.includes(perm),

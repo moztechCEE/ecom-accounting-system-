@@ -1,0 +1,42 @@
+{
+  "checkedAt": "2026-09-23T11:28:19.196761+00:00",
+  "traffic": {
+    "corely-erp-api-dev": [
+      {
+        "percent": 100,
+        "revisionName": "corely-erp-api-dev-account-sso2-0923",
+        "tag": "account-sso2-candidate",
+        "url": "https://account-sso2-candidate---corely-erp-api-dev-sp5g377smq-de.a.run.app"
+      }
+    ],
+    "corely-erp-dev": [
+      {
+        "percent": 100,
+        "revisionName": "corely-erp-dev-account-sso2-0923",
+        "tag": "account-sso2-candidate",
+        "url": "https://account-sso2-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      }
+    ],
+    "ecom-accounting-backend": [
+      {
+        "percent": 100,
+        "revisionName": "ecom-accounting-backend-00506-ray",
+        "tag": "asro-0902",
+        "url": "https://asro-0902---ecom-accounting-backend-sp5g377smq-de.a.run.app"
+      }
+    ],
+    "ecom-accounting-frontend": [
+      {
+        "percent": 100,
+        "revisionName": "ecom-accounting-frontend-00270-vob",
+        "tag": "c-34521877689-1",
+        "url": "https://c-34521877689-1---ecom-accounting-frontend-sp5g377smq-de.a.run.app"
+      }
+    ]
+  },
+  "baseline": "8897ddcbc5c6c3a1128f0ad81df6c611202ca1b8",
+  "warehouseCurrent": "04d0e6f9d8dea151fb35ba3e031bc5f51d323615",
+  "deploymentChangedByThisTask": false,
+  "remoteHeads": "469f1efbbd194950c5a9d7323086b79a973b9926\trefs/heads/EC-EASON\nb967809c200ca6196a2fd160941364c11714182d\trefs/heads/VIC\nd9758ee0b536f59579bee53137ee24ca920c7ee6\trefs/heads/codex-deploy-annual-leave\n77e5c9035cd48d5bceba8d2cc4688d87124ce2a3\trefs/heads/codex/erp-resume-20260825\na8c3f521e99a08db0e36c0b9f2c2378c12a592b0\trefs/heads/codex/google-ads-backend-release-20260811\nd86d5383dda54b7bf0a6aafdf92d3ed1b074213a\trefs/heads/codex/google-ads-multi-credential-20260801\n2ec8282d1975988f93bf6466c372d4b84475ef44\trefs/heads/codex/operations-corely-20260910\n07eaa6f4fa532ea987b9bac8037cb852ae0fdb7a\trefs/heads/codex/product-save-feedback-20260923\nf046c798b45a2b509bff9702fd453d581ce9ef38\trefs/heads/luna/dashboard-command-center\na3791c4886bf92025020812d3f30150c974060a6\trefs/heads/main\n",
+  "worktrees": "worktree /Users/moztecheason/ecom-accounting-system-\nHEAD 77e5c9035cd48d5bceba8d2cc4688d87124ce2a3\nbranch refs/heads/codex/erp-resume-20260825\n\nworktree /Users/moztecheason/.codex/worktrees/erp-after-sales-staging/ecom-accounting-system-\nHEAD fa73e85ec108841d99330b5ed3e246b93be07105\nbranch refs/heads/codex/after-sales-erp-staging\n\nworktree /Users/moztecheason/.codex/worktrees/erp-warehouse-ui-release-20260919/ecom-accounting-system-\nHEAD 65ea165b50102545dac475439f75f0d18381aa95\nbranch refs/heads/codex/warehouse-ui-release-20260919\n\nworktree /Users/moztecheason/.codex/worktrees/operations-corely-20260910/ecom-accounting-system-\nHEAD 65ea165b50102545dac475439f75f0d18381aa95\nbranch refs/heads/codex/operations-corely-20260910\n\nworktree /Users/moztecheason/Documents/New project/luna-erp-read-fixes-20260909\nHEAD 28e8e6769c94e40584a39084dc324aa62f917d98\nbranch refs/heads/codex/luna-company-read-fixes-20260909\n\nworktree /Users/moztecheason/ecom-access-expense-ai-20260923\nHEAD 8897ddcbc5c6c3a1128f0ad81df6c611202ca1b8\nbranch refs/heads/codex/access-expense-ai-20260923\n\nworktree /Users/moztecheason/ecom-erp-dev-20260921\nHEAD 918dad81993fa6e0e51853a31dff7ff72a505629\nbranch refs/heads/codex/erp-dev-environment-20260921\n\nworktree /Users/moztecheason/ecom-erp-wms-links-20260922\nHEAD fe4c4e1ad5d74f77e9f1cd34dfa03af2ea812ee3\nbranch refs/heads/codex/erp-wms-links-20260922\n\nworktree /Users/moztecheason/ecom-product-save-feedback-20260923\nHEAD 07eaa6f4fa532ea987b9bac8037cb852ae0fdb7a\nbranch refs/heads/codex/product-save-feedback-20260923\n\nworktree /Users/moztecheason/ecom-sn-complete-20260922\nHEAD f204b33d6f1390c29f5d47a417f16842fedd307a\nbranch refs/heads/codex/sn-complete-20260922\n\nworktree /Users/moztecheason/ecom-sn-feedback-v2-20260923\nHEAD 2e45e6c5c7ab24419c8c27e9030c468976248ade\nbranch refs/heads/codex/sn-feedback-v2-20260923\n\nworktree /Users/moztecheason/ecom-sn-workspace-20260919\nHEAD 36688f16da9ab2a433cfe5caff8127af7e585156\nbranch refs/heads/codex/sn-label-workspace-20260919\n\nworktree /Users/moztecheason/ecom-warehouse-account-sso-20260923\nHEAD fc82e9035573241b436e9dad29fdd8758ca7636c\nbranch refs/heads/codex/warehouse-account-sso-20260923\n\nworktree /Users/moztecheason/ecom-warehouse-workspace-20260923\nHEAD 04d0e6f9d8dea151fb35ba3e031bc5f51d323615\nbranch refs/heads/codex/warehouse-workspace-20260923\n\n"
+}

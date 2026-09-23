@@ -12,7 +12,10 @@ export const hasRole = (user: User | null | undefined, role: string) =>
 export const hasPermission = (
   user: User | null | undefined,
   permission: string,
-) => isAdminUser(user) || Boolean(user && (user.permissions ?? []).includes(permission))
+) => isAdminUser(user) || Boolean(user && (
+  (user.permissions ?? []).includes(permission) ||
+  (permission === 'access_control:read' && (user.permissions ?? []).includes('access_control:update'))
+))
 
 export const hasAnyPermission = (
   user: User | null | undefined,

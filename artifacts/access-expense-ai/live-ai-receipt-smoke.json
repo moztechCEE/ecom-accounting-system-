@@ -1,0 +1,31 @@
+{
+  "syntheticOnly": true,
+  "source": "real configured Gemini API, mocked ERP records",
+  "elapsedMs": 7526,
+  "result": {
+    "status": "needs_confirmation",
+    "modelId": "gemini-2.5-flash",
+    "recognizedAt": "2026-09-23T10:52:38.945Z",
+    "fingerprints": [
+      "160398da70d3ea1d4f08008479880675564be83be8d85066c8989997bfe504ba"
+    ],
+    "confidence": 1,
+    "warnings": [
+      "此為測試憑證，非真實交易。"
+    ],
+    "possibleDuplicate": false,
+    "fields": {
+      "supplierName": "Test Office Supplies",
+      "description": "Office pens x 10",
+      "amountOriginal": 1200,
+      "currency": "TWD",
+      "taxAmount": 0,
+      "expenseDate": "2026-09-23",
+      "invoiceNo": "TEST0923001",
+      "sellerTaxId": null,
+      "buyerTaxId": null,
+      "receiptType": "RECEIPT",
+      "suggestedItemId": "synthetic-office"
+    }
+  }
+}

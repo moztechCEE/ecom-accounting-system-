@@ -13,6 +13,8 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsService } from './permissions.service';
 import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 
@@ -41,6 +43,8 @@ export class PermissionsController {
 
   @Post()
   @UseGuards(PermissionsGuard)
+  @Roles('SUPER_ADMIN')
+  @UseGuards(RolesGuard)
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '建立權限（帳號與權限管理）' })
   async create(@Body() dto: CreatePermissionDto) {
@@ -49,6 +53,8 @@ export class PermissionsController {
 
   @Patch(':id')
   @UseGuards(PermissionsGuard)
+  @Roles('SUPER_ADMIN')
+  @UseGuards(RolesGuard)
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '更新權限（帳號與權限管理）' })
   async update(@Param('id') id: string, @Body() dto: UpdatePermissionDto) {
@@ -57,6 +63,8 @@ export class PermissionsController {
 
   @Delete(':id')
   @UseGuards(PermissionsGuard)
+  @Roles('SUPER_ADMIN')
+  @UseGuards(RolesGuard)
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '刪除權限（帳號與權限管理）' })
   async remove(@Param('id') id: string) {

@@ -1,0 +1,138 @@
+{
+  "syntheticOnly": true,
+  "source": "real configured Gemini API; production AiService/AiCopilotService/AiCopilotAccessService/EntityAccessService; injected synthetic Prisma delegates",
+  "deploymentChanged": false,
+  "databaseConnected": false,
+  "startedAt": "2026-09-23T11:01:21.370Z",
+  "completedAt": "2026-09-23T11:01:26.937Z",
+  "elapsedMs": 5566,
+  "modelId": "gemini-2.5-flash",
+  "fixture": {
+    "entityId": "synthetic-erp-copilot-company",
+    "userId": "synthetic-erp-copilot-employee",
+    "departmentId": "synthetic-erp-copilot-department",
+    "expectedAmountBase": 1200,
+    "expectedCount": 2
+  },
+  "prompt": "請查詢我在 2026 年 9 月 1 日至 2026 年 9 月 23 日的費用申請總額與筆數。",
+  "intent": {
+    "tool": "get_expense_stats",
+    "params": {
+      "startDate": "2026-09-01",
+      "endDate": "2026-09-23",
+      "mine": true
+    }
+  },
+  "queries": [
+    {
+      "where": {
+        "createdBy": "synthetic-erp-copilot-employee",
+        "entityId": "synthetic-erp-copilot-company",
+        "createdAt": {
+          "gte": "2026-08-31T16:00:00.000Z",
+          "lte": "2026-09-23T15:59:59.999Z"
+        }
+      },
+      "_sum": {
+        "amountBase": true
+      },
+      "_count": {
+        "id": true
+      }
+    }
+  ],
+  "providerCalls": [
+    {
+      "status": "completed"
+    },
+    {
+      "status": "completed"
+    }
+  ],
+  "previousRuns": [
+    {
+      "startedAt": "2026-09-23T11:00:03.324Z",
+      "elapsedMs": 6133,
+      "passed": false,
+      "checks": {
+        "realProviderCompleted": false,
+        "correctToolSelected": true,
+        "selfAndCompanyFilterApplied": true,
+        "correctFixtureAggregateReturned": false,
+        "sourcePresent": false,
+        "queryTimestampPresent": true,
+        "ownExpenseScope": false,
+        "replyUsesFixtureAmount": false,
+        "replyUsesFixtureCount": false
+      },
+      "status": "unavailable",
+      "providerCalls": [
+        {
+          "status": "completed"
+        },
+        {
+          "status": "failed",
+          "code": "provider_http_503"
+        }
+      ]
+    },
+    {
+      "startedAt": "2026-09-23T11:00:41.946Z",
+      "elapsedMs": 8061,
+      "passed": false,
+      "checks": {
+        "realProviderCompleted": false,
+        "correctToolSelected": true,
+        "selfAndCompanyFilterApplied": true,
+        "correctFixtureAggregateReturned": false,
+        "sourcePresent": false,
+        "queryTimestampPresent": true,
+        "ownExpenseScope": false,
+        "replyUsesFixtureAmount": false,
+        "replyUsesFixtureCount": false
+      },
+      "status": "unavailable",
+      "providerCalls": [
+        {
+          "status": "completed"
+        },
+        {
+          "status": "failed",
+          "code": "provider_http_503"
+        }
+      ]
+    }
+  ],
+  "result": {
+    "status": "answered",
+    "checkedAt": "2026-09-23T11:01:24.077Z",
+    "scope": "自己的費用申請",
+    "reply": "您在 2026 年 9 月 1 日至 2026 年 9 月 23 日的費用申請總額為 1200 元，共有 2 筆申請。",
+    "data": {
+      "startDate": "2026-09-01",
+      "endDate": "2026-09-23",
+      "total": 1200,
+      "count": 2
+    },
+    "sources": [
+      {
+        "kind": "metric",
+        "title": "費用申請",
+        "detail": "2026-09-01 至 2026-09-23",
+        "path": "/ap/expenses"
+      }
+    ]
+  },
+  "checks": {
+    "realProviderCompleted": true,
+    "correctToolSelected": true,
+    "selfAndCompanyFilterApplied": true,
+    "correctFixtureAggregateReturned": true,
+    "sourcePresent": true,
+    "queryTimestampPresent": true,
+    "ownExpenseScope": true,
+    "replyUsesFixtureAmount": true,
+    "replyUsesFixtureCount": true
+  },
+  "passed": true
+}

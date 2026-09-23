@@ -1,6 +1,5 @@
 import {
   Controller,
-  ForbiddenException,
   Get,
   Post,
   Body,
@@ -18,8 +17,8 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { PrismaService } from '../../common/prisma/prisma.service';
 import { ExpenseService } from './expense.service';
+import { AssignLegacyApprovalDto } from './dto/assign-legacy-approval.dto';
 import { CreateExpenseRequestDto } from './dto/create-expense-request.dto';
 import { ApproveExpenseRequestDto } from './dto/approve-expense-request.dto';
 import { RejectExpenseRequestDto } from './dto/reject-expense-request.dto';
@@ -32,7 +31,6 @@ import {
 import type { Request } from 'express';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { Public } from '../../common/decorators/public.decorator';
 
 /**
  * 費用控制器
@@ -43,20 +41,7 @@ import { Public } from '../../common/decorators/public.decorator';
 @UseGuards(JwtAuthGuard)
 @Controller('expense')
 export class ExpenseController {
-  constructor(private readonly expenseService: ExpenseService, private readonly prisma: PrismaService) {}
-
-  private async expenseAccess(req?: Request) {
-    const id = (req?.user as any)?.id;
-    const user = id ? await this.prisma.user.findUnique({where:{id},include:{entityMemberships:true,employee:{select:{entityId:true}},roles:{include:{role:{include:{permissions:{include:{permission:true}}}}}}}}) : null;
-    if (!user?.isActive) throw new ForbiddenException();
-    const manager = user.roles.some(r => ['ADMIN','SUPER_ADMIN','ACCOUNTANT'].includes(r.role.code) || r.role.permissions.some(p => ['accounts','purchase_orders'].includes(p.permission.resource) && p.permission.action==='read'));
-    return {user, manager};
-  }
-  private async assertExpenseRead(id:string, req:Request) {
-    const {user,manager} = await this.expenseAccess(req);
-    const record=await this.prisma.expenseRequest.findUnique({where:{id},select:{createdBy:true}});
-    if (!record || (!manager && record.createdBy!==user.id)) throw new ForbiddenException('無法查看其他人員的費用申請');
-  }
+  constructor(private readonly expenseService: ExpenseService) {}
 
   @Get('requests')
   @ApiOperation({ summary: '查詢費用請款列表' })
@@ -66,17 +51,14 @@ export class ExpenseController {
     @Query('status') status?: string,
     @Req() req?: Request,
   ) {
-    const {user,manager} = await this.expenseAccess(req);
-    const createdBy = !manager || req?.query?.mine === 'true' ? user.id : undefined;
-    return this.expenseService.getExpenseRequests(entityId, status, createdBy);
+    return this.expenseService.listAccessibleRequests((req?.user as any)?.id, entityId, status, req?.query?.mine === 'true');
   }
 
   @Get('requests/:id')
   @ApiOperation({ summary: '查詢單一費用請款' })
   @ApiResponse({ status: 200, description: '成功取得費用請款詳情' })
   async getExpenseRequest(@Param('id') id: string, @Req() req: Request) {
-    await this.assertExpenseRead(id, req);
-    return this.expenseService.getExpenseRequest(id);
+    return this.expenseService.accessibleRequest(id, (req.user as any).id);
   }
 
   @Post('requests')
@@ -86,8 +68,6 @@ export class ExpenseController {
     @Body() data: CreateExpenseRequestDto,
     @Req() req: Request,
   ) {
-    const {user:actor,manager} = await this.expenseAccess(req);
-    if (!manager && !actor.entityMemberships.some(m=>m.entityId===data.entityId) && actor.employee?.entityId!==data.entityId) throw new ForbiddenException('沒有此公司的費用申請權限');
     const user = req.user as any;
     return this.expenseService.submitIntelligentExpenseRequest(data, {
       id: user.id,
@@ -96,12 +76,13 @@ export class ExpenseController {
   }
 
   @Post('predict-category')
-  @Public()
   @ApiOperation({ summary: '預測報銷項目' })
   @ApiResponse({ status: 200, description: '成功預測報銷項目' })
   async predictCategory(
     @Body() data: { description: string; entityId: string; model?: string },
+    @Req() req: Request,
   ) {
+    await this.expenseService.assertEntityAccess((req.user as any).id, data.entityId);
     return this.expenseService.predictReimbursementItem(
       data.entityId,
       data.description,
@@ -110,14 +91,12 @@ export class ExpenseController {
   }
 
   @Post('seed-ai-items')
-  @Public()
   @ApiOperation({ summary: '使用 AI 生成報銷項目題庫' })
   @ApiResponse({ status: 200, description: '成功生成報銷項目' })
-  async seedAiItems(@Body() data: { entityId: string }) {
-    // Debug: Test prediction
-    const prediction = await this.expenseService.predictReimbursementItem(data.entityId, '買了一隻筆');
-    console.log('Debug Prediction Result:', JSON.stringify(prediction, null, 2));
-    
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(RolesGuard)
+  async seedAiItems(@Body() data: { entityId: string }, @Req() req: Request) {
+    await this.expenseService.assertEntityAccess((req.user as any).id, data.entityId);
     return this.expenseService.seedAiReimbursementItems(data.entityId);
   }
 
@@ -144,6 +123,22 @@ export class ExpenseController {
     );
   }
 
+  @Get('requests/:id/legacy-approval-route')
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '預覽未指派舊申請的主管審批' })
+  previewLegacyApprovalRoute(@Param('id') id: string, @Req() req: Request) {
+    return this.expenseService.previewLegacyApprovalRoute(id, (req.user as any).id);
+  }
+
+  @Put('requests/:id/legacy-approval-route')
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '管理員確認後為未指派舊申請建立主管審批' })
+  assignLegacyApprovalRoute(@Param('id') id: string, @Body() dto: AssignLegacyApprovalDto, @Req() req: Request) {
+    return this.expenseService.assignLegacyApprovalRoute(id, (req.user as any).id, dto);
+  }
+
   @Put('requests/:id/reject')
   @ApiOperation({ summary: '駁回費用請款' })
   @ApiResponse({ status: 200, description: '成功駁回費用請款' })
@@ -163,8 +158,6 @@ export class ExpenseController {
   @Put('requests/:id/payment-info')
   @ApiOperation({ summary: '更新費用申請付款資訊 (僅限管理員/會計)' })
   @ApiResponse({ status: 200, description: '成功更新付款資訊' })
-  @Roles('ADMIN', 'ACCOUNTANT')
-  @UseGuards(RolesGuard)
   async updatePaymentInfo(
     @Param('id') id: string,
     @Body() data: UpdatePaymentInfoDto,
@@ -182,7 +175,7 @@ export class ExpenseController {
   @ApiOperation({ summary: '取得費用申請歷程' })
   @ApiResponse({ status: 200, description: '成功取得歷程' })
   async getExpenseHistory(@Param('id') id: string, @Req() req: Request) {
-    await this.assertExpenseRead(id, req);
+    await this.expenseService.accessibleRequest(id, (req.user as any).id);
     return this.expenseService.getExpenseRequestHistory(id);
   }
 
@@ -195,6 +188,7 @@ export class ExpenseController {
     @Req() req: Request,
   ) {
     const user = req.user as any;
+    await this.expenseService.accessibleRequest(id, user.id);
     return this.expenseService.submitFeedback(
       id,
       { id: user.id, roleCodes: this.extractRoleCodes(user) },
@@ -207,11 +201,7 @@ export class ExpenseController {
   @ApiResponse({ status: 200, description: '成功取得個人費用請款列表' })
   async getMyExpenseRequests(@Req() req: Request) {
     const user = req.user as any;
-    return this.expenseService.getExpenseRequests(
-      undefined,
-      undefined,
-      user.id,
-    );
+    return this.expenseService.listAccessibleRequests(user.id, undefined, undefined, true);
   }
 
   @Get('reimbursement-items')
@@ -228,7 +218,11 @@ export class ExpenseController {
     @Query('entityId') entityId: string,
     @Query('roles') roles?: string,
     @Query('departmentId') departmentId?: string,
+    @Req() req?: Request,
   ) {
+    const access = await this.expenseService.assertEntityAccess((req?.user as any)?.id, entityId);
+    roles = access.roles.join(',');
+    departmentId = access.user.employee?.departmentId || undefined;
     const roleList = roles
       ? roles
           .split(',')

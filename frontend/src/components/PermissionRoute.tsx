@@ -2,7 +2,7 @@ import React from 'react'
 import { Navigate } from 'react-router-dom'
 import { Result } from 'antd'
 import { useAuth } from '../contexts/AuthContext'
-import { hasAnyPermission, hasRole, isAdminUser } from '../utils/access'
+import { canAccessRoute } from '../utils/access-preview'
 
 type PermissionRouteProps = {
   children: React.ReactNode
@@ -27,14 +27,7 @@ const PermissionRoute: React.FC<PermissionRouteProps> = ({
     return <Navigate to="/login" replace />
   }
 
-  const roleAllowed =
-    anyRoles.length === 0 ||
-    isAdminUser(user) ||
-    anyRoles.some((role) => hasRole(user, role))
-  const permissionAllowed =
-    anyPermissions.length === 0 || hasAnyPermission(user, anyPermissions)
-
-  if (roleAllowed && permissionAllowed) {
+  if (canAccessRoute(user, anyPermissions, anyRoles)) {
     return <>{children}</>
   }
 

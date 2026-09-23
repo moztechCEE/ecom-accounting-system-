@@ -12,6 +12,9 @@ import {
 import { EvidenceFileDto } from './create-expense-request.dto';
 
 export class ApproveExpenseRequestDto {
+  @IsString()
+  approvalStepId?: string;
+
   @ApiPropertyOptional({ description: '覆核後的最終會計科目 ID' })
   @IsOptional()
   @IsUUID()

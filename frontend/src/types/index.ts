@@ -304,6 +304,9 @@ export interface Department {
 }
 
 export interface Employee {
+  entityId?: string;
+  supervisorEmployeeId?: string | null;
+  supervisor?: { id: string; name: string; userId?: string | null } | null;
   id: string;
   userId?: string | null;
   employeeNo: string;

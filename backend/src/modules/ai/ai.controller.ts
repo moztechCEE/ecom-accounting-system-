@@ -7,6 +7,7 @@ import {
   Req,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -14,6 +15,11 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import {
+  CopilotChatDto,
+  CopilotGuideDto,
+  DailyBriefingDto,
+} from './dto/copilot-chat.dto';
 import { AiService, AiModel } from './ai.service';
 import { AiInsightsService } from './ai-insights.service';
 import { AiCopilotService } from './ai-copilot.service';
@@ -32,7 +38,6 @@ import { RequireEntityAccess } from '../../common/decorators/entity-access.decor
 @ApiTags('AI Core')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard, EntityAccessGuard)
-@RequireEntityAccess('accounting')
 @Controller('ai')
 export class AiController {
   constructor(
@@ -42,6 +47,11 @@ export class AiController {
     private readonly computerUseService: AiComputerUseService,
   ) {}
 
+  @Get('status')
+  getStatus() {
+    return this.aiService.getStatus();
+  }
+
   @Get('models')
   @ApiOperation({ summary: '取得可用 AI 模型列表' })
   @ApiResponse({ status: 200, description: '成功取得模型列表' })
@@ -50,22 +60,35 @@ export class AiController {
   }
 
   @Post('insights/daily-briefing')
+  @RequireEntityAccess('accounting')
   @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @ApiOperation({ summary: '取得每日財務 AI 簡報' })
-  async getDailyBriefing(@Body() body: { entityId: string; modelId?: string }) {
-    const briefing = await this.insightsService.getDailyBriefing(
+  async getDailyBriefing(@Req() req: Request, @Body() body: DailyBriefingDto) {
+    const entityId = await this.copilotService.assertDailyBriefingAccess(
+      (req.user as any).id,
       body.entityId,
+    );
+    const briefing = await this.insightsService.getDailyBriefing(
+      entityId,
       body.modelId,
     );
     return briefing;
   }
 
+  @Get('guide')
+  getGuide(@Req() req: Request, @Query() query: CopilotGuideDto) {
+    return this.copilotService.getGuide(
+      (req.user as any).id,
+      query.query,
+      query.currentPath,
+    );
+  }
+
   @Post('copilot/chat')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @ApiOperation({ summary: '與 AI 助手對話（系統知識 + 實際資料查詢）' })
   async chat(
     @Req() req: Request,
-    @Body() body: { message: string; entityId: string; modelId?: string },
+    @Body() body: CopilotChatDto,
   ): Promise<CopilotResponse> {
     const user = req.user as any;
     return this.copilotService.processChat(
@@ -73,6 +96,8 @@ export class AiController {
       user.id,
       body.message,
       body.modelId,
+      body.currentPath,
+      body.history,
     );
   }
 

@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { canUseReimbursementItem } from './reimbursement-item-access';
 
-const EXPENSE_REQUEST_INCLUDE = {
+export const EXPENSE_REQUEST_INCLUDE = {
   creator: {
     select: {
       id: true,
@@ -33,6 +34,7 @@ const EXPENSE_REQUEST_INCLUDE = {
   finalAccount: true,
   approvalSteps: {
     orderBy: { stepOrder: 'asc' },
+    include: { approverUser: { select: { id: true, name: true } } },
   },
 } as const satisfies Prisma.ExpenseRequestInclude;
 
@@ -85,37 +87,14 @@ export class ExpenseRepository {
     entityId: string,
     options?: { roles?: string[]; departmentId?: string },
   ) {
-    const { roles, departmentId } = options || {};
-
-    return this.prisma.reimbursementItem.findMany({
+    const items = await this.prisma.reimbursementItem.findMany({
       where: {
         entityId,
         isActive: true,
-        AND: [
-          roles && roles.length
-            ? {
-                OR: [
-                  { allowedRoles: null },
-                  { allowedRoles: '' },
-                  ...roles.map((role) => ({
-                    allowedRoles: { contains: role },
-                  })),
-                ],
-              }
-            : {},
-          departmentId
-            ? {
-                OR: [
-                  { allowedDepartments: null },
-                  { allowedDepartments: '' },
-                  { allowedDepartments: { contains: departmentId } },
-                ],
-              }
-            : {},
-        ],
       },
       orderBy: { name: 'asc' },
     });
+    return items.filter((item) => canUseReimbursementItem(item, options));
   }
 
   async listReimbursementItemsAdmin(options?: {

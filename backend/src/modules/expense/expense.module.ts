@@ -8,6 +8,8 @@ import { ApprovalsModule } from '../approvals/approvals.module'; // 依賴：費
 import { ApModule } from '../ap/ap.module'; // 依賴：審批後產生AP
 import { NotificationModule } from '../notification/notification.module';
 import { AiModule } from '../ai/ai.module';
+import { ExpenseReceiptController } from './expense-receipt.controller';
+import { ExpenseReceiptService } from './expense-receipt.service';
 
 /**
  * ExpenseModule
@@ -19,8 +21,8 @@ import { AiModule } from '../ai/ai.module';
  */
 @Module({
   imports: [PrismaModule, ApprovalsModule, ApModule, NotificationModule, AiModule],
-  controllers: [ExpenseController],
-  providers: [ExpenseService, ExpenseRepository, AccountingClassifierService],
+  controllers: [ExpenseController, ExpenseReceiptController],
+  providers: [ExpenseService, ExpenseRepository, AccountingClassifierService, ExpenseReceiptService],
   exports: [ExpenseService],
 })
 export class ExpenseModule {}

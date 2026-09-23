@@ -5,7 +5,6 @@ import {
   IsIn,
   IsOptional,
   IsString,
-  IsUUID,
   MinLength,
   ArrayUnique,
 } from 'class-validator';
@@ -28,7 +27,8 @@ export class CreateUserDto {
   @IsOptional()
   @IsArray()
   @ArrayUnique()
-  @IsUUID('4', { each: true })
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
   readonly roleIds?: string[];
 
   @IsOptional()

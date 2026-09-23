@@ -11,6 +11,7 @@ import { stagedOperationsEnabled } from '../config/release'
 import CommandPalette from './CommandPalette'
 import NotificationCenter from './NotificationCenter'
 import SettingsDrawer from './SettingsDrawer'
+import AICopilotWidget from './AICopilotWidget'
 import './OperationsLayout.css'
 
 const STORAGE_KEY = 'corely.operations.navigation.v1'
@@ -100,6 +101,7 @@ export default function DashboardLayout() {
     <a className="operations-skip" href="#operations-content">跳至主要內容</a>
     <CommandPalette items={items} />
     <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    <AICopilotWidget />
     {!mobile && <aside className="operations-sidebar">
       {navContent(preferences.collapsed)}
       <div className="operations-sidebar-footer"><Button type="text" block

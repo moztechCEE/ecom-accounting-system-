@@ -166,6 +166,7 @@ export class PayrollService {
   private buildEmployeeInclude() {
     return {
       department: true,
+      supervisor: { select: { id: true, name: true, userId: true } },
       user: {
         select: {
           id: true,
@@ -1079,6 +1080,25 @@ export class PayrollService {
     return updatedDepartment;
   }
 
+  private async validateSupervisor(supervisorId: string | null | undefined, entityId: string, employeeId?: string) {
+    if (!supervisorId) return;
+    if (supervisorId === employeeId) throw new BadRequestException('直屬主管不能是自己');
+    const supervisor = await this.prisma.employee.findFirst({
+      where: { id: supervisorId, entityId, isActive: true, user: { isActive: true } },
+      select: { id: true, supervisorEmployeeId: true },
+    });
+    if (!supervisor) throw new BadRequestException('主管必須是同公司在職且有啟用登入帳號的員工');
+    const seen = new Set<string>(employeeId ? [employeeId] : []);
+    let current: { id: string; supervisorEmployeeId: string | null } | null = supervisor;
+    while (current) {
+      if (seen.has(current.id)) throw new BadRequestException('主管設定不能形成循環');
+      seen.add(current.id);
+      current = current.supervisorEmployeeId ? await this.prisma.employee.findUnique({
+        where: { id: current.supervisorEmployeeId }, select: { id: true, supervisorEmployeeId: true },
+      }) : null;
+    }
+  }
+
   async createEmployee(
     userId: string,
     data: {
@@ -1088,6 +1108,7 @@ export class PayrollService {
       name: string;
       gender?: string | null;
       departmentId?: string;
+      supervisorEmployeeId?: string | null;
       hireDate: string | Date;
       salaryBaseOriginal: number;
       isActive?: boolean;
@@ -1193,6 +1214,7 @@ export class PayrollService {
       throw new BadRequestException('Password must be at least 8 characters');
     }
 
+    await this.validateSupervisor(data.supervisorEmployeeId, entityId);
     const employee = await this.prisma.employee.create({
       data: {
         entityId,
@@ -1210,6 +1232,7 @@ export class PayrollService {
           data.attendanceType,
         ),
         departmentId: data.departmentId || null,
+        supervisorEmployeeId: data.supervisorEmployeeId || null,
         hireDate: new Date(data.hireDate),
         salaryBaseOriginal,
         salaryBaseCurrency: entity.baseCurrency,
@@ -1390,6 +1413,7 @@ export class PayrollService {
       name?: string;
       gender?: string | null;
       departmentId?: string | null;
+      supervisorEmployeeId?: string | null;
       hireDate?: string | Date;
       salaryBaseOriginal?: number;
       isActive?: boolean;
@@ -1437,6 +1461,10 @@ export class PayrollService {
     }
 
     const updateData: Record<string, any> = {};
+    if (data.supervisorEmployeeId !== undefined) {
+      await this.validateSupervisor(data.supervisorEmployeeId, employee.entityId, employee.id);
+      updateData.supervisorEmployeeId = data.supervisorEmployeeId || null;
+    }
 
     if (data.name !== undefined) {
       const name = data.name.trim();

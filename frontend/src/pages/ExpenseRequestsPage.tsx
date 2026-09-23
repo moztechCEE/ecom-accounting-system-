@@ -20,7 +20,6 @@ import {
   Timeline,
   Descriptions,
   Segmented,
-  Upload,
   Tooltip,
   Modal,
   Checkbox,
@@ -28,7 +27,6 @@ import {
 } from "antd";
 import {
   PlusOutlined,
-  UploadOutlined,
   BulbOutlined,
   ExclamationCircleOutlined,
   ClockCircleOutlined,
@@ -48,6 +46,10 @@ import { accountingService } from "../services/accounting.service";
 import type { Account } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 import { useAI } from "../contexts/AIContext";
+import ExpenseReceiptUpload from "../components/ExpenseReceiptUpload";
+import ReceiptEvidenceViewer from "../components/ReceiptEvidenceViewer";
+import { hasPermission } from "../utils/access";
+import { readReceiptFile, type ReceiptRecognition } from "../services/expense-receipt.service";
 
 const { Text, Title } = Typography;
 
@@ -166,8 +168,8 @@ const ExpenseRequestsPage: React.FC = () => {
   const isAdmin = useMemo(
     () =>
       (user?.roles ?? []).some(
-        (role) => role === "SUPER_ADMIN" || role === "ADMIN",
-      ),
+        (role) => role === "SUPER_ADMIN" || role === "ADMIN" || role === "ACCOUNTANT",
+      ) || Boolean(user?.permissions?.includes("accounts:read")),
     [user],
   );
   const [viewMode, setViewMode] = useState<ViewMode>("mine");
@@ -192,19 +194,24 @@ const ExpenseRequestsPage: React.FC = () => {
   const [approveLoading, setApproveLoading] = useState(false);
   const [rejectLoading, setRejectLoading] = useState(false);
   const [predicting, setPredicting] = useState(false);
+  const [receiptRecognition, setReceiptRecognition] = useState<ReceiptRecognition | null>(null);
 
   // Use global AI context
   const { selectedModelId: globalModelId } = useAI();
 
   const [form] = Form.useForm();
   const [approvalForm] = Form.useForm();
+  const watchedItemId = Form.useWatch<string>('reimbursementItemId', form);
+  useEffect(() => {
+    setSelectedItem(reimbursementItems.find(item => item.id === watchedItemId) ?? null);
+  }, [watchedItemId, reimbursementItems]);
 
   const roleKey = useMemo(() => (user?.roles ?? []).join(","), [user]);
   const resolvedRoles = useMemo(
     () => (roleKey ? roleKey.split(",").filter(Boolean) : []),
     [roleKey],
   );
-  const entityId = DEFAULT_ENTITY_ID;
+  const entityId = localStorage.getItem('entityId')?.trim() || DEFAULT_ENTITY_ID;
   const departmentId: string | undefined = undefined;
 
   const fetchReimbursementItems = useCallback(async () => {
@@ -286,6 +293,8 @@ const ExpenseRequestsPage: React.FC = () => {
   }, [approvalForm, detailDrawerOpen, selectedRequest]);
 
   const handleOpenDrawer = () => {
+    if (!hasPermission(user, 'expense_self:create')) return;
+    setReceiptRecognition(null);
     setSelectedItem(null);
     form.resetFields();
     setDrawerOpen(true);
@@ -332,22 +341,7 @@ const ExpenseRequestsPage: React.FC = () => {
 
       const files = values.files || [];
       const evidenceFiles = await Promise.all(
-        files.map(async (file: any) => {
-          const originFile = file.originFileObj;
-          return new Promise<{ name: string; url: string; mimeType: string }>(
-            (resolve, reject) => {
-              const reader = new FileReader();
-              reader.readAsDataURL(originFile);
-              reader.onload = () =>
-                resolve({
-                  name: originFile.name,
-                  url: reader.result as string,
-                  mimeType: originFile.type,
-                });
-              reader.onerror = (error) => reject(error);
-            },
-          );
-        }),
+        files.map((file: { originFileObj: File }) => readReceiptFile(file.originFileObj)),
       );
 
       const isPrepaidCustoms =
@@ -363,12 +357,15 @@ const ExpenseRequestsPage: React.FC = () => {
         paymentMethod: values.paymentMethod,
         amountOriginal: values.amount,
         amountCurrency: "TWD",
+        taxAmount: values.taxAmount,
+        taxType: values.taxType,
         description: values.description,
         remarks: values.remarks,
         receiptType: values.receiptType,
         dueDate: values.dueDate ? values.dueDate.toISOString() : undefined,
         priority: values.isUrgent ? "urgent" : "normal",
         metadata: {
+          ...(receiptRecognition ? { receiptRecognition: { ...receiptRecognition, confirmedByApplicant: values.receiptConfirmed === true } } : {}),
           ...(values.expenseDate
             ? { expenseDate: values.expenseDate.format("YYYY-MM-DD") }
             : {}),
@@ -525,10 +522,11 @@ const ExpenseRequestsPage: React.FC = () => {
       const { finalAccountId, remark } = approvalForm.getFieldsValue();
       setApproveLoading(true);
       await expenseService.approveExpenseRequest(selectedRequest.id, {
-        finalAccountId: finalAccountId || undefined,
+        approvalStepId: selectedRequest.approvalSteps?.find((step) => step.status === "pending")?.id,
+        finalAccountId: isAdmin ? finalAccountId || undefined : undefined,
         remark: remark?.trim() || undefined,
       });
-      message.success("已核准該費用申請");
+      message.success("已完成本關審批");
       handleCloseDetail();
       await refreshRequests();
     } catch (error) {
@@ -555,6 +553,7 @@ const ExpenseRequestsPage: React.FC = () => {
       }
       setRejectLoading(true);
       await expenseService.rejectExpenseRequest(selectedRequest.id, {
+        approvalStepId: selectedRequest.approvalSteps?.find((step) => step.status === "pending")?.id,
         reason,
         note: (rejectNote as string | undefined)?.trim() || undefined,
       });
@@ -736,7 +735,7 @@ const ExpenseRequestsPage: React.FC = () => {
     .map((x) => x.trim())
     .filter(Boolean);
 
-  const canReview = Boolean(isAdmin && selectedRequest?.status === "pending");
+  const canReview = Boolean(selectedRequest?.canReview);
 
   const columns: ColumnsType<ExpenseRequest> = [
     {
@@ -857,6 +856,8 @@ const ExpenseRequestsPage: React.FC = () => {
         return (
           <Space direction="vertical" size={2}>
             <Tag color={meta.color}>{meta.label}</Tag>
+            {record.status === "pending" && !record.approvalSteps?.length && <Tag color="orange">待管理員核對並指派審批人</Tag>}
+            {record.currentApprover && <span className="text-xs text-slate-500">待 {record.currentApprover.name} 審批</span>}
             {isInvoicePending && (
               <Tooltip
                 title={
@@ -927,6 +928,7 @@ const ExpenseRequestsPage: React.FC = () => {
             </GlassButton>
             <GlassButton
               onClick={handleOpenDrawer}
+              disabled={!hasPermission(user, 'expense_self:create')}
               className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 border-none shadow-lg shadow-blue-500/30"
             >
               <PlusOutlined /> 新增費用申請
@@ -974,6 +976,9 @@ const ExpenseRequestsPage: React.FC = () => {
           initialValues={{ amount: 0 }}
           className="space-y-4"
         >
+          <GlassDrawerSection>
+            <ExpenseReceiptUpload form={form} entityId={entityId} modelId={globalModelId} onRecognized={setReceiptRecognition} />
+          </GlassDrawerSection>
           <GlassDrawerSection>
             <Form.Item
               label="受款人類型"
@@ -1417,29 +1422,6 @@ const ExpenseRequestsPage: React.FC = () => {
           </Form.Item>
 
           <GlassDrawerSection>
-            <Form.Item
-              label="憑證/單據照片"
-              name="files"
-              valuePropName="fileList"
-              getValueFromEvent={(e) => {
-                if (Array.isArray(e)) return e;
-                return e?.fileList;
-              }}
-              className="mb-0"
-            >
-              <Upload
-                listType="picture"
-                beforeUpload={() => false}
-                maxCount={5}
-                accept="image/*,.pdf"
-              >
-                <GlassButton>
-                  <UploadOutlined className="mr-2" />
-                  上傳照片
-                </GlassButton>
-              </Upload>
-            </Form.Item>
-
             {selectedItem && allowedReceiptTypes && (
               <div className="mt-3 text-xs text-slate-500">
                 <span className="mr-2">此報銷項目允許的憑證：</span>
@@ -1540,6 +1522,10 @@ const ExpenseRequestsPage: React.FC = () => {
               </Descriptions>
             </GlassDrawerSection>
 
+            <GlassDrawerSection>
+              <div className="mb-4 font-semibold text-slate-800">原始憑證</div>
+              <ReceiptEvidenceViewer files={selectedRequest.evidenceFiles} attachmentUrl={selectedRequest.attachmentUrl} />
+            </GlassDrawerSection>
             <GlassDrawerSection>
               <div className="mb-4 font-semibold text-slate-800">歷程紀錄</div>
               <div className="max-h-72 overflow-y-auto px-1 pt-1 pb-4">

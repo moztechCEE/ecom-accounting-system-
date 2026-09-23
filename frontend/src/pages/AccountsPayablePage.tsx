@@ -92,7 +92,7 @@ const AccountsPayablePage: React.FC = () => {
       
       // Filter invoices that are not fully paid
       const pendingInvoices = (Array.isArray(invoicesData) ? invoicesData : [])
-        .filter(inv => inv.status !== 'paid')
+        .filter(inv => inv.status !== 'paid' && inv.source !== 'payment_task')
       setInvoices(pendingInvoices)
 
       setBanks(Array.isArray(banksData) ? banksData : [])
@@ -170,12 +170,15 @@ const AccountsPayablePage: React.FC = () => {
         const last5 = accountNo.length > 5 ? accountNo.slice(-5) : accountNo
 
         await expenseService.updatePaymentInfo(selectedExpense.id, {
+          bankAccountId: selectedBank.id,
+          amount: Number(values.amount),
+          paymentDate: values.paymentDate.toISOString(),
           paymentStatus: 'paid',
           paymentMethod: 'bank_transfer',
           paymentBankName: selectedBank.bankName,
           paymentAccountLast5: last5
         })
-        message.success('費用單據付款成功')
+        message.success('已登記實際付款，並同步關閉待付款任務')
       } else if (selectedInvoice) {
         // Pay Vendor Invoice
         await apService.recordPayment(selectedInvoice.id, {
@@ -540,7 +543,7 @@ const AccountsPayablePage: React.FC = () => {
         title={
           <div className="flex items-center gap-2 text-lg">
             <BankOutlined className="text-blue-600" />
-            <span>{selectedExpense ? '支付費用報銷' : '支付採購發票'}</span>
+            <span>{selectedExpense ? '登記費用實際付款' : '支付採購發票'}</span>
           </div>
         }
         open={paymentModalOpen}
@@ -623,7 +626,7 @@ const AccountsPayablePage: React.FC = () => {
           
           <div className="text-xs text-gray-500 mt-2 bg-blue-50 p-3 rounded text-blue-700">
             <p>• 系統將自動記錄銀行交易紀錄</p>
-            <p>• {selectedExpense ? '費用單據將標記為已付款' : '發票狀態將根據付款金額更新'}</p>
+            <p>• {selectedExpense ? '登記已實際完成的付款；系統不會向銀行發出匯款' : '發票狀態將根據付款金額更新'}</p>
           </div>
         </Form>
       </Modal>

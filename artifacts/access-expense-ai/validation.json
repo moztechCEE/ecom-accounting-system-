@@ -1,0 +1,24 @@
+{
+  "checkedAt": "2026-09-23T11:29:31.317988+00:00",
+  "scope": "local tests and synthetic fixtures; no deployed database acceptance",
+  "unitTests": {
+    "permissionsAndEntityScope": 29,
+    "expensesReceiptSupervisorsEligibilityLegacy": 56,
+    "copilotAiStatus": 30,
+    "total": 115
+  },
+  "httpTests": 8,
+  "isolatedPostgresqlChecks": 26,
+  "frontendTests": 19,
+  "sandboxTests": 9,
+  "wmsSandboxFixture": "passed",
+  "browserScenarios": 8,
+  "browserPageErrors": 0,
+  "builds": {
+    "backend": "passed",
+    "frontend": "passed"
+  },
+  "targetedNewFrontendLint": "passed",
+  "liveAi": "synthetic receipt normal and opt-in sandbox passed; synthetic Copilot passed after recorded provider503 failures",
+  "deploymentChanged": false
+}

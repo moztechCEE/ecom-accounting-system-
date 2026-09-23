@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -11,6 +12,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { isPrivilegedRole } from '../roles/role-policy';
 import {
   DataAccessModule,
   DataAccessScope,
@@ -68,6 +70,36 @@ export class UsersService {
 
   private normalizeDataScope(value?: string | null): DataAccessScope {
     return value === 'DEPARTMENT' || value === 'ENTITY' ? value : 'SELF';
+  }
+
+  /** API actor checks are separate from trusted employee-account provisioning. */
+  async assertAccessManagementAllowed(
+    actorId: string,
+    change: { targetUserId?: string; roleIds?: string[]; data?: CreateUserDto | UpdateUserDto },
+  ) {
+    const isSuperAdmin = await this.userHasRole(actorId, 'SUPER_ADMIN');
+    const scopeFields = [
+      'entityIds', 'employeeDataScope', 'attendanceDataScope', 'payrollDataScope',
+      'accountingDataScope', 'inventoryDataScope', 'salesDataScope', 'purchasingDataScope', 'bankingDataScope',
+    ];
+    if (!isSuperAdmin && change.data && scopeFields.some(key => change.data![key as keyof (CreateUserDto | UpdateUserDto)] !== undefined)) {
+      throw new ForbiddenException('公司與資料範圍僅能由最高管理員設定');
+    }
+    if (!isSuperAdmin && change.targetUserId) {
+      const links = await this.prisma.userRole.findMany({ where: { userId: change.targetUserId }, include: { role: true } });
+      if (links.some(link => isPrivilegedRole(link.role))) {
+        throw new ForbiddenException('管理員帳號僅能由最高管理員調整');
+      }
+    }
+    if (change.roleIds?.length) {
+      const roles = await this.prisma.role.findMany({ where: { id: { in: change.roleIds } } });
+      if (roles.some(role => role.code === 'SUPER_ADMIN' || role.name === 'SUPER_ADMIN')) {
+        throw new ForbiddenException('最高管理員角色不在一般帳號管理中指派');
+      }
+      if (!isSuperAdmin && roles.some(isPrivilegedRole)) {
+        throw new ForbiddenException('管理員角色僅能由最高管理員指派');
+      }
+    }
   }
 
   private sanitizeUser(user: UserWithRelations | null) {

@@ -98,13 +98,13 @@ const App: React.FC = () => {
                 <Route path="banking" element={<PermissionRoute anyPermissions={['banking:read']}><BankingPage /></PermissionRoute>} />
                 <Route path="payroll/runs" element={<PermissionRoute anyPermissions={['payroll_self:read', 'payroll_admin:read']}><PayrollPage /></PermissionRoute>} />
                 <Route path="payroll/employees" element={<PermissionRoute anyPermissions={['employees_admin:read']}><EmployeesPage /></PermissionRoute>} />
-                <Route path="ap/expenses" element={<ExpenseRequestsPage />} />
-                <Route path="ap/expense-review" element={<ExpenseReviewCenterPage />} />
-                <Route path="ap/payable" element={<AccountsPayablePage />} />
+                <Route path="ap/expenses" element={<PermissionRoute anyPermissions={['expense_self:read', 'purchase_orders:read', 'accounts:read']}><ExpenseRequestsPage /></PermissionRoute>} />
+                <Route path="ap/expense-review" element={<PermissionRoute anyPermissions={['expense_self:read', 'purchase_orders:read', 'accounts:read']}><ExpenseReviewCenterPage /></PermissionRoute>} />
+                <Route path="ap/payable" element={<PermissionRoute anyPermissions={['purchase_orders:read', 'accounts:read']}><AccountsPayablePage /></PermissionRoute>} />
                 <Route path="admin/access-control" element={<PermissionRoute anyPermissions={['access_control:read', 'access_control:update']}><AccessControlPage /></PermissionRoute>} />
-                <Route path="admin/entities" element={<BusinessEntitiesPage />} />
-                <Route path="admin/reimbursement-items" element={<ReimbursementItemsAdminPage />} />
-                <Route path="admin/settings" element={<SystemSettingsPage />} />
+                <Route path="admin/entities" element={<PermissionRoute anyRoles={['SUPER_ADMIN']}><BusinessEntitiesPage /></PermissionRoute>} />
+                <Route path="admin/reimbursement-items" element={<PermissionRoute anyRoles={['ADMIN']}><ReimbursementItemsAdminPage /></PermissionRoute>} />
+                <Route path="admin/settings" element={<PermissionRoute anyRoles={['ADMIN']}><SystemSettingsPage /></PermissionRoute>} />
                 
                 {/* Attendance Routes */}
                 <Route path="attendance/dashboard" element={<PermissionRoute anyPermissions={['attendance_self:read']}><EmployeeDashboardPage /></PermissionRoute>} />
@@ -125,7 +125,7 @@ const App: React.FC = () => {
                 <Route path="profile" element={<PermissionRoute anyPermissions={['profile_self:read']}><ProfilePage /></PermissionRoute>} />
 
                 {/* Placeholder Routes */}
-                <Route path="import" element={<ImportPage />} />
+                <Route path="import" element={<PermissionRoute anyRoles={['ADMIN']}><ImportPage /></PermissionRoute>} />
               </Route>
             </Route>
             </Routes>

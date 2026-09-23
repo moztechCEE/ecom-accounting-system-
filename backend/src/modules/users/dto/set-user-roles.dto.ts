@@ -1,4 +1,4 @@
-import { ArrayUnique, IsArray, IsUUID } from 'class-validator';
+import { ArrayUnique, IsArray, IsString, MinLength } from 'class-validator';
 
 /**
  * DTO: SetUserRolesDto
@@ -7,6 +7,7 @@ import { ArrayUnique, IsArray, IsUUID } from 'class-validator';
 export class SetUserRolesDto {
   @IsArray()
   @ArrayUnique()
-  @IsUUID('4', { each: true })
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
   readonly roleIds: string[];
 }

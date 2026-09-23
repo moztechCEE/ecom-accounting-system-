@@ -70,6 +70,9 @@ export interface UpsertReimbursementItemPayload {
 }
 
 export interface ExpenseRequest {
+  canReview?: boolean
+  currentApprover?: { id: string; name: string } | null
+  approvalSteps?: { id: string; status: string; approverUserId?: string | null; approverUser?: { id: string; name: string } | null }[]
   id: string
   entityId: string
   amountOriginal: number | string
@@ -144,6 +147,11 @@ export interface EvidenceFile {
 }
 
 export interface CreateExpenseRequestPayload {
+  payeeType?: string
+  paymentMethod?: string
+  priority?: string
+  taxType?: string
+  taxAmount?: number
   entityId?: string
   reimbursementItemId: string
   amountOriginal: number
@@ -160,12 +168,23 @@ export interface CreateExpenseRequestPayload {
 }
 
 export interface ApproveExpenseRequestPayload {
+  approvalStepId?: string
   finalAccountId?: string
   remark?: string
   metadata?: Record<string, unknown>
 }
 
+export interface LegacyApprovalRoutePreview {
+  requestId: string
+  expectedUpdatedAt: string
+  routeToken: string
+  requesterName: string
+  supervisor: { id: string; name: string; userId: string }
+  steps: { order: number; approverName: string | null; roleCode: string | null }[]
+}
+
 export interface RejectExpenseRequestPayload {
+  approvalStepId?: string
   reason: string
   note?: string
   metadata?: Record<string, unknown>
@@ -225,6 +244,12 @@ export const expenseService = {
     const response = await api.post<ExpenseRequest>('/expense/requests', {
       entityId: payload.entityId?.trim() || DEFAULT_ENTITY_ID,
       reimbursementItemId: payload.reimbursementItemId,
+      payeeType: payload.payeeType,
+      paymentMethod: payload.paymentMethod,
+      remarks: payload.remarks,
+      priority: payload.priority,
+      taxType: payload.taxType,
+      taxAmount: payload.taxAmount,
       amountOriginal: payload.amountOriginal,
       amountCurrency: payload.amountCurrency ?? 'TWD',
       amountFxRate: payload.amountFxRate ?? 1,
@@ -304,6 +329,19 @@ export const expenseService = {
     return response.data
   },
 
+  async previewLegacyApprovalRoute(requestId: string) {
+    const { data } = await api.get<LegacyApprovalRoutePreview>(`/expense/requests/${requestId}/legacy-approval-route`)
+    return data
+  },
+
+  async assignLegacyApprovalRoute(requestId: string, preview: LegacyApprovalRoutePreview) {
+    const { data } = await api.put<ExpenseRequest>(`/expense/requests/${requestId}/legacy-approval-route`, {
+      expectedUpdatedAt: preview.expectedUpdatedAt,
+      routeToken: preview.routeToken,
+    })
+    return data
+  },
+
   async seedAiItems(entityId: string) {
     const response = await api.post(`/expense/seed-ai-items`, { entityId })
     return response.data
@@ -321,6 +359,9 @@ export const expenseService = {
   },
 
   updatePaymentInfo: async (id: string, data: { 
+    bankAccountId?: string;
+    amount?: number;
+    paymentDate?: string;
     paymentMethod?: string; 
     paymentStatus: string;
     paymentBankName?: string;

@@ -1,13 +1,22 @@
+import { createHash } from 'node:crypto';
+import { AssignLegacyApprovalDto } from './dto/assign-legacy-approval.dto';
+import { parseReceiptFiles } from './receipt-files';
+import { canUseReimbursementItem } from './reimbursement-item-access';
 import {
   Injectable,
   Logger,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
+import { canViewBankAccountForUser } from '../banking/bank-account-access';
+import { EntityAccessService } from '../../common/entity-access/entity-access.service';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, TaxType } from '@prisma/client';
 import {
   ExpenseRepository,
+  EXPENSE_REQUEST_INCLUDE,
   ExpenseRequestWithGraph,
 } from './expense.repository';
 import { CreateExpenseRequestDto } from './dto/create-expense-request.dto';
@@ -23,6 +32,19 @@ import {
 import { NotificationService } from '../notification/notification.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AI_AGENT_CORE_PRINCIPLES } from '../ai/ai-principles';
+
+interface ExpenseEmployeeContext {
+  id: string;
+  entityId: string;
+  departmentId: string | null;
+  isActive: boolean;
+  supervisor: {
+    id: string;
+    entityId: string;
+    isActive: boolean;
+    user: { id: string; name?: string; isActive: boolean } | null;
+  } | null;
+}
 
 interface UserContext {
   id: string;
@@ -48,6 +70,7 @@ export class ExpenseService {
     private readonly notificationService: NotificationService,
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly entityAccessService: EntityAccessService,
   ) {}
 
   /**
@@ -316,181 +339,222 @@ Do not include markdown or explanation.
     });
   }
 
-  /**
-   * 審核費用申請
-   */
-  async approveExpenseRequest(
-    requestId: string,
-    approver: UserContext,
-    payload: ApproveExpenseRequestDto,
-  ) {
-    const request = await this.ensureExpenseRequest(requestId);
-    const finalAccountId =
-      payload.finalAccountId ||
-      request.finalAccountId ||
-      request.suggestedAccountId;
-
-    const updated =
-      await this.expenseRepository.updateExpenseRequestWithHistory(
-        requestId,
-        {
-          status: 'approved',
-          approvalUserId: approver.id,
-          approvedAt: payload.decidedAt ?? new Date(),
-          finalAccountId: finalAccountId ?? null,
-          metadata: this.mergeMetadata(request.metadata, payload.metadata),
-        },
-        {
-          action: 'approved',
-          fromStatus: request.status,
-          toStatus: 'approved',
-          actorId: approver.id,
-          actorRoleCode: approver.roleCodes?.[0],
-          note: payload.remark,
-          metadata: this.toJsonObject(payload.metadata),
-          attachments: this.toJsonArray(payload.attachments),
-          suggestedAccountId: request.suggestedAccountId ?? undefined,
-          finalAccountId: finalAccountId ?? undefined,
-        },
-        request.suggestedAccountId
-          ? {
-              entityId: request.entityId,
-              description: request.description,
-              suggestedAccountId: request.suggestedAccountId,
-              chosenAccountId: finalAccountId ?? request.suggestedAccountId,
-              suggestedItemId: request.suggestedItemId ?? null,
-              chosenItemId: request.reimbursementItemId ?? null,
-              confidence: request.suggestionConfidence ?? new Prisma.Decimal(0),
-              label:
-                finalAccountId && request.suggestedAccountId !== finalAccountId
-                  ? 'incorrect'
-                  : 'correct',
-              features: request.metadata ?? undefined,
-              createdBy: approver.id,
-            }
-          : undefined,
-        {
-          entityId: request.entityId,
-          vendorId: request.vendorId,
-          status: 'pending',
-          dueDate: request.dueDate,
-          amountOriginal: request.amountOriginal,
-          amountCurrency: request.amountCurrency,
-          amountFxRate: request.amountFxRate,
-          amountBase: request.amountBase,
-          notes: `Expense Request Approved: ${request.description}`,
-        },
-      );
-
-    return updated;
+  async access(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: {
+      employee: { include: { supervisor: { include: { user: { select: { id: true, name: true, isActive: true } } } } } },
+      entityMemberships: true,
+      roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
+    } });
+    if (!user?.isActive) throw new ForbiddenException('登入帳號未啟用');
+    const roles = user.roles.map((r) => r.role.code);
+    const permissions = user.roles.flatMap((r) => r.role.permissions.map((p) => `${p.permission.resource}:${p.permission.action}`));
+    const admin = roles.some((r) => ['ADMIN', 'SUPER_ADMIN'].includes(r));
+    const finance = admin || permissions.some((p) => ['accounts:read', 'purchase_orders:read'].includes(p));
+    if (!finance && !permissions.includes('expense_self:read')) throw new ForbiddenException('沒有費用申請介面的使用權限');
+    return { user, roles, permissions, admin, finance,
+      entityIds: [...new Set([...user.entityMemberships.map((m) => m.entityId), ...(user.employee?.isActive ? [user.employee.entityId] : [])])] };
   }
 
-  /**
-   * 駁回費用申請
-   */
-  async rejectExpenseRequest(
-    requestId: string,
-    approver: UserContext,
-    payload: RejectExpenseRequestDto,
-  ) {
-    const request = await this.ensureExpenseRequest(requestId);
+  async assertEntityAccess(userId: string, entityId: string) {
+    const access = await this.access(userId);
+    if (!access.roles.includes('SUPER_ADMIN') && !access.entityIds.includes(entityId)) throw new ForbiddenException('沒有此公司的費用權限');
+    return access;
+  }
 
-    const result = await this.expenseRepository.updateExpenseRequestWithHistory(
-      requestId,
-      {
-        status: 'rejected',
-        approvalUserId: approver.id,
-        approvedAt: payload.decidedAt ?? new Date(),
-        metadata: this.mergeMetadata(request.metadata, payload.metadata),
-      },
-      {
-        action: 'rejected',
-        fromStatus: request.status,
-        toStatus: 'rejected',
-        actorId: approver.id,
-        actorRoleCode: approver.roleCodes?.[0],
-        note: payload.reason,
-        metadata: this.toJsonObject(payload.metadata),
-        attachments: this.toJsonArray(payload.attachments),
-        suggestedAccountId: request.suggestedAccountId ?? undefined,
-        finalAccountId: request.finalAccountId ?? undefined,
-      },
-      request.suggestedAccountId
-        ? {
-            entityId: request.entityId,
-            description: request.description,
-            suggestedAccountId: request.suggestedAccountId,
-            chosenAccountId: request.finalAccountId ?? null,
-            suggestedItemId: request.suggestedItemId ?? null,
-            chosenItemId: request.reimbursementItemId ?? null,
-            confidence: request.suggestionConfidence ?? new Prisma.Decimal(0),
-            label: 'rejected',
-            features: request.metadata ?? undefined,
-            createdBy: approver.id,
-          }
-        : undefined,
-    );
+  private canReview(request: any, access: Awaited<ReturnType<ExpenseService['access']>>) {
+    if (request.status !== 'pending' || request.createdBy === access.user.id) return false;
+    if (!access.user.employee?.isActive || access.user.employee.entityId !== request.entityId) return false;
+    const step = request.approvalSteps?.find((s: any) => s.status === 'pending');
+    return Boolean(step && (step.approverUserId ? step.approverUserId === access.user.id : step.approverRoleCode && access.roles.includes(step.approverRoleCode)));
+  }
 
-    // Send notification to the requester
-    try {
-      await this.notificationService.create({
-        userId: request.createdBy,
-        title: '費用申請已駁回',
-        message: `您的費用申請「${request.description}」已被駁回。原因：${payload.reason}`,
-        type: 'error',
-        category: 'expense',
-        data: { requestId: request.id },
-      });
-    } catch (error) {
-      this.logger.error(`Failed to send rejection notification: ${error}`);
-      // Do not throw error, let the rejection proceed
+  async listAccessibleRequests(userId: string, entityId?: string, status?: string, mine = false) {
+    const access = entityId ? await this.assertEntityAccess(userId, entityId) : await this.access(userId);
+    const scope = access.roles.includes('SUPER_ADMIN') ? 'ENTITY' : access.user.accountingDataScope;
+    const visible: Prisma.ExpenseRequestWhereInput[] = [{ createdBy: userId }];
+    if (!mine) {
+      visible.push({ approvalSteps: { some: { OR: [{ approverUserId: userId }, { approverUserId: null, approverRoleCode: { in: access.roles } }] } } });
+      if (access.finance && scope === 'ENTITY') visible.push({});
+      if (access.finance && scope === 'DEPARTMENT' && access.user.employee?.departmentId) visible.push({ departmentId: access.user.employee.departmentId });
     }
+    const records = await this.prisma.expenseRequest.findMany({ where: {
+      entityId: entityId || (access.roles.includes('SUPER_ADMIN') ? undefined : { in: access.entityIds }),
+      status, OR: visible,
+    }, include: EXPENSE_REQUEST_INCLUDE, orderBy: { createdAt: 'desc' } });
+    return records.map((record) => ({ ...record, canReview: this.canReview(record, access), currentApprover: record.approvalSteps.find((s) => s.status === 'pending')?.approverUser || null }));
+  }
 
+  async accessibleRequest(id: string, userId: string) {
+    const record = await this.ensureExpenseRequest(id);
+    const visible = await this.listAccessibleRequests(userId, record.entityId);
+    const result = visible.find((r) => r.id === id);
+    if (!result) throw new ForbiddenException('無法查看此費用申請');
     return result;
   }
 
-  /**
-   * 更新費用申請的付款資訊
-   */
-  async updatePaymentInfo(
-    requestId: string,
-    data: UpdatePaymentInfoDto,
-    user: UserContext,
-  ) {
-    const request = await this.ensureExpenseRequest(requestId);
+  async approveExpenseRequest(requestId: string, approver: UserContext, payload: ApproveExpenseRequestDto) {
+    return this.decideExpense(requestId, approver, 'approved', payload);
+  }
 
-    const updateData: Prisma.ExpenseRequestUpdateInput = {
-      paymentStatus: data.paymentStatus,
+  async rejectExpenseRequest(requestId: string, approver: UserContext, payload: RejectExpenseRequestDto) {
+    return this.decideExpense(requestId, approver, 'rejected', { ...payload, remark: payload.reason });
+  }
+
+  private async decideExpense(requestId: string, actor: UserContext, decision: 'approved' | 'rejected', payload: ApproveExpenseRequestDto) {
+    const access = await this.access(actor.id);
+    return this.prisma.$transaction(async (tx) => {
+      const request = await tx.expenseRequest.findUnique({ where: { id: requestId }, include: EXPENSE_REQUEST_INCLUDE });
+      if (!request) throw new NotFoundException('找不到費用申請');
+      if (!this.canReview(request, access)) throw new ForbiddenException('僅目前指派的主管或審批人可處理待審申請；不得審批自己的申請');
+      const step = request.approvalSteps.find((s) => s.status === 'pending')!;
+      if (!payload.approvalStepId) throw new BadRequestException('請重新載入目前審批節點');
+      if (payload.approvalStepId !== step.id) throw new ConflictException('審批節點已變更，請重新整理後再確認');
+      if (payload.finalAccountId) {
+        if (!access.finance) throw new ForbiddenException('會計科目需由有會計權限的人員核定');
+        const account = await tx.account.findFirst({ where: { id: payload.finalAccountId, entityId: request.entityId, isActive: true } });
+        if (!account) throw new BadRequestException('會計科目不屬於此公司或已停用');
+      }
+      const changed = await tx.approvalStep.updateMany({ where: { id: step.id, status: 'pending' }, data: {
+        status: decision, approverUserId: actor.id, decidedAt: new Date(), remark: payload.remark,
+      } });
+      if (changed.count !== 1) throw new ConflictException('此申請已由其他操作處理，請重新整理');
+      const remaining = request.approvalSteps.some((s) => s.id !== step.id && s.status === 'pending');
+      const status = decision === 'rejected' ? 'rejected' : remaining ? 'pending' : 'approved';
+      const finalAccountId = payload.finalAccountId || request.finalAccountId;
+      const updated = await tx.expenseRequest.update({ where: { id: request.id }, data: {
+        status, ...(status !== 'pending' ? { approvalUserId: actor.id, approvedAt: new Date() } : {}),
+        finalAccountId,
+      }, include: EXPENSE_REQUEST_INCLUDE });
+      await tx.expenseRequestHistory.create({ data: { expenseRequestId: request.id, action: decision, fromStatus: request.status, toStatus: status,
+        actorId: actor.id, actorRoleCode: access.roles[0], note: payload.remark,
+        metadata: { approvalStepId: step.id }, finalAccountId,
+      } });
+      if (status === 'approved') await tx.paymentTask.create({ data: {
+        entityId: request.entityId, expenseRequestId: request.id, vendorId: request.vendorId,
+        accountId: finalAccountId, status: 'pending', dueDate: request.dueDate,
+        amountOriginal: request.amountOriginal, amountCurrency: request.amountCurrency,
+        amountFxRate: request.amountFxRate, amountBase: request.amountBase,
+        notes: `費用申請：${request.description}`,
+      } });
+      return { ...updated, canReview: false };
+    });
+  }
+
+  private async resolveExpenseSupervisor(employee: ExpenseEmployeeContext | null, requesterId: string, entityId: string) {
+    const supervisor = employee?.supervisor;
+    if (!employee?.isActive || employee.entityId !== entityId) throw new BadRequestException('請先綁定此公司的在職員工資料');
+    if (!supervisor?.isActive || supervisor.entityId !== entityId || !supervisor.user?.isActive || supervisor.user.id === requesterId) {
+      throw new BadRequestException('尚未設定可審批的直屬主管，請管理員至人員管理設定同公司主管與登入帳號');
+    }
+    try {
+      const supervisorAccess = await this.assertEntityAccess(supervisor.user.id, entityId);
+      if (!supervisorAccess.user.employee?.isActive || supervisorAccess.user.employee.id !== supervisor.id || supervisorAccess.user.employee.entityId !== entityId) {
+        throw new ForbiddenException('主管員工關係無效');
+      }
+    } catch (error) {
+      if (error instanceof ForbiddenException) throw new BadRequestException('直屬主管尚無此公司的費用讀取權限或有效員工關係，請管理員先設定主管權限後再送出');
+      throw error;
+    }
+    return { employee, supervisor: { ...supervisor, user: supervisor.user } };
+  }
+
+  private buildRequestApprovalSteps(item: ExpenseRequestWithGraph['reimbursementItem'], amountOriginal: number, departmentId: string | null, supervisorUserId: string) {
+    const policySteps = this.buildApprovalSteps(item?.approvalPolicy?.steps ?? [], amountOriginal, departmentId || undefined);
+    const steps = [
+      { stepOrder: 1, status: 'pending', approverUserId: supervisorUserId, departmentId, assignedAt: new Date() },
+      ...policySteps.map((step, index) => ({ ...step, stepOrder: index + 2,
+        ...(item?.approvalPolicy?.steps.find((policy) => policy.stepOrder === step.stepOrder)?.requiresDepartmentHead ? { approverUserId: supervisorUserId } : {}),
+      })),
+    ];
+    if (steps.some((step) => !step.approverUserId && !('approverRoleCode' in step && step.approverRoleCode))) throw new BadRequestException('審批政策有未指定審批人的節點，請管理員修正');
+    return steps;
+  }
+
+  private async legacyApprovalPlan(request: ExpenseRequestWithGraph) {
+    if (request.status !== 'pending' || request.approvalSteps.length !== 0) throw new ConflictException('僅尚未指派任何審批節點的待審申請可建立主管審批');
+    const employee = await this.prisma.employee.findUnique({ where: { userId: request.createdBy }, include: {
+      user: { select: { isActive: true } },
+      supervisor: { include: { user: { select: { id: true, name: true, isActive: true } } } },
+    } });
+    if (!employee?.user?.isActive) throw new BadRequestException('原申請人的登入帳號或員工關係無效，請先由管理員核對');
+    const route = await this.resolveExpenseSupervisor(employee, request.createdBy, request.entityId);
+    if (request.reimbursementItem && request.reimbursementItem.entityId !== request.entityId) throw new BadRequestException('原報銷項目公司不符，請先由會計核對');
+    const steps = this.buildRequestApprovalSteps(request.reimbursementItem, Number(request.amountOriginal), route.employee.departmentId, route.supervisor.user.id);
+    const routeToken = createHash('sha256').update(JSON.stringify({
+      requestId: request.id, supervisorEmployeeId: route.supervisor.id,
+      steps: steps.map(({ assignedAt: _assignedAt, ...step }: any) => step),
+    })).digest('hex');
+    return { ...route, steps, routeToken };
+  }
+
+  async previewLegacyApprovalRoute(requestId: string, actorId: string) {
+    const access = await this.access(actorId);
+    if (!access.admin) throw new ForbiddenException('只有系統管理員可為舊申請建立主管審批');
+    const request = await this.accessibleRequest(requestId, actorId);
+    const route = await this.legacyApprovalPlan(request);
+    return {
+      requestId, expectedUpdatedAt: request.updatedAt.toISOString(), routeToken: route.routeToken,
+      requesterName: request.creator.name,
+      supervisor: { id: route.supervisor.id, name: route.supervisor.user.name || '已設定主管', userId: route.supervisor.user.id },
+      steps: route.steps.map((step) => ({ order: step.stepOrder, approverName: step.approverUserId === route.supervisor.user.id ? route.supervisor.user.name || '已設定主管' : null,
+        roleCode: 'approverRoleCode' in step ? step.approverRoleCode : null })),
     };
+  }
 
-    if (data.paymentMethod) {
-      updateData.paymentMethod = data.paymentMethod;
-    }
-
-    // 若付款狀態變更為已付款，且之前未付款，則更新主狀態為 paid
-    if (data.paymentStatus === 'paid' && request.paymentStatus !== 'paid') {
-      updateData.status = 'paid';
-    }
-
-    const updated = await this.prisma.expenseRequest.update({
-      where: { id: requestId },
-      data: updateData,
+  async assignLegacyApprovalRoute(requestId: string, actorId: string, dto: AssignLegacyApprovalDto) {
+    const access = await this.access(actorId);
+    if (!access.admin) throw new ForbiddenException('只有系統管理員可為舊申請建立主管審批');
+    await this.accessibleRequest(requestId, actorId);
+    return this.prisma.$transaction(async (tx) => {
+      const request = await tx.expenseRequest.findUnique({ where: { id: requestId }, include: EXPENSE_REQUEST_INCLUDE });
+      if (!request) throw new NotFoundException('找不到費用申請');
+      if (request.updatedAt.toISOString() !== dto.expectedUpdatedAt) throw new ConflictException('申請已變更，請重新預覽主管審批');
+      const route = await this.legacyApprovalPlan(request);
+      if (route.routeToken !== dto.routeToken) throw new ConflictException('主管或審批政策已變更，請重新預覽並確認');
+      // Updating the version claims this legacy request atomically; a competing repair cannot create another route.
+      const version = new Date(Math.max(Date.now(), request.updatedAt.getTime() + 1));
+      const claimed = await tx.expenseRequest.updateMany({ where: {
+        id: requestId, status: 'pending', updatedAt: request.updatedAt, approvalSteps: { none: {} },
+      }, data: { updatedAt: version } });
+      if (claimed.count !== 1) throw new ConflictException('此申請已被處理，請重新整理');
+      await tx.approvalStep.createMany({ data: route.steps.map((step) => ({ ...step, expenseRequestId: requestId })) });
+      await tx.expenseRequestHistory.create({ data: {
+        expenseRequestId: requestId, action: 'approval_assigned', fromStatus: 'pending', toStatus: 'pending', actorId,
+        note: '管理員確認後，依目前已設定主管建立舊申請審批；保留項目額外審批政策',
+        metadata: { supervisorEmployeeId: route.supervisor.id, supervisorUserId: route.supervisor.user.id, routeToken: route.routeToken },
+      } });
+      return tx.expenseRequest.findUnique({ where: { id: requestId }, include: EXPENSE_REQUEST_INCLUDE });
     });
+  }
 
-    // 記錄操作歷史
-    await this.prisma.expenseRequestHistory.create({
-      data: {
-        expenseRequestId: requestId,
-        action: 'payment_update',
-        fromStatus: request.paymentStatus,
-        toStatus: data.paymentStatus,
-        actorId: user.id,
-        actorRoleCode: user.roleCodes?.[0],
-        note: `Payment info updated: Status=${data.paymentStatus}, Method=${data.paymentMethod || 'N/A'}`,
-      },
+  async updatePaymentInfo(requestId: string, data: UpdatePaymentInfoDto, actor: UserContext) {
+    const request = await this.accessibleRequest(requestId, actor.id);
+    const access = await this.assertEntityAccess(actor.id, request.entityId);
+    if (!access.admin && !access.permissions.includes('banking:update')) throw new ForbiddenException('需要出納付款登記權限');
+    if (data.paymentStatus !== 'paid') throw new BadRequestException('付款登記只接受已實際支付的完整金額，不能回退付款狀態');
+    if (!data.bankAccountId || !data.paymentDate || data.amount === undefined) throw new BadRequestException('請填寫實際付款銀行、日期與金額');
+    const bank = await this.prisma.bankAccount.findFirst({ where: { id: data.bankAccountId, entityId: request.entityId, isActive: true } });
+    if (!bank) throw new BadRequestException('付款銀行不屬於此公司或已停用');
+    if (!canViewBankAccountForUser(bank, access.user)) throw new ForbiddenException('沒有此銀行帳戶的存取權限');
+    const banking = await this.entityAccessService.assertAccess(actor.id, 'banking', request.entityId);
+    if (!banking.isSuperAdmin && ((banking.scope === 'SELF' && request.createdBy !== actor.id) || (banking.scope === 'DEPARTMENT' && request.departmentId !== banking.departmentId))) throw new ForbiddenException('此付款超出你的出納資料範圍');
+    if (bank.currency !== request.amountCurrency) throw new BadRequestException('付款帳戶與費用幣別不同，請會計先確認換匯及支付金額');
+
+    if (!new Prisma.Decimal(data.amount).equals(request.amountOriginal)) throw new BadRequestException('目前費用付款須以完整核准金額登記');
+    return this.prisma.$transaction(async (tx) => {
+      const changed = await tx.expenseRequest.updateMany({ where: { id: requestId, status: 'approved', paymentStatus: { not: 'paid' } }, data: {
+        status: 'paid', paymentStatus: 'paid', paymentMethod: 'bank_transfer',
+        paymentBankName: bank.bankName, paymentAccountLast5: bank.accountNo?.slice(-5),
+      } });
+      if (changed.count !== 1) throw new ConflictException('費用尚未核准或已完成付款登記');
+      const task = await tx.paymentTask.updateMany({ where: { expenseRequestId: requestId, status: 'pending' }, data: { status: 'paid', paidDate: data.paymentDate } });
+      if (task.count !== 1) throw new ConflictException('找不到唯一待付款任務，請先由會計核對');
+      await tx.expenseRequestHistory.create({ data: { expenseRequestId: requestId, action: 'payment_recorded', fromStatus: 'approved', toStatus: 'paid', actorId: actor.id,
+        note: '出納登記實際付款；此操作不會向銀行發出匯款',
+        metadata: { bankAccountId: bank.id, paymentDate: data.paymentDate.toISOString(), amount: data.amount, currency: request.amountCurrency },
+      } });
+      return tx.expenseRequest.findUnique({ where: { id: requestId }, include: EXPENSE_REQUEST_INCLUDE });
     });
-
-    return updated;
   }
 
   /**
@@ -604,6 +668,12 @@ Do not include markdown or explanation.
     dto: CreateExpenseRequestDto,
     requestedBy: UserContext,
   ) {
+    const access = await this.assertEntityAccess(requestedBy.id, dto.entityId);
+    if (!access.admin && !access.permissions.includes('expense_self:create')) throw new ForbiddenException('沒有建立費用申請的權限');
+    const validatedEvidence = parseReceiptFiles(dto.evidenceFiles || []);
+    const { employee, supervisor } = await this.resolveExpenseSupervisor(access.user.employee, requestedBy.id, dto.entityId);
+    if (!(dto.amountOriginal > 0) || !Number.isFinite(dto.amountOriginal) || (dto.amountFxRate !== undefined && !(dto.amountFxRate > 0))) throw new BadRequestException('費用金額與匯率必須大於零');
+    dto.departmentId = employee.departmentId || undefined;
     const amountCurrency = dto.amountCurrency ?? 'TWD';
     const amountFxRate = dto.amountFxRate ?? 1;
     const amountBase = this.toDecimal(dto.amountOriginal * amountFxRate);
@@ -613,6 +683,12 @@ Do not include markdown or explanation.
           dto.reimbursementItemId,
         )
       : null;
+
+    if (dto.reimbursementItemId && (!reimbursementItem || reimbursementItem.entityId !== dto.entityId || !reimbursementItem.isActive)) throw new BadRequestException('報銷項目不屬於此公司或已停用');
+    if (reimbursementItem && !canUseReimbursementItem(reimbursementItem, { roles: access.roles, departmentId: employee.departmentId || undefined })) {
+      throw new ForbiddenException('此報銷項目不適用於你的角色或所屬部門');
+    }
+    if (dto.vendorId && !await this.prisma.vendor.findFirst({ where: { id: dto.vendorId, entityId: dto.entityId, isActive: true } })) throw new BadRequestException('收款廠商不屬於此公司');
 
     const taxType = dto.taxType ?? reimbursementItem?.defaultTaxType ?? null;
     let taxAmount = dto.taxAmount;
@@ -645,11 +721,7 @@ Do not include markdown or explanation.
       metadata: dto.metadata,
     });
 
-    const approvalSteps = this.buildApprovalSteps(
-      reimbursementItem?.approvalPolicy?.steps ?? [],
-      dto.amountOriginal,
-      dto.departmentId,
-    );
+    const approvalSteps = this.buildRequestApprovalSteps(reimbursementItem, dto.amountOriginal, employee.departmentId, supervisor.user.id);
 
     const requestData: Prisma.ExpenseRequestUncheckedCreateInput = {
       entityId: dto.entityId,
@@ -679,6 +751,7 @@ Do not include markdown or explanation.
       suggestionConfidence: this.toDecimal(suggestion.confidence),
       metadata: this.buildJsonObject(dto.metadata, {
         classifierFeatures: suggestion.features,
+        receiptFingerprints: validatedEvidence.map(file => file.fingerprint),
       }),
     };
 
@@ -713,6 +786,10 @@ Do not include markdown or explanation.
       approvalSteps,
       classifierFeedback,
     });
+
+    try {
+      await this.notificationService.create({ userId: supervisor.user.id, title: '待審費用申請', message: `${access.user.name} 提交費用申請：${dto.description}`, type: 'info', category: 'expense', data: { requestId: result.id, entityId: dto.entityId } });
+    } catch (error) { this.logger.warn('費用已送審，但主管站內通知未成功'); }
 
     if (dto.priority === 'urgent') {
       try {

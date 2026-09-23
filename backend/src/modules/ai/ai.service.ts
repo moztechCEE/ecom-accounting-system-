@@ -1,4 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export interface AiModel {
@@ -45,6 +49,23 @@ export class AiService {
     }
   }
 
+  getStatus() {
+    const sandbox =
+      this.configService.get<string>('ERP_DEV_SANDBOX') === 'true';
+    const sandboxDisabled =
+      sandbox &&
+      this.configService.get<string>('ERP_DEV_AI_ENABLED') !== 'true';
+    return {
+      available: Boolean(this.apiKey) && !sandboxDisabled,
+      provider: 'Gemini',
+      reason: sandboxDisabled
+        ? 'sandbox_disabled'
+        : !this.apiKey
+          ? 'not_configured'
+          : undefined,
+    };
+  }
+
   getAvailableModels(): AiModel[] {
     return this.supportedModels;
   }
@@ -79,7 +100,7 @@ export class AiService {
     prompt: string,
     modelId?: string,
   ): Promise<string | null> {
-    if (!this.apiKey) {
+    if (!this.getStatus().available) {
       this.logger.warn('Attempted to use AI without API Key');
       return null;
     }
@@ -91,6 +112,8 @@ export class AiService {
 
       const response = await fetch(url, {
         method: 'POST',
+        redirect: 'error',
+        signal: AbortSignal.timeout(25000),
         headers: {
           'Content-Type': 'application/json',
           'x-goog-api-key': this.apiKey,
@@ -101,10 +124,8 @@ export class AiService {
       });
 
       if (!response.ok) {
-        const raw = await response.text().catch(() => '');
-        throw new Error(
-          `AI API Error: ${response.status} ${response.statusText}${raw ? ` - ${raw}` : ''}`,
-        );
+        // Provider bodies may contain request data; expose only a diagnostic status.
+        throw new Error(`provider_http_${response.status}`);
       }
 
       const data = await response.json();
@@ -112,11 +133,20 @@ export class AiService {
 
       return text || null;
     } catch (error) {
+      const code =
+        error instanceof Error && /^provider_http_\d{3}$/.test(error.message)
+          ? error.message
+          : error instanceof Error &&
+              ['TimeoutError', 'AbortError'].includes(error.name)
+            ? 'provider_timeout'
+            : 'provider_unavailable';
       this.logger.error(
-        `AI Generation failed for model ${resolvedModelId}`,
-        error,
+        `AI Generation failed for model ${resolvedModelId}: ${code}`,
       );
-      throw error;
+      throw new ServiceUnavailableException({
+        message: 'AI 服務暫時無法連線，請稍後再試',
+        code,
+      });
     }
   }
 

@@ -42,7 +42,7 @@ export const NAVIGATION: NavigationItem[] = [
     { key: '/accounting/workbench?focus=missing-invoices', label: '發票核對', permissions: ['accounts:read', 'journal_entries:read'] },
     { key: '/ap/payable', label: '費用付款', permissions: ['purchase_orders:read', 'accounts:read'] },
     { key: '/ap/expenses', label: '費用申請', permissions: ['expense_self:read', 'purchase_orders:read', 'accounts:read'] },
-    { key: '/ap/expense-review', label: '費用審核', permissions: ['purchase_orders:read', 'accounts:read'] },
+    { key: '/ap/expense-review', label: '費用審核', permissions: ['expense_self:read', 'purchase_orders:read', 'accounts:read'] },
     { key: '/banking', label: '銀行帳戶', permissions: ['banking:read'] },
     { key: '/accounting/journals', label: '會計分錄', permissions: ['journal_entries:read'] },
     { key: '/accounting/accounts', label: '會計科目', permissions: ['accounts:read'] },
@@ -60,9 +60,9 @@ export const NAVIGATION: NavigationItem[] = [
   { key: 'admin', label: '系統管理', adminOnly: true, permissions: ['access_control:read', 'access_control:update'], children: [
     { key: '/admin/access-control', label: '帳號與權限' },
     { key: '/admin/entities', label: '公司管理', superAdminOnly: true },
-    { key: '/admin/reimbursement-items', label: '報銷項目' },
-    { key: '/admin/settings', label: '系統設定' },
-    { key: '/admin/after-sales-brands', label: '品牌設定' },
+    { key: '/admin/reimbursement-items', label: '報銷項目', adminOnly: true },
+    { key: '/admin/settings', label: '系統設定', adminOnly: true },
+    { key: '/admin/after-sales-brands', label: '品牌設定', adminOnly: true },
   ] },
   { key: '/profile', label: '個人資料', permissions: ['profile_self:read'] },
 ]

@@ -1,0 +1,141 @@
+.erp-copilot-launcher {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 17px;
+  border: 1px solid #d7e7e2;
+  border-radius: 999px;
+  background: #1c5a4f;
+  color: #fff;
+  box-shadow: 0 5px 22px #163c352b;
+  cursor: pointer;
+  font: 600 14px inherit;
+}
+.erp-copilot-launcher:hover {
+  background: #164a40;
+}
+.erp-copilot-launcher:focus-visible {
+  outline: 3px solid #96c6bd;
+  outline-offset: 3px;
+}
+.erp-copilot-launcher .anticon {
+  font-size: 22px;
+}
+.erp-copilot-drawer .ant-drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  overflow: hidden;
+}
+.erp-copilot-context {
+  display: grid;
+  grid-template-columns: 1fr 130px;
+  gap: 8px;
+}
+.erp-copilot-context p,
+.erp-copilot-context > .erp-copilot-caption {
+  grid-column: 1/-1;
+  margin: 0;
+}
+.erp-copilot-caption {
+  display: block;
+  color: #66736f;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.erp-copilot-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.erp-copilot-messages {
+  flex: 1;
+  min-height: 100px;
+  overflow-y: auto;
+  padding: 4px 1px;
+}
+.erp-copilot-prompts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.erp-copilot-prompts .ant-btn {
+  height: auto;
+  white-space: normal;
+  text-align: left;
+  padding: 10px 12px;
+}
+.erp-copilot-message {
+  border: 1px solid #e3eae7;
+  border-radius: 14px;
+  background: #f8faf9;
+  padding: 12px;
+  margin: 0 0 12px;
+  overflow-wrap: anywhere;
+}
+.erp-copilot-message--user {
+  margin-left: 26px;
+  background: #edf5f2;
+  border-color: #d3e6df;
+}
+.erp-copilot-message strong {
+  font-size: 12px;
+  color: #466b60;
+}
+.erp-copilot-message p {
+  white-space: pre-wrap;
+  margin: 6px 0 10px;
+  line-height: 1.75;
+}
+.erp-copilot-source {
+  border-top: 1px solid #e3eae7;
+  padding: 7px 0;
+}
+.erp-copilot-source small {
+  display: block;
+  font-size: 11px;
+  color: #66736f;
+  line-height: 1.6;
+}
+.erp-copilot-source .ant-btn {
+  padding: 0;
+  height: auto;
+  white-space: normal;
+  text-align: left;
+}
+.erp-copilot-thinking {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  font-size: 12px;
+  color: #66736f;
+}
+.erp-copilot-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e3eae7;
+}
+@media (max-width: 600px) {
+  .erp-copilot-launcher {
+    right: 14px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    padding: 12px;
+  }
+  .erp-copilot-launcher span:not(.anticon) {
+    display: none;
+  }
+  .erp-copilot-drawer .ant-drawer-body {
+    padding: 14px;
+  }
+  .erp-copilot-context {
+    grid-template-columns: 1fr 115px;
+  }
+}

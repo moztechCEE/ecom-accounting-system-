@@ -1,0 +1,151 @@
+const { chromium } = require('../../backend/node_modules/playwright');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const out = __dirname;
+let browser, page;
+const recognized = JSON.parse(fs.readFileSync(path.join(out, 'live-ai-receipt-smoke.json'))).result;
+const permissions = ['expense_self:read', 'expense_self:create', 'profile_self:read', 'access_control:read', 'access_control:update', 'accounts:read', 'banking:read', 'banking:update', 'employees:read'].map((value, i) => ({ id: `p${i}`, resource: value.split(':')[0], action: value.split(':')[1], description: value }));
+const employeeRole = { id: 'employee-role', code: 'EMPLOYEE', name: '一般員工', hierarchyLevel: 3, permissions: permissions.slice(0, 3).map(p => ({ permissionId: p.id, permission: p })) };
+const adminRole = { id: 'admin-role', code: 'SUPER_ADMIN', name: '系統管理員', permissions: permissions.map(p => ({ permissionId: p.id, permission: p })) };
+const user = role => ({ id: 'qa-user', name: 'TEST 權限驗收', email: 'synthetic@example.invalid', isActive: true, mustChangePassword: false, roles: [{ roleId: role.id, role }], entityMemberships: [{ entityId: 'synthetic-company', isPrimary: true, entity: { id: 'synthetic-company', name: 'TEST 公司' } }], ...Object.fromEntries(['employee','attendance','payroll','accounting','inventory','sales','purchasing','banking'].map(x => [x+'DataScope', 'SELF'])) });
+const item = { id: 'synthetic-office', entityId: 'synthetic-company', name: '辦公文具', accountId: 'test-account', account: { id:'test-account',code:'6301',name:'文具用品' }, defaultReceiptType: 'RECEIPT', allowedReceiptTypes: 'RECEIPT,TAX_INVOICE', defaultTaxType: 'TAX_FREE', isActive: true };
+(async () => {
+  browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+  const checks = [], errors = [];
+  let activeRole = adminRole, submitted, chatBody, recognitionMode = 'ok', legacyAssigned = false;
+  const expectedUpdatedAt = '2026-09-23T00:00:00.000Z';
+  const routeToken = 'a'.repeat(64);
+  const pdf = { name: 'synthetic.pdf', mimeType: 'application/pdf', url: 'data:application/pdf;base64,' + Buffer.from('%PDF-1.4 synthetic evidence').toString('base64') };
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1050 } });
+  await context.addInitScript(() => {
+    localStorage.setItem('access_token', 'synthetic-ui-only');
+    localStorage.setItem('entityId', 'synthetic-company');
+    window.__APP_CONFIG__ = { apiUrl: '/api/v1', defaultEntityId: 'synthetic-company', stagedOperationsEnabled: true };
+  });
+  await context.route('**/*', async route => {
+    const url = new URL(route.request().url());
+    if (url.hostname !== '127.0.0.1') return route.abort();
+    if (!url.pathname.startsWith('/api/v1')) return route.continue();
+    const endpoint = url.pathname.replace('/api/v1', '');
+    let data = [];
+    if (endpoint === '/users/me') data = user(activeRole);
+    else if (endpoint === '/users') data = { items: [user(employeeRole)], meta: { total: 1, page: 1, limit: 25, totalPages: 1 } };
+    else if (endpoint === '/roles') data = [employeeRole, adminRole];
+    else if (endpoint === '/permissions') data = permissions;
+    else if (endpoint === '/entities') data = [{ id: 'synthetic-company', name: 'TEST 公司', loginCode: 'TEST', isActive: true }];
+    else if (endpoint === '/ai/models') data = [{ id: 'gemini-2.5-flash', name: '標準模式' }];
+    else if (endpoint === '/ai/status') data = { available: true, provider: 'gemini', configured: true };
+    else if (endpoint === '/ai/guide') data = { status: 'guide', checkedAt: new Date().toISOString(), scope: '內建操作指南・沒有查詢即時資料', reply: '上傳憑證後核對資料，送出給直屬主管，核准後進入出納待付款。', sources: [{ kind: 'knowledge', title: '費用申請', path: '/ap/expenses' }] };
+    else if (endpoint === '/ai/copilot/chat') { chatBody = route.request().postDataJSON(); data = { status: 'answered', checkedAt: new Date().toISOString(), scope: '自己的費用申請', reply: 'TEST 驗收資料：目前有 1 筆待審費用，共 TWD 1,200。', sources: [{ kind: 'metric', title: '我的費用申請', path: '/ap/expenses', detail: 'TEST fixture・非真實 ERP 資料' }] }; }
+    else if (endpoint === '/expense/reimbursement-items') data = [item];
+    else if (endpoint === '/expense/receipts/recognize') {
+      if (recognitionMode === 'fail') return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'TEST provider unavailable'})});
+      data = recognitionMode === 'usd' ? {...recognized,fields:{...recognized.fields,currency:'USD',amountOriginal:40}} : recognized;
+    }
+    else if (endpoint === '/expense/requests' && route.request().method() === 'GET') data = submitted ? [{...submitted,id:'synthetic-request',status:'pending',createdAt:new Date().toISOString(),updatedAt:expectedUpdatedAt,creator:{id:'synthetic-employee',name:'TEST 員工'},createdBy:'synthetic-employee',approvalSteps:legacyAssigned?[{id:'legacy-step',status:'pending',stepOrder:1,approverUserId:'test-manager'}]:[],reimbursementItem:item,evidenceFiles:[...submitted.evidenceFiles,pdf,{name:'invalid',url:'javascript:alert(1)'}]}] : [];
+    else if (endpoint === '/expense/requests' && route.request().method() === 'POST') { submitted = route.request().postDataJSON(); data = { ...submitted, id: 'synthetic-request', status: 'pending' }; }
+    else if (endpoint.endsWith('/legacy-approval-route')) {
+      if (route.request().method() === 'PUT') {
+        const body = route.request().postDataJSON();
+        assert.equal(body.expectedUpdatedAt,expectedUpdatedAt); assert.equal(body.routeToken,routeToken);
+        legacyAssigned = true; data = {id:'synthetic-request',status:'pending'};
+      } else data = {requestId:'synthetic-request',expectedUpdatedAt,routeToken,requesterName:'TEST 員工',supervisor:{id:'manager-employee',userId:'test-manager',name:'TEST 直屬主管'},steps:[{order:1,approverName:'TEST 直屬主管',roleCode:null},{order:2,approverName:null,roleCode:'ACCOUNTANT'}]};
+    }
+    else if (endpoint === '/notifications/unread-count') data = { count: 0 };
+    else if (endpoint === '/notifications') data = [];
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
+  });
+  page = await context.newPage();
+  page.on('pageerror', e => {errors.push(e.message); console.error('UI_ERROR',e.message)});
+  await page.goto('http://127.0.0.1:4179/admin/access-control');
+  await page.getByRole('button', { name: /可見介面/ }).click();
+  await page.getByRole('dialog').waitFor();
+  await page.waitForTimeout(350); await page.screenshot({ animations: 'disabled', path: path.join(out, 'access-preview.png'), fullPage: true });
+  checks.push('人員可見介面預覽開啟');
+  await page.getByRole('button', { name:/^close$/i }).click();
+  await page.getByRole('tab', { name: /角色/ }).click();
+  await page.locator('.ant-tabs-tabpane-active').getByRole('row').filter({ hasText: 'EMPLOYEE' }).getByRole('button').nth(1).click();
+  await page.waitForTimeout(350); await page.screenshot({ animations: 'disabled', path: path.join(out, 'permission-matrix.png'), fullPage: true });
+  checks.push('模組權限勾選開啟');
+
+  activeRole = employeeRole;
+  await page.goto('http://127.0.0.1:4179/ap/expenses');
+  await page.getByRole('button', { name: /新增費用申請/ }).click();
+  await page.locator('input[type=file]').setInputFiles(path.join(out, 'synthetic-receipt.png'));
+  await page.getByText('AI 建議已帶入，請核對後送出', { exact: true }).waitFor();
+  assert.equal(await page.locator('#amount').inputValue(), '1,200');
+  assert.equal(await page.locator('#description').inputValue(), 'Office pens x 10');
+  await page.waitForTimeout(350); await page.screenshot({ animations: 'disabled', path: path.join(out, 'expense-ai.png'), fullPage: true });
+  await page.getByRole('checkbox', { name: '我已核對原始憑證、金額、日期與申請用途' }).check();
+  const submitRequest = page.waitForRequest(request => request.url().includes('/expense/requests') && request.method() === 'POST');
+  await page.getByRole('button', { name: /送出申請/ }).click();
+  await submitRequest;
+  await page.getByRole('dialog').waitFor({state: 'hidden'});
+  assert.equal(submitted.entityId, 'synthetic-company');
+  assert.equal(submitted.amountOriginal, 1200);
+  assert.equal(submitted.metadata.receiptRecognition.confirmedByApplicant, true);
+  assert.equal(submitted.evidenceFiles.length, 1);
+  checks.push('上傳憑證自動辨識填入、員工確認、保存原始附件及辨識來源');
+  await page.getByRole('button', {name:'查看',exact:true}).click();
+  const original = page.getByAltText('原始憑證：synthetic-receipt.png');
+  await original.waitFor();
+  await page.waitForFunction(() => { const img = document.querySelector('img[alt="原始憑證：synthetic-receipt.png"]'); return img && img.naturalWidth > 0; });
+  assert.ok((await page.getByRole('link',{name:'開啟原始憑證',exact:true}).all()).length === 2);
+  assert.ok((await page.getByRole('link',{name:'開啟原始憑證',exact:true}).nth(1).getAttribute('href')).startsWith('blob:'));
+  await page.getByText('部分附件無法預覽，請申請人補上有效圖片或 PDF').waitFor();
+  await page.screenshot({animations:'disabled',path:path.join(out,'receipt-evidence.png'),fullPage:true});
+  await page.getByRole('button',{name:/^close$/i}).click();
+  checks.push('原始圖片實際載入、PDF建立開啟/下載連結、惡意附件URL受阻');
+
+  await page.getByRole('button', {name:/新增費用申請/}).click();
+  await page.locator('input[type=file]').setInputFiles(path.join(out,'synthetic-receipt.png'));
+  await page.getByText('AI 建議已帶入，請核對後送出',{exact:true}).waitFor();
+  recognitionMode = 'usd';
+  await page.getByRole('button',{name:/delete|remove|删除|刪除/i}).click();
+  await page.locator('input[type=file]').setInputFiles(path.join(out,'synthetic-receipt.png'));
+  await page.getByText('AI 建議已帶入，請核對後送出',{exact:true}).waitFor();
+  assert.equal(await page.locator('#amount').inputValue(),'');
+  await page.locator('#amount').fill('1250');
+  await page.getByRole('checkbox',{name:'我已核對原始憑證、金額、日期與申請用途'}).check();
+  recognitionMode = 'fail';
+  await page.getByRole('button',{name:/delete|remove|删除|刪除/i}).click();
+  await page.locator('input[type=file]').setInputFiles(path.join(out,'synthetic-receipt.png'));
+  await page.getByText('TEST provider unavailable').waitFor();
+  assert.equal(await page.locator('#amount').inputValue(),'1,250');
+  assert.equal(await page.getByRole('checkbox',{name:'我已核對原始憑證、金額、日期與申請用途'}).isChecked(),false);
+  await page.getByRole('button',{name:/^close$/i}).click();
+  checks.push('憑證更換清除舊AI金額、外幣不誤填TWD、失敗保留人工修改並重設確認');
+
+
+  await page.getByRole('button', { name: '開啟 ERP Copilot' }).click();
+  await page.getByPlaceholder(/詢問|輸入/).last().fill('我的待審費用有多少？');
+  await page.getByRole('button', { name: /送出問題|傳送|送出訊息|送出/ }).click();
+  await page.getByText('TEST 驗收資料：目前有 1 筆待審費用，共 TWD 1,200。').waitFor();
+  assert.equal(chatBody.entityId, 'synthetic-company');
+  assert.equal(chatBody.currentPath, '/ap/expenses');
+  await page.waitForTimeout(350); await page.screenshot({ animations: 'disabled', path: path.join(out, 'copilot-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(350); await page.screenshot({ animations: 'disabled', path: path.join(out, 'copilot-mobile.png'), fullPage: true });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  checks.push('全站Copilot帶目前頁面與公司、顯示來源/時間、手機版無水平溢出');
+  await page.goto('http://127.0.0.1:4179/admin/access-control');
+  await page.getByText('你目前沒有開通這個功能的使用權限，請洽管理員協助。').waitFor();
+  checks.push('普通員工直接輸入權限管理網址受阻');
+  activeRole = adminRole;
+  await page.setViewportSize({width:1440,height:1050});
+  await page.goto('http://127.0.0.1:4179/ap/expense-review');
+  await page.getByRole('button',{name:'建立主管審批',exact:true}).click();
+  await page.getByRole('dialog').getByText('TEST 直屬主管',{exact:true}).first().waitFor();
+  await page.waitForTimeout(350);
+  await page.screenshot({animations:'disabled',path:path.join(out,'legacy-supervisor-confirm.png'),fullPage:true});
+  await page.getByRole('button',{name:'確認建立審批',exact:true}).click();
+  await page.getByRole('dialog').waitFor({state:'hidden'});
+  await page.getByRole('button',{name:'建立主管審批',exact:true}).waitFor({state:'hidden'});
+  assert.equal(legacyAssigned,true);
+  checks.push('管理員先預覽主管及額外審批順序，確認後帶版本token補建歷史待審流程');
+  assert.deepEqual(errors, []);
+  fs.writeFileSync(path.join(out, 'ui-smoke.json'), JSON.stringify({ fixtureOnly: true, checks, errors }, null, 2));
+  console.log(JSON.stringify({ fixtureOnly: true, checks, errors }, null, 2));
+  await browser.close();
+})().catch(async e => { console.error(e); if(page){console.log((await page.locator('body').innerText()).slice(-7000));await page.screenshot({path:path.join(out,'ui-failure.png'),fullPage:true});} await browser?.close(); process.exitCode = 1; });

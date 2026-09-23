@@ -13,15 +13,19 @@ import {
   ValidateNested,
   IsDate,
   IsEnum,
+  MaxLength,
+  ArrayMaxSize,
 } from 'class-validator';
 
 export class EvidenceFileDto {
   @ApiProperty({ description: '檔案名稱' })
   @IsString()
+  @MaxLength(250)
   name!: string;
 
   @ApiProperty({ description: '檔案 URL' })
   @IsString()
+  @MaxLength(7_000_000)
   url!: string;
 
   @ApiPropertyOptional({ description: '檔案類型' })
@@ -109,6 +113,7 @@ export class CreateExpenseRequestDto {
   @ApiPropertyOptional({ description: '憑證資料', type: [EvidenceFileDto] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(5)
   @ValidateNested({ each: true })
   @Type(() => EvidenceFileDto)
   evidenceFiles?: EvidenceFileDto[];

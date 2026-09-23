@@ -1,3 +1,4 @@
+import ReceiptEvidenceViewer from '../components/ReceiptEvidenceViewer'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
@@ -24,7 +25,6 @@ import {
   Tooltip,
   Typography,
   message,
-  Result,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useNavigate } from 'react-router-dom'
@@ -52,6 +52,7 @@ import {
   expenseService,
   type ExpenseRequest,
   type ExpenseHistoryEntry,
+  type LegacyApprovalRoutePreview,
 } from '../services/expense.service'
 import { accountingService } from '../services/accounting.service'
 import type { Account } from '../types'
@@ -114,6 +115,7 @@ const statusColorMap: Record<string, string> = {
 
 const historyLabelMap: Record<string, string> = {
   submitted: '已提交',
+  approval_assigned: '管理員建立主管審批',
   approved: '核准',
   rejected: '駁回',
   pending: '審核中',
@@ -140,9 +142,14 @@ const ExpenseReviewCenterPage: React.FC = () => {
   const navigate = useNavigate()
   const { user } = useAuth()
   const isAdmin = useMemo(
-    () => (user?.roles ?? []).some((role) => role === 'SUPER_ADMIN' || role === 'ADMIN'),
+    () => (user?.roles ?? []).some((role) => role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'ACCOUNTANT') || Boolean(user?.permissions?.includes('accounts:read')),
     [user],
   )
+
+  const canAssignLegacy = (user?.roles ?? []).some((role) => role === 'ADMIN' || role === 'SUPER_ADMIN')
+  const [legacyRouteLoadingId, setLegacyRouteLoadingId] = useState<string | null>(null)
+  const [legacyRoutePreview, setLegacyRoutePreview] = useState<LegacyApprovalRoutePreview | null>(null)
+  const [legacyRouteSaving, setLegacyRouteSaving] = useState(false)
 
   const [requests, setRequests] = useState<ExpenseRequest[]>([])
   const [loading, setLoading] = useState(true)
@@ -162,12 +169,12 @@ const ExpenseReviewCenterPage: React.FC = () => {
   const [reviewAccountId, setReviewAccountId] = useState<string | undefined>(undefined)
   const [reviewRemark, setReviewRemark] = useState<string>('')
 
-  const entityId = DEFAULT_ENTITY_ID
+  const entityId = localStorage.getItem('entityId') || DEFAULT_ENTITY_ID
 
   const loadRequests = useCallback(async () => {
     try {
       setLoading(true)
-      const result = await expenseService.getExpenseRequests({ entityId })
+      const result = await expenseService.getExpenseRequests({ entityId }).then((rows) => rows.filter((row) => row.canReview || isAdmin))
       setRequests(Array.isArray(result) ? result : [])
     } catch (error) {
       console.error(error)
@@ -175,7 +182,7 @@ const ExpenseReviewCenterPage: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }, [entityId])
+  }, [entityId, isAdmin])
 
   useEffect(() => {
     void loadRequests()
@@ -331,15 +338,45 @@ const ExpenseReviewCenterPage: React.FC = () => {
     }
   }, [selectedRequest])
 
+  const handleAssignLegacyRoute = async (record: ExpenseRequest) => {
+    setLegacyRouteLoadingId(record.id)
+    try {
+      const preview = await expenseService.previewLegacyApprovalRoute(record.id)
+      setLegacyRoutePreview(preview)
+    } catch (error) {
+      const failure = error as { response?: { data?: { message?: string } } }
+      message.error(failure.response?.data?.message || '無法預覽，請先核對申請人與主管設定')
+    } finally {
+      setLegacyRouteLoadingId(null)
+    }
+  }
+
+  const handleConfirmLegacyRoute = async () => {
+    if (!legacyRoutePreview || legacyRouteSaving) return
+    setLegacyRouteSaving(true)
+    try {
+      await expenseService.assignLegacyApprovalRoute(legacyRoutePreview.requestId, legacyRoutePreview)
+      setLegacyRoutePreview(null)
+      message.success('已建立主管審批，原申請仍維持待審')
+      await loadRequests()
+    } catch (error) {
+      const failure = error as { response?: { data?: { message?: string } } }
+      message.error(failure.response?.data?.message || '無法建立審批，請重新預覽')
+    } finally {
+      setLegacyRouteSaving(false)
+    }
+  }
+
   const handleDirectApprove = async () => {
-    if (!selectedRequest || !reviewAccountId) return
+    if (!selectedRequest?.canReview) return
     try {
       setActionLoading(true)
       await expenseService.approveExpenseRequest(selectedRequest.id, {
-        finalAccountId: reviewAccountId,
+        approvalStepId: selectedRequest.approvalSteps?.find((step) => step.status === "pending")?.id,
+        finalAccountId: isAdmin ? reviewAccountId : undefined,
         remark: reviewRemark.trim() || undefined,
       })
-      message.success('已核准申請')
+      message.success('已完成本關審批')
       handleCloseDetail()
       void loadRequests()
     } catch (error) {
@@ -372,6 +409,7 @@ const ExpenseReviewCenterPage: React.FC = () => {
         return
       }
       await expenseService.rejectExpenseRequest(actionState.request.id, {
+        approvalStepId: actionState.request.approvalSteps?.find((step) => step.status === "pending")?.id,
         reason: values.reason.trim(),
         note: values.note?.trim() || undefined,
       })
@@ -539,7 +577,10 @@ const ExpenseReviewCenterPage: React.FC = () => {
       className: '!bg-transparent align-middle',
       render: (_value, record) => (
         <div className="flex items-center justify-end gap-2">
-          {record.status === 'pending' ? (
+          {canAssignLegacy && record.status === 'pending' && !record.approvalSteps?.length && (
+            <Button loading={legacyRouteLoadingId === record.id} onClick={() => void handleAssignLegacyRoute(record)}>建立主管審批</Button>
+          )}
+          {record.canReview ? (
             <Button
               type="primary"
               size="middle"
@@ -562,30 +603,38 @@ const ExpenseReviewCenterPage: React.FC = () => {
     },
   ]
 
-  if (!isAdmin) {
-    return (
-      <Result
-        status="403"
-        title="無權限"
-        subTitle="只有會計或系統管理員可以存取費用審核中心"
-        extra={
-          <Button type="primary" onClick={() => navigate('/dashboard')}>
-            返回儀表板
-          </Button>
-        }
-      />
-    )
-  }
 
   return (
     <div className="space-y-8 animate-[fadeInUp_0.4s_ease-out]">
+      <Modal
+        title="依目前主管建立審批"
+        open={Boolean(legacyRoutePreview)}
+        onCancel={() => { if (!legacyRouteSaving) setLegacyRoutePreview(null) }}
+        onOk={() => void handleConfirmLegacyRoute()}
+        confirmLoading={legacyRouteSaving}
+        cancelButtonProps={{ disabled: legacyRouteSaving }}
+        closable={!legacyRouteSaving}
+        maskClosable={!legacyRouteSaving}
+        okText="確認建立審批"
+        cancelText="取消"
+      >
+        {legacyRoutePreview && <div className="space-y-3">
+          <p>申請人：{legacyRoutePreview.requesterName}。目前已設定的直屬主管：<strong>{legacyRoutePreview.supervisor.name}</strong>。</p>
+          <p>確認後會建立以下審批順序；原申請保持待審，完成核准後才會加入出納待付款。</p>
+          <ol>{legacyRoutePreview.steps.map((step) => <li key={step.order}>{step.order}. {step.approverName || step.roleCode || '待確認審批人'}</li>)}</ol>
+        </div>}
+      </Modal>
+      {requests.some((request) => request.status === 'pending' && !request.approvalSteps?.length) && (
+        <Alert showIcon type="warning" message="有舊費用申請尚未指派審批人" description="這些申請暫停審批。請管理員核對原申請與組織主管後，使用該筆「建立主管審批」操作並確認審批順序，不能直接略過主管核准。新申請會自動保存送出時的直屬主管。" />
+      )}
+
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 mb-1">
             費用審核中心
           </h1>
           <p className="text-slate-500 text-sm">
-            集中檢視所有待審核費用、設定優先順序並進行快速核准或駁回。
+            顯示目前指派給你的費用申請；核准後依政策送下一位審批人，最後自動加入出納待付款。
           </p>
         </div>
         <div className="flex gap-3">
@@ -1003,7 +1052,7 @@ const ExpenseReviewCenterPage: React.FC = () => {
                   </div>
                 </Descriptions.Item>
                 <Descriptions.Item label="會計科目">
-                  {selectedRequest.status === 'pending' ? (
+                  {isAdmin && selectedRequest.status === 'pending' ? (
                     <div className="space-y-2 py-1">
                       <Select
                         value={reviewAccountId}
@@ -1062,31 +1111,7 @@ const ExpenseReviewCenterPage: React.FC = () => {
 
             <GlassDrawerSection>
               <div className="mb-4 font-semibold text-slate-800">單據憑證</div>
-              {selectedRequest.attachmentUrl ? (
-                <div className="rounded-lg overflow-hidden border border-slate-200 mb-2 bg-slate-50">
-                  <img 
-                    src={selectedRequest.attachmentUrl} 
-                    alt="Receipt" 
-                    className="w-full h-auto object-contain max-h-[400px]" 
-                    onClick={() => window.open(selectedRequest.attachmentUrl!, '_blank')}
-                    style={{ cursor: 'zoom-in' }}
-                  />
-                </div>
-              ) : (
-                <Empty description="無附件圖片" image={Empty.PRESENTED_IMAGE_SIMPLE} className="my-4" />
-              )}
-              {selectedRequest.evidenceFiles && Array.isArray(selectedRequest.evidenceFiles) && selectedRequest.evidenceFiles.length > 0 && (
-                 <div className="mt-2 space-y-2">
-                    {selectedRequest.evidenceFiles.map((file: any, index: number) => (
-                      <div key={index} className="flex items-center gap-2 text-sm text-blue-600">
-                        <FileSearchOutlined />
-                        <a href={file.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                          {file.name || `附件 ${index + 1}`}
-                        </a>
-                      </div>
-                    ))}
-                 </div>
-              )}
+              <ReceiptEvidenceViewer files={selectedRequest.evidenceFiles} attachmentUrl={selectedRequest.attachmentUrl} />
             </GlassDrawerSection>
 
             <GlassDrawerSection>
@@ -1130,7 +1155,7 @@ const ExpenseReviewCenterPage: React.FC = () => {
               </div>
             </GlassDrawerSection>
 
-            {selectedRequest.status === 'pending' && (
+            {selectedRequest.canReview && (
               <GlassDrawerSection>
                 <div className="flex gap-3">
                   <Button
@@ -1151,7 +1176,7 @@ const ExpenseReviewCenterPage: React.FC = () => {
                     className="!bg-green-600/85 !backdrop-blur-md !border-green-400/30 !text-white !shadow-md hover:!bg-green-600/95 hover:!shadow-lg transition-all duration-300 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
                     icon={<CheckCircleOutlined />}
                     onClick={handleDirectApprove}
-                    disabled={!reviewAccountId}
+                    disabled={!selectedRequest.canReview}
                     loading={actionLoading}
                   >
                     核准

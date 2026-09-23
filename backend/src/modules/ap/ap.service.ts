@@ -49,10 +49,7 @@ export class ApService {
   }
 
   async getInvoices(entityId?: string) {
-    const [invoices, paymentTasks] = await Promise.all([
-      this.apRepository.findInvoices(entityId),
-      this.apRepository.findPaymentTasks(entityId),
-    ]);
+    const invoices = await this.apRepository.findInvoices(entityId);
 
     const mappedInvoices = invoices.map((inv) => {
       const metadata = this.extractMetadata(inv.notes);
@@ -72,34 +69,7 @@ export class ApService {
       };
     });
 
-    const taskInvoices = paymentTasks.map((task) => ({
-      id: task.id,
-      entityId: task.entityId,
-      invoiceNo:
-        task.expenseRequest?.description?.slice(0, 20) ||
-        `EXP-${task.expenseRequestId?.slice(0, 8)}`,
-      vendorId: task.vendorId || 'EMP-REIMBURSE',
-      vendor: task.vendor || {
-        id: 'EMP-REIMBURSE',
-        name: task.expenseRequest?.creator?.name
-          ? `${task.expenseRequest.creator.name} (員工報銷)`
-          : '員工報銷 / 零用金',
-        code: 'EMP',
-      },
-      amountOriginal: task.amountOriginal,
-      amountCurrency: task.amountCurrency,
-      paidAmountOriginal: task.paidDate ? task.amountOriginal : 0,
-      status: task.status === 'pending' ? 'pending' : 'paid',
-      invoiceDate: task.createdAt,
-      dueDate: task.dueDate || task.createdAt,
-      paymentFrequency: 'one_time',
-      notes: task.notes,
-      source: 'payment_task',
-      taxType: null,
-      taxAmount: 0,
-    }));
-
-    return [...mappedInvoices, ...taskInvoices].sort(
+    return mappedInvoices.sort(
       (a, b) =>
         new Date(b.invoiceDate).getTime() - new Date(a.invoiceDate).getTime(),
     );
@@ -331,33 +301,7 @@ export class ApService {
     // Check if it's a payment task
     const task = await this.apRepository.findPaymentTaskById(invoiceId);
     if (task) {
-      const status = data.newStatus === 'paid' ? 'paid' : 'pending';
-
-      let bankInfo;
-      if (data.bankAccountId) {
-        const bankAccount = await this.apRepository.findBankAccount(
-          data.bankAccountId,
-        );
-        if (bankAccount) {
-          const accountNo = bankAccount.accountNo || '';
-          const last5 =
-            accountNo.length > 5 ? accountNo.slice(-5) : accountNo;
-          bankInfo = {
-            bankName: bankAccount.bankName,
-            accountLast5: last5,
-          };
-        }
-      }
-
-      if (bankInfo) {
-        return this.apRepository.updatePaymentTaskWithBankInfo(
-          invoiceId,
-          status,
-          bankInfo,
-        );
-      }
-
-      return this.apRepository.updatePaymentTaskStatus(invoiceId, status);
+      throw new BadRequestException('費用付款請由費用待付款清單登記，系統需同步核准申請、付款任務與歷程');
     }
 
     return this.apRepository.recordPayment(invoiceId, data);

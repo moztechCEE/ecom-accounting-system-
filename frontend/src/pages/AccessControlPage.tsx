@@ -64,6 +64,9 @@ import {
   getRoleName,
 } from '../constants/translations'
 import { hasPermission, hasRole, isAdminUser } from '../utils/access'
+import AccessPreview from '../components/AccessPreview'
+import PermissionMatrix from '../components/PermissionMatrix'
+import { isPrivilegedRole, SYSTEM_ROLE_CODES } from '../utils/access-preview'
 import { getAccessControlErrorMessage as getErrorMessage } from '../utils/access-control-errors'
 
 type TableColumn<T> = {
@@ -205,12 +208,14 @@ const CompanyAccessField = ({ entities }: { entities: Entity[] }) => (
 )
 
 type UsersTabProps = {
+  canManage: boolean
   availableRoles: Role[]
   canManageDataScopes: boolean
   searchKeyword: string
 }
 
 type RolesTabProps = {
+  canManage: boolean
   roles: Role[]
   permissions: Permission[]
   loadingRoles: boolean
@@ -220,6 +225,7 @@ type RolesTabProps = {
 }
 
 type PermissionsTabProps = {
+  canManage: boolean
   permissions: Permission[]
   loading: boolean
   reloadPermissions: () => Promise<void>
@@ -235,10 +241,12 @@ const isManagedUserSuperAdmin = (record: ManagedUser) =>
   )
 
 const UsersTab = ({
+  canManage,
   availableRoles,
   canManageDataScopes,
   searchKeyword,
 }: UsersTabProps) => {
+  const { user: currentUser, refreshCurrentUser } = useAuth()
   const [users, setUsers] = useState<ManagedUser[]>([])
   const [systemAdminUsers, setSystemAdminUsers] = useState<ManagedUser[]>([])
   const [meta, setMeta] = useState<PaginatedResult<ManagedUser>['meta']>({
@@ -259,13 +267,16 @@ const UsersTab = ({
   const [editOpen, setEditOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null)
   const [entities, setEntities] = useState<Entity[]>([])
+  const [previewUser, setPreviewUser] = useState<ManagedUser | null>(null)
 
   const [createForm] = Form.useForm<CreateUserPayload>()
   const [assignForm] = Form.useForm<{ roleIds: string[] }>()
   const [editForm] = Form.useForm<UpdateUserPayload & { password?: string }>()
+  const createRoleIds = Form.useWatch('roleIds', createForm) || []
+  const assignRoleIds = Form.useWatch('roleIds', assignForm) || []
   const assignableRoles = useMemo(
-    () => availableRoles.filter((role) => role.code !== 'SUPER_ADMIN'),
-    [availableRoles],
+    () => availableRoles.filter((role) => role.code !== 'SUPER_ADMIN' && (canManageDataScopes || !isPrivilegedRole(role))),
+    [availableRoles, canManageDataScopes],
   )
 
   useEffect(() => {
@@ -327,6 +338,7 @@ const UsersTab = ({
   }, [fetchSystemAdmins, showSystemAdmins])
 
   const handleCreate = async () => {
+    if (!canManage) return
     if (createInFlight.current) return
     createInFlight.current = true
     setCreating(true)
@@ -360,10 +372,12 @@ const UsersTab = ({
   }
 
   const handleAssignRoles = async () => {
+    if (!canManage) return
     if (!selectedUser) return
     try {
       const values = await assignForm.validateFields()
       await usersService.setRoles(selectedUser.id, values.roleIds ?? [])
+      if (selectedUser.id === currentUser?.id) await refreshCurrentUser()
       message.success('角色已更新')
       setAssignOpen(false)
       fetchUsers(meta.page)
@@ -376,6 +390,7 @@ const UsersTab = ({
   }
 
   const handleEditUser = async () => {
+    if (!canManage) return
     if (!selectedUser) return
     try {
       const values = await editForm.validateFields()
@@ -411,6 +426,7 @@ const UsersTab = ({
   }
 
   const toggleActive = async (record: ManagedUser, isActive: boolean) => {
+    if (!canManage) return
     try {
       await usersService.update(record.id, { isActive })
       message.success(isActive ? '使用者已啟用' : '使用者已停用')
@@ -492,11 +508,12 @@ const UsersTab = ({
       key: 'actions',
       render: (_value: any, record: ManagedUser) => (
         <Space size="small">
-          {isManagedUserSuperAdmin(record) ? (
+          <Button type="text" icon={<EyeOutlined />} onClick={() => setPreviewUser(record)}>可見介面</Button>
+          {isManagedUserSuperAdmin(record) || (!canManageDataScopes && record.roles?.some(link => isPrivilegedRole(link.role))) ? (
             <Text type="secondary" className="text-xs">
-              最高權限帳號不在此處調整
+              管理員帳號由最高管理員設定
             </Text>
-          ) : (
+          ) : canManage ? (
             <>
           {canManageDataScopes && wmsPortalOrigin() && <WarehouseIdentityButton userId={record.id} name={record.name} />}
           <Tooltip title="設定角色">
@@ -549,7 +566,7 @@ const UsersTab = ({
             </Button>
           )}
             </>
-          )}
+          ) : <Text type="secondary">僅供查看</Text>}
         </Space>
       ),
     },
@@ -613,7 +630,7 @@ const UsersTab = ({
             使用者管理
           </Title>
         </div>
-        <GlassButton variant="primary" onClick={() => setCreateOpen(true)}>
+        <GlassButton variant="primary" disabled={!canManage} onClick={() => setCreateOpen(true)}>
           <PlusOutlined className="mr-2" />
           新增使用者
         </GlassButton>
@@ -685,6 +702,10 @@ const UsersTab = ({
         }}
         className="custom-table"
       />
+
+      <Modal title={`${previewUser?.name || ""} · 可見介面`} open={Boolean(previewUser)} onCancel={() => setPreviewUser(null)} footer={null} width={720}>
+        <AccessPreview roles={previewUser?.roles.map(link => link.role) || []} />
+      </Modal>
 
       <Modal
         title="新增使用者"
@@ -774,17 +795,18 @@ const UsersTab = ({
               </div>
             ) : null}
             {canManageDataScopes ? <DataScopeFormGrid /> : null}
+            <AccessPreview roles={availableRoles.filter(role => createRoleIds.includes(role.id))} />
           </div>
         </Form>
       </Modal>
 
       <Modal
-        title="設定角色"
+        title="設定角色與可見介面"
         open={assignOpen}
         onCancel={() => setAssignOpen(false)}
         onOk={handleAssignRoles}
         okText="儲存"
-        width={500}
+        width={720}
       >
         <Form form={assignForm} layout="vertical" className="pt-4">
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
@@ -799,6 +821,7 @@ const UsersTab = ({
                 className="rounded-md"
               />
             </Form.Item>
+            <AccessPreview roles={availableRoles.filter(role => assignRoleIds.includes(role.id))} />
           </div>
         </Form>
       </Modal>
@@ -856,6 +879,7 @@ const UsersTab = ({
 }
 
 const RolesTab = ({
+  canManage,
   roles,
   permissions,
   loadingRoles,
@@ -863,6 +887,7 @@ const RolesTab = ({
   reloadRoles,
   reloadPermissions,
 }: RolesTabProps) => {
+  const { refreshCurrentUser } = useAuth()
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [permissionOpen, setPermissionOpen] = useState(false)
@@ -873,6 +898,7 @@ const RolesTab = ({
   const [permissionsForm] = Form.useForm<{ permissionIds: string[] }>()
 
   const handleCreate = async () => {
+    if (!canManage) return
     try {
       const values = await createForm.validateFields()
       await rolesService.create(values)
@@ -889,6 +915,7 @@ const RolesTab = ({
   }
 
   const handleUpdate = async () => {
+    if (!canManage) return
     if (!selectedRole) return
     try {
       const values = await editForm.validateFields()
@@ -905,6 +932,7 @@ const RolesTab = ({
   }
 
   const handleDelete = async (role: Role) => {
+    if (!canManage || SYSTEM_ROLE_CODES.includes(role.code)) return
     try {
       await rolesService.remove(role.id)
       message.success('角色已刪除')
@@ -915,6 +943,7 @@ const RolesTab = ({
   }
 
   const handleSetPermissions = async () => {
+    if (!canManage) return
     if (!selectedRole) return
     try {
       const values = await permissionsForm.validateFields()
@@ -922,6 +951,7 @@ const RolesTab = ({
         selectedRole.id,
         values.permissionIds ?? [],
       )
+      await refreshCurrentUser()
       message.success('角色權限已更新')
       setPermissionOpen(false)
       await reloadRoles()
@@ -933,14 +963,9 @@ const RolesTab = ({
     }
   }
 
-  const permissionOptions = useMemo(
-    () =>
-      permissions.map((permission: Permission) => ({
-        label: `${getResourceName(permission.resource)} : ${getActionName(permission.action)}`,
-        value: permission.id,
-      })),
-    [permissions],
-  )
+  const selectedPermissionIds = Form.useWatch('permissionIds', permissionsForm) || []
+  const selectedTemplateId = Form.useWatch('templateRoleId', createForm)
+  const rolePreview = selectedRole ? { ...selectedRole, permissions: permissions.filter(p => selectedPermissionIds.includes(p.id)).map(permission => ({ roleId: selectedRole.id, permissionId: permission.id, permission })) } : null
 
   const columns: TableColumn<Role>[] = [
     {
@@ -979,7 +1004,7 @@ const RolesTab = ({
           <Tooltip title="編輯">
             <Button
               type="text"
-              icon={<EditOutlined />}
+              disabled={!canManage || isPrivilegedRole(record)} icon={<EditOutlined />}
               onClick={() => {
                 setSelectedRole(record)
                 editForm.setFieldsValue({
@@ -995,7 +1020,7 @@ const RolesTab = ({
           <Tooltip title="設定權限">
             <Button
               type="text"
-              icon={<SettingOutlined />}
+              disabled={!canManage || isPrivilegedRole(record)} icon={<SettingOutlined />}
               onClick={() => {
                 setSelectedRole(record)
                 permissionsForm.setFieldsValue({
@@ -1011,13 +1036,13 @@ const RolesTab = ({
           <Popconfirm
             title="確認刪除此角色？"
             onConfirm={() => handleDelete(record)}
-            disabled={record.code === 'SUPER_ADMIN'}
+            disabled={!canManage || SYSTEM_ROLE_CODES.includes(record.code)}
           >
             <Tooltip title="刪除">
               <Button
                 type="text"
                 danger
-                disabled={record.code === 'SUPER_ADMIN'}
+                disabled={!canManage || SYSTEM_ROLE_CODES.includes(record.code)}
                 icon={<DeleteOutlined />}
               />
             </Tooltip>
@@ -1035,7 +1060,7 @@ const RolesTab = ({
             角色管理
           </Title>
         </div>
-        <GlassButton variant="primary" onClick={() => setCreateOpen(true)}>
+        <GlassButton variant="primary" disabled={!canManage} onClick={() => setCreateOpen(true)}>
           <PlusOutlined className="mr-2" />
           新增角色
         </GlassButton>
@@ -1060,6 +1085,11 @@ const RolesTab = ({
         width={500}
       >
         <Form layout="vertical" form={createForm} className="pt-4">
+          <Form.Item name="templateRoleId" label="沿用現有角色的權限" extra="建立獨立角色；日後修改不會影響原角色。">
+            <Select allowClear placeholder="從空白建立，或選擇角色範本" options={roles.filter(role => !isPrivilegedRole(role)).map(role => ({ label: role.name, value: role.id }))} />
+          </Form.Item>
+          {selectedTemplateId && <AccessPreview roles={roles.filter(role => role.id === selectedTemplateId)} />}
+
           <div className="bg-gray-50 p-4 rounded-lg mb-4 border border-gray-100">
             <Form.Item
               name="code"
@@ -1121,7 +1151,7 @@ const RolesTab = ({
                 { pattern: /^[A-Z_]+$/, message: '僅允許大寫英文字與底線' },
               ]}
             >
-              <Input className="rounded-md" />
+              <Input disabled className="rounded-md" />
             </Form.Item>
             <Form.Item
               name="name"
@@ -1148,26 +1178,20 @@ const RolesTab = ({
       </Modal>
 
       <Modal
-        title="設定角色權限"
+        title={`設定角色權限 · ${selectedRole?.name || ""}`}
         open={permissionOpen}
         onCancel={() => setPermissionOpen(false)}
         onOk={handleSetPermissions}
         okText="儲存"
         confirmLoading={loadingPermissions}
-        width={600}
+        width={860}
       >
         <Form form={permissionsForm} layout="vertical" className="pt-4">
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <Form.Item name="permissionIds" label="權限列表" className="mb-0">
-              <Select
-                mode="multiple"
-                placeholder="選擇權限"
-                options={permissionOptions}
-                loading={loadingPermissions}
-                className="rounded-md"
-                style={{ width: '100%' }}
-              />
+            <Form.Item name="permissionIds" label="依功能模組開放操作" className="mb-0">
+              <PermissionMatrix permissions={permissions} disabled={!canManage} />
             </Form.Item>
+            {rolePreview && <AccessPreview roles={[rolePreview]} />}
           </div>
         </Form>
       </Modal>
@@ -1176,6 +1200,7 @@ const RolesTab = ({
 }
 
 const PermissionsTab = ({
+  canManage,
   permissions,
   loading,
   reloadPermissions,
@@ -1198,6 +1223,7 @@ const PermissionsTab = ({
   }>()
 
   const handleCreate = async () => {
+    if (!canManage) return
     try {
       const values = await createForm.validateFields()
       await permissionsService.create(values)
@@ -1215,6 +1241,7 @@ const PermissionsTab = ({
   }
 
   const handleUpdate = async () => {
+    if (!canManage) return
     if (!selectedPermission) return
     try {
       const values = await editForm.validateFields()
@@ -1232,6 +1259,7 @@ const PermissionsTab = ({
   }
 
   const handleDelete = async (record: Permission) => {
+    if (!canManage) return
     try {
       await permissionsService.remove(record.id)
       message.success('權限已刪除')
@@ -1271,7 +1299,7 @@ const PermissionsTab = ({
           <Tooltip title="編輯">
             <Button
               type="text"
-              icon={<EditOutlined />}
+              disabled={!canManage} icon={<EditOutlined />}
               onClick={() => {
                 setSelectedPermission(record)
                 editForm.setFieldsValue({
@@ -1288,7 +1316,7 @@ const PermissionsTab = ({
             onConfirm={() => handleDelete(record)}
           >
             <Tooltip title="刪除">
-              <Button type="text" danger icon={<DeleteOutlined />} />
+              <Button type="text" danger disabled={!canManage} icon={<DeleteOutlined />} />
             </Tooltip>
           </Popconfirm>
         </Space>
@@ -1304,7 +1332,7 @@ const PermissionsTab = ({
             權限管理
           </Title>
         </div>
-        <GlassButton variant="primary" onClick={() => setCreateOpen(true)}>
+        <GlassButton variant="primary" disabled={!canManage} onClick={() => setCreateOpen(true)}>
           <PlusOutlined className="mr-2" />
           新增權限
         </GlassButton>
@@ -1400,6 +1428,7 @@ const AccessControlPage: React.FC = () => {
     isAdminUser(user) ||
     hasPermission(user, 'access_control:read') ||
     hasPermission(user, 'access_control:update')
+  const canManage = hasPermission(user, 'access_control:update')
   const canManageDataScopes = hasRole(user, 'SUPER_ADMIN')
 
   const [roles, setRoles] = useState<Role[]>([])
@@ -1461,6 +1490,7 @@ const AccessControlPage: React.FC = () => {
         </Title>
       </div>
 
+      <Alert type="info" showIcon className="mb-4" message="先選人員、指派角色，再確認可見介面。角色可重複使用，多角色權限會合併。" description={!canManage ? "目前為唯讀模式；如需調整請洽權限管理員。" : "公司與資料範圍由最高管理員設定；一般管理員不可指派管理員角色。"} />
       <Tabs
         defaultActiveKey="users"
         type="card"
@@ -1476,6 +1506,7 @@ const AccessControlPage: React.FC = () => {
             ),
             children: (
               <UsersTab
+                canManage={canManage}
                 availableRoles={roles}
                 canManageDataScopes={canManageDataScopes}
                 searchKeyword={searchKeyword}
@@ -1492,6 +1523,7 @@ const AccessControlPage: React.FC = () => {
             ),
             children: (
               <RolesTab
+                canManage={canManage}
                 roles={roles}
                 permissions={permissions}
                 loadingRoles={loadingRoles}
@@ -1506,11 +1538,12 @@ const AccessControlPage: React.FC = () => {
             label: (
               <span>
                 <KeyOutlined />
-                權限
+                進階權限定義
               </span>
             ),
             children: (
               <PermissionsTab
+                canManage={canManageDataScopes}
                 permissions={permissions}
                 loading={loadingPermissions}
                 reloadPermissions={loadPermissions}

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Decimal } from '@prisma/client/runtime/library';
+import { canViewBankAccountForUser } from './bank-account-access';
 import { BankingRepository } from './banking.repository';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
@@ -821,9 +822,7 @@ export class BankingService {
   }
 
   private canViewBankAccount(account: { metaJson?: any }, user?: any) {
-    if (this.isSuperAdmin(user)) return true;
-    const allowedUserIds = this.getAllowedUserIds(account);
-    return Boolean(user?.id && allowedUserIds.includes(user.id));
+    return canViewBankAccountForUser(account, user);
   }
 
   private assertCanViewBankAccount(account: { metaJson?: any }, user?: any) {

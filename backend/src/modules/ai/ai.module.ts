@@ -7,6 +7,7 @@ import { AiComputerUseService } from './ai-computer-use.service';
 import { AiController } from './ai.controller';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { ReportsModule } from '../reports/reports.module';
+import { AiCopilotAccessService } from './ai-copilot-access.service';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Global()
@@ -18,6 +19,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
     AiInsightsService,
     AiKnowledgeService,
     AiCopilotService,
+    AiCopilotAccessService,
     AiComputerUseService,
     RolesGuard,
   ],
@@ -26,6 +28,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
     AiInsightsService,
     AiKnowledgeService,
     AiCopilotService,
+    AiCopilotAccessService,
     AiComputerUseService,
   ],
 })

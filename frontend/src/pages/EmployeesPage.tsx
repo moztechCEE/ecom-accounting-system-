@@ -395,6 +395,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     emergencyContactName: employee?.emergencyContactName || "",
     emergencyContactPhone: employee?.emergencyContactPhone || "",
     departmentId: employee?.departmentId || undefined,
+    supervisorEmployeeId: employee?.supervisorEmployeeId || null,
     attendanceType: employee?.attendanceType || "INTERNAL",
     hireDate: employee?.hireDate ? dayjs(employee.hireDate) : undefined,
     terminateDate: employee?.terminateDate
@@ -902,6 +903,11 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
                 value: department.id,
               }))}
             />
+          </Form.Item>
+          <Form.Item name="supervisorEmployeeId" label="直屬主管" extra="費用申請會送至此主管；未設定時無法送審。主管變更不會改派已送出的申請。">
+            <Select allowClear showSearch optionFilterProp="label"
+              onClear={() => form.setFieldValue("supervisorEmployeeId", null)}
+              options={employees.filter((employee) => employee.isActive && employee.userId && employee.id !== selectedEmployee?.id && (!selectedEmployee?.entityId || employee.entityId === selectedEmployee.entityId)).map((employee) => ({ label: `${employee.name} (${employee.employeeNo})`, value: employee.id }))} />
           </Form.Item>
           <Form.Item name="attendanceType" label="出勤類型">
             <Select

@@ -2,6 +2,7 @@ import api from './api'
 import { Role } from '../types'
 
 export interface CreateRolePayload {
+  templateRoleId?: string
   code: string
   name: string
   description?: string

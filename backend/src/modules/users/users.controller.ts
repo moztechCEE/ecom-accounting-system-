@@ -94,7 +94,8 @@ export class UsersController {
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '建立新使用者（帳號與權限管理）' })
-  async createUser(@Body() dto: CreateUserDto) {
+  async createUser(@Body() dto: CreateUserDto, @CurrentUser('id') actorId: string) {
+    await this.usersService.assertAccessManagementAllowed(actorId, { data: dto, roleIds: dto.roleIds });
     return this.usersService.createUser(dto);
   }
 
@@ -105,7 +106,8 @@ export class UsersController {
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '更新使用者資訊（帳號與權限管理）' })
-  async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+  async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto, @CurrentUser('id') actorId: string) {
+    await this.usersService.assertAccessManagementAllowed(actorId, { targetUserId: id, data: dto });
     return this.usersService.updateUser(id, dto);
   }
 
@@ -116,7 +118,8 @@ export class UsersController {
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '設定使用者角色（帳號與權限管理）' })
-  async setRoles(@Param('id') id: string, @Body() dto: SetUserRolesDto) {
+  async setRoles(@Param('id') id: string, @Body() dto: SetUserRolesDto, @CurrentUser('id') actorId: string) {
+    await this.usersService.assertAccessManagementAllowed(actorId, { targetUserId: id, roleIds: dto.roleIds });
     return this.usersService.setUserRoles(id, dto.roleIds);
   }
 
@@ -127,7 +130,8 @@ export class UsersController {
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '停用使用者帳號（帳號與權限管理）' })
-  async deactivate(@Param('id') id: string) {
+  async deactivate(@Param('id') id: string, @CurrentUser('id') actorId: string) {
+    await this.usersService.assertAccessManagementAllowed(actorId, { targetUserId: id });
     return this.usersService.deactivateUser(id);
   }
 }

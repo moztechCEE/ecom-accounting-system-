@@ -1395,7 +1395,7 @@ model ExpenseRequestHistory {
 model PaymentTask {
   id               String    @id @default(uuid())
   entityId         String    @map("entity_id")
-  expenseRequestId String?   @map("expense_request_id")
+  expenseRequestId String?   @unique @map("expense_request_id")
   accountId        String?   @map("account_id")
   vendorId         String?   @map("vendor_id")
   status           String    @default("pending")
@@ -1687,6 +1687,7 @@ model Employee {
   location              String?
   attendanceType        String    @default("INTERNAL") @map("attendance_type") // INTERNAL, EXTERNAL
   departmentId          String?   @map("department_id")
+  supervisorEmployeeId  String?   @map("supervisor_employee_id")
   hireDate              DateTime  @map("hire_date")
   terminateDate         DateTime? @map("terminate_date")
 
@@ -1704,6 +1705,8 @@ model Employee {
   entity               Entity                        @relation(fields: [entityId], references: [id], onDelete: Cascade)
   user                 User?                         @relation(fields: [userId], references: [id])
   department           Department?                   @relation(fields: [departmentId], references: [id])
+  supervisor           Employee?                     @relation("EmployeeSupervisor", fields: [supervisorEmployeeId], references: [id], onDelete: SetNull)
+  directReports        Employee[]                    @relation("EmployeeSupervisor")
   payrollItems         PayrollItem[]
   compensationSettings EmployeeCompensationSettings?
   onboardingDocuments  EmployeeOnboardingDocument[]

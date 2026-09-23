@@ -10,6 +10,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { assertCustomRoleIdentity, isPrivilegedRole, SYSTEM_ROLE_CODES } from './role-policy';
 
 const ROLE_INCLUDE = {
   permissions: {
@@ -52,6 +53,11 @@ export class RolesService {
   }
 
   async create(dto: CreateRoleDto) {
+    assertCustomRoleIdentity(dto.code, dto.name);
+    const template = dto.templateRoleId ? await this.findById(dto.templateRoleId) : null;
+    if (template && isPrivilegedRole(template)) {
+      throw new BadRequestException('管理員角色不可作為自訂權限範本');
+    }
     try {
       const role = await this.prisma.role.create({
         data: {
@@ -59,6 +65,7 @@ export class RolesService {
           name: dto.name,
           description: dto.description,
           hierarchyLevel: dto.hierarchyLevel ?? undefined,
+          permissions: template ? { create: template.permissions.map(link => ({ permissionId: link.permissionId })) } : undefined,
         },
         include: ROLE_INCLUDE,
       });
@@ -71,6 +78,16 @@ export class RolesService {
   }
 
   async update(id: string, dto: UpdateRoleDto) {
+    const existing = await this.findById(id);
+    if (isPrivilegedRole(existing)) {
+      throw new BadRequestException('管理員角色由系統保護，不可修改');
+    }
+    if (dto.code !== undefined && dto.code !== existing.code) {
+      throw new BadRequestException('角色代碼建立後不可修改，請建立新角色');
+    }
+    if (dto.name !== undefined && dto.name !== existing.name && SYSTEM_ROLE_CODES.includes(dto.name.trim().toUpperCase())) {
+      throw new BadRequestException('系統角色名稱不可由其他角色使用');
+    }
     try {
       const role = await this.prisma.role.update({
         where: { id },
@@ -91,6 +108,13 @@ export class RolesService {
   }
 
   async remove(id: string) {
+    const existing = await this.findById(id);
+    if (SYSTEM_ROLE_CODES.includes(existing.code) || isPrivilegedRole(existing)) {
+      throw new BadRequestException('系統角色不可刪除');
+    }
+    if (await this.prisma.userRole.count({ where: { roleId: id } })) {
+      throw new BadRequestException('此角色仍有人員使用，請先調整人員角色');
+    }
     try {
       const role = await this.prisma.role.delete({
         where: { id },
@@ -110,6 +134,9 @@ export class RolesService {
         const role = await tx.role.findUnique({ where: { id: roleId } });
         if (!role) {
           throw new NotFoundException(`Role with ID ${roleId} not found`);
+        }
+        if (isPrivilegedRole(role)) {
+          throw new BadRequestException('管理員具有完整功能權限，不可透過權限清單修改');
         }
 
         await this.ensurePermissionIdsExist(permissionIds, tx);

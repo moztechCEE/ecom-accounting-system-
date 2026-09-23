@@ -1,0 +1,44 @@
+{
+  "sandbox": true,
+  "sandboxAiOptIn": true,
+  "syntheticOnly": true,
+  "source": "real configured Gemini API, mocked ERP records",
+  "deploymentChanged": false,
+  "databaseConnected": false,
+  "elapsedMs": 5804,
+  "result": {
+    "status": "needs_confirmation",
+    "modelId": "gemini-2.5-flash",
+    "recognizedAt": "2026-09-23T11:19:47.655Z",
+    "fingerprints": [
+      "160398da70d3ea1d4f08008479880675564be83be8d85066c8989997bfe504ba"
+    ],
+    "confidence": 0.9,
+    "warnings": [
+      "此為測試單據，非真實交易"
+    ],
+    "possibleDuplicate": false,
+    "fields": {
+      "supplierName": "Test Office Supplies",
+      "description": "Office pens x 10",
+      "amountOriginal": 1200,
+      "currency": "TWD",
+      "taxAmount": 0,
+      "expenseDate": "2026-09-23",
+      "invoiceNo": "TEST0923001",
+      "sellerTaxId": null,
+      "buyerTaxId": null,
+      "receiptType": "RECEIPT",
+      "suggestedItemId": "synthetic-office"
+    }
+  },
+  "checks": {
+    "humanConfirmationRequired": true,
+    "correctAmount": true,
+    "correctCurrency": true,
+    "correctDate": true,
+    "eligibleItem": true,
+    "originalFingerprint": true
+  },
+  "passed": true
+}

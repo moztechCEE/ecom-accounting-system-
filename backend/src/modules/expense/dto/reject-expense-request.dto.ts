@@ -11,6 +11,9 @@ import {
 import { EvidenceFileDto } from './create-expense-request.dto';
 
 export class RejectExpenseRequestDto {
+  @IsString()
+  approvalStepId?: string;
+
   @ApiProperty({ description: '駁回原因' })
   @IsString()
   reason!: string;
