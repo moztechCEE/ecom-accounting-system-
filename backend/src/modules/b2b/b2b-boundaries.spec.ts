@@ -5,6 +5,8 @@ import { B2bAwareJwtAuthGuard } from './b2b-auth.guard';
 import { B2bAdminController, B2bPortalController } from './b2b.controller';
 import { B2bRequestDto, B2bSupplierAccountDto } from './b2b.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { ENTITY_ACCESS_MODULE_KEY } from '../../common/decorators/entity-access.decorator';
+import { PERMISSIONS_KEY } from '../../common/decorators/permissions.decorator';
 
 describe('B2B route and input boundaries', () => {
   const pipe = new ValidationPipe({
@@ -69,6 +71,14 @@ describe('B2B route and input boundaries', () => {
     );
     expect(fallback).toHaveBeenCalled();
     expect(service.authenticate).not.toHaveBeenCalled();
+  });
+  it('requires purchasing scope for supplier account changes', () => {
+    const reflector = new Reflector();
+    for (const method of ['createSupplierAccount', 'updateSupplierAccount']) {
+      const targets = [B2bAdminController.prototype[method as keyof B2bAdminController], B2bAdminController];
+      expect(reflector.getAllAndOverride(ENTITY_ACCESS_MODULE_KEY, targets)).toBe('purchasing');
+      expect(reflector.getAllAndOverride(PERMISSIONS_KEY, targets)).toEqual(['purchase_orders:create']);
+    }
   });
   it('rejects price/customer/company overrides in customer submissions', async () => {
     const valid = {
