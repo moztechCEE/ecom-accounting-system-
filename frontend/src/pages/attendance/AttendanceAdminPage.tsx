@@ -1,3 +1,6 @@
+import DepartmentAttendancePage from "./DepartmentAttendancePage";
+import { useAuth } from "../../contexts/AuthContext";
+import { hasPermission } from "../../utils/access";
 import React, { useEffect, useMemo, useState } from "react";
 import { message, Tooltip } from "antd";
 import {
@@ -2868,4 +2871,8 @@ const AttendanceAdminPage: React.FC = () => {
   );
 };
 
-export default AttendanceAdminPage;
+export default function AttendancePage() {
+  const { user } = useAuth();
+  return !hasPermission(user, 'attendance_admin:read') && hasPermission(user, 'attendance_team:read')
+    ? <DepartmentAttendancePage /> : <AttendanceAdminPage />;
+}

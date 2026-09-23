@@ -2,6 +2,12 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export class UpdateDepartmentDto {
+  @IsOptional() @IsString()
+  memberRoleId?: string | null;
+
+  @IsOptional() @IsString()
+  supervisorRoleId?: string | null;
+
   @ApiPropertyOptional({ description: '部門名稱' })
   @IsOptional()
   @IsString()

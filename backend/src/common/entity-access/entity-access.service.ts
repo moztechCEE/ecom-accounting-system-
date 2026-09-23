@@ -1,3 +1,4 @@
+import { DEPARTMENT_ACCESS_SELECT, departmentAccess } from '../department-access/department-access';
 import {
   ForbiddenException,
   Injectable,
@@ -68,13 +69,7 @@ export class EntityAccessService {
         salesDataScope: true,
         purchasingDataScope: true,
         bankingDataScope: true,
-        employee: {
-          select: {
-            id: true,
-            entityId: true,
-            departmentId: true,
-          },
-        },
+        employee: { select: DEPARTMENT_ACCESS_SELECT },
         entityMemberships: {
           orderBy: [{ isPrimary: 'desc' }, { entityId: 'asc' }],
           select: {
@@ -99,7 +94,9 @@ export class EntityAccessService {
     const isSuperAdmin = user.roles.some(
       ({ role }) => role.code === 'SUPER_ADMIN' || role.name === 'SUPER_ADMIN',
     );
-    const scope = this.normalizeScope(user[DATA_SCOPE_FIELDS[module]]);
+    const storedScope = this.normalizeScope(user[DATA_SCOPE_FIELDS[module]]);
+    const scope = module === 'attendance' && storedScope === 'SELF' && departmentAccess(user.employee).isSupervisor
+      ? 'DEPARTMENT' : storedScope;
 
     if (isSuperAdmin) {
       const entityId =

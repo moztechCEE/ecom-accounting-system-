@@ -1,3 +1,4 @@
+import { DEPARTMENT_ACCESS_SELECT, effectivePermissionKeys } from '../../../common/department-access/department-access';
 import { Body, Controller, ForbiddenException, Get, Header, Headers, Injectable, Module, Post, Req, ServiceUnavailableException, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { IsIn, IsInt, IsString, IsOptional, Matches, Min } from 'class-validator';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -56,12 +57,12 @@ export class WmsPortalService {
   }
   async identity(userId: string, station?: Station) {
     const user = await this.db.user.findUnique({ where: { id: userId }, include: {
-      entityMemberships: true, employee: { select: { entityId: true } },
+      entityMemberships: true, employee: { select: DEPARTMENT_ACCESS_SELECT },
       roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
     } });
     if (!user?.isActive || user.mustChangePassword) throw new ForbiddenException('帳號停用或需要先變更密碼');
     const admin = user.roles.some(r => ['ADMIN','SUPER_ADMIN'].includes(r.role.code));
-    const permissions = new Set(user.roles.flatMap(r => r.role.permissions.map(p => `${p.permission.resource}:${p.permission.action}`)));
+    const permissions = new Set(effectivePermissionKeys(user));
     const entityId = process.env.WMS_PORTAL_ENTITY_ID;
     // WMS currently holds one warehouse/company. Do not treat an arbitrary ERP company as this warehouse.
     if (!admin && !user.entityMemberships.some(m => m.entityId === entityId) && user.employee?.entityId !== entityId) throw new ForbiddenException('沒有此儲運公司的存取權限');

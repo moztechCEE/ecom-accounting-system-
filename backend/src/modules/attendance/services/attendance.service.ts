@@ -1,3 +1,4 @@
+import { ATTENDANCE_EMPLOYEE_SELECT } from '../../../common/department-access/attendance-selection';
 import {
   Injectable,
   BadRequestException,
@@ -330,7 +331,7 @@ export class AttendanceService {
         ...this.buildAttendanceAccessWhere(access),
       },
       include: {
-        employee: { include: { department: true } },
+        employee: { select: ATTENDANCE_EMPLOYEE_SELECT },
       },
       orderBy: [{ employee: { employeeNo: 'asc' } }],
     });
@@ -400,7 +401,7 @@ export class AttendanceService {
           : {}),
       },
       include: {
-        employee: { include: { department: true } },
+        employee: { select: ATTENDANCE_EMPLOYEE_SELECT },
       },
       orderBy: [{ workDate: 'desc' }, { employee: { employeeNo: 'asc' } }],
     });
@@ -564,7 +565,7 @@ export class AttendanceService {
           anomalyReason,
         },
         include: {
-          employee: { include: { department: true } },
+          employee: { select: ATTENDANCE_EMPLOYEE_SELECT },
         },
       });
     });

@@ -1,3 +1,4 @@
+import { DEPARTMENT_ACCESS_SELECT, departmentAccess, effectivePermissionKeys } from '../../common/department-access/department-access';
 import {
   BadRequestException,
   ConflictException,
@@ -21,6 +22,7 @@ import {
 } from '../../common/entity-access/entity-access.service';
 
 const USER_INCLUDE = {
+  employee: { select: DEPARTMENT_ACCESS_SELECT },
   entityMemberships: {
     orderBy: [{ isPrimary: 'desc' }, { entityId: 'asc' }],
     include: {
@@ -118,7 +120,11 @@ export class UsersService {
       passwordResetTokenExpiresAt?: Date | null;
       twoFactorSecret?: string | null;
     };
-    return rest;
+    const access = departmentAccess(user.employee);
+    return { ...rest, effectivePermissions: effectivePermissionKeys(user), departmentAccess: {
+      departmentId: user.employee?.departmentId ?? null, departmentName: user.employee?.department?.name ?? null,
+      isSupervisor: access.isSupervisor, roleNames: access.roleNames, employeeId: user.employee?.id ?? null,
+    }, attendanceDataScope: access.isSupervisor && rest.attendanceDataScope === 'SELF' ? 'DEPARTMENT' : rest.attendanceDataScope };
   }
 
   private sanitizeUsers(users: UserWithRelations[]) {
@@ -673,13 +679,7 @@ export class UsersService {
   async getUserPermissions(userId: string) {
     const user = await this.findById(userId);
 
-    const permissions =
-      user?.roles?.flatMap((userRole) =>
-        userRole.role.permissions.map((rolePermission) => ({
-          resource: rolePermission.permission.resource,
-          action: rolePermission.permission.action,
-        })),
-      ) ?? [];
+    const permissions = (user?.effectivePermissions ?? []).map(key => { const [resource, action] = key.split(':'); return { resource, action }; });
 
     return permissions;
   }

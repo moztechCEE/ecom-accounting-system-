@@ -6,6 +6,7 @@ import { SetUserRolesDto } from '../users/dto/set-user-roles.dto';
 
 describe('Role administration boundaries', () => {
   const prisma = {
+    department: { count: jest.fn() },
     role: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     userRole: { count: jest.fn() },
     rolePermission: { deleteMany: jest.fn(), createMany: jest.fn() },
@@ -16,6 +17,7 @@ describe('Role administration boundaries', () => {
   const employee = { id: 'employee', code: 'EMPLOYEE', name: 'EMPLOYEE', permissions: [{ permissionId: 'warehouse-expense-self-read' }] };
   beforeEach(() => {
     jest.resetAllMocks();
+    prisma.department.count.mockResolvedValue(0);
     prisma.$transaction.mockImplementation(callback => callback(prisma));
     service = new RolesService(prisma as any);
   });
@@ -66,6 +68,13 @@ describe('Role administration boundaries', () => {
       where: { userId: 'highest-admin', role: { code: 'SUPER_ADMIN' } },
     });
     expect(prisma.role.delete).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'admin' } }));
+  });
+
+  it('does not delete a role used by a department even without individual assignments', async () => {
+    prisma.role.findUnique.mockResolvedValue({ code: 'CUSTOM', name: 'Custom' });
+    prisma.department.count.mockResolvedValue(1);
+    await expect(service.remove('custom', 'admin')).rejects.toThrow('仍綁定部門');
+    expect(prisma.role.delete).not.toHaveBeenCalled();
   });
 
   it('accepts seeded warehouse string IDs and rejects empty IDs', async () => {

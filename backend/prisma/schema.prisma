@@ -92,6 +92,9 @@ model Role {
   hierarchyLevel Int      @default(3) @map("hierarchy_level")
   createdAt      DateTime @default(now()) @map("created_at")
 
+  memberDepartments Department[] @relation("DepartmentMemberRole")
+  supervisorDepartments Department[] @relation("DepartmentSupervisorRole")
+
   // Relations
   users       UserRole[]
   permissions RolePermission[]
@@ -1654,6 +1657,10 @@ model BankTransaction {
 
 // 部門
 model Department {
+  memberRoleId String? @map("member_role_id")
+  supervisorRoleId String? @map("supervisor_role_id")
+  memberRole Role? @relation("DepartmentMemberRole", fields: [memberRoleId], references: [id], onDelete: Restrict)
+  supervisorRole Role? @relation("DepartmentSupervisorRole", fields: [supervisorRoleId], references: [id], onDelete: Restrict)
   id           String   @id @default(uuid())
   entityId     String   @map("entity_id")
   name         String
@@ -1687,6 +1694,7 @@ model Employee {
   location              String?
   attendanceType        String    @default("INTERNAL") @map("attendance_type") // INTERNAL, EXTERNAL
   departmentId          String?   @map("department_id")
+  isDepartmentSupervisor Boolean @default(false) @map("is_department_supervisor")
   supervisorEmployeeId  String?   @map("supervisor_employee_id")
   hireDate              DateTime  @map("hire_date")
   terminateDate         DateTime? @map("terminate_date")

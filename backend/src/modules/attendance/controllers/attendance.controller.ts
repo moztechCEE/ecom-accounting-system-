@@ -60,7 +60,7 @@ export class AttendanceController {
 
   @Get('admin/daily-summary')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
+  @RequirePermissions({ resource: 'attendance_team', action: 'read' })
   async getDailySummary(
     @Request() req: any,
     @Query('date') dateString: string,
@@ -71,7 +71,7 @@ export class AttendanceController {
 
   @Get('admin/attendance-records')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'attendance_admin', action: 'read' })
+  @RequirePermissions({ resource: 'attendance_team', action: 'read' })
   async getAttendanceRecords(
     @Request() req: any,
     @Query('startDate') startDate?: string,

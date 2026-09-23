@@ -958,6 +958,8 @@ export class PayrollService {
       entityId?: string;
       name: string;
       costCenterId?: string;
+      memberRoleId?: string | null;
+      supervisorRoleId?: string | null;
       isActive?: boolean;
     },
   ) {
@@ -985,11 +987,14 @@ export class PayrollService {
       throw new ConflictException('Department already exists');
     }
 
+    await this.validateDepartmentRoles(userId, data);
     const department = await this.prisma.department.create({
       data: {
         entityId,
         name,
         costCenterId: data.costCenterId?.trim() || null,
+        memberRoleId: data.memberRoleId || null,
+        supervisorRoleId: data.supervisorRoleId || null,
         isActive: data.isActive ?? true,
       },
     });
@@ -1011,6 +1016,8 @@ export class PayrollService {
     data: {
       name?: string;
       costCenterId?: string | null;
+      memberRoleId?: string | null;
+      supervisorRoleId?: string | null;
       isActive?: boolean;
     },
   ) {
@@ -1063,6 +1070,10 @@ export class PayrollService {
       updateData.isActive = data.isActive;
     }
 
+    await this.validateDepartmentRoles(userId, data);
+    if (data.memberRoleId !== undefined) updateData.memberRoleId = data.memberRoleId || null;
+    if (data.supervisorRoleId !== undefined) updateData.supervisorRoleId = data.supervisorRoleId || null;
+    if (data.isActive !== undefined && data.isActive !== department.isActive) await this.assertDepartmentBindingAllowed(userId);
     const updatedDepartment = await this.prisma.department.update({
       where: { id },
       data: updateData,
@@ -1078,6 +1089,34 @@ export class PayrollService {
     });
 
     return updatedDepartment;
+  }
+
+  private async assertDepartmentBindingAllowed(actorId: string) {
+    const privileged = await this.prisma.userRole.count({ where: { userId: actorId, role: { code: { in: ['SUPER_ADMIN','ADMIN'] } } } });
+    if (!privileged &&
+        !(await this.usersService.hasPermission(actorId, 'access_control', 'update'))) {
+      throw new ForbiddenException('部門與主管綁定會影響權限，須由帳號權限管理人員設定');
+    }
+  }
+
+  private async validateDepartmentRoles(actorId: string, data: { memberRoleId?: string | null; supervisorRoleId?: string | null }) {
+    if (data.memberRoleId === undefined && data.supervisorRoleId === undefined) return;
+    await this.assertDepartmentBindingAllowed(actorId);
+    const ids = [...new Set([data.memberRoleId, data.supervisorRoleId].filter(Boolean))] as string[];
+    for (const id of ids) {
+      if (typeof id !== 'string') throw new BadRequestException('部門角色格式不正確');
+      const role = await this.prisma.role.findUnique({ where: { id } });
+      if (!role || ['ADMIN','SUPER_ADMIN'].includes(role.code) || ['ADMIN','SUPER_ADMIN'].includes(role.name)) {
+        throw new BadRequestException('部門只能套用一般作業角色，不能綁定管理員角色');
+      }
+    }
+  }
+
+  private async validateDepartmentSupervisor(value: unknown, departmentId: string | null | undefined, entityId: string) {
+    if (value !== undefined && typeof value !== 'boolean') throw new BadRequestException('是否為部門主管必須是布林值');
+    if (value !== true) return;
+    const department = await this.ensureDepartmentInEntity(departmentId || undefined, entityId);
+    if (!department?.isActive) throw new BadRequestException('請先選擇啟用中的所屬部門，再設定部門主管');
   }
 
   private async validateSupervisor(supervisorId: string | null | undefined, entityId: string, employeeId?: string) {
@@ -1109,6 +1148,7 @@ export class PayrollService {
       gender?: string | null;
       departmentId?: string;
       supervisorEmployeeId?: string | null;
+      isDepartmentSupervisor?: boolean;
       hireDate: string | Date;
       salaryBaseOriginal: number;
       isActive?: boolean;
@@ -1214,6 +1254,8 @@ export class PayrollService {
       throw new BadRequestException('Password must be at least 8 characters');
     }
 
+    if (data.departmentId || data.isDepartmentSupervisor) await this.assertDepartmentBindingAllowed(userId);
+    await this.validateDepartmentSupervisor(data.isDepartmentSupervisor, data.departmentId, entityId);
     await this.validateSupervisor(data.supervisorEmployeeId, entityId);
     const employee = await this.prisma.employee.create({
       data: {
@@ -1233,6 +1275,7 @@ export class PayrollService {
         ),
         departmentId: data.departmentId || null,
         supervisorEmployeeId: data.supervisorEmployeeId || null,
+        isDepartmentSupervisor: data.isDepartmentSupervisor ?? false,
         hireDate: new Date(data.hireDate),
         salaryBaseOriginal,
         salaryBaseCurrency: entity.baseCurrency,
@@ -1414,6 +1457,7 @@ export class PayrollService {
       gender?: string | null;
       departmentId?: string | null;
       supervisorEmployeeId?: string | null;
+      isDepartmentSupervisor?: boolean;
       hireDate?: string | Date;
       salaryBaseOriginal?: number;
       isActive?: boolean;
@@ -1453,6 +1497,14 @@ export class PayrollService {
       throw new NotFoundException('Employee not found');
     }
 
+    if ((data.departmentId !== undefined && (data.departmentId || null) !== employee.departmentId) ||
+        (data.isDepartmentSupervisor !== undefined && data.isDepartmentSupervisor !== employee.isDepartmentSupervisor) ||
+        (data.userId !== undefined && data.userId !== employee.userId)) {
+      await this.assertDepartmentBindingAllowed(userId);
+    }
+    await this.validateDepartmentSupervisor(data.isDepartmentSupervisor ?? employee.isDepartmentSupervisor,
+      data.departmentId === undefined ? employee.departmentId : data.departmentId, employee.entityId);
+    if (data.isDepartmentSupervisor !== undefined && typeof data.isDepartmentSupervisor !== 'boolean') throw new BadRequestException('是否為部門主管必須是布林值');
     if (data.departmentId !== undefined && data.departmentId !== null) {
       await this.ensureDepartmentInEntity(data.departmentId, employee.entityId);
     }
@@ -1461,6 +1513,7 @@ export class PayrollService {
     }
 
     const updateData: Record<string, any> = {};
+    if (data.isDepartmentSupervisor !== undefined) updateData.isDepartmentSupervisor = data.isDepartmentSupervisor;
     if (data.supervisorEmployeeId !== undefined) {
       await this.validateSupervisor(data.supervisorEmployeeId, employee.entityId, employee.id);
       updateData.supervisorEmployeeId = data.supervisorEmployeeId || null;

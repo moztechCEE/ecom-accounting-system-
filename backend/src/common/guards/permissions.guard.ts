@@ -67,8 +67,11 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
+    // Fresh department grants are loaded by JwtStrategy, never supplied by the client.
+    const departmentPermissions: string[] = user.effectivePermissions || [];
+
     // 收集所有權限
-    const userPermissions: string[] = [];
+    const userPermissions: string[] = [...departmentPermissions];
     for (const userRole of userRoles) {
       for (const rolePermission of userRole.role.permissions) {
         const permission = rolePermission.permission;
@@ -81,6 +84,9 @@ export class PermissionsGuard implements CanActivate {
     if (userPermissions.includes('access_control:update')) {
       userPermissions.push('access_control:read');
     }
+
+    if (userPermissions.includes('attendance_admin:read')) userPermissions.push('attendance_team:read');
+    if (userPermissions.includes('attendance_admin:update')) userPermissions.push('attendance_team:review');
 
     // 檢查是否擁有所有所需權限
     const hasAllPermissions = requiredPermissions.every((perm) =>

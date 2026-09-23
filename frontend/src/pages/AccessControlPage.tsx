@@ -468,6 +468,11 @@ const UsersTab = ({
       ),
     },
     {
+      title: '部門／職責', key: 'department',
+      render: (_: unknown, record: ManagedUser) => record.departmentAccess?.departmentName
+        ? <Space direction="vertical" size={2}><span>{record.departmentAccess.departmentName}</span><Tag color={record.departmentAccess.isSupervisor ? 'blue' : 'default'}>{record.departmentAccess.isSupervisor ? '部門主管' : '部門人員'}</Tag></Space> : '尚未綁定員工部門',
+    },
+    {
       title: '狀態',
       dataIndex: 'isActive',
       key: 'status',
@@ -704,7 +709,8 @@ const UsersTab = ({
       />
 
       <Modal title={`${previewUser?.name || ""} · 可見介面`} open={Boolean(previewUser)} onCancel={() => setPreviewUser(null)} footer={null} width={720}>
-        <AccessPreview roles={previewUser?.roles.map(link => link.role) || []} />
+        {previewUser?.departmentAccess?.departmentName && <Alert message={`${previewUser.departmentAccess.departmentName} · ${previewUser.departmentAccess.isSupervisor ? '部門主管' : '部門人員'}`} description={`部門作業角色：${previewUser.departmentAccess.roleNames.join('、') || '基本自助功能'}`} />}
+        <AccessPreview roles={previewUser?.roles.map(link => link.role) || []} permissions={previewUser?.effectivePermissions} />
       </Modal>
 
       <Modal
