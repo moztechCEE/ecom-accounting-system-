@@ -16,7 +16,14 @@ function blocked() {
   error.code = 'ERP_DEV_EXTERNAL_EFFECT_BLOCKED';
   throw error;
 }
-const warehouseOrigin = 'https://corely-wms-dev-sp5g377smq-de.a.run.app';
+const stableWarehouseOrigin = 'https://corely-wms-dev-sp5g377smq-de.a.run.app';
+// A candidate is reachable only when both independently configured bridges agree.
+// Match the raw setting, not a normalized URL: credentials, ports, paths, alternate
+// services and suffix lookalikes must never expand this DEV-only exception.
+const candidateWarehouseOrigin = process.env.WMS_PORTAL_SERVICE_URL || '';
+const candidateWarehouseEnabled = /^https:\/\/[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?---corely-wms-dev-sp5g377smq-de\.a\.run\.app$/.test(candidateWarehouseOrigin) &&
+  [candidateWarehouseOrigin, candidateWarehouseOrigin + '/'].includes(process.env.WMS_WORKSPACE_URL);
+const warehouseOrigin = candidateWarehouseEnabled ? candidateWarehouseOrigin : stableWarehouseOrigin;
 const warehouseHost = new URL(warehouseOrigin).hostname;
 const warehouseAccountEnabled = process.env.WMS_PORTAL_SSO_ENABLED === 'true' && process.env.WMS_PORTAL_SERVICE_URL === warehouseOrigin;
 const warehouseWorkspaceEnabled = process.env.WMS_WORKSPACE_READ_ENABLED === 'true' &&
@@ -42,6 +49,16 @@ function approvedWorkspaceFetch(url, options) {
   return read ? options.body === undefined && !headers.has('content-type') :
     typeof options.body === 'string' && options.body.length <= 1048576 && headers.get('content-type') === 'application/json';
 }
+function approvedAccountFetch(url, options) {
+  if (!warehouseAccountEnabled || url.origin !== warehouseOrigin || url.username || url.password || url.search || url.hash ||
+      !['/api/auth/erp/staff','/api/auth/erp/bind'].includes(url.pathname) ||
+      typeof options !== 'object' || !options || options.method !== 'POST' || options.redirect !== 'error' ||
+      typeof options.body !== 'string' || options.body.length > 1048576) return false;
+  const headers = new Headers(options.headers);
+  return [...headers.keys()].every(key => ['content-type','x-erp-service-key'].includes(key)) &&
+    headers.get('content-type') === 'application/json' && Boolean(process.env.WMS_PORTAL_SHARED_SECRET) &&
+    headers.get('x-erp-service-key') === process.env.WMS_PORTAL_SHARED_SECRET;
+}
 // This exception is intentionally independent of every other DEV integration.
 // Merely enabling the flag cannot open a socket: only a validated fetch gets the token.
 const aiOrigin = 'https://generativelanguage.googleapis.com';
@@ -63,7 +80,7 @@ net.Socket.prototype.connect = function (...args) {
   const path = typeof first === 'object' && first ? first.path : typeof first === 'string' ? first : '';
   const warehouseConnection = (warehouseAccountEnabled || warehouseWorkspaceEnabled) &&
     warehouseFetchContext.getStore() === warehouseFetchToken && typeof first === 'object' &&
-    Number(first.port) === 443 && (first.host === warehouseHost || first.servername === warehouseHost);
+    Number(first.port) === 443 && first.host === warehouseHost && (!first.servername || first.servername === warehouseHost);
   const aiConnection = aiEnabled && aiFetchContext.getStore() === aiFetchToken && typeof first === 'object' &&
     Number(first.port) === 443 && first.host === aiHost && (!first.servername || first.servername === aiHost);
   if (!warehouseConnection && !aiConnection && (!path || !path.startsWith(`/cloudsql/${process.env.CLOUDSQL_INSTANCE}/.s.PGSQL.`))) blocked();
@@ -95,9 +112,11 @@ globalThis.fetch = async (input, options = {}) => {
   }
   // The existing internal DEV account-link bridge remains the only other HTTP exception.
   // Shopify, email, production WMS, callbacks and subprocesses remain blocked.
-  if (!warehouseAccountEnabled || url.origin !== warehouseOrigin || url.username || url.password || url.search || url.hash ||
-      !['/api/auth/erp/staff','/api/auth/erp/bind'].includes(url.pathname) || options.method !== 'POST' || options.redirect !== 'error') blocked();
-  return warehouseFetchContext.run(warehouseFetchToken, () => fetch(input, options));
+  if (!(typeof input === 'string' || input instanceof URL) || !approvedAccountFetch(url, options)) blocked();
+  return warehouseFetchContext.run(warehouseFetchToken, () => fetch(url.href, {
+    method: 'POST', redirect: 'error', signal: options.signal, body: options.body,
+    headers: { 'Content-Type': 'application/json', 'x-erp-service-key': process.env.WMS_PORTAL_SHARED_SECRET },
+  }));
 };
 for (const method of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) childProcess[method] = blocked;
 syncBuiltinESMExports();
