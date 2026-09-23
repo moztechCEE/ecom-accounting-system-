@@ -165,7 +165,7 @@ export class AiCopilotAccessService {
       '/payroll/runs': ['payroll_self:read', 'payroll_admin:read'],
       '/attendance/dashboard': ['attendance_self:read'],
       '/attendance/leaves': ['leave_self:read'],
-      '/attendance/admin': ['attendance_admin:read'],
+      '/attendance/admin': ['attendance_admin:read', 'attendance_team:read'],
       '/profile': ['profile_self:read'],
       '/accounting/workbench': ['accounts:read', 'journal_entries:read'],
       '/accounting/accounts': ['accounts:read'],
