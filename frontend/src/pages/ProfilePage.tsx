@@ -13,6 +13,8 @@ const { Title, Text } = Typography
 const ProfilePage: React.FC = () => {
   const { refreshCurrentUser } = useAuth()
   const [accountForm] = Form.useForm()
+  const [accountLoading, setAccountLoading] = useState(true)
+  const [accountResult, setAccountResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [accountSaving, setAccountSaving] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [securityError, setSecurityError] = useState('')
@@ -57,8 +59,8 @@ const ProfilePage: React.FC = () => {
       accountForm.setFieldsValue({ name: userData.name })
       if (userData.isTwoFactorEnabled) setCurrentStep(2)
     } catch (error) {
-       // ignore
-    }
+      setAccountResult({ type: 'error', text: '無法載入帳號資料，請重新整理' })
+    } finally { setAccountLoading(false) }
   }
 
   const fetchEmployeeProfile = async () => {
@@ -168,15 +170,16 @@ const ProfilePage: React.FC = () => {
       </Title>
 
       <Card title="帳號資料">
-        <Form form={accountForm} layout="vertical" onFinish={async values => {
-          setAccountSaving(true)
-          try { await authService.updateProfile(values.name); await fetchUser(); await refreshCurrentUser(); message.success('個人資料已更新') }
-          catch (error: any) { message.error(error.response?.data?.message || '儲存失敗') }
+        <Form form={accountForm} layout="vertical" disabled={accountLoading || !user} onValuesChange={() => setAccountResult(null)} onFinish={async values => {
+          setAccountSaving(true); setAccountResult(null)
+          try { await authService.updateProfile(values.name); await fetchUser(); await refreshCurrentUser(); setAccountResult({ type: 'success', text: '個人資料已更新' }) }
+          catch (error: any) { setAccountResult({ type: 'error', text: error.response?.data?.message || '儲存失敗' }) }
           finally { setAccountSaving(false) }
         }}>
           <Form.Item name="name" label="姓名" rules={[{ required: true, whitespace: true, max: 100, message: '請輸入姓名（最多 100 字）' }]}><Input /></Form.Item>
           <Typography.Paragraph>登入帳號：{user?.email || '載入中'}</Typography.Paragraph>
           <Typography.Paragraph>角色：{user?.roles?.map((role: string) => getRoleName(role)).join('、') || '—'}</Typography.Paragraph>
+          {accountResult && <Alert type={accountResult.type} showIcon message={accountResult.text} style={{ marginBottom: 16 }} />}
           <Button type="primary" htmlType="submit" loading={accountSaving}>儲存個人資料</Button>
         </Form>
       </Card>

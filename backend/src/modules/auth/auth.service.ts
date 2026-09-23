@@ -415,7 +415,8 @@ export class AuthService {
    */
   async enableTwoFactor(userId: string, token: string, setupToken: string, currentPassword: string) {
     const user = await this.usersService.findForAuthById(userId);
-    if (!user?.isActive || !await bcrypt.compare(currentPassword, user.passwordHash)) throw new UnauthorizedException('目前密碼不正確');
+    if (!user?.isActive) throw new UnauthorizedException();
+    if (!await bcrypt.compare(currentPassword, user.passwordHash)) throw new BadRequestException('目前密碼不正確');
     if (user.isTwoFactorEnabled) throw new BadRequestException('此帳號已啟用兩步驟驗證');
     let setup: { sub: string; purpose: string; secret: string; passwordVersion: string };
     try { setup = await this.jwtService.verifyAsync(setupToken, { audience: 'corely-2fa-setup' }); }
