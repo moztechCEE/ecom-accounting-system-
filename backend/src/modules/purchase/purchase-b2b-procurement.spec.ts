@@ -33,6 +33,7 @@ describe('B2B shortage to supplier purchase order', () => {
     request = {
       id: requestId,
       status: 'needs_adjustment',
+      reviewedAt: new Date('2026-09-24T09:00:00.000Z'),
       items: [
         {
           id: requestItemId,
@@ -77,7 +78,7 @@ describe('B2B shortage to supplier purchase order', () => {
 
   it('creates a linked PO for a selected shortage subset with verified masters and no inventory write', async () => {
     const po = await service.createFromB2bRequest('entity-a', input());
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
     expect(tx.b2bPurchaseRequest.findFirst).toHaveBeenCalledWith({
       where: { id: requestId, entityId: 'entity-a' },
       select: expect.any(Object),
@@ -86,7 +87,6 @@ describe('B2B shortage to supplier purchase order', () => {
       where: {
         entityId: 'entity-a',
         sourceB2bRequestId: requestId,
-        status: { not: 'cancelled' },
       },
       select: expect.any(Object),
     });
@@ -123,6 +123,7 @@ describe('B2B shortage to supplier purchase order', () => {
 
   it('replays the same key and canonical body without another PO, then rejects changed content', async () => {
     const first = await service.createFromB2bRequest('entity-a', input());
+    first.status = 'received';
     tx.purchaseOrder.findFirst.mockResolvedValue(first);
     request.status = 'stock_confirmed'; // A completed staff review must not break an idempotent replay.
     const reordered = { ...input(), orderDate: '2026-09-24T00:00:00.000Z' };
@@ -130,6 +131,7 @@ describe('B2B shortage to supplier purchase order', () => {
       first,
     );
     expect(tx.purchaseOrder.create).toHaveBeenCalledTimes(1);
+    expect(tx.purchaseOrder.findMany).toHaveBeenCalledTimes(1);
     await expect(
       service.createFromB2bRequest('entity-a', {
         ...input(),
@@ -177,9 +179,11 @@ describe('B2B shortage to supplier purchase order', () => {
     expect(po.items[0].unitCostOriginal.toFixed(2)).toBe('18.50');
   });
 
-  it('subtracts prior non-cancelled POs and rejects quantity beyond the remaining shortage', async () => {
+  it('subtracts only open POs and rejects quantity beyond the remaining shortage', async () => {
     tx.purchaseOrder.findMany.mockResolvedValue([
       {
+        status: 'pending',
+        updatedAt: new Date('2026-09-24T09:01:00.000Z'),
         items: [
           { sourceB2bRequestItemId: requestItemId, qty: new Prisma.Decimal(2) },
         ],
@@ -194,6 +198,41 @@ describe('B2B shortage to supplier purchase order', () => {
     await expect(
       service.createFromB2bRequest('entity-a', allowed),
     ).resolves.toMatchObject({ id: 'po-a' });
+  });
+
+  it('requires a fresh manual stock review after a linked PO is received', async () => {
+    tx.purchaseOrder.findMany.mockResolvedValue([{
+      status: 'received',
+      updatedAt: new Date('2026-09-24T10:00:00.000Z'),
+      items: [{ sourceB2bRequestItemId: requestItemId, qty: new Prisma.Decimal(2) }],
+    }]);
+    await expect(service.createFromB2bRequest('entity-a', input()))
+      .rejects.toThrow('請先重新人工核庫');
+    expect(tx.purchaseOrder.create).not.toHaveBeenCalled();
+
+    request.reviewedAt = new Date('2026-09-24T11:00:00.000Z');
+    expect(await service.createFromB2bRequest('entity-a', input()))
+      .toMatchObject({ id: 'po-a' });
+  });
+
+  it('does not count a received PO against a later reviewed shortage', async () => {
+    request.reviewedAt = new Date('2026-09-24T11:00:00.000Z');
+    tx.purchaseOrder.findMany.mockResolvedValue([
+      {
+        status: 'received',
+        updatedAt: new Date('2026-09-24T10:00:00.000Z'),
+        items: [{ sourceB2bRequestItemId: requestItemId, qty: new Prisma.Decimal(2) }],
+      },
+      {
+        status: 'pending',
+        updatedAt: new Date('2026-09-24T11:01:00.000Z'),
+        items: [{ sourceB2bRequestItemId: requestItemId, qty: new Prisma.Decimal(1) }],
+      },
+    ]);
+    const next = input();
+    next.items[0].qty = 2;
+    expect(await service.createFromB2bRequest('entity-a', next))
+      .toMatchObject({ id: 'po-a' });
   });
 
   it('requires a reviewed shortage and source line belonging to the same company request', async () => {
@@ -257,13 +296,22 @@ describe('B2B shortage to supplier purchase order', () => {
     },
   );
 
-  it('shows reviewed shortage and excludes cancelled POs from ordered while retaining history', async () => {
+  it('shows reviewed shortage and excludes cancelled and received POs from ordered while retaining history', async () => {
     tx.purchaseOrder.findMany.mockResolvedValue([
       {
         id: 'po-active',
         status: 'pending',
         vendor: { name: 'Supplier A' },
         createdAt: new Date('2026-09-24'),
+        items: [
+          { sourceB2bRequestItemId: requestItemId, qty: new Prisma.Decimal(2) },
+        ],
+      },
+      {
+        id: 'po-received',
+        status: 'received',
+        vendor: { name: 'Supplier B' },
+        createdAt: new Date('2026-09-23T12:00:00.000Z'),
         items: [
           { sourceB2bRequestItemId: requestItemId, qty: new Prisma.Decimal(2) },
         ],
@@ -295,6 +343,12 @@ describe('B2B shortage to supplier purchase order', () => {
           status: 'pending',
           vendorName: 'Supplier A',
           createdAt: new Date('2026-09-24'),
+        },
+        {
+          id: 'po-received',
+          status: 'received',
+          vendorName: 'Supplier B',
+          createdAt: new Date('2026-09-23T12:00:00.000Z'),
         },
         {
           id: 'po-cancelled',

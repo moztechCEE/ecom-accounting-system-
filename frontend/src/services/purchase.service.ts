@@ -105,6 +105,20 @@ export interface B2BProcurementSummary {
   purchaseOrders: Array<{ id: string; status: string; vendorName: string; createdAt: string }>
 }
 
+export interface B2BShortageRequest {
+  id: string
+  requestNumber: string
+  createdAt: string
+  items: Array<{
+    requestItemId: string
+    sku: string
+    name: string
+    requested: number
+    confirmed: number
+    shortage: number
+  }>
+}
+
 export interface CreateB2BPurchaseOrderDto {
   requestId: string
   requestKey: string
@@ -116,6 +130,11 @@ export interface CreateB2BPurchaseOrderDto {
 }
 
 export const purchaseService = {
+  async b2bShortages(explicitEntityId?: string): Promise<B2BShortageRequest[]> {
+    const entityId = await resolveEntityId(explicitEntityId)
+    const response = await api.get<{ items: B2BShortageRequest[] }>('/purchase-orders/b2b-requests/shortages', { params: { entityId } })
+    return response.data.items
+  },
   async procurementForB2BRequest(requestId: string, explicitEntityId?: string): Promise<B2BProcurementSummary> {
     const entityId = await resolveEntityId(explicitEntityId)
     const response = await api.get<B2BProcurementSummary>(`/purchase-orders/b2b-requests/${encodeURIComponent(requestId)}/procurement`, { params: { entityId } })

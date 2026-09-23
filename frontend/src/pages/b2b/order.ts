@@ -1,4 +1,4 @@
-import type { B2BCatalogItem, B2BRequestInput, B2BRequestStatus } from '../../services/b2b.service'
+import type { B2BCatalogItem, B2BRequestDetail, B2BRequestInput, B2BRequestStatus } from '../../services/b2b.service'
 
 export const statusText: Record<B2BRequestStatus, string> = {
   pending_stock_review: '待人工核對庫存與交期',
@@ -45,10 +45,15 @@ export function formalQuotePath(id: string, version: number): string {
   return `${quotePath(id)}/quote/${encodeURIComponent(version)}`
 }
 
+export function isFormalQuoteExpired(validUntil: string | null, now = Date.now()): boolean {
+  // The API closes a Taiwan-dated quote at 00:00 on the following day (16:00 UTC).
+  return Boolean(validUntil && now >= new Date(`${validUntil}T16:00:00.000Z`).getTime())
+}
+
 export function canConfirmRequest(request: {
   status: B2BRequestStatus
   quoteVersion: number | null
-  quoteStatus: 'sent' | 'accepted' | 'superseded' | null
+  quoteStatus: B2BRequestDetail['quoteStatus']
   salesOrderId: string | null
   items: Array<{ quantity: number; confirmedQuantity: number | null }>
 }): boolean {
@@ -59,7 +64,7 @@ export function canConfirmRequest(request: {
 export function canIssueQuote(request: {
   status: B2BRequestStatus
   quoteVersion: number | null
-  quoteStatus: 'sent' | 'accepted' | 'superseded' | null
+  quoteStatus: B2BRequestDetail['quoteStatus']
   salesOrderId: string | null
   items: Array<{ quantity: number; confirmedQuantity: number | null }>
 }): boolean {

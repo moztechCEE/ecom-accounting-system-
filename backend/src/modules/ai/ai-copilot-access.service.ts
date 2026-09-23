@@ -160,6 +160,8 @@ export class AiCopilotAccessService {
       '/warehouse/users': [],
       '/vendors': ['purchase_orders:read', 'accounts:read'],
       '/purchasing/orders': ['purchase_orders:read'],
+      '/purchasing/b2b-shortages': ['purchase_orders:create'],
+      '/purchasing/supplier-accounts': ['purchase_orders:read'],
       '/banking': ['banking:read'],
       '/payroll/employees': ['employees_admin:read'],
       '/payroll/runs': ['payroll_self:read', 'payroll_admin:read'],

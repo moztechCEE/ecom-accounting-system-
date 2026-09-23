@@ -38,6 +38,8 @@ type B2bSource = {
   requestItemIds: string[];
 };
 
+const CLOSED_B2B_PURCHASE_STATUSES = ['cancelled', 'received', 'completed'];
+
 @Injectable()
 export class PurchaseService {
   constructor(
@@ -203,7 +205,7 @@ export class PurchaseService {
         await tx.$queryRaw`SELECT id FROM b2b_purchase_requests WHERE id=${requestId} AND entity_id=${companyId} FOR UPDATE`;
         const request = await tx.b2bPurchaseRequest.findFirst({
           where: { id: requestId, entityId: companyId },
-          select: { id: true, status: true, items: { select: {
+          select: { id: true, status: true, reviewedAt: true, items: { select: {
             id: true, productId: true, quantity: true, confirmedQuantity: true,
           } } },
         });
@@ -213,18 +215,30 @@ export class PurchaseService {
         if (request.status !== 'needs_adjustment')
           throw new ConflictException('僅核庫不足的需求可建立供應商採購單');
         const sourceItems = new Map(request.items.map((item) => [item.id, item]));
-        if (request.items.some((item) => item.confirmedQuantity === null ||
+        if (!request.reviewedAt || request.items.some((item) => item.confirmedQuantity === null ||
           item.confirmedQuantity < 0 || item.confirmedQuantity > item.quantity))
           throw new ConflictException('此需求尚未完成人工核庫');
+        const lastReviewAt = request.reviewedAt;
+        // Receipt claims a PO row before posting stock and its final status.
+        // Lock linked rows so the following status/timestamp check sees any
+        // concurrent receipt before permitting another order for this shortage.
+        await tx.$queryRaw`SELECT id FROM purchase_orders WHERE entity_id=${companyId} AND source_b2b_request_id=${requestId} FOR UPDATE`;
         const priorOrders = await tx.purchaseOrder.findMany({
-          where: { entityId: companyId, sourceB2bRequestId: requestId, status: { not: 'cancelled' } },
-          select: { items: { select: { sourceB2bRequestItemId: true, qty: true } } },
+          where: { entityId: companyId, sourceB2bRequestId: requestId },
+          select: { status: true, updatedAt: true, items: { select: { sourceB2bRequestItemId: true, qty: true } } },
         });
+        if (priorOrders.some((order) =>
+          ['received', 'completed'].includes(order.status) &&
+          order.updatedAt.getTime() >= lastReviewAt.getTime()))
+          throw new ConflictException('採購單已於上次核庫後收貨，請先重新人工核庫');
         const ordered = new Map<string, Prisma.Decimal>();
-        for (const order of priorOrders) for (const item of order.items) {
-          if (!item.sourceB2bRequestItemId) continue;
-          ordered.set(item.sourceB2bRequestItemId,
-            (ordered.get(item.sourceB2bRequestItemId) || new Prisma.Decimal(0)).add(item.qty));
+        for (const order of priorOrders) {
+          if (CLOSED_B2B_PURCHASE_STATUSES.includes(order.status)) continue;
+          for (const item of order.items) {
+            if (!item.sourceB2bRequestItemId) continue;
+            ordered.set(item.sourceB2bRequestItemId,
+              (ordered.get(item.sourceB2bRequestItemId) || new Prisma.Decimal(0)).add(item.qty));
+          }
         }
         for (const item of selected) {
           const source = sourceItems.get(item.requestItemId);
@@ -278,7 +292,7 @@ export class PurchaseService {
     });
     const ordered = new Map<string, Prisma.Decimal>();
     for (const order of orders) {
-      if (order.status === 'cancelled') continue;
+      if (CLOSED_B2B_PURCHASE_STATUSES.includes(order.status)) continue;
       for (const item of order.items) {
         if (!item.sourceB2bRequestItemId) continue;
         ordered.set(item.sourceB2bRequestItemId,

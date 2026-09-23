@@ -22,12 +22,28 @@ CREATE TABLE "b2b_issued_quotes" (
   "status" TEXT NOT NULL DEFAULT 'sent',
   "issued_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
   "issued_by" TEXT NOT NULL,
+  "seller_name" TEXT NOT NULL,
+  "seller_tax_id" TEXT,
+  "buyer_name" TEXT NOT NULL,
+  "buyer_tax_id" TEXT,
+  "delivery_date" DATE,
   "accepted_at" TIMESTAMPTZ,
   "accepted_by_account_id" TEXT,
+  "withdrawn_at" TIMESTAMPTZ,
+  "withdrawn_by" TEXT,
+  "withdrawal_reason" TEXT,
   CONSTRAINT "b2b_issued_quotes_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "b2b_issued_quotes_version_positive" CHECK ("version" > 0),
-  CONSTRAINT "b2b_issued_quotes_status_valid" CHECK ("status" IN ('sent','accepted','superseded')),
-  CONSTRAINT "b2b_issued_quotes_accepted_pair" CHECK (("accepted_at" IS NULL) = ("accepted_by_account_id" IS NULL))
+  CONSTRAINT "b2b_issued_quotes_status_valid" CHECK ("status" IN ('sent','accepted','superseded','withdrawn')),
+  CONSTRAINT "b2b_issued_quotes_accepted_pair" CHECK (
+    ("status" IN ('sent','superseded') AND "accepted_at" IS NULL AND "accepted_by_account_id" IS NULL
+      AND "withdrawn_at" IS NULL AND "withdrawn_by" IS NULL AND "withdrawal_reason" IS NULL)
+    OR ("status" = 'accepted' AND "accepted_at" IS NOT NULL AND "accepted_by_account_id" IS NOT NULL
+      AND "withdrawn_at" IS NULL AND "withdrawn_by" IS NULL AND "withdrawal_reason" IS NULL)
+    OR ("status" = 'withdrawn' AND "accepted_at" IS NOT NULL AND "accepted_by_account_id" IS NOT NULL
+      AND "withdrawn_at" IS NOT NULL AND "withdrawn_by" IS NOT NULL AND "withdrawal_reason" IS NOT NULL
+      AND length(trim("withdrawal_reason")) >= 10)
+  )
 );
 CREATE UNIQUE INDEX "b2b_issued_quotes_quotation_id_key" ON "b2b_issued_quotes"("quotation_id");
 CREATE UNIQUE INDEX "b2b_issued_quotes_request_id_version_key" ON "b2b_issued_quotes"("request_id","version");

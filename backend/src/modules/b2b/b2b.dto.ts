@@ -128,3 +128,11 @@ export class B2bIssueQuoteDto extends B2bEntityDto {
   @IsOptional() @Transform(trim) @IsString() @MaxLength(500) paymentTerms?: string;
   @IsOptional() @Transform(trim) @IsString() @MaxLength(500) deliveryTerms?: string;
 }
+
+export class B2bWithdrawQuoteDto extends B2bEntityDto {
+  @Transform(trim)
+  @IsString()
+  @MinLength(10)
+  @MaxLength(1000)
+  reason!: string;
+}

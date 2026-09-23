@@ -11,6 +11,13 @@ Object.defineProperty(globalThis, 'window', {value:{__APP_CONFIG__:{stagedOperat
 
 const admin = { roles: ['SUPER_ADMIN'], permissions: [] } as unknown as User
 const staff = { roles: ['CUSTOMER_SERVICE'], permissions: ['after_sales_cases:read'] } as unknown as User
+test('purchasing-only staff can open shortage procurement without the sales workbench', () => {
+  const purchasing = { ...staff, permissions: ['purchase_orders:read', 'purchase_orders:create'] }
+  const leaves = navigationLeaves(visibleNavigation(purchasing))
+  assert(leaves.some((item) => item.key === '/purchasing/b2b-shortages'))
+  assert(leaves.some((item) => item.key === '/purchasing/supplier-accounts'))
+  assert(!leaves.some((item) => item.key === '/sales/b2b'))
+})
 test('SN label drafts belong to purchasing/inventory and respect inventory read access', () => {
   const inventory = { ...staff, permissions: ['inventory:read'] }
   const items = visibleNavigation(inventory)

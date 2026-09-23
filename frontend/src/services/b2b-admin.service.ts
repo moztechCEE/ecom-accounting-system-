@@ -57,6 +57,10 @@ export const b2bAdminService = {
     const { data } = await api.post<B2BFormalQuote>(`/b2b/admin/requests/${encodeURIComponent(id)}/quotes`, input)
     return data
   },
+  async withdrawQuote(id: string, version: number, input: { entityId: string; reason: string }): Promise<B2BFormalQuote> {
+    const { data } = await api.post<B2BFormalQuote>(`/b2b/admin/requests/${encodeURIComponent(id)}/quotes/${encodeURIComponent(version)}/withdraw`, input)
+    return data
+  },
   async confirmRequest(id: string, input: { entityId: string; channelId: string; warehouseId: string }): Promise<{ salesOrderId: string; alreadyConfirmed: boolean }> {
     const { data } = await api.post<{ salesOrderId: string; alreadyConfirmed: boolean }>(`/b2b/admin/requests/${encodeURIComponent(id)}/confirm`, input)
     return data

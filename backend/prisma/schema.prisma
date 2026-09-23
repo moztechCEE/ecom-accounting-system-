@@ -690,7 +690,7 @@ model SalesQuotation {
   paymentTerms  String?   @map("payment_terms")
   deliveryTerms String?   @map("delivery_terms")
   reference     String?
-  status        String    @default("draft") // draft, pending, approved, sent, accepted, rejected, expired
+  status        String    @default("draft") // draft, pending, approved, sent, accepted, rejected, expired, withdrawn
 
   subtotalOriginal       Decimal @default(0) @map("subtotal_original") @db.Decimal(18, 2)
   discountAmountOriginal Decimal @default(0) @map("discount_amount_original") @db.Decimal(18, 2)
@@ -2718,8 +2718,16 @@ model B2bIssuedQuote {
   status              String             @default("sent")
   issuedAt            DateTime           @default(now()) @map("issued_at") @db.Timestamptz
   issuedBy            String             @map("issued_by")
+  sellerName          String             @map("seller_name")
+  sellerTaxId         String?            @map("seller_tax_id")
+  buyerName           String             @map("buyer_name")
+  buyerTaxId          String?            @map("buyer_tax_id")
+  deliveryDate        DateTime?          @map("delivery_date") @db.Date
   acceptedAt          DateTime?          @map("accepted_at") @db.Timestamptz
   acceptedByAccountId String?            @map("accepted_by_account_id")
+  withdrawnAt         DateTime?          @map("withdrawn_at") @db.Timestamptz
+  withdrawnBy         String?            @map("withdrawn_by")
+  withdrawalReason    String?            @map("withdrawal_reason")
   request             B2bPurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
   quotation           SalesQuotation     @relation(fields: [quotationId], references: [id], onDelete: Restrict)
   acceptedByAccount   B2bAccount?        @relation(fields: [acceptedByAccountId], references: [id], onDelete: Restrict)

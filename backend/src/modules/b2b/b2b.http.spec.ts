@@ -243,6 +243,7 @@ function fixture() {
       },
     },
     b2bStockReview: { create: async ({ data }: any) => ({ id: randomUUID(), ...data }) },
+    purchaseOrder: { findMany: async () => [] },
     b2bRequestItem: {
       update: async ({ where, data }: any) => {
         for (const r of requests.values())

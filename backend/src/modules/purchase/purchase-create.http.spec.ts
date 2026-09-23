@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { PurchaseController } from './purchase.controller';
 import { PurchaseService } from './purchase.service';
+import { PurchaseB2bQueueService } from './purchase-b2b-queue.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { EntityAccessService } from '../../common/entity-access/entity-access.service';
 import { InventoryService } from '../inventory/inventory.service';
@@ -115,6 +116,13 @@ function fixture() {
         .map((k) => [k, row[k]]),
     );
   const db: any = {
+    b2bPurchaseRequest: {
+      findMany: jest.fn(async ({ where }: any) => where.entityId === 'entity-a' ? [{
+        id: 'b2b-a', requestNumber: 'B2B-001', createdAt: new Date('2026-09-24T00:00:00Z'),
+        customerId: 'private-customer', subtotal: '999.00',
+        items: [{ id: 'line-a', sku: 'A', name: 'Product A', quantity: 3, confirmedQuantity: 1, unitPrice: '999.00' }],
+      }] : []),
+    },
     entity: {
       findFirst: jest.fn(async ({ where }: any) =>
         where.id === 'entity-a' && where.isActive
@@ -198,6 +206,7 @@ describe('Manual purchase-order HTTP boundary', () => {
       controllers: [PurchaseController],
       providers: [
         PurchaseService,
+        PurchaseB2bQueueService,
         PurchaseTestStrategy,
         { provide: PrismaService, useValue: db },
         { provide: EntityAccessService, useValue: companyAccess },
@@ -264,6 +273,23 @@ describe('Manual purchase-order HTTP boundary', () => {
         { id: 'product-b', name: 'Product B', sku: 'B' },
       ],
     });
+  });
+
+  it('gives a purchasing-only creator a company-scoped shortage queue without sales prices', async () => {
+    const path = '/api/v1/purchase-orders/b2b-requests/shortages?entityId=entity-a';
+    const response = await request(app.getHttpServer())
+      .get(path).set('Authorization', auth()).expect(200);
+    expect(response.body).toEqual({ items: [{
+      id: 'b2b-a', requestNumber: 'B2B-001', createdAt: '2026-09-24T00:00:00.000Z',
+      items: [{ requestItemId: 'line-a', sku: 'A', name: 'Product A', requested: 3, confirmed: 1, shortage: 2 }],
+    }] });
+    expect(JSON.stringify(response.body)).not.toContain('private-customer');
+    expect(JSON.stringify(response.body)).not.toContain('999.00');
+    expect(db.b2bPurchaseRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { entityId: 'entity-a', status: 'needs_adjustment' } }));
+    expect(companyAccess.assertAccess).toHaveBeenCalledWith('buyer', 'purchasing', 'entity-a');
+    await request(app.getHttpServer()).get(path).set('Authorization', auth('reader')).expect(403);
+    await request(app.getHttpServer()).get(path).set('Authorization', auth('outsider')).expect(403);
+    await request(app.getHttpServer()).get('/api/v1/purchase-orders/b2b-requests/shortages?entityId=entity-b').set('Authorization', auth()).expect(403);
   });
 
   it('requires authentication and create permission for orders and options', async () => {

@@ -54,6 +54,8 @@ export default function B2bWorkbenchPage() {
   const [reviewing, setReviewing] = useState<B2BAdminRequest | null>(null)
   const [confirming, setConfirming] = useState<B2BAdminRequest | null>(null)
   const [quoting, setQuoting] = useState<B2BAdminRequest | null>(null)
+  const [withdrawing, setWithdrawing] = useState<B2BAdminRequest | null>(null)
+  const [withdrawReason, setWithdrawReason] = useState('')
   const [procurementRequest, setProcurementRequest] = useState<B2BAdminRequest | null>(null)
   const [procurement, setProcurement] = useState<B2BProcurementSummary | null>(null)
   const [procurementLoading, setProcurementLoading] = useState(false)
@@ -253,6 +255,22 @@ export default function B2bWorkbenchPage() {
     finally { setSaving(false) }
   }
 
+  const withdrawQuote = async () => {
+    if (!entityId || !withdrawing?.quoteVersion || !canWrite || saving) return
+    const reason = withdrawReason.trim()
+    if (!reason) { message.error('請填寫撤回原因。'); return }
+    try {
+      setSaving(true)
+      await b2bAdminService.withdrawQuote(withdrawing.id, withdrawing.quoteVersion, { entityId, reason })
+      setWithdrawing(null)
+      setWithdrawReason('')
+      message.success('已撤回報價，需求回到待人工核庫。請重新確認供貨後出具新版本。')
+      await load()
+    } catch (error) {
+      message.error(`${errorText(error)} 若結果不明，請重新整理報價狀態後再操作。`)
+    } finally { setSaving(false) }
+  }
+
   const openProcurement = async (request: B2BAdminRequest) => {
     if (!entityId || !canManageSupplier) return
     setProcurementRequest(request)
@@ -331,13 +349,14 @@ export default function B2bWorkbenchPage() {
     { title: '客戶採購單號', dataIndex: 'customerPoNumber', key: 'customerPoNumber' },
     { title: '狀態', dataIndex: 'status', key: 'status', render: (status: B2BAdminRequest['status']) => <Tag color={status === 'stock_confirmed' || status === 'order_confirmed' ? 'green' : status === 'needs_adjustment' ? 'red' : 'gold'}>{statusText[status]}</Tag> },
     { title: '需求試算金額', dataIndex: 'total', key: 'total', align: 'right', render: amount },
-    { title: '正式報價', key: 'quote', render: (_, request) => request.quoteVersion ? <Tag color={request.quoteStatus === 'accepted' ? 'green' : 'blue'}>{request.quoteStatus === 'accepted' ? '客戶已接受' : `第 ${request.quoteVersion} 版已出具`}</Tag> : <Text type="secondary">尚未出具</Text> },
+    { title: '正式報價', key: 'quote', render: (_, request) => request.quoteVersion ? <Tag color={request.quoteStatus === 'accepted' ? 'green' : request.quoteStatus === 'withdrawn' ? 'default' : 'blue'}>{request.quoteStatus === 'accepted' ? '客戶已接受' : request.quoteStatus === 'withdrawn' ? `第 ${request.quoteVersion} 版已撤回` : `第 ${request.quoteVersion} 版已出具`}</Tag> : <Text type="secondary">尚未出具</Text> },
     { title: '操作', key: 'actions', render: (_, request) => <Space wrap>
       <Button size="small" icon={<CopyOutlined />} onClick={() => void copyLink(quotePath(request.id), '需求討論連結')}>複製需求連結</Button>
       {request.quoteVersion ? <Button size="small" icon={<CopyOutlined />} onClick={() => void copyLink(formalQuotePath(request.id, request.quoteVersion!), '正式報價連結')}>複製正式報價</Button> : null}
       {canWrite && (request.status === 'pending_stock_review' || request.status === 'needs_adjustment') ? <Button size="small" onClick={() => openReview(request)}>{request.status === 'needs_adjustment' ? '重新人工核庫' : '人工核庫'}</Button> : null}
       {canManageSupplier && request.status === 'needs_adjustment' ? <Button size="small" onClick={() => void openProcurement(request)}>轉供應商採購單</Button> : null}
       {canWrite && canIssueQuote(request) ? <Button size="small" type="primary" onClick={() => openQuote(request)}>{request.quoteVersion ? '重開新版報價' : '出具正式報價'}</Button> : null}
+      {canWrite && request.quoteStatus === 'accepted' && request.quoteVersion && !request.salesOrderId ? <Button size="small" danger onClick={() => { setWithdrawReason(''); setWithdrawing(request) }}>撤回報價並重核</Button> : null}
       {canWrite && canConfirmRequest(request) ? <Button size="small" type="primary" onClick={() => { setChannelId(''); setWarehouseId(''); setConfirming(request) }}>確認接單</Button> : null}
       {request.salesOrderId ? <Link to="/sales/orders">查看銷售訂單</Link> : null}
     </Space> },
@@ -382,6 +401,12 @@ export default function B2bWorkbenchPage() {
         <Form.Item name="deliveryTerms" label="交貨條件（選填）"><Input.TextArea rows={2} maxLength={500} placeholder="例如指定倉庫交貨" /></Form.Item>
       </Form>
       <Text type="secondary">正式報價仍不預留庫存；客戶接受且業務確認接單後才會預留。</Text>
+    </Modal>
+
+    <Modal title={`撤回已接受報價 · ${withdrawing?.requestNumber || ''}`} open={Boolean(withdrawing)} confirmLoading={saving} onCancel={() => { setWithdrawing(null); setWithdrawReason('') }} onOk={() => void withdrawQuote()} okText="確認撤回並重新核庫" okButtonProps={{ danger: true, disabled: !withdrawReason.trim() }} destroyOnHidden>
+      <Alert type="warning" showIcon style={{ marginBottom: 16 }} message="客戶已接受此版報價。撤回後原連結會標示已撤回，需求回到人工核庫；請先與客戶溝通並記錄原因。已建立銷售訂單的需求不可撤回。" />
+      <label htmlFor="b2b-withdraw-reason">撤回原因（必填）</label>
+      <Input.TextArea id="b2b-withdraw-reason" rows={3} maxLength={1000} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} style={{ marginTop: 8 }} />
     </Modal>
 
     <Modal title={`轉供應商採購單 · ${procurementRequest?.requestNumber || ''}`} open={Boolean(procurementRequest)} confirmLoading={saving} width={850} onCancel={() => { setProcurementRequest(null); setProcurement(null) }} onOk={() => void saveProcurement()} okText="建立來源關聯採購單" okButtonProps={{ disabled: procurementLoading || !procurement?.items.some((item) => item.shortage > item.ordered) }} destroyOnHidden>

@@ -27,6 +27,7 @@ import {
   B2bConfirmDto,
   B2bEntityDto,
   B2bIssueQuoteDto,
+  B2bWithdrawQuoteDto,
   B2bLoginDto,
   B2bPriceDto,
   B2bProductOptionsDto,
@@ -180,6 +181,17 @@ export class B2bAdminController {
     @Req() req: StaffRequest,
   ) {
     return this.service.issueQuote(id, dto, req.user.id);
+  }
+
+  @Post('requests/:id/quotes/:version/withdraw')
+  @RequirePermissions({ resource: 'sales_orders', action: 'create' })
+  withdrawQuote(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('version', ParseIntPipe) version: number,
+    @Body() dto: B2bWithdrawQuoteDto,
+    @Req() req: StaffRequest,
+  ) {
+    return this.service.withdrawQuote(id, version, dto, req.user.id);
   }
 
   @Post('requests/:id/confirm')

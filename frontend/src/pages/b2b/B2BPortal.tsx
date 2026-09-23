@@ -5,7 +5,7 @@ import { Link, Navigate, Outlet, useLocation, useNavigate, useOutletContext, use
 import BrandMark from '../../components/BrandMark'
 import { b2bErrorMessage, b2bService, getB2BToken } from '../../services/b2b.service'
 import type { B2BCatalog, B2BCatalogItem, B2BFormalQuote, B2BProfile, B2BRequestDetail } from '../../services/b2b.service'
-import { buildRequestInput, formalQuotePath, quotePath, statusText } from './order'
+import { buildRequestInput, formalQuotePath, isFormalQuoteExpired, quotePath, statusText } from './order'
 import './B2BPortal.css'
 
 const money = (amount: string | number) =>
@@ -289,7 +289,7 @@ export function B2BFormalQuotePage() {
   if (result.error || !result.quote) return <main className="b2b-main b2b-narrow"><ErrorNotice text={result.error || '找不到正式報價。'} /><Link to={quotePath(id)}>返回採購需求</Link></main>
 
   const quote = result.quote
-  const expired = Boolean(quote.validUntil && quote.validUntil < dayjs().format('YYYY-MM-DD'))
+  const expired = isFormalQuoteExpired(quote.validUntil)
   const canAccept = quote.status === 'sent' && !expired && !acceptError
   const shareLink = `${window.location.origin}${formalQuotePath(id, quoteVersion)}`
 
@@ -311,10 +311,10 @@ export function B2BFormalQuotePage() {
 
   return <main className="b2b-main b2b-narrow">
     <Link className="b2b-back-link" to={quotePath(id)}>← 返回採購需求</Link>
-    <div className="b2b-detail-top"><div><span className="b2b-eyebrow">FORMAL QUOTATION · VERSION {quote.version}</span><h1>正式報價單 {quote.quotationNo}</h1><p>需求編號 {quote.requestNumber} · 貴公司採購單號 {quote.customerPoNumber}</p></div><span className="b2b-status">{quote.status === 'accepted' ? '已接受' : quote.status === 'superseded' ? '已由新版取代' : expired ? '已過有效期限' : '待接受'}</span></div>
-    <div className="b2b-review-banner"><strong>{quote.status === 'accepted' ? '您已接受此版報價' : quote.status === 'superseded' ? '此版本已由新版報價取代' : expired ? '此報價已過有效期限' : '請核對後明確接受'}</strong><span>{quote.status === 'accepted' ? `接受時間：${quote.acceptedAt ? dateTime(quote.acceptedAt) : '已記錄'}` : '此頁內容為已出具的固定版本。接受後業務會再確認接單與庫存預留；若資料有誤，請先與業務窗口聯繫。'}</span></div>
+    <div className="b2b-detail-top"><div><span className="b2b-eyebrow">FORMAL QUOTATION · VERSION {quote.version}</span><h1>正式報價單 {quote.quotationNo}</h1><p>需求編號 {quote.requestNumber} · 貴公司採購單號 {quote.customerPoNumber}</p></div><span className="b2b-status">{quote.status === 'accepted' ? '已接受' : quote.status === 'withdrawn' ? '已撤回' : quote.status === 'superseded' ? '已由新版取代' : expired ? '已過有效期限' : '待接受'}</span></div>
+    <div className="b2b-review-banner"><strong>{quote.status === 'accepted' ? '您已接受此版報價' : quote.status === 'withdrawn' ? '此版報價已撤回' : quote.status === 'superseded' ? '此版本已由新版報價取代' : expired ? '此報價已過有效期限' : '請核對後明確接受'}</strong><span>{quote.status === 'withdrawn' ? `撤回時間：${quote.withdrawnAt ? dateTime(quote.withdrawnAt) : '已記錄'}。原因：${quote.withdrawalReason || '請洽業務窗口'}` : quote.status === 'accepted' ? `接受時間：${quote.acceptedAt ? dateTime(quote.acceptedAt) : '已記錄'}` : '此頁內容為已出具的固定版本。接受後業務會再確認接單與庫存預留；若資料有誤，請先與業務窗口聯繫。'}</span></div>
     <section className="b2b-detail-card">
-      <div className="b2b-detail-grid"><div><small>報價單號</small><strong>{quote.quotationNo}</strong></div><div><small>版本</small><strong>第 {quote.version} 版</strong></div><div><small>有效至</small><strong>{quote.validUntil || '未設定'}</strong></div><div><small>預計交期</small><strong>{quote.deliveryDate || '待確認'}</strong></div></div>
+      <div className="b2b-detail-grid"><div><small>報價單號</small><strong>{quote.quotationNo}</strong></div><div><small>報價日期</small><strong>{quote.quotationDate}</strong></div><div><small>版本</small><strong>第 {quote.version} 版</strong></div><div><small>有效至</small><strong>{quote.validUntil || '未設定'}</strong></div><div><small>賣方</small><strong>{quote.sellerName}</strong><small>統編：{quote.sellerTaxId || '未提供'}</small></div><div><small>買方</small><strong>{quote.buyerName}</strong><small>統編：{quote.buyerTaxId || '未提供'}</small></div><div><small>預計交期</small><strong>{quote.deliveryDate || '待確認'}</strong></div></div>
       <h2>報價品項</h2><div className="b2b-detail-items">{quote.items.map((item) => <div key={item.requestItemId}><span><strong>{item.name}</strong><small>{item.sku} · {item.quantity} 件</small></span><span>{money(item.unitPrice)} / 件</span><strong>{money(item.total)}</strong></div>)}</div>
       <div className="b2b-detail-totals"><div><span>商品小計</span><strong>{money(quote.subtotal)}</strong></div><div><span>稅額</span><strong>{money(quote.tax)}</strong></div><div className="b2b-grand-total"><span>報價總額</span><strong>{money(quote.total)}</strong></div></div>
       {quote.paymentTerms ? <div className="b2b-detail-note"><small>付款條件</small><p>{quote.paymentTerms}</p></div> : null}

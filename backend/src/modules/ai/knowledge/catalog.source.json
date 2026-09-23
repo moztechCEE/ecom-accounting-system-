@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reviewedBaseCommit": "9165c7123b10750b598a95f9badfc9c00ed04abd",
+  "reviewedBaseCommit": "38a34b3a5faacf003820f56baed5c32039c1fc38",
   "locales": [
     "zh-TW",
     "en"
@@ -841,13 +841,13 @@
       "group": "inventory",
       "sections": {
         "steps": [
-          "先選公司；有採購建立權限者在採購單頁選擇該公司有效供應商與商品，填入日期、原幣單價、正整數數量、幣別與匯率後建立採購單。若選項缺少主檔，先到供應商或商品管理建檔。B2B 需求人工核庫不足時，也可從客戶採購工作台檢視每行缺口與既有關聯採購量，僅就尚未採購的缺口建立來源關聯採購單。",
+          "先選公司；有採購建立權限者在採購單頁選擇該公司有效供應商與商品，填入日期、原幣單價、正整數數量、幣別與匯率後建立採購單。若選項缺少主檔，先到供應商或商品管理建檔。B2B 需求人工核庫不足時，可從獨立的「客戶缺貨採購」入口檢視缺口與既有關聯採購量，僅就尚未採購的缺口建立來源關聯採購單。",
           "在待收貨採購單開啟「運費與到岸成本」，逐品項填本次總計費重量，輸入每公斤運費、運費幣別與必要匯率，先試算再保存估算。",
           "選擇收貨倉庫並核對品項數量；需序號的商品填齊序號後確認收貨入庫，再查看已保存的成本分攤。若採購單來自 B2B 缺口，收貨後回客戶採購工作台重新人工核庫，確認可供量與交期。"
         ],
         "boundaries": [
           "運費與到岸成本在收貨前可修改；試算或保存估算都不增加庫存，收貨才建立庫存與成本紀錄，收貨後只能查看估算。",
-          "採購單、收貨、應付與付款不是同一狀態，不能只憑建立採購單認定已進貨；B2B 來源關聯採購單不會自動完成客戶核庫、出具報價或預留庫存。",
+          "採購單、收貨、應付與付款不是同一狀態，不能只憑建立採購單認定已進貨；B2B 已收或取消的採購單不再占用未收缺口。若在上次核庫後收到關聯採購單，系統拒絕再採購，須先由業務重新人工核庫。來源關聯採購單不會自動出具報價或預留庫存。",
           "建單需要採購建立權限與公司範圍；收貨及運費試算／保存另依既有採購角色授權，指南不提供繞過 API 授權的直接執行。"
         ],
         "related": [
@@ -855,7 +855,8 @@
           "products",
           "accounts-payable",
           "warehouse",
-          "b2b-staff-workbench"
+          "b2b-staff-workbench",
+          "b2b-shortage-procurement"
         ]
       },
       "translations": {
@@ -869,13 +870,13 @@
           ],
           "sections": {
             "steps": [
-              "Select the company. Staff with purchase creation access choose an active vendor and products from that company, enter date, currency, exchange rate, unit costs and positive integer quantities, then create the purchase order. Create missing master records in Vendors or Products first. For a B2B request with a manually reviewed shortage, the customer procurement workbench shows each line's shortage and already ordered quantity; create a source-linked supplier purchase order only for the remaining shortage.",
+              "Select the company. Staff with purchase creation access choose an active vendor and products from that company, enter date, currency, exchange rate, unit costs and positive integer quantities, then create the purchase order. Create missing master records in Vendors or Products first. For a manually reviewed B2B shortage, use the separate Customer shortage procurement page to inspect each line's shortage and linked open-order quantity; create a source-linked supplier purchase order only for the unpurchased shortage.",
               "On a pending order, open Landed cost, enter each line's total chargeable weight, freight per kilogram, currency and any exchange rate; preview and then save the estimate.",
               "Choose the receiving warehouse and verify quantities. Enter serial numbers where required, receive the goods, and review the saved cost allocation. After receiving a B2B shortage-linked order, return to the customer procurement workbench for a fresh manual stock and delivery review."
             ],
             "boundaries": [
               "Landed cost can be changed before receipt. Previewing or saving an estimate does not add stock; receipt records inventory and cost, after which the estimate is read-only.",
-              "A purchase order, receipt, payable and payment have separate states; creation alone does not prove receipt. A B2B source-linked purchase order does not automatically confirm customer stock, issue a quote or reserve inventory.",
+              "A purchase order, receipt, payable and payment have separate states; creation alone does not prove receipt. Received or cancelled linked orders no longer consume the open shortage. If a linked order arrived after the last stock review, a new purchase order is blocked until sales manually reviews stock again. A linked order does not automatically issue a quote or reserve inventory.",
               "Creation requires purchase creation permission and company access. Receiving and landed-cost actions retain their purchasing role gate; this guide does not bypass API authorization."
             ],
             "related": [
@@ -883,7 +884,8 @@
               "products",
               "accounts-payable",
               "warehouse",
-              "b2b-staff-workbench"
+              "b2b-staff-workbench",
+              "b2b-shortage-procurement"
             ]
           }
         }
@@ -1736,11 +1738,11 @@
         "steps": [
           "以公司內的客戶搜尋選擇對象，設定報價日期、有效期限與幣別，填寫付款及交貨條件。",
           "加入品項、數量與價格並儲存，開啟報價預覽後列印或存成 PDF。",
-          "由 B2B 客戶採購需求產生的正式報價，應在客戶採購工作台完成人工核庫後開立；客戶以專用入口登入、查看最新版並明確接受。"
+          "由 B2B 客戶採購需求產生的正式報價，應在客戶採購工作台完成人工核庫後開立固定版本；客戶以專用入口登入、查看最新版並明確接受。若客戶已接受但尚未確認銷單，業務可在客戶採購工作台填原因撤回，重新人工核庫後再出新版。"
         ],
         "boundaries": [
           "內部備註與顧客列印備註用途不同；輸出前先檢查顧客版內容。",
-          "儲存或下載一般報價不表示已寄出、客戶接受、轉訂單或收到款項。B2B 正式報價的接受紀錄只能由客戶入口建立，員工不得在一般報價狀態欄代替客戶接受。"
+          "儲存或下載一般報價不表示已寄出、客戶接受、轉訂單或收到款項。B2B 正式報價的接受紀錄只能由客戶入口建立，員工不得在一般報價狀態欄代替客戶接受；撤回原版保留歷史與原因，原客戶接受不得用來確認新銷單。"
         ],
         "related": [
           "customers",
@@ -1761,11 +1763,11 @@
             "steps": [
               "Search for a customer in the selected company, set the quotation date, validity and currency, then enter payment and delivery terms.",
               "Add lines, quantities and prices, save, and open the preview to print or save a PDF.",
-              "For a formal quote sourced from a B2B customer request, first complete manual stock review and issue it from the customer procurement workbench. The customer signs in to view and explicitly accept the latest version."
+              "For a formal quote sourced from a B2B customer request, first complete manual stock review and issue a fixed version from the customer procurement workbench. The customer signs in to view and explicitly accept the latest version. If accepted but not yet converted to an order, sales can record a reason and withdraw it, then manually re-review stock before issuing a new version."
             ],
             "boundaries": [
               "Internal notes and customer-facing print notes serve different purposes; inspect the customer view before export.",
-              "Saving or downloading a regular quotation does not prove sending, acceptance, order conversion or payment. Only the customer portal can record acceptance of a B2B formal quote; staff cannot mark it accepted through the general quotation status control."
+              "Saving or downloading a regular quotation does not prove sending, acceptance, order conversion or payment. Only the customer portal can record acceptance of a B2B formal quote; staff cannot mark it accepted through the general quotation status control. A withdrawn version remains in history with its reason, and its former acceptance cannot authorize a new order."
             ],
             "related": [
               "customers",
@@ -1779,8 +1781,10 @@
         "frontend/src/config/navigation.ts",
         "frontend/src/App.tsx",
         "frontend/src/pages/SalesQuotationsPage.tsx",
+        "frontend/src/pages/b2b/B2bWorkbenchPage.tsx",
         "backend/src/modules/sales/sales.controller.ts",
-        "backend/src/modules/sales/services/sales-quotation.service.ts"
+        "backend/src/modules/sales/services/sales-quotation.service.ts",
+        "backend/src/modules/b2b/b2b.service.ts"
       ],
       "permissions": [
         "sales_orders:read",
@@ -3805,11 +3809,11 @@
       "sections": {
         "steps": [
           "在客戶商品目錄選擇數量、填入客戶採購單號及備註，送出後取得採購需求編號與價格試算；可複製需登入的需求討論連結至 LINE 與業務討論。",
-          "於「我的採購需求」查看逐行人工核庫狀態、價格快照、確認數量與交期。員工完成全數核庫並出具正式報價後，開啟最新版連結，核對固定的品項、價格、總額、條件與有效期限，再按「確認接受此版正式報價」。"
+          "於「我的採購需求」查看逐行人工核庫狀態、價格快照、確認數量與交期。員工完成全數核庫並出具正式報價後，開啟最新版連結，核對報價日期、買賣雙方、固定品項、價格、總額、條件、交期與有效期限，再按「確認接受此版正式報價」。"
         ],
         "boundaries": [
           "新需求與需求討論連結僅是價格試算；送出、分享、出具正式報價或客戶接受均不預留或扣除庫存，也不等於 ERP 已確認接單。接受後仍由業務確認銷單，才建立庫存預留。",
-          "正式報價連結需要客戶登入且只能查看所屬公司資料；過期或被新版取代的報價不能接受。數量差異須由業務協調並重新人工核庫，原需求價格快照不會因日後改價而自動改寫。"
+          "正式報價連結需要客戶登入且只能查看所屬公司資料；過期、被新版取代或由業務撤回的報價不能接受。已接受但尚未接單的報價若被撤回，原連結保留撤回原因，業務須重新人工核庫並出新版；原需求價格快照不會因日後改價而自動改寫。"
         ],
         "related": ["b2b-customer-portal", "b2b-staff-workbench", "sales-quotations", "sales-orders"]
       },
@@ -3822,11 +3826,11 @@
           "sections": {
             "steps": [
               "Choose quantities in the customer catalog, enter the customer PO number and notes, and submit to receive a request number and price estimate. Copy the login-protected request link to discuss it with sales through LINE.",
-              "In My purchase requests, review line-by-line manual stock status, snapshotted prices, confirmed quantities and delivery date. Once staff fully review stock and issue a formal quote, open the latest version, inspect its fixed lines, prices, total, terms and expiry, then explicitly accept that version."
+              "In My purchase requests, review line-by-line manual stock status, snapshotted prices, confirmed quantities and delivery date. Once staff fully review stock and issue a formal quote, open the latest version, inspect its quotation date, seller and buyer, fixed lines, prices, total, terms, delivery date and expiry, then explicitly accept that version."
             ],
             "boundaries": [
               "A new request and discussion link are only a price estimate. Submitting, sharing, issuing a formal quote or accepting it neither reserves nor deducts stock and does not confirm an ERP order. Sales must still confirm the order before reservation is created.",
-              "The formal quote link requires customer login and is scoped to the customer's company. Expired or superseded versions cannot be accepted. Sales must resolve quantity differences and manually re-review stock; later price edits do not rewrite the request's price snapshot."
+              "The formal quote link requires customer login and is scoped to the customer's company. Expired, superseded or withdrawn versions cannot be accepted. An accepted quote withdrawn before order confirmation remains visible with its reason; sales must manually re-review stock and issue a new version. Later price edits do not rewrite the request's price snapshot."
             ],
             "related": ["b2b-customer-portal", "b2b-staff-workbench", "sales-quotations", "sales-orders"]
           }
@@ -3852,18 +3856,18 @@
       "sections": {
         "steps": [
           "先選公司；若客戶或供應商尚無主檔，先到客戶管理或供應商管理建立，回到此工作台搜尋主檔並建立綁定的外部帳號；可停用帳號或設定新密碼，再搜尋商品發布目錄與設定客戶有效專屬價格。",
-          "收到需求後逐行人工核對庫存，填入確認數量、交期與必要備註；可複製需登入的需求討論連結至 LINE 與客戶協調。若核庫不足，具採購建立權限者可檢視每行缺口與既有關聯採購量，選供應商就尚未採購的缺口建立來源關聯採購單。收貨入庫後須重新人工核庫。",
-          "逐行全數確認後，填寫正式報價有效期限與需要的付款、交貨條件並出具固定版本；複製正式報價連結給客戶登入查閱與明確接受。若調整未接受版本的條件，重新出具新版並改用新版連結。",
+          "收到需求後逐行人工核對庫存，填入確認數量、交期與必要備註；可複製需登入的需求討論連結至 LINE 與客戶協調。若核庫不足，具採購建立權限者可在獨立的「客戶缺貨採購」入口核對未收採購量，選供應商就尚未採購的缺口建立來源關聯採購單。收貨入庫後須重新人工核庫。",
+          "逐行全數確認後，填寫正式報價有效期限與需要的付款、交貨條件並出具固定版本；複製正式報價連結給客戶登入查閱與明確接受。未接受版本的條件若變更，重新出具新版。若已接受而尚未接單，業務可填撤回原因使需求回待核庫；重新核庫後再出新版。",
           "客戶接受最新有效版本後，選擇銷售通路與出貨倉庫確認接單，建立 ERP 銷售訂單、預留庫存及後續 WMS 出貨交接。"
         ],
         "boundaries": [
           "專屬價的「有效至」為台灣日期，設定當天結束前仍有效；隔日零時起不再套用該專屬價，回到已發布目錄價。",
-          "人工核庫、來源關聯採購單與出具正式報價都不預留、不扣正式庫存；數量有異動時必填核對備註，須待收貨或其他供貨處理後重新人工核庫，不能直接確認接單。",
-          "正式報價固定品項、金額與條件；被新版取代或過期版本不能接受。員工無法代客戶接受，客戶接受後仍須業務確認接單才預留庫存。若需調整原需求品項或價格，應與客戶協調重新送出需求。",
-          "客戶帳號使用獨立登入。供應商帳號目前只有建檔、停用與重設密碼，供應商登入及查採購單尚未開放；供應商帳號操作還需採購權限。",
+          "人工核庫、來源關聯採購單與出具正式報價都不預留、不扣 Corely ERP 正式庫存；已收或取消採購不占未收缺口，收貨後若未重核庫，新增來源關聯採購會被拒絕。數量有異動時必填核對備註，不能直接確認接單。",
+          "正式報價固定品項、金額與條件；被新版取代、過期或撤回版本不能接受。員工無法代客戶接受，客戶接受後仍須業務確認接單才預留庫存。已接單不得撤回該版報價；若需調整原需求品項或價格，應與客戶協調重新送出需求。",
+          "客戶帳號使用獨立登入。供應商帳號可在獨立採購入口建檔、停用與重設密碼，供應商登入及查採購單尚未開放；供應商帳號變更需採購建立權限。",
           "員工建立帳號時的初始密碼不會在頁面持續顯示；此工作台不會直接發送 LINE 訊息或證明 WMS 已出貨。"
         ],
-        "related": ["b2b-customer-portal", "b2b-purchase-requests", "sales-quotations", "purchase-orders", "sales-orders", "wms-handover-reconciliation"]
+        "related": ["b2b-customer-portal", "b2b-purchase-requests", "sales-quotations", "purchase-orders", "b2b-shortage-procurement", "b2b-supplier-accounts", "sales-orders", "wms-handover-reconciliation"]
       },
       "translations": {
         "en": {
@@ -3874,18 +3878,18 @@
           "sections": {
             "steps": [
               "Select a company. Create missing customer or vendor master records on their respective pages, then search for those records in this workbench to create linked external accounts. You can deactivate accounts or set new passwords, then search for products to publish catalog items and set valid customer prices.",
-              "Manually check stock for each request line and record confirmed quantities, delivery date and required notes. Copy the login-protected request discussion link for coordination through LINE. If stock is short, staff with purchase creation access can inspect each line's shortage and existing linked purchase quantity, then create a source-linked supplier purchase order for the unpurchased shortage. After receipt, manually review stock again.",
-              "When every line is fully confirmed, set the formal quote expiry and any payment or delivery terms, then issue a fixed version. Copy its formal quote link for the customer to sign in, review and explicitly accept. If the terms of an unaccepted quote change, issue a new version and share the new link.",
+              "Manually check stock for each request line and record confirmed quantities, delivery date and required notes. Copy the login-protected request discussion link for coordination through LINE. If stock is short, staff with purchase creation access can use the separate Customer shortage procurement page to inspect open linked orders and create a source-linked supplier purchase order for the unpurchased shortage. After receipt, manually review stock again.",
+              "When every line is fully confirmed, set the formal quote expiry and any payment or delivery terms, then issue a fixed version. Copy its formal quote link for the customer to sign in, review and explicitly accept. Reissue an unaccepted quote if terms change. If accepted but not yet converted to an order, sales can record a withdrawal reason; this returns the request to manual stock review before a new version is issued.",
               "After the customer accepts the latest valid version, choose a sales channel and shipping warehouse to confirm the ERP sales order, reserve inventory and start WMS fulfilment handoff."
             ],
             "boundaries": [
               "A customer price's Valid through date is a Taiwan calendar date. The override remains effective for that entire day; from the following midnight, the published catalog price applies instead.",
-              "Manual stock review, a source-linked purchase order and quote issuance do not reserve or deduct posted inventory. Quantity changes require a review note and fresh manual review after receipt or other supply resolution; they cannot be directly confirmed as an order.",
-              "A formal quote fixes its lines, prices and terms. Superseded or expired versions cannot be accepted, and staff cannot accept on the customer's behalf. Customer acceptance still requires sales to confirm the order before reservation. To change the original request's lines or prices, coordinate a new customer request.",
-              "Customer accounts have a separate login. Supplier accounts can currently be created, deactivated and reset, but supplier login and purchase-order viewing are not open; supplier account changes also require purchasing access.",
+              "Manual stock review, a source-linked purchase order and quote issuance do not reserve or deduct Corely ERP's posted inventory. Received or cancelled orders no longer consume the open shortage; a new linked order is blocked after receipt until staff manually re-review stock. Quantity changes require a review note and cannot be directly confirmed as an order.",
+              "A formal quote fixes its lines, prices and terms. Superseded, expired or withdrawn versions cannot be accepted, and staff cannot accept on the customer's behalf. Customer acceptance still requires sales order confirmation before reservation. An already confirmed order cannot have its accepted quote withdrawn. To change the original request's lines or prices, coordinate a new customer request.",
+              "Customer accounts have a separate login. Supplier accounts can be created, deactivated and reset through a separate purchasing page, but supplier login and purchase-order viewing are not open; supplier account changes require purchase creation access.",
               "The initial password does not remain visible on the page. This workbench does not send LINE messages or prove WMS shipment."
             ],
-            "related": ["b2b-customer-portal", "b2b-purchase-requests", "sales-quotations", "purchase-orders", "sales-orders", "wms-handover-reconciliation"]
+            "related": ["b2b-customer-portal", "b2b-purchase-requests", "sales-quotations", "purchase-orders", "b2b-shortage-procurement", "b2b-supplier-accounts", "sales-orders", "wms-handover-reconciliation"]
           }
         }
       },
@@ -3893,10 +3897,117 @@
         "frontend/src/config/navigation.ts",
         "frontend/src/App.tsx",
         "frontend/src/pages/b2b/B2bWorkbenchPage.tsx",
+        "frontend/src/pages/B2bProcurementPage.tsx",
+        "frontend/src/pages/SupplierAccountsPage.tsx",
         "backend/src/modules/b2b/b2b.controller.ts",
         "backend/src/modules/b2b/b2b.service.ts"
       ],
       "permissions": ["sales_orders:read"]
+    },
+    {
+      "id": "b2b-shortage-procurement",
+      "title": "客戶缺貨採購",
+      "summary": "採購人員檢視已人工核庫的 B2B 缺口，建立保留需求行來源的供應商採購單。",
+      "keywords": ["客戶缺貨採購", "採購缺口", "來源關聯採購", "B2B"],
+      "path": "/purchasing/b2b-shortages",
+      "module": "purchase",
+      "category": "採購庫存",
+      "group": "inventory",
+      "sections": {
+        "steps": [
+          "先選事業別，在「客戶缺貨採購」查看已由業務人工核庫且數量不足的需求；展開需求號，核對 SKU、品名、申購量、已確認量與缺口。",
+          "開啟需求並核對關聯採購單及每行未收採購量，選有效供應商、日期、幣別與匯率，逐行填寫不超過剩餘缺口的數量與原幣成本後建立採購單。",
+          "在採購單頁完成運費暫估與入庫；收貨後請業務重新人工核庫，再決定是否尚需採購或可以出具正式報價。"
+        ],
+        "boundaries": [
+          "此入口需授權公司之採購建立權限，只顯示採購所需的需求號與品項數量，不顯示客戶登入帳號或專屬銷價。供應商主檔需先由授權人員建立。",
+          "只計未收且未取消的來源關聯採購量。若關聯採購在上次核庫後收貨，新建採購會被阻擋，不能把舊缺口直接再開單；須先由業務重新核庫。重送相同請求鍵與內容會返回原採購單。",
+          "建立採購單不等於入庫、客戶庫存確認、正式報價、銷單預留或付款；Corely ERP 收貨入庫才增加正式庫存。"
+        ],
+        "related": ["purchase-orders", "b2b-staff-workbench", "b2b-supplier-accounts", "products"]
+      },
+      "translations": {
+        "en": {
+          "title": "Customer shortage procurement",
+          "summary": "Purchasing staff review manually checked B2B shortages and create supplier purchase orders linked to the source request lines.",
+          "category": "Purchasing and inventory",
+          "keywords": ["Customer shortage procurement", "B2B shortage", "linked purchase order"],
+          "sections": {
+            "steps": [
+              "Select the company. On Customer shortage procurement, review requests that sales manually marked short. Expand a request number and compare SKU, item name, requested quantity, confirmed quantity and shortage.",
+              "Open the request and inspect linked purchase orders and each line's open ordered quantity. Choose an active vendor, date, currency and exchange rate; enter original-currency costs and quantities within each remaining shortage, then create the supplier purchase order.",
+              "On the purchase-order page, estimate freight and receive stock. After receipt, ask sales to manually review stock again before deciding whether more procurement or a formal quote is appropriate."
+            ],
+            "boundaries": [
+              "This page requires purchase creation permission in the selected company. It shows request numbers and item quantities needed by purchasing, not customer login accounts or private sales prices. Authorized staff must create the vendor master record first.",
+              "Only linked orders that are neither received nor cancelled consume the open shortage. Receipt after the last stock review blocks another linked order until sales reviews stock again; do not reuse the old shortage. Replaying the same request key and body returns the original purchase order.",
+              "Creating a purchase order is not receipt, customer stock confirmation, a formal quote, sales reservation or payment. Only receipt in Corely ERP increases posted inventory."
+            ],
+            "related": ["purchase-orders", "b2b-staff-workbench", "b2b-supplier-accounts", "products"]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/B2bProcurementPage.tsx",
+        "frontend/src/services/purchase.service.ts",
+        "backend/src/modules/purchase/purchase.controller.ts",
+        "backend/src/modules/purchase/purchase-b2b-queue.service.ts",
+        "backend/src/modules/purchase/purchase.service.ts"
+      ],
+      "permissions": ["purchase_orders:create"]
+    },
+    {
+      "id": "b2b-supplier-accounts",
+      "title": "供應商帳號",
+      "summary": "採購人員檢視供應商聯絡帳號，依權限建立、啟停與設定新密碼；供應商自助入口尚未開放。",
+      "keywords": ["供應商帳號", "建立供應商登入", "重設供應商密碼", "B2B"],
+      "path": "/purchasing/supplier-accounts",
+      "module": "purchase",
+      "category": "採購庫存",
+      "group": "inventory",
+      "sections": {
+        "steps": [
+          "選擇事業別，在「供應商帳號」查看供應商、聯絡人姓名、Email 與啟用狀態；若缺少供應商主檔，先請有權限的人員在供應商管理建立。",
+          "具採購建立權限者可選擇有效供應商並填姓名、Email 與至少 12 字元的新密碼建立帳號；也可停用、重新啟用或替既有帳號設定新密碼。",
+          "初始或重設密碼不在頁面持續顯示，須透過既有安全流程交付；重設後原登入憑證失效。"
+        ],
+        "boundaries": [
+          "查看需所選公司採購讀取權限；建立、啟停與重設另需採購建立權限，且限授權公司。清單不提供客戶帳號、專屬銷價或密碼雜湊。",
+          "供應商帳號目前只是管理資料，尚不能登入客戶採購前台，也沒有供應商自助登入或採購單查詢入口；建立帳號不表示採購單已寄送或供應商已接單。"
+        ],
+        "related": ["vendors", "purchase-orders", "b2b-shortage-procurement", "b2b-staff-workbench"]
+      },
+      "translations": {
+        "en": {
+          "title": "Supplier accounts",
+          "summary": "Purchasing staff view supplier contact accounts and, with the required permission, create, enable, disable or reset them. Supplier self-service is not open.",
+          "category": "Purchasing and inventory",
+          "keywords": ["Supplier accounts", "supplier password reset", "B2B"],
+          "sections": {
+            "steps": [
+              "Select the company and open Supplier accounts to view vendor, contact name, email and active status. If the vendor master record is missing, authorized staff create it in Vendors first.",
+              "Staff with purchase creation permission can choose an active vendor and enter a name, email and new password of at least 12 characters to create an account. They can also deactivate, reactivate or set a new password for an existing account.",
+              "Initial and reset passwords are not kept visible on the page; deliver them through the established secure process. A reset revokes old sessions."
+            ],
+            "boundaries": [
+              "Viewing requires purchase read permission for the selected company; creation, status changes and resets additionally require purchase creation permission. The list contains no customer accounts, private sales prices or password hashes.",
+              "Supplier accounts are currently administrative records: they cannot access the customer purchasing portal, and supplier self-service sign-in or purchase-order viewing is not available. Creating an account does not send a PO or prove supplier acceptance."
+            ],
+            "related": ["vendors", "purchase-orders", "b2b-shortage-procurement", "b2b-staff-workbench"]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/SupplierAccountsPage.tsx",
+        "frontend/src/services/b2b-supplier-admin.service.ts",
+        "backend/src/modules/b2b/b2b.controller.ts",
+        "backend/src/modules/b2b/b2b.service.ts"
+      ],
+      "permissions": ["purchase_orders:read"]
     },
     {
       "id": "wms-handover-reconciliation",
@@ -3915,8 +4026,8 @@
         ],
         "boundaries": [
           "裝箱完成不會列為已交運，也不會正式扣庫；只有 WMS 實際交運事件且有箱件與物流證據才進待核銷。",
-          "待核銷期間保留原銷單預留；逐行核准才扣 ERP 正式庫存，同一行重試不可重複扣庫，部分出貨只過帳已核准量。",
-          "此頁讀取需要庫存讀取權限，核准另需庫存更新權限；409 衝突代表須重新核對，不可視作過帳成功。"
+          "Corely ERP 管正式庫存帳；WMS 保存實物交運證據，不直接扣 ERP 帳面庫存。待核銷期間保留原銷單預留；逐行核准才扣正式庫存，同一行重試不可重複扣庫，部分出貨只過帳已核准量。",
+          "此頁讀取需要庫存讀取權限，核准另需庫存更新權限；409 衝突代表須重新核對，不可視作過帳成功。ERP／WMS 的 60＋40 件配對只完成隔離 DEV 合成試驗，不代表實體交運或正式環境驗收。"
         ],
         "related": ["warehouse", "sales-orders", "purchase-orders"]
       },
@@ -3934,8 +4045,8 @@
             ],
             "boundaries": [
               "Packing is not actual handover or final stock deduction. Only a real WMS handover event with package and logistics evidence enters reconciliation.",
-              "The sales-order reservation remains while pending. Each approved line posts final ERP inventory once; retries must not deduct again, and partial shipments post only approved quantities.",
-              "Reading requires inventory read access; approval additionally needs inventory update access. A 409 conflict requires a new review and is not a successful posting."
+              "Corely ERP owns the posted inventory ledger; WMS stores physical handover evidence and does not directly deduct ERP on-hand stock. The sales-order reservation remains while pending. Each approved line posts final inventory once; retries must not deduct again, and partial shipments post only approved quantities.",
+              "Reading requires inventory read access; approval additionally needs inventory update access. A 409 conflict requires a new review and is not a successful posting. The paired ERP/WMS 60-plus-40 trial used synthetic isolated DEV data; it does not prove physical handover or production acceptance."
             ],
             "related": ["warehouse", "sales-orders", "purchase-orders"]
           }

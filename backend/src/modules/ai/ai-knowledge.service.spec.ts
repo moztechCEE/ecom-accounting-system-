@@ -116,6 +116,8 @@ describe('Knowledge ACL and route parity', () => {
 
   it.each([
     ['/sales/quotations', 'purchase_orders:read'],
+    ['/purchasing/b2b-shortages', 'purchase_orders:create'],
+    ['/purchasing/supplier-accounts', 'purchase_orders:read'],
     ['/sales/invoices', 'accounts:read'],
     ['/sales/after-sales/quotes', 'after_sales_cases:read'],
     ['/manufacturing/assembly', 'inventory:read'],

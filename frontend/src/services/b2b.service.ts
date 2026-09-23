@@ -54,7 +54,7 @@ export interface B2BRequestDetail {
   }>
   quotePath: string
   quoteVersion: number | null
-  quoteStatus: 'sent' | 'accepted' | 'superseded' | null
+  quoteStatus: 'sent' | 'accepted' | 'superseded' | 'withdrawn' | null
   formalQuotePath: string | null
 }
 
@@ -64,10 +64,17 @@ export interface B2BFormalQuote {
   requestNumber: string
   customerPoNumber: string
   quotationNo: string
+  quotationDate: string
+  sellerName: string
+  sellerTaxId: string | null
+  buyerName: string
+  buyerTaxId: string | null
   version: number
-  status: 'sent' | 'accepted' | 'superseded'
+  status: 'sent' | 'accepted' | 'superseded' | 'withdrawn'
   validUntil: string | null
   acceptedAt: string | null
+  withdrawnAt: string | null
+  withdrawalReason: string | null
   currency: 'TWD'
   subtotal: string
   tax: string
