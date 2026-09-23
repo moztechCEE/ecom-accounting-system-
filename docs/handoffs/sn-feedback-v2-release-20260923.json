@@ -1,0 +1,154 @@
+{
+  "build": "8f8768d9-8888-4e65-8157-8b91f00f8a98",
+  "commit": "53baac06cdf928052e3f33befa66f160ef1554b3",
+  "before": {
+    "corely-erp-api-dev": {
+      "service": "corely-erp-api-dev",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "corely-erp-api-dev-00003-2l2"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev@sha256:a137b99bc82b48f12de0ac06fda20cdfe762f15c11b87ed4983281f932a84236"
+    },
+    "corely-erp-dev": {
+      "service": "corely-erp-dev",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "corely-erp-dev-00005-zf8"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:402a73a0c489446fe2e1cfb223298e25d65a5c9c6b39fd3284f4e9b9a13d080b"
+    }
+  },
+  "after": [
+    {
+      "service": "corely-erp-api-dev",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "corely-erp-api-dev-00004-nt4"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev@sha256:fbb7b380cd13026d7dccffd8a5f9c2cdec4303c8abe9395d030083577a661120"
+    },
+    {
+      "service": "corely-erp-dev",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "corely-erp-dev-00006-rjs"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:a7d100845df6f8d19ff3b06d895071178e5e3823e9b71b2861d04a5a7514de55"
+    }
+  ],
+  "productionAndWmsBefore": [
+    {
+      "service": "ecom-accounting-backend",
+      "traffic": [
+        {
+          "percent": 100,
+          "revisionName": "ecom-accounting-backend-00506-ray",
+          "tag": "asro-0902",
+          "url": "https://asro-0902---ecom-accounting-backend-sp5g377smq-de.a.run.app"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/ecom-accounting-backend@sha256:811dda7618cd04a4c0ca638522b9d18905112e995d9c49ac79a042ff1e0efc25"
+    },
+    {
+      "service": "ecom-accounting-frontend",
+      "traffic": [
+        {
+          "percent": 100,
+          "revisionName": "ecom-accounting-frontend-00270-vob",
+          "tag": "c-34521877689-1",
+          "url": "https://c-34521877689-1---ecom-accounting-frontend-sp5g377smq-de.a.run.app"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/ecom-accounting-frontend:6814f67f1381ac1eaf06a61af55855a9ea3cee6c"
+    },
+    {
+      "service": "corely-wms",
+      "traffic": [
+        {
+          "percent": 100,
+          "revisionName": "corely-wms-import-footer-20260917",
+          "tag": "import-footer-candidate",
+          "url": "https://import-footer-candidate---corely-wms-sp5g377smq-de.a.run.app"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-frontend@sha256:99af59f00ba2de28644e8182101b46b5ec6e840a4d619378d4155fd9cba56cf1"
+    },
+    {
+      "service": "corely-wms-dev",
+      "traffic": [
+        {
+          "percent": 100,
+          "revisionName": "corely-wms-dev-batch-16d7668-0923",
+          "tag": "batch-candidate",
+          "url": "https://batch-candidate---corely-wms-dev-sp5g377smq-de.a.run.app"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-frontend@sha256:c153cec4139d2a38af3c62abaf8c120b4e0f444d3d88d9edb6bd1ec6a37c06d0"
+    }
+  ],
+  "productionAndWmsAfter": [
+    {
+      "service": "ecom-accounting-backend",
+      "traffic": [
+        {
+          "percent": 100,
+          "revisionName": "ecom-accounting-backend-00506-ray",
+          "tag": "asro-0902",
+          "url": "https://asro-0902---ecom-accounting-backend-sp5g377smq-de.a.run.app"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/ecom-accounting-backend@sha256:811dda7618cd04a4c0ca638522b9d18905112e995d9c49ac79a042ff1e0efc25"
+    },
+    {
+      "service": "ecom-accounting-frontend",
+      "traffic": [
+        {
+          "percent": 100,
+          "revisionName": "ecom-accounting-frontend-00270-vob",
+          "tag": "c-34521877689-1",
+          "url": "https://c-34521877689-1---ecom-accounting-frontend-sp5g377smq-de.a.run.app"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/ecom-accounting-frontend:6814f67f1381ac1eaf06a61af55855a9ea3cee6c"
+    },
+    {
+      "service": "corely-wms",
+      "traffic": [
+        {
+          "percent": 100,
+          "revisionName": "corely-wms-import-footer-20260917",
+          "tag": "import-footer-candidate",
+          "url": "https://import-footer-candidate---corely-wms-sp5g377smq-de.a.run.app"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-frontend@sha256:99af59f00ba2de28644e8182101b46b5ec6e840a4d619378d4155fd9cba56cf1"
+    },
+    {
+      "service": "corely-wms-dev",
+      "traffic": [
+        {
+          "percent": 100,
+          "revisionName": "corely-wms-dev-batch-16d7668-0923",
+          "tag": "batch-candidate",
+          "url": "https://batch-candidate---corely-wms-dev-sp5g377smq-de.a.run.app"
+        }
+      ],
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-frontend@sha256:c153cec4139d2a38af3c62abaf8c120b4e0f444d3d88d9edb6bd1ec6a37c06d0"
+    }
+  ],
+  "noMigration": true,
+  "environmentPreserved": true
+}

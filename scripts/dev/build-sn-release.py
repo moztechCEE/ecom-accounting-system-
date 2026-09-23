@@ -1,13 +1,14 @@
 """Package reviewed SN dist on the exact currently approved DEV runtime images.
 Adds only QR/barcode dependencies in a separate locked module directory.
 """
-import json,shutil,subprocess,tempfile
+import json,shutil,subprocess,tempfile,sys
 from pathlib import Path
 root=Path(__file__).resolve().parents[2]
 assert not subprocess.check_output(['git','status','--porcelain'],cwd=root).strip(),'Commit reviewed source before build'
 sha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root).decode().strip()
 registry='asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/'
-bases={'backend':('corely-erp-api-dev','a137b99bc82b48f12de0ac06fda20cdfe762f15c11b87ed4983281f932a84236'),'frontend':('corely-erp-dev','402a73a0c489446fe2e1cfb223298e25d65a5c9c6b39fd3284f4e9b9a13d080b')}
+bases={'backend':('corely-erp-api-dev','fbb7b380cd13026d7dccffd8a5f9c2cdec4303c8abe9395d030083577a661120'),'frontend':('corely-erp-dev','a7d100845df6f8d19ff3b06d895071178e5e3823e9b71b2861d04a5a7514de55')}
+if '--frontend-only' in sys.argv: bases={k:v for k,v in bases.items() if k=='frontend'}
 for service,digest in bases.values():
  live=json.loads(subprocess.check_output(['gcloud','run','services','describe',service,'--project=moztech-main-db','--region=asia-east1','--format=json'],stderr=subprocess.DEVNULL))
  traffic=[t for t in live['status']['traffic'] if t.get('percent',0)]

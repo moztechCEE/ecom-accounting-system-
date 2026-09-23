@@ -47,6 +47,8 @@ export default function CartonPreview({
     };
   }, [api, draft, page, key]);
   useEffect(() => {
+    // Keep the currently inspected carton stable until the user closes its list.
+    if (selected) return;
     const update = () => {
       setSelected(null);
       setRefresh((n) => n + 1);
@@ -57,7 +59,7 @@ export default function CartonPreview({
       window.removeEventListener("focus", update);
       clearInterval(interval);
     };
-  }, []);
+  }, [selected]);
   const value = result?.key === key ? result.value : null;
   const error = failure?.key === key ? failure.message : "";
   return (
