@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:3a2cc69682ddd2b77f25da973a740524e867504de2ca1f1141bc4c123f84fdff",
+  "sourceVersion": "sha256:0838d8a5b84f6dc585a1d2b770603b87de987405862efe637e827a6015000198",
   "reviewedBaseCommit": "9165c7123b10750b598a95f9badfc9c00ed04abd",
   "entryCount": 55,
   "groups": [
@@ -122,7 +122,7 @@
     },
     {
       "path": "backend/src/modules/ai/ai.service.ts",
-      "sha256": "907c3c483f6c9fc36f22094ed6b62f89521bcb8d746f741cdee5f08b6dd4d4e5"
+      "sha256": "205936f07978c988fb8f3f1312265416142f40324cf8edb86fffe57d76a09ad9"
     },
     {
       "path": "backend/src/modules/ap/ap.controller.ts",

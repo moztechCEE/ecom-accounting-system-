@@ -10,15 +10,18 @@ export interface AiModel {
   name: string;
   description?: string;
   isExperimental?: boolean;
+  mode?: 'standard' | 'deep';
 }
 
-const DEFAULT_STANDARD_MODEL = 'gemini-2.5-flash';
-const DEFAULT_DEEP_MODEL = 'gemini-2.5-pro';
+const DEFAULT_STANDARD_MODEL = 'gemini-3.5-flash-lite';
+const DEFAULT_DEEP_MODEL = 'gemini-3.5-flash';
 
 const LEGACY_MODEL_ALIASES: Record<string, string> = {
   'gemini-1.5-flash': DEFAULT_STANDARD_MODEL,
   'gemini-1.5-pro': DEFAULT_DEEP_MODEL,
   'gemini-2.0-flash': DEFAULT_STANDARD_MODEL,
+  'gemini-2.5-flash': DEFAULT_STANDARD_MODEL,
+  'gemini-2.5-pro': DEFAULT_DEEP_MODEL,
 };
 
 @Injectable()
@@ -30,11 +33,13 @@ export class AiService {
   private readonly supportedModels: AiModel[] = [
     {
       id: DEFAULT_STANDARD_MODEL,
+      mode: 'standard',
       name: '標準模式',
       description: '速度較快，適合日常問答與建議',
     },
     {
       id: DEFAULT_DEEP_MODEL,
+      mode: 'deep',
       name: '深度模式',
       description: '思考較深，適合分析與判斷',
     },
@@ -128,8 +133,24 @@ export class AiService {
         throw new Error(`provider_http_${response.status}`);
       }
 
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const data = (await response.json()) as {
+        candidates?: Array<{
+          content?: { parts?: Array<{ text?: unknown; thought?: boolean }> };
+        }>;
+      };
+      const parts = data.candidates?.[0]?.content?.parts;
+      // A response can contain several text parts alongside thought summaries
+      // or non-text parts. Only assemble the public answer, preserving its order.
+      const text = Array.isArray(parts)
+        ? parts
+            .filter(
+              (part) =>
+                typeof part?.text === 'string' &&
+                (part.thought === undefined || part.thought === false),
+            )
+            .map((part) => part.text)
+            .join('')
+        : '';
 
       return text || null;
     } catch (error) {

@@ -20,6 +20,7 @@ def run(args):
     manifest = qa.load_manifest(args.manifest)
     test = qa.Acceptance(manifest, qa.validate_base(args.api), 'read-only', args.out, args.with_ai)
     test.receipt['scope'] = 'Corely Claw knowledge and read-only AI; no business writes'
+    test.receipt['modelId'] = args.model_id or 'server-default'
     try:
         test.call('/health/ready')
         test.call('/ai/knowledge', expected=(401,))
@@ -68,13 +69,17 @@ def run(args):
                 ('grounded-guide','如何申請費用並交給直屬主管審核？請說明步驟與付款的差別。'),
                 ('live-scope','請查詢我自己本月的費用申請總筆數與金額。'),
             ]:
-                answer = test.call('/ai/copilot/chat', 'employee', 'POST', {'message':question,'entityId':manifest['entityId'],'currentPath':'/ap/expenses'}, expected=(200, 201))
+                body = {'message':question,'entityId':manifest['entityId'],'currentPath':'/ap/expenses'}
+                if args.model_id:
+                    body['modelId'] = args.model_id
+                answer = test.call('/ai/copilot/chat', 'employee', 'POST', body, expected=(200, 201))
+                test.receipt.setdefault('aiAnswers',{})[label] = answer
+                test.save()
                 test.check(answer.get('status') == 'answered' and bool(answer.get('sources')) and bool(answer.get('checkedAt')), 'real AI ' + label + ' returns evidence')
                 if label == 'grounded-guide':
                     test.check(all(s.get('kind') == 'knowledge' and s.get('sourceVersion') for s in answer['sources']), 'AI workflow answer cites versioned guide evidence')
                 else:
                     test.check(answer.get('scope') == '自己的費用申請' and answer.get('data', {}).get('count') == 0 and answer.get('data', {}).get('total') == 0 and any(s.get('kind') == 'metric' for s in answer['sources']), 'AI live query returns isolated empty QA company and SELF scope')
-                test.receipt.setdefault('aiAnswers',{})[label] = answer
         test.receipt['passed'] = True
         test.save()
     except Exception as exc:
@@ -89,4 +94,5 @@ if __name__ == '__main__':
     parser.add_argument('--api', required=True)
     parser.add_argument('--out', required=True)
     parser.add_argument('--with-ai', action='store_true')
+    parser.add_argument('--model-id', choices=['gemini-3.5-flash-lite', 'gemini-3.5-flash'], help='Optional reviewed model; omission tests the server default')
     run(parser.parse_args())

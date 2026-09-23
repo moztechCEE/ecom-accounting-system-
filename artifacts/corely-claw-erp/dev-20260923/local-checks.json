@@ -1,13 +1,13 @@
 {
-  "verifiedAt": "2026-09-23T13:04:26.453741+00:00",
+  "verifiedAt": "2026-09-23T13:47:37.630444+00:00",
   "backend": {
     "suites": 60,
-    "tests": 368,
+    "tests": 384,
     "passed": true
   },
   "aiFocused": {
-    "suites": 3,
-    "tests": 61,
+    "suites": 4,
+    "tests": 86,
     "passed": true
   },
   "frontendNavigation": {
@@ -38,5 +38,10 @@
     "tests": 10,
     "passed": true
   },
-  "frontendTypecheck": true
+  "frontendTypecheck": true,
+  "frontendModelSelection": {
+    "tests": 6,
+    "passed": true
+  },
+  "providerCompatibility": "Updated standard/deep models; synthetic direct readiness passed; full candidate API acceptance pending"
 }

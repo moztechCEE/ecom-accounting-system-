@@ -1,16 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { aiService, AiModel } from "../services/ai.service";
+import { aiService, type AiModel } from "../services/ai.service";
 import { useAuth } from "./AuthContext";
-
-const DEFAULT_AI_MODEL_ID = "gemini-2.5-flash";
-const LEGACY_AI_MODEL_ALIASES: Record<string, string> = {
-  "gemini-1.5-flash": DEFAULT_AI_MODEL_ID,
-  "gemini-2.0-flash": DEFAULT_AI_MODEL_ID,
-  "gemini-1.5-pro": "gemini-2.5-pro",
-};
+import { aiModelMode, readModelPreference, resolveAiModel } from "./ai-model-selection";
 
 interface AIContextType {
-  selectedModelId: string;
+  selectedModelId: string | undefined;
   setSelectedModelId: (id: string) => void;
   availableModels: AiModel[];
   loading: boolean;
@@ -18,71 +12,52 @@ interface AIContextType {
 
 const AIContext = createContext<AIContextType | undefined>(undefined);
 
-export const AIProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
+export const AIProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const [selectedModelId, setSelectedModelId] = useState<string>(() => {
-    const storedModelId = localStorage.getItem("ai_selected_model");
-    if (!storedModelId) {
-      return DEFAULT_AI_MODEL_ID;
-    }
-
-    return LEGACY_AI_MODEL_ALIASES[storedModelId] || storedModelId;
-  });
-  const [availableModels, setAvailableModels] = useState<AiModel[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    const fetchModels = async () => {
-      try {
-        const models = await aiService.getAvailableModels();
-        setAvailableModels(models);
-        // If currently selected model is not in the list (and list is not empty), default to first
-        if (
-          models.length > 0 &&
-          !models.find((m) => m.id === selectedModelId)
-        ) {
-          const defaultModel =
-            models.find((m) => m.id === DEFAULT_AI_MODEL_ID) ||
-            models.find((m) => m.id === "gemini-2.5-pro") ||
-            models[0];
-          setSelectedModelId(defaultModel.id);
-        }
-      } catch (error: any) {
-        // Ignore 401 errors as they are handled by the API interceptor (redirect to login)
-        if (error.response?.status !== 401) {
-          console.error("Failed to fetch AI models", error);
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchModels();
-  }, [user]); // Re-fetch when user changes (logs in)
-
-  useEffect(() => {
-    localStorage.setItem("ai_selected_model", selectedModelId);
-  }, [selectedModelId]);
-
-  return (
-    <AIContext.Provider
-      value={{ selectedModelId, setSelectedModelId, availableModels, loading }}
-    >
-      {children}
-    </AIContext.Provider>
-  );
+  return <ScopedAIProvider key={user?.id ?? 'anonymous'} userId={user?.id}>{children}</ScopedAIProvider>;
 };
 
+function ScopedAIProvider({ children, userId }: { children: React.ReactNode; userId?: string }) {
+  const [preference, setPreference] = useState(() => readModelPreference(
+    localStorage.getItem("ai_selected_model"), localStorage.getItem("ai_selected_mode"),
+  ));
+  const [catalog, setCatalog] = useState<{ userId: string; models: AiModel[] } | null>(null);
+  // Ignore another account's catalog synchronously, before the new request finishes.
+  const availableModels = userId && catalog?.userId === userId ? catalog.models : [];
+  const selectedModelId = resolveAiModel(availableModels, preference)?.id;
+  const loading = Boolean(userId && catalog?.userId !== userId);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    aiService.getAvailableModels().then(models => {
+      if (!cancelled) setCatalog({ userId, models });
+    }).catch(() => {
+      // Authentication redirects are handled by the API client. Never retain a stale model ID.
+      if (!cancelled) setCatalog({ userId, models: [] });
+    });
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  const setSelectedModelId = (id: string) => {
+    const model = availableModels.find(candidate => candidate.id === id);
+    if (!model) return;
+    const mode = aiModelMode(model);
+    setPreference({ id: model.id, mode });
+    localStorage.setItem("ai_selected_model", model.id);
+    if (mode) localStorage.setItem("ai_selected_mode", mode);
+    else localStorage.removeItem("ai_selected_mode");
+  };
+
+  return <AIContext.Provider value={{ selectedModelId, setSelectedModelId, availableModels, loading }}>
+    {children}
+  </AIContext.Provider>;
+}
+
+// Keep the existing provider/hook import contract used across ERP pages.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAI = () => {
   const context = useContext(AIContext);
-  if (context === undefined) {
-    throw new Error("useAI must be used within an AIProvider");
-  }
+  if (context === undefined) throw new Error("useAI must be used within an AIProvider");
   return context;
 };

@@ -1,0 +1,39 @@
+{
+  "environment": "ERP DEV",
+  "payload": "Synthetic JSON readiness request only; no customer data",
+  "existingModels": {
+    "gemini-2.5-flash": "Intermittent success, repeated HTTP 429 in candidate logs",
+    "gemini-2.5-pro": "HTTP 404 in candidate logs"
+  },
+  "replacementProbes": [
+    {
+      "model": "gemini-3.5-flash-lite",
+      "status": 200,
+      "response": {
+        "ready": true
+      }
+    },
+    {
+      "model": "gemini-3.5-flash",
+      "status": 200,
+      "response": {
+        "ready": true
+      }
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "status": 503,
+      "attempts": 2,
+      "selected": false
+    }
+  ],
+  "selected": {
+    "standard": "gemini-3.5-flash-lite",
+    "deep": "gemini-3.5-flash"
+  },
+  "officialReferences": [
+    "https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite",
+    "https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash"
+  ],
+  "credentialHandling": "Existing DEV provider key used in memory only; no key, request headers or thought signatures retained"
+}

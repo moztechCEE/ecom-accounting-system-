@@ -27,10 +27,18 @@ ERP AI consumes authorized full guide sections and provides existing authorized 
 
 Local implementation: 55 bilingual guides across 9 module groups, covering 64 route/filter entries and 78 reviewed source hashes. The source drift/coverage check runs in the release build and quality-gate workflow. Historic 24 guide identities are retained; outdated dashboard and reimbursement text was corrected against current pages.
 
-Local validation: backend 60 suites / 368 tests passed; focused AI 3 suites / 61 tests passed; frontend production compilation and 19 existing access/navigation/WMS tests passed. Claw UI logic/safety tests 10/10, generated-catalog negative checks 9/9 and DEV sandbox tests 9/9 also passed. Provider-error messages in the unit log are deliberate mocked failure tests.
+Local validation: backend 60 suites / 384 tests passed; focused AI/receipt 4 suites / 86 tests passed; frontend production compilation and 19 existing access/navigation/WMS tests passed. Claw UI logic/safety tests 10/10, model preference tests 6/6, generated-catalog negative checks 9/9 and DEV sandbox tests 9/9 also passed. Provider-error messages in the unit log are deliberate mocked failure tests.
 
 DEV candidate and live-browser acceptance are still pending at this source checkpoint. No production acceptance is implied. Final source SHA, DEV images/revisions, browser evidence, QA cleanup and remaining limits will be appended after verification.
 
 ## Initial zero-traffic candidate review
 
 Source `ff5e636e`, build `0057f053-c270-45b4-94a7-c639a4595344`, passed HTTP knowledge/ACL checks and the browser guide/mobile/download checks recorded in artifacts. The first HTTP harness incorrectly expected 200 instead of Nest's valid POST 201; the harness was corrected and its failed receipt retained. Manual review of the real model answer then found a substantive finance explanation error: it combined cashier bank transfer with separate accounting posting. That answer is preserved as rejected evidence. The guides and composition instructions now explicitly separate approval, external bank transfer, ERP payment registration and accounting posting. An additional browser finding aligned dashboard guide access with the actual non-warehouse-only menu, without changing live data authorization. A corrected candidate must pass real model review before traffic promotion.
+
+## Model compatibility found during candidate acceptance
+
+The `a861a006` zero-traffic candidate passed the corrected finance-answer semantic review (root plus independent reviewer) and all 19 knowledge/ACL/source checks. Browser page help confirmed the employee dashboard article and corrected expense stages. Its existing standard provider intermittently returned HTTP 429, while the existing deep model returned HTTP 404; these are retained as failed acceptance receipts, not counted as successful real-time queries. No traffic was promoted from either earlier candidate.
+
+Using only the existing DEV provider credential and a synthetic JSON readiness prompt, `gemini-3.5-flash-lite` and `gemini-3.5-flash` each returned 200 with the expected JSON. `gemini-3.8-flash` returned 503 twice and was not selected. The [official Flash-Lite model page](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite) and [Flash model page](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash) document these as stable models with text, image and PDF input support. No credential, prompt containing business data, or provider thought signature is stored in the receipt.
+
+The compatibility correction keeps standard/deep preferences, maps legacy model IDs, and adds only the two exact provider paths to the existing DEV network allowlist. No new provider, billing setting or wider network access is introduced. Full ERP guide and live SELF queries must be rechecked on the resulting candidate; direct provider readiness alone is not acceptance.

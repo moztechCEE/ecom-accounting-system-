@@ -19,6 +19,8 @@ Run each phase once without --execute to review its proposed spec/command.
 Candidate web uses tagged API; final web uses stable API. Both web tags are
 included in the API's finite CORS allowlist. Existing tags are never removed.
 This release needs no migration or IAM change. Existing DEV AI access is retained.
+A retry may supersede two completed candidates plus an optional final-web,
+only while entry-audit retains 100% traffic and no promotion has started.
 An interrupted/ambiguous mutation leaves pending.json. Use the same phase with
 --reconcile to accept ONLY its exact ready result; this option never mutates cloud.
 """
@@ -237,8 +239,8 @@ def initialize(args, directory):
         previous = json.loads((previous_dir / 'state.json').read_text())
         require(previous.get('version') == 1 and previous.get('project') == PROJECT
                 and previous.get('region') == REGION, 'Previous release belongs to another environment')
-        require([p.get('phase') for p in previous.get('completed', [])] == ['candidate-api', 'candidate-web'],
-                'Previous release must contain only the two candidates, before final web or promotion')
+        require(tuple(p.get('phase') for p in previous.get('completed', [])) in (PHASES[:2], PHASES[:3]),
+                'Previous release requires the two candidates, optionally final-web, with no promotion')
         live = check_current(previous)
         for name in DEV:
             recorded = previous['expected'][name]
@@ -425,7 +427,7 @@ def main():
     parser.add_argument('--state-dir', type=Path, required=True)
     parser.add_argument('--build-id')
     parser.add_argument('--source-sha')
-    parser.add_argument('--previous-state-dir', type=Path, help='init only: replace recorded zero-traffic candidates while entry-audit remains at 100%%')
+    parser.add_argument('--previous-state-dir', type=Path, help='init only: replace two recorded zero-traffic candidates plus optional final-web; entry-audit must remain at 100%%')
     parser.add_argument('--execute', action='store_true', help='Apply this DEV-only phase after fresh guards')
     parser.add_argument('--reconcile', action='store_true', help='Read-only recovery of the exact pending result')
     args = parser.parse_args()

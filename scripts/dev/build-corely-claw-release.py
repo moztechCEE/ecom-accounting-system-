@@ -43,6 +43,12 @@ UNCHANGED_RUNTIME = [
     'backend/scripts/start-prod.js', 'backend/scripts/database-url.js',
     'backend/prisma.config.ts', 'frontend/server.mjs', 'backend/assets',
 ]
+# Only the reviewed model-path compatibility change may overlay the sandbox.
+REVIEWED_RUNTIME_SHA256 = {
+    'backend/scripts/dev-sandbox.cjs': '2e14a841a0c957ddc6c122f66694f607b36973cce6ff74fbf820c84ce7307c76',
+}
+REBUILD_PHASES = (('candidate-api', 'candidate-web'),
+                  ('candidate-api', 'candidate-web', 'final-web'))
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -63,6 +69,12 @@ def sha256_file(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def verify_reviewed_runtime():
+    for relative, expected in REVIEWED_RUNTIME_SHA256.items():
+        check(sha256_file(ROOT / relative) == expected,
+              'Reviewed runtime hash changed; review before overlay: ' + relative)
+
+
 def load_release_state(path):
     if path is None:
         return None
@@ -70,8 +82,8 @@ def load_release_state(path):
     state = json.loads(path.read_text())
     check(state.get('version') == 1 and state.get('project') == PROJECT and state.get('region') == REGION,
           'Previous release state is for another environment')
-    check([item.get('phase') for item in state.get('completed', [])] == ['candidate-api', 'candidate-web'],
-          'Rebuild state must contain only the two completed candidates, before final web or promotion')
+    check(tuple(item.get('phase') for item in state.get('completed', [])) in REBUILD_PHASES,
+          'Rebuild state requires the two completed candidates, optionally final-web, with no promotion')
     return state
 
 
@@ -120,7 +132,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--submit', action='store_true', help='Submit Cloud Build after preparing; never deploy')
     parser.add_argument('--context-dir', type=Path, help='New directory for reviewable build context; defaults to a new temp directory')
-    parser.add_argument('--release-state', type=Path, help='Previous helper state.json with two zero-traffic candidates and entry-audit still at 100%%')
+    parser.add_argument('--release-state', type=Path, help='Previous helper state.json with two zero-traffic candidates, optionally final-web, and entry-audit still at 100%%')
     args = parser.parse_args()
     check(not output(['git', 'status', '--porcelain']), 'Commit reviewed source first; working tree must be clean')
     sha = output(['git', 'rev-parse', 'HEAD'])
@@ -134,6 +146,7 @@ def main():
           'Merge the reviewed latest entry-audit source before building; never replace it with the older ERP baseline')
     check(not output(['git', 'diff', BASE_SOURCE, '--', *UNCHANGED_RUNTIME]),
           'Dependencies/startup/assets/server changed: this reviewed overlay is insufficient; use a newly reviewed full build')
+    verify_reviewed_runtime()
     subprocess.run(['node', 'scripts/dev/generate-copilot-knowledge.cjs', '--check'], cwd=ROOT, check=True)
     # Prisma normalizes schema formatting in the generated copy, so byte equality
     # is not a reliable freshness check. Generate from the exact source instead.

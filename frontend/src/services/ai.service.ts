@@ -5,6 +5,7 @@ export interface AiModel {
   name: string;
   description?: string;
   isExperimental?: boolean;
+  mode?: "standard" | "deep";
 }
 
 export interface AiCopilotSource {
