@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:ed9d49e33c2f36423cbe7d26f502eadc2f4e27cc26cb7883c90c1690ed019755",
+  "sourceVersion": "sha256:1a1b6880d3c5169bac33f6f5edb8ccc99ba658e67f1ec59cd2c53a68df9d7ef4",
   "reviewedBaseCommit": "9165c7123b10750b598a95f9badfc9c00ed04abd",
   "entryCount": 55,
   "groups": [
@@ -334,7 +334,7 @@
     },
     {
       "path": "frontend/src/pages/EmployeesPage.tsx",
-      "sha256": "43544bdaba1f2c3ca18b0d303993c0d0beaa663b34f59a0b8bf1d7703d769370"
+      "sha256": "d6d56635165f56ed2581cebdd79895dd4daaf5ee2ebc099ba7dcc027a277c56f"
     },
     {
       "path": "frontend/src/pages/ExpenseRequestsPage.tsx",

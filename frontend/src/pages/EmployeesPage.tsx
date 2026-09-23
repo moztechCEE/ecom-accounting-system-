@@ -488,7 +488,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     setEmployeeSaveErrorDetails([]);
     setEmployeeSaveLoading(true);
     try {
-      const values = await form.validateFields();
+      await form.validateFields();
+      // Preserve initialized values from tabs that have not been opened.
+      const values = form.getFieldsValue(true);
       const {
         loginEmail,
         loginPassword,
@@ -560,7 +562,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     try {
       setEmployeeSaveError(null);
       setEmployeeSaveErrorDetails([]);
-      const values = await form.validateFields();
+      await form.validateFields();
+      // Preserve initialized values from tabs that have not been opened.
+      const values = form.getFieldsValue(true);
       const {
         loginEmail,
         loginPassword,
@@ -569,7 +573,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       } = values;
       const loginUpdates: { loginEmail?: string; loginPassword?: string } = {};
       const normalizedLoginEmail = loginEmail?.trim() || "";
-      if (normalizedLoginEmail !== (selectedEmployee.user?.email || "")) {
+      if (loginEmail !== undefined && normalizedLoginEmail !== (selectedEmployee.user?.email || "")) {
         loginUpdates.loginEmail = normalizedLoginEmail;
       }
       if (loginPassword?.trim()) {
@@ -584,7 +588,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
           : undefined,
         terminateDate: employeeValues.terminateDate
           ? employeeValues.terminateDate.toISOString()
-          : null,
+          : employeeValues.terminateDate === null ? null : undefined,
         nationalId: employeeValues.nationalId,
         mailingAddress: employeeValues.mailingAddress,
         emergencyContactName: employeeValues.emergencyContactName,
