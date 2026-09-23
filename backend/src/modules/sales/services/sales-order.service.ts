@@ -8,7 +8,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service';
 import { JournalService } from '../../accounting/services/journal.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import { InventoryService } from '../../inventory/inventory.service';
-import { ProductType } from '@prisma/client';
+import { Prisma, ProductType } from '@prisma/client';
 import { ApService } from '../../ap/ap.service';
 import {
   buildSalesOrderSourceKey,
@@ -60,13 +60,13 @@ export class SalesOrderService {
     return {channels,products,customers};
   }
 
-  async validateOrderInput(data:{entityId:string;channelId:string;customerId?:string;items:Array<{productId:string;qty:number;unitPrice:number;discount?:number}>}){
-    if(!data.items?.length||data.items.length>1000||data.items.some(i=>!Number.isFinite(i.qty)||i.qty<=0||!Number.isFinite(i.unitPrice)||i.unitPrice<0||!Number.isFinite(i.discount||0)||(i.discount||0)<0||(i.discount||0)>i.qty*i.unitPrice))throw new BadRequestException('訂單品項、数量或金額不符');
+  async validateOrderInput(data:{entityId:string;channelId:string;customerId?:string;items:Array<{productId:string;qty:number;unitPrice:number;discount?:number;taxAmount?:number}>},db:Prisma.TransactionClient|PrismaService=this.prisma){
+    if(!data.items?.length||data.items.length>1000||data.items.some(i=>!Number.isFinite(i.qty)||i.qty<=0||!Number.isFinite(i.unitPrice)||i.unitPrice<0||!Number.isFinite(i.discount||0)||(i.discount||0)<0||(i.discount||0)>i.qty*i.unitPrice||!Number.isFinite(i.taxAmount||0)||(i.taxAmount||0)<0))throw new BadRequestException('訂單品項、数量或金額不符');
     const ids=[...new Set(data.items.map(i=>i.productId))];
     const [channel,products,customer]=await Promise.all([
-      this.prisma.salesChannel.findFirst({where:{id:data.channelId,entityId:data.entityId,isActive:true},select:{id:true}}),
-      this.prisma.product.findMany({where:{id:{in:ids},entityId:data.entityId,isActive:true},select:{id:true}}),
-      data.customerId?this.prisma.customer.findFirst({where:{id:data.customerId,entityId:data.entityId,isActive:true},select:{id:true}}):Promise.resolve(true),
+      db.salesChannel.findFirst({where:{id:data.channelId,entityId:data.entityId,isActive:true},select:{id:true}}),
+      db.product.findMany({where:{id:{in:ids},entityId:data.entityId,isActive:true},select:{id:true}}),
+      data.customerId?db.customer.findFirst({where:{id:data.customerId,entityId:data.entityId,isActive:true},select:{id:true}}):Promise.resolve(true),
     ]);
     if(!channel||!customer||products.length!==ids.length)throw new BadRequestException('通路、客戶或商品不屬於目前公司，或已停用');
   }
@@ -91,19 +91,35 @@ export class SalesOrderService {
         qty: number;
         unitPrice: number;
         discount?: number;
+        taxAmount?: number;
       }>;
     },
     createdBy: string,
+    transactionClient?: Prisma.TransactionClient,
   ) {
-    await this.validateOrderInput(data);
-    // 計算訂單金額
-    const totalGross = data.items.reduce(
-      (sum, item) => sum + item.qty * item.unitPrice - (item.discount || 0),
-      0,
+    await this.validateOrderInput(data,transactionClient || this.prisma);
+    const subtotal = data.items.reduce(
+      (sum, item) => sum.add(new Decimal(item.qty).mul(item.unitPrice).sub(item.discount || 0)),
+      new Decimal(0),
     );
+    const totalTax = data.items.reduce(
+      (sum, item) => sum.add(item.taxAmount || 0), new Decimal(0),
+    );
+    const totalGross = subtotal.add(totalTax);
 
-    // 建立訂單
-    const order = await this.prisma.salesOrder.create({
+    // When a warehouse is supplied, order creation and every component
+    // reservation must commit together. A failed later line must not leave a
+    // partly reserved order visible to staff or WMS.
+    const execute = async (db: Prisma.TransactionClient | PrismaService) => {
+      if (data.warehouseId) {
+        const warehouse = await db.warehouse.findFirst({
+          where: { id: data.warehouseId, entityId: data.entityId, isActive: true },
+          select: { id: true },
+        });
+        if (!warehouse) throw new BadRequestException('出貨倉庫不屬於目前公司，或已停用');
+      }
+
+      const order = await db.salesOrder.create({
       data: {
         entityId: data.entityId,
         channelId: data.channelId,
@@ -117,10 +133,10 @@ export class SalesOrderService {
         totalGrossCurrency: data.currency || 'TWD',
         totalGrossFxRate: new Decimal(data.fxRate || 1),
         totalGrossBase: new Decimal(totalGross).mul(data.fxRate || 1),
-        taxAmountOriginal: new Decimal(0),
+        taxAmountOriginal: totalTax,
         taxAmountCurrency: data.currency || 'TWD',
         taxAmountFxRate: new Decimal(data.fxRate || 1),
-        taxAmountBase: new Decimal(0),
+        taxAmountBase: totalTax.mul(data.fxRate || 1),
         discountAmountOriginal: new Decimal(0),
         discountAmountCurrency: data.currency || 'TWD',
         discountAmountFxRate: new Decimal(data.fxRate || 1),
@@ -142,10 +158,10 @@ export class SalesOrderService {
             discountCurrency: data.currency || 'TWD',
             discountFxRate: new Decimal(data.fxRate || 1),
             discountBase: new Decimal(item.discount || 0).mul(data.fxRate || 1),
-            taxAmountOriginal: new Decimal(0),
+            taxAmountOriginal: new Decimal(item.taxAmount || 0),
             taxAmountCurrency: data.currency || 'TWD',
             taxAmountFxRate: new Decimal(data.fxRate || 1),
-            taxAmountBase: new Decimal(0),
+            taxAmountBase: new Decimal(item.taxAmount || 0).mul(data.fxRate || 1),
           })),
         },
       },
@@ -157,33 +173,41 @@ export class SalesOrderService {
         },
         channel: true,
       },
-    });
+      });
 
-    this.logger.log(`Created sales order ${order.id}`);
+      this.logger.log(`Created sales order ${order.id}`);
 
-    // 若有提供 warehouseId，建立訂單後預留庫存
-    if (data.warehouseId) {
-      for (const item of order.items) {
-        await this.reserveInventoryForItem(
-          data.entityId,
-          data.warehouseId,
-          order.id,
-          item.product,
-          Number(item.qty),
+      if (data.warehouseId) {
+        for (const item of order.items) {
+          await this.reserveInventoryForItem(
+            db as Prisma.TransactionClient,
+            data.entityId,
+            data.warehouseId,
+            order.id,
+            item.product,
+            Number(item.qty),
+          );
+        }
+        this.logger.log(
+          `Reserved inventory for sales order ${order.id} in warehouse ${data.warehouseId}`,
         );
       }
-      this.logger.log(
-        `Reserved inventory for sales order ${order.id} in warehouse ${data.warehouseId}`,
-      );
-    }
 
-    return order;
+      return order;
+    };
+
+    return transactionClient
+      ? execute(transactionClient)
+      : data.warehouseId
+      ? this.prisma.$transaction((tx) => execute(tx), { maxWait: 5_000, timeout: 20_000 })
+      : execute(this.prisma);
   }
 
   /**
    * 遞迴預留庫存 (支援 Bundle 展開)
    */
   private async reserveInventoryForItem(
+    tx: Prisma.TransactionClient,
     entityId: string,
     warehouseId: string,
     orderId: string,
@@ -192,7 +216,7 @@ export class SalesOrderService {
   ) {
     if (product.type === ProductType.BUNDLE) {
       // 展開 BOM
-      const bom = await this.prisma.billOfMaterial.findMany({
+      const bom = await tx.billOfMaterial.findMany({
         where: { parentId: product.id },
         include: { child: true },
       });
@@ -207,6 +231,7 @@ export class SalesOrderService {
       for (const component of bom) {
         const requiredQty = Number(component.quantity) * qty;
         await this.reserveInventoryForItem(
+          tx,
           entityId,
           warehouseId,
           orderId,
@@ -217,14 +242,17 @@ export class SalesOrderService {
     } else {
       if (product.type === ProductType.SERVICE) return;
 
-      await this.inventoryService.reserveStock({
-        entityId,
-        warehouseId,
-        productId: product.id,
-        quantity: qty,
-        referenceType: 'SALES_ORDER',
-        referenceId: orderId,
-      });
+      await this.inventoryService.reserveStock(
+        {
+          entityId,
+          warehouseId,
+          productId: product.id,
+          quantity: qty,
+          referenceType: 'SALES_ORDER',
+          referenceId: orderId,
+        },
+        tx,
+      );
     }
   }
 

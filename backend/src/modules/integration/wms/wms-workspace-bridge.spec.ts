@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { WmsWorkspaceBridge,projectWorkspaceResponse } from './wms-workspace-bridge';
 import { JwtService } from '@nestjs/jwt';
 const keys=generateKeyPairSync('rsa',{modulusLength:2048});
@@ -9,6 +9,11 @@ const prisma=(permissions=['wms_tasks:read','wms_picking:execute','wms_packing:e
   userRole:{findMany:jest.fn().mockResolvedValue([{role:{code:'EMPLOYEE',permissions:permissions.map(p=>{const [resource,action]=p.split(':');return {permission:{resource,action}};})}}])},
 }) as any;
 const page={contractVersion:'wms.workspace-read.v1',source:'wms',mode:'read_only',items:[],total:0};
+const dispatchReceipt={contractVersion:'wms.workspace-command.v1',source:'wms',id:'sale-1',orderNumber:'SO-001',brand:'MOZTECH',state:'pending',
+  warehouseLabel:'待預揀核對',logisticsLabel:'交運尚未核對',receiptLabel:'Corely 庫存尚未核銷',assignee:null,updatedAt:'2026-09-23T00:00:00.000Z',
+  required:2,picked:0,packed:0,revision:1,items:[{id:'line-1',sku:'0001',name:'商品',barcode:'000123',quantity:2,picked:0,packed:0,serials:[]}],
+  allowedActions:[],blockers:['待預揀核對完成']};
+const nativeReceipt={nativeIntakeId:12,wmsOrderId:24,workBarcode:'WT0123456789ABCDEF01',batchId:36,reservationAccepted:true};
 describe('ERP WMS source bridge',()=>{
   it('switches stations without changing or impersonating the employee',async()=>{
     const fetcher=jest.fn().mockImplementation(async(_url,options)=>{
@@ -41,5 +46,42 @@ describe('ERP WMS source bridge',()=>{
     }
     expect(()=>projectWorkspaceResponse({...page,mode:'write'},false)).toThrow();
     expect(projectWorkspaceResponse({...page,privateCustomer:'not forwarded'},false)).not.toHaveProperty('privateCustomer');
+  });
+  it('preserves the complete native intake receipt on a signed dispatch while dropping unlisted fields',async()=>{
+    const body={requestId:'stable-request',order:{sourceHash:'a'.repeat(64)}};
+    const fetcher=jest.fn().mockImplementation(async(url,options)=>{
+      expect(String(url)).toBe('https://wms.example/api/integrations/erp/workflow/v1/orders/sale-1/dispatch');
+      expect(options.method).toBe('POST');expect(options.body).toBe(JSON.stringify(body));
+      const claims=await new JwtService().verifyAsync(options.headers.Authorization.slice(7),{publicKey:keys.publicKey.export({type:'spki',format:'pem'}).toString(),algorithms:['RS256'],issuer:'erp-test',audience:'wms-test'});
+      expect(claims.station).toBe('dispatch');expect(claims.scope).toBe('wms.workspace.command');expect(claims.path).toBe('/orders/sale-1/dispatch');
+      expect(claims.bodyHash).toBe(createHash('sha256').update(JSON.stringify(body)).digest('hex'));
+      return new Response(JSON.stringify({...dispatchReceipt,...nativeReceipt,redirectUrl:'https://untrusted.invalid/',privatePayload:{cost:100},reused:true}),{headers:{'content-type':'application/json'}});
+    });
+    const bridge=new WmsWorkspaceBridge(prisma(['wms_tasks:read','wms_orders:create']),{...env,WMS_WORKSPACE_COMMANDS_ENABLED:'true'},fetcher);
+    const result=await bridge.command('employee','company','sale-1','dispatch','dispatch',body);
+    expect(result).toMatchObject(nativeReceipt);
+    for(const key of ['redirectUrl','privatePayload','reused'])expect(result).not.toHaveProperty(key);
+  });
+  it('keeps a false reservation result and accepts legacy receipts without adding native metadata',()=>{
+    const blocked=projectWorkspaceResponse({...dispatchReceipt,...nativeReceipt,reservationAccepted:false},true,'sale-1',true,'dispatch');
+    expect(blocked).toHaveProperty('reservationAccepted',false);
+    const legacy=projectWorkspaceResponse(dispatchReceipt,true,'sale-1',true,'dispatch');
+    for(const key of Object.keys(nativeReceipt))expect(legacy).not.toHaveProperty(key);
+  });
+  it('rejects every partial native receipt and malformed identifiers, work barcodes and reservation booleans',()=>{
+    for(const key of Object.keys(nativeReceipt)) {
+      const partial:Record<string,unknown>={...dispatchReceipt,...nativeReceipt};delete partial[key];
+      expect(()=>projectWorkspaceResponse(partial,true,'sale-1',true,'dispatch')).toThrow('WMS 回應格式不符');
+    }
+    const badIds=[0,-1,1.5,'12',null,NaN,Infinity,2147483648];
+    for(const key of ['nativeIntakeId','wmsOrderId','batchId'])for(const value of badIds)expect(()=>projectWorkspaceResponse({...dispatchReceipt,...nativeReceipt,[key]:value},true,'sale-1',true,'dispatch')).toThrow();
+    for(const workBarcode of ['','WT0123','WT0123456789abcdef01','https://bad.invalid','WT0123456789ABCDEF01\n',null])expect(()=>projectWorkspaceResponse({...dispatchReceipt,...nativeReceipt,workBarcode},true,'sale-1',true,'dispatch')).toThrow();
+    for(const reservationAccepted of [undefined,null,'true','false',0,1])expect(()=>projectWorkspaceResponse({...dispatchReceipt,...nativeReceipt,reservationAccepted},true,'sale-1',true,'dispatch')).toThrow();
+  });
+  it('never adds dispatch receipt metadata to read-only or warehouse scan views',()=>{
+    const readonly={...dispatchReceipt,...nativeReceipt,contractVersion:'wms.workspace-read.v1'};
+    const read=projectWorkspaceResponse(readonly,true,'sale-1',false,'dispatch');
+    const scan=projectWorkspaceResponse({...dispatchReceipt,...nativeReceipt},true,'sale-1',true,'pick');
+    for(const result of [read,scan])for(const key of Object.keys(nativeReceipt))expect(result).not.toHaveProperty(key);
   });
 });

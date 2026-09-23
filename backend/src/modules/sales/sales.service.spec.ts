@@ -4,6 +4,7 @@ import { SalesService } from './sales.service';
 
 describe('SalesService.fulfillSalesOrder', () => {
   const tx = {
+    $queryRaw: jest.fn(),
     salesOrder: {
       findFirst: jest.fn(),
       updateMany: jest.fn(),
@@ -49,6 +50,7 @@ describe('SalesService.fulfillSalesOrder', () => {
     tx.salesOrder.findFirst.mockResolvedValue(order);
     tx.salesOrder.updateMany.mockResolvedValue({ count: 1 });
     tx.inventoryTransaction.count.mockResolvedValue(0);
+    tx.$queryRaw.mockResolvedValue([]);
     tx.warehouse.findFirst.mockResolvedValue({ id: 'warehouse-1', code: 'MAIN' });
     tx.shipment.create.mockResolvedValue({ id: 'shipment-1' });
     tx.salesOrder.update.mockResolvedValue({ ...order, status: 'shipped' });
@@ -108,6 +110,21 @@ describe('SalesService.fulfillSalesOrder', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
+    expect(inventory.shipStock).not.toHaveBeenCalled();
+    expect(tx.salesOrder.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('blocks whole-order deduction after WMS dispatch, pending or acknowledged', async () => {
+    for (const status of ['prepared', 'unknown', 'acknowledged']) {
+      tx.$queryRaw.mockResolvedValueOnce([{ status }]);
+      await expect(
+        service.fulfillSalesOrder({
+          entityId: 'entity-1',
+          warehouseId: 'warehouse-1',
+          salesOrderId: 'order-1',
+        }),
+      ).rejects.toThrow('晚間核銷');
+    }
     expect(inventory.shipStock).not.toHaveBeenCalled();
     expect(tx.salesOrder.updateMany).not.toHaveBeenCalled();
   });

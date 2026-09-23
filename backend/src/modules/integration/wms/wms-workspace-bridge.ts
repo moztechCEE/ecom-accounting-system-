@@ -12,6 +12,20 @@ const invalid=()=>new ServiceUnavailableException({code:'WMS_RESPONSE_INVALID',m
 function record(value:unknown):Record<string,unknown>{if(!value||typeof value!=='object'||Array.isArray(value))throw invalid();return value as Record<string,unknown>;}
 function text(value:unknown,max=256):string {if(typeof value!=='string'||value.length>max)throw invalid();return value;}
 function count(value:unknown):number {if(typeof value!=='number'||!Number.isSafeInteger(value)||value<0)throw invalid();return value;}
+function nativeIntakeReceipt(data:Record<string,unknown>) {
+  const fields=['nativeIntakeId','wmsOrderId','workBarcode','batchId','reservationAccepted'];
+  // Older ECOUNT/workspace responses have none of these fields. A native
+  // receipt is an indivisible set; never turn a partial receipt into a link.
+  if(!fields.some(key=>Object.hasOwn(data,key)))return {};
+  if(!fields.every(key=>Object.hasOwn(data,key)))throw invalid();
+  const id=(value:unknown)=>{
+    const result=count(value);
+    if(result<1||result>2147483647)throw invalid();
+    return result;
+  };
+  if(typeof data.workBarcode!=='string'||!/^WT[0-9A-F]{18}$/.test(data.workBarcode)||typeof data.reservationAccepted!=='boolean')throw invalid();
+  return {nativeIntakeId:id(data.nativeIntakeId),wmsOrderId:id(data.wmsOrderId),workBarcode:data.workBarcode,batchId:id(data.batchId),reservationAccepted:data.reservationAccepted};
+}
 function row(value:unknown) {
   const r=record(value);
   return {id:text(r.id,128),orderNumber:text(r.orderNumber),brand:text(r.brand,128),state:text(r.state,64),
@@ -40,7 +54,8 @@ export function projectWorkspaceResponse(value:unknown,detail:boolean,expectedId
     if(items.some(i=>i.quantity<1||i.picked>i.quantity||i.packed>i.picked||i.serials.length&&i.serials.length!==i.quantity))throw invalid();
     if(items.some(i=>i.serials.length&&(i.serials.filter(s=>s.status!=='pending').length!==i.picked||i.serials.filter(s=>s.status==='packed').length!==i.packed)))throw invalid();
     if(items.reduce((n,i)=>n+i.quantity,0)!==data.required||items.reduce((n,i)=>n+i.picked,0)!==data.picked||items.reduce((n,i)=>n+i.packed,0)!==data.packed)throw invalid();
-    return {...row(data),source:'wms',revision:count(data.revision),items,allowedActions:data.allowedActions.map(a=>text(a)),blockers:data.blockers.map(b=>text(b))};
+    return {...row(data),source:'wms',revision:count(data.revision),items,allowedActions:data.allowedActions.map(a=>text(a)),blockers:data.blockers.map(b=>text(b)),
+      ...(station==='dispatch'?nativeIntakeReceipt(data):{})};
   }
   return {...row(data),source:'wms',revision:0,items,allowedActions:[],blockers:['作業寫入尚未啟用']};
 }

@@ -11,6 +11,7 @@ export const NAVIGATION: NavigationItem[] = [
     { key: '/sales/orders', label: '銷售訂單', permissions: ['sales_orders:read'] },
     { key: '/sales/quotations', label: '銷售報價', permissions: ['sales_orders:read', 'purchase_orders:read'] },
     { key: '/sales/customers', label: '客戶管理', permissions: ['sales_orders:read'] },
+    { key: '/sales/b2b', label: '客戶採購入口', permissions: ['sales_orders:read'] },
   ] },
   { key: 'service', label: '售後管理中心', children: [
     { key: '/sales/after-sales', label: '案件工作台', permissions: ['after_sales_cases:read'] },

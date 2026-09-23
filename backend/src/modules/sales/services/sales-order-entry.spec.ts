@@ -90,4 +90,43 @@ describe('business order entry for warehouse handoff', () => {
       'sales_orders:create',
     );
   });
+
+  it('creates the order and all stock holds inside one transaction when a warehouse is selected', async () => {
+    const { prisma, inventory, service } = setup();
+    const tx = {
+      warehouse: { findFirst: jest.fn().mockResolvedValue({ id: 'warehouse' }) },
+      salesOrder: {
+        create: jest.fn().mockResolvedValue({
+          id: 'order',
+          items: [
+            { qty: 2, product: { id: 'product', type: 'SIMPLE' } },
+            { qty: 1, product: { id: 'product-2', type: 'SIMPLE' } },
+          ],
+        }),
+      },
+    };
+    prisma.product.findMany.mockResolvedValue([{ id: 'product' }, { id: 'product-2' }]);
+    (prisma as any).$transaction = jest.fn((callback) => callback(tx));
+    (inventory as any).reserveStock = jest.fn().mockResolvedValue({});
+
+    await service.createSalesOrder(
+      {
+        ...input,
+        warehouseId: 'warehouse',
+        items: [
+          ...input.items,
+          { productId: 'product-2', qty: 1, unitPrice: 10 },
+        ],
+      },
+      'employee',
+    );
+
+    expect(prisma.salesOrder.create).not.toHaveBeenCalled();
+    expect(tx.salesOrder.create).toHaveBeenCalledTimes(1);
+    expect((inventory as any).reserveStock).toHaveBeenCalledTimes(2);
+    for (const call of (inventory as any).reserveStock.mock.calls) {
+      expect(call[1]).toBe(tx);
+      expect(call[0].referenceId).toBe('order');
+    }
+  });
 });

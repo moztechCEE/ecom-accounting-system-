@@ -93,3 +93,66 @@ describe('InventoryService.shipStock', () => {
     expect(tx.inventorySnapshot.update).not.toHaveBeenCalled();
   });
 });
+
+describe('InventoryService.reserveStock', () => {
+  const tx = {
+    inventorySnapshot: {
+      updateMany: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
+    },
+    inventoryTransaction: { create: jest.fn() },
+  };
+  const service = new InventoryService({} as any);
+  const input = {
+    entityId: 'entity-1',
+    warehouseId: 'warehouse-1',
+    productId: 'product-1',
+    quantity: 2,
+    referenceType: 'SALES_ORDER' as const,
+    referenceId: 'order-1',
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    tx.inventorySnapshot.updateMany.mockResolvedValue({ count: 1 });
+    tx.inventorySnapshot.findUniqueOrThrow.mockResolvedValue({ id: 'snapshot-1' });
+    tx.inventoryTransaction.create.mockResolvedValue({ id: 'movement-1' });
+  });
+
+  it('claims available quantity with a conditional update before recording the reservation', async () => {
+    const result = await service.reserveStock(input, tx as any);
+    expect(tx.inventorySnapshot.updateMany).toHaveBeenCalledWith({
+      where: {
+        entityId: 'entity-1',
+        warehouseId: 'warehouse-1',
+        productId: 'product-1',
+        qtyAvailable: { gte: new Prisma.Decimal(2) },
+      },
+      data: {
+        qtyAllocated: { increment: new Prisma.Decimal(2) },
+        qtyAvailable: { decrement: new Prisma.Decimal(2) },
+      },
+    });
+    expect(tx.inventorySnapshot.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.inventoryTransaction.create.mock.invocationCallOrder[0],
+    );
+    expect(result.snapshot.id).toBe('snapshot-1');
+  });
+
+  it('records nothing when a competing order already claimed the remaining stock', async () => {
+    tx.inventorySnapshot.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.reserveStock(input, tx as any)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(tx.inventoryTransaction.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a zero or negative reservation before touching the database', async () => {
+    for (const quantity of [0, -1]) {
+      await expect(
+        service.reserveStock({ ...input, quantity }, tx as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    }
+    expect(tx.inventorySnapshot.updateMany).not.toHaveBeenCalled();
+  });
+});

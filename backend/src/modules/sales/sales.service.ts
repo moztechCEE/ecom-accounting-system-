@@ -78,6 +78,20 @@ export class SalesService {
         throw new BadRequestException(`Sales order cannot be fulfilled from status ${order.status}`);
       }
 
+      // WMS-managed orders must be posted from verified shipment lines after
+      // warehouse reconciliation. The legacy whole-order action would deduct
+      // every ordered unit before actual handover and could post twice.
+      const dispatchIntents = await tx.$queryRaw<Array<{ status: string }>>`
+        SELECT status FROM wms_dispatch_intents
+        WHERE entity_id=${entityId} AND sales_order_id=${salesOrderId}
+        LIMIT 1
+      `;
+      if (dispatchIntents.length > 0) {
+        throw new BadRequestException(
+          '此訂單已送 WMS，請依實際交運明細完成晚間核銷，不能整單直接扣庫',
+        );
+      }
+
       const existingOutbound = await tx.inventoryTransaction.count({
         where: {
           entityId,

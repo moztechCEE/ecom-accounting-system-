@@ -38,6 +38,11 @@ export class CreateSalesOrderDto {
   @IsUUID()
   entityId!: string;
 
+  @ApiProperty({ description: '確認供貨及預留庫存的出貨倉庫 ID', required: false })
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
+
   @ApiProperty({ description: '銷售渠道 ID' })
   @IsUUID()
   channelId!: string;

@@ -45,6 +45,7 @@ export function prepareDispatch(
       brands.add(brand);
       return {
         id: i.id,
+        productId: i.productId,
         sku: p.sku,
         name: p.name,
         barcode: p.barcode,
@@ -101,7 +102,56 @@ export class WmsDispatchService {
         shipments: { select: { id: true } },
       },
     });
-    return prepareDispatch(order, entityId, mapping);
+    const prepared = prepareDispatch(order, entityId, mapping);
+    // The native Corely WMS intake must receive evidence of a completed
+    // inventory hold. A merely pending order must not start picking.
+    const movements = await db.inventoryTransaction.findMany({
+      where: {
+        entityId,
+        referenceType: 'SALES_ORDER',
+        referenceId: id,
+        direction: { in: ['RESERVE', 'RELEASE', 'OUT'] },
+      },
+      select: { warehouseId: true, productId: true, direction: true, quantity: true },
+    });
+    const expected = new Map<string, number>();
+    for (const item of prepared.items) {
+      expected.set(item.productId, (expected.get(item.productId) || 0) + item.quantity);
+    }
+    const held = new Map<string, number>();
+    const warehouses = new Set<string>();
+    for (const movement of movements) {
+      if (movement.direction === 'OUT') {
+        throw new ConflictException('訂單已有出庫流水，請先核對正式庫存');
+      }
+      warehouses.add(movement.warehouseId);
+      const sign = movement.direction === 'RESERVE' ? 1 : -1;
+      held.set(
+        movement.productId,
+        (held.get(movement.productId) || 0) + sign * Number(movement.quantity),
+      );
+    }
+    if (
+      warehouses.size !== 1 ||
+      held.size !== expected.size ||
+      [...expected].some(([productId, quantity]) => held.get(productId) !== quantity)
+    ) {
+      throw new ConflictException('訂單尚未完整預留庫存，請先確認供貨倉庫與數量');
+    }
+    const reservationReference = {
+      salesOrderId: id,
+      warehouseId: [...warehouses][0],
+      quantitiesByProduct: [...expected]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([productId, quantity]) => ({ productId, quantity })),
+    };
+    return {
+      ...prepared,
+      reservationReference,
+      sourceHash: createHash('sha256')
+        .update(JSON.stringify({ orderHash: prepared.sourceHash, reservationReference }))
+        .digest('hex'),
+    };
   }
   async preview(actorId: string, entityId: string, id: string) {
     await this.permit(actorId);
@@ -178,7 +228,11 @@ export class WmsDispatchService {
       );
       await this.prisma
         .$executeRaw`UPDATE wms_dispatch_intents SET status='acknowledged',response=${JSON.stringify(result)}::jsonb,updated_at=now() WHERE entity_id=${entityId} AND sales_order_id=${id}`;
-      return result;
+      const receipt = result as { nativeIntakeId?: number };
+      const prepickUrl = this.env.WMS_WORKSPACE_URL && Number.isSafeInteger(receipt.nativeIntakeId) && (receipt.nativeIntakeId || 0) > 0
+        ? new URL(`/corely-intakes/${receipt.nativeIntakeId}`, this.env.WMS_WORKSPACE_URL).toString()
+        : null;
+      return { ...result, prepickUrl };
     } catch (e) {
       await this.prisma
         .$executeRaw`UPDATE wms_dispatch_intents SET status=CASE WHEN status='acknowledged' THEN status ELSE 'unknown' END,updated_at=now() WHERE entity_id=${entityId} AND sales_order_id=${id}`;

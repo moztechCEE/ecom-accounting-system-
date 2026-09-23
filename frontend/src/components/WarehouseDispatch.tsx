@@ -27,7 +27,8 @@ export default function WarehouseDispatch({
     [preview, setPreview] = useState<Preview | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [success, setSuccess] = useState("");
+    [success, setSuccess] = useState(""),
+    [prepickUrl, setPrepickUrl] = useState<string | null>(null);
   const [options, setOptions] = useState<{ id: string; orderNumber: string }[]>(
       [],
     ),
@@ -62,13 +63,15 @@ export default function WarehouseDispatch({
     setBusy(true);
     setError("");
     setSuccess("");
+    setPrepickUrl(null);
     try {
       if (confirm) {
-        await api.post(
+        const response = await api.post<{ prepickUrl?: string | null; workBarcode?: string; reservationAccepted?: boolean }>(
           `/wms/workbench/dispatch/${encodeURIComponent(id.trim())}`,
           { entityId, sourceHash: preview!.sourceHash, requestId: key.current },
         );
-        setSuccess(`訂單 ${preview!.orderNumber} 已交接揀貨`);
+        setSuccess(`訂單 ${preview!.orderNumber} 已送達 WMS 預揀${response.data.workBarcode ? ` · 工作條碼 ${response.data.workBarcode}` : ""}`);
+        setPrepickUrl(response.data.prepickUrl || null);
         setPreview(null);
         onDispatched();
       } else {
@@ -118,6 +121,7 @@ export default function WarehouseDispatch({
               setId(value);
               setPreview(null);
               setSuccess("");
+              setPrepickUrl(null);
               setError("");
             }}
           />
@@ -128,6 +132,7 @@ export default function WarehouseDispatch({
       </div>
       {error && <Alert type="warning" message={error} />}{" "}
       {success && <Alert type="success" message={success} />}
+      {prepickUrl && <a href={prepickUrl} target="_blank" rel="noopener noreferrer">打開 WMS 預揀工作單 →</a>}
       {preview && (
         <>
           <h3>

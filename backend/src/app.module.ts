@@ -13,7 +13,8 @@ import { AuditModule } from './common/audit/audit.module';
 import { DatabaseModule } from './common/database/database.module';
 import { RedisModule } from './common/redis/redis.module'; // Added RedisModule
 import { GlobalQueueModule } from './common/queue/queue.module'; // Added QueueModule
-import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { B2bAwareJwtAuthGuard } from './modules/b2b/b2b-auth.guard';
+import { B2bModule } from './modules/b2b/b2b.module';
 import { GuardsModule } from './common/guards/guards.module';
 import { ConnectorSyncModule } from './common/sync/connector-sync.module';
 
@@ -92,6 +93,7 @@ import { WmsWorkbenchModule } from './modules/integration/wms/wms-workbench.modu
 
     // Features
     AuthModule,
+    B2bModule,
     UsersModule,
     RolesModule,
     PermissionsModule,
@@ -142,7 +144,7 @@ import { WmsWorkbenchModule } from './modules/integration/wms/wms-workbench.modu
     // 全域啟用 JWT 驗證
     {
       provide: APP_GUARD,
-      useClass: JwtAuthGuard,
+      useClass: B2bAwareJwtAuthGuard,
     },
   ],
 })

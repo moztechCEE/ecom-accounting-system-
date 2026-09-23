@@ -1,5 +1,5 @@
 import React from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { loginDestination } from './utils/login-destination'
 import { warehouseOnlyUser } from './config/workspaces'
@@ -34,7 +34,6 @@ import ReportsPage from './pages/ReportsPage'
 import VendorsPage from './pages/VendorsPage'
 import AccessControlPage from './pages/AccessControlPage'
 import ArInvoicesPage from './pages/ArInvoicesPage'
-import ApInvoicesPage from './pages/ApInvoicesPage'
 import BankingPage from './pages/BankingPage'
 import PayrollPage from './pages/PayrollPage'
 import EmployeesPage from './pages/EmployeesPage'
@@ -54,6 +53,8 @@ import PurchaseOrdersPage from './pages/PurchaseOrdersPage'
 import AssemblyPage from './pages/AssemblyPage'
 import CustomersPage from './pages/CustomersPage'
 import ProfilePage from './pages/ProfilePage'
+import { B2BLoginPage, B2BPortalLayout, B2BCatalogPage, B2BRequestsPage, B2BRequestDetailPage } from './pages/b2b/B2BPortal'
+import B2bWorkbenchPage from './pages/b2b/B2bWorkbenchPage'
 
 function HomeEntry({ dashboard = false }: { dashboard?: boolean }) {
   const { user, loading } = useAuth()
@@ -65,10 +66,15 @@ const App: React.FC = () => {
   const staged = stagedOperationsEnabled()
   return (
     <BrowserRouter>
-      <ThemeProvider>
-        <AuthProvider>
-          <AIProvider>
-            <Routes>
+      <Routes>
+        <Route path="/b2b/login" element={<B2BLoginPage />} />
+        <Route path="/b2b" element={<B2BPortalLayout />}>
+          <Route index element={<Navigate to="catalog" replace />} />
+          <Route path="catalog" element={<B2BCatalogPage />} />
+          <Route path="requests" element={<B2BRequestsPage />} />
+          <Route path="requests/:id" element={<B2BRequestDetailPage />} />
+        </Route>
+        <Route element={<EmployeeProviders />}>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
             
@@ -120,6 +126,7 @@ const App: React.FC = () => {
                 <Route path="purchasing/orders" element={<PermissionRoute anyPermissions={['purchase_orders:read']}><PurchaseOrdersPage /></PermissionRoute>} />
                 <Route path="manufacturing/assembly" element={<PermissionRoute anyPermissions={['inventory:read']}><AssemblyPage /></PermissionRoute>} />
                 <Route path="sales/customers" element={<PermissionRoute anyPermissions={['sales_orders:read']}><CustomersPage /></PermissionRoute>} />
+                <Route path="sales/b2b" element={<PermissionRoute anyPermissions={['sales_orders:read']}><B2bWorkbenchPage /></PermissionRoute>} />
 
                 {/* User Routes */}
                 <Route path="profile" element={<PermissionRoute anyPermissions={['profile_self:read']}><ProfilePage /></PermissionRoute>} />
@@ -128,12 +135,14 @@ const App: React.FC = () => {
                 <Route path="import" element={<PermissionRoute anyRoles={['ADMIN']}><ImportPage /></PermissionRoute>} />
               </Route>
             </Route>
-            </Routes>
-          </AIProvider>
-        </AuthProvider>
-      </ThemeProvider>
+        </Route>
+      </Routes>
     </BrowserRouter>
   )
+}
+
+function EmployeeProviders() {
+  return <ThemeProvider><AuthProvider><AIProvider><Outlet /></AIProvider></AuthProvider></ThemeProvider>
 }
 
 export default App

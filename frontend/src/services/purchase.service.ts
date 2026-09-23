@@ -9,8 +9,10 @@ export interface PurchaseOrder {
   status: 'pending' | 'receiving' | 'received' | 'completed' | 'cancelled'
   totalAmountOriginal: number
   totalAmountCurrency: string
+  totalAmountFxRate?: string | number
   orderDate: string
   items: PurchaseOrderItem[]
+  landedCost?: PurchaseLandedCost | null
 }
 
 export interface PurchaseOrderItem {
@@ -23,7 +25,54 @@ export interface PurchaseOrderItem {
   }
   qty: number // Backend uses qty
   unitCostOriginal: number
+  unitCostBase: string | number
   totalPrice: number
+}
+
+export interface LandedCostInput {
+  freightCurrency: string
+  ratePerKgOriginal: number
+  fxRateToBase: number
+  weights: Array<{ purchaseOrderItemId: string; chargeableWeightKg: number }>
+}
+
+export interface LandedCostPreview {
+  freightCurrency: string
+  ratePerKgOriginal: string
+  fxRateToBase: string
+  totalChargeableWeightKg: string
+  freightOriginal: string
+  freightBase: string
+  goodsBase: string
+  landedTotalBase: string
+  lines: Array<{
+    purchaseOrderItemId: string
+    productId: string
+    sku: string
+    qty: string
+    chargeableWeightKg: string
+    goodsBase: string
+    allocatedFreightBase: string
+    landedTotalBase: string
+    landedUnitCostBase: string
+  }>
+}
+
+export interface PurchaseLandedCost {
+  id: string
+  freightCurrency: string
+  ratePerKgOriginal: string
+  fxRateToBase: string
+  totalChargeableWeightKg: string
+  freightOriginal: string
+  freightBase: string
+  goodsBase: string
+  lines: Array<{
+    purchaseOrderItemId: string
+    chargeableWeightKg: string
+    allocatedFreightBase: string
+    landedUnitCostBase: string
+  }>
 }
 
 export interface CreatePurchaseOrderDto {
@@ -61,5 +110,17 @@ export const purchaseService = {
     const entityId = await resolveEntityId(explicitEntityId)
     const response = await api.put<PurchaseOrder>(`/purchase-orders/${id}/receive`, { warehouseId, serialNumbers }, { params: { entityId } })
     return response.data
-  }
+  },
+
+  async previewLandedCost(id: string, data: LandedCostInput, explicitEntityId?: string) {
+    const entityId = await resolveEntityId(explicitEntityId)
+    const response = await api.post<LandedCostPreview>(`/purchase-orders/${encodeURIComponent(id)}/landed-cost/preview`, data, { params: { entityId } })
+    return response.data
+  },
+
+  async saveLandedCost(id: string, data: LandedCostInput, explicitEntityId?: string) {
+    const entityId = await resolveEntityId(explicitEntityId)
+    const response = await api.put<PurchaseLandedCost>(`/purchase-orders/${encodeURIComponent(id)}/landed-cost`, data, { params: { entityId } })
+    return response.data
+  },
 }

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InventoryService } from '../inventory/inventory.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { Prisma, ProductType } from '@prisma/client';
@@ -83,44 +83,51 @@ export class CostService {
     const db = transactionClient || this.prisma;
     const po = await db.purchaseOrder.findUnique({
       where: { id: purchaseOrderId },
-      include: { items: true },
+      include: { items: true, landedCost: { include: { lines: true } } },
     });
 
     if (!po) throw new Error('Purchase Order not found');
-
+    const landedLines = new Map(po.landedCost?.lines.map((line) => [line.purchaseOrderItemId, line]) || []);
+    if (po.landedCost &&
+      (po.landedCost.status !== 'estimated' || landedLines.size !== po.items.length)) {
+      throw new BadRequestException('Landed cost estimate is incomplete or already applied');
+    }
+    const grouped = new Map<string, { qty: Prisma.Decimal; totalCost: Prisma.Decimal; latestPrice: Prisma.Decimal }>();
     for (const item of po.items) {
-      const product = await db.product.findUnique({
-        where: { id: item.productId },
-      });
-
-      if (!product) continue;
-
-      // 1. 取得當前庫存快照 (已由 InventoryService 增加數量)
-      // 這裡簡化計算，假設所有倉庫總庫存
-      const inventorySnapshots = await db.inventorySnapshot.findMany({
-        where: { entityId: po.entityId, productId: item.productId },
-      });
-      const totalQtyOnHand = inventorySnapshots.reduce((sum, snap) => sum + Number(snap.qtyOnHand), 0);
-      
-      // 2. 回推舊庫存數量
-      const newQty = Number(item.qty);
-      const oldQty = totalQtyOnHand - newQty;
-      
-      // 3. 計算移動平均成本
-      const oldCost = Number(product.movingAverageCost);
-      const newUnitCost = Number(item.unitCostBase); // 使用本位幣成本
-
-      let newMovingAvg = newUnitCost;
-      if (oldQty > 0) {
-        newMovingAvg = ((oldQty * oldCost) + (newQty * newUnitCost)) / totalQtyOnHand;
+      const landed = landedLines.get(item.id);
+      if (po.landedCost &&
+        (!landed || landed.productId !== item.productId || !landed.qty.equals(item.qty))) {
+        throw new BadRequestException('Landed cost lines no longer match the purchase order');
       }
+      const qty = new Prisma.Decimal(item.qty);
+      const goodsCost = qty.mul(item.unitCostBase);
+      const totalCost = goodsCost.add(landed?.allocatedFreightBase || 0);
+      const previous = grouped.get(item.productId);
+      grouped.set(item.productId, {
+        qty: (previous?.qty || new Prisma.Decimal(0)).add(qty),
+        totalCost: (previous?.totalCost || new Prisma.Decimal(0)).add(totalCost),
+        latestPrice: new Prisma.Decimal(item.unitCostBase),
+      });
+    }
 
-      // 4. 更新產品成本資訊
+    for (const [productId, received] of grouped) {
+      const product = await db.product.findUnique({ where: { id: productId } });
+      if (!product) throw new BadRequestException(`Product ${productId} is missing`);
+      const snapshots = await db.inventorySnapshot.findMany({
+        where: { entityId: po.entityId, productId },
+      });
+      const totalOnHand = snapshots.reduce(
+        (sum, snap) => sum.add(snap.qtyOnHand), new Prisma.Decimal(0),
+      );
+      const oldQty = totalOnHand.sub(received.qty);
+      if (oldQty.isNegative()) throw new BadRequestException('Received quantity exceeds total stock');
+      const previousValue = oldQty.mul(product.movingAverageCost);
+      const movingAverageCost = previousValue.add(received.totalCost).div(totalOnHand).toDecimalPlaces(6);
       await db.product.update({
-        where: { id: item.productId },
+        where: { id: productId },
         data: {
-          latestPurchasePrice: newUnitCost,
-          movingAverageCost: newMovingAvg,
+          latestPurchasePrice: received.latestPrice,
+          movingAverageCost,
         },
       });
     }

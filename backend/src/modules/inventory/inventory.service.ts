@@ -945,7 +945,10 @@ export class InventoryService {
   /**
    * 預留庫存（銷售訂單建立時）
    */
-  async reserveStock(input: ReserveStockInput) {
+  async reserveStock(
+    input: ReserveStockInput,
+    transactionClient?: Prisma.TransactionClient,
+  ) {
     const {
       entityId,
       warehouseId,
@@ -955,24 +958,29 @@ export class InventoryService {
       referenceType,
     } = input;
     const qty = new Prisma.Decimal(quantity as any);
+    if (qty.lte(0)) {
+      throw new BadRequestException('Reservation quantity must be greater than zero');
+    }
 
-    return this.prisma.$transaction(async (tx) => {
-      // 檢查是否有足夠可用庫存
-      const snapshot = await tx.inventorySnapshot.findUnique({
+    const execute = async (tx: Prisma.TransactionClient) => {
+      // A conditional database update serializes competing reservations for the
+      // same stock row. A prior findUnique followed by update can oversell.
+      const claimed = await tx.inventorySnapshot.updateMany({
         where: {
-          entityId_warehouseId_productId: {
-            entityId,
-            warehouseId,
-            productId,
-          },
+          entityId,
+          warehouseId,
+          productId,
+          qtyAvailable: { gte: qty },
+        },
+        data: {
+          qtyAllocated: { increment: qty },
+          qtyAvailable: { decrement: qty },
         },
       });
-
-      if (!snapshot || snapshot.qtyAvailable.lt(qty)) {
-        throw new NotFoundException('Not enough available stock to reserve');
+      if (claimed.count !== 1) {
+        throw new BadRequestException('Not enough available stock to reserve');
       }
 
-      // 建立異動紀錄（RESERVE）
       const movement = await tx.inventoryTransaction.create({
         data: {
           entityId,
@@ -986,8 +994,7 @@ export class InventoryService {
         },
       });
 
-      // 更新 snapshot：Allocated +, Available -
-      const updatedSnapshot = await tx.inventorySnapshot.update({
+      const updatedSnapshot = await tx.inventorySnapshot.findUniqueOrThrow({
         where: {
           entityId_warehouseId_productId: {
             entityId,
@@ -995,14 +1002,14 @@ export class InventoryService {
             productId,
           },
         },
-        data: {
-          qtyAllocated: { increment: qty },
-          qtyAvailable: { decrement: qty },
-        },
       });
 
       return { movement, snapshot: updatedSnapshot };
-    });
+    };
+
+    return transactionClient
+      ? execute(transactionClient)
+      : this.prisma.$transaction(execute);
   }
 
   /**
