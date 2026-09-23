@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesService } from './roles.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -29,8 +30,8 @@ export class RolesController {
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'access_control', action: 'read' })
   @ApiOperation({ summary: '查詢所有角色（帳號與權限管理）' })
-  async findAll() {
-    return this.rolesService.findAll();
+  async findAll(@CurrentUser('id') actorId: string) {
+    return this.rolesService.findAll(actorId);
   }
 
   @Get(':id')
@@ -61,8 +62,8 @@ export class RolesController {
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '刪除角色（帳號與權限管理）' })
-  async remove(@Param('id') id: string) {
-    return this.rolesService.remove(id);
+  async remove(@Param('id') id: string, @CurrentUser('id') actorId: string) {
+    return this.rolesService.remove(id, actorId);
   }
 
   @Put(':id/permissions')

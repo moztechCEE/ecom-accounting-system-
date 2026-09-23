@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { roleDeletionReason } from './role-deletion-policy';
 import { Prisma } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -32,11 +33,10 @@ export class RolesService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll() {
-    return this.prisma.role.findMany({
-      orderBy: { hierarchyLevel: 'asc' },
-      include: ROLE_INCLUDE,
-    });
+  async findAll(actorId?: string) {
+    const roles = await this.prisma.role.findMany({ orderBy: { hierarchyLevel: 'asc' }, include: { ...ROLE_INCLUDE, _count: { select: { users: true } } } });
+    const superAdmin = Boolean(actorId && await this.prisma.userRole.count({ where: { userId: actorId, role: { code: 'SUPER_ADMIN' } } }));
+    return roles.map(role => ({ ...role, assignedUserCount: role._count.users, deletionReason: roleDeletionReason(role.code, role._count.users, superAdmin) }));
   }
 
   async findById(id: string) {
@@ -107,25 +107,18 @@ export class RolesService {
     }
   }
 
-  async remove(id: string) {
-    const existing = await this.findById(id);
-    if (SYSTEM_ROLE_CODES.includes(existing.code) || isPrivilegedRole(existing)) {
-      throw new BadRequestException('系統角色不可刪除');
-    }
-    if (await this.prisma.userRole.count({ where: { roleId: id } })) {
-      throw new BadRequestException('此角色仍有人員使用，請先調整人員角色');
-    }
-    try {
-      const role = await this.prisma.role.delete({
-        where: { id },
-        include: ROLE_INCLUDE,
-      });
-
-      this.logger.log(`Deleted role ${id}`);
-      return role;
-    } catch (error) {
-      this.handlePrismaError(error, `delete role ${id}`);
-    }
+  async remove(id: string, actorId?: string) {
+    return this.prisma.$transaction(async tx => {
+      // Lock the role before counting assignments; concurrent FK inserts must wait.
+      await tx.$queryRaw`SELECT id FROM roles WHERE id = ${id} FOR UPDATE`;
+      const role = await tx.role.findUnique({ where: { id } });
+      if (!role) throw new NotFoundException('角色不存在');
+      const assigned = await tx.userRole.count({ where: { roleId: id } });
+      const superAdmin = Boolean(actorId && await tx.userRole.count({ where: { userId: actorId, role: { code: 'SUPER_ADMIN' } } }));
+      const reason = roleDeletionReason(role.code, assigned, superAdmin);
+      if (reason) throw new BadRequestException(reason);
+      return tx.role.delete({ where: { id }, include: ROLE_INCLUDE });
+    });
   }
 
   async setPermissions(roleId: string, permissionIds: string[]) {

@@ -20,7 +20,7 @@ export const WMS_PORTAL_SECTIONS = [
   { key: '/warehouse/picking', label: '揀貨作業', path: '/tasks?group=pick', permissions: ['wms_picking:execute'] },
   { key: '/warehouse/packing', label: '裝箱核對', path: '/tasks?group=pack', permissions: ['wms_packing:execute'] },
   { key: '/warehouse/completed', label: '完成紀錄', path: '/tasks?view=completed', permissions: ['wms_tasks:read'] },
-  { key: '/warehouse/dispatch', label: '出貨管理', path: '/admin', permissions: ['wms_orders:create'] },
+  { key: '/warehouse/dispatch', label: '出貨管理', path: '/admin', workRole: 'dispatcher', permissions: ['wms_orders:create'] },
   { key: '/warehouse/marketplace', label: '通路訂單轉檔', path: '/admin/marketplace-converter', permissions: ['wms_orders:create'] },
   { key: '/warehouse/intakes', label: '預揀與倉庫放行', path: '/warehouse-intakes', permissions: ['wms_orders:create', 'wms_picking:execute', 'wms_packing:execute'] },
   { key: '/warehouse/overview', label: '儲運分析', path: '/admin/analytics', permissions: ['wms_overview:read'] },
@@ -32,7 +32,7 @@ export const WMS_PORTAL_SECTIONS = [
   { key: '/warehouse/team', label: '團隊公告', path: '/team', permissions: ['wms_tasks:read'] },
   { key: '/warehouse/users', label: '儲運人員', path: '/admin/users', adminOnly: true },
   { key: '/warehouse/settings', label: '儲運設定', path: '/settings', permissions: ['wms_tasks:read'] },
-] satisfies { key: string; label: string; path: string; permissions?: string[]; adminOnly?: boolean }[]
+] satisfies { key: string; label: string; path: string; workRole?: 'dispatcher'; permissions?: string[]; adminOnly?: boolean }[]
 
 export function wmsPortalLinks(user: User | null | undefined) {
   const origin = wmsPortalOrigin()

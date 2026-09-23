@@ -1,5 +1,6 @@
 import { WmsPortalService } from './wms-portal.module';
 import { ExpenseController } from '../../expense/expense.controller';
+import { ExpenseService } from '../../expense/expense.service';
 
 function actor(permissions = ['wms_tasks:read','wms_picking:execute']) {
   return {id:'staff',name:'Staff',passwordHash:'hash',isActive:true,mustChangePassword:false,entityMemberships:[{entityId:'warehouse'}],employee:null,
@@ -38,16 +39,26 @@ describe('warehouse identity and personal access', () => {
     db.$queryRaw.mockResolvedValue([{user_id:'staff',station:'picker',entity_id:'warehouse',password_version:'old'}]);
     await expect(service.inspect('s')).rejects.toThrow();
   });
-  it('employee expense list is self scoped even when mine=false',async()=>{
-    const expenses={getExpenseRequests:jest.fn().mockResolvedValue([])};
-    const controller=new ExpenseController(expenses as any,db);
+  function expenseController() {
+    db.user.findUnique.mockResolvedValue({...actor(['expense_self:read']), accountingDataScope:'SELF'});
+    db.expenseRequest.findMany = jest.fn().mockResolvedValue([]);
+    const expenses = new ExpenseService({findRequestById:jest.fn().mockResolvedValue({id:'other-request',entityId:'warehouse',createdBy:'other'})} as any, {} as any, {} as any, db, {} as any, {} as any);
+    return new ExpenseController(expenses,db);
+  }
+  it('employee expense list remains limited to own and explicitly assigned approvals when mine=false',async()=>{
+    const controller=expenseController();
     await controller.getExpenseRequests('warehouse',undefined,{user:{id:'staff'},query:{mine:'false'}} as any);
-    expect(expenses.getExpenseRequests).toHaveBeenCalledWith('warehouse',undefined,'staff');
+    expect(db.expenseRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({where:{
+      entityId:'warehouse',status:undefined,OR:[
+        {createdBy:'staff'},
+        {approvalSteps:{some:{OR:[{approverUserId:'staff'},{approverUserId:null,approverRoleCode:{in:['WAREHOUSE_PICKER']}}]}}},
+      ],
+    }}));
   });
   it('employee cannot read another expense or its history by guessing its ID',async()=>{
-    const controller=new ExpenseController({} as any,db);
+    const controller=expenseController();
     const req={user:{id:'staff'}} as any;
-    await expect(controller.getExpenseRequest('other-request',req)).rejects.toThrow();
-    await expect(controller.getExpenseHistory('other-request',req)).rejects.toThrow();
+    await expect(controller.getExpenseRequest('other-request',req)).rejects.toThrow('無法查看此費用申請');
+    await expect(controller.getExpenseHistory('other-request',req)).rejects.toThrow('無法查看此費用申請');
   });
 });

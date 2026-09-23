@@ -1,17 +1,25 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Typography, Button, Steps, QRCode, Input, message, Divider, Tag, Form, Upload, Alert, Space } from 'antd'
+import { useAuth } from '../contexts/AuthContext'
+import { getRoleName } from '../constants/translations'
+import { Card, Collapse, Typography, Button, QRCode, Input, message, Divider, Tag, Form, Upload, Alert, Space } from 'antd'
 import { motion } from 'framer-motion'
-import { SafetyCertificateOutlined, CheckCircleOutlined, LockOutlined, UploadOutlined, DownloadOutlined } from '@ant-design/icons'
+import { UploadOutlined, DownloadOutlined } from '@ant-design/icons'
 import { authService } from '../services/auth.service'
 import { payrollService } from '../services/payroll.service'
 import type { Employee, EmployeeOnboardingDocument } from '../types'
 
 const { Title, Text } = Typography
-const { Step } = Steps
 
 const ProfilePage: React.FC = () => {
+  const { refreshCurrentUser } = useAuth()
+  const [accountForm] = Form.useForm()
+  const [accountLoading, setAccountLoading] = useState(true)
+  const [accountResult, setAccountResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [accountSaving, setAccountSaving] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [securityError, setSecurityError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [setupData, setSetupData] = useState<{ secret: string; otpauthUrl: string } | null>(null)
+  const [setupData, setSetupData] = useState<{ secret: string; otpauthUrl: string; setupToken: string } | null>(null)
   const [token, setToken] = useState('')
   const [currentStep, setCurrentStep] = useState(0)
   const [user, setUser] = useState<any>(null)
@@ -48,12 +56,11 @@ const ProfilePage: React.FC = () => {
     try {
       const userData = await authService.getCurrentUser()
       setUser(userData)
-      // Check if user has 2FA enabled based on backend data (if available in user object)
-      // Currently backend mapManagedUserToUser doesn't mapping is_two_factor_enabled
-      // but let's assume valid setup flow is available.
+      accountForm.setFieldsValue({ name: userData.name })
+      if (userData.isTwoFactorEnabled) setCurrentStep(2)
     } catch (error) {
-       // ignore
-    }
+      setAccountResult({ type: 'error', text: '無法載入帳號資料，請重新整理' })
+    } finally { setAccountLoading(false) }
   }
 
   const fetchEmployeeProfile = async () => {
@@ -123,13 +130,13 @@ const ProfilePage: React.FC = () => {
   }
 
   const handleStartSetup = async () => {
-    setLoading(true)
+    setLoading(true); setSecurityError('')
     try {
       const data = await authService.get2FASetup()
       setSetupData(data)
       setCurrentStep(1)
-    } catch (error) {
-      message.error('Failed to initiate 2FA setup')
+    } catch (error: any) {
+      setSecurityError(error.response?.data?.message || '無法開始設定，請重試')
     } finally {
       setLoading(false)
     }
@@ -137,13 +144,15 @@ const ProfilePage: React.FC = () => {
 
   const handleVerify = async () => {
     if (!setupData || !token) return
-    setLoading(true)
+    setLoading(true); setSecurityError('')
     try {
-      await authService.enable2FA(token, setupData.secret)
-      message.success('Two-Factor Authentication Enabled Successfully!')
+      await authService.enable2FA(token, setupData.setupToken, currentPassword)
+      setSetupData(null); setToken(''); setCurrentPassword('')
+      await fetchUser(); await refreshCurrentUser()
+      message.success('兩步驟驗證已啟用')
       setCurrentStep(2)
-    } catch (error) {
-      message.error('Invalid Verification Code')
+    } catch (error: any) {
+      setSecurityError(error.response?.data?.message || '驗證失敗，請重試')
     } finally {
       setLoading(false)
     }
@@ -160,6 +169,20 @@ const ProfilePage: React.FC = () => {
         個人資料
       </Title>
 
+      <Card title="帳號資料">
+        <Form form={accountForm} layout="vertical" disabled={accountLoading || !user} onValuesChange={() => setAccountResult(null)} onFinish={async values => {
+          setAccountSaving(true); setAccountResult(null)
+          try { await authService.updateProfile(values.name); await fetchUser(); await refreshCurrentUser(); setAccountResult({ type: 'success', text: '個人資料已更新' }) }
+          catch (error: any) { setAccountResult({ type: 'error', text: error.response?.data?.message || '儲存失敗' }) }
+          finally { setAccountSaving(false) }
+        }}>
+          <Form.Item name="name" label="姓名" rules={[{ required: true, whitespace: true, max: 100, message: '請輸入姓名（最多 100 字）' }]}><Input /></Form.Item>
+          <Typography.Paragraph>登入帳號：{user?.email || '載入中'}</Typography.Paragraph>
+          <Typography.Paragraph>角色：{user?.roles?.map((role: string) => getRoleName(role)).join('、') || '—'}</Typography.Paragraph>
+          {accountResult && <Alert type={accountResult.type} showIcon message={accountResult.text} style={{ marginBottom: 16 }} />}
+          <Button type="primary" htmlType="submit" loading={accountSaving}>儲存個人資料</Button>
+        </Form>
+      </Card>
       <Card title="入職資料與文件">
         {employeeProfile ? (
           <div className="space-y-6">
@@ -251,76 +274,18 @@ const ProfilePage: React.FC = () => {
         )}
       </Card>
       
-      <Card title={<span><SafetyCertificateOutlined /> Security Settings</span>}>
-        <div className="max-w-xl mx-auto">
-          <Title level={4}>Two-Factor Authentication (2FA)</Title>
-          <Text type="secondary">
-            Protect your account with an extra layer of security.
-          </Text>
-          
-          <Divider />
-
-          {currentStep === 2 ? (
-             <div className="text-center py-8">
-                <CheckCircleOutlined className="text-6xl text-green-500 mb-4" />
-                <Title level={3}>2FA is Active</Title>
-                <Text>Your account is now secured.</Text>
-             </div>
-          ) : (
-            <>
-              <Steps current={currentStep} className="mb-8">
-                <Step title="Start" description="Initiate Setup" />
-                <Step title="Scan" description="Scan QR Code" />
-                <Step title="Verify" description="Enter Code" />
-              </Steps>
-
-              {currentStep === 0 && (
-                <div className="text-center">
-                   <LockOutlined className="text-6xl text-blue-500 mb-4" />
-                   <div className="mb-4">
-                     <Text>Click the button below to set up 2FA using Google Authenticator or similar apps.</Text>
-                   </div>
-                   <Button type="primary" onClick={handleStartSetup} loading={loading}>
-                     Setup 2FA
-                   </Button>
-                </div>
-              )}
-
-              {currentStep === 1 && setupData && (
-                <div className="flex flex-col items-center space-y-6">
-                  <div className="p-4 border rounded bg-white">
-                    <QRCode value={setupData.otpauthUrl} size={200} />
-                  </div>
-                  <div className="text-center">
-                    <Text strong>Scan this QR Code with your Authenticator App</Text>
-                    <br />
-                    <Text type="secondary" copyable>{setupData.secret}</Text>
-                  </div>
-                  
-                  <div className="w-full max-w-xs">
-                    <Input.OTP 
-                      length={6} 
-                      value={token} 
-                      onChange={(val) => setToken(val)} 
-                      size="large"
-                    />
-                    <Button 
-                      type="primary" 
-                      block 
-                      className="mt-4" 
-                      onClick={handleVerify} 
-                      loading={loading}
-                      disabled={token.length !== 6}
-                    >
-                      Verify & Enable
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </Card>
+      <Collapse items={[{ key: 'security', label: `帳號安全 · 兩步驟驗證${currentStep === 2 ? '已啟用' : '未啟用'}`, children: <div style={{ maxWidth: 560 }}>
+        <Typography.Paragraph type="secondary">兩步驟驗證是額外的登入保護，不影響編輯個人資料。</Typography.Paragraph>
+        {securityError && <Alert type="error" showIcon message={securityError} style={{ marginBottom: 16 }} />}
+        {currentStep === 2 ? <Alert type="success" message="已啟用兩步驟驗證" description="下次登入需輸入密碼及手機驗證器的六位數驗證碼。" /> : currentStep === 0 ? <Button onClick={handleStartSetup} loading={loading}>設定兩步驟驗證</Button> : setupData && <Space direction="vertical" size="middle">
+          <Typography.Text>用手機驗證器掃描 QR Code，並保存設定金鑰供更換手機時使用。設定十分鐘內有效。</Typography.Text>
+          <QRCode value={setupData.otpauthUrl} size={200} />
+          <Typography.Text copyable>{setupData.secret}</Typography.Text>
+          <Input.Password aria-label="目前密碼" placeholder="目前登入密碼" autoComplete="current-password" value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} />
+          <Input aria-label="驗證器驗證碼" placeholder="驗證器的六位數驗證碼" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={token} onChange={event => setToken(event.target.value.replace(/\D/g, ''))} />
+          <Space><Button type="primary" onClick={handleVerify} loading={loading} disabled={token.length !== 6 || !currentPassword}>驗證並啟用</Button><Button onClick={() => { setSetupData(null); setCurrentPassword(''); setToken(''); setSecurityError(''); setCurrentStep(0) }}>取消</Button></Space>
+        </Space>}
+      </div> }]} />
     </motion.div>
   )
 }

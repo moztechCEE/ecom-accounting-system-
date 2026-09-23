@@ -66,7 +66,7 @@ import {
 import { hasPermission, hasRole, isAdminUser } from '../utils/access'
 import AccessPreview from '../components/AccessPreview'
 import PermissionMatrix from '../components/PermissionMatrix'
-import { isPrivilegedRole, SYSTEM_ROLE_CODES } from '../utils/access-preview'
+import { isPrivilegedRole } from '../utils/access-preview'
 import { getAccessControlErrorMessage as getErrorMessage } from '../utils/access-control-errors'
 
 type TableColumn<T> = {
@@ -777,7 +777,7 @@ const UsersTab = ({
             </Form.Item>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <Form.Item name="roleIds" label="指派角色" extra="儲運作業員可選揀貨或裝箱；揀貨員與裝箱員只開放對應作業。" className="mb-0">
+            <Form.Item name="roleIds" label="指派角色" extra="倉儲人員進入工作台後，可選擇今天負責揀貨或裝箱。" className="mb-0">
               <Select
                 mode="multiple"
                 placeholder="選擇角色"
@@ -810,7 +810,7 @@ const UsersTab = ({
       >
         <Form form={assignForm} layout="vertical" className="pt-4">
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <Form.Item name="roleIds" label="角色" extra="儲運作業員可選揀貨或裝箱；揀貨員與裝箱員只開放對應作業。" className="mb-0">
+            <Form.Item name="roleIds" label="角色" extra="倉儲人員進入工作台後，可選擇今天負責揀貨或裝箱。" className="mb-0">
               <Select
                 mode="multiple"
                 placeholder="選擇角色"
@@ -932,7 +932,7 @@ const RolesTab = ({
   }
 
   const handleDelete = async (role: Role) => {
-    if (!canManage || SYSTEM_ROLE_CODES.includes(role.code)) return
+    if (!canManage || role.deletionReason || role.code === 'SUPER_ADMIN') return
     try {
       await rolesService.remove(role.id)
       message.success('角色已刪除')
@@ -989,6 +989,8 @@ const RolesTab = ({
       render: (value: any) =>
         typeof value === 'number' ? <Tag>{value}</Tag> : '—',
     },
+    { title: '使用帳號', key: 'assignedUserCount', render: (_value: any, record: Role) => <Text>{record.assignedUserCount ?? 0} 個帳號</Text> },
+    { title: '刪除狀態', key: 'deletionReason', render: (_value: any, record: Role) => <Text type="secondary">{record.deletionReason || '可刪除'}</Text> },
     {
       title: '權限數量',
       key: 'permissionCount',
@@ -1036,13 +1038,13 @@ const RolesTab = ({
           <Popconfirm
             title="確認刪除此角色？"
             onConfirm={() => handleDelete(record)}
-            disabled={!canManage || SYSTEM_ROLE_CODES.includes(record.code)}
+            disabled={!canManage || Boolean(record.deletionReason) || record.code === 'SUPER_ADMIN'}
           >
-            <Tooltip title="刪除">
+            <Tooltip title={record.deletionReason || "刪除"}>
               <Button
                 type="text"
                 danger
-                disabled={!canManage || SYSTEM_ROLE_CODES.includes(record.code)}
+                disabled={!canManage || Boolean(record.deletionReason) || record.code === 'SUPER_ADMIN'}
                 icon={<DeleteOutlined />}
               />
             </Tooltip>

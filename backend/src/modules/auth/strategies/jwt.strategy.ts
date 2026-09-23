@@ -32,7 +32,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * @param payload - JWT Token 中的 payload
    * @returns 使用者資訊
    */
-  async validate(payload: { sub: string; email: string }) {
+  async validate(payload: { sub: string; email: string; purpose?: string; aud?: string }) {
+    if (payload.purpose || payload.aud || !payload.email) throw new UnauthorizedException();
     const user = await this.authService.validateUser(payload.sub);
     if (!user) {
       throw new UnauthorizedException();

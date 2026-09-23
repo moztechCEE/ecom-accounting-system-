@@ -1,3 +1,4 @@
+import WarehouseLink from './WarehouseLink'
 import { useEffect, useState } from 'react'
 import { Input, Modal, Empty } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
@@ -27,7 +28,7 @@ export default function CommandPalette({ items }: { items?: NavigationItem[] }) 
     <Input id="operations-command-search" aria-label="搜尋功能" prefix={<SearchOutlined />}
       value={search} onChange={(event) => setSearch(event.target.value)} allowClear />
     <nav aria-label="功能搜尋結果" className="operations-command-results">
-      {pages.map((item) => item.externalUrl ? <a key={item.key} href={item.externalUrl} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>{item.label}</a> : <button type="button" key={item.key}
+      {pages.map((item) => item.externalUrl ? <WarehouseLink key={item.key} item={item} onOpen={() => setOpen(false)} /> : <button type="button" key={item.key}
         onClick={() => { navigate(item.key); setOpen(false) }}>{item.label}</button>)}
       {!pages.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="沒有符合的功能" />}
     </nav>

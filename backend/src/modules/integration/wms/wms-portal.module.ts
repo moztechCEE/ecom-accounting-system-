@@ -6,11 +6,11 @@ import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
 
-const roles = { picker: 'wms_picking:execute', packer: 'wms_packing:execute' } as const;
+const roles = { picker: 'wms_picking:execute', packer: 'wms_packing:execute', dispatcher: 'wms_orders:create' } as const;
 type Station = keyof typeof roles;
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
 class TicketDto {
-  @IsIn(['picker', 'packer']) role!: Station;
+  @IsIn(['picker', 'packer', 'dispatcher']) role!: Station;
   @IsString() @Matches(/^[a-f0-9]{64}$/) nonce!: string;
 }
 class ExchangeDto {

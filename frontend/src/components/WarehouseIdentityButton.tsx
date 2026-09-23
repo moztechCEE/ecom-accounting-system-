@@ -24,7 +24,7 @@ export default function WarehouseIdentityButton({userId,name}:{userId:string;nam
   }
   const linked=staff.find(s=>s.erp_user_id===userId)
   return <><Button type="text" onClick={load}>儲運帳號</Button><Modal title={`${name} · 儲運帳號`} open={open} onCancel={()=>setOpen(false)} onOk={save} okText="連結帳號" confirmLoading={loading} okButtonProps={{disabled:!loaded || !selected || !!linked}}>
-    <Typography.Paragraph>先在角色設定指派揀貨、裝箱或儲運作業員。新進人員首次進入工作台時，會自動建立儲運身分。</Typography.Paragraph>
+    <Typography.Paragraph>先在角色設定指派倉儲人員，或具備出貨管理權限的角色。新進人員首次進入工作台時，會自動建立儲運身分。</Typography.Paragraph>
     <Typography.Paragraph>已有儲運紀錄的人員，請連結本人原帳號，保留原有任務與操作歷程。連結後改由營運管理系統統一登入。</Typography.Paragraph>
     {error && <Alert type="error" message={error} style={{marginBottom:16}}/>}
     <Select aria-label="既有儲運帳號" style={{width:'100%'}} loading={loading} disabled={!!linked} value={selected} onChange={setSelected} placeholder="選擇本人原有的儲運帳號" options={staff.map(s=>({value:s.id,label:`${s.name}（${s.username}）`,disabled:!!s.erp_user_id && s.erp_user_id!==userId}))}/>

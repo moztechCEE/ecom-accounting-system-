@@ -1,0 +1,79 @@
+{
+  "environment": "DEV",
+  "productionChanged": false,
+  "githubMerged": false,
+  "revisions": {
+    "corely-erp-api-dev": {
+      "revision": "corely-erp-api-dev-workspace-0923",
+      "percent": 100,
+      "images": [
+        "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev@sha256:48853ce03fe13fe6b607673cea89c3740fde20ad6fca73304cce7467a75efabb"
+      ]
+    },
+    "corely-erp-dev": {
+      "revision": "corely-erp-dev-workspace-0923",
+      "percent": 100,
+      "images": [
+        "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:efcec3386186fccaa8830a0635bedb7486ab45ad0c99d1311fe8f71fe8091851"
+      ]
+    },
+    "corely-wms-dev": {
+      "revision": "corely-wms-dev-workspace-0923",
+      "percent": 100,
+      "images": [
+        "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-frontend@sha256:b047c7f63f354186c85b0bc124e4f862fe5acb1fb95054d072be0c8a1198492f",
+        "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-wms-backend@sha256:b75336b3ae9109396993c272d1a09e7c49036ecf50c292f8da2e61228717176f"
+      ]
+    }
+  },
+  "source": {
+    "erpRuntime": "8897ddcb",
+    "erpMigrations": "1a4244cb",
+    "wms": "eca381b"
+  },
+  "migrations": [
+    "20260923010000_warehouse_workspace",
+    "20260923020000_warehouse_role_identifiers",
+    "20260923030000_warehouse_role_uuid_v4",
+    "034_erp_staff_identity.sql"
+  ],
+  "api": {
+    "erp": "https://corely-erp-api-dev-sp5g377smq-de.a.run.app/api/v1",
+    "wms": "https://corely-wms-dev-sp5g377smq-de.a.run.app",
+    "notes": [
+      "picker sees only picking",
+      "picker cannot mint a packing session",
+      "employee cannot list other expenses",
+      "employee cannot link accounts",
+      "backchannel requires service credential",
+      "ERP picker session reads real DEV work queue",
+      "handoff cannot be replayed",
+      "switching to packing revokes old picking session and preserves identity",
+      "removing pack permission immediately blocks API",
+      "ERP logout revokes WMS access",
+      "admin reads bindable staff through restricted DEV backchannel"
+    ]
+  },
+  "browser": {
+    "notes": [
+      "operator has two work choices and compact personal sidebar",
+      "ERP picker button opens authenticated WMS without another login, with embedded announcements",
+      "packing choice gives packer controls",
+      "WMS personal expense link returns to authenticated ERP",
+      "personal page opens /attendance/dashboard",
+      "personal page opens /attendance/leaves",
+      "personal page opens /ap/expenses",
+      "picker-only account has no packing card on mobile"
+    ],
+    "pageErrors": []
+  },
+  "binding": {
+    "passed": 7,
+    "legacyWmsId": 31,
+    "erpPickerId": "88217743-c80a-41b4-8714-7e6422826093",
+    "legacyPasswordBlocked": true,
+    "oldTokenBlocked": true,
+    "historyIdentityPreserved": true,
+    "rebindRejected": true
+  }
+}

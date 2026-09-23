@@ -9,6 +9,7 @@ describe('Role administration boundaries', () => {
     role: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     userRole: { count: jest.fn() },
     rolePermission: { deleteMany: jest.fn(), createMany: jest.fn() },
+    $queryRaw: jest.fn(),
     $transaction: jest.fn(),
   };
   let service: RolesService;
@@ -32,10 +33,10 @@ describe('Role administration boundaries', () => {
     expect(prisma.role.update).not.toHaveBeenCalled();
   });
 
-  it('protects administrator permission lists and system role deletion', async () => {
+  it('protects administrator permission lists and denies deleting ADMIN without highest-admin authority', async () => {
     prisma.role.findUnique.mockResolvedValue({ code: 'ADMIN', name: 'ADMIN' });
     await expect(service.setPermissions('admin', [])).rejects.toThrow('管理員');
-    await expect(service.remove('admin')).rejects.toThrow('系統角色不可刪除');
+    await expect(service.remove('admin')).rejects.toThrow('最高管理員');
     expect(prisma.rolePermission.deleteMany).not.toHaveBeenCalled();
     expect(prisma.role.delete).not.toHaveBeenCalled();
   });
@@ -52,8 +53,19 @@ describe('Role administration boundaries', () => {
   it('does not delete custom roles still assigned to people', async () => {
     prisma.role.findUnique.mockResolvedValue({ id: 'custom', code: 'CUSTOM', name: 'Custom' });
     prisma.userRole.count.mockResolvedValue(1);
-    await expect(service.remove('custom')).rejects.toThrow('仍有人員使用');
+    await expect(service.remove('custom')).rejects.toThrow('仍有 1 個帳號使用');
     expect(prisma.role.delete).not.toHaveBeenCalled();
+  });
+
+  it('preserves highest-admin removal of an unused ADMIN role under the transactional lock', async () => {
+    prisma.role.findUnique.mockResolvedValue({ id: 'admin', code: 'ADMIN', name: 'ADMIN' });
+    prisma.userRole.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+    await service.remove('admin', 'highest-admin');
+    expect(prisma.$queryRaw).toHaveBeenCalled();
+    expect(prisma.userRole.count).toHaveBeenLastCalledWith({
+      where: { userId: 'highest-admin', role: { code: 'SUPER_ADMIN' } },
+    });
+    expect(prisma.role.delete).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'admin' } }));
   });
 
   it('accepts seeded warehouse string IDs and rejects empty IDs', async () => {
