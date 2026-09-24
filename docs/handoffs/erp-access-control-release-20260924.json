@@ -1,0 +1,104 @@
+{
+  "verifiedAt": "2026-09-24T08:32:41Z",
+  "environment": "DEV",
+  "project": "moztech-main-db",
+  "region": "asia-east1",
+  "source": {
+    "checkout": "corely-erp-access-dev-20260924",
+    "branch": "codex/erp-access-dev-20260924",
+    "imageSourceSha": "870e3b18f41b183d449a4be4c5b63cf24399fbd8",
+    "baseSha": "a75132f0b6b35113bff469eff9d17f9f9ec78f34",
+    "cloudBuildId": "4f692f30-7b47-4f29-9236-0ae7fa3b5d6e",
+    "cloudBuildStatus": "SUCCESS",
+    "remotePush": "blocked_by_auto_review",
+    "remotePushReason": "The destination GitHub repository is public; the reviewer rejected publishing sensitive ERP permission and compensation code without explicit authorization. The DEV image was built from the local commit."
+  },
+  "scope": [
+    "Simplified users and role templates with effective permission and sensitive data previews",
+    "Separated product cost, margin, net profit, salary, and performance review permissions",
+    "Added company and subject-scoped performance review workflows without salary fields",
+    "Enforced sensitive read and write rules in API responses, requests, reports, and AI paths"
+  ],
+  "database": {
+    "name": "erp_dev_20260921",
+    "migration": "20260924010000_performance_reviews",
+    "migrationChecksum": "0dfd335d570acd8cbe4894fb0e80607dd39e447909dc3658edad2ffd6e8bcb1f",
+    "status": "applied_and_verified",
+    "existingUserRoleAssignmentsChanged": false
+  },
+  "tests": {
+    "backendSuites": 82,
+    "backendTests": 722,
+    "backendResult": "pass",
+    "backendBuild": "pass",
+    "frontendBuild": "pass",
+    "knowledgeGeneratorChecks": "12/12 pass",
+    "migrationHelperChecks": "6/6 pass",
+    "qaFixtureSelftests": "9/9 pass"
+  },
+  "devRelease": {
+    "api": {
+      "service": "corely-erp-api-dev",
+      "revision": "corely-erp-api-dev-access-870e3b18-r",
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-api-dev@sha256:f3c6b7224eddc73b1e6d6629be3d7379961cfc92c98dd75fa604de8e7c99807e",
+      "generation": 38,
+      "trafficPercent": 100,
+      "ready": true,
+      "url": "https://corely-erp-api-dev-sp5g377smq-de.a.run.app"
+    },
+    "web": {
+      "service": "corely-erp-dev",
+      "revision": "corely-erp-dev-access-870e3b18-r",
+      "image": "asia-east1-docker.pkg.dev/moztech-main-db/cloud-run/corely-erp-dev@sha256:ea06537d33aaf65dba70e99b5196e4cab10b7fb3eff980a4c7bef8dea563625c",
+      "generation": 47,
+      "trafficPercent": 100,
+      "ready": true,
+      "url": "https://corely-erp-dev-sp5g377smq-de.a.run.app/admin/access-control"
+    },
+    "apiReadiness": "HTTP 200 ready",
+    "webEntryAndRoutes": "HTTP 200 for /, /admin/access-control, and /performance/reviews",
+    "webConfig": "Canonical DEV API URL; sandbox enabled; staged operations disabled"
+  },
+  "authenticatedDevAcceptance": {
+    "fixture": "Dedicated synthetic DEV-only company with five accounts and linked employees",
+    "roles": ["SUPER_ADMIN", "PERFORMANCE_HR", "PERFORMANCE_REVIEWER", "EMPLOYEE", "ACCOUNTANT"],
+    "checks": [
+      "All five QA accounts authenticated and returned effective access",
+      "HR created a cycle and assigned a reviewer in the same company",
+      "Reviewer updated and submitted only an assigned review",
+      "Submitted review rejected further edits with HTTP 409",
+      "Employee review request was denied with HTTP 403",
+      "Reviewer and HR salary requests were denied with HTTP 403",
+      "HR cross-company cycle creation was denied with HTTP 403",
+      "Review responses contained no salary fields",
+      "Live browser showed new user filters, role templates, sensitive data summary, and effective access preview",
+      "After refreshing an already-open browser tab, the navigation displayed 考績與考核 and its review page"
+    ],
+    "fixtureCleanup": "completed; QA company, accounts, employees, cycles, and reviews removed"
+  },
+  "untouchedServices": {
+    "productionApi": {
+      "service": "ecom-accounting-backend",
+      "generation": 509,
+      "revision": "ecom-accounting-backend-00506-ray",
+      "trafficPercent": 100
+    },
+    "productionWeb": {
+      "service": "ecom-accounting-frontend",
+      "generation": 271,
+      "revision": "ecom-accounting-frontend-00270-vob",
+      "trafficPercent": 100
+    },
+    "wmsDev": {
+      "service": "corely-wms-dev",
+      "generation": 64,
+      "revision": "corely-wms-dev-entry-audit2-0923",
+      "trafficPercent": 100
+    }
+  },
+  "rollbackDevRevisions": {
+    "api": "corely-erp-api-dev-b2b-a75132f0b6b3-c",
+    "web": "corely-erp-dev-b2b-a75132f0b6b3-f"
+  },
+  "productionDeploymentAuthorized": false
+}
