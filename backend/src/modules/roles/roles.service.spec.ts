@@ -7,7 +7,7 @@ import { SetUserRolesDto } from '../users/dto/set-user-roles.dto';
 describe('Role administration boundaries', () => {
   const prisma = {
     department: { count: jest.fn() },
-    role: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
+    role: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     userRole: { count: jest.fn() },
     rolePermission: { deleteMany: jest.fn(), createMany: jest.fn() },
     $queryRaw: jest.fn(),
@@ -50,6 +50,23 @@ describe('Role administration boundaries', () => {
     expect(prisma.role.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
       code: 'TEAM_ASSISTANT', permissions: { create: [{ permissionId: 'warehouse-expense-self-read' }] },
     }) }));
+  });
+
+  it('marks roles containing finance or unknown permissions as unavailable to account maintainers', async () => {
+    const counts = { users: 0, memberDepartments: 0, supervisorDepartments: 0 };
+    prisma.role.findMany.mockResolvedValue([
+      { id: 'worker', code: 'WAREHOUSE_PICKER', name: '揀貨員', _count: counts, permissions: [
+        { permission: { resource: 'wms_picking', action: 'execute' } },
+      ] },
+      { id: 'finance', code: 'ACCOUNTANT', name: '財務', _count: counts, permissions: [
+        { permission: { resource: 'reports', action: 'read' } },
+      ] },
+    ]);
+    prisma.userRole.count.mockResolvedValue(0);
+    const roles = await service.findAll('account-admin');
+    expect(roles.map(role => [role.id, role.assignableByAccountManager])).toEqual([
+      ['worker', true], ['finance', false],
+    ]);
   });
 
   it('does not delete custom roles still assigned to people', async () => {

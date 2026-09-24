@@ -12,7 +12,7 @@
     {
       "id": "dashboard",
       "title": "儀表板總覽",
-      "summary": "依期間查看營運、財務、毛利與待辦，追蹤資料狀態並連到來源功能。",
+      "summary": "依期間查看營運、獲授權的財務與損益指標及待辦，追蹤資料狀態並連到來源功能。",
       "keywords": [
         "dashboard",
         "首頁",
@@ -33,7 +33,8 @@
         ],
         "boundaries": [
           "儀表板數字與 AI 摘要不能替代原單據；載入失敗或沒有資料不表示金額為零。",
-          "儲運專用角色可能直接進入儲運工作區；不是所有人都有同一首頁。"
+          "儲運專用角色可能直接進入儲運工作區；不是所有人都有同一首頁。",
+          "成本、毛利、淨利，以及可反推出費用的廣告費、平台費、淨入帳等指標，依專用讀取權限顯示；無權限時不可把缺少的指標解讀為零。完整高階財務總覽需成本、毛利及淨利三項讀取授權。"
         ],
         "related": [
           "reports",
@@ -44,7 +45,7 @@
       "translations": {
         "en": {
           "title": "Dashboard overview",
-          "summary": "Review operations, finance, gross profit and work queues by period, checking data status and source features.",
+          "summary": "Review operations, authorized financial and profit metrics, and work queues by period, checking data status and source features.",
           "category": "Overview",
           "keywords": [
             "Dashboard overview",
@@ -57,7 +58,8 @@
             ],
             "boundaries": [
               "Metrics and AI summaries do not replace source documents; failed or missing data is not a zero balance.",
-              "Warehouse-only users may land in their warehouse workspace instead."
+              "Warehouse-only users may land in their warehouse workspace instead.",
+              "Cost, margin and net-profit figures, and advertising spend, platform fees or net payout that could reveal expenses, depend on separate read grants; a missing metric is not zero. The full executive financial overview requires all three grants."
             ],
             "related": [
               "reports",
@@ -72,7 +74,8 @@
         "frontend/src/App.tsx",
         "frontend/src/pages/DashboardPage.tsx",
         "frontend/src/utils/login-destination.ts",
-        "frontend/src/config/workspaces.ts"
+        "frontend/src/config/workspaces.ts",
+        "backend/src/modules/reports/reports.controller.ts"
       ]
     },
     {
@@ -469,7 +472,7 @@
     {
       "id": "access-control",
       "title": "權限管理",
-      "summary": "在權限管理先選人員、設定角色，再點「可見介面」預覽。需要新組合時，在角色頁新增角色、選擇範本，以模組矩陣勾選讀取、新增、修改等操作後儲存，再指派給人員；多角色權限取聯集。公司與八類資料範圍只有最高管理員能設定，資料範圍分自己、部門、公司。主管另外在員工管理維護；看得到選單不代表可以修改或核准。",
+      "summary": "在「使用者」先篩選帳號、指派職務範本並查看有效權限；多角色權限合併。帳號維護與角色政策分開：一般帳號管理者只能指派已核准的作業角色，最高管理員才可修改共用角色、公司及資料範圍。成本、毛利、淨利與同仁薪資須個別授權。",
       "keywords": [
         "權限",
         "角色",
@@ -484,17 +487,21 @@
       "group": "admin",
       "sections": {
         "steps": [
-          "在人員頁選擇使用者與角色，儲存後用「可見介面」預覽。",
-          "新增角色時選擇範本，再逐模組勾選讀取、新增、修改等操作；儲存角色後另行指派人員。",
-          "最高管理員依業務需要設定公司及自己、部門、公司資料範圍；主管另到員工資料設定。",
-          "部門與主管旗標在人員管理設定；帳號列表顯示部門與職責，「可見介面」合併個人角色及部門衍生權限。"
+          "在「使用者」依姓名或 Email、帳號狀態與職務範本篩選，選定帳號後查看目前角色、敏感資料標示及有效權限。",
+          "建立或編輯帳號時先選最符合工作內容的職務範本；兼任時才增加角色。一般管理者新增帳號會自動歸入其唯一所屬公司；需要存取本人資料的職務，接著在員工管理連結員工資料並核對有效權限。",
+          "只有最高管理員可在「角色」建立或修改共用角色及其權限，並設定帳號可存取公司與各模組資料範圍。",
+          "部門與主管身分在員工管理維護；考績評核另需專用權限及逐筆指派，不能只憑主管職稱取得。"
         ],
         "boundaries": [
-          "多角色權限取聯集；畫面可見不代表可修改、審批或查看所有公司的資料。",
-          "可選範本不會自動授權現有員工。不得藉由 Copilot 繞過原有資料範圍。"
+          "具有帳號更新權限的一般管理者只能維護一般帳號並指派明確開放的作業角色；管理員、敏感或未知權限角色，以及共用角色政策，均由最高管理員處理。",
+          "一般帳號管理者僅能查看及維護其可管理公司內的帳號；目標若無公司或同時屬於其他公司，交由最高管理員處理。一般管理者若屬於零個或多個公司，需請最高管理員明確選擇新帳號公司。",
+          "新帳號的資料範圍預設為「自己」；若未連結同公司的有效員工資料，多數公司資料操作仍會受後端範圍限制，不應自動放大成全公司。",
+          "成本需 product_cost:read；毛利另需 financial_margin:read，淨利再需 financial_net_profit:read；同仁薪資另需 employee_compensation:read。資料範圍或看得到選單不代表可讀敏感欄位、修改、審批或跨公司存取。",
+          "多角色權限取聯集。畫面預覽供核對，實際操作仍受後端權限、公司、資料範圍和逐筆指派限制；Copilot 不可繞過。"
         ],
         "related": [
           "employee-supervisor",
+          "performance-reviews",
           "business-entities",
           "expense-requests"
         ]
@@ -502,7 +509,7 @@
       "translations": {
         "en": {
           "title": "Access control",
-          "summary": "Assign roles to people and preview visible pages. Use the module matrix to edit reusable role templates. Roles combine; only super administrators change company access and data scopes. Supervisors are configured separately.",
+          "summary": "Start with Users: filter accounts, assign job templates and inspect effective access. Multiple roles combine. Account maintenance and role policy are separate: account managers may assign approved operational roles, while only super administrators change shared roles, company access and data scopes. Cost, margin, net profit and coworker pay require separate grants.",
           "category": "Administration",
           "keywords": [
             "Access control",
@@ -510,17 +517,21 @@
           ],
           "sections": {
             "steps": [
-              "Select a user and roles, save, then preview visible pages.",
-              "When creating a role, choose a template and select module actions. Saving a role and assigning it to a person are separate steps.",
-              "A super administrator sets company access and self, department or entity scopes. Configure supervisors in employee records.",
-              "Maintain department and supervisor status in employee management. The account list shows that binding, and the preview combines individual and department permissions."
+              "In Users, filter by name or email, account status and job template. Open an account to inspect roles, sensitive-data labels and effective access.",
+              "When creating or editing an account, choose the closest job template first and add another role only for a second duty. An ordinary account manager’s new account is assigned to their sole company. For self-scoped work, link the employee record in employee management and then check effective access.",
+              "Only a super administrator creates or changes shared roles and their permissions, and sets an account’s company access and module data scopes.",
+              "Maintain department and supervisor identity in employee records. Performance review also requires explicit permission and assignment; a supervisor title alone is insufficient."
             ],
             "boundaries": [
-              "Role permissions combine. Page visibility does not imply write, approval or cross-company access.",
-              "Optional templates do not automatically grant existing employees access. Copilot must retain original data scopes."
+              "An account manager with update access can maintain ordinary accounts and assign only explicitly approved operational roles. Administrator, sensitive or unknown-permission roles and shared role policy require a super administrator.",
+              "An ordinary account manager can view and maintain only accounts wholly within their manageable companies. Accounts with no company or an additional outside company require a super administrator. When the manager has zero or multiple companies, a super administrator must choose the new account’s company explicitly.",
+              "A new account’s data scopes default to Self. Without a linked active employee in the same company, many company-data operations remain blocked by server scope checks; do not automatically widen them to the whole company.",
+              "Cost requires product_cost:read; margin additionally requires financial_margin:read, and net profit additionally requires financial_net_profit:read. Coworker pay separately requires employee_compensation:read. Data scope or a visible menu grants none of these fields, writes, approval or cross-company access.",
+              "Role permissions combine. The preview is for checking; server permissions, company and data scopes, and record assignment still control operations. Copilot cannot bypass them."
             ],
             "related": [
               "employee-supervisor",
+              "performance-reviews",
               "business-entities",
               "expense-requests"
             ]
@@ -534,7 +545,9 @@
         "backend/src/modules/roles/roles.controller.ts",
         "backend/src/modules/users/users.controller.ts",
         "frontend/src/utils/access.ts",
-        "backend/src/common/department-access/department-access.ts"
+        "backend/src/common/department-access/department-access.ts",
+        "backend/src/modules/users/users.service.ts",
+        "backend/src/modules/roles/role-policy.ts"
       ],
       "permissions": [
         "access_control:read",
@@ -689,7 +702,7 @@
     {
       "id": "products",
       "title": "商品管理",
-      "summary": "查看商品 SKU、名稱、成本、售價與庫存快照。",
+      "summary": "查看商品 SKU、名稱、售價與庫存快照；成本欄位僅對另有成本讀取權限者顯示。",
       "keywords": [
         "商品",
         "product",
@@ -711,7 +724,7 @@
         "boundaries": [
           "庫存快照不等於實體盤點、預留量或已完成出庫；對外通用庫存調整、預留與釋放入口已關閉，正式銷單出庫須依交運核銷流程。",
           "查詢需要庫存讀取權限；建倉與舊 ERP 匯入需要庫存更新權限，且只能操作授權公司。",
-          "成本與售價依原功能權限；Copilot 敏感成本工具需要額外授權。"
+          "商品清單與明細的成本欄位需另有 product_cost:read；只有庫存讀取權限不能查看成本，Copilot 查詢仍依原授權。"
         ],
         "related": [
           "purchase-orders",
@@ -723,7 +736,7 @@
       "translations": {
         "en": {
           "title": "Products and inventory",
-          "summary": "View SKUs, names, costs, prices and inventory snapshots.",
+          "summary": "View SKUs, names, selling prices and inventory snapshots; cost fields require a separate cost-read grant.",
           "category": "Purchasing and inventory",
           "keywords": [
             "Products and inventory",
@@ -737,7 +750,7 @@
             "boundaries": [
               "A stock snapshot does not prove a physical count, reservation or completed dispatch. Generic HTTP stock adjustment, reservation and release endpoints are closed; final sales stock posting follows handover reconciliation.",
               "Reads require inventory read permission. Warehouse creation and legacy ERP import require inventory update permission within an authorized company.",
-              "Cost and price access follow original permissions; sensitive Copilot cost lookup needs additional authorization."
+              "Product cost fields in lists and details require product_cost:read. Inventory read alone does not grant cost visibility; Copilot queries remain subject to their own authorization."
             ],
             "related": [
               "purchase-orders",
@@ -754,7 +767,9 @@
         "frontend/src/pages/ProductsPage.tsx",
         "frontend/src/services/inventory.service.ts",
         "backend/src/modules/product/product.controller.ts",
-        "backend/src/modules/inventory/inventory.controller.ts"
+        "backend/src/modules/inventory/inventory.controller.ts",
+        "backend/src/modules/product/sensitive-response.interceptor.ts",
+        "backend/src/modules/ai/ai-copilot-access.service.ts"
       ],
       "permissions": [
         "inventory:read"
@@ -841,14 +856,14 @@
       "group": "inventory",
       "sections": {
         "steps": [
-          "先選公司；有採購建立權限者在採購單頁選擇該公司有效供應商與商品，填入日期、原幣單價、正整數數量、幣別與匯率後建立採購單。若選項缺少主檔，先到供應商或商品管理建檔。",
+          "先選公司；有採購建立及成本更新權限者在採購單頁選擇該公司有效供應商與商品，填入日期、原幣單價、正整數數量、幣別與匯率後建立採購單。若選項缺少主檔，先到供應商或商品管理建檔。",
           "在待收貨採購單開啟「運費與到岸成本」，逐品項填本次總計費重量，輸入每公斤運費、運費幣別與必要匯率，先試算再保存估算。",
           "選擇收貨倉庫並核對品項數量；需序號的商品填齊序號後確認收貨入庫，再查看已保存的成本分攤。"
         ],
         "boundaries": [
           "運費與到岸成本在收貨前可修改；試算或保存估算都不增加庫存，收貨才建立庫存與成本紀錄，收貨後只能查看估算。",
           "採購單、收貨、應付與付款不是同一狀態，不能只憑建立採購單認定已進貨。",
-          "建單需要採購建立權限與公司範圍；收貨及運費試算／保存另依既有採購角色授權，指南不提供繞過 API 授權的直接執行。"
+          "建單與收貨需授權公司、採購建立及 product_cost:update；到岸成本試算需 product_cost:read，保存需 product_cost:update，收貨與到岸成本另受採購角色限制。採購文件中的成本與金額對未獲成本讀取權限者遮蔽。"
         ],
         "related": [
           "vendors",
@@ -868,14 +883,14 @@
           ],
           "sections": {
             "steps": [
-              "Select the company. Staff with purchase creation access choose an active vendor and products from that company, enter date, currency, exchange rate, unit costs and positive integer quantities, then create the purchase order. Create missing master records in Vendors or Products first.",
+              "Select the company. Staff with purchase creation and cost-update access choose an active vendor and products from that company, enter date, currency, exchange rate, unit costs and positive integer quantities, then create the purchase order. Create missing master records in Vendors or Products first.",
               "On a pending order, open Landed cost, enter each line's total chargeable weight, freight per kilogram, currency and any exchange rate; preview and then save the estimate.",
               "Choose the receiving warehouse and verify quantities. Enter serial numbers where required, receive the goods, and review the saved cost allocation."
             ],
             "boundaries": [
               "Landed cost can be changed before receipt. Previewing or saving an estimate does not add stock; receipt records inventory and cost, after which the estimate is read-only.",
               "A purchase order, receipt, payable and payment have separate states; creation alone does not prove receipt.",
-              "Creation requires purchase creation permission and company access. Receiving and landed-cost actions retain their purchasing role gate; this guide does not bypass API authorization."
+              "Creation and receipt require company access, purchase creation and product_cost:update. Landed-cost preview requires product_cost:read, saving requires product_cost:update, and receipt and landed-cost actions also retain a purchasing role gate. Cost and amount fields in purchase documents are hidden without cost-read access."
             ],
             "related": [
               "vendors",
@@ -891,7 +906,8 @@
         "frontend/src/App.tsx",
         "frontend/src/pages/PurchaseOrdersPage.tsx",
         "backend/src/modules/purchase/purchase.controller.ts",
-        "backend/src/modules/purchase/purchase.service.ts"
+        "backend/src/modules/purchase/purchase.service.ts",
+        "backend/src/modules/product/sensitive-response.interceptor.ts"
       ],
       "permissions": [
         "purchase_orders:read"
@@ -988,12 +1004,14 @@
         ],
         "boundaries": [
           "未設定主管旗標的人員不會因職稱或角色名稱被推定為主管。調部門、取消主管或停用後，後端重新核對權限。",
-          "部門角色僅授予作業權限，個人明確授權仍保留；薪資、財務、系統管理需分別授權。不能審核自己的請假或費用。"
+          "部門角色僅授予作業權限，個人明確授權仍保留；同仁薪資需 employee_compensation:read，薪酬修改另需 employee_compensation:update。財務與系統管理分別授權；不能審核自己的請假或費用。",
+          "部門主管身分不自動取得考績權；評核人須有主管考核職務權限，且由人資或獲授權管理者在週期中逐筆指派。"
         ],
         "related": [
           "access-control",
           "expense-review",
-          "attendance-admin"
+          "attendance-admin",
+          "performance-reviews"
         ]
       },
       "translations": {
@@ -1013,12 +1031,14 @@
             ],
             "boundaries": [
               "Titles or role names do not establish supervisor status. Transfers, demotion and deactivation are checked on subsequent server requests.",
-              "Department grants are operational and additive; sensitive salary, finance and system access require individual authorization. Self-approval is blocked."
+              "Department grants are operational and additive. Coworker pay requires employee_compensation:read and compensation changes also require employee_compensation:update; finance and system access remain separate. Self-approval is blocked.",
+              "Department supervisor status does not grant performance review access. The reviewer needs the review job permission and an explicit assignment in a cycle by HR or another authorized manager."
             ],
             "related": [
               "access-control",
               "expense-review",
-              "attendance-admin"
+              "attendance-admin",
+              "performance-reviews"
             ]
           }
         }
@@ -1034,6 +1054,82 @@
       "permissions": [
         "employees_admin:read"
       ]
+    },
+    {
+      "id": "performance-reviews",
+      "title": "考績與主管考核",
+      "summary": "在「考績與考核」查看週期及指派紀錄。人資或獲授權管理者建立週期時選公司、指派評核人；有考核職務權限的主管只處理明確指派給自己的紀錄。",
+      "keywords": [
+        "考績",
+        "考核",
+        "評分",
+        "評語",
+        "主管評核",
+        "performance review"
+      ],
+      "module": "performance",
+      "category": "人資考勤",
+      "group": "people",
+      "sections": {
+        "steps": [
+          "人資或獲授權管理者選擇可存取公司、建立考核週期，再從同公司在職員工名單指派受評者及評核人。",
+          "系統預設使用受評者目前的直屬主管；建立指派時固定評核人，若需不同評核人須在指派時明確選擇。",
+          "評核人開啟指派給自己的草稿，填寫 1 到 5 分、目標與評語；送出前必須有評分及評語。",
+          "送出後查看狀態；已送出的考核不可再修改。"
+        ],
+        "boundaries": [
+          "建立週期及指派需 performance_reviews:manage；評核人需明確的 performance_reviews:read 與 performance_reviews:write、連結同公司在職員工與啟用帳號。部門主管身分不會自動授權。",
+          "一般評核人只能查看及修改自己被指派的紀錄；跨公司、未指派、自評或已送出的修改均被拒絕。管理者可查看授權公司紀錄，但不能代改主管評語。",
+          "考績名單只含員工身分資料，不含薪資、銀行或薪酬；考績權限不授予 employee_compensation:read，也不代表薪資決策已完成。"
+        ],
+        "related": [
+          "employee-supervisor",
+          "access-control",
+          "payroll"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Performance reviews",
+          "summary": "In Performance reviews, view cycles and assignments. HR or another authorized manager chooses a company when creating a cycle and assigns reviewers; a supervisor with the review job grant handles only records explicitly assigned to them.",
+          "category": "People and attendance",
+          "keywords": [
+            "Performance reviews",
+            "appraisal",
+            "reviewer"
+          ],
+          "sections": {
+            "steps": [
+              "HR or an authorized manager selects an accessible company, creates a cycle, then assigns a subject and reviewer from active employees in that company.",
+              "The current direct supervisor is the default reviewer. The reviewer is fixed when the assignment is created; choose another explicitly at assignment time if needed.",
+              "The reviewer opens an assigned draft and enters a score from 1 to 5, goals and comments. Score and comment are required before submission.",
+              "Check the submitted status. A submitted review cannot be edited."
+            ],
+            "boundaries": [
+              "Creating cycles and assignments requires performance_reviews:manage. A reviewer needs explicit performance_reviews:read and performance_reviews:write, an active account and a linked active employee in the same company. Supervisor status alone grants nothing.",
+              "An ordinary reviewer can read and edit only their assigned records. Cross-company, unassigned, self-review and edits after submission are blocked. Managers can read records in accessible companies but cannot edit a supervisor’s comments on their behalf.",
+              "The roster contains employee identity only, with no salary, bank or compensation fields. Review access does not grant employee_compensation:read or complete a pay decision."
+            ],
+            "related": [
+              "employee-supervisor",
+              "access-control",
+              "payroll"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/config/navigation.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/PerformanceReviewsPage.tsx",
+        "frontend/src/services/performance.service.ts",
+        "backend/src/modules/performance/performance.controller.ts",
+        "backend/src/modules/performance/performance.service.ts"
+      ],
+      "permissions": [
+        "performance_reviews:read"
+      ],
+      "path": "/performance/reviews"
     },
     {
       "id": "payroll",
@@ -1053,11 +1149,11 @@
       "sections": {
         "steps": [
           "在薪資管理選擇月份或批次，檢查薪資項目及批次狀態。",
-          "有管理權限者依原流程計算、確認或核准；員工只查看獲授權的個人內容。"
+          "有薪資管理及薪酬讀寫權限者依原流程計算、確認或核准；員工只從本人薪資單入口查看獲授權的個人內容。"
         ],
         "boundaries": [
           "計算、核准、過帳與實際發薪應分開核實。",
-          "薪資是敏感資料；Copilot 薪資彙總採更嚴格授權，不能用一般指南取得他人薪資。"
+          "查同仁薪資與銀行、薪酬欄位需 payroll_admin:read 及 employee_compensation:read；計算或更改需 payroll_admin:update 及 employee_compensation:update。個人薪資單走本人 payroll_self:read 路由；考績授權不開放薪資，Copilot 不能用一般指南取得他人資料。"
         ],
         "related": [
           "system-settings",
@@ -1077,11 +1173,11 @@
           "sections": {
             "steps": [
               "Select the month or run and inspect payroll items and status.",
-              "Authorized payroll managers use the original calculation and approval workflow; employees see only permitted personal information."
+              "Staff with payroll administration and compensation grants use the original calculation, confirmation and approval flow. Employees view only their authorized personal payslips."
             ],
             "boundaries": [
               "Calculation, approval, posting and actual disbursement require separate verification.",
-              "Payroll is sensitive. Copilot summaries have stricter authorization and guides do not reveal other employees’ salaries."
+              "Coworker pay, bank and compensation fields require payroll_admin:read and employee_compensation:read; calculation or changes require payroll_admin:update and employee_compensation:update. Personal payslips use the employee’s own payroll_self:read route. Review permission does not grant salary, and Copilot cannot use a general guide to retrieve another person’s pay."
             ],
             "related": [
               "system-settings",
@@ -1095,7 +1191,9 @@
         "frontend/src/config/navigation.ts",
         "frontend/src/App.tsx",
         "frontend/src/pages/PayrollPage.tsx",
-        "backend/src/modules/payroll/payroll.controller.ts"
+        "backend/src/modules/payroll/payroll.controller.ts",
+        "backend/src/modules/product/sensitive-response.interceptor.ts",
+        "backend/src/modules/ai/ai-copilot-access.service.ts"
       ],
       "permissions": [
         "payroll_self:read",
@@ -1192,6 +1290,7 @@
         "boundaries": [
           "操作知識涵蓋功能入口，不代表每個模組都已具備 AI 即時查詢或執行工具。",
           "只有註冊且授權的工具可查資料；一般指南不授予權限，也不表示已核准、付款、發送或過帳。",
+          "Copilot 商品成本查詢另需 product_cost:read；同仁薪資彙總另需 employee_compensation:read。每日財務簡報需成本、毛利、淨利三項授權及相應公司的財務與銷售資料範圍，不能從一般指南推得可查。",
           "不要貼上密碼、驗證碼、金鑰或不必要的個資；AI 無法連線時不得假装使用即時資料。"
         ],
         "related": [
@@ -1217,6 +1316,7 @@
             "boundaries": [
               "Coverage of operating guides does not mean every module has a live AI query or executor.",
               "Only registered authorized tools may retrieve data. A guide grants no permission and proves no approval, payment, sending or posting.",
+              "Copilot product-cost lookup separately requires product_cost:read, and coworker payroll summary requires employee_compensation:read. The daily financial briefing requires cost, margin and net-profit grants plus matching company accounting and sales scope; a general guide does not confer any of these.",
               "Do not share passwords, verification codes, keys or unnecessary personal data. A disconnected AI provider must not be presented as a live result."
             ],
             "related": [
@@ -1229,7 +1329,9 @@
       "sourcePaths": [
         "frontend/src/config/navigation.ts",
         "frontend/src/App.tsx",
-        "backend/src/modules/ai/ai.service.ts"
+        "backend/src/modules/ai/ai.service.ts",
+        "backend/src/modules/ai/ai-copilot-access.service.ts",
+        "backend/src/modules/ai/ai-knowledge.service.ts"
       ]
     },
     {
@@ -1537,12 +1639,13 @@
       "sections": {
         "steps": [
           "在營運報表選擇公司、期間與需要的報表類型。",
-          "查看管理、電商歷史、損益、資產負債、試算或總分類帳等已提供頁籤。",
+          "依獲授權欄位查看管理與電商歷史報表；完整損益、資產負債、現金流、試算與總分類帳需另有成本、毛利及淨利讀取權限。",
           "追溯異常指標至來源明細，核對費用是否完整與期間是否一致。"
         ],
         "boundaries": [
           "報表平衡檢查不等於完成正式結帳；淨利受成本、應計與費用完整性影響。",
-          "統計口徑、幣別與日期區間不同時不可直接相加或比較。"
+          "統計口徑、幣別與日期區間不同時不可直接相加或比較。",
+          "報表讀取權限不等於可見成本、損益或可反推出費用的廣告費、平台費與淨入帳。product_cost:read 才可讀成本；毛利還需 financial_margin:read；淨利及上述費用相關指標還需 financial_net_profit:read。完整財務報表、月渠道與訂單對帳稽核，以及 AI 財務分析端點要求三者同時授權。"
         ],
         "related": [
           "accounting-workbench",
@@ -1562,12 +1665,13 @@
           "sections": {
             "steps": [
               "Select company, period and report type.",
-              "Use available management, ecommerce history, income statement, balance sheet, trial balance or general-ledger views.",
+              "Use management and ecommerce history views according to granted fields. Full income statement, balance sheet, cash flow, trial balance and general ledger also require cost, margin and net-profit read grants.",
               "Trace unusual metrics to detail and verify expense completeness and consistent periods."
             ],
             "boundaries": [
               "A balanced report is not formal period close; profit depends on complete costs, accruals and expenses.",
-              "Do not combine or compare figures with incompatible definitions, currencies or date ranges."
+              "Do not combine or compare figures with incompatible definitions, currencies or date ranges.",
+              "Reports read access does not reveal cost, profit, or advertising spend, platform fees and net payout that could expose expenses. Cost requires product_cost:read, margin additionally needs financial_margin:read, and net profit and those expense-related metrics additionally need financial_net_profit:read. Full financial statements, monthly channel and order reconciliation audits, and AI financial analysis require all three grants."
             ],
             "related": [
               "accounting-workbench",
@@ -1582,7 +1686,8 @@
         "frontend/src/App.tsx",
         "frontend/src/pages/ReportsPage.tsx",
         "backend/src/modules/reports/reports.controller.ts",
-        "backend/src/modules/accounting/accounting.controller.ts"
+        "backend/src/modules/accounting/accounting.controller.ts",
+        "backend/src/modules/product/sensitive-response.interceptor.ts"
       ],
       "permissions": [
         "reports:read"
@@ -3741,9 +3846,18 @@
       "id": "b2b-customer-portal",
       "title": "客戶採購入口與商品目錄",
       "summary": "客戶用公司代碼與專屬帳號登入，查看已發布商品及適用於自己的價格。",
-      "keywords": ["客戶入口", "客戶登入", "商品目錄", "專屬價格", "B2B"],
+      "keywords": [
+        "客戶入口",
+        "客戶登入",
+        "商品目錄",
+        "專屬價格",
+        "B2B"
+      ],
       "path": "/b2b/login",
-      "aliases": ["/b2b", "/b2b/catalog"],
+      "aliases": [
+        "/b2b",
+        "/b2b/catalog"
+      ],
       "module": "b2b",
       "category": "客戶採購",
       "group": "sales",
@@ -3756,14 +3870,24 @@
           "客戶入口使用獨立登入及公司資料隔離；ERP 員工帳號與客戶帳號不能互用，商品與價格只顯示授權客戶可見的內容。",
           "目錄價格與金額試算不保證現貨或交期。客戶自行重設密碼及供應商登入入口尚未提供，需洽業務窗口。"
         ],
-        "related": ["b2b-purchase-requests", "b2b-staff-workbench", "products"]
+        "related": [
+          "b2b-purchase-requests",
+          "b2b-staff-workbench",
+          "products"
+        ]
       },
       "translations": {
         "en": {
           "title": "Customer procurement portal and catalog",
           "summary": "Customers sign in with a company code and dedicated account to view published products and their applicable prices.",
           "category": "Customer procurement",
-          "keywords": ["Customer portal", "login", "catalog", "customer pricing", "B2B"],
+          "keywords": [
+            "Customer portal",
+            "login",
+            "catalog",
+            "customer pricing",
+            "B2B"
+          ],
           "sections": {
             "steps": [
               "Staff create a customer account in the procurement workbench and provide the company's login code. The customer signs in with that code, email and password through a separate portal.",
@@ -3773,7 +3897,11 @@
               "Customer sessions and company data are separate from ERP employee access. The accounts are not interchangeable; only products and prices authorized for that customer are shown.",
               "Catalog prices and totals do not guarantee availability or delivery. Customer self-service password reset and a supplier login portal are not yet available; contact the sales representative."
             ],
-            "related": ["b2b-purchase-requests", "b2b-staff-workbench", "products"]
+            "related": [
+              "b2b-purchase-requests",
+              "b2b-staff-workbench",
+              "products"
+            ]
           }
         }
       },
@@ -3789,9 +3917,17 @@
       "id": "b2b-purchase-requests",
       "title": "客戶採購需求與線上報價",
       "summary": "客戶送出採購需求後，查看本人公司可讀的報價連結與人工核庫進度。",
-      "keywords": ["採購需求", "線上報價", "客戶採購單", "LINE 連結", "B2B"],
+      "keywords": [
+        "採購需求",
+        "線上報價",
+        "客戶採購單",
+        "LINE 連結",
+        "B2B"
+      ],
       "path": "/b2b/requests",
-      "aliases": ["/b2b/requests/:id"],
+      "aliases": [
+        "/b2b/requests/:id"
+      ],
       "module": "b2b",
       "category": "客戶採購",
       "group": "sales",
@@ -3804,14 +3940,24 @@
           "新需求為待人工核庫，送出或分享連結均不預留、不扣除庫存，也不等於 ERP 已接單。",
           "報價連結需要客戶登入且只能查看所屬公司資料；數量不同時需由業務協調，原需求價格快照不會因日後改價而自動改寫。"
         ],
-        "related": ["b2b-customer-portal", "b2b-staff-workbench", "sales-orders"]
+        "related": [
+          "b2b-customer-portal",
+          "b2b-staff-workbench",
+          "sales-orders"
+        ]
       },
       "translations": {
         "en": {
           "title": "Customer purchase requests and online quotes",
           "summary": "After submitting a purchase request, customers can view their company's quote link and manual stock review progress.",
           "category": "Customer procurement",
-          "keywords": ["Purchase request", "online quote", "customer PO", "LINE link", "B2B"],
+          "keywords": [
+            "Purchase request",
+            "online quote",
+            "customer PO",
+            "LINE link",
+            "B2B"
+          ],
           "sections": {
             "steps": [
               "Choose quantities in the customer catalog, enter the customer PO number and notes, and submit to receive an online quote and request number.",
@@ -3821,7 +3967,11 @@
               "A new request awaits manual stock review. Submission or link sharing neither reserves nor deducts stock and does not mean an ERP order is confirmed.",
               "The quote link requires customer login and is restricted to that customer's company. Sales must resolve quantity changes; later price edits do not rewrite the request's price snapshot."
             ],
-            "related": ["b2b-customer-portal", "b2b-staff-workbench", "sales-orders"]
+            "related": [
+              "b2b-customer-portal",
+              "b2b-staff-workbench",
+              "sales-orders"
+            ]
           }
         }
       },
@@ -3837,7 +3987,14 @@
       "id": "b2b-staff-workbench",
       "title": "客戶採購工作台",
       "summary": "員工建立外部帳號、發布目錄與專屬價格，人工核庫後才確認採購需求為 ERP 銷售訂單。",
-      "keywords": ["客戶帳號", "供應商帳號", "商品發布", "專屬價", "人工核庫", "確認接單"],
+      "keywords": [
+        "客戶帳號",
+        "供應商帳號",
+        "商品發布",
+        "專屬價",
+        "人工核庫",
+        "確認接單"
+      ],
       "path": "/sales/b2b",
       "module": "b2b",
       "category": "訂單銷售",
@@ -3854,14 +4011,26 @@
           "客戶帳號使用獨立登入。供應商帳號目前只有建檔、停用與重設密碼，供應商登入及查採購單尚未開放；供應商帳號操作還需採購權限。",
           "員工建立帳號時的初始密碼不會在頁面持續顯示；此工作台不會直接發送 LINE 訊息或證明 WMS 已出貨。"
         ],
-        "related": ["b2b-customer-portal", "b2b-purchase-requests", "sales-orders", "wms-handover-reconciliation"]
+        "related": [
+          "b2b-customer-portal",
+          "b2b-purchase-requests",
+          "sales-orders",
+          "wms-handover-reconciliation"
+        ]
       },
       "translations": {
         "en": {
           "title": "Customer procurement workbench",
           "summary": "Staff manage external accounts, catalog and customer prices, then confirm reviewed requests as ERP sales orders.",
           "category": "Sales",
-          "keywords": ["Customer accounts", "supplier accounts", "catalog publishing", "customer price", "stock review", "order confirmation"],
+          "keywords": [
+            "Customer accounts",
+            "supplier accounts",
+            "catalog publishing",
+            "customer price",
+            "stock review",
+            "order confirmation"
+          ],
           "sections": {
             "steps": [
               "Select a company. Create missing customer or vendor master records on their respective pages, then search for those records in this workbench to create linked external accounts. You can deactivate accounts or set new passwords, then search for products to publish catalog items and set valid customer prices.",
@@ -3874,7 +4043,12 @@
               "Customer accounts have a separate login. Supplier accounts can currently be created, deactivated and reset, but supplier login and purchase-order viewing are not open; supplier account changes also require purchasing access.",
               "The initial password does not remain visible on the page. This workbench does not send LINE messages or prove WMS shipment."
             ],
-            "related": ["b2b-customer-portal", "b2b-purchase-requests", "sales-orders", "wms-handover-reconciliation"]
+            "related": [
+              "b2b-customer-portal",
+              "b2b-purchase-requests",
+              "sales-orders",
+              "wms-handover-reconciliation"
+            ]
           }
         }
       },
@@ -3885,13 +4059,22 @@
         "backend/src/modules/b2b/b2b.controller.ts",
         "backend/src/modules/b2b/b2b.service.ts"
       ],
-      "permissions": ["sales_orders:read"]
+      "permissions": [
+        "sales_orders:read"
+      ]
     },
     {
       "id": "wms-handover-reconciliation",
       "title": "交運待核銷與正式出庫",
       "summary": "核對 WMS 實際交運、箱件與物流證據及 ERP 銷單，逐行人工核准正式扣庫。",
-      "keywords": ["交運待核銷", "正式出庫", "WMS", "箱件證據", "銷單核對", "過帳"],
+      "keywords": [
+        "交運待核銷",
+        "正式出庫",
+        "WMS",
+        "箱件證據",
+        "銷單核對",
+        "過帳"
+      ],
       "path": "/inventory/handover-reconciliation",
       "module": "inventory",
       "category": "採購庫存",
@@ -3907,14 +4090,25 @@
           "待核銷期間保留原銷單預留；逐行核准才扣 ERP 正式庫存，同一行重試不可重複扣庫，部分出貨只過帳已核准量。",
           "此頁讀取需要庫存讀取權限，核准另需庫存更新權限；409 衝突代表須重新核對，不可視作過帳成功。"
         ],
-        "related": ["warehouse", "sales-orders", "purchase-orders"]
+        "related": [
+          "warehouse",
+          "sales-orders",
+          "purchase-orders"
+        ]
       },
       "translations": {
         "en": {
           "title": "WMS handover reconciliation and final stock posting",
           "summary": "Compare actual WMS handover, package and logistics evidence with ERP sales orders, then manually approve final stock deduction line by line.",
           "category": "Purchasing and inventory",
-          "keywords": ["Handover reconciliation", "final stock posting", "WMS", "package evidence", "sales order", "posting"],
+          "keywords": [
+            "Handover reconciliation",
+            "final stock posting",
+            "WMS",
+            "package evidence",
+            "sales order",
+            "posting"
+          ],
           "sections": {
             "steps": [
               "Select a company and filter pending, posted or all events; search by Taiwan handover date, order number, event ID or SKU.",
@@ -3926,7 +4120,11 @@
               "The sales-order reservation remains while pending. Each approved line posts final ERP inventory once; retries must not deduct again, and partial shipments post only approved quantities.",
               "Reading requires inventory read access; approval additionally needs inventory update access. A 409 conflict requires a new review and is not a successful posting."
             ],
-            "related": ["warehouse", "sales-orders", "purchase-orders"]
+            "related": [
+              "warehouse",
+              "sales-orders",
+              "purchase-orders"
+            ]
           }
         }
       },
@@ -3938,7 +4136,9 @@
         "backend/src/modules/integration/wms/wms-handover.module.ts",
         "backend/src/modules/integration/wms/wms-handover.service.ts"
       ],
-      "permissions": ["inventory:read"]
+      "permissions": [
+        "inventory:read"
+      ]
     }
   ],
   "legacyContentOverrideReasons": {

@@ -56,6 +56,7 @@ export const NAVIGATION: NavigationItem[] = [
     { key: '/attendance/dashboard', label: '我的出勤', permissions: ['attendance_self:read'] },
     { key: '/attendance/leaves', label: '請假申請', permissions: ['leave_self:read'] },
     { key: '/payroll/employees', label: '員工與部門', permissions: ['employees_admin:read'] },
+    { key: '/performance/reviews', label: '考績與考核', permissions: ['performance_reviews:read'] },
     { key: '/attendance/admin', label: '出勤審核', permissions: ['attendance_admin:read', 'attendance_team:read'] },
     { key: '/payroll/runs', label: '薪資管理', permissions: ['payroll_self:read', 'payroll_admin:read'] },
   ] },

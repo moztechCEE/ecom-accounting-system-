@@ -1,4 +1,5 @@
 import React from 'react'
+import PerformanceReviewsPage from './pages/PerformanceReviewsPage'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { loginDestination } from './utils/login-destination'
@@ -105,6 +106,7 @@ const App: React.FC = () => {
                 <Route path="banking" element={<PermissionRoute anyPermissions={['banking:read']}><BankingPage /></PermissionRoute>} />
                 <Route path="payroll/runs" element={<PermissionRoute anyPermissions={['payroll_self:read', 'payroll_admin:read']}><PayrollPage /></PermissionRoute>} />
                 <Route path="payroll/employees" element={<PermissionRoute anyPermissions={['employees_admin:read']}><EmployeesPage /></PermissionRoute>} />
+                <Route path="performance/reviews" element={<PermissionRoute anyPermissions={['performance_reviews:read']}><PerformanceReviewsPage /></PermissionRoute>} />
                 <Route path="ap/expenses" element={<PermissionRoute anyPermissions={['expense_self:read', 'purchase_orders:read', 'accounts:read']}><ExpenseRequestsPage /></PermissionRoute>} />
                 <Route path="ap/expense-review" element={<PermissionRoute anyPermissions={['expense_self:read', 'purchase_orders:read', 'accounts:read']}><ExpenseReviewCenterPage /></PermissionRoute>} />
                 <Route path="ap/payable" element={<PermissionRoute anyPermissions={['purchase_orders:read', 'accounts:read']}><AccountsPayablePage /></PermissionRoute>} />

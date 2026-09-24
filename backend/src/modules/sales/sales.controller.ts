@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,6 +23,7 @@ import { RequirePermissions } from '../../common/decorators/permissions.decorato
 import { EntityAccessGuard } from '../../common/guards/entity-access.guard';
 import { RequireEntityAccess } from '../../common/decorators/entity-access.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { SensitiveResponseInterceptor } from '../product/sensitive-response.interceptor';
 import { SalesService } from './sales.service';
 import { SalesOrderService } from './services/sales-order.service';
 import { SalesQuotationService } from './services/sales-quotation.service';
@@ -47,6 +49,7 @@ import {
 @Controller('sales')
 @UseGuards(JwtAuthGuard, EntityAccessGuard)
 @RequireEntityAccess('sales')
+@UseInterceptors(new SensitiveResponseInterceptor())
 export class SalesController {
   constructor(
     private readonly salesService: SalesService,
@@ -69,6 +72,8 @@ export class SalesController {
    * 查詢銷售訂單
    */
   @Get('orders')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
   @ApiOperation({ summary: '查詢銷售訂單' })
   @ApiQuery({ name: 'entityId', required: true })
   @ApiQuery({ name: 'channelId', required: false })
@@ -116,6 +121,8 @@ export class SalesController {
   orderOptions(@Query('entityId') entityId:string){return this.salesOrderService.orderEntryOptions(this.requireEntityId(entityId));}
 
   @Get('quotations')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
   @ApiOperation({ summary: '查詢銷售報價單' })
   @ApiQuery({ name: 'entityId', required: true })
   @ApiQuery({ name: 'status', required: false })
@@ -138,6 +145,8 @@ export class SalesController {
   }
 
   @Get('quotations/:id')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
   @ApiOperation({ summary: '查詢單一銷售報價單' })
   @ApiQuery({ name: 'entityId', required: true })
   async getSalesQuotation(
@@ -157,6 +166,8 @@ export class SalesController {
   }
 
   @Get('after-sales-cases')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
   @ApiOperation({ summary: '查詢售後來回件' })
   @ApiQuery({ name: 'entityId', required: true })
   @ApiQuery({ name: 'status', required: false })

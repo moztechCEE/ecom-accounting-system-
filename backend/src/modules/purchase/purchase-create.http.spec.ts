@@ -10,6 +10,7 @@ import { Test } from '@nestjs/testing';
 import { PassportModule, PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { JwtService } from '@nestjs/jwt';
+import { Reflector } from '@nestjs/core';
 import request from 'supertest';
 import { PurchaseController } from './purchase.controller';
 import { PurchaseService } from './purchase.service';
@@ -32,7 +33,12 @@ class PurchaseTestStrategy extends PassportStrategy(Strategy, 'jwt') {
   validate(payload: { sub: string }) {
     if (!['buyer', 'reader', 'outsider'].includes(payload.sub))
       throw new UnauthorizedException();
-    return { id: payload.sub };
+    return {
+      id: payload.sub,
+      effectivePermissions: payload.sub === 'buyer'
+        ? ['product_cost:read', 'product_cost:update']
+        : [],
+    };
   }
 }
 
@@ -162,6 +168,9 @@ function fixture() {
                   action: where.userId === 'reader' ? 'read' : 'create',
                 },
               },
+              ...(where.userId === 'buyer' ? [{
+                permission: { resource: 'product_cost', action: 'update' },
+              }] : []),
             ],
           },
         },
@@ -199,6 +208,7 @@ describe('Manual purchase-order HTTP boundary', () => {
       providers: [
         PurchaseService,
         PurchaseTestStrategy,
+        Reflector,
         { provide: PrismaService, useValue: db },
         { provide: EntityAccessService, useValue: companyAccess },
         { provide: InventoryService, useValue: inventory },

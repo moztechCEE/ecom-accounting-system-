@@ -158,6 +158,51 @@ async function main() {
       create: { resource: 'reports', action: 'read', description: '查看報表中心' },
     }),
     prisma.permission.upsert({
+      where: { resource_action: { resource: 'product_cost', action: 'read' } },
+      update: {},
+      create: { resource: 'product_cost', action: 'read', description: '查看產品採購與庫存成本' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'product_cost', action: 'update' } },
+      update: {},
+      create: { resource: 'product_cost', action: 'update', description: '維護產品採購與庫存成本' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'financial_margin', action: 'read' } },
+      update: {},
+      create: { resource: 'financial_margin', action: 'read', description: '查看銷售毛利' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'financial_net_profit', action: 'read' } },
+      update: {},
+      create: { resource: 'financial_net_profit', action: 'read', description: '查看估算與正式淨利' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'employee_compensation', action: 'read' } },
+      update: {},
+      create: { resource: 'employee_compensation', action: 'read', description: '查看員工薪資與薪酬設定' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'employee_compensation', action: 'update' } },
+      update: {},
+      create: { resource: 'employee_compensation', action: 'update', description: '維護員工薪資與薪酬設定' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'performance_reviews', action: 'read' } },
+      update: {},
+      create: { resource: 'performance_reviews', action: 'read', description: '查看被指派的考核' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'performance_reviews', action: 'write' } },
+      update: {},
+      create: { resource: 'performance_reviews', action: 'write', description: '填寫並送出被指派的考核' },
+    }),
+    prisma.permission.upsert({
+      where: { resource_action: { resource: 'performance_reviews', action: 'manage' } },
+      update: {},
+      create: { resource: 'performance_reviews', action: 'manage', description: '建立考核週期與指派評核人' },
+    }),
+    prisma.permission.upsert({
       where: { resource_action: { resource: 'attendance_self', action: 'read' } },
       update: {},
       create: { resource: 'attendance_self', action: 'read', description: '查看自己的打卡與出勤' },
@@ -246,6 +291,24 @@ async function main() {
       description: '一般操作成員，可進行基礎作業',
       hierarchyLevel: 4,
     },
+    {
+      code: 'PERFORMANCE_REVIEWER',
+      name: '主管考核',
+      description: '僅可填寫與送出指派給自己的考核；不含薪資。',
+      hierarchyLevel: 3,
+    },
+    {
+      code: 'PERFORMANCE_HR',
+      name: '人資考核管理',
+      description: '建立考核週期與指派評核人；不含薪資。',
+      hierarchyLevel: 3,
+    },
+    {
+      code: 'PROCUREMENT_COST',
+      name: '採購成本作業',
+      description: '查看及建立採購單與產品成本；不含薪資及公司淨利。',
+      hierarchyLevel: 3,
+    },
   ];
 
   const roles: Record<string, { id: string }> = {};
@@ -320,7 +383,26 @@ async function main() {
     'banking:read',
     'attendance_admin:read',
     'payroll_admin:read',
+    'product_cost:read',
+    'financial_margin:read',
+    'financial_net_profit:read',
+    'employee_compensation:read',
     'sales_orders:read',
+  ]);
+  await ensureRolePermissions('PERFORMANCE_REVIEWER', [
+    'performance_reviews:read',
+    'performance_reviews:write',
+  ]);
+  await ensureRolePermissions('PERFORMANCE_HR', [
+    'performance_reviews:read',
+    'performance_reviews:manage',
+  ]);
+  await ensureRolePermissions('PROCUREMENT_COST', [
+    'purchase_orders:read',
+    'purchase_orders:create',
+    'inventory:read',
+    'product_cost:read',
+    'product_cost:update',
   ]);
   await ensureRolePermissions('EMPLOYEE', [
     'attendance_self:read',

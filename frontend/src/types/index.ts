@@ -23,6 +23,7 @@ export interface RolePermissionLink {
 export interface Role {
   assignedUserCount?: number;
   deletionReason?: string | null;
+  assignableByAccountManager?: boolean;
   id: string;
   code: string;
   name: string;
@@ -51,6 +52,19 @@ export interface UserEntityMembership {
 
 export interface ManagedUser {
   effectivePermissions?: string[];
+  effectiveAccess?: {
+    permissionMode: "all" | "listed";
+    permissionSources: Array<{
+      permission: string;
+      roles: Array<{ code: string; name: string }>;
+      employeeAssignment: boolean;
+      derivedFrom: string | null;
+    }>;
+    companyMode: "all" | "assigned";
+    companyIds: string[] | null;
+    configuredScopes: Record<string, "SELF" | "DEPARTMENT" | "ENTITY">;
+    effectiveAttendanceDataScope: "SELF" | "DEPARTMENT" | "ENTITY";
+  };
   effectiveAttendanceDataScope?: "SELF" | "DEPARTMENT" | "ENTITY";
   departmentAccess?: { departmentId: string | null; departmentName: string | null; employeeId: string | null; isSupervisor: boolean; roleNames: string[] };
 

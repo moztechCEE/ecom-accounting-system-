@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, Module, Param, Post, Query, Req, ServiceUnavailableException, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Module, Param, Post, Query, Req, ServiceUnavailableException, UseGuards, UseInterceptors } from '@nestjs/common';
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -10,6 +10,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service';
 import { WmsWorkspaceBridge } from './wms-workspace-bridge';
 import { WmsDispatchService } from './wms-dispatch.service';
 import type { ManagementSection } from './wms-management.contract';
+import { SensitiveResponseInterceptor } from '../../product/sensitive-response.interceptor';
 
 export class WmsWorkbenchQuery {
   @IsString() @IsNotEmpty() @MaxLength(128) entityId!: string;
@@ -45,6 +46,7 @@ export class WmsDispatchDto {
 @UseGuards(JwtAuthGuard, PermissionsGuard, EntityAccessGuard)
 @RequireEntityAccess('inventory')
 @RequirePermissions({resource:'wms_tasks',action:'read'})
+@UseInterceptors(new SensitiveResponseInterceptor())
 export class WmsWorkbenchController {
   constructor(private readonly bridge:WmsWorkspaceBridge,private readonly dispatchService?:WmsDispatchService) {}
   @Get('management/:section') @Header('Cache-Control','private, no-store')

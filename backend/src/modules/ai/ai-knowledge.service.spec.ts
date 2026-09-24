@@ -29,6 +29,41 @@ describe('Knowledge ACL and route parity', () => {
     expect(knowledge.search('')).toEqual([]);
   });
 
+  it('requires dedicated permissions before offering cost and compensation tools', async () => {
+    const grants = ['inventory:read', 'payroll_admin:read'];
+    const findUnique = jest.fn().mockImplementation(async () => ({
+      isActive: true,
+      roles: [{ role: {
+        code: 'MANAGER',
+        permissions: grants.map((grant) => {
+          const [resource, action] = grant.split(':');
+          return { permission: { resource, action } };
+        }),
+      } }],
+    }));
+    const service = new AiCopilotAccessService(
+      { user: { findUnique } } as unknown as PrismaService,
+      { assertAccess: jest.fn() } as unknown as EntityAccessService,
+    );
+    const manager = await service.getActor('manager');
+    expect(manager.tools).not.toContain('get_product_cost');
+    expect(manager.tools).not.toContain('get_payroll_summary');
+    grants.push('product_cost:read');
+    expect((await service.getActor('manager')).tools).toContain('get_product_cost');
+    grants.push('employee_compensation:read');
+    expect((await service.getActor('manager')).tools).toContain('get_payroll_summary');
+  });
+
+  it('refuses finance AI briefing without net-profit permission', async () => {
+    const assertAccess = jest.fn();
+    const service = new AiCopilotAccessService(
+      {} as PrismaService,
+      { assertAccess } as unknown as EntityAccessService,
+    );
+    await expect(service.authorizeBriefing(actor(['reports:read']), 'entity-a')).rejects.toThrow('財務淨利');
+    expect(assertAccess).not.toHaveBeenCalled();
+  });
+
   it.each([
     { permissions: ['expense_self:read'], roles: ['EMPLOYEE'], visible: true },
     { permissions: [], roles: ['EMPLOYEE'], visible: true },

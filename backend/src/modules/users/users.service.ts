@@ -13,7 +13,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { isPrivilegedRole } from '../roles/role-policy';
+import { isAccountAssignableRole } from '../roles/role-policy';
 import {
   DataAccessModule,
   DataAccessScope,
@@ -74,6 +74,56 @@ export class UsersService {
     return value === 'DEPARTMENT' || value === 'ENTITY' ? value : 'SELF';
   }
 
+  /** Account maintenance follows the actor's assigned companies, not a role's global permission. */
+  private async accountManagementEntityIds(actorId: string): Promise<string[]> {
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorId },
+      select: {
+        employee: { select: { entityId: true } },
+        entityMemberships: { select: { entityId: true } },
+      },
+    });
+    if (!actor) throw new ForbiddenException('帳號管理者不存在');
+    return [...new Set([
+      ...(actor.employee?.entityId ? [actor.employee.entityId] : []),
+      ...actor.entityMemberships.map(({ entityId }) => entityId),
+    ])];
+  }
+
+  private async assertAccountInActorCompanies(actorId: string, targetUserId: string) {
+    const allowed = new Set(await this.accountManagementEntityIds(actorId));
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        employee: { select: { entityId: true } },
+        entityMemberships: { select: { entityId: true } },
+      },
+    });
+    const targetEntities = target ? [
+      ...(target.employee?.entityId ? [target.employee.entityId] : []),
+      ...target.entityMemberships.map(({ entityId }) => entityId),
+    ] : [];
+    // A target with no company, or even one company outside the actor's scope,
+    // must be handled by a super administrator.
+    if (!targetEntities.length || targetEntities.some(entityId => !allowed.has(entityId))) {
+      throw new NotFoundException(`User with ID ${targetUserId} not found`);
+    }
+  }
+
+  /** Keep trusted employee provisioning separate from account-management API creation. */
+  async prepareManagedUserCreate(actorId: string, dto: CreateUserDto): Promise<CreateUserDto> {
+    await this.assertAccessManagementAllowed(actorId, { data: dto, roleIds: dto.roleIds });
+    if (await this.userHasRole(actorId, 'SUPER_ADMIN')) {
+      if (!dto.entityIds?.length) throw new BadRequestException('請先選擇新帳號可存取的公司');
+      return dto;
+    }
+    const entityIds = await this.accountManagementEntityIds(actorId);
+    if (entityIds.length !== 1) {
+      throw new ForbiddenException('帳號管理者須僅屬於一家公司；請由最高管理員選擇新帳號公司');
+    }
+    return { ...dto, entityIds };
+  }
+
   /** API actor checks are separate from trusted employee-account provisioning. */
   async assertAccessManagementAllowed(
     actorId: string,
@@ -88,18 +138,25 @@ export class UsersService {
       throw new ForbiddenException('公司與資料範圍僅能由最高管理員設定');
     }
     if (!isSuperAdmin && change.targetUserId) {
-      const links = await this.prisma.userRole.findMany({ where: { userId: change.targetUserId }, include: { role: true } });
-      if (links.some(link => isPrivilegedRole(link.role))) {
-        throw new ForbiddenException('管理員帳號僅能由最高管理員調整');
+      await this.assertAccountInActorCompanies(actorId, change.targetUserId);
+      const links = await this.prisma.userRole.findMany({
+        where: { userId: change.targetUserId },
+        include: { role: { include: { permissions: { include: { permission: true } } } } },
+      });
+      if (links.some(link => !isAccountAssignableRole(link.role))) {
+        throw new ForbiddenException('含敏感權限的帳號僅能由最高管理員調整');
       }
     }
     if (change.roleIds?.length) {
-      const roles = await this.prisma.role.findMany({ where: { id: { in: change.roleIds } } });
+      const roles = await this.prisma.role.findMany({
+        where: { id: { in: change.roleIds } },
+        include: { permissions: { include: { permission: true } } },
+      });
       if (roles.some(role => role.code === 'SUPER_ADMIN' || role.name === 'SUPER_ADMIN')) {
         throw new ForbiddenException('最高管理員角色不在一般帳號管理中指派');
       }
-      if (!isSuperAdmin && roles.some(isPrivilegedRole)) {
-        throw new ForbiddenException('管理員角色僅能由最高管理員指派');
+      if (!isSuperAdmin && roles.some(role => !isAccountAssignableRole(role))) {
+        throw new ForbiddenException('含敏感權限的角色僅能由最高管理員指派');
       }
     }
   }
@@ -121,10 +178,57 @@ export class UsersService {
       twoFactorSecret?: string | null;
     };
     const access = departmentAccess(user.employee);
-    return { ...rest, effectivePermissions: effectivePermissionKeys(user), departmentAccess: {
+    const effectivePermissions = effectivePermissionKeys(user);
+    const roleSources = new Map<string, Array<{ code: string; name: string }>>();
+    for (const { role } of user.roles) {
+      for (const { permission } of role.permissions) {
+        const key = `${permission.resource}:${permission.action}`;
+        const sources = roleSources.get(key) ?? [];
+        sources.push({ code: role.code, name: role.name });
+        roleSources.set(key, sources);
+      }
+    }
+    const employeePermissions = new Set(access.permissions);
+    const isSuperAdmin = user.roles.some(({ role }) => role.code === 'SUPER_ADMIN');
+    const isAdmin = isSuperAdmin || user.roles.some(({ role }) => role.code === 'ADMIN');
+    const companyIds = [...new Set([
+      ...user.entityMemberships.map(({ entityId }) => entityId),
+      ...(user.employee?.entityId ? [user.employee.entityId] : []),
+    ])];
+    const effectiveAttendanceDataScope = access.isSupervisor && rest.attendanceDataScope === 'SELF'
+      ? 'DEPARTMENT' : rest.attendanceDataScope;
+    const effectiveAccess = {
+      permissionMode: isAdmin ? 'all' as const : 'listed' as const,
+      permissionSources: effectivePermissions.map(permission => ({
+        permission,
+        roles: roleSources.get(permission) ?? [],
+        employeeAssignment: employeePermissions.has(permission),
+        derivedFrom: permission === 'access_control:read' && !roleSources.has(permission) && !employeePermissions.has(permission)
+          ? 'access_control:update'
+          : permission === 'attendance_team:read' && !roleSources.has(permission) && !employeePermissions.has(permission)
+            ? 'attendance_admin:read'
+            : permission === 'attendance_team:review' && !roleSources.has(permission) && !employeePermissions.has(permission)
+              ? 'attendance_admin:update'
+              : null,
+      })),
+      companyMode: isSuperAdmin ? 'all' as const : 'assigned' as const,
+      companyIds: isSuperAdmin ? null : companyIds,
+      configuredScopes: {
+        employees: rest.employeeDataScope,
+        attendance: rest.attendanceDataScope,
+        payroll: rest.payrollDataScope,
+        accounting: rest.accountingDataScope,
+        inventory: rest.inventoryDataScope,
+        sales: rest.salesDataScope,
+        purchasing: rest.purchasingDataScope,
+        banking: rest.bankingDataScope,
+      },
+      effectiveAttendanceDataScope,
+    };
+    return { ...rest, effectivePermissions, effectiveAccess, departmentAccess: {
       departmentId: user.employee?.departmentId ?? null, departmentName: user.employee?.department?.name ?? null,
       isSupervisor: access.isSupervisor, roleNames: access.roleNames, employeeId: user.employee?.id ?? null,
-    }, effectiveAttendanceDataScope: access.isSupervisor && rest.attendanceDataScope === 'SELF' ? 'DEPARTMENT' : rest.attendanceDataScope };
+    }, effectiveAttendanceDataScope };
   }
 
   private sanitizeUsers(users: UserWithRelations[]) {
@@ -196,6 +300,14 @@ export class UsersService {
     return this.sanitizeUser(user);
   }
 
+  async assertUserVisibleToActor(actorId: string, targetUserId: string) {
+    if (await this.userHasRole(actorId, 'SUPER_ADMIN')) return;
+    if (await this.userHasRole(targetUserId, 'SUPER_ADMIN')) {
+      throw new NotFoundException(`User with ID ${targetUserId} not found`);
+    }
+    await this.assertAccountInActorCompanies(actorId, targetUserId);
+  }
+
   /**
    * 分頁取得使用者清單
    */
@@ -206,6 +318,9 @@ export class UsersService {
       requesterId?: string;
       systemAdmins?: 'exclude' | 'only' | 'include';
       search?: string;
+      status?: 'active' | 'inactive' | 'all';
+      roleId?: string;
+      entityId?: string;
     },
   ) {
     const skip = (page - 1) * limit;
@@ -243,9 +358,37 @@ export class UsersService {
           ],
         }
       : undefined;
-    const where: Prisma.UserWhereInput = searchWhere
-      ? { AND: [systemAdminWhere, searchWhere] }
-      : systemAdminWhere;
+    const filters: Prisma.UserWhereInput[] = [systemAdminWhere];
+    if (options?.requesterId && !requesterIsSuperAdmin) {
+      const allowedEntityIds = await this.accountManagementEntityIds(options.requesterId);
+      // Require at least one assigned company, and require every company on
+      // the target account (including its employee company) to be manageable.
+      filters.push({ AND: [
+        { OR: [
+          { entityMemberships: { some: { entityId: { in: allowedEntityIds } } } },
+          { employee: { is: { entityId: { in: allowedEntityIds } } } },
+        ] },
+        { entityMemberships: { none: { entityId: { notIn: allowedEntityIds } } } },
+        { OR: [
+          { employee: { is: null } },
+          { employee: { is: { entityId: { in: allowedEntityIds } } } },
+        ] },
+      ] });
+    }
+    if (searchWhere) filters.push(searchWhere);
+    if (options?.status === 'active') filters.push({ isActive: true });
+    if (options?.status === 'inactive') filters.push({ isActive: false });
+    if (options?.roleId?.trim()) {
+      filters.push({ roles: { some: { roleId: options.roleId.trim() } } });
+    }
+    if (options?.entityId?.trim()) {
+      const entityId = options.entityId.trim();
+      filters.push({ OR: [
+        { entityMemberships: { some: { entityId } } },
+        { employee: { is: { entityId } } },
+      ] });
+    }
+    const where: Prisma.UserWhereInput = { AND: filters };
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({

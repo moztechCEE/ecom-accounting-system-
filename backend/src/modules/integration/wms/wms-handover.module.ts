@@ -10,6 +10,7 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { WmsHandoverAuth } from './wms-handover.auth';
 import { WmsHandoverService } from './wms-handover.service';
@@ -22,6 +23,7 @@ import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { EntityAccessGuard } from '../../../common/guards/entity-access.guard';
 import { RequireEntityAccess } from '../../../common/decorators/entity-access.decorator';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { SensitiveResponseInterceptor } from '../../product/sensitive-response.interceptor';
 
 @Controller('integration/wms')
 export class WmsHandoverController {
@@ -40,6 +42,7 @@ export class WmsHandoverController {
 @UseGuards(PermissionsGuard, EntityAccessGuard)
 @RequireEntityAccess('inventory')
 @RequirePermissions({ resource: 'inventory', action: 'read' })
+@UseInterceptors(new SensitiveResponseInterceptor())
 export class WmsReconciliationController {
   constructor(private readonly service: WmsHandoverService) {}
   @Get()

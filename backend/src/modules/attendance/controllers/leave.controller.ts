@@ -8,6 +8,7 @@ import {
   Patch,
   Param,
   Query,
+  UseInterceptors,
 } from '@nestjs/common';
 import { LeaveService } from '../services/leave.service';
 import { CreateLeaveRequestDto } from '../dto/create-leave-request.dto';
@@ -17,9 +18,11 @@ import { UpdateLeaveStatusDto } from '../dto/update-leave-status.dto';
 import { UpsertLeaveTypeDto } from '../dto/upsert-leave-type.dto';
 import { AdjustLeaveBalanceDto } from '../dto/adjust-leave-balance.dto';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { SensitiveResponseInterceptor } from '../../product/sensitive-response.interceptor';
 
 @Controller('attendance/leaves')
 @UseGuards(JwtAuthGuard)
+@UseInterceptors(new SensitiveResponseInterceptor())
 export class LeaveController {
   constructor(private readonly leaveService: LeaveService) {}
 

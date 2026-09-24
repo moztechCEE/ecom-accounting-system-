@@ -17,6 +17,7 @@ import { CreateEmployeeLoginAccountDto } from './dto/create-employee-login-accou
 import { Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import PDFDocument = require('pdfkit');
+import { redactSensitiveResponse, sensitiveReadPermissions } from '../product/sensitive-response.interceptor';
 
 const DEFAULT_PAYROLL_POLICY = {
   standardMonthlyHours: 240,
@@ -251,6 +252,27 @@ export class PayrollService {
       compensationSettings: compensation,
       onboardingDocuments,
     };
+  }
+
+  private async serializeEmployeeForActor<T extends Record<string, any>>(
+    actorUserId: string,
+    employee: T,
+  ) {
+    const canReadCompensation = await this.usersService.hasPermission(
+      actorUserId,
+      'employee_compensation',
+      'read',
+    );
+    return redactSensitiveResponse(this.serializeEmployee(employee), {
+      ...sensitiveReadPermissions(),
+      employeeCompensation: canReadCompensation,
+    });
+  }
+
+  private async assertCompensationWrite(actorUserId: string) {
+    if (!(await this.usersService.hasPermission(actorUserId, 'employee_compensation', 'update'))) {
+      throw new ForbiddenException('Missing permission: employee_compensation:update');
+    }
   }
 
   private serializePayrollRun<T extends Record<string, any>>(run: T) {
@@ -922,7 +944,7 @@ export class PayrollService {
       throw new NotFoundException('Employee not found');
     }
 
-    return this.serializeEmployee(employee);
+    return this.serializeEmployeeForActor(userId, employee);
   }
 
   async getEmployees(userId: string, entityId?: string) {
@@ -933,7 +955,11 @@ export class PayrollService {
       include: this.buildEmployeeInclude(),
     });
 
-    return employees.map((employee) => this.serializeEmployee(employee));
+    const canReadCompensation = await this.usersService.hasPermission(userId, 'employee_compensation', 'read');
+    return employees.map((employee) => redactSensitiveResponse(this.serializeEmployee(employee), {
+      ...sensitiveReadPermissions(),
+      employeeCompensation: canReadCompensation,
+    }));
   }
 
   async getDepartments(userId: string, entityId?: string) {
@@ -1150,7 +1176,7 @@ export class PayrollService {
       supervisorEmployeeId?: string | null;
       isDepartmentSupervisor?: boolean;
       hireDate: string | Date;
-      salaryBaseOriginal: number;
+      salaryBaseOriginal?: number;
       isActive?: boolean;
       location?: string;
       attendanceType?: string | null;
@@ -1167,6 +1193,10 @@ export class PayrollService {
       loginPassword?: string | null;
     },
   ) {
+    if (data.salaryBaseOriginal !== undefined || data.compensationSettings !== undefined ||
+        Object.prototype.hasOwnProperty.call(data, 'bankInfo')) {
+      await this.assertCompensationWrite(userId);
+    }
     const access = await this.getEmployeeDataAccessContext(
       userId,
       data.entityId,
@@ -1214,7 +1244,8 @@ export class PayrollService {
 
     await this.ensureDepartmentInEntity(data.departmentId, entityId);
 
-    const salaryBaseOriginal = Number(data.salaryBaseOriginal);
+    // Personnel records can be opened before HR enters compensation.
+    const salaryBaseOriginal = Number(data.salaryBaseOriginal ?? 0);
     if (!Number.isFinite(salaryBaseOriginal) || salaryBaseOriginal < 0) {
       throw new BadRequestException(
         'Salary must be a valid non-negative number',
@@ -1329,7 +1360,7 @@ export class PayrollService {
     });
 
     if (linkedUserId) {
-      return this.serializeEmployee(employeeWithOnboardingDocuments);
+      return this.serializeEmployeeForActor(userId, employeeWithOnboardingDocuments);
     }
 
     const loginAccount = await this.createEmployeeLoginAccount(
@@ -1441,7 +1472,7 @@ export class PayrollService {
     });
 
     return {
-      employee: this.serializeEmployee(updatedEmployee),
+      employee: await this.serializeEmployeeForActor(actorUserId, updatedEmployee),
       user: createdUser,
       temporaryPassword: password,
       mustChangePassword: true,
@@ -1473,6 +1504,10 @@ export class PayrollService {
       loginPassword?: string | null;
     },
   ) {
+    if (data.salaryBaseOriginal !== undefined || data.compensationSettings !== undefined ||
+        Object.prototype.hasOwnProperty.call(data, 'bankInfo')) {
+      await this.assertCompensationWrite(userId);
+    }
     const employee = await this.prisma.employee.findUnique({
       where: { id },
       include: this.buildEmployeeInclude(),
@@ -1644,7 +1679,7 @@ export class PayrollService {
       newData: this.serializeEmployee(updatedEmployee),
     });
 
-    return this.serializeEmployee(updatedEmployee);
+    return this.serializeEmployeeForActor(userId, updatedEmployee);
   }
 
   async uploadEmployeeOnboardingDocument(

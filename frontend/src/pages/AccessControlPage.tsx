@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Alert,
   Button,
+  Drawer,
   Form,
   Input,
   InputNumber,
@@ -174,9 +175,35 @@ const getUserDataScopeValues = (user: ManagedUser) =>
     {} as Record<DataScopeKey, 'SELF' | 'DEPARTMENT' | 'ENTITY'>,
   )
 
+const roleDisplayName = (role: Role) =>
+  role.name && role.name !== role.code ? role.name : getRoleName(role.code)
+
+const newRoleCode = () =>
+  `CUSTOM_${Array.from(crypto.getRandomValues(new Uint8Array(12)), (value) => String.fromCharCode(65 + value % 26)).join('')}`
+
+const isTestRole = (role: Role) => /^(QA_|DEV_|TEST_)/i.test(role.code)
+
+const SENSITIVE_PERMISSION_LABELS: Record<string, string> = {
+  'product_cost:read': '成本',
+  'financial_margin:read': '毛利',
+  'financial_net_profit:read': '淨利',
+  'employee_compensation:read': '同仁薪資',
+  'banking:read': '銀行資料',
+}
+const SENSITIVE_PERMISSION_REQUIREMENTS: Record<string, string[]> = {
+  'financial_margin:read': ['product_cost:read', 'financial_margin:read'],
+  'financial_net_profit:read': ['product_cost:read', 'financial_margin:read', 'financial_net_profit:read'],
+}
+
+const sensitiveLabels = (permissions: string[] = [], fullAccess = false) =>
+  Object.entries(SENSITIVE_PERMISSION_LABELS)
+    .filter(([key]) => fullAccess || (SENSITIVE_PERMISSION_REQUIREMENTS[key] || [key]).every((required) => permissions.includes(required)))
+    .map(([, label]) => label)
+
 const DataScopeFormGrid = () => (
-  <div className="mt-5">
-    <div className="mb-3 text-sm font-semibold text-slate-700">資料權限</div>
+  <details className="mt-5 rounded-xl border border-slate-200 bg-white p-3">
+    <summary className="cursor-pointer text-sm font-semibold text-slate-700">進階：各模組資料範圍</summary>
+    <Alert className="mt-3" type="info" showIcon message="這些設定只控制已支援資料範圍的作業；薪資、成本與淨利仍由獨立權限控制。" />
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {DATA_SCOPE_FIELDS.map((field) => (
         <Form.Item
@@ -189,11 +216,11 @@ const DataScopeFormGrid = () => (
         </Form.Item>
       ))}
     </div>
-  </div>
+  </details>
 )
 
-const CompanyAccessField = ({ entities }: { entities: Entity[] }) => (
-  <Form.Item name="entityIds" label="可存取公司" className="mb-0">
+const CompanyAccessField = ({ entities, required = false }: { entities: Entity[]; required?: boolean }) => (
+  <Form.Item name="entityIds" label="可存取公司" className="mb-0" rules={required ? [{ required: true, message: '請選擇至少一家公司' }] : undefined}>
     <Select
       mode="multiple"
       placeholder="選擇公司"
@@ -240,6 +267,9 @@ const isManagedUserSuperAdmin = (record: ManagedUser) =>
     ),
   )
 
+const isManagedUserFullAdmin = (record: ManagedUser) =>
+  Boolean(record.roles?.some((link) => isPrivilegedRole(link.role)))
+
 const UsersTab = ({
   canManage,
   availableRoles,
@@ -268,24 +298,51 @@ const UsersTab = ({
   const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null)
   const [entities, setEntities] = useState<Entity[]>([])
   const [previewUser, setPreviewUser] = useState<ManagedUser | null>(null)
+  const [searchTerm, setSearchTerm] = useState(searchKeyword)
+  const [searchDraft, setSearchDraft] = useState(searchKeyword)
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active')
+  const [roleFilter, setRoleFilter] = useState<string | undefined>()
+  const [entityFilter, setEntityFilter] = useState<string | undefined>()
 
   const [createForm] = Form.useForm<CreateUserPayload>()
   const [assignForm] = Form.useForm<{ roleIds: string[] }>()
   const [editForm] = Form.useForm<UpdateUserPayload & { password?: string }>()
   const createRoleIds = Form.useWatch('roleIds', createForm) || []
+  const createEntityIds = Form.useWatch('entityIds', createForm) || []
   const assignRoleIds = Form.useWatch('roleIds', assignForm) || []
+  const assignedPreviewRoles = availableRoles.filter((role) => assignRoleIds.includes(role.id))
+  const assignedSensitive = sensitiveLabels(
+    assignedPreviewRoles.flatMap((role) => (role.permissions || []).map((link) => `${link.permission.resource}:${link.permission.action}`)),
+    assignedPreviewRoles.some(isPrivilegedRole),
+  )
+  const previousSensitive = sensitiveLabels(selectedUser?.effectivePermissions, selectedUser ? isManagedUserFullAdmin(selectedUser) : false)
   const assignableRoles = useMemo(
-    () => availableRoles.filter((role) => role.code !== 'SUPER_ADMIN' && (canManageDataScopes || !isPrivilegedRole(role))),
+    () => availableRoles.filter((role) => role.code !== 'SUPER_ADMIN' && (canManageDataScopes || role.assignableByAccountManager === true)),
     [availableRoles, canManageDataScopes],
   )
+  const roleOptions = useMemo(() => {
+    const options = (roles: Role[]) => roles.map((role) => ({
+      label: roleDisplayName(role),
+      value: role.id,
+    }))
+    return [
+      { label: '日常職務', options: options(assignableRoles.filter((role) => !isPrivilegedRole(role) && !isTestRole(role))) },
+      { label: '特殊與測試職務（請確認用途）', options: options(assignableRoles.filter((role) => isPrivilegedRole(role) || isTestRole(role))) },
+    ].filter((group) => group.options.length > 0)
+  }, [assignableRoles])
 
   useEffect(() => {
-    if (!canManageDataScopes) return
+    setSearchTerm(searchKeyword)
+    setSearchDraft(searchKeyword)
+  }, [searchKeyword])
+
+  useEffect(() => {
+    if (!canManage) return
 
     listEntities({ isActive: true })
       .then(setEntities)
       .catch((error) => message.error(getErrorMessage(error)))
-  }, [canManageDataScopes])
+  }, [canManage])
 
   const fetchUsers = useCallback(
     async (page = 1, limit = meta.limit) => {
@@ -293,7 +350,10 @@ const UsersTab = ({
       try {
         const result = await usersService.list(page, limit, {
           systemAdmins: 'exclude',
-          search: searchKeyword,
+          search: searchTerm,
+          status: statusFilter,
+          roleId: roleFilter,
+          entityId: entityFilter,
         })
         setUsers(result.items)
         setMeta(result.meta)
@@ -303,12 +363,12 @@ const UsersTab = ({
         setLoading(false)
       }
     },
-    [meta.limit, searchKeyword],
+    [meta.limit, searchTerm, statusFilter, roleFilter, entityFilter],
   )
 
   useEffect(() => {
     fetchUsers(1)
-  }, [fetchUsers, searchKeyword])
+  }, [fetchUsers])
 
   const fetchSystemAdmins = useCallback(async () => {
     if (!canManageDataScopes) {
@@ -320,7 +380,7 @@ const UsersTab = ({
     try {
       const result = await usersService.list(1, 50, {
         systemAdmins: 'only',
-        search: searchKeyword,
+        search: searchTerm,
       })
       setSystemAdminUsers(result.items)
     } catch (error) {
@@ -329,7 +389,7 @@ const UsersTab = ({
     } finally {
       setLoadingSystemAdmins(false)
     }
-  }, [canManageDataScopes, searchKeyword])
+  }, [canManageDataScopes, searchTerm])
 
   useEffect(() => {
     if (showSystemAdmins) {
@@ -354,7 +414,7 @@ const UsersTab = ({
             roleIds: values.roleIds,
           } satisfies CreateUserPayload)
       await usersService.create(payload)
-      message.success('使用者建立成功')
+      message.success('帳號已建立；請確認員工資料綁定與各模組資料範圍，才能開始使用公司資料。', 6)
       setCreateOpen(false)
       createForm.resetFields()
       fetchUsers(1)
@@ -460,12 +520,22 @@ const UsersTab = ({
       render: (_value: any, record: ManagedUser) => (
         <Space wrap>
           {record.roles?.map((userRole: UserRoleLink) => (
-            <Tag key={userRole.roleId} color="blue">
-              {userRole.role?.name || getRoleName(userRole.role?.code || '')}
+            <Tag key={userRole.roleId} color={isPrivilegedRole(userRole.role) ? 'orange' : 'blue'}>
+              {roleDisplayName(userRole.role)}
             </Tag>
           ))}
         </Space>
       ),
+    },
+    {
+      title: '敏感資料',
+      key: 'sensitive',
+      render: (_value: any, record: ManagedUser) => {
+        const labels = sensitiveLabels(record.effectivePermissions, isManagedUserFullAdmin(record))
+        return labels.length
+          ? <Space wrap>{labels.map((label) => <Tag key={label} color="orange">{label}</Tag>)}</Space>
+          : <Text type="secondary">未另行開放</Text>
+      },
     },
     {
       title: '部門／職責', key: 'department',
@@ -513,7 +583,7 @@ const UsersTab = ({
       key: 'actions',
       render: (_value: any, record: ManagedUser) => (
         <Space size="small">
-          <Button type="text" icon={<EyeOutlined />} onClick={() => setPreviewUser(record)}>可見介面</Button>
+          <Button type="text" icon={<EyeOutlined />} onClick={() => setPreviewUser(record)}>查看權限</Button>
           {isManagedUserSuperAdmin(record) || (!canManageDataScopes && record.roles?.some(link => isPrivilegedRole(link.role))) ? (
             <Text type="secondary" className="text-xs">
               管理員帳號由最高管理員設定
@@ -635,10 +705,50 @@ const UsersTab = ({
             使用者管理
           </Title>
         </div>
-        <GlassButton variant="primary" disabled={!canManage} onClick={() => setCreateOpen(true)}>
+        <GlassButton variant="primary" disabled={!canManage || (!canManageDataScopes && entities.length !== 1)} onClick={() => setCreateOpen(true)}>
           <PlusOutlined className="mr-2" />
           新增使用者
         </GlassButton>
+      </div>
+      {canManage && !canManageDataScopes && entities.length !== 1 &&
+        <Alert className="mb-4" type="info" showIcon message="目前帳號對應零或多家公司；請由最高管理員建立帳號並指定可存取公司。" />}
+
+      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <Input.Search
+          placeholder="搜尋姓名、Email 或職務"
+          value={searchDraft}
+          onChange={(event) => setSearchDraft(event.target.value)}
+          onSearch={(value) => setSearchTerm(value.trim())}
+          allowClear
+          enterButton="搜尋"
+          aria-label="搜尋使用者"
+        />
+        <Select
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[{ value: 'active', label: '啟用帳號' }, { value: 'inactive', label: '停用帳號' }, { value: 'all', label: '全部帳號' }]}
+          aria-label="帳號狀態"
+        />
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          placeholder="篩選職務範本"
+          value={roleFilter}
+          onChange={setRoleFilter}
+          options={availableRoles.map((role) => ({ value: role.id, label: roleDisplayName(role) }))}
+          aria-label="篩選職務範本"
+        />
+        {canManageDataScopes && <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          placeholder="篩選公司"
+          value={entityFilter}
+          onChange={setEntityFilter}
+          options={entities.map((entity) => ({ value: entity.id, label: entity.name }))}
+          aria-label="篩選公司"
+        />}
       </div>
 
       {canManageDataScopes ? (
@@ -708,32 +818,34 @@ const UsersTab = ({
         className="custom-table"
       />
 
-      <Modal title={`${previewUser?.name || ""} · 可見介面`} open={Boolean(previewUser)} onCancel={() => setPreviewUser(null)} footer={null} width={720}>
+      <Drawer title={`${previewUser?.name || ""} · 有效權限`} open={Boolean(previewUser)} onClose={() => setPreviewUser(null)} width={720}>
         {previewUser?.departmentAccess?.departmentName && <Alert message={`${previewUser.departmentAccess.departmentName} · ${previewUser.departmentAccess.isSupervisor ? '部門主管' : '部門人員'}`} description={`部門作業角色：${previewUser.departmentAccess.roleNames.join('、') || '基本自助功能'}`} />}
-        <AccessPreview roles={previewUser?.roles.map(link => link.role) || []} permissions={previewUser?.effectivePermissions} />
-      </Modal>
+        <AccessPreview
+          roles={previewUser?.roles.map(link => link.role) || []}
+          permissions={previewUser?.effectivePermissions}
+          actual
+          serverAccess={previewUser?.effectiveAccess}
+          companyNames={previewUser?.entityMemberships?.map((membership) => membership.entity.name) || []}
+          departmentName={previewUser?.departmentAccess?.departmentName}
+          scopeSummary={previewUser ? DATA_SCOPE_FIELDS.filter((field) => previewUser[field.key] !== 'SELF').map((field) => `${field.shortLabel}：${DATA_SCOPE_LABEL_MAP[previewUser[field.key] || 'SELF']}`) : []}
+        />
+      </Drawer>
 
-      <Modal
-        title="新增使用者"
+      <Drawer
+        title="建立帳號 · 選擇職務與資料範圍"
         open={createOpen}
-        onCancel={() => { if (!createInFlight.current) setCreateOpen(false) }}
+        onClose={() => { if (!createInFlight.current) setCreateOpen(false) }}
         afterOpenChange={(open) => { if (open) setCreateError(null) }}
-        onOk={handleCreate}
-        confirmLoading={creating}
-        cancelButtonProps={{ disabled: creating }}
         closable={!creating}
         maskClosable={!creating}
         keyboard={!creating}
-        style={{ top: 24 }}
-        styles={{ body: { maxHeight: 'calc(100dvh - 240px)', overflowY: 'auto', paddingRight: 8 } }}
-        footer={(buttons) => (
-          <>
+        footer={<div className="space-y-3">
             {createError && <Alert type="error" showIcon message={createError} role="alert" style={{ marginBottom: 12, textAlign: 'left' }} />}
-            {buttons}
-          </>
-        )}
-        destroyOnClose
-        okText="建立"
+            <div className="flex justify-end gap-2">
+              <Button disabled={creating} onClick={() => setCreateOpen(false)}>取消</Button>
+              <Button type="primary" loading={creating} onClick={handleCreate}>建立帳號</Button>
+            </div>
+          </div>}
         width={820}
       >
         <Form
@@ -747,6 +859,7 @@ const UsersTab = ({
           className="pt-4"
         >
           <div className="bg-gray-50 p-4 rounded-lg mb-4 border border-gray-100">
+            <Text strong>1. 基本資料</Text>
             <Form.Item
               name="name"
               label="姓名"
@@ -783,61 +896,65 @@ const UsersTab = ({
             </Form.Item>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <Form.Item name="roleIds" label="指派角色" extra="倉儲人員進入工作台後，可選擇今天負責揀貨或裝箱。" className="mb-0">
+            <Text strong>2. 職務與公司</Text>
+            <Form.Item name="roleIds" label="職務範本" extra="建議先選一項；兼任時才增加職務。多項職務的權限會合併。" className="mb-0 mt-3" rules={[{ required: true, message: '請至少選擇一個職務範本' }]}>
               <Select
                 mode="multiple"
-                placeholder="選擇角色"
-                options={assignableRoles.map((role: Role) => ({
-                  label: role.name || getRoleName(role.code),
-                  value: role.id,
-                }))}
+                placeholder="選擇工作職務"
+                options={roleOptions}
                 allowClear
                 className="rounded-md"
               />
             </Form.Item>
             {canManageDataScopes ? (
               <div className="mt-4">
-                <CompanyAccessField entities={entities} />
+                <CompanyAccessField entities={entities} required />
               </div>
-            ) : null}
+            ) : <div className="mt-3 text-sm text-slate-600">公司：{entities[0]?.name || '尚未確認'}（由系統指定）</div>}
+            <Alert className="mt-3" type="info" showIcon message="建立帳號後，請確認員工資料是否已綁定；僅有職務範本不代表已取得公司資料範圍。" />
             {canManageDataScopes ? <DataScopeFormGrid /> : null}
-            <AccessPreview roles={availableRoles.filter(role => createRoleIds.includes(role.id))} />
+            <div className="mt-4 text-sm font-semibold text-slate-700">3. 儲存前確認</div>
+            <AccessPreview
+              roles={availableRoles.filter(role => createRoleIds.includes(role.id))}
+              companyNames={canManageDataScopes ? entities.filter(entity => createEntityIds.includes(entity.id)).map(entity => entity.name) : entities.slice(0, 1).map(entity => entity.name)}
+            />
           </div>
         </Form>
-      </Modal>
+      </Drawer>
 
-      <Modal
-        title="設定角色與可見介面"
+      <Drawer
+        title="調整職務與可見資料"
         open={assignOpen}
-        onCancel={() => setAssignOpen(false)}
-        onOk={handleAssignRoles}
-        okText="儲存"
+        onClose={() => setAssignOpen(false)}
+        footer={<div className="flex justify-end gap-2"><Button onClick={() => setAssignOpen(false)}>取消</Button><Button type="primary" onClick={handleAssignRoles}>儲存</Button></div>}
         width={720}
       >
         <Form form={assignForm} layout="vertical" className="pt-4">
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <Form.Item name="roleIds" label="角色" extra="倉儲人員進入工作台後，可選擇今天負責揀貨或裝箱。" className="mb-0">
+            <Form.Item name="roleIds" label="職務範本" extra="多項職務的權限會合併；敏感資料請使用經核准的專用範本。" className="mb-0">
               <Select
                 mode="multiple"
-                placeholder="選擇角色"
-                options={assignableRoles.map((role: Role) => ({
-                  label: role.name || getRoleName(role.code),
-                  value: role.id,
-                }))}
+                placeholder="選擇工作職務"
+                options={roleOptions}
                 className="rounded-md"
               />
             </Form.Item>
-            <AccessPreview roles={availableRoles.filter(role => assignRoleIds.includes(role.id))} />
+            <Alert
+              type={assignedSensitive.some((label) => !previousSensitive.includes(label)) ? 'warning' : 'info'}
+              showIcon
+              className="mt-4"
+              message={`敏感資料變化：${assignedSensitive.filter((label) => !previousSensitive.includes(label)).map((label) => `新增 ${label}`).concat(previousSensitive.filter((label) => !assignedSensitive.includes(label)).map((label) => `移除 ${label}`)).join('、') || '沒有變化'}`}
+            />
+            <AccessPreview roles={assignedPreviewRoles} companyNames={selectedUser?.entityMemberships?.map((link) => link.entity.name) || []} />
           </div>
         </Form>
-      </Modal>
+      </Drawer>
 
-      <Modal
+      <Drawer
         title="編輯使用者"
         open={editOpen}
-        onCancel={() => setEditOpen(false)}
-        onOk={handleEditUser}
-        okText="儲存"
+        onClose={() => setEditOpen(false)}
+        footer={<div className="flex justify-end gap-2"><Button onClick={() => setEditOpen(false)}>取消</Button><Button type="primary" onClick={handleEditUser}>儲存</Button></div>}
         width={820}
       >
         <Form form={editForm} layout="vertical" className="pt-4">
@@ -879,7 +996,7 @@ const UsersTab = ({
             {canManageDataScopes ? <DataScopeFormGrid /> : null}
           </div>
         </Form>
-      </Modal>
+      </Drawer>
     </GlassCard>
   )
 }
@@ -897,6 +1014,7 @@ const RolesTab = ({
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [permissionOpen, setPermissionOpen] = useState(false)
+  const [showTestRoles, setShowTestRoles] = useState(false)
   const [selectedRole, setSelectedRole] = useState<Role | null>(null)
 
   const [createForm] = Form.useForm<CreateRolePayload>()
@@ -953,6 +1071,17 @@ const RolesTab = ({
     if (!selectedRole) return
     try {
       const values = await permissionsForm.validateFields()
+      const selectedKeys = new Set(permissions.filter((permission) => values.permissionIds?.includes(permission.id))
+        .map((permission) => `${permission.resource}:${permission.action}`))
+      if (selectedKeys.has('financial_margin:read') && !selectedKeys.has('product_cost:read')) {
+        message.error('開放毛利時，也要開放產品成本讀取。')
+        return
+      }
+      if (selectedKeys.has('financial_net_profit:read') &&
+        (!selectedKeys.has('financial_margin:read') || !selectedKeys.has('product_cost:read'))) {
+        message.error('開放淨利時，也要開放產品成本與毛利讀取。')
+        return
+      }
       await rolesService.setPermissions(
         selectedRole.id,
         values.permissionIds ?? [],
@@ -975,28 +1104,22 @@ const RolesTab = ({
 
   const columns: TableColumn<Role>[] = [
     {
-      title: '代碼',
-      dataIndex: 'code',
-      key: 'code',
-      render: (value: string) => <Text code>{value}</Text>,
-    },
-    {
-      title: '名稱',
+      title: '職務範本',
       dataIndex: 'name',
       key: 'name',
       render: (value: string, record: Role) => (
-        <span className="font-medium">{value || getRoleName(record.code)}</span>
+        <Space direction="vertical" size={0}><span className="font-medium">{roleDisplayName(record)}</span>
+          {record.description && <Text type="secondary" className="text-xs">{record.description}</Text>}</Space>
       ),
     },
     {
-      title: '階層',
-      dataIndex: 'hierarchyLevel',
-      key: 'hierarchyLevel',
-      render: (value: any) =>
-        typeof value === 'number' ? <Tag>{value}</Tag> : '—',
+      title: '敏感資料', key: 'sensitive',
+      render: (_value: any, record: Role) => {
+        const labels = sensitiveLabels((record.permissions || []).map((link) => `${link.permission.resource}:${link.permission.action}`), isPrivilegedRole(record))
+        return labels.length ? <Space wrap>{labels.map((label) => <Tag key={label} color="orange">{label}</Tag>)}</Space> : <Text type="secondary">未另行開放</Text>
+      },
     },
     { title: '使用帳號', key: 'assignedUserCount', render: (_value: any, record: Role) => <Text>{record.assignedUserCount ?? 0} 個帳號</Text> },
-    { title: '刪除狀態', key: 'deletionReason', render: (_value: any, record: Role) => <Text type="secondary">{record.deletionReason || '可刪除'}</Text> },
     {
       title: '權限數量',
       key: 'permissionCount',
@@ -1009,10 +1132,9 @@ const RolesTab = ({
       key: 'actions',
       render: (_value: any, record: Role) => (
         <Space size="small">
-          <Tooltip title="編輯">
             <Button
-              type="text"
-              disabled={!canManage || isPrivilegedRole(record)} icon={<EditOutlined />}
+              type="link"
+              disabled={!canManage || isPrivilegedRole(record)}
               onClick={() => {
                 setSelectedRole(record)
                 editForm.setFieldsValue({
@@ -1023,12 +1145,10 @@ const RolesTab = ({
                 })
                 setEditOpen(true)
               }}
-            />
-          </Tooltip>
-          <Tooltip title="設定權限">
+            >編輯</Button>
             <Button
-              type="text"
-              disabled={!canManage || isPrivilegedRole(record)} icon={<SettingOutlined />}
+              type="link"
+              disabled={!canManage || isPrivilegedRole(record)}
               onClick={() => {
                 setSelectedRole(record)
                 permissionsForm.setFieldsValue({
@@ -1039,8 +1159,7 @@ const RolesTab = ({
                 })
                 setPermissionOpen(true)
               }}
-            />
-          </Tooltip>
+            >設定可用功能</Button>
           <Popconfirm
             title="確認刪除此角色？"
             onConfirm={() => handleDelete(record)}
@@ -1065,20 +1184,28 @@ const RolesTab = ({
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <div>
           <Title level={4} className="!mb-1 !font-light">
-            角色管理
+            職務範本
           </Title>
+          <Text type="secondary">先用現有職務，少數例外再建立新範本；修改範本會影響所有已指派帳號。</Text>
         </div>
-        <GlassButton variant="primary" disabled={!canManage} onClick={() => setCreateOpen(true)}>
+        <GlassButton variant="primary" disabled={!canManage} onClick={() => {
+          createForm.setFieldsValue({ code: newRoleCode(), hierarchyLevel: 3 })
+          setCreateOpen(true)
+        }}>
           <PlusOutlined className="mr-2" />
-          新增角色
+          新增職務範本
         </GlassButton>
       </div>
+      <div className="mb-4"><Button type="link" onClick={() => setShowTestRoles((value) => !value)}>
+        {showTestRoles ? '隱藏測試職務' : `顯示測試職務（${roles.filter(isTestRole).length}）`}
+      </Button></div>
 
       <Table
         rowKey="id"
         columns={columns}
-        dataSource={roles}
+        dataSource={showTestRoles ? roles : roles.filter((role) => !isTestRole(role))}
         loading={loadingRoles}
+        expandable={{ expandedRowRender: (role) => <Space wrap><Text code>{role.code}</Text><Tag>階層 {role.hierarchyLevel}</Tag><Text type="secondary">{role.deletionReason || '可刪除'}</Text></Space> }}
         scroll={{ x: 800 }}
         pagination={false}
         className="custom-table"
@@ -1100,43 +1227,30 @@ const RolesTab = ({
 
           <div className="bg-gray-50 p-4 rounded-lg mb-4 border border-gray-100">
             <Form.Item
-              name="code"
-              label="角色代碼"
-              rules={[
-                { required: true, message: '請輸入角色代碼' },
-                { pattern: /^[A-Z_]+$/, message: '僅允許大寫英文字與底線' },
-              ]}
-            >
-              <Input placeholder="例如 FINANCE_ADMIN" className="rounded-md" />
-            </Form.Item>
-            <Form.Item
               name="name"
-              label="角色名稱"
-              rules={[{ required: true, message: '請輸入角色名稱' }]}
+              label="職務名稱"
+              rules={[{ required: true, message: '請輸入職務名稱' }, { min: 3, message: '至少 3 個字' }]}
             >
-              <Input placeholder="顯示名稱" className="rounded-md" />
+              <Input placeholder="例如 倉庫主管" className="rounded-md" />
             </Form.Item>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <Form.Item name="description" label="描述">
+            <Form.Item name="description" label="適用工作與說明">
               <Input.TextArea
                 rows={3}
                 placeholder="簡短說明"
                 className="rounded-md"
               />
             </Form.Item>
-            <Form.Item
-              name="hierarchyLevel"
-              label="階層 (數字愈小代表權限愈高)"
-              className="mb-0"
-            >
-              <InputNumber
-                min={1}
-                style={{ width: '100%' }}
-                placeholder="預設為 3"
-                className="rounded-md"
-              />
-            </Form.Item>
+            <details>
+              <summary className="cursor-pointer text-sm text-slate-600">進階：內部代碼與階層</summary>
+              <Form.Item name="code" label="內部代碼" rules={[{ required: true }, { pattern: /^[A-Z_]+$/, message: '僅允許大寫英文字與底線' }]} className="mt-3">
+                <Input className="rounded-md" />
+              </Form.Item>
+              <Form.Item name="hierarchyLevel" label="階層（數字越小權限越高）" className="mb-0">
+                <InputNumber min={1} style={{ width: '100%' }} className="rounded-md" />
+              </Form.Item>
+            </details>
           </div>
         </Form>
       </Modal>
@@ -1194,6 +1308,8 @@ const RolesTab = ({
         confirmLoading={loadingPermissions}
         width={860}
       >
+        <Alert type="warning" showIcon message={`儲存後會立即影響 ${selectedRole?.assignedUserCount ?? 0} 個已指派帳號。請先確認成本、淨利與薪資等敏感資料。`} />
+        <Alert className="mt-3" type="info" showIcon message="毛利需同時開放產品成本；淨利需同時開放產品成本與毛利。" />
         <Form form={permissionsForm} layout="vertical" className="pt-4">
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
             <Form.Item name="permissionIds" label="依功能模組開放操作" className="mb-0">
@@ -1526,12 +1642,12 @@ const AccessControlPage: React.FC = () => {
             label: (
               <span>
                 <SafetyCertificateOutlined />
-                角色
+                職務範本
               </span>
             ),
             children: (
               <RolesTab
-                canManage={canManage}
+                canManage={canManageDataScopes}
                 roles={roles}
                 permissions={permissions}
                 loadingRoles={loadingRoles}
