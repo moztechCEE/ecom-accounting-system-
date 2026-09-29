@@ -1,4 +1,8 @@
-import { Injectable, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
@@ -23,14 +27,28 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
     if (isPublic) {
       if (process.env.ERP_DEV_SANDBOX === 'true') {
-        const request = context.switchToHttp().getRequest();
+        const request = context
+          .switchToHttp()
+          .getRequest<{ method: string; path: string }>();
         const route = `${request.method} ${request.path.replace(/\/+$/, '')}`;
-        const allowed = ['POST /api/v1/auth/login', 'GET /api/v1/auth/login-entities',
-          'POST /api/v1/wms/portal/consume', 'POST /api/v1/wms/portal/inspect', 'POST /api/v1/wms/portal/revoke',
-          'GET /api/v1/health', 'GET /api/v1/health/ready'];
+        const allowed = [
+          'POST /api/v1/auth/login',
+          'GET /api/v1/auth/login-entities',
+          'POST /api/v1/wms/portal/consume',
+          'POST /api/v1/wms/portal/inspect',
+          'POST /api/v1/wms/portal/revoke',
+          'GET /api/v1/health',
+          'GET /api/v1/health/ready',
+        ];
         if (process.env.B2B_PUBLIC_CATALOG_ENABLED === 'true')
           allowed.push('GET /api/v1/b2b/public/catalog');
-        if (!allowed.includes(route)) throw new ForbiddenException('DEV 停用公開註冊、回呼與外部作業入口');
+        if (
+          process.env.B2B_PUBLIC_CATALOG_ENABLED === 'true' &&
+          process.env.B2B_PUBLIC_ORDER_ENABLED === 'true'
+        )
+          allowed.push('POST /api/v1/b2b/public/requests');
+        if (!allowed.includes(route))
+          throw new ForbiddenException('DEV 停用公開註冊、回呼與外部作業入口');
       }
       return true;
     }

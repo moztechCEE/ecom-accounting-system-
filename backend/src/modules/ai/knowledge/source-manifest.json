@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:8a9e27d728f1c1d26c6c04fd50a48e0dd6541de458bb0dd799004e731b82797f",
+  "sourceVersion": "sha256:05165fd10f920c464cd716dc58da528f8d67f85164cd56d7176577f7aa380f47",
   "reviewedBaseCommit": "38a34b3a5faacf003820f56baed5c32039c1fc38",
-  "entryCount": 61,
+  "entryCount": 62,
   "groups": [
     "admin",
     "dashboard",
@@ -18,7 +18,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "ce34b1f37fc61d24f3fdc80634ffa62248b716c6af44380c4ee24fc80d41680f",
+  "catalogSha256": "b011178f20cf62ab46d3350de502f89c7d1b42caad0e40a72cb8ec833052bcfe",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -43,6 +43,7 @@
       "/b2b/catalog",
       "/b2b/login",
       "/b2b/requests",
+      "/b2b/shop",
       "/banking",
       "/dashboard",
       "/import",
@@ -136,7 +137,7 @@
     },
     {
       "path": "backend/src/common/guards/jwt-auth.guard.ts",
-      "sha256": "f822929a5d59a3a9fb2614342217a601995bee61439bce23f19b3d4da817d567"
+      "sha256": "530fb13563a2cc89d231420fd58699e5dc61fcf2e3263d1e71e76d019f295a94"
     },
     {
       "path": "backend/src/modules/accounting/accounting.controller.ts",
@@ -171,12 +172,20 @@
       "sha256": "171d8792dfe1ee5ff1db5ed83a2d0a19168b8d8681bf5b8f65f949ef1bc23ffd"
     },
     {
+      "path": "backend/src/modules/b2b/b2b-guest.controller.ts",
+      "sha256": "63d4c9db9ca4ed5c7a64d864f8db2baca87f2309d8eca5424b86ee00af8bbef6"
+    },
+    {
+      "path": "backend/src/modules/b2b/b2b-guest.service.ts",
+      "sha256": "5d26f5665e0310dd01edd7e8886cf4ce86d8589581b9ec6e44450d44f0966ac4"
+    },
+    {
       "path": "backend/src/modules/b2b/b2b-pricebook.controller.ts",
-      "sha256": "8f40c99749accc3e4db56c332751afd5e3f65f2f74abb4ce3b711b5ed3c57c32"
+      "sha256": "37af74c0f0fd2872e55780a97e385e415502139131bef878c38c108010103c43"
     },
     {
       "path": "backend/src/modules/b2b/b2b-pricebook.service.ts",
-      "sha256": "286edc5f98b950d46ae0cff07fb9b649ba374112d47e8d3de516ab349afc54a6"
+      "sha256": "9ea2979604f75eaba85a33bd706765f3201683a071c1b860ec2c3f95b569bbd3"
     },
     {
       "path": "backend/src/modules/b2b/b2b.controller.ts",
@@ -296,7 +305,7 @@
     },
     {
       "path": "frontend/src/App.tsx",
-      "sha256": "4dfb141bf9cdb9cb28b156b1027bfc6b589be54a1134628780bf5b51d8aa5c3f"
+      "sha256": "3cabfb1813506866fc642f477ff0a8f44e1ebe98af22a0256678f71b18fce95e"
     },
     {
       "path": "frontend/src/config/navigation.ts",
@@ -380,11 +389,19 @@
     },
     {
       "path": "frontend/src/pages/b2b/B2bWorkbenchPage.tsx",
-      "sha256": "033dbe00d50b71147b22bf234716ce72a14326bc738930484f1112e403c17c04"
+      "sha256": "dd943bf1b68c0c3e688c86e8a731925eadd2662422a69a7a3555dbe3d42110af"
     },
     {
       "path": "frontend/src/pages/b2b/CustomerDiscountManager.tsx",
       "sha256": "5bf782eb5d99ed155286a6963e18d20ec8e6d5bde4898d9162618876be5d59bf"
+    },
+    {
+      "path": "frontend/src/pages/b2b/GuestInquiryManager.tsx",
+      "sha256": "c2bb8dfb33f7f352c897d185835d3f9ee51147863a86a61f4be7d3e1bfefad85"
+    },
+    {
+      "path": "frontend/src/pages/b2b/GuestShopPage.tsx",
+      "sha256": "3706ab0ee4e1b90773db92800cce11b4b7d64ff5d4ac26199430e24a34c954a7"
     },
     {
       "path": "frontend/src/pages/b2b/order.ts",
@@ -521,6 +538,10 @@
     {
       "path": "frontend/src/pages/WmsHandoverReconciliationPage.tsx",
       "sha256": "5753d6ab5a30e71c9b3b5ba72087dfd775b617c89b91bf5e95b85510a51b0bc2"
+    },
+    {
+      "path": "frontend/src/services/b2b-public.service.ts",
+      "sha256": "6ed996ec7fae1d3eade3bc6e7211565cf45144b06a91dc1ea2ed3b9d2dfc65cd"
     },
     {
       "path": "frontend/src/services/b2b-supplier-admin.service.ts",

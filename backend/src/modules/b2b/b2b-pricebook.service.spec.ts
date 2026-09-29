@@ -270,7 +270,7 @@ describe('B2B governed price books', () => {
         },
       ]);
       db.b2bProductPriceBook.count.mockResolvedValue(1);
-      const result = await service.publicCatalog('entity');
+      const result = await service.publicCatalog('entity', 20, 0, ' SKU ');
       expect(result.items).toEqual([
         {
           productId,
@@ -284,6 +284,10 @@ describe('B2B governed price books', () => {
       ]);
       const query = db.b2bProductPriceBook.findMany.mock.calls[0][0];
       expect(query.where.isPublic).toBe(true);
+      expect(query.where.product.OR).toEqual([
+        { sku: { contains: 'SKU', mode: 'insensitive' } },
+        { name: { contains: 'SKU', mode: 'insensitive' } },
+      ]);
       expect(query.where.product.b2bCatalog.some).toEqual({
         entityId: 'entity',
         isPublished: true,
