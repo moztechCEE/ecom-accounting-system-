@@ -15,13 +15,114 @@ export interface B2BAdminSetup {
 
 export interface B2BAdminRequest extends B2BRequestDetail {
   customerName: string
+  customerId?: string
 }
 
 export interface B2BProductOption { id: string; sku: string; name: string }
 
+export interface B2BPriceOffer {
+  id: string
+  unitPrice: string
+  startsAt: string
+  endsAt: string
+  audience: 'ALL' | 'CODE'
+  audienceCode: string | null
+  isActive: boolean
+}
+
+export interface B2BPriceBook {
+  productId: string
+  sku: string
+  name: string
+  isPublished: boolean
+  isPublic: boolean
+  currency: 'TWD'
+  taxBasis: 'TAX_INCLUDED' | 'TAX_EXCLUDED'
+  msrp: string | null
+  regularPrice: string | null
+  groupBuyPrice: string | null
+  updatedAt: string | null
+  offers: B2BPriceOffer[]
+}
+
+export interface B2BPriceOfferInput {
+  entityId: string
+  unitPrice: number
+  startsAt: string
+  endsAt: string
+  audience: B2BPriceOffer['audience']
+  audienceCode?: string | null
+  isActive?: boolean
+}
+
+export interface B2BCustomerDiscount {
+  customerId: string
+  customerName?: string
+  multiplier: string
+  basePriceType: 'MSRP' | 'REGULAR'
+  validFrom: string
+  validUntil: string | null
+  isActive: boolean
+}
+
+export interface B2BCustomerDiscountPreviewLine {
+  productId: string
+  quantity: number
+  source: 'FIXED_OVERRIDE' | 'CUSTOMER_DISCOUNT' | null
+  basePriceType: 'MSRP' | 'REGULAR' | null
+  baseUnitPrice: string | null
+  multiplier: string | null
+  selectedUnitPrice: string | null
+  taxBasis: 'TAX_INCLUDED' | 'TAX_EXCLUDED' | null
+  quoteUnitPrice: string | null
+  quoteLineTotal: string | null
+  eligible: boolean
+  reason?: string
+}
+
+export interface B2BAdminPage<T> {
+  rows: T[]
+  total: number
+  limit: number
+  offset: number
+  hasMore: boolean
+}
+
 export const b2bAdminService = {
   async productOptions(entityId: string, search = '', limit = 20): Promise<{ rows: B2BProductOption[]; total: number; limit: number; hasMore: boolean }> {
     const { data } = await api.get('/b2b/admin/product-options', { params: { entityId, search: search.trim().slice(0, 200), limit } })
+    return data
+  },
+  async priceBooks(entityId: string, options: { search?: string; limit?: number; offset?: number } = {}): Promise<B2BAdminPage<B2BPriceBook>> {
+    const { data } = await api.get<B2BAdminPage<B2BPriceBook>>('/b2b/admin/price-books', { params: { entityId, ...options } })
+    return data
+  },
+  async savePriceBook(productId: string, input: { entityId: string; currency: 'TWD'; taxBasis: B2BPriceBook['taxBasis']; msrp: number; regularPrice: number | null; groupBuyPrice: number | null; isPublic: boolean }): Promise<B2BPriceBook> {
+    const { data } = await api.put<B2BPriceBook>(`/b2b/admin/price-books/${encodeURIComponent(productId)}`, input)
+    return data
+  },
+  async createPriceOffer(productId: string, input: B2BPriceOfferInput): Promise<B2BPriceOffer> {
+    const { data } = await api.post<B2BPriceOffer>(`/b2b/admin/price-books/${encodeURIComponent(productId)}/offers`, input)
+    return data
+  },
+  async updatePriceOffer(productId: string, offerId: string, input: B2BPriceOfferInput): Promise<B2BPriceOffer> {
+    const { data } = await api.patch<B2BPriceOffer>(`/b2b/admin/price-books/${encodeURIComponent(productId)}/offers/${encodeURIComponent(offerId)}`, input)
+    return data
+  },
+  async previewPrice(productId: string, input: { entityId: string; priceType: 'MSRP' | 'REGULAR' | 'GROUP_BUY' | 'CAMPAIGN'; offerId?: string; quantity: number; at?: string; audienceCode?: string }): Promise<{ priceType: string; unitPrice: string | null; lineTotal: string | null; currency: 'TWD'; taxBasis: B2BPriceBook['taxBasis']; eligible: boolean; reason?: string }> {
+    const { data } = await api.post(`/b2b/admin/price-books/${encodeURIComponent(productId)}/preview`, input)
+    return data
+  },
+  async customerDiscounts(entityId: string, options: { search?: string; limit?: number; offset?: number } = {}): Promise<B2BAdminPage<B2BCustomerDiscount>> {
+    const { data } = await api.get<B2BAdminPage<B2BCustomerDiscount>>('/b2b/admin/customer-discounts', { params: { entityId, ...options } })
+    return data
+  },
+  async saveCustomerDiscount(customerId: string, input: { entityId: string; multiplier: number; basePriceType: B2BCustomerDiscount['basePriceType']; validFrom: string; validUntil: string | null; isActive: boolean }): Promise<B2BCustomerDiscount> {
+    const { data } = await api.put<B2BCustomerDiscount>(`/b2b/admin/customer-discounts/${encodeURIComponent(customerId)}`, input)
+    return data
+  },
+  async previewCustomerDiscount(customerId: string, input: { entityId: string; items: Array<{ productId: string; quantity: number }>; at?: string }): Promise<{ currency: 'TWD'; items: B2BCustomerDiscountPreviewLine[] }> {
+    const { data } = await api.post<{ currency: 'TWD'; items: B2BCustomerDiscountPreviewLine[] }>(`/b2b/admin/customer-discounts/${encodeURIComponent(customerId)}/preview`, input)
     return data
   },
   async setup(entityId: string): Promise<B2BAdminSetup> {
@@ -53,7 +154,17 @@ export const b2bAdminService = {
   async reviewRequest(id: string, input: { entityId: string; items: Array<{ id: string; confirmedQuantity: number }>; reviewNote?: string; deliveryDate?: string }): Promise<void> {
     await api.post(`/b2b/admin/requests/${encodeURIComponent(id)}/review`, input)
   },
-  async issueQuote(id: string, input: { entityId: string; validUntil?: string; paymentTerms?: string; deliveryTerms?: string }): Promise<B2BFormalQuote> {
+  async formalQuote(id: string, version: number, entityId: string): Promise<B2BFormalQuote> {
+    const { data } = await api.get<B2BFormalQuote>(`/b2b/admin/requests/${encodeURIComponent(id)}/quotes/${encodeURIComponent(version)}`, { params: { entityId } })
+    return data
+  },
+  async issueQuote(id: string, input: {
+    entityId: string
+    items: Array<{ requestItemId: string; quantity: number; unitPrice: number }>
+    validUntil?: string
+    paymentTerms?: string
+    deliveryTerms?: string
+  }): Promise<B2BFormalQuote> {
     const { data } = await api.post<B2BFormalQuote>(`/b2b/admin/requests/${encodeURIComponent(id)}/quotes`, input)
     return data
   },

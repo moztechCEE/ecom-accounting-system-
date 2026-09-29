@@ -1,28 +1,30 @@
-# B2B 客戶採購入口第一版
+# B2B 客戶採購與價目模組
 
-這個模組提供獨立客戶登入、已發布目錄、客戶專屬價、客戶 PO 需求及價格快照、人工核庫和確認接單。公司主檔使用既有 `Entity`，客戶／供應商使用既有 `Customer`／`Vendor`；外部帳號不建立內部 `User` 或員工角色。
+這個模組提供獨立客戶登入、已發布目錄、客戶專屬價、客戶 PO 需求、人工核庫、固定版次正式報價、客戶接受與確認接單。新價目表另外管理建議售價、常態售價、團購主進貨價、活動價與客戶常用折數。公司主檔使用既有 `Entity`，客戶／供應商使用既有 `Customer`／`Vendor`；外部帳號不建立內部 `User` 或員工角色。
 
 ## 啟用與邊界
 
-- 新增 migration：`20260923080000_b2b_customer_portal`。先在指定測試資料庫檢查及套用；本次程式與測試不會替正式或 DEV 資料庫執行 migration。
+- 依序檢查及套用既有 B2B migrations 和 `20260929000000_b2b_public_price_books`。本機測試不會替正式或 DEV 資料庫執行 migration。
 - 明確設定 `B2B_PORTAL_ENABLED=true` 才開放客戶入口；預設關閉。既有 DEV 公開註冊及外部 webhook 封鎖仍保留。
 - `companyCode` 是銷售公司 `Entity.loginCode`，不是客戶代碼。員工 setup 回應的 `company.loginCode` 可用於提供登入資訊。
-- 第一期僅台幣公司、一般商品、稅外加 5%；價格來自已發布目錄或目前有效的客戶專屬價。尚未支援多幣別、級距／促銷疊加或其他稅別。
+- 第一期僅台幣公司、一般商品、正式銷貨報價未稅單價加 5% 稅。登入後既有目錄仍讀取其目錄單價或有效客戶固定價；新價目表與客戶成交比例須由員工明確試算並帶入本次報價，不自動疊加活動或團購價。含稅價在沒有核准轉換規則時不能自動帶入未稅報價。
+- `B2B_PUBLIC_CATALOG_ENABLED=true` 只啟用匿名 MSRP 目錄 API；單一商品還須在新價目表明確勾選匿名公開，且既有目錄已發布。三者預設均不讓商品匿名可見。免登入送單與免登入查看／接受專屬正式報價仍未實作。
 - 外部 session 為隨機 opaque token，資料庫只存 SHA-256 hash，效期 8 小時。每次要求重查帳號、公司及客戶啟用狀態。停用或重設密碼撤銷現有 session。
 - 客戶登入與員工 JWT 分離。客戶只能讀所屬公司的已發布商品及自己客戶的需求；目錄不傳成本、精確庫存、供應商或其他客戶資訊。
 - 供應商帳號可由員工建立、停用及重設密碼，資料庫限制客戶／供應商擇一關聯。供應商登入、供應商 PO 查詢與其前台尚未實作；供應商帳號無法進入客戶目錄。
-- 不會發送 LINE、Email、通知、建立供應商採購單或進行任何外部交易。
+- 不會直接發送 LINE、Email 或通知。缺貨可從員工端建立來源關聯採購單，但收貨後仍須重新人工核庫。
 
 ## 流程
 
-1. 員工建立客戶帳號、发布商品與目錄價，必要時設定客戶專屬價。
+1. 員工建立客戶帳號、發布商品與目錄價，必要時設定客戶專屬價或新價目表、客戶常用折數。
 2. 客戶登入，選商品及數量，填自己的 PO 號送出。伺服器計價並保存快照，狀態為 `pending_stock_review`。不保留、不扣庫。
 3. `quotePath` 指向 `/b2b/requests/{id}`，可由業務複製給 LINE。這是須客戶登入且通過歸屬檢查的連結；不是公開、不受限制的 bearer 報價。
 4. 員工逐行確認可供數量與交期。全數符合才 `stock_confirmed`；差異進 `needs_adjustment` 並要求原因。核庫不改客戶原始數量、單價或金額，不保留庫存。
-5. 員工另行確認接單，必須指定出貨倉與通路。服務確認完整人工核庫、價格快照及 WMS 前置條件後，在同一資料庫 transaction 建正式銷單、預留庫存及寫回 `salesOrderId`，變成 `order_confirmed`。資料缺失或不足量失敗時整體回滾；重送不重建訂單。
-6. WMS 出貨、晚間核對及正式扣庫由各自流程處理。本模組不把人工核庫當作實際交運。
+5. 員工出具固定版次正式報價，可修改原需求行的數量與未稅單價；增刪 SKU 須建立新需求。舊版被新版取代後不能接受，顧客以獨立帳號登入接受最新有效版本。
+6. 員工另行確認接單，必須指定出貨倉與通路。服務核對人工核庫、客戶接受版次與 WMS 前置條件後，在同一資料庫 transaction 以**接受版次的行項、金額及稅額快照**建正式銷單、預留庫存及寫回 `salesOrderId`，變成 `order_confirmed`。資料缺失或不足量失敗時整體回滾；重送不重建訂單。
+7. WMS 出貨、晚間核對及正式扣庫由各自流程處理。本模組不把人工核庫當作實際交運。
 
-`needs_adjustment` 不可直接確認接單；第一版須由客戶依協調後條件重新提交需求。尚未實作原報價修訂／版本核准。報價快照目前沒有客戶在線接受動作；確認接單是員工操作。
+`needs_adjustment` 不可直接確認接單。原需求需要重新人工核庫後才能出具新版正式報價；客戶接受與員工確認接單是兩個不同動作。已接受但尚未接單的報價可由業務記錄原因撤回，重新核庫後再出新版；已接單不可撤回原報價。
 
 ## API
 
@@ -37,6 +39,8 @@
 | `POST /b2b/portal/requests` | `{requestId,customerPoNumber,note?,items:[{productId,quantity}]}` |
 | `GET /b2b/portal/requests` | 最近 100 筆自己客戶需求 |
 | `GET /b2b/portal/requests/:id` | 自己客戶的需求／報價快照 |
+| `GET /b2b/portal/requests/:id/quotes/:version` | 登入客戶查看所屬公司的固定版次正式報價 |
+| `POST /b2b/portal/requests/:id/quotes/:version/accept` | 登入客戶接受最新有效版次 |
 | `GET /b2b/admin/setup?entityId=...` | 公司代碼、客戶、供應商、商品、帳號、目錄及專屬價 |
 | `POST /b2b/admin/accounts` | 客戶帳號；密碼至少 12 字元且 UTF-8 ≤72 bytes |
 | `POST /b2b/admin/supplier-accounts` | 供應商帳號準備；沒有開放供應商入口 |
@@ -44,9 +48,19 @@
 | `PATCH /b2b/admin/supplier-accounts/:id` | `{entityId,isActive,password?}`；僅採購權限可管理供應商帳號 |
 | `PUT /b2b/admin/catalog` | `{entityId,productId,unitPrice,isPublished}` |
 | `PUT /b2b/admin/prices` | `{entityId,customerId,productId,unitPrice,isActive,validUntil?}` |
+| `GET /b2b/admin/price-books?entityId=...` | 員工查價目、團購主價與活動價 |
+| `PUT /b2b/admin/price-books/:productId` | 設定 MSRP、常態價、團購主價、稅別與獨立 `isPublic` 勾選 |
+| `POST /b2b/admin/price-books/:productId/offers` | 建立有起迄時間的活動價 |
+| `PATCH /b2b/admin/price-books/:productId/offers/:offerId` | 修改／停用活動價 |
+| `GET /b2b/admin/customer-discounts?entityId=...` | 員工查客戶常用成交比例 |
+| `PUT /b2b/admin/customer-discounts/:customerId` | 設定客戶常用成交比例與效期 |
+| `POST /b2b/admin/customer-discounts/:customerId/preview` | 試算後由員工明確帶入本次報價 |
 | `GET /b2b/admin/requests?entityId=...` | 公司最近 100 筆需求與人工核庫待辦 |
 | `POST /b2b/admin/requests/:id/review` | `{entityId,items:[{id,confirmedQuantity}],reviewNote?,deliveryDate?}` |
+| `POST /b2b/admin/requests/:id/quotes` | 出具或修訂正式報價，保留不可覆寫版次 |
+| `GET /b2b/admin/requests/:id/quotes/:version?entityId=...` | 員工查看既有固定版次 |
 | `POST /b2b/admin/requests/:id/confirm` | `{entityId,channelId,warehouseId}`；正式接單及預留 |
+| `GET /b2b/public/catalog?entityId=...` | 開關及逐品項授權後，只回傳匿名 MSRP 與必要商品識別欄位 |
 
 內部 API 使用員工 JWT；客戶價格與訂單使用 sales 公司存取檢查及 sales_orders 讀／建權限，供應商帳號新增與修改另需 purchasing 公司存取與 purchase_orders 建立權限。`requestId` 必須 UUID v4；相同客戶相同提交鍵、相同內容回傳原快照，不同內容回 409。外部 DTO 拒收 unitPrice、entityId、customerId、內部註記或其他未知欄位。
 
@@ -59,7 +73,8 @@ npm test -- --runInBand src/modules/b2b src/common/guards/jwt-auth.guard.dev.spe
 npm run build
 ```
 
-- `b2b.service.spec.ts`：身分範圍、專屬價、金額快照、重送、人工核庫、confirm 重送／共用 transaction／失敗不標記／WMS 前置條件。
+- `b2b.service.spec.ts`：身分範圍、專屬價、重送、人工核庫、正式報價 V1/V2 快照、客戶接受、接受版次轉銷單及 WMS 前置條件。
+- `b2b-pricebook.service.spec.ts` 與 `b2b-pricebook.migration.cjs`：價目、折數、團購主價不自動套用、匿名公開欄位白名單及隔離 SQL 約束。
 - `b2b-boundaries.spec.ts`：全域 guard 的客戶／員工分流及未知欄位、異常數量拒絕。
 - `b2b.http.spec.ts`：實際 Nest HTTP、DTO、bcrypt、JWT 與客戶 session，從帳號→登入→目錄→PO→核庫→停用。使用明確的記憶體 repository fixture，**不是 Prisma 真資料庫端到端測試**。只監聽本機 127.0.0.1 隨機埠。
 - `b2b.migration.cjs`：在暫存 PGlite PostgreSQL engine 套用 migration，驗證 XOR、唯一鍵、外鍵及數量／價格／狀態約束。不連接業務資料庫。

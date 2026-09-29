@@ -28,6 +28,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         const allowed = ['POST /api/v1/auth/login', 'GET /api/v1/auth/login-entities',
           'POST /api/v1/wms/portal/consume', 'POST /api/v1/wms/portal/inspect', 'POST /api/v1/wms/portal/revoke',
           'GET /api/v1/health', 'GET /api/v1/health/ready'];
+        if (process.env.B2B_PUBLIC_CATALOG_ENABLED === 'true')
+          allowed.push('GET /api/v1/b2b/public/catalog');
         if (!allowed.includes(route)) throw new ForbiddenException('DEV 停用公開註冊、回呼與外部作業入口');
       }
       return true;

@@ -119,7 +119,21 @@ export class B2bConfirmDto extends B2bEntityDto {
   @IsString() @IsNotEmpty() @MaxLength(128) warehouseId!: string;
 }
 
+export class B2bIssueQuoteLineDto {
+  @IsUUID('4') requestItemId!: string;
+  @IsInt() @Min(1) @Max(100000) quantity!: number;
+  @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100000000) unitPrice!: number;
+}
+
 export class B2bIssueQuoteDto extends B2bEntityDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => B2bIssueQuoteLineDto)
+  items?: B2bIssueQuoteLineDto[];
+
   @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   @IsDateString({ strict: true })

@@ -183,6 +183,16 @@ export class B2bAdminController {
     return this.service.issueQuote(id, dto, req.user.id);
   }
 
+  @Get('requests/:id/quotes/:version')
+  @Header('Cache-Control', 'no-store')
+  staffFormalQuote(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('version', ParseIntPipe) version: number,
+    @Query() query: B2bEntityDto,
+  ) {
+    return this.service.staffFormalQuote(query.entityId, id, version);
+  }
+
   @Post('requests/:id/quotes/:version/withdraw')
   @RequirePermissions({ resource: 'sales_orders', action: 'create' })
   withdrawQuote(

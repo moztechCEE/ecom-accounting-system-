@@ -70,6 +70,28 @@ function requestRow(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+function issuedQuoteRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'issued-quote', requestId, quotationId: 'quotation-q', version: 1,
+    status: 'accepted', acceptedAt: new Date('2026-09-24T01:00:00Z'),
+    acceptedByAccountId: 'account-a', sellerName: 'Corely', sellerTaxId: '12345678',
+    buyerName: 'Customer A', buyerTaxId: '87654321', deliveryDate: null,
+    withdrawnAt: null, withdrawalReason: null,
+    quotation: {
+      id: 'quotation-q', entityId: 'entity-a', customerId: 'customer-a',
+      quotationNo: 'B2B-QT', quotationDate: new Date('2026-09-24T00:00:00Z'),
+      validUntil: new Date('2099-12-31T00:00:00Z'), currency: 'TWD', status: 'accepted',
+      paymentTerms: null, deliveryTerms: null,
+      subtotalOriginal: D('30.03'), discountAmountOriginal: D('0'),
+      taxAmountOriginal: D('1.50'), totalAmountOriginal: D('31.53'),
+      items: [{ productId: 'p1', itemName: 'Product', itemSpec: 'SKU-1',
+        quantity: D(3), unitPriceOriginal: D('10.01'), discountOriginal: D(0),
+        taxRate: D(5), taxAmountOriginal: D('1.50'), lineTotalOriginal: D('31.53'),
+        sortOrder: 0 }],
+    },
+    ...overrides,
+  };
+}
 function makeDb() {
   const db: any = {
     entity: {
@@ -140,7 +162,8 @@ function makeDb() {
     },
     b2bRequestItem: { update: jest.fn(), updateMany: jest.fn() },
     b2bStockReview: { create: jest.fn().mockResolvedValue({ id: 'review-event' }) },
-    b2bIssuedQuote: { findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+    b2bIssuedQuote: { findFirst: jest.fn().mockImplementation(async () => issuedQuoteRow()),
+      findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
     salesQuotation: { create: jest.fn(), update: jest.fn() },
     inventorySnapshot: { update: jest.fn() },
     inventoryTransaction: { create: jest.fn(), findFirst: jest.fn() },
@@ -559,6 +582,52 @@ describe('B2B account and request boundaries', () => {
       alreadyConfirmed: false,
     });
   });
+  it('creates one reserved order from accepted edited quote V2, not request list price, across replay', async () => {
+    let reviewed = requestRow({ status: 'stock_confirmed', reviewedAt: new Date(),
+      issuedQuotes: [{ id: 'issued-v2', version: 2, status: 'accepted',
+        acceptedAt: new Date('2026-09-24T01:00:00Z'), acceptedByAccountId: 'account-a' }] });
+    reviewed.items[0].confirmedQuantity = 3 as never;
+    db.b2bPurchaseRequest.findFirst.mockImplementation(async () => reviewed);
+    db.b2bIssuedQuote.findFirst.mockResolvedValue(issuedQuoteRow({ id: 'issued-v2', version: 2,
+      quotation: { ...issuedQuoteRow().quotation, id: 'quotation-v2',
+        subtotalOriginal: D(17), taxAmountOriginal: D('0.85'), totalAmountOriginal: D('17.85'),
+        items: [{ ...issuedQuoteRow().quotation.items[0], quantity: D(2),
+          unitPriceOriginal: D('8.50'), taxAmountOriginal: D('0.85'),
+          lineTotalOriginal: D('17.85') }] } }));
+    salesOrders.createSalesOrder.mockResolvedValue({ id: 'order-v2' });
+    db.b2bPurchaseRequest.update.mockImplementation(async ({ data }: any) => {
+      reviewed = { ...reviewed, ...data };
+      return reviewed;
+    });
+    db.salesOrder.findFirst.mockResolvedValue({ id: 'order-v2', channelId: 'b2b-channel' });
+    db.inventoryTransaction.findFirst.mockResolvedValue({ warehouseId: 'warehouse-a' });
+    const input = { entityId: 'entity-a', warehouseId: 'warehouse-a', channelId: 'b2b-channel' };
+    expect((await service.confirm(requestId, input, 'staff')).alreadyConfirmed).toBe(false);
+    expect((await service.confirm(requestId, input, 'staff')).alreadyConfirmed).toBe(true);
+    expect(salesOrders.createSalesOrder).toHaveBeenCalledTimes(1);
+    expect(salesOrders.createSalesOrder).toHaveBeenCalledWith(expect.objectContaining({
+      items: [{ productId: 'p1', qty: 2, unitPrice: 8.5, taxAmount: 0.85 }],
+    }), 'staff', db);
+  });
+  it('blocks reservation if an accepted quote is stale or its line/tax snapshot changed', async () => {
+    const reviewed = requestRow({ status: 'stock_confirmed', reviewedAt: new Date(),
+      issuedQuotes: [{ id: 'issued-v2', version: 2, status: 'accepted',
+        acceptedAt: new Date('2026-09-24T01:00:00Z'), acceptedByAccountId: 'account-a' }] });
+    reviewed.items[0].confirmedQuantity = 3 as never;
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
+    db.b2bIssuedQuote.findFirst.mockResolvedValueOnce(issuedQuoteRow({ id: 'issued-v1' }));
+    const input = { entityId: 'entity-a', warehouseId: 'warehouse-a', channelId: 'b2b-channel' };
+    await expect(service.confirm(requestId, input, 'staff')).rejects.toThrow(ConflictException);
+    db.b2bIssuedQuote.findFirst.mockResolvedValueOnce(issuedQuoteRow({ id: 'issued-v2', version: 2,
+      quotation: { ...issuedQuoteRow().quotation, taxAmountOriginal: D('0.50') } }));
+    await expect(service.confirm(requestId, input, 'staff')).rejects.toThrow('正式報價金額快照不一致');
+    db.b2bIssuedQuote.findFirst.mockResolvedValueOnce(issuedQuoteRow({ id: 'issued-v2', version: 2,
+      quotation: { ...issuedQuoteRow().quotation,
+        items: [{ ...issuedQuoteRow().quotation.items[0], quantity: D(4),
+          lineTotalOriginal: D('41.54') }] } }));
+    await expect(service.confirm(requestId, input, 'staff')).rejects.toThrow('正式報價品項快照不一致');
+    expect(salesOrders.createSalesOrder).not.toHaveBeenCalled();
+  });
   it('leaves the request unconfirmed when atomic order/reservation creation rejects', async () => {
     const reviewed = requestRow({
       status: 'stock_confirmed',
@@ -724,6 +793,88 @@ describe('B2B account and request boundaries', () => {
     expect(db.salesQuotation.create).toHaveBeenCalledTimes(1);
     expect(db.inventoryTransaction.create).not.toHaveBeenCalled();
   });
+  it('supersedes V1 when staff changes reviewed quantity and price, then replays only identical V2', async () => {
+    const reviewed = requestRow({ status: 'stock_confirmed', reviewedAt: new Date(),
+      issuedQuotes: [{ id: 'issued-v1', version: 1, status: 'sent' }] });
+    reviewed.items[0].confirmedQuantity = 3 as never;
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
+    const prior = issuedQuoteRow({ id: 'issued-v1', status: 'sent', acceptedAt: null,
+      acceptedByAccountId: null, quotation: { ...issuedQuoteRow().quotation, status: 'sent' } });
+    let current = prior;
+    db.b2bIssuedQuote.findFirst.mockImplementation(async () => current);
+    let createdQuotation: any;
+    db.salesQuotation.create.mockImplementation(async ({ data }: any) => {
+      createdQuotation = { ...data, id: 'quotation-v2', items: data.items.create };
+      return createdQuotation;
+    });
+    db.b2bIssuedQuote.create.mockImplementation(async ({ data }: any) => {
+      current = { ...issuedQuoteRow(), ...data, id: 'issued-v2', status: 'sent',
+        acceptedAt: null, acceptedByAccountId: null, quotation: createdQuotation } as any;
+      return current;
+    });
+    const input = { entityId: 'entity-a', validUntil: '2099-12-31',
+      items: [{ requestItemId: lineId, quantity: 2, unitPrice: 8.5 }] };
+    const second = await service.issueQuote(requestId, input, 'staff');
+    expect(second).toMatchObject({ version: 2, status: 'sent', subtotal: '17.00',
+      tax: '0.85', total: '17.85' });
+    expect(second.items[0]).toMatchObject({ requestItemId: lineId, quantity: 2,
+      unitPrice: '8.50', lineTotal: '17.00', taxAmount: '0.85', total: '17.85' });
+    expect(db.b2bIssuedQuote.update).toHaveBeenCalledWith({ where: { id: 'issued-v1' },
+      data: { status: 'superseded' } });
+    expect(db.salesQuotation.create.mock.calls[0][0].data).toMatchObject({
+      subtotalOriginal: D(17), taxAmountOriginal: D('0.85'), totalAmountOriginal: D('17.85'),
+      items: { create: [expect.objectContaining({ quantity: 2, unitPriceOriginal: D('8.5') })] },
+    });
+    const retry = await service.issueQuote(requestId, input, 'staff');
+    expect(retry.id).toBe(second.id);
+    expect(db.salesQuotation.create).toHaveBeenCalledTimes(1);
+    expect(salesOrders.createSalesOrder).not.toHaveBeenCalled();
+  });
+  it('carries edited V1 lines into V2 when staff changes only terms and omits items', async () => {
+    const reviewed = requestRow({ status: 'stock_confirmed', reviewedAt: new Date() });
+    reviewed.items[0].confirmedQuantity = 3 as never;
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
+    const edited = issuedQuoteRow({ id: 'issued-v1', status: 'sent', acceptedAt: null,
+      acceptedByAccountId: null, quotation: { ...issuedQuoteRow().quotation, status: 'sent',
+        subtotalOriginal: D(17), taxAmountOriginal: D('0.85'), totalAmountOriginal: D('17.85'),
+        items: [{ ...issuedQuoteRow().quotation.items[0], quantity: D(2),
+          unitPriceOriginal: D('8.50'), taxAmountOriginal: D('0.85'),
+          lineTotalOriginal: D('17.85') }] } });
+    let current = edited;
+    let createdQuotation: any;
+    db.b2bIssuedQuote.findFirst.mockImplementation(async () => current);
+    db.salesQuotation.create.mockImplementation(async ({ data }: any) => {
+      createdQuotation = { ...data, id: 'quotation-v2', items: data.items.create };
+      return createdQuotation;
+    });
+    db.b2bIssuedQuote.create.mockImplementation(async ({ data }: any) => {
+      current = { ...edited, ...data, id: 'issued-v2', status: 'sent',
+        quotation: createdQuotation } as any;
+      return current;
+    });
+    const termsOnly = { entityId: 'entity-a', validUntil: '2099-12-31', paymentTerms: '月結 30 天' };
+    const second = await service.issueQuote(requestId, termsOnly, 'staff');
+    expect(second).toMatchObject({ version: 2, subtotal: '17.00', tax: '0.85', total: '17.85',
+      items: [{ requestItemId: lineId, quantity: 2, unitPrice: '8.50' }] });
+    expect(db.salesQuotation.create.mock.calls[0][0].data.items.create[0]).toMatchObject({
+      quantity: 2, unitPriceOriginal: D('8.50'), taxAmountOriginal: D('0.85'),
+    });
+    expect((await service.issueQuote(requestId, termsOnly, 'staff')).id).toBe(second.id);
+    expect(db.salesQuotation.create).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    [{ requestItemId: lineId, quantity: 4, unitPrice: 8.5 }],
+    [{ requestItemId: lineId, quantity: 2, unitPrice: 8.555 }],
+    [{ requestItemId: '00000000-0000-4000-8000-000000000099', quantity: 2, unitPrice: 8.5 }],
+  ])('rejects quote edits outside the reviewed line and money bounds', async (items) => {
+    const reviewed = requestRow({ status: 'stock_confirmed', reviewedAt: new Date() });
+    reviewed.items[0].confirmedQuantity = 3 as never;
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
+    db.b2bIssuedQuote.findFirst.mockResolvedValue(null);
+    await expect(service.issueQuote(requestId, { entityId: 'entity-a', items }, 'staff'))
+      .rejects.toThrow(BadRequestException);
+    expect(db.salesQuotation.create).not.toHaveBeenCalled();
+  });
   it.each(['serial', 'bundle', 'no-barcode', 'inactive', 'no-brand'])(
     'does not issue a customer-acceptable quote when WMS prerequisite is %s',
     async (reason) => {
@@ -751,16 +902,7 @@ describe('B2B account and request boundaries', () => {
         acceptedByAccountId: 'account-a' }] });
     reviewed.items[0].confirmedQuantity = 3 as never;
     db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
-    const quotation = { id: 'quotation-q', quotationNo: 'B2B-QT',
-      quotationDate: new Date('2026-09-24T00:00:00Z'), validUntil: new Date('2099-12-31T00:00:00Z'),
-      paymentTerms: null, deliveryTerms: null, subtotalOriginal: D('30.03'),
-      taxAmountOriginal: D('1.50'), totalAmountOriginal: D('31.53'),
-      items: [{ taxAmountOriginal: D('1.50'), lineTotalOriginal: D('31.53') }] };
-    const issued = { id: 'issued-q', requestId, version: 1, status: 'accepted',
-      quotationId: 'quotation-q', quotation, acceptedAt, acceptedByAccountId: 'account-a',
-      deliveryDate, sellerName: 'Corely', sellerTaxId: '12345678',
-      buyerName: 'Customer A', buyerTaxId: '87654321',
-      withdrawnAt: null, withdrawnBy: null, withdrawalReason: null };
+    const issued = issuedQuoteRow({ id: 'issued-q', acceptedAt, deliveryDate });
     db.b2bIssuedQuote.findFirst.mockResolvedValue(issued);
     db.b2bIssuedQuote.update.mockImplementation(({ data }: any) => ({ ...issued, ...data }));
     const reason = '庫存已由另一筆銷售訂單占用，需重新核對。';
@@ -792,15 +934,10 @@ describe('B2B account and request boundaries', () => {
       deliveryDate: '2026-10-01' });
   });
   it('replays only the same withdrawal and never withdraws after a sales order exists', async () => {
-    const quotation = { id: 'quotation-q', quotationNo: 'B2B-QT',
-      quotationDate: new Date('2026-09-24T00:00:00Z'), validUntil: null,
-      paymentTerms: null, deliveryTerms: null, subtotalOriginal: D('30.03'),
-      taxAmountOriginal: D('1.50'), totalAmountOriginal: D('31.53'),
-      items: [{ taxAmountOriginal: D('1.50'), lineTotalOriginal: D('31.53') }] };
     const reason = '庫存不足，需重新確認交期。';
     const acceptedAt = new Date('2026-09-24T01:00:00Z');
-    const issued = { id: 'issued-q', requestId, version: 1, status: 'accepted',
-      quotationId: 'quotation-q', quotation, acceptedAt, acceptedByAccountId: 'account-a' };
+    const issued = issuedQuoteRow({ id: 'issued-q', acceptedAt,
+      quotation: { ...issuedQuoteRow().quotation, validUntil: null } });
     db.b2bIssuedQuote.findFirst.mockResolvedValue(issued);
     const confirmed = requestRow({ status: 'order_confirmed', salesOrderId: 'order-a',
       issuedQuotes: [{ id: 'issued-q', version: 1, status: 'accepted', acceptedAt,
@@ -849,15 +986,10 @@ describe('B2B account and request boundaries', () => {
       issuedQuotes: [{ id: 'issued-q', version: 1, status: 'sent' }] });
     reviewed.items[0].confirmedQuantity = 3 as never;
     db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
-    const quotation = { id: 'quotation-q', quotationNo: 'B2B-QT',
-      quotationDate: new Date('2026-09-24T00:00:00Z'),
-      validUntil: new Date('2099-12-31T00:00:00Z'), paymentTerms: null,
-      deliveryTerms: null, subtotalOriginal: D('30.03'), taxAmountOriginal: D('1.50'),
-      totalAmountOriginal: D('31.53'), items: [{ taxAmountOriginal: D('1.50'), lineTotalOriginal: D('31.53') }] };
-    db.b2bIssuedQuote.findFirst.mockResolvedValue({ id: 'issued-q', version: 1, status: 'sent',
-      quotationId: 'quotation-q', acceptedAt: null, quotation });
-    db.b2bIssuedQuote.update.mockResolvedValue({ id: 'issued-q', version: 1, status: 'accepted',
-      quotationId: 'quotation-q', acceptedAt: new Date(), quotation });
+    const sent = issuedQuoteRow({ id: 'issued-q', status: 'sent', acceptedAt: null,
+      acceptedByAccountId: null, quotation: { ...issuedQuoteRow().quotation, status: 'sent' } });
+    db.b2bIssuedQuote.findFirst.mockResolvedValue(sent);
+    db.b2bIssuedQuote.update.mockResolvedValue({ ...sent, status: 'accepted', acceptedAt: new Date() });
     const accepted = await service.acceptQuote(identity, requestId, 1);
     expect(accepted.status).toBe('accepted');
     expect(db.b2bIssuedQuote.update.mock.calls[0][0].data.acceptedByAccountId).toBe('account-a');
@@ -871,15 +1003,11 @@ describe('B2B account and request boundaries', () => {
       issuedQuotes: [{ id: 'issued-q', version: 1, status: 'sent' }] });
     reviewed.items[0].confirmedQuantity = 3 as never;
     db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
-    const quotation = { id: 'quotation-q', quotationNo: 'B2B-QT',
-      quotationDate: new Date('2026-09-24T00:00:00Z'),
-      validUntil: new Date('2030-03-20T00:00:00Z'), paymentTerms: null,
-      deliveryTerms: null, subtotalOriginal: D('30.03'), taxAmountOriginal: D('1.50'),
-      totalAmountOriginal: D('31.53'), items: [{ taxAmountOriginal: D('1.50'), lineTotalOriginal: D('31.53') }] };
-    db.b2bIssuedQuote.findFirst.mockResolvedValue({ id: 'issued-q', version: 1, status: 'sent',
-      quotationId: 'quotation-q', acceptedAt: null, quotation });
-    db.b2bIssuedQuote.update.mockResolvedValue({ id: 'issued-q', version: 1, status: 'accepted',
-      quotationId: 'quotation-q', acceptedAt: new Date(), quotation });
+    const sent = issuedQuoteRow({ id: 'issued-q', status: 'sent', acceptedAt: null,
+      acceptedByAccountId: null, quotation: { ...issuedQuoteRow().quotation, status: 'sent',
+        validUntil: new Date('2030-03-20T00:00:00Z') } });
+    db.b2bIssuedQuote.findFirst.mockResolvedValue(sent);
+    db.b2bIssuedQuote.update.mockResolvedValue({ ...sent, status: 'accepted', acceptedAt: new Date() });
     const clock = jest.spyOn(Date, 'now');
     try {
       clock.mockReturnValue(new Date('2030-03-20T15:59:59.999Z').getTime());
@@ -898,6 +1026,28 @@ describe('B2B account and request boundaries', () => {
       status: 'superseded', quotationId: 'quotation-v1' });
     await expect(service.acceptQuote(identity, requestId, 1)).rejects.toThrow('此報價版本已失效');
     expect(db.b2bIssuedQuote.update).not.toHaveBeenCalled();
+  });
+  it('loads exact versioned quote lines for a staff editor within the requested entity', async () => {
+    const reviewed = requestRow({ status: 'stock_confirmed', reviewedAt: new Date() });
+    reviewed.items[0].confirmedQuantity = 3 as never;
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
+    db.b2bIssuedQuote.findFirst.mockResolvedValue(issuedQuoteRow({ id: 'issued-v2', version: 2,
+      status: 'sent', quotation: { ...issuedQuoteRow().quotation, status: 'sent',
+        subtotalOriginal: D(17), taxAmountOriginal: D('0.85'), totalAmountOriginal: D('17.85'),
+        items: [{ ...issuedQuoteRow().quotation.items[0], quantity: D(2),
+          unitPriceOriginal: D('8.50'), taxAmountOriginal: D('0.85'),
+          lineTotalOriginal: D('17.85') }] } }));
+    const quote = await service.staffFormalQuote('entity-a', requestId, 2);
+    expect(quote).toMatchObject({ version: 2, status: 'sent', total: '17.85',
+      items: [{ requestItemId: lineId, quantity: 2, unitPrice: '8.50' }] });
+    expect(db.b2bPurchaseRequest.findFirst.mock.calls[0][0].where).toEqual({
+      id: requestId, entityId: 'entity-a',
+    });
+    expect(db.b2bIssuedQuote.findFirst.mock.calls[0][0].where).toEqual({
+      requestId, version: 2,
+    });
+    db.b2bPurchaseRequest.findFirst.mockResolvedValueOnce(null);
+    await expect(service.staffFormalQuote('entity-b', requestId, 2)).rejects.toThrow(NotFoundException);
   });
   it('allows a shortage to be manually reviewed again while retaining review history', async () => {
     const short = requestRow({ status: 'needs_adjustment', reviewedAt: new Date() });
