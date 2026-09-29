@@ -75,6 +75,38 @@ export type B2bIdentity = {
 type RequestRecord = Prisma.B2bPurchaseRequestGetPayload<{
   include: typeof includeRequest;
 }>;
+type QuoteLine = {
+  requestItemId: string;
+  productId: string;
+  sku: string;
+  name: string;
+  quantity: number;
+  unitPrice: Prisma.Decimal;
+  lineTotal: Prisma.Decimal;
+};
+
+function quoteTax(subtotal: Prisma.Decimal) {
+  return subtotal.mul(5).div(100).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+}
+
+function allocateQuoteTax(lines: QuoteLine[], subtotal: Prisma.Decimal, tax: Prisma.Decimal) {
+  const parts = lines.map((line, index) => {
+    const exact = subtotal.isZero()
+      ? new Prisma.Decimal(0)
+      : tax.mul(100).mul(line.lineTotal).div(subtotal);
+    const cents = exact.floor().toNumber();
+    return { index, cents, remainder: exact.sub(cents) };
+  });
+  let remaining = tax.mul(100).toNumber() - parts.reduce((sum, part) => sum + part.cents, 0);
+  if (!Number.isSafeInteger(remaining) || remaining < 0)
+    throw new BadRequestException('報價稅額快照無法配置');
+  parts.sort((a, b) => b.remainder.comparedTo(a.remainder) || a.index - b.index);
+  for (const part of parts) {
+    if (remaining-- <= 0) break;
+    part.cents++;
+  }
+  return new Map(parts.map((part) => [part.index, new Prisma.Decimal(part.cents).div(100)]));
+}
 export function publicRequest(row: RequestRecord) {
   const latestQuote = row.issuedQuotes?.[0];
   return {
@@ -652,7 +684,7 @@ export class B2bService {
       items: rows.map((r) => ({
         ...publicRequest(r),
         ...(!customerId
-          ? { customerName: r.customer.companyName || r.customer.name }
+          ? { customerId: r.customerId, customerName: r.customer.companyName || r.customer.name }
           : {}),
       })),
     };
@@ -757,8 +789,86 @@ export class B2bService {
     });
   }
 
+  private quoteLinesForIssue(request: RequestRecord, dto: B2bIssueQuoteDto,
+    previousSentQuotation?: any): QuoteLine[] {
+    const supplied = dto.items;
+    if (!supplied && previousSentQuotation)
+      return this.assertQuoteSnapshot(request, previousSentQuotation, true).lines.map((line) => ({
+        requestItemId: line.requestItemId, productId: line.productId, sku: line.sku,
+        name: line.name, quantity: line.quantity, unitPrice: line.unitPrice,
+        lineTotal: line.lineTotal,
+      }));
+    if (supplied && (!Array.isArray(supplied) || supplied.length !== request.items.length))
+      throw new BadRequestException('正式報價須包含每一筆原始需求品項');
+    const overrides = new Map((supplied || []).map((line) => [line.requestItemId, line]));
+    if (supplied && overrides.size !== request.items.length)
+      throw new BadRequestException('正式報價品項不可重複');
+    const lines = request.items.map((item) => {
+      const line = overrides.get(item.id);
+      if (supplied && !line) throw new BadRequestException('正式報價包含未知或遺漏的需求品項');
+      const quantity = line?.quantity ?? item.quantity;
+      const rawPrice = line?.unitPrice ?? item.unitPrice;
+      if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100000 ||
+          item.confirmedQuantity === null || quantity > item.confirmedQuantity)
+        throw new BadRequestException(`${item.sku} 報價數量超過人工核庫數量，請重新核庫`);
+      const unitPrice = new Prisma.Decimal(rawPrice);
+      if (!unitPrice.isFinite() || unitPrice.lt(0) || unitPrice.gt(100000000) ||
+          unitPrice.decimalPlaces() > 2)
+        throw new BadRequestException(`${item.sku} 報價單價不符`);
+      return { requestItemId: item.id, productId: item.productId,
+        sku: item.sku, name: item.name, quantity, unitPrice,
+        lineTotal: unitPrice.mul(quantity) };
+    });
+    return lines;
+  }
+
+  private assertQuoteSnapshot(request: RequestRecord, quotation: any, requireReviewedStock = false) {
+    if (quotation.entityId !== request.entityId || quotation.customerId !== request.customerId ||
+        quotation.currency !== 'TWD' || quotation.items.length !== request.items.length ||
+        !new Prisma.Decimal(quotation.discountAmountOriginal).isZero())
+      throw new ConflictException('正式報價與需求快照不一致，請人工查核');
+    const byProduct = new Map(request.items.map((item) => [item.productId, item]));
+    const seen = new Set<string>();
+    let subtotal = new Prisma.Decimal(0);
+    let tax = new Prisma.Decimal(0);
+    let total = new Prisma.Decimal(0);
+    const lines = quotation.items.map((line: any) => {
+      const requestItem = byProduct.get(line.productId);
+      const quantity = new Prisma.Decimal(line.quantity);
+      const unitPrice = new Prisma.Decimal(line.unitPriceOriginal);
+      const discount = new Prisma.Decimal(line.discountOriginal);
+      const taxRate = new Prisma.Decimal(line.taxRate);
+      const taxAmount = new Prisma.Decimal(line.taxAmountOriginal);
+      const lineTotal = new Prisma.Decimal(line.lineTotalOriginal);
+      if (!requestItem || seen.has(line.productId) || line.itemName !== requestItem.name ||
+          line.itemSpec !== requestItem.sku || !quantity.isInteger() || quantity.lt(1) ||
+          quantity.gt(requireReviewedStock ? (requestItem.confirmedQuantity ?? 0) : requestItem.quantity) ||
+          quantity.gt(100000) ||
+          !unitPrice.isFinite() || unitPrice.lt(0) || unitPrice.gt(100000000) ||
+          unitPrice.decimalPlaces() > 2 || !discount.isZero() || !taxRate.equals(5) ||
+          !taxAmount.isFinite() || taxAmount.lt(0) || taxAmount.decimalPlaces() > 2 ||
+          !lineTotal.equals(quantity.mul(unitPrice).add(taxAmount)))
+        throw new ConflictException('正式報價品項快照不一致，請人工查核');
+      seen.add(line.productId);
+      subtotal = subtotal.add(quantity.mul(unitPrice));
+      tax = tax.add(taxAmount);
+      total = total.add(lineTotal);
+      return { requestItemId: requestItem.id, productId: requestItem.productId,
+        sku: requestItem.sku, name: requestItem.name, quantity: quantity.toNumber(),
+        unitPrice, lineTotal: quantity.mul(unitPrice), taxAmount, total: lineTotal };
+    });
+    if (seen.size !== request.items.length ||
+        !subtotal.equals(quotation.subtotalOriginal) ||
+        !tax.equals(quotation.taxAmountOriginal) ||
+        !tax.equals(quoteTax(subtotal)) ||
+        !total.equals(quotation.totalAmountOriginal))
+      throw new ConflictException('正式報價金額快照不一致，請人工查核');
+    return { lines, subtotal, tax, total };
+  }
+
   private publicFormalQuote(request: RequestRecord, issued: any) {
     const quotation = issued.quotation;
+    const snapshot = this.assertQuoteSnapshot(request, quotation);
     return {
       id: issued.id,
       requestId: request.id,
@@ -783,16 +893,16 @@ export class B2bService {
       withdrawalReason: issued.withdrawalReason,
       paymentTerms: quotation.paymentTerms,
       deliveryTerms: quotation.deliveryTerms,
-      items: request.items.map((item, index) => ({
-        requestItemId: item.id,
+      items: snapshot.lines.map((item) => ({
+        requestItemId: item.requestItemId,
         productId: item.productId,
         sku: item.sku,
         name: item.name,
         quantity: item.quantity,
         unitPrice: item.unitPrice.toFixed(2),
         lineTotal: item.lineTotal.toFixed(2),
-        taxAmount: quotation.items[index].taxAmountOriginal.toFixed(2),
-        total: quotation.items[index].lineTotalOriginal.toFixed(2),
+        taxAmount: item.taxAmount.toFixed(2),
+        total: item.total.toFixed(2),
       })),
       quotePath: `/b2b/requests/${request.id}/quote/${issued.version}`,
     };
@@ -844,10 +954,20 @@ export class B2bService {
       });
       if (previous?.status === 'accepted')
         throw new ConflictException('客戶已接受報價，不可重新開立版本');
+      const lines = this.quoteLinesForIssue(request, dto,
+        previous?.status === 'sent' ? previous.quotation : undefined);
+      const subtotal = lines.reduce((sum, line) => sum.add(line.lineTotal), new Prisma.Decimal(0));
+      const tax = quoteTax(subtotal);
+      const total = subtotal.add(tax);
       if (previous?.status === 'sent' &&
           (previous.quotation.validUntil?.toISOString().slice(0, 10) || null) === (dto.validUntil || null) &&
           previous.quotation.paymentTerms === paymentTerms &&
-          previous.quotation.deliveryTerms === deliveryTerms)
+          previous.quotation.deliveryTerms === deliveryTerms &&
+          previous.quotation.items.length === lines.length &&
+          previous.quotation.items.every((item, index) =>
+            item.productId === lines[index].productId &&
+            new Prisma.Decimal(item.quantity).equals(lines[index].quantity) &&
+            new Prisma.Decimal(item.unitPriceOriginal).equals(lines[index].unitPrice)))
         return this.publicFormalQuote(request, previous);
       await this.assertWmsReady(request, tx);
       if (previous?.status === 'sent') {
@@ -855,22 +975,7 @@ export class B2bService {
         await tx.salesQuotation.update({ where: { id: previous.quotationId }, data: { status: 'expired' } });
       }
       const version = (previous?.version || 0) + 1;
-      const taxParts = request.items.map((item, index) => {
-        const exact = request.subtotal.isZero()
-          ? new Prisma.Decimal(0)
-          : request.tax.mul(100).mul(item.lineTotal).div(request.subtotal);
-        const cents = exact.floor().toNumber();
-        return { index, cents, remainder: exact.sub(cents) };
-      });
-      let remaining = request.tax.mul(100).toNumber() - taxParts.reduce((sum, part) => sum + part.cents, 0);
-      if (!Number.isSafeInteger(remaining) || remaining < 0)
-        throw new BadRequestException('報價稅額快照無法配置');
-      taxParts.sort((a, b) => b.remainder.comparedTo(a.remainder) || a.index - b.index);
-      for (const part of taxParts) {
-        if (remaining-- <= 0) break;
-        part.cents++;
-      }
-      const taxByIndex = new Map(taxParts.map((part) => [part.index, new Prisma.Decimal(part.cents).div(100)]));
+      const taxByIndex = allocateQuoteTax(lines, subtotal, tax);
       const quotation = await tx.salesQuotation.create({
         data: {
           entityId: request.entityId,
@@ -885,11 +990,11 @@ export class B2bService {
           reference: request.requestNumber,
           notes: request.reviewNote || request.note,
           createdBy: actorId,
-          subtotalOriginal: request.subtotal,
+          subtotalOriginal: subtotal,
           discountAmountOriginal: new Prisma.Decimal(0),
-          taxAmountOriginal: request.tax,
-          totalAmountOriginal: request.total,
-          items: { create: request.items.map((item, index) => ({
+          taxAmountOriginal: tax,
+          totalAmountOriginal: total,
+          items: { create: lines.map((item, index) => ({
             productId: item.productId,
             itemName: item.name,
             itemSpec: item.sku,
@@ -933,6 +1038,20 @@ export class B2bService {
     return this.publicFormalQuote(request, issued);
   }
 
+  async staffFormalQuote(entityId: string, id: string, version: number) {
+    if (!Number.isSafeInteger(version) || version < 1)
+      throw new NotFoundException('找不到此正式報價');
+    const request = await this.db.b2bPurchaseRequest.findFirst({
+      where: { id, entityId }, include: includeRequest,
+    });
+    if (!request) throw new NotFoundException('找不到此正式報價');
+    const issued = await this.db.b2bIssuedQuote.findFirst({
+      where: { requestId: id, version }, include: includeIssuedQuote,
+    });
+    if (!issued) throw new NotFoundException('找不到此正式報價');
+    return this.publicFormalQuote(request, issued);
+  }
+
   async acceptQuote(identity: B2bIdentity, id: string, version: number) {
     if (!Number.isSafeInteger(version) || version < 1)
       throw new NotFoundException('找不到此正式報價');
@@ -954,6 +1073,9 @@ export class B2bService {
           throw new ConflictException('此報價缺少客戶接受紀錄，請人工查核');
         return this.publicFormalQuote(request, issued);
       }
+      if (issued.status !== 'sent')
+        throw new ConflictException('此報價尚不可由客戶接受');
+      this.assertQuoteSnapshot(request, issued.quotation, true);
       const validUntil = issued.quotation.validUntil?.toISOString().slice(0, 10);
       if (validUntil && Date.now() >= new Date(`${validUntil}T16:00:00.000Z`).getTime())
         throw new ConflictException('正式報價已逾有效期限，請聯絡業務重新開立');
@@ -1046,29 +1168,23 @@ export class B2bService {
       if (row.issuedQuotes[0]?.status !== 'accepted' ||
         !row.issuedQuotes[0]?.acceptedAt || !row.issuedQuotes[0]?.acceptedByAccountId)
         throw new ConflictException('須先開立正式報價並取得客戶登入確認');
+      const issued = await tx.b2bIssuedQuote.findFirst({
+        where: { requestId: id, version: row.issuedQuotes[0].version },
+        include: includeIssuedQuote,
+      });
+      if (!issued || issued.id !== row.issuedQuotes[0].id || issued.status !== 'accepted' ||
+          !issued.acceptedAt || !issued.acceptedByAccountId ||
+          issued.acceptedAt.getTime() !== row.issuedQuotes[0].acceptedAt.getTime() ||
+          issued.acceptedByAccountId !== row.issuedQuotes[0].acceptedByAccountId ||
+          issued.quotation.status !== 'accepted')
+        throw new ConflictException('正式報價接受紀錄不一致，請人工查核');
+      const acceptedQuote = this.assertQuoteSnapshot(row, issued.quotation, true);
       if (row.currency !== 'TWD' ||
         !row.items.reduce((sum, item) => sum.add(item.lineTotal), new Prisma.Decimal(0)).equals(row.subtotal) ||
         !row.subtotal.add(row.tax).equals(row.total)) {
-        throw new BadRequestException('報價金額快照不一致，請人工查核');
+        throw new BadRequestException('原始需求金額快照不一致，請人工查核');
       }
-      const totalTaxCents = row.tax.mul(100).toNumber();
-      if (!Number.isSafeInteger(totalTaxCents) || totalTaxCents < 0)
-        throw new BadRequestException('報價稅額超出支援範圍');
       await this.assertWmsReady(row, tx);
-      const taxParts = row.items.map((item, index) => {
-        const exact = row.subtotal.isZero()
-          ? new Prisma.Decimal(0)
-          : row.tax.mul(100).mul(item.lineTotal).div(row.subtotal);
-        const cents = exact.floor().toNumber();
-        return { index, cents, remainder: exact.sub(cents) };
-      });
-      let remaining = totalTaxCents - taxParts.reduce((sum, part) => sum + part.cents, 0);
-      taxParts.sort((a, b) => b.remainder.comparedTo(a.remainder) || a.index - b.index);
-      for (const part of taxParts) {
-        if (remaining-- <= 0) break;
-        part.cents++;
-      }
-      const taxByIndex = new Map(taxParts.map((part) => [part.index, part.cents / 100]));
       const order = await this.salesOrders.createSalesOrder({
         entityId: row.entityId,
         channelId: dto.channelId,
@@ -1078,11 +1194,11 @@ export class B2bService {
         orderDate: new Date(),
         currency: 'TWD',
         fxRate: 1,
-        items: row.items.map((item, index) => ({
+        items: acceptedQuote.lines.map((item) => ({
           productId: item.productId,
           qty: item.quantity,
           unitPrice: Number(item.unitPrice),
-          taxAmount: taxByIndex.get(index) || 0,
+          taxAmount: Number(item.taxAmount),
         })),
       }, actorId, tx);
       const updated = await tx.b2bPurchaseRequest.update({

@@ -201,6 +201,8 @@ model Entity {
   b2bAccounts B2bAccount[]
   b2bCatalog B2bCatalogItem[]
   b2bPrices B2bCustomerPrice[]
+  b2bPriceBooks B2bProductPriceBook[]
+  b2bCustomerDiscountRules B2bCustomerDiscountRule[]
   b2bRequests B2bPurchaseRequest[]
   customers                  Customer[]
   vendors                    Vendor[]
@@ -411,6 +413,7 @@ model Customer {
   entity          Entity           @relation(fields: [entityId], references: [id], onDelete: Cascade)
   b2bAccounts B2bAccount[]
   b2bPrices B2bCustomerPrice[]
+  b2bCustomerDiscountRules B2bCustomerDiscountRule[]
   b2bRequests B2bPurchaseRequest[]
   salesOrders     SalesOrder[]
   salesQuotations SalesQuotation[]
@@ -419,6 +422,7 @@ model Customer {
 
   @@index([entityId])
   @@index([entityId, code])
+  @@unique([id, entityId])
   @@map("customers")
 }
 
@@ -479,6 +483,7 @@ model Product {
   entity              Entity                 @relation(fields: [entityId], references: [id], onDelete: Cascade)
   b2bCatalog B2bCatalogItem[]
   b2bPrices B2bCustomerPrice[]
+  b2bPriceBooks B2bProductPriceBook[]
   salesOrderItems     SalesOrderItem[]
   salesQuotationItems SalesQuotationItem[]
   afterSalesCaseItems AfterSalesCaseItem[]
@@ -525,6 +530,7 @@ model Product {
   serialNumbers InventorySerialNumber[]
 
   @@unique([entityId, sku])
+  @@unique([id, entityId])
   @@index([entityId])
   @@index([parentId])
   @@map("products")
@@ -2645,6 +2651,70 @@ model B2bCustomerPrice {
   product Product @relation(fields:[productId],references:[id])
   @@unique([entityId,customerId,productId])
   @@map("b2b_customer_prices")
+}
+
+// List and regular prices are governed independently of Product.salesPrice,
+// which is used by marketplace order imports as a latest-transaction value.
+model B2bProductPriceBook {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  productId String @map("product_id")
+  msrp Decimal @db.Decimal(18,2)
+  regularPrice Decimal? @map("regular_price") @db.Decimal(18,2)
+  groupBuyPrice Decimal? @map("group_buy_price") @db.Decimal(18,2)
+  isPublic Boolean @default(false) @map("is_public")
+  currency String
+  taxBasis String @map("tax_basis")
+  createdBy String @map("created_by")
+  updatedBy String @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  entity Entity @relation(fields:[entityId],references:[id],onDelete:Restrict)
+  product Product @relation(fields:[productId,entityId],references:[id,entityId],onDelete:Restrict)
+  offers B2bPriceOffer[]
+  @@unique([entityId,productId])
+  @@map("b2b_product_price_books")
+}
+
+// Campaigns are distinct dated offers, selected explicitly by staff when
+// preparing a quote. They never automatically override the standing prices.
+model B2bPriceOffer {
+  id String @id @default(uuid())
+  priceBookId String @map("price_book_id")
+  unitPrice Decimal @map("unit_price") @db.Decimal(18,2)
+  startsAt DateTime @map("starts_at") @db.Timestamptz
+  endsAt DateTime @map("ends_at") @db.Timestamptz
+  audience String
+  audienceCode String? @map("audience_code")
+  isActive Boolean @default(true) @map("is_active")
+  createdBy String @map("created_by")
+  updatedBy String @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  priceBook B2bProductPriceBook @relation(fields:[priceBookId],references:[id],onDelete:Restrict)
+  @@index([priceBookId,startsAt,endsAt])
+  @@map("b2b_price_offers")
+}
+
+// One governed default discount per customer. Per-SKU fixed-price exceptions
+// continue to use B2bCustomerPrice; no offer stacks with this multiplier.
+model B2bCustomerDiscountRule {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  customerId String @map("customer_id")
+  multiplier Decimal @db.Decimal(5,4)
+  basePriceType String @map("base_price_type")
+  validFrom DateTime @map("valid_from") @db.Timestamptz
+  validUntil DateTime? @map("valid_until") @db.Timestamptz
+  isActive Boolean @default(true) @map("is_active")
+  createdBy String @map("created_by")
+  updatedBy String @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  entity Entity @relation(fields:[entityId],references:[id],onDelete:Restrict)
+  customer Customer @relation(fields:[customerId,entityId],references:[id,entityId],onDelete:Restrict)
+  @@unique([entityId,customerId])
+  @@map("b2b_customer_discount_rules")
 }
 model B2bPurchaseRequest {
   id String @id @default(uuid())

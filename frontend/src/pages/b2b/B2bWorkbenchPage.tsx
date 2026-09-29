@@ -15,6 +15,8 @@ import type { B2BProcurementSummary } from '../../services/purchase.service'
 import { availableProcurementLines, remainingProcurementQuantity } from './procurement'
 import CustomerSearchSelect from '../../components/CustomerSearchSelect'
 import ProductSearchSelect from './ProductSearchSelect'
+import PriceBookManager from './PriceBookManager'
+import CustomerDiscountManager from './CustomerDiscountManager'
 
 const { Title, Text } = Typography
 const amount = (value: string | number) => `NT$ ${Number(value || 0).toLocaleString('zh-TW', { maximumFractionDigits: 2 })}`
@@ -35,7 +37,7 @@ const passwordRules = [
 type AccountValues = { accountType: 'CUSTOMER' | 'SUPPLIER'; customerId?: string; vendorId?: string; email: string; name: string; password: string }
 type CatalogValues = { productId: string; unitPrice: number; isPublished: boolean }
 type PriceValues = { customerId: string; productId: string; unitPrice: number; isActive: boolean; validUntil?: string }
-type QuoteValues = { validUntil: string; paymentTerms?: string; deliveryTerms?: string }
+type QuoteValues = { validUntil: string; paymentTerms?: string; deliveryTerms?: string; items: Array<{ quantity: number; unitPrice: number }> }
 type ProcurementValues = { vendorId: string; orderDate: string; currency: string; fxRate: number; items: Array<{ qty: number; unitCost: number }> }
 
 export default function B2bWorkbenchPage() {
@@ -48,6 +50,8 @@ export default function B2bWorkbenchPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [quoteLoading, setQuoteLoading] = useState(false)
+  const [quoteApplying, setQuoteApplying] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [catalogOpen, setCatalogOpen] = useState(false)
   const [priceOpen, setPriceOpen] = useState(false)
@@ -77,6 +81,7 @@ export default function B2bWorkbenchPage() {
   const procurementCurrency = Form.useWatch('currency', procurementForm)
   const catalogProductId = Form.useWatch('productId', catalogForm)
   const priceProductId = Form.useWatch('productId', priceForm)
+  const quoteDraftItems = Form.useWatch('items', quoteForm) || []
 
   const load = async () => {
     if (!entityId) { setError('請先選擇事業別。'); return }
@@ -226,10 +231,25 @@ export default function B2bWorkbenchPage() {
     finally { setSaving(false) }
   }
 
-  const openQuote = (request: B2BAdminRequest) => {
-    quoteForm.resetFields()
-    quoteForm.setFieldsValue({ validUntil: dayjs().add(7, 'day').format('YYYY-MM-DD') })
-    setQuoting(request)
+  const openQuote = async (request: B2BAdminRequest) => {
+    if (!entityId || quoteLoading) return
+    setQuoteLoading(true)
+    try {
+      const previous = request.quoteVersion ? await b2bAdminService.formalQuote(request.id, request.quoteVersion, entityId) : null
+      const previousItems = new Map(previous?.items.map((item) => [item.requestItemId, item]) || [])
+      quoteForm.resetFields()
+      quoteForm.setFieldsValue({
+        validUntil: dayjs().add(7, 'day').format('YYYY-MM-DD'),
+        paymentTerms: previous?.paymentTerms || undefined,
+        deliveryTerms: previous?.deliveryTerms || undefined,
+        items: request.items.map((item) => ({
+          quantity: previousItems.get(item.id)?.quantity ?? item.confirmedQuantity ?? item.quantity,
+          unitPrice: Number(previousItems.get(item.id)?.unitPrice ?? item.unitPrice),
+        })),
+      })
+      setQuoting(request)
+    } catch (reason) { message.error(`無法取得上一版正式報價，請重試：${errorText(reason)}`) }
+    finally { setQuoteLoading(false) }
   }
 
   const issueQuote = async () => {
@@ -237,9 +257,22 @@ export default function B2bWorkbenchPage() {
     if (!canIssueQuote(quoting)) { message.error('請先完整核對庫存；已接受的報價不可重新出具。'); return }
     try {
       const values = await quoteForm.validateFields()
+      const items = quoting.items.map((item, index) => ({
+        requestItemId: item.id,
+        quantity: values.items[index]?.quantity,
+        unitPrice: values.items[index]?.unitPrice,
+      }))
+      if (items.some((item, index) =>
+        !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > (quoting.items[index].confirmedQuantity ?? 0) ||
+        !Number.isFinite(item.unitPrice) || item.unitPrice < 0 || item.unitPrice > 100000000 ||
+        Math.round(item.unitPrice * 100) !== item.unitPrice * 100)) {
+        message.error('請檢查每項報價數量及未稅單價，數量不可超過人工核庫結果，價格最多小數兩位。')
+        return
+      }
       setSaving(true)
       await b2bAdminService.issueQuote(quoting.id, {
         entityId,
+        items,
         validUntil: values.validUntil,
         ...(values.paymentTerms?.trim() ? { paymentTerms: values.paymentTerms.trim() } : {}),
         ...(values.deliveryTerms?.trim() ? { deliveryTerms: values.deliveryTerms.trim() } : {}),
@@ -254,6 +287,36 @@ export default function B2bWorkbenchPage() {
       }
     }
     finally { setSaving(false) }
+  }
+
+  const applyCustomerPrice = async () => {
+    if (!entityId || !quoting?.customerId || quoteApplying) return
+    const draft = quoteForm.getFieldValue('items') as QuoteValues['items'] | undefined
+    if (!draft || draft.length !== quoting.items.length || draft.some((item, index) =>
+      !Number.isSafeInteger(item?.quantity) || item.quantity < 1 || item.quantity > (quoting.items[index].confirmedQuantity ?? 0))) {
+      message.error('請先確認每項報價數量。')
+      return
+    }
+    try {
+      setQuoteApplying(true)
+      const result = await b2bAdminService.previewCustomerDiscount(quoting.customerId, {
+        entityId,
+        items: quoting.items.map((item, index) => ({ productId: item.productId, quantity: draft[index].quantity })),
+      })
+      if (result.items.length !== quoting.items.length || result.items.some((line, index) =>
+        line.productId !== quoting.items[index].productId || !line.eligible || line.quoteUnitPrice == null ||
+        !Number.isFinite(Number(line.quoteUnitPrice)))) {
+        const reason = result.items.find((line) => !line.eligible || line.quoteUnitPrice == null)?.reason
+        message.warning(reason === 'tax_conversion_policy_required'
+          ? '部分商品是含稅價格，尚無核准的未稅轉換規則，不能自動帶入；請由業務確認。'
+          : `無法完整帶入客戶常用價格${reason ? `：${reason}` : '，請逐項確認設定。'}`)
+        return
+      }
+      quoteForm.setFieldValue('items', draft.map((item, index) => ({ ...item, unitPrice: Number(result.items[index].quoteUnitPrice) })))
+      const fixed = result.items.filter((line) => line.source === 'FIXED_OVERRIDE').length
+      message.success(`已帶入 ${result.items.length} 項建議未稅報價單價（其中 ${fixed} 項 SKU 固定價）；請檢查後出具，本次修改不會保存為未來規則。`)
+    } catch (reason) { message.error(errorText(reason)) }
+    finally { setQuoteApplying(false) }
   }
 
   const withdrawQuote = async () => {
@@ -367,7 +430,7 @@ export default function B2bWorkbenchPage() {
       {request.quoteVersion ? <Button size="small" icon={<CopyOutlined />} onClick={() => void copyLink(formalQuotePath(request.id, request.quoteVersion!), '正式報價連結')}>複製正式報價</Button> : null}
       {canWrite && (request.status === 'pending_stock_review' || request.status === 'needs_adjustment') ? <Button size="small" onClick={() => openReview(request)}>{request.status === 'needs_adjustment' ? '重新人工核庫' : '人工核庫'}</Button> : null}
       {canManageSupplier && request.status === 'needs_adjustment' ? <Button size="small" onClick={() => void openProcurement(request)}>轉供應商採購單</Button> : null}
-      {canWrite && canIssueQuote(request) ? <Button size="small" type="primary" onClick={() => openQuote(request)}>{request.quoteVersion ? '重開新版報價' : '出具正式報價'}</Button> : null}
+      {canWrite && canIssueQuote(request) ? <Button size="small" type="primary" loading={quoteLoading} onClick={() => void openQuote(request)}>{request.quoteVersion ? '重開新版報價' : '出具正式報價'}</Button> : null}
       {canWrite && request.quoteStatus === 'accepted' && request.quoteVersion && !request.salesOrderId ? <Button size="small" danger onClick={() => { setWithdrawReason(''); setWithdrawing(request) }}>撤回報價並重核</Button> : null}
       {canWrite && canConfirmRequest(request) ? <Button size="small" type="primary" onClick={() => { setChannelId(''); setWarehouseId(''); setConfirming(request) }}>確認接單</Button> : null}
       {request.salesOrderId ? <Link to="/sales/orders">查看銷售訂單</Link> : null}
@@ -391,27 +454,39 @@ export default function B2bWorkbenchPage() {
     <Card><Tabs items={[
       { key: 'requests', label: `採購需求 (${requests.filter((item) => item.status === 'pending_stock_review' || item.status === 'needs_adjustment').length} 待核對／補貨)`, children: <><Alert type="warning" showIcon style={{ marginBottom: 18 }} message="客戶送出的是採購需求與價格試算；完整人工核庫後才能出具正式報價，客戶接受報價後才能確認接單並預留庫存。" /><Table rowKey="id" loading={loading} columns={requestColumns} dataSource={requests} scroll={{ x: 1180 }} expandable={{ expandedRowRender: (request) => <div><Text strong>商品明細</Text>{request.items.map((item) => <div key={item.id} style={{ padding: '5px 0' }}>{item.sku} · {item.name}：申購 {item.quantity}，確認 {item.confirmedQuantity ?? '待核對'}，缺口 {Math.max(0, item.quantity - (item.confirmedQuantity ?? 0))}，試算單價 {amount(item.unitPrice)}</div>)}{request.note ? <p>客戶備註：{request.note}</p> : null}{request.reviewNote ? <p>核對備註：{request.reviewNote}</p> : null}</div> }} /></> },
       { key: 'accounts', label: '客戶與供應商帳號', children: <><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite || canManageSupplier ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { const defaultType = canWrite ? 'CUSTOMER' : 'SUPPLIER'; setAccountType(defaultType); accountForm.resetFields(); accountForm.setFieldsValue({ accountType: defaultType }); setAccountOpen(true) }}>建立外部帳號</Button> : null}</div><Table rowKey="id" loading={loading} columns={accountColumns} dataSource={setup?.accounts || []} scroll={{ x: 850 }} /></> },
-      { key: 'catalog', label: '商品發布', children: <><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { catalogForm.resetFields(); catalogForm.setFieldsValue({ isPublished: true }); setCatalogOpen(true) }}>設定商品</Button> : null}</div><Alert type="info" style={{ marginBottom: 12 }} message="商品列表只含快速載入與已設定商品；點「設定商品」可用 SKU 或名稱搜尋其他商品。" /><Table rowKey="id" loading={loading} dataSource={catalogProducts} columns={[{ title: '商品', key: 'product', render: (_, product) => `${product.sku} · ${product.name}` }, { title: '目錄單價', key: 'price', render: (_, product) => { const row = setup?.catalog.find((item) => item.productId === product.id); return row ? amount(row.unitPrice) : '未設定' } }, { title: '對外發布', key: 'published', render: (_, product) => { const row = setup?.catalog.find((item) => item.productId === product.id); return <Tag color={row?.isPublished ? 'green' : 'default'}>{row?.isPublished ? '已發布' : '未發布'}</Tag> } }, { title: '操作', key: 'actions', render: (_, product) => canWrite ? <Button size="small" onClick={() => { const row = setup?.catalog.find((item) => item.productId === product.id); catalogForm.setFieldsValue({ productId: product.id, unitPrice: Number(row?.unitPrice || 0), isPublished: row?.isPublished || false }); setCatalogOpen(true) }}>設定</Button> : null }]} /></> },
-      { key: 'prices', label: '客戶專屬價格', children: <><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { priceForm.resetFields(); priceForm.setFieldsValue({ isActive: true }); setPriceOpen(true) }}>設定專屬價</Button> : null}</div><Table rowKey={(row) => `${row.customerId}:${row.productId}`} loading={loading} dataSource={setup?.prices || []} columns={[{ title: '客戶', dataIndex: 'customerId', key: 'customer', render: customerName }, { title: '商品', dataIndex: 'productId', key: 'product', render: productName }, { title: '專屬單價', dataIndex: 'unitPrice', key: 'price', render: amount }, { title: '有效至', dataIndex: 'validUntil', key: 'until', render: (value: string | null) => value?.slice(0, 10) || '未設定' }, { title: '狀態', dataIndex: 'isActive', key: 'active', render: (value: boolean) => <Tag color={value ? 'green' : 'default'}>{value ? '啟用' : '停用'}</Tag> }, { title: '操作', key: 'actions', render: (_, row) => canWrite ? <Button size="small" onClick={() => { priceForm.setFieldsValue({ customerId: row.customerId, productId: row.productId, unitPrice: Number(row.unitPrice), isActive: row.isActive, validUntil: row.validUntil?.slice(0, 10) || undefined }); setPriceOpen(true) }}>設定</Button> : null }]} scroll={{ x: 820 }} /></> },
+      { key: 'price-books', label: '商品價格', children: <PriceBookManager entityId={entityId} canWrite={canWrite} /> },
+      { key: 'catalog', label: '商品發布', children: <><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { catalogForm.resetFields(); catalogForm.setFieldsValue({ isPublished: true }); setCatalogOpen(true) }}>設定商品</Button> : null}</div><Alert type="info" style={{ marginBottom: 12 }} message="此處發布只控制既有登入入口；規劃中的免登入公開入口還須在「商品價格」個別開啟公開開關，且只顯示建議售價。" /><Table rowKey="id" loading={loading} dataSource={catalogProducts} columns={[{ title: '商品', key: 'product', render: (_, product) => `${product.sku} · ${product.name}` }, { title: '既有入口目錄單價', key: 'price', render: (_, product) => { const row = setup?.catalog.find((item) => item.productId === product.id); return row ? amount(row.unitPrice) : '未設定' } }, { title: '既有登入入口發布', key: 'published', render: (_, product) => { const row = setup?.catalog.find((item) => item.productId === product.id); return <Tag color={row?.isPublished ? 'green' : 'default'}>{row?.isPublished ? '已發布' : '未發布'}</Tag> } }, { title: '操作', key: 'actions', render: (_, product) => canWrite ? <Button size="small" onClick={() => { const row = setup?.catalog.find((item) => item.productId === product.id); catalogForm.setFieldsValue({ productId: product.id, unitPrice: Number(row?.unitPrice || 0), isPublished: row?.isPublished || false }); setCatalogOpen(true) }}>設定</Button> : null }]} /></> },
+      { key: 'prices', label: '客戶專屬價格', children: <><CustomerDiscountManager entityId={entityId} canWrite={canWrite} customers={setup?.customers || []} /><Title level={4} style={{ marginTop: 28 }}>單一商品固定價例外</Title><Text type="secondary">此價格優先於客戶常用成交比例；已出具的正式報價不會隨設定更動。</Text><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { priceForm.resetFields(); priceForm.setFieldsValue({ isActive: true }); setPriceOpen(true) }}>設定固定價例外</Button> : null}</div><Table rowKey={(row) => `${row.customerId}:${row.productId}`} loading={loading} dataSource={setup?.prices || []} columns={[{ title: '客戶', dataIndex: 'customerId', key: 'customer', render: customerName }, { title: '商品', dataIndex: 'productId', key: 'product', render: productName }, { title: '固定單價', dataIndex: 'unitPrice', key: 'price', render: amount }, { title: '有效至', dataIndex: 'validUntil', key: 'until', render: (value: string | null) => value?.slice(0, 10) || '未設定' }, { title: '狀態', dataIndex: 'isActive', key: 'active', render: (value: boolean) => <Tag color={value ? 'green' : 'default'}>{value ? '啟用' : '停用'}</Tag> }, { title: '操作', key: 'actions', render: (_, row) => canWrite ? <Button size="small" onClick={() => { priceForm.setFieldsValue({ customerId: row.customerId, productId: row.productId, unitPrice: Number(row.unitPrice), isActive: row.isActive, validUntil: row.validUntil?.slice(0, 10) || undefined }); setPriceOpen(true) }}>設定</Button> : null }]} scroll={{ x: 820 }} /></> },
     ]} /></Card>
 
     <Modal title="建立外部帳號" open={accountOpen} confirmLoading={saving} onCancel={() => { setAccountOpen(false); accountForm.resetFields() }} onOk={() => void saveAccount()} okText="建立帳號" destroyOnHidden><Form form={accountForm} layout="vertical" autoComplete="off"><Form.Item name="accountType" label="帳號類型" rules={[{ required: true }]}><Select onChange={(value) => setAccountType(value)} options={[{ value: 'CUSTOMER', label: '客戶帳號', disabled: !canWrite }, { value: 'SUPPLIER', label: '供應商帳號（入口待建置）', disabled: !canManageSupplier }]} /></Form.Item>{accountType === 'CUSTOMER' ? <Form.Item name="customerId" label="客戶" rules={[{ required: true, message: '請選擇客戶' }]}><CustomerSearchSelect entityId={entityId} enabled={accountOpen} /></Form.Item> : <Form.Item name="vendorId" label="供應商" rules={[{ required: true, message: '請選擇供應商' }]}><Select showSearch optionFilterProp="label" options={setup?.vendors.map((item) => ({ value: item.id, label: item.name }))} /></Form.Item>}<Form.Item name="name" label="使用者姓名" rules={[{ required: true, message: '請填寫姓名' }]}><Input maxLength={80} /></Form.Item><Form.Item name="email" label="登入電子郵件" rules={[{ required: true, type: 'email', message: '請填寫有效電子郵件' }]}><Input autoComplete="off" /></Form.Item><Form.Item name="password" label="初始密碼" rules={passwordRules}><Input.Password autoComplete="new-password" /></Form.Item><Text type="secondary">建立後不會在頁面保存或再次顯示密碼，請透過既有安全流程交付。</Text></Form></Modal>
 
     <Modal title={`設定新密碼 · ${resetAccount?.name || ''}`} open={Boolean(resetAccount)} confirmLoading={saving} onCancel={() => { resetForm.resetFields(); setResetAccount(null) }} onOk={() => void resetPassword()} okText="更新密碼" destroyOnHidden><Form form={resetForm} layout="vertical" autoComplete="off"><Form.Item name="password" label="新密碼" rules={passwordRules}><Input.Password autoComplete="new-password" /></Form.Item></Form><Alert type="info" message="更新密碼後，這個帳號現有的登入會立即失效。" /></Modal>
 
-    <Modal title="商品發布設定" open={catalogOpen} confirmLoading={saving} onCancel={() => setCatalogOpen(false)} onOk={() => void saveCatalog()} okText="儲存" destroyOnHidden><Form form={catalogForm} layout="vertical"><Form.Item name="productId" label="商品" rules={[{ required: true, message: '請選擇商品' }]}><ProductSearchSelect entityId={entityId} enabled={catalogOpen} selectedProduct={setup?.products.find((item) => item.id === catalogProductId)} /></Form.Item><Form.Item name="unitPrice" label="目錄單價（未稅，TWD）" rules={[{ required: true, message: '請填寫價格' }]}><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item><Form.Item name="isPublished" label="對客戶發布" valuePropName="checked"><Switch /></Form.Item><Alert type="info" message="只發布且有有效價格的商品才會顯示在客戶前台。" /></Form></Modal>
+    <Modal title="商品發布設定" open={catalogOpen} confirmLoading={saving} onCancel={() => setCatalogOpen(false)} onOk={() => void saveCatalog()} okText="儲存" destroyOnHidden><Form form={catalogForm} layout="vertical"><Form.Item name="productId" label="商品" rules={[{ required: true, message: '請選擇商品' }]}><ProductSearchSelect entityId={entityId} enabled={catalogOpen} selectedProduct={setup?.products.find((item) => item.id === catalogProductId)} /></Form.Item><Form.Item name="unitPrice" label="既有登入入口目錄單價（未稅，TWD）" rules={[{ required: true, message: '請填寫價格' }]}><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item><Form.Item name="isPublished" label="既有登入入口發布" valuePropName="checked"><Switch /></Form.Item><Alert type="info" message="此設定不會直接對免登入訪客公開商品。未來公開入口還需在「商品價格」開啟獨立公開開關，而且只顯示建議售價。" /></Form></Modal>
 
     <Modal title="客戶專屬價格" open={priceOpen} confirmLoading={saving} onCancel={() => setPriceOpen(false)} onOk={() => void savePrice()} okText="儲存" destroyOnHidden><Form form={priceForm} layout="vertical"><Form.Item name="customerId" label="客戶" rules={[{ required: true, message: '請選擇客戶' }]}><CustomerSearchSelect entityId={entityId} enabled={priceOpen} /></Form.Item><Form.Item name="productId" label="商品" rules={[{ required: true, message: '請選擇商品' }]}><ProductSearchSelect entityId={entityId} enabled={priceOpen} selectedProduct={setup?.products.find((item) => item.id === priceProductId)} /></Form.Item><Form.Item name="unitPrice" label="專屬單價（未稅，TWD）" rules={[{ required: true, message: '請填寫價格' }]}><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item><Form.Item name="validUntil" label="有效至（選填）"><Input type="date" /></Form.Item><Form.Item name="isActive" label="啟用專屬價格" valuePropName="checked"><Switch /></Form.Item></Form></Modal>
 
     <Modal title={`人工核對庫存 · ${reviewing?.requestNumber || ''}`} open={Boolean(reviewing)} confirmLoading={saving} onCancel={() => setReviewing(null)} onOk={() => void saveReview()} okText="儲存核對結果" width={680} destroyOnHidden><Alert type="warning" style={{ marginBottom: 18 }} message="此步驟僅記錄人工確認結果，不預留、不扣正式庫存。" />{reviewing?.items.map((item) => <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, margin: '12px 0' }}><span>{item.sku} · {item.name}<br /><Text type="secondary">申購 {item.quantity} 件</Text></span><InputNumber min={0} max={item.quantity} precision={0} value={confirmed[item.id]} onChange={(value) => setConfirmed((current) => ({ ...current, [item.id]: value ?? NaN }))} aria-label={`${item.name} 確認數量`} /></div>)}<div style={{ marginTop: 22 }}><label htmlFor="b2b-review-date">確認交期</label><Input id="b2b-review-date" type="date" value={deliveryDate} onChange={(event) => setDeliveryDate(event.target.value)} style={{ margin: '8px 0 18px' }} /><label htmlFor="b2b-review-note">核對備註（數量有異動時必填）</label><Input.TextArea id="b2b-review-note" rows={3} maxLength={1000} value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} style={{ marginTop: 8 }} /></div></Modal>
 
-    <Modal title={`${quoting?.quoteVersion ? '重開新版' : '出具正式'}報價 · ${quoting?.requestNumber || ''}`} open={Boolean(quoting)} confirmLoading={saving} onCancel={() => setQuoting(null)} onOk={() => void issueQuote()} okText="出具不可修改的報價版本" destroyOnHidden>
+    <Modal title={`${quoting?.quoteVersion ? '重開新版' : '出具正式'}報價 · ${quoting?.requestNumber || ''}`} open={Boolean(quoting)} confirmLoading={saving} onCancel={() => setQuoting(null)} onOk={() => void issueQuote()} okText={`確認並出具第 ${(quoting?.quoteVersion || 0) + 1} 版`} width={880} destroyOnHidden>
       <Alert type="info" showIcon style={{ marginBottom: 16 }} message={quoting?.quoteVersion ? '重新出具後，前一版待接受報價會失效。請確認新條件並發送新版本連結。' : '只有完整人工核庫的需求可出具正式報價。出具後金額、品項、條件會固定為此版本，客戶須登入並明確接受。'} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}><Text type="secondary">請先核對數量，再逐項確認本次未稅成交價。</Text><Button loading={quoteApplying} disabled={!quoting?.customerId} onClick={() => void applyCustomerPrice()}>帶入該顧客常用價格</Button></div>
       <Form form={quoteForm} layout="vertical">
+        <Table size="small" pagination={false} rowKey="id" dataSource={quoting?.items || []} scroll={{ x: 700 }} columns={[
+          { title: '商品', key: 'product', width: 220, render: (_, item) => <><Text strong>{item.name}</Text><br /><Text type="secondary">{item.sku}</Text></> },
+          { title: '送單參考單價', key: 'reference', width: 120, align: 'right', render: (_, item) => amount(item.unitPrice) },
+          { title: '人工確認', dataIndex: 'confirmedQuantity', key: 'confirmed', width: 90, align: 'right' },
+          { title: '本次報價數量', key: 'quantity', width: 130, render: (_, item, index) => <Form.Item name={['items', index, 'quantity']} style={{ margin: 0 }} rules={[{ required: true, message: '必填' }, { type: 'integer', min: 1, max: item.confirmedQuantity ?? 0, message: '不可超過人工確認數量' }]}><InputNumber min={1} max={item.confirmedQuantity ?? 0} precision={0} style={{ width: '100%' }} aria-label={`${item.name} 本次報價數量`} /></Form.Item> },
+          { title: '本次未稅單價', key: 'unitPrice', width: 150, render: (_, item, index) => <Form.Item name={['items', index, 'unitPrice']} style={{ margin: 0 }} rules={[{ required: true, message: '必填' }, { type: 'number', min: 0, max: 100000000, message: '單價須在 0 至 1 億之間' }]}><InputNumber min={0} max={100000000} precision={2} prefix="NT$" style={{ width: '100%' }} aria-label={`${item.name} 本次未稅單價`} /></Form.Item> },
+          { title: '未稅小計', key: 'lineTotal', width: 135, align: 'right', render: (_, _item, index) => amount((quoteDraftItems[index]?.quantity || 0) * (quoteDraftItems[index]?.unitPrice || 0)) },
+        ]} />
+        <div style={{ textAlign: 'right', margin: '12px 0 20px' }}><Text strong>本次未稅合計：{amount(quoteDraftItems.reduce((sum, item) => sum + (Number(item?.quantity) || 0) * (Number(item?.unitPrice) || 0), 0))}</Text></div>
         <Form.Item name="validUntil" label="報價有效至" rules={[{ required: true, message: '請選擇報價有效期限' }, { validator: (_, value?: string) => value && value >= dayjs().format('YYYY-MM-DD') ? Promise.resolve() : Promise.reject(new Error('有效期限不可早於今日')) }]}><Input type="date" min={dayjs().format('YYYY-MM-DD')} /></Form.Item>
         <Form.Item name="paymentTerms" label="付款條件（選填）"><Input.TextArea rows={2} maxLength={500} placeholder="例如月結 30 天" /></Form.Item>
         <Form.Item name="deliveryTerms" label="交貨條件（選填）"><Input.TextArea rows={2} maxLength={500} placeholder="例如指定倉庫交貨" /></Form.Item>
       </Form>
+      <Alert type="warning" showIcon style={{ marginBottom: 12 }} message="這些數量與單價只用於本次正式報價版本，不會修改此客戶未來的價格規則。" />
       <Text type="secondary">正式報價仍不預留庫存；客戶接受且業務確認接單後才會預留。</Text>
     </Modal>
 

@@ -4,7 +4,11 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('DEV public entry restrictions', () => {
   const before = process.env.ERP_DEV_SANDBOX;
-  afterEach(() => { if (before === undefined) delete process.env.ERP_DEV_SANDBOX; else process.env.ERP_DEV_SANDBOX = before; });
+  const catalogBefore = process.env.B2B_PUBLIC_CATALOG_ENABLED;
+  afterEach(() => {
+    if (before === undefined) delete process.env.ERP_DEV_SANDBOX; else process.env.ERP_DEV_SANDBOX = before;
+    if (catalogBefore === undefined) delete process.env.B2B_PUBLIC_CATALOG_ENABLED; else process.env.B2B_PUBLIC_CATALOG_ENABLED = catalogBefore;
+  });
   function request(method: string, path: string) {
     const context = { getHandler: () => null, getClass: () => null,
       switchToHttp: () => ({ getRequest: () => ({ method, path }) }) } as unknown as ExecutionContext;
@@ -22,5 +26,13 @@ describe('DEV public entry restrictions', () => {
   it('preserves existing public policy outside the explicit DEV runtime', () => {
     delete process.env.ERP_DEV_SANDBOX;
     expect(request('POST', '/api/v1/auth/register')()).toBe(true);
+  });
+  it('allows the read-only MSRP catalog in DEV only when its separate flag is enabled', () => {
+    process.env.ERP_DEV_SANDBOX = 'true';
+    delete process.env.B2B_PUBLIC_CATALOG_ENABLED;
+    expect(request('GET', '/api/v1/b2b/public/catalog')).toThrow(ForbiddenException);
+    process.env.B2B_PUBLIC_CATALOG_ENABLED = 'true';
+    expect(request('GET', '/api/v1/b2b/public/catalog')()).toBe(true);
+    expect(request('POST', '/api/v1/b2b/public/catalog')).toThrow(ForbiddenException);
   });
 });
