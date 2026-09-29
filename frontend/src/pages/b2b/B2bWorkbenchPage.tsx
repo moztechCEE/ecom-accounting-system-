@@ -17,6 +17,7 @@ import CustomerSearchSelect from '../../components/CustomerSearchSelect'
 import ProductSearchSelect from './ProductSearchSelect'
 import PriceBookManager from './PriceBookManager'
 import CustomerDiscountManager from './CustomerDiscountManager'
+import GuestInquiryManager from './GuestInquiryManager'
 
 const { Title, Text } = Typography
 const amount = (value: string | number) => `NT$ ${Number(value || 0).toLocaleString('zh-TW', { maximumFractionDigits: 2 })}`
@@ -452,6 +453,7 @@ export default function B2bWorkbenchPage() {
     {confirmedOrderId ? <Alert type="success" showIcon message={`已建立銷售訂單 ${confirmedOrderId}`} description={<Space><Link to="/sales/orders">前往 ERP 銷售訂單列表</Link>{hasAnyPermission(user, ['wms_tasks:read']) ? <Link to="/warehouse">開啟儲運工作台</Link> : null}</Space>} closable onClose={() => setConfirmedOrderId(null)} /> : null}
     {setup ? <Alert type="info" showIcon message={`公司登入代碼：${setup.company.loginCode}`} description="請將此代碼與客戶帳號提供給對應窗口。供應商帳號目前可建檔與停用；供應商登入與採購單查看入口仍在後續階段。" /> : null}
     <Card><Tabs items={[
+      { key: 'guest-requests', label: '免登入訪客需求', children: <GuestInquiryManager entityId={entityId} canWrite={canWrite} /> },
       { key: 'requests', label: `採購需求 (${requests.filter((item) => item.status === 'pending_stock_review' || item.status === 'needs_adjustment').length} 待核對／補貨)`, children: <><Alert type="warning" showIcon style={{ marginBottom: 18 }} message="客戶送出的是採購需求與價格試算；完整人工核庫後才能出具正式報價，客戶接受報價後才能確認接單並預留庫存。" /><Table rowKey="id" loading={loading} columns={requestColumns} dataSource={requests} scroll={{ x: 1180 }} expandable={{ expandedRowRender: (request) => <div><Text strong>商品明細</Text>{request.items.map((item) => <div key={item.id} style={{ padding: '5px 0' }}>{item.sku} · {item.name}：申購 {item.quantity}，確認 {item.confirmedQuantity ?? '待核對'}，缺口 {Math.max(0, item.quantity - (item.confirmedQuantity ?? 0))}，試算單價 {amount(item.unitPrice)}</div>)}{request.note ? <p>客戶備註：{request.note}</p> : null}{request.reviewNote ? <p>核對備註：{request.reviewNote}</p> : null}</div> }} /></> },
       { key: 'accounts', label: '客戶與供應商帳號', children: <><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite || canManageSupplier ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { const defaultType = canWrite ? 'CUSTOMER' : 'SUPPLIER'; setAccountType(defaultType); accountForm.resetFields(); accountForm.setFieldsValue({ accountType: defaultType }); setAccountOpen(true) }}>建立外部帳號</Button> : null}</div><Table rowKey="id" loading={loading} columns={accountColumns} dataSource={setup?.accounts || []} scroll={{ x: 850 }} /></> },
       { key: 'price-books', label: '商品價格', children: <PriceBookManager entityId={entityId} canWrite={canWrite} /> },

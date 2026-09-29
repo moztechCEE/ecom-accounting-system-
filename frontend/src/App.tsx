@@ -57,6 +57,7 @@ import CustomersPage from './pages/CustomersPage'
 import ProfilePage from './pages/ProfilePage'
 import { B2BLoginPage, B2BPortalLayout, B2BCatalogPage, B2BRequestsPage, B2BRequestDetailPage, B2BFormalQuotePage } from './pages/b2b/B2BPortal'
 import B2bWorkbenchPage from './pages/b2b/B2bWorkbenchPage'
+import GuestShopPage from './pages/b2b/GuestShopPage'
 import WmsHandoverReconciliationPage from './pages/WmsHandoverReconciliationPage'
 
 function HomeEntry({ dashboard = false }: { dashboard?: boolean }) {
@@ -70,6 +71,7 @@ const App: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/b2b/shop" element={<GuestShopPage />} />
         <Route path="/b2b/login" element={<B2BLoginPage />} />
         <Route path="/b2b" element={<B2BPortalLayout />}>
           <Route index element={<Navigate to="catalog" replace />} />

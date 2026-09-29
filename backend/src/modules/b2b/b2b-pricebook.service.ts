@@ -455,7 +455,12 @@ export class B2bPriceBookService {
     };
   }
 
-  async publicCatalog(entityId: string, limit = 100, offset = 0) {
+  async publicCatalog(
+    entityId: string,
+    limit = 100,
+    offset = 0,
+    search?: string,
+  ) {
     if (process.env.B2B_PUBLIC_CATALOG_ENABLED !== 'true')
       throw new ServiceUnavailableException('公開商品頁尚未啟用');
     await this.company(entityId);
@@ -468,6 +473,9 @@ export class B2bPriceBookService {
       offset > 999999
     )
       throw new BadRequestException('分頁參數無效');
+    const term = search?.trim();
+    if (term && term.length > 200)
+      throw new BadRequestException('搜尋字串過長');
     const where: Prisma.B2bProductPriceBookWhereInput = {
       entityId,
       isPublic: true,
@@ -476,6 +484,14 @@ export class B2bPriceBookService {
         isActive: true,
         type: ProductType.SIMPLE,
         b2bCatalog: { some: { entityId, isPublished: true } },
+        ...(term
+          ? {
+              OR: [
+                { sku: { contains: term, mode: 'insensitive' } },
+                { name: { contains: term, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
       },
     };
     const [rows, total] = await Promise.all([

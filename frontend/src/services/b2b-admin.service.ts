@@ -88,6 +88,32 @@ export interface B2BAdminPage<T> {
   hasMore: boolean
 }
 
+export interface B2BGuestRequestSummary {
+  id: string
+  reference: string
+  status: 'NEW' | 'MATCHED' | 'REJECTED'
+  companyName: string
+  contactName: string
+  contactEmail: string
+  customerPoNumber: string | null
+  itemCount: number
+  createdAt: string
+  matchedCustomerId: string | null
+  matchedCustomerName: string | null
+}
+
+export interface B2BGuestRequestDetail extends B2BGuestRequestSummary {
+  contactPhone: string | null
+  note: string | null
+  matchedAt: string | null
+  matchedBy: string | null
+  matchReason: string | null
+  rejectedAt: string | null
+  rejectedBy: string | null
+  rejectionReason: string | null
+  items: Array<{ id: string; productId: string; sku: string; name: string; quantity: number; msrp: string; currency: 'TWD'; taxBasis: 'TAX_INCLUDED' | 'TAX_EXCLUDED'; lineTotal: string }>
+}
+
 export const b2bAdminService = {
   async productOptions(entityId: string, search = '', limit = 20): Promise<{ rows: B2BProductOption[]; total: number; limit: number; hasMore: boolean }> {
     const { data } = await api.get('/b2b/admin/product-options', { params: { entityId, search: search.trim().slice(0, 200), limit } })
@@ -115,6 +141,22 @@ export const b2bAdminService = {
   },
   async customerDiscounts(entityId: string, options: { search?: string; limit?: number; offset?: number } = {}): Promise<B2BAdminPage<B2BCustomerDiscount>> {
     const { data } = await api.get<B2BAdminPage<B2BCustomerDiscount>>('/b2b/admin/customer-discounts', { params: { entityId, ...options } })
+    return data
+  },
+  async guestRequests(entityId: string, options: { status?: B2BGuestRequestSummary['status']; search?: string; limit?: number; offset?: number } = {}): Promise<B2BAdminPage<B2BGuestRequestSummary>> {
+    const { data } = await api.get<B2BAdminPage<B2BGuestRequestSummary>>('/b2b/admin/guest-requests', { params: { entityId, ...options } })
+    return data
+  },
+  async guestRequest(id: string, entityId: string): Promise<B2BGuestRequestDetail> {
+    const { data } = await api.get<B2BGuestRequestDetail>(`/b2b/admin/guest-requests/${encodeURIComponent(id)}`, { params: { entityId } })
+    return data
+  },
+  async matchGuestRequest(id: string, input: { entityId: string; customerId: string; reason: string }): Promise<B2BGuestRequestDetail> {
+    const { data } = await api.post<B2BGuestRequestDetail>(`/b2b/admin/guest-requests/${encodeURIComponent(id)}/match`, input)
+    return data
+  },
+  async rejectGuestRequest(id: string, input: { entityId: string; reason: string }): Promise<B2BGuestRequestDetail> {
+    const { data } = await api.post<B2BGuestRequestDetail>(`/b2b/admin/guest-requests/${encodeURIComponent(id)}/reject`, input)
     return data
   },
   async saveCustomerDiscount(customerId: string, input: { entityId: string; multiplier: number; basePriceType: B2BCustomerDiscount['basePriceType']; validFrom: string; validUntil: string | null; isActive: boolean }): Promise<B2BCustomerDiscount> {

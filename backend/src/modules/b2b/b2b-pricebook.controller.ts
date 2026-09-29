@@ -126,6 +126,7 @@ export class B2bPublicCatalogController {
       query.entityId,
       query.limit ? Number(query.limit) : 100,
       query.offset ? Number(query.offset) : 0,
+      query.search,
     );
   }
 }

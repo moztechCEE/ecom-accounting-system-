@@ -203,6 +203,7 @@ model Entity {
   b2bPrices B2bCustomerPrice[]
   b2bPriceBooks B2bProductPriceBook[]
   b2bCustomerDiscountRules B2bCustomerDiscountRule[]
+  b2bGuestInquiries B2bGuestInquiry[]
   b2bRequests B2bPurchaseRequest[]
   customers                  Customer[]
   vendors                    Vendor[]
@@ -414,6 +415,7 @@ model Customer {
   b2bAccounts B2bAccount[]
   b2bPrices B2bCustomerPrice[]
   b2bCustomerDiscountRules B2bCustomerDiscountRule[]
+  matchedB2bGuestInquiries B2bGuestInquiry[]
   b2bRequests B2bPurchaseRequest[]
   salesOrders     SalesOrder[]
   salesQuotations SalesQuotation[]
@@ -2715,6 +2717,64 @@ model B2bCustomerDiscountRule {
   customer Customer @relation(fields:[customerId,entityId],references:[id,entityId],onDelete:Restrict)
   @@unique([entityId,customerId])
   @@map("b2b_customer_discount_rules")
+}
+
+// Anonymous request for quotation. Matching a customer never creates a sales
+// order or reserves inventory; accepted quotes use the existing controlled flow.
+model B2bGuestInquiry {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  requestId String @map("request_id")
+  payloadHash String @map("payload_hash")
+  reference String @unique
+  companyName String @map("company_name")
+  contactName String @map("contact_name")
+  contactEmail String @map("contact_email")
+  contactPhone String? @map("contact_phone")
+  customerPoNumber String? @map("customer_po_number")
+  note String?
+  status String @default("NEW")
+  matchedCustomerId String? @map("matched_customer_id")
+  matchedAt DateTime? @map("matched_at") @db.Timestamptz
+  matchedBy String? @map("matched_by")
+  matchReason String? @map("match_reason")
+  rejectedAt DateTime? @map("rejected_at") @db.Timestamptz
+  rejectedBy String? @map("rejected_by")
+  rejectionReason String? @map("rejection_reason")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  entity Entity @relation(fields:[entityId],references:[id],onDelete:Restrict)
+  matchedCustomer Customer? @relation(fields:[matchedCustomerId,entityId],references:[id,entityId],onDelete:Restrict)
+  items B2bGuestInquiryItem[]
+  @@unique([entityId,requestId])
+  @@index([entityId,status,createdAt])
+  @@map("b2b_guest_inquiries")
+}
+
+model B2bGuestInquiryItem {
+  id String @id @default(uuid())
+  inquiryId String @map("inquiry_id")
+  productId String @map("product_id")
+  sku String
+  name String
+  quantity Int
+  msrp Decimal @db.Decimal(18,2)
+  currency String
+  taxBasis String @map("tax_basis")
+  lineTotal Decimal @map("line_total") @db.Decimal(18,2)
+  sortOrder Int @map("sort_order")
+  inquiry B2bGuestInquiry @relation(fields:[inquiryId],references:[id],onDelete:Restrict)
+  @@unique([inquiryId,productId])
+  @@map("b2b_guest_inquiry_items")
+}
+
+// HMAC-derived IP/contact keys only. No raw IP or contact is stored here.
+model B2bGuestRateBucket {
+  keyHash String @id @map("key_hash")
+  windowStart DateTime @map("window_start") @db.Timestamptz
+  attempts Int @default(0)
+  @@index([windowStart])
+  @@map("b2b_guest_rate_buckets")
 }
 model B2bPurchaseRequest {
   id String @id @default(uuid())

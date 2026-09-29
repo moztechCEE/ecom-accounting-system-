@@ -8,7 +8,8 @@
 - 明確設定 `B2B_PORTAL_ENABLED=true` 才開放客戶入口；預設關閉。既有 DEV 公開註冊及外部 webhook 封鎖仍保留。
 - `companyCode` 是銷售公司 `Entity.loginCode`，不是客戶代碼。員工 setup 回應的 `company.loginCode` 可用於提供登入資訊。
 - 第一期僅台幣公司、一般商品、正式銷貨報價未稅單價加 5% 稅。登入後既有目錄仍讀取其目錄單價或有效客戶固定價；新價目表與客戶成交比例須由員工明確試算並帶入本次報價，不自動疊加活動或團購價。含稅價在沒有核准轉換規則時不能自動帶入未稅報價。
-- `B2B_PUBLIC_CATALOG_ENABLED=true` 只啟用匿名 MSRP 目錄 API；單一商品還須在新價目表明確勾選匿名公開，且既有目錄已發布。三者預設均不讓商品匿名可見。免登入送單與免登入查看／接受專屬正式報價仍未實作。
+- `B2B_PUBLIC_CATALOG_ENABLED=true` 只啟用匿名 MSRP 目錄 API；單一商品還須在新價目表明確勾選匿名公開，且既有目錄已發布。三者預設均不讓商品匿名可見。
+- 新增的免登入採購需求須同時設定 `B2B_PUBLIC_CATALOG_ENABLED=true`、`B2B_PUBLIC_ORDER_ENABLED=true` 與至少 32 字元的 `B2B_PUBLIC_ORDER_RATE_SECRET`；預設關閉。公開 POST 使用經部署確認可信的 `req.ip`、正規化 Email 與公司，在資料庫分別執行 10 分鐘限流；上線前須確認 Cloud Run／反向代理的來源位址設定。免登入查看／接受專屬正式報價仍未實作。
 - 外部 session 為隨機 opaque token，資料庫只存 SHA-256 hash，效期 8 小時。每次要求重查帳號、公司及客戶啟用狀態。停用或重設密碼撤銷現有 session。
 - 客戶登入與員工 JWT 分離。客戶只能讀所屬公司的已發布商品及自己客戶的需求；目錄不傳成本、精確庫存、供應商或其他客戶資訊。
 - 供應商帳號可由員工建立、停用及重設密碼，資料庫限制客戶／供應商擇一關聯。供應商登入、供應商 PO 查詢與其前台尚未實作；供應商帳號無法進入客戶目錄。
@@ -23,6 +24,8 @@
 5. 員工出具固定版次正式報價，可修改原需求行的數量與未稅單價；增刪 SKU 須建立新需求。舊版被新版取代後不能接受，顧客以獨立帳號登入接受最新有效版本。
 6. 員工另行確認接單，必須指定出貨倉與通路。服務核對人工核庫、客戶接受版次與 WMS 前置條件後，在同一資料庫 transaction 以**接受版次的行項、金額及稅額快照**建正式銷單、預留庫存及寫回 `salesOrderId`，變成 `order_confirmed`。資料缺失或不足量失敗時整體回滾；重送不重建訂單。
 7. WMS 出貨、晚間核對及正式扣庫由各自流程處理。本模組不把人工核庫當作實際交運。
+
+另有獨立 `/b2b/shop` 免登入頁，只對已同意匿名公開的商品顯示 MSRP。顧客送出的採購需求進入 `B2bGuestInquiry`，伺服器保存 MSRP 快照並回傳不含個資的參考編號；授權員工可人工核實後配對既有客戶主檔，或留原因標記無效。**配對不會自動建立上面流程的 B2B 採購需求、正式報價、銷單或預留。**
 
 `needs_adjustment` 不可直接確認接單。原需求需要重新人工核庫後才能出具新版正式報價；客戶接受與員工確認接單是兩個不同動作。已接受但尚未接單的報價可由業務記錄原因撤回，重新核庫後再出新版；已接單不可撤回原報價。
 
@@ -61,6 +64,11 @@
 | `GET /b2b/admin/requests/:id/quotes/:version?entityId=...` | 員工查看既有固定版次 |
 | `POST /b2b/admin/requests/:id/confirm` | `{entityId,channelId,warehouseId}`；正式接單及預留 |
 | `GET /b2b/public/catalog?entityId=...` | 開關及逐品項授權後，只回傳匿名 MSRP 與必要商品識別欄位 |
+| `POST /b2b/public/requests` | 雙公開開關及限流設定啟用後，接收匿名採購需求，只回傳不透明參考編號 |
+| `GET /b2b/admin/guest-requests?entityId=...` | 員工查待核實／已配對／已標記無效需求 |
+| `GET /b2b/admin/guest-requests/:id?entityId=...` | 員工查原始聯絡資料與 MSRP 快照 |
+| `POST /b2b/admin/guest-requests/:id/match` | 留身分核實依據並配對同公司的有效客戶 |
+| `POST /b2b/admin/guest-requests/:id/reject` | 留原因將無效需求移出待處理清單 |
 
 內部 API 使用員工 JWT；客戶價格與訂單使用 sales 公司存取檢查及 sales_orders 讀／建權限，供應商帳號新增與修改另需 purchasing 公司存取與 purchase_orders 建立權限。`requestId` 必須 UUID v4；相同客戶相同提交鍵、相同內容回傳原快照，不同內容回 409。外部 DTO 拒收 unitPrice、entityId、customerId、內部註記或其他未知欄位。
 
@@ -75,6 +83,7 @@ npm run build
 
 - `b2b.service.spec.ts`：身分範圍、專屬價、重送、人工核庫、正式報價 V1/V2 快照、客戶接受、接受版次轉銷單及 WMS 前置條件。
 - `b2b-pricebook.service.spec.ts` 與 `b2b-pricebook.migration.cjs`：價目、折數、團購主價不自動套用、匿名公開欄位白名單及隔離 SQL 約束。
+- `b2b-guest.service.spec.ts` 與 `b2b-guest.migration.cjs`：匿名受理、三維限流、防重、公開品項白名單、公司隔離、人工配對與無效標記、隔離 SQL 約束。
 - `b2b-boundaries.spec.ts`：全域 guard 的客戶／員工分流及未知欄位、異常數量拒絕。
 - `b2b.http.spec.ts`：實際 Nest HTTP、DTO、bcrypt、JWT 與客戶 session，從帳號→登入→目錄→PO→核庫→停用。使用明確的記憶體 repository fixture，**不是 Prisma 真資料庫端到端測試**。只監聽本機 127.0.0.1 隨機埠。
 - `b2b.migration.cjs`：在暫存 PGlite PostgreSQL engine 套用 migration，驗證 XOR、唯一鍵、外鍵及數量／價格／狀態約束。不連接業務資料庫。

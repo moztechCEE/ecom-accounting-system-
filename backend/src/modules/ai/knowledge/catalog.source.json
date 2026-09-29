@@ -3749,6 +3749,57 @@
       "availability": "wms-portal"
     },
     {
+      "id": "b2b-guest-shop",
+      "title": "免登入商品採購需求",
+      "summary": "訪客只看公開商品的建議售價並送出待核實採購需求；員工再人工配對客戶。",
+      "keywords": ["免登入採購", "建議售價", "牌價", "訪客需求", "顧客詢價"],
+      "path": "/b2b/shop",
+      "module": "b2b",
+      "category": "客戶採購",
+      "group": "sales",
+      "sections": {
+        "steps": [
+          "訪客在公開商品頁搜尋已上架且另經匿名公開勾選的商品，只看到建議售價及參考金額；選品後填公司、聯絡人、Email、可選採購單號及需求，送出取得受理編號。",
+          "員工到客戶採購工作台的免登入訪客需求分頁查看明細，使用既有聯絡方式核實身分，記錄依據後人工配對客戶主檔；無效需求可留原因標記無效。"
+        ],
+        "boundaries": [
+          "公開頁不顯示客戶固定價、折數、團購主進貨價、活動價、成本或精確庫存。建議售價與小計不是正式報價，也不保證庫存或交期；送出需求不建立銷貨單、不預留或扣庫。",
+          "公開商品 API、公開送單及每商品匿名發布各有獨立開關與限制，均需由部署和員工明確啟用；受理編號不是查看私人價格的憑證。已配對或標記無效的需求不能在原操作中重新配對。員工配對主檔也不會自動建立既有 B2B 採購需求、正式報價或銷單；私人報價須另經已核准的身分驗證流程。"
+        ],
+        "related": ["b2b-customer-portal", "b2b-purchase-requests", "b2b-staff-workbench", "products"]
+      },
+      "translations": {
+        "en": {
+          "title": "Guest product purchase requests",
+          "summary": "Visitors see only public MSRP and submit a purchase request for staff to verify and match to a customer.",
+          "category": "Customer procurement",
+          "keywords": ["guest shopping", "MSRP", "list price", "purchase inquiry", "customer request"],
+          "sections": {
+            "steps": [
+              "Visitors search products that are published and separately opted in for anonymous display. They see only MSRP and reference amounts, choose quantities, enter company and contact details, optional customer PO and notes, then receive a receipt reference.",
+              "Staff open the Guest inquiries tab of the customer procurement workbench, verify the sender through an established contact channel, record the evidence, and manually match an existing customer master record. They can mark invalid inquiries with a recorded reason."
+            ],
+            "boundaries": [
+              "The public page does not disclose fixed customer prices, multipliers, group-buy organizer prices, campaigns, costs or exact stock. MSRP totals are not formal quotations or stock promises; submission creates no sales order, reservation or inventory deduction.",
+              "Anonymous catalog access, guest submission and each product's public opt-in have separate gates. A receipt reference grants no access to private pricing. A matched or rejected inquiry cannot be silently rematched through the original action. Matching a customer master record does not automatically create an existing B2B request, formal quote or sales order; a separately approved identity-verification flow is still needed for private quotes."
+            ],
+            "related": ["b2b-customer-portal", "b2b-purchase-requests", "b2b-staff-workbench", "products"]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/App.tsx",
+        "frontend/src/pages/b2b/GuestShopPage.tsx",
+        "frontend/src/pages/b2b/GuestInquiryManager.tsx",
+        "frontend/src/services/b2b-public.service.ts",
+        "backend/src/modules/b2b/b2b-pricebook.controller.ts",
+        "backend/src/modules/b2b/b2b-pricebook.service.ts",
+        "backend/src/modules/b2b/b2b-guest.controller.ts",
+        "backend/src/modules/b2b/b2b-guest.service.ts",
+        "backend/src/common/guards/jwt-auth.guard.ts"
+      ]
+    },
+    {
       "id": "b2b-customer-portal",
       "title": "客戶採購入口與商品目錄",
       "summary": "客戶用公司代碼與專屬帳號登入，查看已發布商品及適用於自己的價格。",
@@ -3855,19 +3906,19 @@
       "group": "sales",
       "sections": {
         "steps": [
-          "先選公司；若客戶或供應商尚無主檔，先到客戶管理或供應商管理建立，再回此工作台建立綁定的外部帳號。商品發布與既有客戶固定單價仍各自管理；另在「商品牌價與活動」設定建議售價、常態售價、團購主進貨價、活動期間及稅別，在「客戶成交比例」設定代理商等客戶的常用折數並試算。",
+          "先選公司；若客戶或供應商尚無主檔，先到客戶管理或供應商管理建立，再回此工作台建立綁定的外部帳號。商品發布與既有客戶固定單價仍各自管理；另在「商品牌價與活動」設定建議售價、常態售價、團購主進貨價、活動期間及稅別，在「客戶成交比例」設定代理商等客戶的常用折數並試算。免登入訪客需求須另在專用分頁人工核實聯絡人並配對客戶主檔。",
           "收到需求後逐行人工核對庫存，填入確認數量、交期與必要備註；可複製需登入的需求討論連結至 LINE 與客戶協調。若核庫不足，具採購建立權限者可在獨立的「客戶缺貨採購」入口核對未收採購量，選供應商就尚未採購的缺口建立來源關聯採購單。收貨入庫後須重新人工核庫。",
           "逐行全數確認後，可先明確帶入該顧客常用價格，再按本次需求調整原品項的數量及未稅單價、有效期限與付款交貨條件；出具後形成固定版本。複製正式報價連結給客戶登入查閱與明確接受。已送出版本的價格或條件若變更，出具新版並保留舊版。若已接受而尚未接單，業務可填撤回原因使需求回待核庫；重新核庫後再出新版。",
           "客戶接受最新有效版本後，選擇銷售通路與出貨倉庫確認接單；ERP 銷售訂單取用已接受報價的數量及金額快照，才預留庫存並開始 WMS 出貨交接。"
         ],
         "boundaries": [
-          "既有 SKU 專屬固定價的「有效至」為台灣日期，設定當天結束前仍有效；隔日零時起不再套用該固定價。建議售價、常態售價及團購主進貨價有獨立價目；活動須核對期間與適用對象。未核實團購主身分時，團購價僅供內部參考，不會自動和代理商折數疊加。匿名公開需全域開關、每商品的獨立公開勾選和既有目錄發布都成立；登入目錄的發布本身不會開放匿名瀏覽。公開 API 不代表免登入送單已開放。",
+          "既有 SKU 專屬固定價的「有效至」為台灣日期，設定當天結束前仍有效；隔日零時起不再套用該固定價。建議售價、常態售價及團購主進貨價有獨立價目；活動須核對期間與適用對象。未核實團購主身分時，團購價僅供內部參考，不會自動和代理商折數疊加。匿名公開需全域開關、每商品的獨立公開勾選和既有目錄發布都成立；登入目錄的發布本身不會開放匿名瀏覽。免登入送單另需獨立開關與防濫用設定；訪客需求配對客戶不會自動建立正式報價或銷單。",
           "人工核庫、來源關聯採購單與出具正式報價都不預留、不扣 Corely ERP 正式庫存；已收或取消採購不占未收缺口，收貨後若未重核庫，新增來源關聯採購會被拒絕。數量有異動時必填核對備註，不能直接確認接單。",
           "已送出的正式報價固定品項、金額與條件；調整原需求各行數量或未稅單價須出具新版，增刪商品仍須新需求。被新版取代、過期或撤回版本不能接受。員工無法代客戶接受，客戶接受後仍須業務確認接單才預留庫存；已接單不得撤回原報價。含稅牌價缺少已核准的換算規則時，不能自動帶入未稅正式報價。",
           "客戶帳號使用獨立登入。供應商帳號可在獨立採購入口建檔、停用與重設密碼，供應商登入及查採購單尚未開放；供應商帳號變更需採購建立權限。",
           "員工建立帳號時的初始密碼不會在頁面持續顯示；此工作台不會直接發送 LINE 訊息或證明 WMS 已出貨。"
         ],
-        "related": ["b2b-customer-portal", "b2b-purchase-requests", "sales-quotations", "purchase-orders", "b2b-shortage-procurement", "b2b-supplier-accounts", "sales-orders", "wms-handover-reconciliation"]
+        "related": ["b2b-guest-shop", "b2b-customer-portal", "b2b-purchase-requests", "sales-quotations", "purchase-orders", "b2b-shortage-procurement", "b2b-supplier-accounts", "sales-orders", "wms-handover-reconciliation"]
       },
       "translations": {
         "en": {
@@ -3877,19 +3928,19 @@
           "keywords": ["Customer accounts", "supplier accounts", "catalog publishing", "MSRP", "campaign price", "group-buy price", "customer discount", "stock review", "formal quote", "order confirmation"],
           "sections": {
             "steps": [
-              "Select a company. Create missing customer or vendor master records on their respective pages, then create linked external accounts in this workbench. Catalog publishing and existing fixed customer SKU prices remain separate. In Product price books, set independent MSRP, regular price and the standing group-buy organizer procurement price, plus dated campaigns and explicit tax basis; in Customer discount ratios, set and preview a wholesale customer's usual multiplier.",
+              "Select a company. Create missing customer or vendor master records on their respective pages, then create linked external accounts in this workbench. Catalog publishing and existing fixed customer SKU prices remain separate. In Product price books, set independent MSRP, regular price and the standing group-buy organizer procurement price, plus dated campaigns and explicit tax basis; in Customer discount ratios, set and preview a wholesale customer's usual multiplier. Separately review guest inquiries, verify the contact and manually match a customer master record.",
               "Manually check stock for each request line and record confirmed quantities, delivery date and required notes. Copy the login-protected request discussion link for coordination through LINE. If stock is short, staff with purchase creation access can use the separate Customer shortage procurement page to inspect open linked orders and create a source-linked supplier purchase order for the unpurchased shortage. After receipt, manually review stock again.",
               "After every line is confirmed, explicitly apply the customer's usual price if appropriate, then adjust original request-line quantities and pre-tax unit prices, expiry, and terms for this quote. Issuing freezes a version. Copy the formal quote link for the customer to sign in, review and accept. Price or term changes after issue create a new version and preserve the old one. If accepted but not yet converted to an order, sales can record a withdrawal reason; this returns the request to manual stock review before a new version is issued.",
               "After the customer accepts the latest valid version, choose a sales channel and shipping warehouse. The ERP sales order copies the accepted quotation's quantity and amount snapshots, then reserves inventory and starts WMS fulfilment handoff."
             ],
             "boundaries": [
-              "The existing fixed SKU price's Valid through date is a Taiwan calendar date. It remains effective through that day, then expires. MSRP, regular price and the group-buy organizer procurement price have a separate price book; campaigns require the proper period and audience. The organizer price remains a staff-only reference until the customer is verified as a group-buy organizer, and it does not automatically stack with wholesale discounts. Anonymous publication requires the global enable flag, an explicit per-product public opt-in, and existing catalog publication. Publishing to the signed-in catalog alone never exposes a product anonymously. The public API does not mean no-login ordering is available.",
+              "The existing fixed SKU price's Valid through date is a Taiwan calendar date. It remains effective through that day, then expires. MSRP, regular price and the group-buy organizer procurement price have a separate price book; campaigns require the proper period and audience. The organizer price remains a staff-only reference until the customer is verified as a group-buy organizer, and it does not automatically stack with wholesale discounts. Anonymous publication requires the global enable flag, an explicit per-product public opt-in, and existing catalog publication. Publishing to the signed-in catalog alone never exposes a product anonymously. Guest submission has a separate enable flag and abuse controls; matching a guest inquiry does not create a formal quote or sales order.",
               "Manual stock review, a source-linked purchase order and quote issuance do not reserve or deduct Corely ERP's posted inventory. Received or cancelled orders no longer consume the open shortage; a new linked order is blocked after receipt until staff manually re-review stock. Quantity changes require a review note and cannot be directly confirmed as an order.",
               "An issued formal quote fixes its lines, prices and terms. Editing original line quantities or pre-tax unit prices requires a new version; adding or removing products still requires a new request. Superseded, expired or withdrawn versions cannot be accepted, and staff cannot accept on the customer's behalf. Customer acceptance still requires sales order confirmation before reservation, and an already confirmed order cannot have its quote withdrawn. Tax-inclusive list prices cannot auto-populate a pre-tax quote without an approved conversion rule.",
               "Customer accounts have a separate login. Supplier accounts can be created, deactivated and reset through a separate purchasing page, but supplier login and purchase-order viewing are not open; supplier account changes require purchase creation access.",
               "The initial password does not remain visible on the page. This workbench does not send LINE messages or prove WMS shipment."
             ],
-            "related": ["b2b-customer-portal", "b2b-purchase-requests", "sales-quotations", "purchase-orders", "b2b-shortage-procurement", "b2b-supplier-accounts", "sales-orders", "wms-handover-reconciliation"]
+            "related": ["b2b-guest-shop", "b2b-customer-portal", "b2b-purchase-requests", "sales-quotations", "purchase-orders", "b2b-shortage-procurement", "b2b-supplier-accounts", "sales-orders", "wms-handover-reconciliation"]
           }
         }
       },
@@ -3899,12 +3950,15 @@
         "frontend/src/pages/b2b/B2bWorkbenchPage.tsx",
         "frontend/src/pages/b2b/PriceBookManager.tsx",
         "frontend/src/pages/b2b/CustomerDiscountManager.tsx",
+        "frontend/src/pages/b2b/GuestInquiryManager.tsx",
         "frontend/src/pages/B2bProcurementPage.tsx",
         "frontend/src/pages/SupplierAccountsPage.tsx",
         "backend/src/modules/b2b/b2b.controller.ts",
         "backend/src/modules/b2b/b2b.service.ts",
         "backend/src/modules/b2b/b2b-pricebook.controller.ts",
         "backend/src/modules/b2b/b2b-pricebook.service.ts",
+        "backend/src/modules/b2b/b2b-guest.controller.ts",
+        "backend/src/modules/b2b/b2b-guest.service.ts",
         "backend/src/common/guards/jwt-auth.guard.ts"
       ],
       "permissions": ["sales_orders:read"]
