@@ -24,6 +24,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PayrollService } from './payroll.service';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { SensitiveResponseInterceptor } from '../product/sensitive-response.interceptor';
 import { PayPayrollRunDto } from './dto/pay-payroll-run.dto';
 import { PayrollRunPrecheckDto } from './dto/payroll-run-precheck.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
@@ -40,6 +41,7 @@ import * as multer from 'multer';
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('payroll')
+@UseInterceptors(new SensitiveResponseInterceptor(false, true))
 export class PayrollController {
   constructor(private readonly payrollService: PayrollService) {}
 
@@ -79,7 +81,7 @@ export class PayrollController {
 
   @Get('bank-accounts')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'read' }, { resource: 'employee_compensation', action: 'read' })
   @ApiOperation({ summary: '查詢可用發薪帳戶' })
   @ApiResponse({ status: 200, description: '成功取得銀行帳戶列表' })
   async getBankAccounts(
@@ -91,7 +93,7 @@ export class PayrollController {
 
   @Get('settings')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'read' }, { resource: 'employee_compensation', action: 'read' })
   @ApiOperation({ summary: '查詢薪資規則設定' })
   @ApiResponse({ status: 200, description: '成功取得薪資規則設定' })
   async getPayrollSettings(
@@ -103,7 +105,7 @@ export class PayrollController {
 
   @Patch('settings')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'update' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'update' }, { resource: 'employee_compensation', action: 'update' })
   @ApiOperation({ summary: '更新薪資規則設定' })
   @ApiResponse({ status: 200, description: '成功更新薪資規則設定' })
   async upsertPayrollSettings(
@@ -351,7 +353,7 @@ export class PayrollController {
 
   @Get('runs')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'read' }, { resource: 'employee_compensation', action: 'read' })
   @ApiOperation({ summary: '查詢薪資計算批次' })
   @ApiResponse({ status: 200, description: '成功取得薪資計算批次' })
   async getPayrollRuns(
@@ -363,7 +365,7 @@ export class PayrollController {
 
   @Get('employee-salaries')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'read' }, { resource: 'employee_compensation', action: 'read' })
   @ApiOperation({ summary: '查詢職員薪資明細列表' })
   @ApiResponse({ status: 200, description: '成功取得職員薪資明細列表' })
   async getEmployeeSalaryRows(
@@ -375,7 +377,7 @@ export class PayrollController {
 
   @Get('runs/:id')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'read' }, { resource: 'employee_compensation', action: 'read' })
   @ApiOperation({ summary: '查詢單一薪資批次' })
   @ApiResponse({ status: 200, description: '成功取得薪資批次詳情' })
   async getPayrollRun(@Request() req: any, @Param('id') id: string) {
@@ -384,7 +386,7 @@ export class PayrollController {
 
   @Get('runs/:id/audit-logs')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'read' }, { resource: 'employee_compensation', action: 'read' })
   @ApiOperation({ summary: '查詢薪資批次操作紀錄' })
   @ApiResponse({ status: 200, description: '成功取得薪資批次操作紀錄' })
   async getPayrollRunAuditLogs(@Request() req: any, @Param('id') id: string) {
@@ -393,7 +395,7 @@ export class PayrollController {
 
   @Get('runs/:id/pdf')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'read' }, { resource: 'employee_compensation', action: 'read' })
   @ApiOperation({ summary: '下載指定員工薪資單 PDF' })
   @ApiResponse({ status: 200, description: '成功下載薪資單 PDF' })
   async downloadPayrollRunPdf(
@@ -416,6 +418,8 @@ export class PayrollController {
   }
 
   @Get('my/runs')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'payroll_self', action: 'read' })
   @ApiOperation({ summary: '查詢我的薪資單列表' })
   @ApiResponse({ status: 200, description: '成功取得個人薪資單列表' })
   async getMyPayrollRuns(@Request() req: any) {
@@ -423,6 +427,8 @@ export class PayrollController {
   }
 
   @Get('my/runs/:id')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'payroll_self', action: 'read' })
   @ApiOperation({ summary: '查詢我的單張薪資單' })
   @ApiResponse({ status: 200, description: '成功取得個人薪資單明細' })
   async getMyPayrollRun(@Request() req: any, @Param('id') id: string) {
@@ -430,6 +436,8 @@ export class PayrollController {
   }
 
   @Get('my/runs/:id/pdf')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'payroll_self', action: 'read' })
   @ApiOperation({ summary: '下載我的薪資單 PDF' })
   @ApiResponse({ status: 200, description: '成功下載個人薪資單 PDF' })
   async downloadMyPayrollRunPdf(
@@ -451,7 +459,7 @@ export class PayrollController {
 
   @Post('runs')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'update' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'update' }, { resource: 'employee_compensation', action: 'update' })
   @ApiOperation({ summary: '建立薪資計算批次' })
   @ApiResponse({ status: 201, description: '成功建立薪資計算批次' })
   async createPayrollRun(@Request() req: any, @Body() data: any) {
@@ -460,7 +468,7 @@ export class PayrollController {
 
   @Post('runs/precheck')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'update' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'update' }, { resource: 'employee_compensation', action: 'update' })
   @ApiOperation({ summary: '薪資結算前檢查出勤與請假異常' })
   @ApiResponse({ status: 200, description: '成功取得薪資前檢查結果' })
   async previewPayrollRunWarnings(
@@ -472,7 +480,7 @@ export class PayrollController {
 
   @Post('runs/:id/submit')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'update' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'update' }, { resource: 'employee_compensation', action: 'update' })
   @ApiOperation({ summary: '送審薪資批次' })
   @ApiResponse({ status: 200, description: '成功送審薪資批次' })
   async submitPayrollRun(@Request() req: any, @Param('id') id: string) {
@@ -481,7 +489,7 @@ export class PayrollController {
 
   @Post('runs/:id/approve')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'update' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'update' }, { resource: 'employee_compensation', action: 'update' })
   @ApiOperation({ summary: '批准並封存薪資批次' })
   @ApiResponse({ status: 200, description: '成功批准薪資批次' })
   async approvePayrollRun(@Request() req: any, @Param('id') id: string) {
@@ -490,7 +498,7 @@ export class PayrollController {
 
   @Post('runs/:id/unapprove')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'update' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'update' }, { resource: 'employee_compensation', action: 'update' })
   @ApiOperation({ summary: '取消薪資批次確定並退回草稿' })
   @ApiResponse({ status: 200, description: '成功取消確定薪資批次' })
   async unapprovePayrollRun(
@@ -503,7 +511,7 @@ export class PayrollController {
 
   @Post('runs/:id/post')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'update' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'update' }, { resource: 'employee_compensation', action: 'update' })
   @ApiOperation({ summary: '過帳薪資批次至會計' })
   @ApiResponse({ status: 200, description: '成功過帳薪資批次' })
   async postPayrollRun(@Request() req: any, @Param('id') id: string) {
@@ -512,7 +520,7 @@ export class PayrollController {
 
   @Post('runs/:id/pay')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'update' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'update' }, { resource: 'employee_compensation', action: 'update' })
   @ApiOperation({ summary: '標記薪資批次已發薪' })
   @ApiResponse({ status: 200, description: '成功完成薪資發放' })
   async payPayrollRun(
@@ -525,7 +533,7 @@ export class PayrollController {
 
   @Get('payrolls')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'read' }, { resource: 'employee_compensation', action: 'read' })
   @ApiOperation({ summary: '查詢薪資記錄列表' })
   @ApiResponse({ status: 200, description: '成功取得薪資記錄' })
   async getPayrolls(
@@ -544,7 +552,7 @@ export class PayrollController {
 
   @Get('payrolls/:id')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'read' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'read' }, { resource: 'employee_compensation', action: 'read' })
   @ApiOperation({ summary: '查詢單一薪資記錄' })
   @ApiResponse({ status: 200, description: '成功取得薪資記錄詳情' })
   async getPayroll(@Request() req: any, @Param('id') id: string) {
@@ -553,7 +561,7 @@ export class PayrollController {
 
   @Post('payrolls')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'update' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'update' }, { resource: 'employee_compensation', action: 'update' })
   @ApiOperation({ summary: '建立薪資記錄' })
   @ApiResponse({ status: 201, description: '成功建立薪資記錄' })
   async createPayroll(@Request() req: any, @Body() data: any) {
@@ -562,7 +570,7 @@ export class PayrollController {
 
   @Post('payrolls/:id/process')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'payroll_admin', action: 'update' })
+  @RequirePermissions({ resource: 'payroll_admin', action: 'update' }, { resource: 'employee_compensation', action: 'update' })
   @ApiOperation({ summary: '處理薪資發放' })
   @ApiResponse({ status: 200, description: '成功處理薪資發放' })
   async processPayroll(

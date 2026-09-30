@@ -31,6 +31,11 @@ export const RESOURCE_TRANSLATIONS: Record<string, string> = {
   attendance_admin: '考勤後臺',
   payroll_admin: '薪資管理',
   access_control: '帳號與權限',
+  product_cost: '產品與採購成本',
+  financial_margin: '毛利資料',
+  financial_net_profit: '淨利與完整損益',
+  employee_compensation: '同仁薪資與支付資料',
+  performance_reviews: '考核作業',
 }
 
 export const ACTION_TRANSLATIONS: Record<string, string> = {
@@ -42,6 +47,9 @@ export const ACTION_TRANSLATIONS: Record<string, string> = {
   export: '匯出',
   import: '匯入',
   execute: '操作',
+  write: '填寫',
+  manage: '管理',
+  submit: '送出',
 }
 
 export const ROLE_TRANSLATIONS: Record<string, string> = {
@@ -52,6 +60,9 @@ export const ROLE_TRANSLATIONS: Record<string, string> = {
   OPERATOR: '一般操作員',
   VIEWER: '唯讀使用者',
   EMPLOYEE: '一般員工',
+  PERFORMANCE_REVIEWER: '考核主管',
+  PERFORMANCE_HR: '人資考核管理',
+  PROCUREMENT_COST: '採購成本專員',
 }
 
 export const getResourceName = (resource: string): string => {

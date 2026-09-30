@@ -18,7 +18,7 @@ The bilingual entries cover navigation groups and route or filter entry points, 
 | Warehouse / 儲運 | ERP workspace and permission-controlled WMS destinations / ERP 工作區與依權限開放的 WMS 入口 |
 | Purchasing and inventory / 採購庫存 | Vendors, landed cost, receiving, products, SN, assembly and handover reconciliation / 供應商、到岸成本、收貨、產品、序號、組裝與交運核銷 |
 | Finance / 財務會計 | Expenses, approvals, payments, AR, banking, journals, accounts, periods, reconciliation and reports / 費用、審批、付款、應收、銀行、分錄、科目、期間、對帳與報表 |
-| People / 人資考勤 | Employee supervisors, attendance, leave review and payroll / 員工主管、出勤、請假審核與薪資 |
+| People / 人資考勤 | Employee supervisors, attendance, leave review, performance reviews and payroll / 員工主管、出勤、請假審核、考績與薪資 |
 | Administration / 系統管理 | Access, companies, reimbursement policies, settings, brands and import preview / 權限、公司、報銷政策、設定、品牌與匯入預覽 |
 | Personal and assistant / 個人與助手 | Profile, authentication guidance and AI limits / 個人資料、驗證流程與 AI 邊界 |
 
@@ -32,6 +32,9 @@ The bilingual entries cover navigation groups and route or filter entry points, 
 - WMS packing is not final ERP stock deduction. A real handover event with package and logistics evidence enters reconciliation; an authorized employee must approve each line, with source, reservation and stock conflicts blocking posting. / WMS 裝箱不是 ERP 正式扣庫。實際交運及箱件、物流證據進入待核銷後，授權員工須逐行核准；來源、預留或庫存衝突會阻止過帳。
 - Spreadsheet import only previews the first worksheet in the browser. Assembly creation and account creation buttons currently lack connected handlers. Notification/security/general-setting tabs are preview-only. / 匯入僅本機預覽；建立組裝工單、新增科目的按鈕尚未接事件；系統通知、安全、一般設定仍為預覽。
 - Expense recognition is advisory. Approval, payment recording, bank transfer and journal posting remain distinct. The current Copilot bank tool totals imported transactions, not live bank availability. / 憑證辨識是建議；核准、付款登記、匯款與過帳分開；Copilot 銀行工具只彙總已匯入交易。
+- Copilot product-cost lookup and coworker-payroll summary require separate sensitive read grants. A daily financial briefing additionally requires cost, margin and net-profit grants and matching company scope; guides do not grant live tools. / Copilot 商品成本與同仁薪資彙總各需敏感資料讀取授權；每日財務簡報還需成本、毛利、淨利與相應公司資料範圍。操作指南不開放即時工具。
+- Account maintenance is separate from role policy. Ordinary account managers work only within their assigned companies and can grant only approved operational roles; a sole company is assigned to new accounts automatically. Super administrators handle multi-company cases, shared roles and data scopes. Cost requires `product_cost:read`; margin additionally requires `financial_margin:read`, and net profit, advertising spend, platform fees and net payout additionally require `financial_net_profit:read`. Coworker compensation needs `employee_compensation:read`. / 帳號維護與角色政策分開：一般管理者只在所屬公司內管理帳號並指派核准的作業角色，若僅屬一家公司則新帳號自動歸入該公司。跨公司、共用角色與資料範圍由最高管理員處理。成本需 `product_cost:read`，毛利再需 `financial_margin:read`，淨利、廣告費、平台費與淨入帳另需 `financial_net_profit:read`；同仁薪資需 `employee_compensation:read`。
+- Performance reviews are at `/performance/reviews`. A reviewer needs explicit read/write permission and a record assignment; supervisor status alone grants neither review access nor pay access. HR review management creates cycles and assignments, while submitted reviews are locked. / 考績入口為 `/performance/reviews`。評核人需明確讀寫權限及逐筆指派，部門主管身分不自動取得考績或薪資；人資管理權限可建週期與指派，送出後鎖定。
 - Examples are synthetic form/preview data, not ready-to-run API requests or company records. / JSON 與 CSV 範例是虛構填表或預覽資料，不是真實單據或可執行 API 請求。
 
 ## Ownership and contract / 維護與契約

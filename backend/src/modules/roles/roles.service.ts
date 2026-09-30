@@ -11,7 +11,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
-import { assertCustomRoleIdentity, isPrivilegedRole, SYSTEM_ROLE_CODES } from './role-policy';
+import { assertCustomRoleIdentity, isAccountAssignableRole, isPrivilegedRole, SYSTEM_ROLE_CODES } from './role-policy';
 
 const ROLE_INCLUDE = {
   permissions: {
@@ -36,7 +36,14 @@ export class RolesService {
   async findAll(actorId?: string) {
     const roles = await this.prisma.role.findMany({ orderBy: { hierarchyLevel: 'asc' }, include: { ...ROLE_INCLUDE, _count: { select: { users: true, memberDepartments: true, supervisorDepartments: true } } } });
     const superAdmin = Boolean(actorId && await this.prisma.userRole.count({ where: { userId: actorId, role: { code: 'SUPER_ADMIN' } } }));
-    return roles.map(role => ({ ...role, assignedUserCount: role._count.users, deletionReason: (role._count.memberDepartments + role._count.supervisorDepartments > 0) ? '此角色仍綁定部門，請先調整部門設定' : roleDeletionReason(role.code, role._count.users, superAdmin) }));
+    return roles.map(role => ({
+      ...role,
+      assignedUserCount: role._count.users,
+      assignableByAccountManager: isAccountAssignableRole(role),
+      deletionReason: (role._count.memberDepartments + role._count.supervisorDepartments > 0)
+        ? '此角色仍綁定部門，請先調整部門設定'
+        : roleDeletionReason(role.code, role._count.users, superAdmin),
+    }));
   }
 
   async findById(id: string) {
@@ -49,7 +56,7 @@ export class RolesService {
       throw new NotFoundException(`Role with ID ${id} not found`);
     }
 
-    return role;
+    return { ...role, assignableByAccountManager: isAccountAssignableRole(role) };
   }
 
   async create(dto: CreateRoleDto) {

@@ -343,6 +343,8 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
   const [form] = Form.useForm();
   const canBindDepartment = hasPermission(user, "access_control:update");
   const canManageEmployees = hasPermission(user, "employees_admin:update");
+  const canViewCompensation = hasPermission(user, "employee_compensation:read");
+  const canWriteCompensation = canViewCompensation && hasPermission(user, "employee_compensation:update");
 
   const fetchEmployees = async () => {
     setLoading(true);
@@ -405,7 +407,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
     terminateDate: employee?.terminateDate
       ? dayjs(employee.terminateDate)
       : null,
-    salaryBaseOriginal: employee?.salaryBaseOriginal ?? 0,
+    salaryBaseOriginal: canViewCompensation
+      ? (employee ? employee.salaryBaseOriginal : (canWriteCompensation ? 0 : undefined))
+      : undefined,
     isActive: employee?.isActive ?? true,
     loginEmail: employee?.user?.email || "",
     loginPassword: "",
@@ -419,10 +423,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       }),
       {} as Record<EmployeeOnboardingDocument["docType"], boolean>,
     ),
-    compensationSettings: {
-      ...compensationDefaults,
-      ...(employee?.compensationSettings || {}),
-    },
+    compensationSettings: canViewCompensation
+      ? (employee?.compensationSettings || (employee || !canWriteCompensation ? undefined : compensationDefaults))
+      : undefined,
   });
 
   const resolveEmployeeFormTabByField = (fieldName?: (string | number)[]) => {
@@ -441,7 +444,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       return "profile";
     }
     if (["salaryBaseOriginal", "compensationSettings"].includes(rootName)) {
-      return "payroll";
+      return canViewCompensation ? "payroll" : "basic";
     }
     if (rootName === "onboardingRequirements") {
       return "onboarding";
@@ -495,17 +498,23 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         loginEmail,
         loginPassword,
         onboardingRequirements,
+        salaryBaseOriginal,
+        compensationSettings,
+        bankInfo: _bankInfo,
         ...employeeValues
       } = values;
+      const compensationValues = canWriteCompensation
+        ? { salaryBaseOriginal, compensationSettings }
+        : {};
       const createdEmployee = (await payrollService.createEmployee({
         ...employeeValues,
+        ...compensationValues,
         employeeNo: undefined,
         hireDate: employeeValues.hireDate.toISOString(),
         nationalId: employeeValues.nationalId,
         mailingAddress: employeeValues.mailingAddress,
         emergencyContactName: employeeValues.emergencyContactName,
         emergencyContactPhone: employeeValues.emergencyContactPhone,
-        compensationSettings: employeeValues.compensationSettings,
         onboardingRequirements,
         loginEmail: loginEmail?.trim() || undefined,
         loginPassword: loginPassword?.trim() || undefined,
@@ -569,8 +578,14 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         loginEmail,
         loginPassword,
         onboardingRequirements: _onboardingRequirements,
+        salaryBaseOriginal,
+        compensationSettings,
+        bankInfo: _bankInfo,
         ...employeeValues
       } = values;
+      const compensationValues = canWriteCompensation
+        ? { salaryBaseOriginal, compensationSettings }
+        : {};
       const loginUpdates: { loginEmail?: string; loginPassword?: string } = {};
       const normalizedLoginEmail = loginEmail?.trim() || "";
       if (loginEmail !== undefined && normalizedLoginEmail !== (selectedEmployee.user?.email || "")) {
@@ -582,6 +597,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
 
       await payrollService.updateEmployee(selectedEmployee.id, {
         ...employeeValues,
+        ...compensationValues,
         ...loginUpdates,
         hireDate: employeeValues.hireDate
           ? employeeValues.hireDate.toISOString()
@@ -593,7 +609,6 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         mailingAddress: employeeValues.mailingAddress,
         emergencyContactName: employeeValues.emergencyContactName,
         emergencyContactPhone: employeeValues.emergencyContactPhone,
-        compensationSettings: employeeValues.compensationSettings,
       });
       message.success("員工更新成功");
       setEditOpen(false);
@@ -777,12 +792,12 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       key: "departmentSupervisor",
       render: (_: unknown, record: Employee) => <Tag color={record.isDepartmentSupervisor ? "blue" : "default"}>{record.isDepartmentSupervisor ? "部門主管" : "部門人員"}</Tag>,
     },
-    {
+    ...(canViewCompensation ? [{
       title: "本薪",
       dataIndex: "salaryBaseOriginal",
       key: "salaryBaseOriginal",
-      render: (salary: number) => salary.toLocaleString(),
-    },
+      render: (salary: number | null | undefined) => salary == null ? "—" : salary.toLocaleString(),
+    }] : []),
     {
       title: "到職日",
       dataIndex: "hireDate",
@@ -833,9 +848,9 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
       <Form.Item
         name="salaryBaseOriginal"
         label="本薪"
-        rules={[{ required: true }]}
+        rules={canWriteCompensation ? [{ required: true }] : undefined}
       >
-        <InputNumber className="w-full" min={0} />
+        <InputNumber className="w-full" min={0} disabled={!canWriteCompensation} />
       </Form.Item>
       <Divider orientation="left">固定給付項目（管理者輸入）</Divider>
       <div className="grid gap-4 md:grid-cols-2">
@@ -845,7 +860,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
             name={["compensationSettings", field.key]}
             label={field.label}
           >
-            <InputNumber className="w-full" min={0} />
+            <InputNumber className="w-full" min={0} disabled={!canWriteCompensation} />
           </Form.Item>
         ))}
       </div>
@@ -857,7 +872,7 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
             name={["compensationSettings", field.key]}
             label={field.label}
           >
-            <InputNumber className="w-full" min={0} />
+            <InputNumber className="w-full" min={0} disabled={!canWriteCompensation} />
           </Form.Item>
         ))}
       </div>
@@ -972,11 +987,11 @@ const EmployeesTab = ({ departments }: { departments: Department[] }) => {
         </div>
       ),
     },
-    {
+    ...(canViewCompensation && (mode === "edit" || canWriteCompensation) ? [{
       key: "payroll",
       label: "薪資支付事項",
       children: renderCompensationFields(),
-    },
+    }] : []),
     {
       key: "onboarding",
       label: "新增資訊",

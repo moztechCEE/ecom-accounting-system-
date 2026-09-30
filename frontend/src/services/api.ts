@@ -5,6 +5,7 @@ declare global {
     __APP_CONFIG__?: {
       apiUrl?: string
       defaultEntityId?: string
+      b2bPublicOrderEnabled?: boolean
       wsUrl?: string
       stagedOperationsEnabled?: boolean
       wmsPortalUrl?: string

@@ -132,14 +132,15 @@ const PayrollPage: React.FC = () => {
   const [leaveBackfillForm] = Form.useForm()
 
   const canManagePayroll = useMemo(
-    () => hasPermission(user, 'payroll_admin:update'),
+    () => hasPermission(user, 'payroll_admin:update') && hasPermission(user, 'employee_compensation:update'),
     [user],
   )
 
   const canReviewPayroll = useMemo(
-    () => hasPermission(user, 'payroll_admin:read'),
+    () => hasPermission(user, 'payroll_admin:read') && hasPermission(user, 'employee_compensation:read'),
     [user],
   )
+  const canViewOwnPayroll = hasPermission(user, 'payroll_self:read')
 
   const fetchAdminRuns = async () => {
     if (!canReviewPayroll) {
@@ -209,9 +210,9 @@ const PayrollPage: React.FC = () => {
   useEffect(() => {
     fetchAdminRuns()
     fetchEmployeeSalaryRows()
-    fetchMyRuns()
+    if (canViewOwnPayroll) fetchMyRuns()
     fetchBankAccounts()
-  }, [canReviewPayroll, canManagePayroll])
+  }, [canReviewPayroll, canManagePayroll, canViewOwnPayroll])
 
   const adminMonthTotal = useMemo(() => {
     const currentMonth = dayjs().format('YYYY-MM')
@@ -1162,9 +1163,9 @@ const PayrollPage: React.FC = () => {
     ? [
         { key: 'admin', label: '月薪資台帳', children: adminPanel },
         { key: 'employee-salaries', label: '查詢職員薪資', children: employeeSalaryPanel },
-        { key: 'mine', label: '我的薪資單', children: myPanel },
+        ...(canViewOwnPayroll ? [{ key: 'mine', label: '我的薪資單', children: myPanel }] : []),
       ]
-    : [{ key: 'mine', label: '我的薪資單', children: myPanel }]
+    : canViewOwnPayroll ? [{ key: 'mine', label: '我的薪資單', children: myPanel }] : []
 
   return (
     <motion.div
@@ -1184,7 +1185,8 @@ const PayrollPage: React.FC = () => {
         ) : null}
       </div>
 
-      <Tabs defaultActiveKey={canReviewPayroll ? 'admin' : 'mine'} items={tabItems} />
+      {tabItems.length ? <Tabs defaultActiveKey={canReviewPayroll ? 'admin' : 'mine'} items={tabItems} />
+        : <Alert type="info" showIcon message="此帳號未開放薪資檢視；如需查看同仁薪資，請由最高管理員指派獨立的薪資資料權限。" />}
 
       <GlassDrawer
         title="執行薪資計算"

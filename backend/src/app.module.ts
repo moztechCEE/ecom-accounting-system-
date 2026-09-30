@@ -33,6 +33,7 @@ import { ExpenseModule } from './modules/expense/expense.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { BankingModule } from './modules/banking/banking.module';
 import { PayrollModule } from './modules/payroll/payroll.module';
+import { PerformanceModule } from './modules/performance/performance.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { InvoicingModule } from './modules/invoicing/invoicing.module';
 import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
@@ -116,6 +117,7 @@ import { WmsWorkbenchModule } from './modules/integration/wms/wms-workbench.modu
     ApModule, // → ApprovalsModule, BankingModule
     ExpenseModule, // → ApprovalsModule, ApModule
     PayrollModule, // → AccountingModule, ApprovalsModule
+    PerformanceModule,
 
     // 4. 報表模組（依賴所有業務模組）
     ReportsModule, // → AccountingModule

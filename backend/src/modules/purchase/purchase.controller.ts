@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Post, Body, Param, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Post, Body, Param, Put, Query, Req, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ApiQuery } from '@nestjs/swagger';
 import { PurchaseService } from './purchase.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
@@ -13,11 +13,13 @@ import { RequirePermissions } from '../../common/decorators/permissions.decorato
 import { LandedCostDto } from './dto/landed-cost.dto';
 import { CreateB2bPurchaseOrderDto } from './dto/create-b2b-purchase-order.dto';
 import { PurchaseB2bQueueService } from './purchase-b2b-queue.service';
+import { SensitiveResponseInterceptor } from '../product/sensitive-response.interceptor';
 
 @Controller('purchase-orders')
 @UseGuards(JwtAuthGuard, RolesGuard, EntityAccessGuard)
 @RequireEntityAccess('purchasing')
 @ApiQuery({ name: 'entityId', required: true })
+@UseInterceptors(new SensitiveResponseInterceptor(true))
 export class PurchaseController {
   constructor(
     private readonly purchaseService: PurchaseService,
@@ -32,14 +34,14 @@ export class PurchaseController {
 
   @Post()
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'purchase_orders', action: 'create' })
+  @RequirePermissions({ resource: 'purchase_orders', action: 'create' }, { resource: 'product_cost', action: 'update' })
   create(@Query('entityId') entityId: string, @Body() dto: CreatePurchaseOrderDto) {
     return this.purchaseService.create(this.requireEntityId(entityId), dto);
   }
 
   @Post('from-b2b-request')
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ resource: 'purchase_orders', action: 'create' })
+  @RequirePermissions({ resource: 'purchase_orders', action: 'create' }, { resource: 'product_cost', action: 'update' })
   createFromB2bRequest(@Query('entityId') entityId: string, @Body() dto: CreateB2bPurchaseOrderDto) {
     return this.purchaseService.createFromB2bRequest(this.requireEntityId(entityId), dto);
   }
@@ -80,19 +82,25 @@ export class PurchaseController {
   }
 
   @Put(':id/receive')
-  @Roles('ADMIN', 'OPERATOR')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERATOR', 'PROCUREMENT_COST')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'purchase_orders', action: 'create' }, { resource: 'product_cost', action: 'update' })
   receive(@Query('entityId') entityId: string, @Param('id') id: string, @Body() dto: ReceivePurchaseOrderDto) {
     return this.purchaseService.receiveOrder(this.requireEntityId(entityId), id, dto);
   }
 
   @Post(':id/landed-cost/preview')
-  @Roles('ADMIN', 'OPERATOR')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERATOR', 'PROCUREMENT_COST')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'purchase_orders', action: 'create' }, { resource: 'product_cost', action: 'read' })
   previewLandedCost(@Query('entityId') entityId: string, @Param('id') id: string, @Body() dto: LandedCostDto) {
     return this.purchaseService.previewLandedCost(this.requireEntityId(entityId), id, dto);
   }
 
   @Put(':id/landed-cost')
-  @Roles('ADMIN', 'OPERATOR')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPERATOR', 'PROCUREMENT_COST')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ resource: 'purchase_orders', action: 'create' }, { resource: 'product_cost', action: 'update' })
   saveLandedCost(@Query('entityId') entityId: string, @Param('id') id: string, @Body() dto: LandedCostDto, @Req() req: {user: {id: string}}) {
     return this.purchaseService.saveLandedCost(this.requireEntityId(entityId), id, dto, req.user.id);
   }

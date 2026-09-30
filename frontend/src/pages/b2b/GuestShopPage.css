@@ -58,6 +58,9 @@
 .guest-shop-product-bottom input { width: 66px; height: 37px; padding: 6px; color: #183b4c; background: #f8fbfc; border: 1px solid #cbdce3; border-radius: 8px; text-align: center; }
 .guest-shop-pagination { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 25px; color: #697f8b; font-size: 12px; }
 .guest-shop-cart { position: sticky; top: 20px; padding: 25px; background: #fff; border: 1px solid #dfebef; border-radius: 17px; box-shadow: 0 14px 40px rgba(16, 68, 90, .07); }
+.guest-shop-preview h2 { margin: 9px 0 12px; font-size: 22px; line-height: 1.35; }
+.guest-shop-preview p { margin: 0 0 20px; color: #617d8c; font-size: 13px; line-height: 1.7; }
+.guest-shop-preview .guest-shop-submit { width: 100%; }
 .guest-shop-cart-head h2 { display: flex; justify-content: space-between; margin: 7px 0; font-size: 23px; }
 .guest-shop-cart-head h2 span { display: grid; place-items: center; min-width: 25px; height: 25px; padding: 0 7px; color: #0b739f; background: #e6f3f8; border-radius: 50px; font-size: 12px; }
 .guest-shop-cart-head p { margin: 0 0 18px; color: #7a919d; font-size: 12px; line-height: 1.6; }

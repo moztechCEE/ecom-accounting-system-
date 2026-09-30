@@ -9,6 +9,7 @@ import {
   Patch,
   Param,
   Delete,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AttendanceService } from '../services/attendance.service';
 import { ClockInDto } from '../dto/clock-in.dto';
@@ -24,9 +25,11 @@ import { OvertimeService } from '../services/overtime.service';
 import { CreateOvertimeRequestDto } from '../dto/create-overtime-request.dto';
 import { ReviewOvertimeRequestDto } from '../dto/review-overtime-request.dto';
 import { AdminAdjustAttendanceDto } from '../dto/admin-adjust-attendance.dto';
+import { SensitiveResponseInterceptor } from '../../product/sensitive-response.interceptor';
 
 @Controller('attendance')
 @UseGuards(JwtAuthGuard)
+@UseInterceptors(new SensitiveResponseInterceptor())
 export class AttendanceController {
   constructor(
     private readonly attendanceService: AttendanceService,

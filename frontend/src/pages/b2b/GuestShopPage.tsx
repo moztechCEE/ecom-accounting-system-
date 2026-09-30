@@ -6,6 +6,7 @@ import type { PublicCatalogFacets, PublicCatalogItem, GuestRequestInput, GuestRe
 import './GuestShopPage.css'
 
 const entityId = window.__APP_CONFIG__?.defaultEntityId?.trim() || import.meta.env.VITE_DEFAULT_ENTITY_ID?.trim() || 'tw-entity-001'
+const publicOrderEnabled = window.__APP_CONFIG__?.b2bPublicOrderEnabled === true
 const pageSize = 24
 const money = (value: string | number) => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 2 }).format(Number(value) || 0)
 type CartLine = { product: PublicCatalogItem; quantity: number }
@@ -58,6 +59,7 @@ export default function GuestShopPage() {
   const maxPage = Math.max(1, Math.ceil(total / pageSize))
 
   const changeQuantity = (product: PublicCatalogItem, quantity: number) => {
+    if (!publicOrderEnabled) return
     setReceipt(null)
     if (!Number.isSafeInteger(quantity) || quantity < 0 || quantity > 1000) return
     setCart((current) => {
@@ -70,6 +72,7 @@ export default function GuestShopPage() {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!publicOrderEnabled) return
     if (submitting) return
     setSubmitError('')
     const companyName = contact.companyName.trim()
@@ -125,14 +128,14 @@ export default function GuestShopPage() {
 
   return <div className="guest-shop">
     <header className="guest-shop-header">
-      <div className="guest-shop-brand"><BrandMark className="guest-shop-mark" alt="Corely" /><span>Corely <small>商品採購</small></span></div>
-      <nav aria-label="頁面導覽"><a href="#products">商品目錄</a><a href="#cart">採購車 <span>{lines.length}</span></a></nav>
+      <div className="guest-shop-brand"><BrandMark className="guest-shop-mark" alt="Corely" /><span>Corely <small>{publicOrderEnabled ? '商品採購' : '商品目錄'}</small></span></div>
+      <nav aria-label="頁面導覽"><a href="#products">商品目錄</a>{publicOrderEnabled ? <a href="#cart">採購車 <span>{lines.length}</span></a> : null}</nav>
     </header>
 
     <main>
       <section className="guest-shop-hero">
-        <div className="guest-shop-hero-inner"><p className="guest-shop-kicker">CORELY PRODUCT CATALOG</p><h1>找到需要的商品，<br />建立採購單。</h1><p>依品牌、類別或關鍵字選品，填入數量即可產生待確認採購單。公開頁只顯示建議售價；業務核庫並與您確認後，才會提供專屬價格與正式版本。</p><a href="#products" className="guest-shop-hero-action">瀏覽商品 <span aria-hidden>↗</span></a></div>
-        <div className="guest-shop-hero-panel" aria-hidden><span>01</span><strong>選商品</strong><span>02</span><strong>建立採購單</strong><span>03</span><strong>雙方確認</strong></div>
+        <div className="guest-shop-hero-inner"><p className="guest-shop-kicker">CORELY PRODUCT CATALOG</p><h1>{publicOrderEnabled ? <>找到需要的商品，<br />建立採購單。</> : <>公開商品目錄，<br />預覽中。</>}</h1><p>{publicOrderEnabled ? '依品牌、類別或關鍵字選品，填入數量即可產生待確認採購單。公開頁只顯示建議售價；業務核庫並與您確認後，才會提供專屬價格與正式版本。' : '預覽中，暫不受理採購單。您可依品牌、類別或關鍵字瀏覽公開商品與建議售價；實際庫存與正式價格請洽業務確認。'}</p><a href="#products" className="guest-shop-hero-action">瀏覽商品 <span aria-hidden>↗</span></a></div>
+        <div className="guest-shop-hero-panel" aria-hidden>{publicOrderEnabled ? <><span>01</span><strong>選商品</strong><span>02</span><strong>建立採購單</strong><span>03</span><strong>雙方確認</strong></> : <><span>01</span><strong>瀏覽公開商品</strong><span>02</span><strong>洽業務確認需求</strong></>}</div>
       </section>
 
       {receipt ? <section className="guest-shop-receipt" role="status"><div><span>待確認採購單已建立</span><h2>我們已收到您的採購品項</h2><p>採購單編號：<strong>{receipt.reference}</strong></p><p>此連結只顯示品項、數量與建議售價，可先在 LINE 與業務討論。專屬價格會在核對顧客與庫存後另行提供；目前尚未成立銷貨單，也未預留庫存。</p><div className="guest-shop-receipt-actions"><a href={receipt.orderUrl}>查看採購單</a><button type="button" onClick={() => void copyOrderLink()}>複製採購單連結</button><button type="button" onClick={() => setReceipt(null)}>繼續選購</button></div>{copyStatus ? <p role="status">{copyStatus}</p> : null}</div></section> : null}
@@ -145,12 +148,12 @@ export default function GuestShopPage() {
           {loading ? <div className="guest-shop-placeholder">正在載入商品…</div> : !catalogError && !products.length ? <div className="guest-shop-placeholder">目前沒有符合條件的公開商品。</div> : null}
           <div className="guest-shop-grid">{products.map((product) => <article className="guest-shop-product" key={product.productId}>
             <div className="guest-shop-product-visual" aria-hidden>{product.name.slice(0, 1)}</div>
-            <div className="guest-shop-product-body"><span className="guest-shop-sku">{product.sku}</span><h3>{product.name}</h3><p>{[product.brand, product.category].filter(Boolean).join(' · ') || '商品'}</p><div className="guest-shop-product-bottom"><div><small>建議售價 · {product.taxBasis === 'TAX_INCLUDED' ? '含稅' : '未稅'}</small><strong>{money(product.msrp)}</strong></div><label><span className="guest-shop-sr-only">{product.name} 採購數量</span><input type="number" min="0" max="1000" step="1" value={cart[product.productId]?.quantity ?? 0} onChange={(event) => changeQuantity(product, Number(event.target.value))} /></label></div></div>
+            <div className="guest-shop-product-body"><span className="guest-shop-sku">{product.sku}</span><h3>{product.name}</h3><p>{[product.brand, product.category].filter(Boolean).join(' · ') || '商品'}</p><div className="guest-shop-product-bottom"><div><small>建議售價 · {product.taxBasis === 'TAX_INCLUDED' ? '含稅' : '未稅'}</small><strong>{money(product.msrp)}</strong></div>{publicOrderEnabled ? <label><span className="guest-shop-sr-only">{product.name} 採購數量</span><input type="number" min="0" max="1000" step="1" value={cart[product.productId]?.quantity ?? 0} onChange={(event) => changeQuantity(product, Number(event.target.value))} /></label> : null}</div></div>
           </article>)}</div>
           {!catalogError && total > pageSize ? <div className="guest-shop-pagination"><button type="button" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>上一頁</button><span>第 {page}／{maxPage} 頁 · 共 {total} 項</span><button type="button" disabled={page >= maxPage || loading} onClick={() => setPage((value) => value + 1)}>下一頁</button></div> : null}
         </section>
 
-        <aside id="cart" className="guest-shop-cart" aria-labelledby="guest-shop-cart-title">
+        {publicOrderEnabled ? <aside id="cart" className="guest-shop-cart" aria-labelledby="guest-shop-cart-title">
           <div className="guest-shop-cart-head"><span className="guest-shop-kicker">YOUR REQUEST</span><h2 id="guest-shop-cart-title">採購車 <span>{lines.length}</span></h2><p>送出後由人員核實身分、庫存與實際價格。</p></div>
           {!lines.length ? <div className="guest-shop-empty-cart">先從左側商品目錄選擇數量。</div> : <><div className="guest-shop-cart-lines">{lines.map((line) => <div key={line.product.productId}><div><strong>{line.product.name}</strong><small>{line.product.sku} · {line.quantity} 件</small></div><button type="button" aria-label={`移除 ${line.product.name}`} onClick={() => changeQuantity(line.product, 0)}>移除</button></div>)}</div>{referenceBasis ? <div className="guest-shop-reference"><span>建議售價參考合計（{referenceBasis === 'TAX_INCLUDED' ? '含稅' : '未稅'}）</span><strong>{money(referenceTotal)}</strong></div> : <p className="guest-shop-mixed-tax">品項稅別不同，請依各商品參考價查看；正式金額以報價單為準。</p>}</>}
           <form onSubmit={(event) => void submit(event)} className="guest-shop-form">
@@ -165,9 +168,14 @@ export default function GuestShopPage() {
             <button type="submit" className="guest-shop-submit" disabled={!lines.length || submitting}>{submitting ? '建立中…' : '建立待確認採購單'}</button>
             <p>建立後會產生可查看品項的採購單連結。這仍是待確認需求，尚非正式銷貨單；建議售價僅供參考。</p>
           </form>
-        </aside>
+        </aside> : <aside className="guest-shop-cart guest-shop-preview" aria-labelledby="guest-shop-preview-title">
+          <span className="guest-shop-kicker">CATALOG PREVIEW</span>
+          <h2 id="guest-shop-preview-title">預覽中，暫不受理採購單</h2>
+          <p>目前僅開放瀏覽公開商品與建議售價。如有採購需求，請聯絡業務確認庫存與正式報價。</p>
+          <button type="button" className="guest-shop-submit" disabled>暫不受理採購單</button>
+        </aside>}
       </div>
     </main>
-    <footer className="guest-shop-footer">Corely · 商品採購需求入口</footer>
+    <footer className="guest-shop-footer">Corely · {publicOrderEnabled ? '商品採購需求入口' : '公開商品目錄預覽'}</footer>
   </div>
 }

@@ -58,6 +58,8 @@ import {
 } from '../services/dashboard.service'
 import { invoicingService, InvoiceQueueResponse } from '../services/invoicing.service'
 import { resolveEntityId } from '../services/entities.service'
+import { useAuth } from '../contexts/AuthContext'
+import { hasPermission } from '../utils/access'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -81,6 +83,24 @@ const formatMoney = (value: unknown) => `NT$ ${formatNumber(value, { maximumFrac
 
 const formatPercent = (value: unknown, digits = 2) => `${toNumber(value).toFixed(digits)}%`
 
+const optionalNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+const formatOptionalNumber = (value: unknown) => {
+  const number = optionalNumber(value)
+  return number === null ? '—' : formatNumber(number)
+}
+
+const formatOptionalPercent = (value: unknown) => {
+  const number = optionalNumber(value)
+  return number === null ? '—' : formatPercent(number)
+}
+
+const statisticValue = (value: unknown) => optionalNumber(value) ?? '—'
+
 interface ReportRow {
   key: string
   category: string
@@ -93,6 +113,10 @@ interface ReportRow {
 }
 
 const ReportsPage: React.FC = () => {
+  const { user } = useAuth()
+  const canViewCost = hasPermission(user, 'product_cost:read')
+  const canViewMargin = canViewCost && hasPermission(user, 'financial_margin:read')
+  const canViewNetProfit = canViewMargin && hasPermission(user, 'financial_net_profit:read')
   const reportRequestRef = useRef(0)
   const [loading, setLoading] = useState(false)
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs().startOf('year'), dayjs()])
@@ -192,10 +216,10 @@ const ReportsPage: React.FC = () => {
       const accountingStart = start.startOf('day').toISOString()
       const accountingEnd = end.endOf('day').toISOString()
       const results = await Promise.allSettled([
-        accountingService.getIncomeStatement(accountingStart, accountingEnd, entityId),
-        accountingService.getBalanceSheet(accountingEnd, entityId),
-        accountingService.getTrialBalance(accountingEnd, entityId),
-        accountingService.getGeneralLedger(accountingStart, accountingEnd, entityId),
+        canViewNetProfit ? accountingService.getIncomeStatement(accountingStart, accountingEnd, entityId) : Promise.resolve(null),
+        canViewNetProfit ? accountingService.getBalanceSheet(accountingEnd, entityId) : Promise.resolve(null),
+        canViewNetProfit ? accountingService.getTrialBalance(accountingEnd, entityId) : Promise.resolve(null),
+        canViewNetProfit ? accountingService.getGeneralLedger(accountingStart, accountingEnd, entityId) : Promise.resolve(null),
         dashboardService.getOperationsHub({
           entityId,
           startDate: start.format('YYYY-MM-DD'),
@@ -213,23 +237,23 @@ const ReportsPage: React.FC = () => {
           startDate: start.format('YYYY-MM-DD'),
           endDate: end.format('YYYY-MM-DD'),
         }),
-        dashboardService.getMonthlyChannelReconciliation({
+        canViewNetProfit ? dashboardService.getMonthlyChannelReconciliation({
           entityId,
           startDate: start.format('YYYY-MM-DD'),
           endDate: end.format('YYYY-MM-DD'),
-        }),
+        }) : Promise.resolve(null),
         invoicingService.getQueue({
           entityId,
           startDate: start.format('YYYY-MM-DD'),
           endDate: end.format('YYYY-MM-DD'),
           limit: 6,
         }),
-        dashboardService.getOrderReconciliationAudit({
+        canViewNetProfit ? dashboardService.getOrderReconciliationAudit({
           entityId,
           startDate: start.format('YYYY-MM-DD'),
           endDate: end.format('YYYY-MM-DD'),
           limit: 50,
-        }),
+        }) : Promise.resolve(null),
       ])
 
       if (requestId !== reportRequestRef.current) return
@@ -252,25 +276,25 @@ const ReportsPage: React.FC = () => {
       if (incomeResult.status === 'fulfilled') {
         setIncomeStatement(incomeResult.value)
       } else {
-        failedSections.push('損益表')
+        if (canViewNetProfit) failedSections.push('損益表')
       }
 
       if (balanceResult.status === 'fulfilled') {
         setBalanceSheet(balanceResult.value)
       } else {
-        failedSections.push('資產負債表')
+        if (canViewNetProfit) failedSections.push('資產負債表')
       }
 
       if (trialResult.status === 'fulfilled') {
         setTrialBalance(trialResult.value)
       } else {
-        failedSections.push('試算表')
+        if (canViewNetProfit) failedSections.push('試算表')
       }
 
       if (ledgerResult.status === 'fulfilled') {
         setGeneralLedger(ledgerResult.value)
       } else {
-        failedSections.push('總分類帳')
+        if (canViewNetProfit) failedSections.push('總分類帳')
       }
 
       if (operationsResult.status === 'fulfilled') {
@@ -294,7 +318,7 @@ const ReportsPage: React.FC = () => {
       if (monthlyResult.status === 'fulfilled') {
         setMonthlyReconciliation(monthlyResult.value)
       } else {
-        failedSections.push('月度對帳矩陣')
+        if (canViewNetProfit) failedSections.push('月度對帳矩陣')
       }
 
       if (invoiceResult.status === 'fulfilled') {
@@ -306,7 +330,7 @@ const ReportsPage: React.FC = () => {
       if (auditResult.status === 'fulfilled') {
         setReconciliationAudit(auditResult.value)
       } else {
-        failedSections.push('逐筆對帳稽核')
+        if (canViewNetProfit) failedSections.push('逐筆對帳稽核')
       }
 
       setLoadIssues(failedSections)
@@ -325,7 +349,7 @@ const ReportsPage: React.FC = () => {
 
   useEffect(() => {
     fetchData()
-  }, [dateRange, managementGroupBy])
+  }, [dateRange, managementGroupBy, canViewCost, canViewMargin, canViewNetProfit])
 
   // Transform Income Statement Data
   const getPLData = (): ReportRow[] => {
@@ -355,7 +379,7 @@ const ReportsPage: React.FC = () => {
       { key: 'header_exp', category: '營業費用', amount: null, isHeader: true },
       ...expenses,
       { key: 'total_exp', category: '總費用', amount: toNumber(incomeStatement.totalExpense), isTotal: true },
-      { key: 'net_income', category: '淨利', amount: toNumber(incomeStatement.netIncome), isTotal: true, isNet: true }
+      { key: 'net_income', category: '淨利', amount: optionalNumber(incomeStatement.netIncome), isTotal: true, isNet: true }
     ]
   }
 
@@ -499,7 +523,7 @@ const ReportsPage: React.FC = () => {
               description={`目前失敗區塊：${loadIssues.join('、')}。其餘已成功讀到的區塊仍會先顯示，不會整頁空白。`}
             />
           ) : null}
-          {managementSummary?.releaseGate?.status === 'blocked' ? (
+          {canViewNetProfit && managementSummary?.releaseGate?.status === 'blocked' ? (
             <Alert
               showIcon
               type="error"
@@ -507,7 +531,7 @@ const ReportsPage: React.FC = () => {
               message={`財務報表暫不可發布：尚有 ${managementSummary.journalApproval.counts.unapproved} 筆未審核分錄`}
               description={managementSummary.releaseGate.reason}
             />
-          ) : managementSummary?.releaseGate?.status === 'ready' ? (
+          ) : canViewNetProfit && managementSummary?.releaseGate?.status === 'ready' ? (
             <Alert
               showIcon
               type="success"
@@ -516,7 +540,7 @@ const ReportsPage: React.FC = () => {
               description="正式損益表、資產負債表、試算表與總分類帳只採用已審核分錄。"
             />
           ) : null}
-          <Tabs defaultActiveKey="1" type="card" size="large" className="custom-tabs">
+          <Tabs defaultActiveKey={canViewNetProfit ? '1' : '0.7'} type="card" size="large" className="custom-tabs">
             <TabPane
               tab={
                 <span className="flex items-center gap-2">
@@ -862,7 +886,9 @@ const ReportsPage: React.FC = () => {
                     年 / 季 / 月 / 週管理報表
                   </Title>
                   <Text className="text-slate-500">
-                    先用真實訂單、收款、手續費、估算成本與費用去彙整公司營運數字。
+                    {canViewCost || canViewMargin || canViewNetProfit
+                      ? '依真實訂單與收款彙整營運數字；成本與損益僅顯示已授權資料。'
+                      : '依真實訂單與收款彙整營運數字。'}
                   </Text>
                 </div>
                 <Select<ManagementSummaryGroupBy>
@@ -881,32 +907,32 @@ const ReportsPage: React.FC = () => {
               <Row gutter={[16, 16]}>
                 <Col xs={24} md={8} xl={4}>
                   <Card bordered={false} className="shadow-sm">
-                    <Statistic title="營業額" value={managementSummary ? (managementSummary.summary?.revenue ?? 0) : '—'} precision={0} prefix={managementSummary ? 'NT$' : undefined} />
+                    <Statistic title="營業額" value={statisticValue(managementSummary?.summary?.revenue)} precision={0} prefix={optionalNumber(managementSummary?.summary?.revenue) === null ? undefined : 'NT$'} />
                   </Card>
                 </Col>
-                <Col xs={24} md={8} xl={4}>
+                {canViewMargin ? <Col xs={24} md={8} xl={4}>
                   <Card bordered={false} className="shadow-sm">
-                    <Statistic title="毛利" value={managementSummary ? (managementSummary.summary?.grossProfit ?? 0) : '—'} precision={0} prefix={managementSummary ? 'NT$' : undefined} />
+                    <Statistic title="毛利" value={statisticValue(managementSummary?.summary?.grossProfit)} precision={0} prefix={optionalNumber(managementSummary?.summary?.grossProfit) === null ? undefined : 'NT$'} />
                   </Card>
-                </Col>
-                <Col xs={24} md={8} xl={4}>
+                </Col> : null}
+                {canViewMargin ? <Col xs={24} md={8} xl={4}>
                   <Card bordered={false} className="shadow-sm">
-                    <Statistic title="毛利率" value={managementSummary ? (managementSummary.summary?.grossMarginPct ?? 0) : '—'} precision={2} suffix={managementSummary ? '%' : undefined} />
+                    <Statistic title="毛利率" value={statisticValue(managementSummary?.summary?.grossMarginPct)} precision={2} suffix={optionalNumber(managementSummary?.summary?.grossMarginPct) === null ? undefined : '%'} />
                   </Card>
-                </Col>
-                <Col xs={24} md={8} xl={4}>
+                </Col> : null}
+                {canViewNetProfit ? <Col xs={24} md={8} xl={4}>
                   <Card bordered={false} className="shadow-sm">
-                    <Statistic title="淨利" value={managementSummary ? (managementSummary.summary?.netProfit ?? 0) : '—'} precision={0} prefix={managementSummary ? 'NT$' : undefined} />
+                    <Statistic title="淨利" value={statisticValue(managementSummary?.summary?.netProfit)} precision={0} prefix={optionalNumber(managementSummary?.summary?.netProfit) === null ? undefined : 'NT$'} />
                   </Card>
-                </Col>
-                <Col xs={24} md={8} xl={4}>
+                </Col> : null}
+                {canViewNetProfit ? <Col xs={24} md={8} xl={4}>
                   <Card bordered={false} className="shadow-sm">
-                    <Statistic title="手續費" value={managementSummary ? (managementSummary.summary?.feeTotal ?? 0) : '—'} precision={0} prefix={managementSummary ? 'NT$' : undefined} />
+                    <Statistic title="手續費" value={statisticValue(managementSummary?.summary?.feeTotal)} precision={0} prefix={optionalNumber(managementSummary?.summary?.feeTotal) === null ? undefined : 'NT$'} />
                   </Card>
-                </Col>
+                </Col> : null}
                 <Col xs={24} md={8} xl={4}>
                   <Card bordered={false} className="shadow-sm">
-                    <Statistic title="應收未收" value={managementSummary ? (managementSummary.summary?.openArAmount ?? 0) : '—'} precision={0} prefix={managementSummary ? 'NT$' : undefined} />
+                    <Statistic title="應收未收" value={statisticValue(managementSummary?.summary?.openArAmount)} precision={0} prefix={optionalNumber(managementSummary?.summary?.openArAmount) === null ? undefined : 'NT$'} />
                   </Card>
                 </Col>
               </Row>
@@ -924,8 +950,8 @@ const ReportsPage: React.FC = () => {
                             <Tooltip formatter={(value: number) => formatMoney(value)} />
                             <Legend />
                             <Line type="monotone" dataKey="revenue" name="營業額" stroke="#2563eb" strokeWidth={2} />
-                            <Line type="monotone" dataKey="grossProfit" name="毛利" stroke="#16a34a" strokeWidth={2} />
-                            <Line type="monotone" dataKey="netProfit" name="淨利" stroke="#f97316" strokeWidth={2} />
+                            {canViewMargin ? <Line type="monotone" dataKey="grossProfit" name="毛利" stroke="#16a34a" strokeWidth={2} /> : null}
+                            {canViewNetProfit ? <Line type="monotone" dataKey="netProfit" name="淨利" stroke="#f97316" strokeWidth={2} /> : null}
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
@@ -954,39 +980,39 @@ const ReportsPage: React.FC = () => {
                           align: 'right',
                           render: (value: number) => formatNumber(value),
                         },
-                        {
+                        ...(canViewCost ? [{
                           title: '估算成本',
                           dataIndex: 'estimatedCogs',
                           key: 'estimatedCogs',
-                          align: 'right',
-                          render: (value: number) => formatNumber(value),
-                        },
-                        {
+                          align: 'right' as const,
+                          render: (value: number | null | undefined) => formatOptionalNumber(value),
+                        }] : []),
+                        ...(canViewMargin ? [{
                           title: '毛利 / 毛利率',
                           key: 'grossProfit',
-                          align: 'right',
-                          render: (_, record) => `${formatNumber(record.grossProfit)} / ${formatPercent(record.grossMarginPct)}`,
-                        },
-                        {
+                          align: 'right' as const,
+                          render: (_: unknown, record: typeof managementPeriods[number]) => `${formatOptionalNumber(record.grossProfit)} / ${formatOptionalPercent(record.grossMarginPct)}`,
+                        }] : []),
+                        ...(canViewNetProfit ? [{
                           title: '手續費',
                           dataIndex: 'feeTotal',
                           key: 'feeTotal',
-                          align: 'right',
-                          render: (value: number) => formatNumber(value),
-                        },
-                        {
+                          align: 'right' as const,
+                          render: (value: number | null | undefined) => formatOptionalNumber(value),
+                        }] : []),
+                        ...(canViewNetProfit ? [{
                           title: '營運費用',
                           dataIndex: 'operatingExpenses',
                           key: 'operatingExpenses',
-                          align: 'right',
-                          render: (value: number) => formatNumber(value),
-                        },
-                        {
+                          align: 'right' as const,
+                          render: (value: number | null | undefined) => formatOptionalNumber(value),
+                        }] : []),
+                        ...(canViewNetProfit ? [{
                           title: '淨利 / 淨利率',
                           key: 'netProfit',
-                          align: 'right',
-                          render: (_, record) => `${formatNumber(record.netProfit)} / ${formatPercent(record.netMarginPct)}`,
-                        },
+                          align: 'right' as const,
+                          render: (_: unknown, record: typeof managementPeriods[number]) => `${formatOptionalNumber(record.netProfit)} / ${formatOptionalPercent(record.netMarginPct)}`,
+                        }] : []),
                         {
                           title: '已收率',
                           dataIndex: 'collectedRatePct',
@@ -1084,8 +1110,8 @@ const ReportsPage: React.FC = () => {
               </Row>
             </TabPane>
             
-            {/* Tab 1: Financial Statements */}
-            <TabPane 
+            {/* Formal statements contain account balances and net profit. */}
+            {canViewNetProfit ? <TabPane
               tab={
                 <span className="flex items-center gap-2">
                   <FileTextOutlined />
@@ -1144,9 +1170,9 @@ const ReportsPage: React.FC = () => {
                   </Card>
                 </Col>
               </Row>
-            </TabPane>
+            </TabPane> : null}
 
-            <TabPane
+            {canViewNetProfit ? <TabPane
               tab={
                 <span className="flex items-center gap-2">
                   <FileTextOutlined />
@@ -1293,10 +1319,10 @@ const ReportsPage: React.FC = () => {
                   </Card>
                 </Col>
               </Row>
-            </TabPane>
+            </TabPane> : null}
 
             {/* Tab 2: Sales Analysis */}
-            <TabPane
+            {canViewNetProfit ? <TabPane
               tab={
                 <span className="flex items-center gap-2">
                   <BarChartOutlined />
@@ -1362,14 +1388,14 @@ const ReportsPage: React.FC = () => {
                         dataIndex: 'payoutNet',
                         key: 'payoutNet',
                         align: 'right',
-                        render: (value: number) => formatNumber(value),
+                        render: (value: number | null | undefined) => formatOptionalNumber(value),
                       },
                       {
                         title: '手續費',
                         dataIndex: 'feeTotal',
                         key: 'feeTotal',
                         align: 'right',
-                        render: (value: number) => formatNumber(value),
+                        render: (value: number | null | undefined) => formatOptionalNumber(value),
                       },
                       {
                         title: '待撥款',
@@ -1407,9 +1433,9 @@ const ReportsPage: React.FC = () => {
                   />
                 ) : <Empty description="無月度對帳資料" />}
               </Card>
-            </TabPane>
+            </TabPane> : null}
 
-            <TabPane
+            {canViewNetProfit ? <TabPane
               tab={
                 <span className="flex items-center gap-2">
                   <PieChartOutlined />
@@ -1451,9 +1477,9 @@ const ReportsPage: React.FC = () => {
                     <Card bordered={false} className="bg-slate-50">
                       <Statistic
                         title="總手續費"
-                        value={reconciliationAudit ? (reconciliationAudit.summary?.totalFeeAmount ?? 0) : '—'}
+                        value={statisticValue(reconciliationAudit?.summary?.totalFeeAmount)}
                         precision={0}
-                        prefix={reconciliationAudit ? 'NT$' : undefined}
+                        prefix={optionalNumber(reconciliationAudit?.summary?.totalFeeAmount) === null ? undefined : 'NT$'}
                       />
                     </Card>
                   </Col>
@@ -1461,9 +1487,9 @@ const ReportsPage: React.FC = () => {
                     <Card bordered={false} className="bg-slate-50">
                       <Statistic
                         title="金流手續費"
-                        value={reconciliationAudit ? (reconciliationAudit.summary?.totalGatewayFeeAmount ?? 0) : '—'}
+                        value={statisticValue(reconciliationAudit?.summary?.totalGatewayFeeAmount)}
                         precision={0}
-                        prefix={reconciliationAudit ? 'NT$' : undefined}
+                        prefix={optionalNumber(reconciliationAudit?.summary?.totalGatewayFeeAmount) === null ? undefined : 'NT$'}
                       />
                     </Card>
                   </Col>
@@ -1471,10 +1497,10 @@ const ReportsPage: React.FC = () => {
                     <Card bordered={false} className="bg-slate-50">
                       <Statistic
                         title="平台手續費"
-                        value={reconciliationAudit ? (reconciliationAudit.summary?.totalPlatformFeeAmount ?? 0) : '—'}
+                        value={statisticValue(reconciliationAudit?.summary?.totalPlatformFeeAmount)}
                         precision={0}
-                        prefix={reconciliationAudit ? 'NT$' : undefined}
-                        suffix={reconciliationAudit ? ` / ${formatPercent(reconciliationAudit.summary?.feeTakeRatePct)}` : undefined}
+                        prefix={optionalNumber(reconciliationAudit?.summary?.totalPlatformFeeAmount) === null ? undefined : 'NT$'}
+                        suffix={optionalNumber(reconciliationAudit?.summary?.feeTakeRatePct) === null ? undefined : ` / ${formatOptionalPercent(reconciliationAudit?.summary?.feeTakeRatePct)}`}
                       />
                     </Card>
                   </Col>
@@ -1527,7 +1553,7 @@ const ReportsPage: React.FC = () => {
                         title: '手續費',
                         key: 'fees',
                         align: 'right',
-                        render: (_, record) => `${formatNumber(record.feeTotalAmount, { maximumFractionDigits: 0 })} (${formatPercent(record.feeRatePct)})`,
+                        render: (_, record) => `${formatOptionalNumber(record.feeTotalAmount)} (${formatOptionalPercent(record.feeRatePct)})`,
                       },
                       {
                         title: '發票',
@@ -1552,7 +1578,7 @@ const ReportsPage: React.FC = () => {
                   />
                 </div>
               </Card>
-            </TabPane>
+            </TabPane> : null}
 
             <TabPane
               tab={
@@ -1571,7 +1597,7 @@ const ReportsPage: React.FC = () => {
             </TabPane>
 
             {/* Tab 3: Expense Analysis */}
-            <TabPane 
+            {canViewNetProfit ? <TabPane
               tab={
                 <span className="flex items-center gap-2">
                   <PieChartOutlined />
@@ -1631,7 +1657,7 @@ const ReportsPage: React.FC = () => {
                   </Card>
                 </Col>
               </Row>
-            </TabPane>
+            </TabPane> : null}
           </Tabs>
         </Spin>
       </div>
