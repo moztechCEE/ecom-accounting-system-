@@ -2661,6 +2661,7 @@ model B2bProductPriceBook {
   id String @id @default(uuid())
   entityId String @map("entity_id")
   productId String @map("product_id")
+  brand String? @db.VarChar(100)
   msrp Decimal @db.Decimal(18,2)
   regularPrice Decimal? @map("regular_price") @db.Decimal(18,2)
   groupBuyPrice Decimal? @map("group_buy_price") @db.Decimal(18,2)
@@ -2746,7 +2747,9 @@ model B2bGuestInquiry {
   entity Entity @relation(fields:[entityId],references:[id],onDelete:Restrict)
   matchedCustomer Customer? @relation(fields:[matchedCustomerId,entityId],references:[id,entityId],onDelete:Restrict)
   items B2bGuestInquiryItem[]
+  purchaseRequest B2bPurchaseRequest?
   @@unique([entityId,requestId])
+  @@unique([id,entityId])
   @@index([entityId,status,createdAt])
   @@map("b2b_guest_inquiries")
 }
@@ -2780,13 +2783,15 @@ model B2bPurchaseRequest {
   id String @id @default(uuid())
   entityId String @map("entity_id")
   customerId String @map("customer_id")
-  accountId String @map("account_id")
+  accountId String? @map("account_id")
   requestId String @map("request_id")
   sourceHash String @map("source_hash")
+  sourceKind String @default("PORTAL") @map("source_kind")
+  sourceGuestInquiryId String? @unique @map("source_guest_inquiry_id")
   salesOrderId String? @unique @map("sales_order_id")
   salesOrder SalesOrder? @relation(fields:[salesOrderId],references:[id],onDelete:Restrict)
   requestNumber String @unique @map("request_number")
-  customerPoNumber String @map("customer_po_number")
+  customerPoNumber String? @map("customer_po_number")
   status String @default("pending_stock_review")
   currency String @default("TWD")
   subtotal Decimal @db.Decimal(18,2)
@@ -2800,9 +2805,11 @@ model B2bPurchaseRequest {
   deliveryDate DateTime? @map("delivery_date") @db.Date
   entity Entity @relation(fields:[entityId],references:[id])
   customer Customer @relation(fields:[customerId],references:[id])
-  account B2bAccount @relation(fields:[accountId],references:[id])
+  account B2bAccount? @relation(fields:[accountId],references:[id])
+  sourceGuestInquiry B2bGuestInquiry? @relation(fields:[sourceGuestInquiryId,entityId],references:[id,entityId],onDelete:Restrict)
   items B2bRequestItem[]
   @@unique([entityId,customerId,requestId])
+  @@unique([sourceGuestInquiryId,entityId])
   @@index([entityId,status,createdAt])
   stockReviews B2bStockReview[]
   issuedQuotes B2bIssuedQuote[]
@@ -2855,16 +2862,42 @@ model B2bIssuedQuote {
   deliveryDate        DateTime?          @map("delivery_date") @db.Date
   acceptedAt          DateTime?          @map("accepted_at") @db.Timestamptz
   acceptedByAccountId String?            @map("accepted_by_account_id")
+  acceptedByEmail     String?            @map("accepted_by_email")
   withdrawnAt         DateTime?          @map("withdrawn_at") @db.Timestamptz
   withdrawnBy         String?            @map("withdrawn_by")
   withdrawalReason    String?            @map("withdrawal_reason")
   request             B2bPurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
   quotation           SalesQuotation     @relation(fields: [quotationId], references: [id], onDelete: Restrict)
   acceptedByAccount   B2bAccount?        @relation(fields: [acceptedByAccountId], references: [id], onDelete: Restrict)
+  emailAccess         B2bQuoteEmailAccess?
 
   @@unique([requestId, version])
   @@index([status, issuedAt])
   @@map("b2b_issued_quotes")
+}
+
+// The opaque bearer secret exists only in the outgoing message. A new send
+// attempt rotates its hash, so a failed or superseded delivery is unusable.
+model B2bQuoteEmailAccess {
+  id                 String         @id @default(uuid())
+  issuedQuoteId      String         @unique @map("issued_quote_id")
+  tokenHash          String         @unique @map("token_hash")
+  recipientEmail     String         @map("recipient_email")
+  verificationReason String         @map("verification_reason")
+  verifiedBy         String         @map("verified_by")
+  verifiedAt         DateTime       @map("verified_at") @db.Timestamptz
+  expiresAt          DateTime       @map("expires_at") @db.Timestamptz
+  sendState          String         @default("SENDING") @map("send_state")
+  attemptId          String         @map("attempt_id")
+  sendLeaseUntil     DateTime       @map("send_lease_until") @db.Timestamptz
+  sentAt             DateTime?      @map("sent_at") @db.Timestamptz
+  consumedAt         DateTime?      @map("consumed_at") @db.Timestamptz
+  revokedAt          DateTime?      @map("revoked_at") @db.Timestamptz
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  issuedQuote        B2bIssuedQuote @relation(fields: [issuedQuoteId], references: [id], onDelete: Restrict)
+
+  @@index([expiresAt])
+  @@map("b2b_quote_email_accesses")
 }
 
 // Immutable accepted WMS handover evidence. Receipt is acknowledgement, never inventory posting.

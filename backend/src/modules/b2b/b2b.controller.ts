@@ -16,6 +16,7 @@ import {
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { EntityAccessGuard } from '../../common/guards/entity-access.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { RequireEntityAccess } from '../../common/decorators/entity-access.decorator';
 import { B2bLogin, B2bSession } from './b2b-auth.guard';
 import { B2bService } from './b2b.service';
@@ -35,9 +36,33 @@ import {
   B2bReviewDto,
   B2bSupplierAccountDto,
 } from './b2b.dto';
+import { B2bQuoteEmailDto, B2bQuoteTokenDto } from './b2b-quote-email.dto';
+import { B2bGuestRevisionDto } from './b2b-guest-revision.dto';
 
 type CustomerRequest = { b2b: B2bIdentity };
 type StaffRequest = { user: { id: string } };
+@Public()
+@Controller('b2b/public/quote-access')
+export class B2bPrivateQuoteController {
+  constructor(private readonly service: B2bService) {}
+
+  @Post('preview')
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
+  @Header('X-Robots-Tag', 'noindex, nofollow')
+  preview(@Body() dto: B2bQuoteTokenDto) {
+    return this.service.previewEmailQuote(dto);
+  }
+
+  @Post('accept')
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
+  @Header('X-Robots-Tag', 'noindex, nofollow')
+  accept(@Body() dto: B2bQuoteTokenDto) {
+    return this.service.acceptEmailQuote(dto);
+  }
+}
+
 @Controller('b2b/portal')
 @B2bSession()
 export class B2bPortalController {
@@ -163,6 +188,23 @@ export class B2bAdminController {
   requests(@Query() query: B2bEntityDto) {
     return this.service.requests(query.entityId);
   }
+  @Get('requests/:id/stock-snapshot')
+  @Header('Cache-Control', 'no-store')
+  stockSnapshot(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Query() query: B2bEntityDto,
+  ) {
+    return this.service.stockSnapshot(query.entityId, id);
+  }
+  @Post('requests/:id/revise-guest')
+  @RequirePermissions({ resource: 'sales_orders', action: 'create' })
+  reviseGuestRequest(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: B2bGuestRevisionDto,
+    @Req() req: StaffRequest,
+  ) {
+    return this.service.reviseGuestRequest(id, dto, req.user.id);
+  }
   @Post('requests/:id/review')
   @RequirePermissions({ resource: 'sales_orders', action: 'create' })
   review(
@@ -191,6 +233,18 @@ export class B2bAdminController {
     @Query() query: B2bEntityDto,
   ) {
     return this.service.staffFormalQuote(query.entityId, id, version);
+  }
+
+  @Post('requests/:id/quotes/:version/email')
+  @RequirePermissions({ resource: 'sales_orders', action: 'create' })
+  @Header('Cache-Control', 'no-store')
+  emailGuestQuote(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('version', ParseIntPipe) version: number,
+    @Body() dto: B2bQuoteEmailDto,
+    @Req() req: StaffRequest,
+  ) {
+    return this.service.emailGuestQuote(id, version, dto, req.user.id);
   }
 
   @Post('requests/:id/quotes/:version/withdraw')

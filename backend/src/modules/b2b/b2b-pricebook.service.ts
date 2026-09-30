@@ -45,6 +45,34 @@ function audienceCode(input?: string | null) {
   return input?.trim().toUpperCase() || null;
 }
 
+function publicCatalogWhere(
+  entityId: string,
+  search?: string,
+  brand?: string,
+  category?: string,
+): Prisma.B2bProductPriceBookWhereInput {
+  return {
+    entityId,
+    isPublic: true,
+    ...(brand ? { brand } : {}),
+    product: {
+      entityId,
+      isActive: true,
+      type: ProductType.SIMPLE,
+      b2bCatalog: { some: { entityId, isPublished: true } },
+      ...(category ? { category } : {}),
+      ...(search
+        ? {
+            OR: [
+              { sku: { contains: search, mode: 'insensitive' as const } },
+              { name: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    },
+  };
+}
+
 function checkMoney(value: number, field: string) {
   if (
     !Number.isFinite(value) ||
@@ -201,6 +229,7 @@ export class B2bPriceBookService {
         productId: row.productId,
         sku: row.product.sku,
         name: row.product.name,
+        brand: row.brand,
         productIsActive: row.product.isActive,
         isPublished: row.product.b2bCatalog[0]?.isPublished || false,
         isPublic: row.isPublic,
@@ -228,6 +257,21 @@ export class B2bPriceBookService {
     };
   }
 
+  async brands(entityId: string) {
+    await this.company(entityId);
+    const rows = await this.db.b2bProductPriceBook.findMany({
+      where: { entityId, brand: { not: null } },
+      select: { brand: true },
+      distinct: ['brand'],
+      orderBy: { brand: 'asc' },
+    });
+    return {
+      brands: rows
+        .map((row) => row.brand)
+        .filter((value): value is string => Boolean(value?.trim())),
+    };
+  }
+
   async putBook(productId: string, dto: B2bPutPriceBookDto, actorId: string) {
     await this.company(dto.entityId);
     await this.product(dto.entityId, productId);
@@ -247,6 +291,7 @@ export class B2bPriceBookService {
       dto.groupBuyPrice == null
         ? null
         : checkMoney(dto.groupBuyPrice, '團購主進貨價');
+    const brand = dto.brand?.trim() || null;
     const result = await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM products WHERE id=${productId} AND entity_id=${dto.entityId} FOR UPDATE`;
       const before = await tx.b2bProductPriceBook.findUnique({
@@ -257,6 +302,7 @@ export class B2bPriceBookService {
         create: {
           entityId: dto.entityId,
           productId,
+          brand,
           msrp,
           regularPrice,
           groupBuyPrice,
@@ -267,6 +313,7 @@ export class B2bPriceBookService {
           updatedBy: actorId,
         },
         update: {
+          ...(dto.brand !== undefined ? { brand } : {}),
           msrp,
           regularPrice,
           groupBuyPrice,
@@ -288,6 +335,7 @@ export class B2bPriceBookService {
     });
     return {
       productId: result.productId,
+      brand: result.brand,
       msrp: asMoney(result.msrp),
       regularPrice: result.regularPrice ? asMoney(result.regularPrice) : null,
       groupBuyPrice: result.groupBuyPrice
@@ -460,6 +508,8 @@ export class B2bPriceBookService {
     limit = 100,
     offset = 0,
     search?: string,
+    brand?: string,
+    category?: string,
   ) {
     if (process.env.B2B_PUBLIC_CATALOG_ENABLED !== 'true')
       throw new ServiceUnavailableException('公開商品頁尚未啟用');
@@ -476,29 +526,16 @@ export class B2bPriceBookService {
     const term = search?.trim();
     if (term && term.length > 200)
       throw new BadRequestException('搜尋字串過長');
-    const where: Prisma.B2bProductPriceBookWhereInput = {
-      entityId,
-      isPublic: true,
-      product: {
-        entityId,
-        isActive: true,
-        type: ProductType.SIMPLE,
-        b2bCatalog: { some: { entityId, isPublished: true } },
-        ...(term
-          ? {
-              OR: [
-                { sku: { contains: term, mode: 'insensitive' } },
-                { name: { contains: term, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      },
-    };
+    const brandFilter = brand?.trim();
+    if (brandFilter && brandFilter.length > 100)
+      throw new BadRequestException('品牌名稱過長');
+    const where = publicCatalogWhere(entityId, term, brandFilter, category);
     const [rows, total] = await Promise.all([
       this.db.b2bProductPriceBook.findMany({
         where,
         select: {
           productId: true,
+          brand: true,
           msrp: true,
           currency: true,
           taxBasis: true,
@@ -521,6 +558,7 @@ export class B2bPriceBookService {
         productId: row.productId,
         sku: row.product.sku,
         name: row.product.name,
+        brand: row.brand,
         category: row.product.category,
         msrp: asMoney(row.msrp),
         currency: row.currency,
@@ -530,6 +568,35 @@ export class B2bPriceBookService {
       limit,
       offset,
       hasMore: offset + rows.length < total,
+    };
+  }
+
+  async publicCatalogFacets(entityId: string) {
+    if (process.env.B2B_PUBLIC_CATALOG_ENABLED !== 'true')
+      throw new ServiceUnavailableException('公開商品頁尚未啟用');
+    await this.company(entityId);
+    const rows = await this.db.b2bProductPriceBook.findMany({
+      where: publicCatalogWhere(entityId),
+      select: {
+        brand: true,
+        product: { select: { category: true } },
+      },
+    });
+    return {
+      brands: [
+        ...new Set(
+          rows
+            .map((row) => row.brand)
+            .filter((value): value is string => Boolean(value?.trim())),
+        ),
+      ].sort((a, b) => a.localeCompare(b)),
+      categories: [
+        ...new Set(
+          rows
+            .map((row) => row.product.category)
+            .filter((value): value is string => Boolean(value?.trim())),
+        ),
+      ].sort((a, b) => a.localeCompare(b)),
     };
   }
 

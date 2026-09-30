@@ -19,6 +19,7 @@ import { EntityAccessGuard } from '../../common/guards/entity-access.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import {
   B2bGuestEntityDto,
+  B2bGuestConvertDto,
   B2bGuestListDto,
   B2bGuestMatchDto,
   B2bGuestRejectDto,
@@ -36,6 +37,13 @@ export class B2bGuestPublicController {
   @Header('Cache-Control', 'no-store')
   submit(@Body() dto: B2bGuestSubmitDto, @Req() req: { ip?: string }) {
     return this.service.submit(dto, req.ip);
+  }
+
+  @Get('orders/:reference')
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
+  order(@Param('reference') reference: string, @Req() req: { ip?: string }) {
+    return this.service.publicOrder(reference, req.ip);
   }
 }
 
@@ -73,6 +81,20 @@ export class B2bGuestAdminController {
     @Req() req: { user: { id: string } },
   ) {
     return this.service.match(id, dto, req.user.id);
+  }
+
+  @Post(':id/convert')
+  @RequirePermissions(
+    { resource: 'sales_orders', action: 'read' },
+    { resource: 'sales_orders', action: 'create' },
+  )
+  @Header('Cache-Control', 'no-store')
+  convert(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: B2bGuestConvertDto,
+    @Req() req: { user: { id: string } },
+  ) {
+    return this.service.convert(id, dto, req.user.id);
   }
 
   @Post(':id/reject')

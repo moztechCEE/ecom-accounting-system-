@@ -1725,7 +1725,7 @@
     {
       "id": "sales-quotations",
       "title": "銷售報價",
-      "summary": "建立與查看銷售報價；B2B 正式報價須由客戶登入接受有效版本。",
+      "summary": "建立與查看銷售報價；B2B 正式報價須由對應客戶明確接受有效版本。",
       "keywords": [
         "銷售報價",
         "Sales quotations"
@@ -1738,11 +1738,11 @@
         "steps": [
           "以公司內的客戶搜尋選擇對象，設定報價日期、有效期限與幣別，填寫付款及交貨條件。",
           "加入品項、數量與價格並儲存，開啟報價預覽後列印或存成 PDF。",
-          "由 B2B 客戶採購需求產生的正式報價，應在客戶採購工作台完成人工核庫後開立固定版本；客戶以專用入口登入、查看最新版並明確接受。若客戶已接受但尚未確認銷單，業務可在客戶採購工作台填原因撤回，重新人工核庫後再出新版。"
+          "由 B2B 客戶採購需求產生的正式報價，應在客戶採購工作台完成人工核庫後開立固定版本；既有客戶入口由客戶登入接受，免登入訪客需求則寄到已核實的目前客戶主檔信箱供客戶明確接受。若客戶已接受但尚未確認銷單，業務可在客戶採購工作台填原因撤回，重新人工核庫後再出新版。"
         ],
         "boundaries": [
           "內部備註與顧客列印備註用途不同；輸出前先檢查顧客版內容。",
-          "儲存或下載一般報價不表示已寄出、客戶接受、轉訂單或收到款項。B2B 正式報價的接受紀錄只能由客戶入口建立，員工不得在一般報價狀態欄代替客戶接受；撤回原版保留歷史與原因，原客戶接受不得用來確認新銷單。"
+          "儲存或下載一般報價不表示已寄出、客戶接受、轉訂單或收到款項。B2B 正式報價的接受紀錄須由客戶登入或經核實 Email 的私密連結明確建立，員工不得在一般報價狀態欄代替客戶接受；寄出與瀏覽都不算接受。撤回原版保留歷史與原因，原客戶接受不得用來確認新銷單。"
         ],
         "related": [
           "customers",
@@ -1753,7 +1753,7 @@
       "translations": {
         "en": {
           "title": "Sales quotations",
-          "summary": "Create and view sales quotations; a B2B formal quote requires customer acceptance of a valid version in the portal.",
+          "summary": "Create and view sales quotations; B2B formal quotes require explicit customer acceptance of a valid version.",
           "category": "Sales",
           "keywords": [
             "Sales quotations",
@@ -1763,11 +1763,11 @@
             "steps": [
               "Search for a customer in the selected company, set the quotation date, validity and currency, then enter payment and delivery terms.",
               "Add lines, quantities and prices, save, and open the preview to print or save a PDF.",
-              "For a formal quote sourced from a B2B customer request, first complete manual stock review and issue a fixed version from the customer procurement workbench. The customer signs in to view and explicitly accept the latest version. If accepted but not yet converted to an order, sales can record a reason and withdraw it, then manually re-review stock before issuing a new version."
+              "For a formal quote sourced from a B2B customer request, first complete manual stock review and issue a fixed version from the customer procurement workbench. Existing portal customers sign in to accept; a no-login guest request uses a private link delivered to a verified current customer-master email for explicit acceptance. If accepted but not yet converted to an order, sales can record a reason and withdraw it, then manually re-review stock before issuing a new version."
             ],
             "boundaries": [
               "Internal notes and customer-facing print notes serve different purposes; inspect the customer view before export.",
-              "Saving or downloading a regular quotation does not prove sending, acceptance, order conversion or payment. Only the customer portal can record acceptance of a B2B formal quote; staff cannot mark it accepted through the general quotation status control. A withdrawn version remains in history with its reason, and its former acceptance cannot authorize a new order."
+              "Saving or downloading a regular quotation does not prove sending, acceptance, order conversion or payment. B2B acceptance requires the signed-in customer or the verified-email private link and an explicit customer action; staff cannot mark it accepted through the general quotation status control. SMTP delivery and link viewing are not acceptance. A withdrawn version remains in history with its reason, and its former acceptance cannot authorize a new order."
             ],
             "related": [
               "customers",
@@ -3751,37 +3751,38 @@
     {
       "id": "b2b-guest-shop",
       "title": "免登入商品採購需求",
-      "summary": "訪客只看公開商品的建議售價並送出待核實採購需求；員工再人工配對客戶。",
-      "keywords": ["免登入採購", "建議售價", "牌價", "訪客需求", "顧客詢價"],
+      "summary": "訪客依品牌、分類及搜尋挑選公開商品，僅看建議售價並取得可分享的待核實採購單。",
+      "keywords": ["免登入採購", "建議售價", "牌價", "訪客需求", "品牌", "採購單連結"],
       "path": "/b2b/shop",
+      "aliases": ["/b2b/order/:reference"],
       "module": "b2b",
       "category": "客戶採購",
       "group": "sales",
       "sections": {
         "steps": [
-          "訪客在公開商品頁搜尋已上架且另經匿名公開勾選的商品，只看到建議售價及參考金額；選品後填公司、聯絡人、Email、可選採購單號及需求，送出取得受理編號。",
-          "員工到客戶採購工作台的免登入訪客需求分頁查看明細，使用既有聯絡方式核實身分，記錄依據後人工配對客戶主檔；無效需求可留原因標記無效。"
+          "訪客在公開商品頁依業務設定的品牌、分類或關鍵字搜尋已上架且另經匿名公開勾選的商品，只看到建議售價及參考金額；選品後填公司、聯絡人、Email、可選採購單號及需求，送出取得可分享的採購單連結。",
+          "公開採購單只顯示品項、數量、牌價與受理狀態；員工到客戶採購工作台的免登入訪客需求分頁查看聯絡資料，透過既有管道核實身分並記錄依據，配對客戶主檔，再明確選擇品項、數量與未稅單價轉為內部待核庫需求。"
         ],
         "boundaries": [
           "公開頁不顯示客戶固定價、折數、團購主進貨價、活動價、成本或精確庫存。建議售價與小計不是正式報價，也不保證庫存或交期；送出需求不建立銷貨單、不預留或扣庫。",
-          "公開商品 API、公開送單及每商品匿名發布各有獨立開關與限制，均需由部署和員工明確啟用；受理編號不是查看私人價格的憑證。已配對或標記無效的需求不能在原操作中重新配對。員工配對主檔也不會自動建立既有 B2B 採購需求、正式報價或銷單；私人報價須另經已核准的身分驗證流程。"
+          "公開商品 API、公開送單及每商品匿名發布各有獨立開關與限制，公開送單須先驗證代理來源與限流。採購單連結與受理編號不是查看私人價格的憑證；已配對或標記無效的需求不能在原操作中重新配對。員工配對主檔不會自動建立內部需求、正式報價或銷單；轉內部需求也不代表庫存已確認。"
         ],
         "related": ["b2b-customer-portal", "b2b-purchase-requests", "b2b-staff-workbench", "products"]
       },
       "translations": {
         "en": {
           "title": "Guest product purchase requests",
-          "summary": "Visitors see only public MSRP and submit a purchase request for staff to verify and match to a customer.",
+          "summary": "Visitors browse public products by brand, category or search, see only MSRP and receive a shareable pending purchase receipt.",
           "category": "Customer procurement",
           "keywords": ["guest shopping", "MSRP", "list price", "purchase inquiry", "customer request"],
           "sections": {
             "steps": [
-              "Visitors search products that are published and separately opted in for anonymous display. They see only MSRP and reference amounts, choose quantities, enter company and contact details, optional customer PO and notes, then receive a receipt reference.",
-              "Staff open the Guest inquiries tab of the customer procurement workbench, verify the sender through an established contact channel, record the evidence, and manually match an existing customer master record. They can mark invalid inquiries with a recorded reason."
+              "Visitors browse products published and separately opted in for anonymous display by staff-set brand, category or keyword. They see only MSRP and reference amounts, choose quantities, enter company and contact details, optional customer PO and notes, then receive a shareable purchase receipt link.",
+              "The public receipt shows only items, quantities, MSRP and intake status. Staff open Guest inquiries in the procurement workbench, verify the sender through an established channel, record the evidence, match an existing customer record, then explicitly select lines, quantities and pre-tax unit prices to create an internal request pending manual stock review."
             ],
             "boundaries": [
               "The public page does not disclose fixed customer prices, multipliers, group-buy organizer prices, campaigns, costs or exact stock. MSRP totals are not formal quotations or stock promises; submission creates no sales order, reservation or inventory deduction.",
-              "Anonymous catalog access, guest submission and each product's public opt-in have separate gates. A receipt reference grants no access to private pricing. A matched or rejected inquiry cannot be silently rematched through the original action. Matching a customer master record does not automatically create an existing B2B request, formal quote or sales order; a separately approved identity-verification flow is still needed for private quotes."
+              "Anonymous catalog access, guest submission and each product's public opt-in have separate gates. Public submission requires validated ingress identity and abuse limits. A receipt reference grants no access to private pricing. A matched or rejected inquiry cannot be silently rematched through the original action. Matching alone creates no internal request, formal quote or sales order; conversion still does not confirm stock."
             ],
             "related": ["b2b-customer-portal", "b2b-purchase-requests", "b2b-staff-workbench", "products"]
           }
@@ -3790,6 +3791,7 @@
       "sourcePaths": [
         "frontend/src/App.tsx",
         "frontend/src/pages/b2b/GuestShopPage.tsx",
+        "frontend/src/pages/b2b/GuestOrderPage.tsx",
         "frontend/src/pages/b2b/GuestInquiryManager.tsx",
         "frontend/src/services/b2b-public.service.ts",
         "backend/src/modules/b2b/b2b-pricebook.controller.ts",
@@ -3797,6 +3799,59 @@
         "backend/src/modules/b2b/b2b-guest.controller.ts",
         "backend/src/modules/b2b/b2b-guest.service.ts",
         "backend/src/common/guards/jwt-auth.guard.ts"
+      ]
+    },
+    {
+      "id": "b2b-private-quote",
+      "title": "免登入專屬報價確認",
+      "summary": "訪客需求經人工核庫與收件信箱核實後，由客戶以限時私密連結查看並明確接受固定版次報價。",
+      "keywords": ["免登入報價", "專屬價格", "Email", "正式報價", "確認接受"],
+      "path": "/b2b/private-quote",
+      "module": "b2b",
+      "category": "客戶採購",
+      "group": "sales",
+      "sections": {
+        "steps": [
+          "員工將已核實訪客採購單明確轉為內部需求，完成逐項人工核庫，確認本次數量、未稅價格、交期及條件後出具不可改寫的正式報價版次。",
+          "員工核對收件地址與目前啟用的客戶主檔 Email 或對帳 Email 相同，記錄查核依據，再由系統寄出私密報價連結；LINE 群組僅提醒查收 Email。",
+          "客戶從 Email 開啟限時連結，核對版次、買賣方、商品、數量、價格、總額及條件；同意時明確按「確認接受」。業務收到接受紀錄後仍須在 ERP 確認接單。"
+        ],
+        "boundaries": [
+          "私密連結可被轉寄，持有者可看報價；不得貼在 LINE 群組。連結 24 小時內到期，且不得超過報價有效期限；新版、撤回、逾期或失去客戶信箱對應的連結不能再用。系統只儲存憑證雜湊，不在員工回應中提供連結或原始憑證。",
+          "寄送到 SMTP、開啟連結與客戶明確接受是不同狀態。接受仍不建立銷貨單或預留庫存；業務確認接單後才依接受版快照建立銷單及預留。公開採購單連結不能查看此專屬價格。",
+          "此本地開發流程的公開入口、匿名送單與私密 Email 開關預設關閉，尚未在 DEV 做真實收件與代理限流驗收；不可宣稱目前網站已可使用。"
+        ],
+        "related": ["b2b-guest-shop", "b2b-staff-workbench", "sales-quotations", "sales-orders"]
+      },
+      "translations": {
+        "en": {
+          "title": "No-login private quote acceptance",
+          "summary": "After manual stock and recipient-email verification, a guest customer reviews and explicitly accepts a fixed quote version through a time-limited private link.",
+          "category": "Customer procurement",
+          "keywords": ["private quote", "customer price", "email", "formal quote", "acceptance"],
+          "sections": {
+            "steps": [
+              "Staff explicitly convert a verified guest receipt to an internal request, review stock line by line, confirm the current quantities, pre-tax prices, delivery and terms, then issue an immutable formal quote version.",
+              "Staff verify that the recipient equals the current active customer master email or statement email, record their verification evidence, and send the private quote through the system. Use LINE only to remind the customer to check email.",
+              "The customer opens the time-limited email link, checks version, seller and buyer, items, quantities, prices, total and terms, then explicitly selects Accept. Sales still confirms the ERP order after the acceptance record exists."
+            ],
+            "boundaries": [
+              "A forwarded private link lets its holder view the quote; never paste it into a LINE group. It expires within 24 hours and by the quote validity cutoff. Superseded, withdrawn, expired or no-longer-matched customer-email links cannot be used. Only a token hash is stored; staff responses never contain the raw token or link.",
+              "SMTP acceptance, link viewing and explicit customer acceptance are distinct states. Acceptance itself creates no sales order or reservation; sales confirmation then copies the accepted version into the order and reserves stock. The public purchase receipt cannot reveal private prices.",
+              "This locally developed flow's public catalog, anonymous submission and private email switches default off; real DEV mail and ingress-limit checks remain outstanding. Do not tell customers the live website already supports it."
+            ],
+            "related": ["b2b-guest-shop", "b2b-staff-workbench", "sales-quotations", "sales-orders"]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/App.tsx",
+        "frontend/src/pages/b2b/PrivateQuotePage.tsx",
+        "frontend/src/services/b2b-private-quote.service.ts",
+        "frontend/src/pages/b2b/B2bWorkbenchPage.tsx",
+        "backend/src/modules/b2b/b2b.controller.ts",
+        "backend/src/modules/b2b/b2b.service.ts",
+        "backend/src/modules/b2b/b2b-quote-mail.service.ts"
       ]
     },
     {
@@ -3906,15 +3961,15 @@
       "group": "sales",
       "sections": {
         "steps": [
-          "先選公司；若客戶或供應商尚無主檔，先到客戶管理或供應商管理建立，再回此工作台建立綁定的外部帳號。商品發布與既有客戶固定單價仍各自管理；另在「商品牌價與活動」設定建議售價、常態售價、團購主進貨價、活動期間及稅別，在「客戶成交比例」設定代理商等客戶的常用折數並試算。免登入訪客需求須另在專用分頁人工核實聯絡人並配對客戶主檔。",
-          "收到需求後逐行人工核對庫存，填入確認數量、交期與必要備註；可複製需登入的需求討論連結至 LINE 與客戶協調。若核庫不足，具採購建立權限者可在獨立的「客戶缺貨採購」入口核對未收採購量，選供應商就尚未採購的缺口建立來源關聯採購單。收貨入庫後須重新人工核庫。",
-          "逐行全數確認後，可先明確帶入該顧客常用價格，再按本次需求調整原品項的數量及未稅單價、有效期限與付款交貨條件；出具後形成固定版本。複製正式報價連結給客戶登入查閱與明確接受。已送出版本的價格或條件若變更，出具新版並保留舊版。若已接受而尚未接單，業務可填撤回原因使需求回待核庫；重新核庫後再出新版。",
+          "先選公司；若客戶或供應商尚無主檔，先到客戶管理或供應商管理建立，再回此工作台建立綁定的外部帳號。商品發布與既有客戶固定單價仍各自管理；另在「商品牌價與活動」設定品牌、建議售價、常態售價、團購主進貨價、活動期間及稅別，在「客戶成交比例」設定代理商等客戶的常用折數並試算。免登入訪客需求須另在專用分頁人工核實聯絡人並配對客戶主檔，再選品項、數量與本次未稅價格，明確轉為內部待核庫需求。",
+          "收到需求後參考 ERP 各倉的在庫、已預留與可用量，逐行人工核對庫存，填入確認數量、交期與必要備註；既有登入需求可複製討論連結至 LINE，訪客的公開採購單連結也可供群組討論。若訪客內部需求缺貨，尚未出具任何報價或關聯採購單時，可依協調結果減量或刪除品項並記錄原因，之後重新人工核庫。具採購建立權限者另可在「客戶缺貨採購」入口核對未收採購量，選供應商建立來源關聯採購單；收貨後仍須重新核庫。",
+          "逐行全數確認後，可先明確帶入該顧客常用價格，再按本次需求調整原品項的數量及未稅單價、有效期限與付款交貨條件；出具後形成固定版本。既有客戶入口可複製需登入的正式報價連結；訪客需求則須核對目前客戶主檔收件信箱、記錄查核依據並由系統寄送私密連結，客戶免登入明確接受。已送出版本的價格或條件若變更，出具新版並保留舊版。若已接受而尚未接單，業務可填撤回原因使需求回待核庫；重新核庫後再出新版。",
           "客戶接受最新有效版本後，選擇銷售通路與出貨倉庫確認接單；ERP 銷售訂單取用已接受報價的數量及金額快照，才預留庫存並開始 WMS 出貨交接。"
         ],
         "boundaries": [
-          "既有 SKU 專屬固定價的「有效至」為台灣日期，設定當天結束前仍有效；隔日零時起不再套用該固定價。建議售價、常態售價及團購主進貨價有獨立價目；活動須核對期間與適用對象。未核實團購主身分時，團購價僅供內部參考，不會自動和代理商折數疊加。匿名公開需全域開關、每商品的獨立公開勾選和既有目錄發布都成立；登入目錄的發布本身不會開放匿名瀏覽。免登入送單另需獨立開關與防濫用設定；訪客需求配對客戶不會自動建立正式報價或銷單。",
-          "人工核庫、來源關聯採購單與出具正式報價都不預留、不扣 Corely ERP 正式庫存；已收或取消採購不占未收缺口，收貨後若未重核庫，新增來源關聯採購會被拒絕。數量有異動時必填核對備註，不能直接確認接單。",
-          "已送出的正式報價固定品項、金額與條件；調整原需求各行數量或未稅單價須出具新版，增刪商品仍須新需求。被新版取代、過期或撤回版本不能接受。員工無法代客戶接受，客戶接受後仍須業務確認接單才預留庫存；已接單不得撤回原報價。含稅牌價缺少已核准的換算規則時，不能自動帶入未稅正式報價。",
+          "既有 SKU 專屬固定價的「有效至」為台灣日期，設定當天結束前仍有效；隔日零時起不再套用該固定價。建議售價、常態售價及團購主進貨價有獨立價目；活動須核對期間與適用對象。未核實團購主身分時，團購價僅供內部參考，不會自動和代理商折數疊加。匿名公開需全域開關、每商品的獨立公開勾選和既有目錄發布都成立；品牌須人工設定，登入目錄的發布本身不會開放匿名瀏覽。免登入送單另需獨立開關與經驗證的防濫用設定；公開採購單連結只含牌價與品項，訪客配對或轉內部需求都不會自動建立正式報價或銷單。",
+          "ERP 庫存摘要只供員工人工判斷，頁面不顯示成本；人工核庫、訪客需求修訂、來源關聯採購單與出具正式報價都不預留、不扣 Corely ERP 正式庫存。訪客修訂保留原始採購單與核庫歷史，只有缺貨狀態、未出過任何報價且沒有關聯採購單時可減量或刪除品項；修訂後必須重新核庫。已收或取消採購不占未收缺口，收貨後若未重核庫，新增來源關聯採購會被拒絕。數量有異動時必填核對備註，不能直接確認接單。",
+          "已送出的正式報價固定品項、金額與條件；調整本次報價數量或未稅單價須出具新版，增列商品仍須新需求。被新版取代、過期或撤回版本不能接受。訪客版私密連結只寄至已核實的客戶主檔信箱，不能張貼 LINE 群組；寄送與瀏覽不是接受。員工無法代客戶接受，客戶接受後仍須業務確認接單才預留庫存；已接單不得撤回原報價。含稅牌價缺少已核准的換算規則時，不能自動帶入未稅正式報價。",
           "客戶帳號使用獨立登入。供應商帳號可在獨立採購入口建檔、停用與重設密碼，供應商登入及查採購單尚未開放；供應商帳號變更需採購建立權限。",
           "員工建立帳號時的初始密碼不會在頁面持續顯示；此工作台不會直接發送 LINE 訊息或證明 WMS 已出貨。"
         ],
@@ -3928,15 +3983,15 @@
           "keywords": ["Customer accounts", "supplier accounts", "catalog publishing", "MSRP", "campaign price", "group-buy price", "customer discount", "stock review", "formal quote", "order confirmation"],
           "sections": {
             "steps": [
-              "Select a company. Create missing customer or vendor master records on their respective pages, then create linked external accounts in this workbench. Catalog publishing and existing fixed customer SKU prices remain separate. In Product price books, set independent MSRP, regular price and the standing group-buy organizer procurement price, plus dated campaigns and explicit tax basis; in Customer discount ratios, set and preview a wholesale customer's usual multiplier. Separately review guest inquiries, verify the contact and manually match a customer master record.",
-              "Manually check stock for each request line and record confirmed quantities, delivery date and required notes. Copy the login-protected request discussion link for coordination through LINE. If stock is short, staff with purchase creation access can use the separate Customer shortage procurement page to inspect open linked orders and create a source-linked supplier purchase order for the unpurchased shortage. After receipt, manually review stock again.",
-              "After every line is confirmed, explicitly apply the customer's usual price if appropriate, then adjust original request-line quantities and pre-tax unit prices, expiry, and terms for this quote. Issuing freezes a version. Copy the formal quote link for the customer to sign in, review and accept. Price or term changes after issue create a new version and preserve the old one. If accepted but not yet converted to an order, sales can record a withdrawal reason; this returns the request to manual stock review before a new version is issued.",
+              "Select a company. Create missing customer or vendor master records on their respective pages, then create linked external accounts in this workbench. Catalog publishing and existing fixed customer SKU prices remain separate. In Product price books, set staff-reviewed brands, independent MSRP, regular price and the standing group-buy organizer procurement price, plus dated campaigns and explicit tax basis; in Customer discount ratios, set and preview a wholesale customer's usual multiplier. Separately verify and match guest inquiries, then explicitly select lines, quantities and current pre-tax prices to create an internal request pending stock review.",
+              "Use ERP per-warehouse on-hand, allocated and available quantities as a reference, then manually review each request line and record confirmed quantities, delivery date and required notes. Use the login-protected portal request link or the guest public purchase receipt in LINE for discussion. If a guest internal request has a shortage, staff can reduce or remove lines with a recorded reason before any quote or linked purchase order exists, then manually re-review stock. Staff with purchase creation access can separately inspect the unpurchased shortage and create a source-linked supplier purchase order; after receipt, review stock again.",
+              "After every line is confirmed, explicitly apply the customer's usual price if appropriate, then adjust request-line quantities, pre-tax unit prices, expiry and terms for this quote. Issuing freezes a version. Existing portal customers sign in through their formal quote link; guest requests require staff to verify a current customer-master recipient email, record why it was verified and send a private link for explicit no-login acceptance. Price or term changes after issue create a new version and preserve the old one. If accepted but not yet converted to an order, sales can record a withdrawal reason; this returns the request to manual stock review before a new version is issued.",
               "After the customer accepts the latest valid version, choose a sales channel and shipping warehouse. The ERP sales order copies the accepted quotation's quantity and amount snapshots, then reserves inventory and starts WMS fulfilment handoff."
             ],
             "boundaries": [
-              "The existing fixed SKU price's Valid through date is a Taiwan calendar date. It remains effective through that day, then expires. MSRP, regular price and the group-buy organizer procurement price have a separate price book; campaigns require the proper period and audience. The organizer price remains a staff-only reference until the customer is verified as a group-buy organizer, and it does not automatically stack with wholesale discounts. Anonymous publication requires the global enable flag, an explicit per-product public opt-in, and existing catalog publication. Publishing to the signed-in catalog alone never exposes a product anonymously. Guest submission has a separate enable flag and abuse controls; matching a guest inquiry does not create a formal quote or sales order.",
-              "Manual stock review, a source-linked purchase order and quote issuance do not reserve or deduct Corely ERP's posted inventory. Received or cancelled orders no longer consume the open shortage; a new linked order is blocked after receipt until staff manually re-review stock. Quantity changes require a review note and cannot be directly confirmed as an order.",
-              "An issued formal quote fixes its lines, prices and terms. Editing original line quantities or pre-tax unit prices requires a new version; adding or removing products still requires a new request. Superseded, expired or withdrawn versions cannot be accepted, and staff cannot accept on the customer's behalf. Customer acceptance still requires sales order confirmation before reservation, and an already confirmed order cannot have its quote withdrawn. Tax-inclusive list prices cannot auto-populate a pre-tax quote without an approved conversion rule.",
+              "The existing fixed SKU price's Valid through date is a Taiwan calendar date. It remains effective through that day, then expires. MSRP, regular price and the group-buy organizer procurement price have a separate price book; campaigns require the proper period and audience. The organizer price remains staff-only until verified and does not automatically stack with wholesale discounts. Anonymous publication requires the global enable flag, an explicit per-product public opt-in and existing catalog publication. Brands are staff-set; publishing to the signed-in catalog alone never exposes a product anonymously. Guest submission has a separate enable flag and verified abuse controls; a public receipt contains only MSRP and items, while guest matching or conversion creates no formal quote or sales order.",
+              "The ERP stock summary is staff-only reference data and contains no cost. Manual review, guest correction, a source-linked purchase order and quote issuance do not reserve or deduct Corely ERP's posted inventory. A guest correction preserves the original receipt and review history; it can only reduce or remove lines after a shortage review, before any quote or linked purchase order, and requires a new manual review. Received or cancelled orders no longer consume the open shortage; a new linked order is blocked after receipt until staff manually re-review stock. Quantity changes require a review note and cannot be directly confirmed as an order.",
+              "An issued formal quote fixes its lines, prices and terms. Editing current quote quantities or pre-tax unit prices requires a new version; adding products still requires a new request. Superseded, expired or withdrawn versions cannot be accepted, and staff cannot accept on the customer's behalf. Guest private links are mailed only to verified current customer-master addresses, never pasted into LINE; delivery and viewing are not acceptance. Customer acceptance still requires sales confirmation before reservation, and an already confirmed order cannot have its quote withdrawn. Tax-inclusive list prices cannot auto-populate a pre-tax quote without an approved conversion rule.",
               "Customer accounts have a separate login. Supplier accounts can be created, deactivated and reset through a separate purchasing page, but supplier login and purchase-order viewing are not open; supplier account changes require purchase creation access.",
               "The initial password does not remain visible on the page. This workbench does not send LINE messages or prove WMS shipment."
             ],
@@ -3951,6 +4006,7 @@
         "frontend/src/pages/b2b/PriceBookManager.tsx",
         "frontend/src/pages/b2b/CustomerDiscountManager.tsx",
         "frontend/src/pages/b2b/GuestInquiryManager.tsx",
+        "frontend/src/pages/b2b/PrivateQuotePage.tsx",
         "frontend/src/pages/B2bProcurementPage.tsx",
         "frontend/src/pages/SupplierAccountsPage.tsx",
         "backend/src/modules/b2b/b2b.controller.ts",

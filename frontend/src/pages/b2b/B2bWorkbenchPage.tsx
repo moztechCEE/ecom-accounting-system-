@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from 'antd'
+import { Alert, Button, Card, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { CopyOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
@@ -8,7 +8,8 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useEntityContext } from '../../hooks/useEntityContext'
 import { hasAnyPermission } from '../../utils/access'
 import { b2bAdminService } from '../../services/b2b-admin.service'
-import type { B2BAdminRequest, B2BAdminSetup } from '../../services/b2b-admin.service'
+import type { B2BAdminRequest, B2BAdminSetup, B2BRequestStockSnapshot } from '../../services/b2b-admin.service'
+import type { B2BFormalQuote } from '../../services/b2b.service'
 import { canConfirmRequest, canIssueQuote, formalQuotePath, quotePath, statusText } from './order'
 import { purchaseService } from '../../services/purchase.service'
 import type { B2BProcurementSummary } from '../../services/purchase.service'
@@ -48,6 +49,8 @@ export default function B2bWorkbenchPage() {
   const canManageSupplier = hasAnyPermission(user, ['purchase_orders:create'])
   const [setup, setSetup] = useState<B2BAdminSetup | null>(null)
   const [requests, setRequests] = useState<B2BAdminRequest[]>([])
+  const [activeTab, setActiveTab] = useState('guest-requests')
+  const [focusedRequestId, setFocusedRequestId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -58,8 +61,20 @@ export default function B2bWorkbenchPage() {
   const [priceOpen, setPriceOpen] = useState(false)
   const [resetAccount, setResetAccount] = useState<B2BAdminSetup['accounts'][number] | null>(null)
   const [reviewing, setReviewing] = useState<B2BAdminRequest | null>(null)
+  const [stockSnapshot, setStockSnapshot] = useState<{ requestId: string; data: B2BRequestStockSnapshot } | null>(null)
+  const [stockLoading, setStockLoading] = useState(false)
+  const [stockError, setStockError] = useState('')
+  const [amending, setAmending] = useState<B2BAdminRequest | null>(null)
+  const [amendmentId, setAmendmentId] = useState('')
+  const [amendReason, setAmendReason] = useState('')
+  const [amendLines, setAmendLines] = useState<Record<string, { included: boolean; quantity: number | null }>>({})
   const [confirming, setConfirming] = useState<B2BAdminRequest | null>(null)
   const [quoting, setQuoting] = useState<B2BAdminRequest | null>(null)
+  const [emailing, setEmailing] = useState<B2BAdminRequest | null>(null)
+  const [emailQuote, setEmailQuote] = useState<B2BFormalQuote | null>(null)
+  const [emailQuoteLoading, setEmailQuoteLoading] = useState(false)
+  const [emailRecipient, setEmailRecipient] = useState('')
+  const [emailReason, setEmailReason] = useState('')
   const [withdrawing, setWithdrawing] = useState<B2BAdminRequest | null>(null)
   const [withdrawReason, setWithdrawReason] = useState('')
   const [procurementRequest, setProcurementRequest] = useState<B2BAdminRequest | null>(null)
@@ -189,9 +204,50 @@ export default function B2bWorkbenchPage() {
 
   const openReview = (request: B2BAdminRequest) => {
     setReviewing(request)
+    setStockSnapshot(null)
+    setStockError('')
     setConfirmed(Object.fromEntries(request.items.map((item) => [item.id, item.confirmedQuantity ?? item.quantity])))
     setReviewNote('')
     setDeliveryDate('')
+    setStockLoading(true)
+    void b2bAdminService.stockSnapshot(request.id, entityId)
+      .then((data) => setStockSnapshot({ requestId: request.id, data }))
+      .catch((reason) => setStockError(errorText(reason)))
+      .finally(() => setStockLoading(false))
+  }
+
+  const openAmendment = (request: B2BAdminRequest) => {
+    if (request.sourceKind !== 'GUEST' || request.status !== 'needs_adjustment' || !request.latestStockReviewId || request.quoteVersion) return
+    setAmending(request)
+    setAmendmentId(crypto.randomUUID())
+    setAmendReason('')
+    setAmendLines(Object.fromEntries(request.items.map((item) => [item.id, { included: true, quantity: item.quantity }])))
+  }
+
+  const saveAmendment = async () => {
+    if (!entityId || !amending?.latestStockReviewId || !amendmentId || saving) return
+    const items = amending.items.filter((item) => amendLines[item.id]?.included)
+      .map((item) => ({ requestItemId: item.id, quantity: amendLines[item.id]?.quantity ?? NaN }))
+    if (!items.length || items.some((item) => !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > (amending.items.find((line) => line.id === item.requestItemId)?.quantity || 0))) {
+      message.error('須保留至少一項；每項修訂數量須為 1 至原需求數量的整數。')
+      return
+    }
+    if (items.length === amending.items.length && items.every((item) => item.quantity === amending.items.find((line) => line.id === item.requestItemId)?.quantity)) {
+      message.error('請至少減少一項數量或移除一項商品。')
+      return
+    }
+    const reason = amendReason.trim()
+    if (reason.length < 10 || reason.length > 1000) { message.error('請記錄 10 至 1,000 字的缺貨協調與改單原因。'); return }
+    try {
+      setSaving(true)
+      const result = await b2bAdminService.reviseGuestRequest(amending.id, {
+        entityId, amendmentId, expectedStockReviewId: amending.latestStockReviewId, reason, items,
+      })
+      setAmending(null)
+      message.success(result.alreadyApplied ? '已確認先前完成的修訂，請重新人工核庫。' : '需求已修訂並留下稽核紀錄，請重新人工核庫後再報價。')
+      await load()
+    } catch (reason) { message.error(`${errorText(reason)} 請先重新整理需求狀態，避免重複修改。`) }
+    finally { setSaving(false) }
   }
   const saveReview = async () => {
     if (!entityId || !reviewing) return
@@ -279,7 +335,9 @@ export default function B2bWorkbenchPage() {
         ...(values.deliveryTerms?.trim() ? { deliveryTerms: values.deliveryTerms.trim() } : {}),
       })
       setQuoting(null)
-      message.success('正式報價已出具，請複製正式報價連結供客戶登入確認。')
+      message.success(quoting.sourceKind === 'GUEST'
+        ? '報價版本已建立；請核對收件 Email 後寄送，客戶明確接受後才能確認接單。'
+        : '正式報價已出具，請複製正式報價連結供客戶登入確認。')
       await load()
     } catch (reason) {
       if (!isFormValidationError(reason)) {
@@ -287,6 +345,36 @@ export default function B2bWorkbenchPage() {
         message.error(`${errorText(reason)} 若結果不明，請先重新整理報價狀態，避免重開版本。`)
       }
     }
+    finally { setSaving(false) }
+  }
+
+  const openEmailQuote = async (request: B2BAdminRequest) => {
+    if (!entityId || !request.quoteVersion || request.sourceKind !== 'GUEST') return
+    const customer = setup?.customers.find((item) => item.id === request.customerId)
+    setEmailing(request)
+    setEmailQuote(null)
+    setEmailRecipient(customer?.email?.trim() || customer?.statementEmail?.trim() || '')
+    setEmailReason('')
+    setEmailQuoteLoading(true)
+    try { setEmailQuote(await b2bAdminService.formalQuote(request.id, request.quoteVersion, entityId)) }
+    catch (reason) { message.error(`無法讀取待寄送報價，請重新整理：${errorText(reason)}`); setEmailing(null) }
+    finally { setEmailQuoteLoading(false) }
+  }
+
+  const sendGuestQuote = async () => {
+    if (!entityId || !emailing?.quoteVersion || !emailQuote || saving) return
+    const recipientEmail = emailRecipient.trim().toLowerCase()
+    const verificationReason = emailReason.trim()
+    if (!/^\S+@\S+\.\S+$/.test(recipientEmail)) { message.error('請填寫有效收件 Email。'); return }
+    if (verificationReason.length < 10 || verificationReason.length > 1000) { message.error('請記錄 10 至 1,000 字的聯絡人與 Email 核實依據。'); return }
+    try {
+      setSaving(true)
+      await b2bAdminService.emailGuestQuote(emailing.id, emailing.quoteVersion, { entityId, recipientEmail, verificationReason })
+      setEmailing(null)
+      setEmailQuote(null)
+      message.success('已將此版報價交由郵件服務寄送；請在 LINE 群組提醒客戶查看 Email 並明確確認。')
+      await load()
+    } catch (reason) { message.error(`${errorText(reason)} 請先重新載入報價狀態，再決定是否重試寄送。`) }
     finally { setSaving(false) }
   }
 
@@ -425,11 +513,14 @@ export default function B2bWorkbenchPage() {
     { title: '客戶採購單號', dataIndex: 'customerPoNumber', key: 'customerPoNumber' },
     { title: '狀態', dataIndex: 'status', key: 'status', render: (status: B2BAdminRequest['status']) => <Tag color={status === 'stock_confirmed' || status === 'order_confirmed' ? 'green' : status === 'needs_adjustment' ? 'red' : 'gold'}>{statusText[status]}</Tag> },
     { title: '需求試算金額', dataIndex: 'total', key: 'total', align: 'right', render: amount },
-    { title: '正式報價', key: 'quote', render: (_, request) => request.quoteVersion ? <Tag color={request.quoteStatus === 'accepted' ? 'green' : request.quoteStatus === 'withdrawn' ? 'default' : 'blue'}>{request.quoteStatus === 'accepted' ? '客戶已接受' : request.quoteStatus === 'withdrawn' ? `第 ${request.quoteVersion} 版已撤回` : `第 ${request.quoteVersion} 版已出具`}</Tag> : <Text type="secondary">尚未出具</Text> },
+    { title: '正式報價', key: 'quote', render: (_, request) => request.quoteVersion ? <Tag color={request.quoteStatus === 'accepted' ? 'green' : request.quoteStatus === 'withdrawn' ? 'default' : request.quoteStatus === 'delivery_pending' ? 'gold' : 'blue'}>{request.quoteStatus === 'accepted' ? '客戶已接受' : request.quoteStatus === 'withdrawn' ? `第 ${request.quoteVersion} 版已撤回` : request.quoteStatus === 'delivery_pending' ? `第 ${request.quoteVersion} 版待寄送` : `第 ${request.quoteVersion} 版已出具`}</Tag> : <Text type="secondary">尚未出具</Text> },
     { title: '操作', key: 'actions', render: (_, request) => <Space wrap>
-      <Button size="small" icon={<CopyOutlined />} onClick={() => void copyLink(quotePath(request.id), '需求討論連結')}>複製需求連結</Button>
-      {request.quoteVersion ? <Button size="small" icon={<CopyOutlined />} onClick={() => void copyLink(formalQuotePath(request.id, request.quoteVersion!), '正式報價連結')}>複製正式報價</Button> : null}
+      {request.sourceKind === 'PORTAL' ? <Button size="small" icon={<CopyOutlined />} onClick={() => void copyLink(quotePath(request.id), '需求討論連結')}>複製需求連結</Button> : null}
+      {request.sourceKind === 'PORTAL' && request.quoteVersion ? <Button size="small" icon={<CopyOutlined />} onClick={() => void copyLink(formalQuotePath(request.id, request.quoteVersion!), '正式報價連結')}>複製正式報價</Button> : null}
+      {request.sourceKind === 'GUEST' && request.quoteVersion && request.quoteStatus === 'delivery_pending' && canWrite ? <Button size="small" onClick={() => void openEmailQuote(request)}>寄送報價 Email</Button> : null}
+      {request.sourceKind === 'GUEST' && request.quoteStatus === 'sent' ? <Text type="secondary">已寄出至核實信箱</Text> : null}
       {canWrite && (request.status === 'pending_stock_review' || request.status === 'needs_adjustment') ? <Button size="small" onClick={() => openReview(request)}>{request.status === 'needs_adjustment' ? '重新人工核庫' : '人工核庫'}</Button> : null}
+      {canWrite && request.sourceKind === 'GUEST' && request.status === 'needs_adjustment' && request.latestStockReviewId && !request.quoteVersion ? <Button size="small" onClick={() => openAmendment(request)}>依缺貨協調修訂需求</Button> : null}
       {canManageSupplier && request.status === 'needs_adjustment' ? <Button size="small" onClick={() => void openProcurement(request)}>轉供應商採購單</Button> : null}
       {canWrite && canIssueQuote(request) ? <Button size="small" type="primary" loading={quoteLoading} onClick={() => void openQuote(request)}>{request.quoteVersion ? '重開新版報價' : '出具正式報價'}</Button> : null}
       {canWrite && request.quoteStatus === 'accepted' && request.quoteVersion && !request.salesOrderId ? <Button size="small" danger onClick={() => { setWithdrawReason(''); setWithdrawing(request) }}>撤回報價並重核</Button> : null}
@@ -452,12 +543,12 @@ export default function B2bWorkbenchPage() {
     {error ? <Alert type="error" showIcon message={error} /> : null}
     {confirmedOrderId ? <Alert type="success" showIcon message={`已建立銷售訂單 ${confirmedOrderId}`} description={<Space><Link to="/sales/orders">前往 ERP 銷售訂單列表</Link>{hasAnyPermission(user, ['wms_tasks:read']) ? <Link to="/warehouse">開啟儲運工作台</Link> : null}</Space>} closable onClose={() => setConfirmedOrderId(null)} /> : null}
     {setup ? <Alert type="info" showIcon message={`公司登入代碼：${setup.company.loginCode}`} description="請將此代碼與客戶帳號提供給對應窗口。供應商帳號目前可建檔與停用；供應商登入與採購單查看入口仍在後續階段。" /> : null}
-    <Card><Tabs items={[
-      { key: 'guest-requests', label: '免登入訪客需求', children: <GuestInquiryManager entityId={entityId} canWrite={canWrite} /> },
-      { key: 'requests', label: `採購需求 (${requests.filter((item) => item.status === 'pending_stock_review' || item.status === 'needs_adjustment').length} 待核對／補貨)`, children: <><Alert type="warning" showIcon style={{ marginBottom: 18 }} message="客戶送出的是採購需求與價格試算；完整人工核庫後才能出具正式報價，客戶接受報價後才能確認接單並預留庫存。" /><Table rowKey="id" loading={loading} columns={requestColumns} dataSource={requests} scroll={{ x: 1180 }} expandable={{ expandedRowRender: (request) => <div><Text strong>商品明細</Text>{request.items.map((item) => <div key={item.id} style={{ padding: '5px 0' }}>{item.sku} · {item.name}：申購 {item.quantity}，確認 {item.confirmedQuantity ?? '待核對'}，缺口 {Math.max(0, item.quantity - (item.confirmedQuantity ?? 0))}，試算單價 {amount(item.unitPrice)}</div>)}{request.note ? <p>客戶備註：{request.note}</p> : null}{request.reviewNote ? <p>核對備註：{request.reviewNote}</p> : null}</div> }} /></> },
+    <Card><Tabs activeKey={activeTab} onChange={setActiveTab} items={[
+      { key: 'guest-requests', label: '免登入訪客需求', children: <GuestInquiryManager entityId={entityId} canWrite={canWrite} onOpenRequest={(requestId) => { setFocusedRequestId(requestId); setActiveTab('requests'); void load() }} /> },
+      { key: 'requests', label: `採購需求 (${requests.filter((item) => item.status === 'pending_stock_review' || item.status === 'needs_adjustment').length} 待核對／補貨)`, children: <>{focusedRequestId ? <Alert type="info" showIcon closable onClose={() => setFocusedRequestId(null)} style={{ marginBottom: 12 }} message={`已開啟內部需求 ${requests.find((item) => item.id === focusedRequestId)?.requestNumber || focusedRequestId}，請在下方進行人工核庫。`} /> : null}<Alert type="warning" showIcon style={{ marginBottom: 18 }} message="客戶送出的是採購需求與價格試算；完整人工核庫後才能出具正式報價，客戶接受報價後才能確認接單並預留庫存。" /><Table rowKey="id" loading={loading} columns={requestColumns} dataSource={requests} scroll={{ x: 1180 }} expandable={{ expandedRowRender: (request) => <div><Text strong>商品明細</Text>{request.items.map((item) => <div key={item.id} style={{ padding: '5px 0' }}>{item.sku} · {item.name}：申購 {item.quantity}，確認 {item.confirmedQuantity ?? '待核對'}，缺口 {Math.max(0, item.quantity - (item.confirmedQuantity ?? 0))}，試算單價 {amount(item.unitPrice)}</div>)}{request.note ? <p>客戶備註：{request.note}</p> : null}{request.reviewNote ? <p>核對備註：{request.reviewNote}</p> : null}</div> }} /></> },
       { key: 'accounts', label: '客戶與供應商帳號', children: <><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite || canManageSupplier ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { const defaultType = canWrite ? 'CUSTOMER' : 'SUPPLIER'; setAccountType(defaultType); accountForm.resetFields(); accountForm.setFieldsValue({ accountType: defaultType }); setAccountOpen(true) }}>建立外部帳號</Button> : null}</div><Table rowKey="id" loading={loading} columns={accountColumns} dataSource={setup?.accounts || []} scroll={{ x: 850 }} /></> },
       { key: 'price-books', label: '商品價格', children: <PriceBookManager entityId={entityId} canWrite={canWrite} /> },
-      { key: 'catalog', label: '商品發布', children: <><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { catalogForm.resetFields(); catalogForm.setFieldsValue({ isPublished: true }); setCatalogOpen(true) }}>設定商品</Button> : null}</div><Alert type="info" style={{ marginBottom: 12 }} message="此處發布只控制既有登入入口；規劃中的免登入公開入口還須在「商品價格」個別開啟公開開關，且只顯示建議售價。" /><Table rowKey="id" loading={loading} dataSource={catalogProducts} columns={[{ title: '商品', key: 'product', render: (_, product) => `${product.sku} · ${product.name}` }, { title: '既有入口目錄單價', key: 'price', render: (_, product) => { const row = setup?.catalog.find((item) => item.productId === product.id); return row ? amount(row.unitPrice) : '未設定' } }, { title: '既有登入入口發布', key: 'published', render: (_, product) => { const row = setup?.catalog.find((item) => item.productId === product.id); return <Tag color={row?.isPublished ? 'green' : 'default'}>{row?.isPublished ? '已發布' : '未發布'}</Tag> } }, { title: '操作', key: 'actions', render: (_, product) => canWrite ? <Button size="small" onClick={() => { const row = setup?.catalog.find((item) => item.productId === product.id); catalogForm.setFieldsValue({ productId: product.id, unitPrice: Number(row?.unitPrice || 0), isPublished: row?.isPublished || false }); setCatalogOpen(true) }}>設定</Button> : null }]} /></> },
+      { key: 'catalog', label: '商品發布', children: <><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { catalogForm.resetFields(); catalogForm.setFieldsValue({ isPublished: true }); setCatalogOpen(true) }}>設定商品</Button> : null}</div><Alert type="info" style={{ marginBottom: 12 }} message="此處發布只控制既有登入入口；免登入公開入口還須在「商品價格」個別開啟公開開關，且只顯示建議售價。公開總開關目前仍需經部署驗收後啟用。" /><Table rowKey="id" loading={loading} dataSource={catalogProducts} columns={[{ title: '商品', key: 'product', render: (_, product) => `${product.sku} · ${product.name}` }, { title: '既有入口目錄單價', key: 'price', render: (_, product) => { const row = setup?.catalog.find((item) => item.productId === product.id); return row ? amount(row.unitPrice) : '未設定' } }, { title: '既有登入入口發布', key: 'published', render: (_, product) => { const row = setup?.catalog.find((item) => item.productId === product.id); return <Tag color={row?.isPublished ? 'green' : 'default'}>{row?.isPublished ? '已發布' : '未發布'}</Tag> } }, { title: '操作', key: 'actions', render: (_, product) => canWrite ? <Button size="small" onClick={() => { const row = setup?.catalog.find((item) => item.productId === product.id); catalogForm.setFieldsValue({ productId: product.id, unitPrice: Number(row?.unitPrice || 0), isPublished: row?.isPublished || false }); setCatalogOpen(true) }}>設定</Button> : null }]} /></> },
       { key: 'prices', label: '客戶專屬價格', children: <><CustomerDiscountManager entityId={entityId} canWrite={canWrite} customers={setup?.customers || []} /><Title level={4} style={{ marginTop: 28 }}>單一商品固定價例外</Title><Text type="secondary">此價格優先於客戶常用成交比例；已出具的正式報價不會隨設定更動。</Text><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{canWrite ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { priceForm.resetFields(); priceForm.setFieldsValue({ isActive: true }); setPriceOpen(true) }}>設定固定價例外</Button> : null}</div><Table rowKey={(row) => `${row.customerId}:${row.productId}`} loading={loading} dataSource={setup?.prices || []} columns={[{ title: '客戶', dataIndex: 'customerId', key: 'customer', render: customerName }, { title: '商品', dataIndex: 'productId', key: 'product', render: productName }, { title: '固定單價', dataIndex: 'unitPrice', key: 'price', render: amount }, { title: '有效至', dataIndex: 'validUntil', key: 'until', render: (value: string | null) => value?.slice(0, 10) || '未設定' }, { title: '狀態', dataIndex: 'isActive', key: 'active', render: (value: boolean) => <Tag color={value ? 'green' : 'default'}>{value ? '啟用' : '停用'}</Tag> }, { title: '操作', key: 'actions', render: (_, row) => canWrite ? <Button size="small" onClick={() => { priceForm.setFieldsValue({ customerId: row.customerId, productId: row.productId, unitPrice: Number(row.unitPrice), isActive: row.isActive, validUntil: row.validUntil?.slice(0, 10) || undefined }); setPriceOpen(true) }}>設定</Button> : null }]} scroll={{ x: 820 }} /></> },
     ]} /></Card>
 
@@ -465,14 +556,35 @@ export default function B2bWorkbenchPage() {
 
     <Modal title={`設定新密碼 · ${resetAccount?.name || ''}`} open={Boolean(resetAccount)} confirmLoading={saving} onCancel={() => { resetForm.resetFields(); setResetAccount(null) }} onOk={() => void resetPassword()} okText="更新密碼" destroyOnHidden><Form form={resetForm} layout="vertical" autoComplete="off"><Form.Item name="password" label="新密碼" rules={passwordRules}><Input.Password autoComplete="new-password" /></Form.Item></Form><Alert type="info" message="更新密碼後，這個帳號現有的登入會立即失效。" /></Modal>
 
-    <Modal title="商品發布設定" open={catalogOpen} confirmLoading={saving} onCancel={() => setCatalogOpen(false)} onOk={() => void saveCatalog()} okText="儲存" destroyOnHidden><Form form={catalogForm} layout="vertical"><Form.Item name="productId" label="商品" rules={[{ required: true, message: '請選擇商品' }]}><ProductSearchSelect entityId={entityId} enabled={catalogOpen} selectedProduct={setup?.products.find((item) => item.id === catalogProductId)} /></Form.Item><Form.Item name="unitPrice" label="既有登入入口目錄單價（未稅，TWD）" rules={[{ required: true, message: '請填寫價格' }]}><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item><Form.Item name="isPublished" label="既有登入入口發布" valuePropName="checked"><Switch /></Form.Item><Alert type="info" message="此設定不會直接對免登入訪客公開商品。未來公開入口還需在「商品價格」開啟獨立公開開關，而且只顯示建議售價。" /></Form></Modal>
+    <Modal title="商品發布設定" open={catalogOpen} confirmLoading={saving} onCancel={() => setCatalogOpen(false)} onOk={() => void saveCatalog()} okText="儲存" destroyOnHidden><Form form={catalogForm} layout="vertical"><Form.Item name="productId" label="商品" rules={[{ required: true, message: '請選擇商品' }]}><ProductSearchSelect entityId={entityId} enabled={catalogOpen} selectedProduct={setup?.products.find((item) => item.id === catalogProductId)} /></Form.Item><Form.Item name="unitPrice" label="既有登入入口目錄單價（未稅，TWD）" rules={[{ required: true, message: '請填寫價格' }]}><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item><Form.Item name="isPublished" label="既有登入入口發布" valuePropName="checked"><Switch /></Form.Item><Alert type="info" message="此設定不會直接對免登入訪客公開商品。公開入口還需在「商品價格」開啟獨立公開開關，而且只顯示建議售價。" /></Form></Modal>
 
     <Modal title="客戶專屬價格" open={priceOpen} confirmLoading={saving} onCancel={() => setPriceOpen(false)} onOk={() => void savePrice()} okText="儲存" destroyOnHidden><Form form={priceForm} layout="vertical"><Form.Item name="customerId" label="客戶" rules={[{ required: true, message: '請選擇客戶' }]}><CustomerSearchSelect entityId={entityId} enabled={priceOpen} /></Form.Item><Form.Item name="productId" label="商品" rules={[{ required: true, message: '請選擇商品' }]}><ProductSearchSelect entityId={entityId} enabled={priceOpen} selectedProduct={setup?.products.find((item) => item.id === priceProductId)} /></Form.Item><Form.Item name="unitPrice" label="專屬單價（未稅，TWD）" rules={[{ required: true, message: '請填寫價格' }]}><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item><Form.Item name="validUntil" label="有效至（選填）"><Input type="date" /></Form.Item><Form.Item name="isActive" label="啟用專屬價格" valuePropName="checked"><Switch /></Form.Item></Form></Modal>
 
-    <Modal title={`人工核對庫存 · ${reviewing?.requestNumber || ''}`} open={Boolean(reviewing)} confirmLoading={saving} onCancel={() => setReviewing(null)} onOk={() => void saveReview()} okText="儲存核對結果" width={680} destroyOnHidden><Alert type="warning" style={{ marginBottom: 18 }} message="此步驟僅記錄人工確認結果，不預留、不扣正式庫存。" />{reviewing?.items.map((item) => <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, margin: '12px 0' }}><span>{item.sku} · {item.name}<br /><Text type="secondary">申購 {item.quantity} 件</Text></span><InputNumber min={0} max={item.quantity} precision={0} value={confirmed[item.id]} onChange={(value) => setConfirmed((current) => ({ ...current, [item.id]: value ?? NaN }))} aria-label={`${item.name} 確認數量`} /></div>)}<div style={{ marginTop: 22 }}><label htmlFor="b2b-review-date">確認交期</label><Input id="b2b-review-date" type="date" value={deliveryDate} onChange={(event) => setDeliveryDate(event.target.value)} style={{ margin: '8px 0 18px' }} /><label htmlFor="b2b-review-note">核對備註（數量有異動時必填）</label><Input.TextArea id="b2b-review-note" rows={3} maxLength={1000} value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} style={{ marginTop: 8 }} /></div></Modal>
+    <Modal title={`人工核對庫存 · ${reviewing?.requestNumber || ''}`} open={Boolean(reviewing)} confirmLoading={saving} onCancel={() => setReviewing(null)} onOk={() => void saveReview()} okText="儲存核對結果" width={780} destroyOnHidden>
+      <Alert type="warning" style={{ marginBottom: 18 }} message="ERP 庫存僅供人工核對參考；此步驟不預留、不扣正式庫存。" />
+      {stockError ? <Alert type="error" style={{ marginBottom: 12 }} message={`無法讀取 ERP 庫存參考：${stockError}`} /> : null}
+      {stockLoading ? <Text type="secondary">正在讀取 ERP 庫存摘要…</Text> : null}
+      {reviewing?.items.map((item) => {
+        const snapshot = stockSnapshot?.requestId === reviewing.id ? stockSnapshot.data.items.find((row) => row.requestItemId === item.id) : null
+        return <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, margin: '14px 0', borderBottom: '1px solid #edf0f2', paddingBottom: 12 }}><span><Text strong>{item.sku} · {item.name}</Text><br /><Text type="secondary">申購 {item.quantity} 件{snapshot ? `；ERP 現有 ${snapshot.totalOnHand}，已預留 ${snapshot.totalAllocated}，可用 ${snapshot.totalAvailable}` : ''}</Text>{snapshot?.warehouses.length ? <><br /><Text type="secondary">{snapshot.warehouses.map((row) => `${row.warehouseName} 可用 ${row.qtyAvailable}`).join('；')}</Text></> : null}</span><InputNumber min={0} max={item.quantity} precision={0} value={confirmed[item.id]} onChange={(value) => setConfirmed((current) => ({ ...current, [item.id]: value ?? NaN }))} aria-label={`${item.name} 確認數量`} /></div>
+      })}
+      <div style={{ marginTop: 22 }}><label htmlFor="b2b-review-date">確認交期</label><Input id="b2b-review-date" type="date" value={deliveryDate} onChange={(event) => setDeliveryDate(event.target.value)} style={{ margin: '8px 0 18px' }} /><label htmlFor="b2b-review-note">核對備註（數量有異動時必填）</label><Input.TextArea id="b2b-review-note" rows={3} maxLength={1000} value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} style={{ marginTop: 8 }} /></div>
+    </Modal>
+
+    <Modal title={`依缺貨協調修訂需求 · ${amending?.requestNumber || ''}`} open={Boolean(amending)} confirmLoading={saving} onCancel={() => { if (!saving) setAmending(null) }} onOk={() => void saveAmendment()} okText="儲存修訂並重新核庫" width={780} destroyOnHidden>
+      <Alert type="warning" showIcon style={{ marginBottom: 16 }} message="先與客戶確認減量或取消品項，再修訂內部需求。" description="只能在訪客需求尚未出具報價、沒有關聯採購單時減少數量或移除品項。原始採購單與核庫紀錄保留；修訂後須重新人工核庫，才可出具正式報價。" />
+      <Table size="small" pagination={false} rowKey="id" dataSource={amending?.items || []} scroll={{ x: 650 }} columns={[
+        { title: '保留', key: 'included', width: 75, render: (_, item) => <Checkbox checked={amendLines[item.id]?.included ?? false} onChange={(event) => { setAmendmentId(crypto.randomUUID()); setAmendLines((current) => ({ ...current, [item.id]: { ...current[item.id], included: event.target.checked } })) }} aria-label={`保留 ${item.name}`} /> },
+        { title: '商品', key: 'product', render: (_, item) => `${item.sku} · ${item.name}` },
+        { title: '原需求', dataIndex: 'quantity', key: 'original', width: 100, align: 'right' },
+        { title: '人工確認', dataIndex: 'confirmedQuantity', key: 'confirmed', width: 100, align: 'right' },
+        { title: '修訂後數量', key: 'quantity', width: 145, render: (_, item) => <InputNumber min={1} max={item.quantity} precision={0} disabled={!amendLines[item.id]?.included} value={amendLines[item.id]?.quantity} onChange={(value) => { setAmendmentId(crypto.randomUUID()); setAmendLines((current) => ({ ...current, [item.id]: { ...current[item.id], quantity: value } })) }} aria-label={`${item.name} 修訂後數量`} /> },
+      ]} />
+      <label htmlFor="b2b-amend-reason">缺貨協調與改單原因（10–1,000 字）</label><Input.TextArea id="b2b-amend-reason" rows={3} maxLength={1000} value={amendReason} onChange={(event) => { setAmendmentId(crypto.randomUUID()); setAmendReason(event.target.value) }} style={{ marginTop: 8 }} />
+    </Modal>
 
     <Modal title={`${quoting?.quoteVersion ? '重開新版' : '出具正式'}報價 · ${quoting?.requestNumber || ''}`} open={Boolean(quoting)} confirmLoading={saving} onCancel={() => setQuoting(null)} onOk={() => void issueQuote()} okText={`確認並出具第 ${(quoting?.quoteVersion || 0) + 1} 版`} width={880} destroyOnHidden>
-      <Alert type="info" showIcon style={{ marginBottom: 16 }} message={quoting?.quoteVersion ? '重新出具後，前一版待接受報價會失效。請確認新條件並發送新版本連結。' : '只有完整人工核庫的需求可出具正式報價。出具後金額、品項、條件會固定為此版本，客戶須登入並明確接受。'} />
+      <Alert type="info" showIcon style={{ marginBottom: 16 }} message={quoting?.quoteVersion ? '重新出具後，前一版待接受報價會失效。請確認新條件並寄送新版本。' : quoting?.sourceKind === 'GUEST' ? '只有完整人工核庫的需求可出具正式報價。出具後先待寄送到已核實的客戶 Email；客戶免登入，但須明確接受。' : '只有完整人工核庫的需求可出具正式報價。出具後金額、品項、條件會固定為此版本，客戶須登入並明確接受。'} />
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}><Text type="secondary">請先核對數量，再逐項確認本次未稅成交價。</Text><Button loading={quoteApplying} disabled={!quoting?.customerId} onClick={() => void applyCustomerPrice()}>帶入該顧客常用價格</Button></div>
       <Form form={quoteForm} layout="vertical">
         <Table size="small" pagination={false} rowKey="id" dataSource={quoting?.items || []} scroll={{ x: 700 }} columns={[
@@ -490,6 +602,17 @@ export default function B2bWorkbenchPage() {
       </Form>
       <Alert type="warning" showIcon style={{ marginBottom: 12 }} message="這些數量與單價只用於本次正式報價版本，不會修改此客戶未來的價格規則。" />
       <Text type="secondary">正式報價仍不預留庫存；客戶接受且業務確認接單後才會預留。</Text>
+    </Modal>
+
+    <Modal title={`寄送專屬報價 · ${emailing?.requestNumber || ''}`} open={Boolean(emailing)} confirmLoading={saving} onCancel={() => { if (!saving) { setEmailing(null); setEmailQuote(null) } }} onOk={() => void sendGuestQuote()} okText="核對後寄送 Email" okButtonProps={{ disabled: !emailQuote || emailQuoteLoading || !emailRecipient.trim() || emailReason.trim().length < 10 }} width={780} destroyOnHidden>
+      {emailQuoteLoading ? <p>正在載入正式報價版本…</p> : emailQuote ? <>
+        <Alert type="warning" showIcon style={{ marginBottom: 16 }} message={`即將交付不可改寫的第 ${emailQuote.version} 版報價`} description="這是客戶專屬價格，請核對收件人屬於已核實的客戶聯絡人。LINE 群組只提醒對方查收，不貼含價格的連結。寄出及客戶開啟郵件都不等於接受；客戶須明確按下接受。" />
+        <Space wrap size="large"><Text>買方：<Text strong>{emailQuote.buyerName}</Text></Text><Text>有效至：<Text strong>{emailQuote.validUntil || '未設定'}</Text></Text><Text>總額：<Text strong>{amount(emailQuote.total)}</Text></Text></Space>
+        <Table size="small" style={{ marginTop: 16 }} rowKey="requestItemId" pagination={false} dataSource={emailQuote.items} columns={[{ title: '品項', key: 'item', render: (_, item) => `${item.sku} · ${item.name}` }, { title: '數量', dataIndex: 'quantity', key: 'qty', align: 'right' }, { title: '未稅單價', dataIndex: 'unitPrice', key: 'unitPrice', align: 'right', render: amount }, { title: '含稅小計', dataIndex: 'total', key: 'total', align: 'right', render: amount }]} scroll={{ x: 570 }} />
+        <label htmlFor="b2b-quote-recipient">已核實的客戶收件 Email</label><Input id="b2b-quote-recipient" type="email" value={emailRecipient} onChange={(event) => setEmailRecipient(event.target.value)} style={{ margin: '8px 0 14px' }} />
+        {setup?.customers.find((item) => item.id === emailing?.customerId) ? <p style={{ color: '#718096', fontSize: 12 }}>客戶主檔 Email：{setup.customers.find((item) => item.id === emailing?.customerId)?.email || '未設定'}；對帳 Email：{setup.customers.find((item) => item.id === emailing?.customerId)?.statementEmail || '未設定'}。系統僅允許寄送到上述目前有效的地址。</p> : null}
+        <label htmlFor="b2b-quote-verification">聯絡人與 Email 核實依據（10–1,000 字）</label><Input.TextArea id="b2b-quote-verification" rows={3} maxLength={1000} value={emailReason} onChange={(event) => setEmailReason(event.target.value)} style={{ marginTop: 8 }} />
+      </> : <Alert type="error" message="無法取得報價資料，請關閉後重新載入。" />}
     </Modal>
 
     <Modal title={`撤回已接受報價 · ${withdrawing?.requestNumber || ''}`} open={Boolean(withdrawing)} confirmLoading={saving} onCancel={() => { setWithdrawing(null); setWithdrawReason('') }} onOk={() => void withdrawQuote()} okText="確認撤回並重新核庫" okButtonProps={{ danger: true, disabled: !withdrawReason.trim() }} destroyOnHidden>

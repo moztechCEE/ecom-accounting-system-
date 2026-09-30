@@ -22,6 +22,8 @@ import {
   B2bDiscountPreviewDto,
   B2bOfferPreviewDto,
   B2bPriceBookListDto,
+  B2bPriceBookEntityDto,
+  B2bPublicCatalogQueryDto,
   B2bPutPriceBookDto,
   B2bUpsertOfferDto,
 } from './b2b-pricebook.dto';
@@ -40,6 +42,12 @@ export class B2bPriceBookAdminController {
   @Header('Cache-Control', 'no-store')
   list(@Query() query: B2bPriceBookListDto) {
     return this.service.list(query);
+  }
+
+  @Get('price-books/brands')
+  @Header('Cache-Control', 'no-store')
+  brands(@Query() query: B2bPriceBookEntityDto) {
+    return this.service.brands(query.entityId);
   }
 
   @Put('price-books/:productId')
@@ -121,12 +129,20 @@ export class B2bPublicCatalogController {
 
   @Get('catalog')
   @Header('Cache-Control', 'no-store')
-  catalog(@Query() query: B2bPriceBookListDto) {
+  catalog(@Query() query: B2bPublicCatalogQueryDto) {
     return this.service.publicCatalog(
       query.entityId,
       query.limit ? Number(query.limit) : 100,
       query.offset ? Number(query.offset) : 0,
       query.search,
+      query.brand,
+      query.category,
     );
+  }
+
+  @Get('catalog/facets')
+  @Header('Cache-Control', 'no-store')
+  facets(@Query() query: B2bPriceBookEntityDto) {
+    return this.service.publicCatalogFacets(query.entityId);
   }
 }

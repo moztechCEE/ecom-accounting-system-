@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography, message } from 'antd'
+import { Alert, AutoComplete, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -16,7 +16,7 @@ const errorText = (error: unknown) => {
   return value?.response?.data?.message || value?.message || '操作失敗，請稍後重試。'
 }
 
-type BookValues = { productId: string; msrp: number; regularPrice?: number | null; groupBuyPrice?: number | null; taxBasis: B2BPriceBook['taxBasis']; isPublic: boolean }
+type BookValues = { productId: string; brand?: string | null; msrp: number; regularPrice?: number | null; groupBuyPrice?: number | null; taxBasis: B2BPriceBook['taxBasis']; isPublic: boolean }
 type OfferValues = {
   unitPrice: number
   startsAt: string
@@ -28,6 +28,8 @@ type OfferEditor = { book: B2BPriceBook; offer: B2BPriceOffer | null }
 
 export default function PriceBookManager({ entityId, canWrite }: { entityId: string; canWrite: boolean }) {
   const [books, setBooks] = useState<B2BPriceBook[]>([])
+  const [brandOptions, setBrandOptions] = useState<string[]>([])
+  const [brandRefresh, setBrandRefresh] = useState(0)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -64,9 +66,19 @@ export default function PriceBookManager({ entityId, canWrite }: { entityId: str
     return () => { active = false }
   }, [entityId, page, search])
 
+  useEffect(() => {
+    setBrandOptions([])
+    if (!entityId) return
+    let active = true
+    b2bAdminService.priceBookBrands(entityId)
+      .then(({ brands }) => { if (active) setBrandOptions(brands) })
+      .catch(() => { if (active) setBrandOptions([]) })
+    return () => { active = false }
+  }, [entityId, brandRefresh])
+
   const openBook = (book?: B2BPriceBook) => {
     bookForm.resetFields()
-    if (book) bookForm.setFieldsValue({ productId: book.productId, msrp: book.msrp == null ? undefined : Number(book.msrp), regularPrice: book.regularPrice == null ? null : Number(book.regularPrice), groupBuyPrice: book.groupBuyPrice == null ? null : Number(book.groupBuyPrice), taxBasis: book.taxBasis, isPublic: book.isPublic })
+    if (book) bookForm.setFieldsValue({ productId: book.productId, brand: book.brand || '', msrp: book.msrp == null ? undefined : Number(book.msrp), regularPrice: book.regularPrice == null ? null : Number(book.regularPrice), groupBuyPrice: book.groupBuyPrice == null ? null : Number(book.groupBuyPrice), taxBasis: book.taxBasis, isPublic: book.isPublic })
     else bookForm.setFieldsValue({ isPublic: false })
     setBookOpen(true)
   }
@@ -78,10 +90,11 @@ export default function PriceBookManager({ entityId, canWrite }: { entityId: str
       if (values.regularPrice != null && (!Number.isFinite(values.regularPrice) || values.regularPrice <= 0 || Math.round(values.regularPrice * 100) !== values.regularPrice * 100)) throw new Error('常態售價須大於 0，最多小數兩位；不用時請留空。')
       if (values.groupBuyPrice != null && (!Number.isFinite(values.groupBuyPrice) || values.groupBuyPrice <= 0 || Math.round(values.groupBuyPrice * 100) !== values.groupBuyPrice * 100)) throw new Error('團購主進貨價須大於 0，最多小數兩位；不用時請留空。')
       setSaving(true)
-      await b2bAdminService.savePriceBook(values.productId, { entityId, currency: 'TWD', taxBasis: values.taxBasis, msrp: values.msrp, regularPrice: values.regularPrice ?? null, groupBuyPrice: values.groupBuyPrice ?? null, isPublic: values.isPublic === true })
+      await b2bAdminService.savePriceBook(values.productId, { entityId, currency: 'TWD', taxBasis: values.taxBasis, msrp: values.msrp, regularPrice: values.regularPrice ?? null, groupBuyPrice: values.groupBuyPrice ?? null, brand: values.brand?.trim() || null, isPublic: values.isPublic === true })
       setBookOpen(false)
       message.success('商品價目已儲存')
       await reload()
+      setBrandRefresh((value) => value + 1)
     } catch (reason) {
       if (!(reason && typeof reason === 'object' && 'errorFields' in reason)) message.error(errorText(reason))
     } finally { setSaving(false) }
@@ -148,6 +161,7 @@ export default function PriceBookManager({ entityId, canWrite }: { entityId: str
 
   const columns: ColumnsType<B2BPriceBook> = [
     { title: '商品', key: 'product', render: (_, book) => <><Text strong>{book.name}</Text><br /><Text type="secondary">{book.sku}</Text></> },
+    { title: '品牌', dataIndex: 'brand', key: 'brand', render: (value: string | null) => value || '未設定' },
     { title: '稅別', dataIndex: 'taxBasis', key: 'taxBasis', render: (value: B2BPriceBook['taxBasis']) => value === 'TAX_INCLUDED' ? '含稅' : '未稅' },
     { title: '建議售價（牌價）', dataIndex: 'msrp', key: 'msrp', align: 'right', render: money },
     { title: '常態售價', dataIndex: 'regularPrice', key: 'regular', align: 'right', render: money },
@@ -173,6 +187,7 @@ export default function PriceBookManager({ entityId, canWrite }: { entityId: str
     <Modal title="商品價目" open={bookOpen} confirmLoading={saving} onCancel={() => setBookOpen(false)} onOk={() => void saveBook()} okText="儲存價目" destroyOnHidden>
       <Form form={bookForm} layout="vertical">
         <Form.Item name="productId" label="商品" rules={[{ required: true, message: '請選擇商品' }]}><ProductSearchSelect entityId={entityId} enabled={bookOpen} selectedProduct={books.find((book) => book.productId === productId) ? { id: productId, sku: books.find((book) => book.productId === productId)!.sku, name: books.find((book) => book.productId === productId)!.name } : undefined} /></Form.Item>
+        <Form.Item name="brand" label="品牌（選填，公開目錄篩選用）" rules={[{ max: 100, message: '品牌最多 100 字' }]}><AutoComplete options={brandOptions.map((brand) => ({ value: brand }))} filterOption={(input, option) => String(option?.value || '').toLocaleLowerCase().includes(input.toLocaleLowerCase())}><Input maxLength={100} placeholder="輸入品牌或選擇既有品牌；留空則不顯示" /></AutoComplete></Form.Item>
         <Form.Item name="taxBasis" label="價格稅別" rules={[{ required: true, message: '請選擇含稅或未稅' }]}><Select options={[{ value: 'TAX_INCLUDED', label: '含稅價' }, { value: 'TAX_EXCLUDED', label: '未稅價' }]} /></Form.Item>
         <Form.Item name="msrp" label={`建議售價（公開入口啟用後顯示；${bookTaxBasis === 'TAX_INCLUDED' ? '含稅' : bookTaxBasis === 'TAX_EXCLUDED' ? '未稅' : '請先選稅別'} TWD）`} rules={[{ required: true, message: '請填建議售價' }, { type: 'number', min: 0.01, max: 100000000, message: '請填有效價格' }]}><InputNumber min={0.01} precision={2} prefix="NT$" style={{ width: '100%' }} /></Form.Item>
         <Form.Item name="regularPrice" label={`常態售價（選填；${bookTaxBasis === 'TAX_INCLUDED' ? '含稅' : bookTaxBasis === 'TAX_EXCLUDED' ? '未稅' : '請先選稅別'} TWD）`} rules={[{ type: 'number', min: 0.01, max: 100000000, message: '請填有效價格' }]}><InputNumber min={0.01} precision={2} prefix="NT$" style={{ width: '100%' }} /></Form.Item>

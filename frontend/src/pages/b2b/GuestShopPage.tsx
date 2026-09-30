@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import BrandMark from '../../components/BrandMark'
 import { b2bPublicService, publicB2bError } from '../../services/b2b-public.service'
-import type { PublicCatalogItem, GuestRequestInput, GuestRequestReceipt } from '../../services/b2b-public.service'
+import type { PublicCatalogFacets, PublicCatalogItem, GuestRequestInput, GuestRequestReceipt } from '../../services/b2b-public.service'
 import './GuestShopPage.css'
 
 const entityId = window.__APP_CONFIG__?.defaultEntityId?.trim() || import.meta.env.VITE_DEFAULT_ENTITY_ID?.trim() || 'tw-entity-001'
@@ -18,6 +18,9 @@ export default function GuestShopPage() {
   const [page, setPage] = useState(1)
   const [searchText, setSearchText] = useState('')
   const [search, setSearch] = useState('')
+  const [brand, setBrand] = useState('')
+  const [category, setCategory] = useState('')
+  const [facets, setFacets] = useState<PublicCatalogFacets>({ brands: [], categories: [] })
   const [loading, setLoading] = useState(true)
   const [catalogError, setCatalogError] = useState('')
   const [cart, setCart] = useState<Record<string, CartLine>>({})
@@ -25,20 +28,29 @@ export default function GuestShopPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [receipt, setReceipt] = useState<GuestRequestReceipt | null>(null)
+  const [copyStatus, setCopyStatus] = useState('')
   const requestId = useRef(crypto.randomUUID())
   const lastAttemptPayload = useRef<string | null>(null)
   const [refresh, setRefresh] = useState(0)
 
   useEffect(() => {
     let active = true
+    b2bPublicService.catalogFacets(entityId)
+      .then((result) => { if (active) setFacets(result) })
+      .catch(() => { if (active) setFacets({ brands: [], categories: [] }) })
+    return () => { active = false }
+  }, [refresh])
+
+  useEffect(() => {
+    let active = true
     setLoading(true)
     setCatalogError('')
-    b2bPublicService.catalog(entityId, { search, limit: pageSize, offset: (page - 1) * pageSize })
+    b2bPublicService.catalog(entityId, { search, brand: brand || undefined, category: category || undefined, limit: pageSize, offset: (page - 1) * pageSize })
       .then((result) => { if (active) { setProducts(result.items); setTotal(result.total) } })
       .catch((reason) => { if (active) { setProducts([]); setCatalogError(publicB2bError(reason, '無法讀取公開商品，請稍後再試。')) } })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [page, search, refresh])
+  }, [page, search, brand, category, refresh])
 
   const lines = useMemo(() => Object.values(cart), [cart])
   const referenceBasis = lines.length && lines.every((line) => line.product.taxBasis === lines[0].product.taxBasis) ? lines[0].product.taxBasis : null
@@ -89,6 +101,7 @@ export default function GuestShopPage() {
       setSubmitting(true)
       const result = await b2bPublicService.submitRequest({ ...payload, requestId: requestId.current })
       setReceipt(result)
+      setCopyStatus('')
       setCart({})
       setContact(emptyContact)
       requestId.current = crypto.randomUUID()
@@ -99,6 +112,17 @@ export default function GuestShopPage() {
     } finally { setSubmitting(false) }
   }
 
+  const copyOrderLink = async () => {
+    if (!receipt) return
+    const url = new URL(receipt.orderUrl, window.location.origin).toString()
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopyStatus('已複製連結，可以貼到 LINE 群組討論。')
+    } catch {
+      setCopyStatus('瀏覽器無法自動複製；請開啟採購單後複製網址。')
+    }
+  }
+
   return <div className="guest-shop">
     <header className="guest-shop-header">
       <div className="guest-shop-brand"><BrandMark className="guest-shop-mark" alt="Corely" /><span>Corely <small>商品採購</small></span></div>
@@ -107,20 +131,21 @@ export default function GuestShopPage() {
 
     <main>
       <section className="guest-shop-hero">
-        <div className="guest-shop-hero-inner"><p className="guest-shop-kicker">CORELY PRODUCT CATALOG</p><h1>找到需要的商品，<br />把採購需求交給我們。</h1><p>免登入即可查看建議售價並送出需求。業務核對顧客身分、庫存與交期後，會提供正式成交價格與報價單。</p><a href="#products" className="guest-shop-hero-action">瀏覽商品 <span aria-hidden>↗</span></a></div>
-        <div className="guest-shop-hero-panel" aria-hidden><span>01</span><strong>選商品</strong><span>02</span><strong>送需求</strong><span>03</span><strong>人工確認</strong></div>
+        <div className="guest-shop-hero-inner"><p className="guest-shop-kicker">CORELY PRODUCT CATALOG</p><h1>找到需要的商品，<br />建立採購單。</h1><p>依品牌、類別或關鍵字選品，填入數量即可產生待確認採購單。公開頁只顯示建議售價；業務核庫並與您確認後，才會提供專屬價格與正式版本。</p><a href="#products" className="guest-shop-hero-action">瀏覽商品 <span aria-hidden>↗</span></a></div>
+        <div className="guest-shop-hero-panel" aria-hidden><span>01</span><strong>選商品</strong><span>02</span><strong>建立採購單</strong><span>03</span><strong>雙方確認</strong></div>
       </section>
 
-      {receipt ? <section className="guest-shop-receipt" role="status"><div><span>需求已送出</span><h2>我們已收到您的採購需求</h2><p>參考編號：<strong>{receipt.reference}</strong></p><p>人員會先核實顧客資料與庫存，再回覆正式價格與交期。此時尚未成立銷貨單，也未預留庫存。</p></div><button type="button" onClick={() => setReceipt(null)}>繼續選購</button></section> : null}
+      {receipt ? <section className="guest-shop-receipt" role="status"><div><span>待確認採購單已建立</span><h2>我們已收到您的採購品項</h2><p>採購單編號：<strong>{receipt.reference}</strong></p><p>此連結只顯示品項、數量與建議售價，可先在 LINE 與業務討論。專屬價格會在核對顧客與庫存後另行提供；目前尚未成立銷貨單，也未預留庫存。</p><div className="guest-shop-receipt-actions"><a href={receipt.orderUrl}>查看採購單</a><button type="button" onClick={() => void copyOrderLink()}>複製採購單連結</button><button type="button" onClick={() => setReceipt(null)}>繼續選購</button></div>{copyStatus ? <p role="status">{copyStatus}</p> : null}</div></section> : null}
 
       <div className="guest-shop-content">
         <section id="products" className="guest-shop-products" aria-labelledby="guest-shop-products-title">
-          <div className="guest-shop-section-head"><div><span className="guest-shop-kicker">CATALOG</span><h2 id="guest-shop-products-title">商品目錄</h2><p>頁面只顯示建議售價；實際採購價以核對後的正式報價為準。</p></div><form role="search" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(searchText.trim()) }}><input aria-label="搜尋 SKU 或商品名稱" value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="搜尋商品名稱或 SKU" /><button type="submit">搜尋</button></form></div>
+          <div className="guest-shop-section-head"><div><span className="guest-shop-kicker">CATALOG</span><h2 id="guest-shop-products-title">商品目錄</h2><p>可瀏覽已公開上架的商品；頁面只顯示建議售價，正式採購價由業務核對後提供。</p></div><form role="search" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(searchText.trim()) }}><input aria-label="搜尋 SKU 或商品名稱" value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="搜尋商品名稱或 SKU" /><button type="submit">搜尋</button></form></div>
+          <div className="guest-shop-filters"><label>品牌<select aria-label="依品牌篩選" value={brand} onChange={(event) => { setPage(1); setBrand(event.target.value) }}><option value="">全部品牌</option>{facets.brands.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label>分類<select aria-label="依商品分類篩選" value={category} onChange={(event) => { setPage(1); setCategory(event.target.value) }}><option value="">全部分類</option>{facets.categories.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>{brand || category || search ? <button type="button" onClick={() => { setBrand(''); setCategory(''); setSearch(''); setSearchText(''); setPage(1) }}>清除篩選</button> : null}</div>
           {catalogError ? <div className="guest-shop-notice guest-shop-notice-error" role="alert">{catalogError}<button type="button" onClick={() => setRefresh((current) => current + 1)}>重試</button></div> : null}
           {loading ? <div className="guest-shop-placeholder">正在載入商品…</div> : !catalogError && !products.length ? <div className="guest-shop-placeholder">目前沒有符合條件的公開商品。</div> : null}
           <div className="guest-shop-grid">{products.map((product) => <article className="guest-shop-product" key={product.productId}>
             <div className="guest-shop-product-visual" aria-hidden>{product.name.slice(0, 1)}</div>
-            <div className="guest-shop-product-body"><span className="guest-shop-sku">{product.sku}</span><h3>{product.name}</h3><p>{product.category || '商品'}</p><div className="guest-shop-product-bottom"><div><small>建議售價 · {product.taxBasis === 'TAX_INCLUDED' ? '含稅' : '未稅'}</small><strong>{money(product.msrp)}</strong></div><label><span className="guest-shop-sr-only">{product.name} 採購數量</span><input type="number" min="0" max="1000" step="1" value={cart[product.productId]?.quantity ?? 0} onChange={(event) => changeQuantity(product, Number(event.target.value))} /></label></div></div>
+            <div className="guest-shop-product-body"><span className="guest-shop-sku">{product.sku}</span><h3>{product.name}</h3><p>{[product.brand, product.category].filter(Boolean).join(' · ') || '商品'}</p><div className="guest-shop-product-bottom"><div><small>建議售價 · {product.taxBasis === 'TAX_INCLUDED' ? '含稅' : '未稅'}</small><strong>{money(product.msrp)}</strong></div><label><span className="guest-shop-sr-only">{product.name} 採購數量</span><input type="number" min="0" max="1000" step="1" value={cart[product.productId]?.quantity ?? 0} onChange={(event) => changeQuantity(product, Number(event.target.value))} /></label></div></div>
           </article>)}</div>
           {!catalogError && total > pageSize ? <div className="guest-shop-pagination"><button type="button" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>上一頁</button><span>第 {page}／{maxPage} 頁 · 共 {total} 項</span><button type="button" disabled={page >= maxPage || loading} onClick={() => setPage((value) => value + 1)}>下一頁</button></div> : null}
         </section>
@@ -137,8 +162,8 @@ export default function GuestShopPage() {
             <label>貴公司採購單號（選填）<input maxLength={100} value={contact.customerPoNumber} onChange={(event) => setContact((current) => ({ ...current, customerPoNumber: event.target.value }))} /></label>
             <label>補充需求（選填）<textarea rows={3} maxLength={1000} value={contact.note} onChange={(event) => setContact((current) => ({ ...current, note: event.target.value }))} /></label>
             {submitError ? <div className="guest-shop-notice guest-shop-notice-error" role="alert">{submitError}</div> : null}
-            <button type="submit" className="guest-shop-submit" disabled={!lines.length || submitting}>{submitting ? '送出中…' : '送出採購需求'}</button>
-            <p>送出是採購需求，尚非正式銷貨訂單。建議售價僅供參考；實際價格與交期由業務核對後提供。</p>
+            <button type="submit" className="guest-shop-submit" disabled={!lines.length || submitting}>{submitting ? '建立中…' : '建立待確認採購單'}</button>
+            <p>建立後會產生可查看品項的採購單連結。這仍是待確認需求，尚非正式銷貨單；建議售價僅供參考。</p>
           </form>
         </aside>
       </div>

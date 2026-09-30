@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -24,6 +25,9 @@ import {
   B2bSupplierAccountDto,
   B2bWithdrawQuoteDto,
 } from './b2b.dto';
+import { B2bQuoteMailService } from './b2b-quote-mail.service';
+import { B2bQuoteEmailDto, B2bQuoteTokenDto } from './b2b-quote-email.dto';
+import { B2bGuestRevisionDto } from './b2b-guest-revision.dto';
 
 const sha256 = (value: string) =>
   createHash('sha256').update(value).digest('hex');
@@ -52,9 +56,11 @@ const accountSelect = {
 const includeRequest = {
   items: { orderBy: { sortOrder: 'asc' as const } },
   customer: { select: { name: true, companyName: true, taxId: true } },
+  stockReviews: { orderBy: { reviewedAt: 'desc' as const },
+    take: 1, select: { id: true } },
   issuedQuotes: { orderBy: { version: 'desc' as const }, take: 1,
     select: { id: true, version: true, status: true, acceptedAt: true,
-      acceptedByAccountId: true } },
+      acceptedByAccountId: true, acceptedByEmail: true } },
 } as const;
 const includeIssuedQuote = {
   quotation: { include: { items: { orderBy: { sortOrder: 'asc' as const } } } },
@@ -112,6 +118,7 @@ export function publicRequest(row: RequestRecord) {
   return {
     id: row.id,
     requestNumber: row.requestNumber,
+    sourceKind: row.sourceKind,
     customerPoNumber: row.customerPoNumber,
     status: row.status,
     salesOrderId: row.salesOrderId,
@@ -154,7 +161,11 @@ export function requestSourceHash(dto: B2bRequestDto) {
 
 @Injectable()
 export class B2bService {
-  constructor(private readonly db: PrismaService, private readonly salesOrders: SalesOrderService) {}
+  constructor(
+    private readonly db: PrismaService,
+    private readonly salesOrders: SalesOrderService,
+    @Optional() private readonly quoteMail?: B2bQuoteMailService,
+  ) {}
   ensureEnabled() {
     if (process.env.B2B_PORTAL_ENABLED !== 'true')
       throw new ServiceUnavailableException('客戶採購入口尚未啟用');
@@ -225,7 +236,8 @@ export class B2bService {
       await Promise.all([
         this.db.customer.findMany({
           where: { entityId, isActive: true },
-          select: { id: true, code: true, name: true, companyName: true },
+          select: { id: true, code: true, name: true, companyName: true,
+            email: true, statementEmail: true },
           orderBy: { name: 'asc' },
           take: 1000,
         }),
@@ -675,7 +687,7 @@ export class B2bService {
   }
   async requests(entityId: string, customerId?: string) {
     const rows = await this.db.b2bPurchaseRequest.findMany({
-      where: { entityId, ...(customerId ? { customerId } : {}) },
+      where: { entityId, ...(customerId ? { customerId, sourceKind: 'PORTAL' } : {}) },
       include: includeRequest,
       orderBy: { createdAt: 'desc' },
       take: 100,
@@ -684,7 +696,8 @@ export class B2bService {
       items: rows.map((r) => ({
         ...publicRequest(r),
         ...(!customerId
-          ? { customerId: r.customerId, customerName: r.customer.companyName || r.customer.name }
+          ? { customerId: r.customerId, customerName: r.customer.companyName || r.customer.name,
+            latestStockReviewId: r.stockReviews[0]?.id || null }
           : {}),
       })),
     };
@@ -695,12 +708,123 @@ export class B2bService {
         id,
         entityId: identity.entityId,
         customerId: identity.customerId,
+        sourceKind: 'PORTAL',
       },
       include: includeRequest,
     });
     if (!row) throw new NotFoundException('找不到此報價需求');
     return publicRequest(row);
   }
+  async stockSnapshot(entityId: string, id: string) {
+    const request = await this.db.b2bPurchaseRequest.findFirst({
+      where: { id, entityId },
+      select: { items: { select: { id: true, productId: true } } },
+    });
+    if (!request) throw new NotFoundException('找不到此採購需求');
+    const snapshots = await this.db.inventorySnapshot.findMany({
+      where: { entityId, productId: { in: request.items.map((item) => item.productId) },
+        warehouse: { entityId, isActive: true } },
+      select: { productId: true, qtyOnHand: true, qtyAllocated: true,
+        qtyAvailable: true, warehouse: { select: { id: true, code: true, name: true } } },
+      orderBy: { warehouse: { code: 'asc' } },
+    });
+    return {
+      capturedAt: new Date(),
+      items: request.items.map((item) => {
+        const rows = snapshots.filter((stock) => stock.productId === item.productId);
+        const sum = (field: 'qtyOnHand' | 'qtyAllocated' | 'qtyAvailable') =>
+          rows.reduce((total, stock) => total.add(stock[field]), new Prisma.Decimal(0)).toFixed(2);
+        return {
+          requestItemId: item.id,
+          productId: item.productId,
+          warehouses: rows.map((stock) => ({
+            warehouseId: stock.warehouse.id,
+            warehouseName: `${stock.warehouse.code} · ${stock.warehouse.name}`,
+            qtyOnHand: stock.qtyOnHand.toFixed(2),
+            qtyAllocated: stock.qtyAllocated.toFixed(2),
+            qtyAvailable: stock.qtyAvailable.toFixed(2),
+          })),
+          totalOnHand: sum('qtyOnHand'),
+          totalAllocated: sum('qtyAllocated'),
+          totalAvailable: sum('qtyAvailable'),
+        };
+      }),
+    };
+  }
+
+  async reviseGuestRequest(id: string, dto: B2bGuestRevisionDto, actorId: string) {
+    const reason = dto.reason.trim();
+    const items = [...dto.items].sort((a, b) => a.requestItemId.localeCompare(b.requestItemId));
+    const payloadHash = sha256(JSON.stringify({ entityId: dto.entityId, requestId: id,
+      expectedStockReviewId: dto.expectedStockReviewId, reason, items }));
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM b2b_purchase_requests WHERE id=${id} AND entity_id=${dto.entityId} FOR UPDATE`;
+      const row = await tx.b2bPurchaseRequest.findFirst({
+        where: { id, entityId: dto.entityId, sourceKind: 'GUEST' }, include: includeRequest,
+      });
+      if (!row) throw new NotFoundException('找不到此訪客內部需求');
+      const prior = await tx.auditLog.findUnique({ where: { id: dto.amendmentId } });
+      if (prior) {
+        const data = prior.newData as { payloadHash?: string } | null;
+        if (prior.tableName !== 'b2b_purchase_requests' || prior.recordId !== id ||
+            prior.action !== 'REVISE_GUEST_REQUEST' || data?.payloadHash !== payloadHash)
+          throw new ConflictException('修訂編號已用於不同內容');
+        return { requestId: row.id, requestNumber: row.requestNumber, alreadyApplied: true };
+      }
+      if (row.status !== 'needs_adjustment' || row.salesOrderId || row.issuedQuotes.length)
+        throw new ConflictException('此需求已進入報價、接單或不再允許修訂');
+      if (row.stockReviews[0]?.id !== dto.expectedStockReviewId)
+        throw new ConflictException('人工核庫紀錄已有更新，請重新載入');
+      if (await tx.purchaseOrder.count({ where: { entityId: dto.entityId,
+        sourceB2bRequestId: id } }))
+        throw new ConflictException('此需求已有關聯採購單，請先處理採購流程');
+      if (!items.length || items.length > row.items.length ||
+          new Set(items.map((item) => item.requestItemId)).size !== items.length)
+        throw new BadRequestException('修訂須保留至少一項且品項不可重複');
+      const current = new Map(row.items.map((item) => [item.id, item]));
+      if (items.some((item) => !current.has(item.requestItemId) ||
+          item.quantity < 1 || item.quantity > current.get(item.requestItemId)!.quantity))
+        throw new BadRequestException('只能保留原品項並減少數量');
+      if (items.length === row.items.length && items.every((item) =>
+        item.quantity === current.get(item.requestItemId)!.quantity))
+        throw new BadRequestException('修訂須至少減少一項數量或移除一項品項');
+      const subtotal = items.reduce((total, item) =>
+        total.add(current.get(item.requestItemId)!.unitPrice.mul(item.quantity)),
+      new Prisma.Decimal(0));
+      const tax = quoteTax(subtotal);
+      const before = { status: row.status, subtotal: row.subtotal.toFixed(2),
+        tax: row.tax.toFixed(2), total: row.total.toFixed(2),
+        items: row.items.map((item) => ({ id: item.id, productId: item.productId,
+          quantity: item.quantity, confirmedQuantity: item.confirmedQuantity,
+          unitPrice: item.unitPrice.toFixed(2), lineTotal: item.lineTotal.toFixed(2) })) };
+      for (const item of items) {
+        const original = current.get(item.requestItemId)!;
+        await tx.b2bRequestItem.update({ where: { id: item.requestItemId },
+          data: { quantity: item.quantity, confirmedQuantity: null,
+            lineTotal: original.unitPrice.mul(item.quantity) } });
+      }
+      await tx.b2bRequestItem.deleteMany({ where: { requestId: id,
+        id: { notIn: items.map((item) => item.requestItemId) } } });
+      await tx.b2bPurchaseRequest.update({ where: { id }, data: {
+        status: 'pending_stock_review', subtotal, tax, total: subtotal.add(tax),
+        reviewedAt: null, reviewedBy: null, reviewNote: null, deliveryDate: null,
+      } });
+      await tx.auditLog.create({ data: {
+        id: dto.amendmentId, userId: actorId, tableName: 'b2b_purchase_requests',
+        recordId: id, action: 'REVISE_GUEST_REQUEST', oldData: before,
+        newData: { payloadHash, reason, expectedStockReviewId: dto.expectedStockReviewId,
+          status: 'pending_stock_review', subtotal: subtotal.toFixed(2),
+          tax: tax.toFixed(2), total: subtotal.add(tax).toFixed(2),
+          items: items.map((item) => ({ requestItemId: item.requestItemId,
+            productId: current.get(item.requestItemId)!.productId,
+            quantity: item.quantity,
+            unitPrice: current.get(item.requestItemId)!.unitPrice.toFixed(2),
+            lineTotal: current.get(item.requestItemId)!.unitPrice.mul(item.quantity).toFixed(2) })) },
+      } });
+      return { requestId: row.id, requestNumber: row.requestNumber, alreadyApplied: false };
+    }, { maxWait: 5_000, timeout: 20_000 });
+  }
+
   async review(id: string, dto: B2bReviewDto, actorId: string) {
     return this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM b2b_purchase_requests WHERE id=${id} AND entity_id=${dto.entityId} FOR UPDATE`;
@@ -908,6 +1032,236 @@ export class B2bService {
     };
   }
 
+  private ensurePrivateQuoteEnabled() {
+    if (process.env.B2B_PRIVATE_QUOTE_EMAIL_ENABLED !== 'true')
+      throw new ServiceUnavailableException('私密報價電子郵件入口尚未啟用');
+  }
+
+  private assertQuoteValidUntil(quotation: { validUntil: Date | null }) {
+    const validUntil = quotation.validUntil?.toISOString().slice(0, 10);
+    if (validUntil && Date.now() >= new Date(`${validUntil}T16:00:00.000Z`).getTime())
+      throw new ConflictException('正式報價已逾有效期限，請聯絡業務重新開立');
+    return validUntil ? new Date(`${validUntil}T16:00:00.000Z`) : null;
+  }
+
+  async emailGuestQuote(id: string, version: number, dto: B2bQuoteEmailDto, actorId: string) {
+    this.ensurePrivateQuoteEnabled();
+    if (!Number.isSafeInteger(version) || version < 1)
+      throw new NotFoundException('找不到此正式報價');
+    if (!this.quoteMail) throw new ServiceUnavailableException('私密報價郵件服務尚未設定');
+    this.quoteMail.assertConfigured();
+    const recipientEmail = emailKey(dto.recipientEmail);
+    const reason = dto.verificationReason.trim();
+    if (!recipientEmail || reason.length < 10 || reason.length > 1000)
+      throw new BadRequestException('請填寫公司收件信箱與至少 10 字的查核理由');
+
+    const prepared = await this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM b2b_purchase_requests WHERE id=${id} AND entity_id=${dto.entityId} FOR UPDATE`;
+      const request = await tx.b2bPurchaseRequest.findFirst({
+        where: { id, entityId: dto.entityId, sourceKind: 'GUEST' }, include: includeRequest,
+      });
+      if (!request) throw new NotFoundException('找不到此訪客正式報價');
+      if (request.status !== 'stock_confirmed' || !request.reviewedAt ||
+          request.items.some((item) => item.confirmedQuantity !== item.quantity))
+        throw new ConflictException('須先完成人工核庫');
+      const issued = await tx.b2bIssuedQuote.findFirst({
+        where: { requestId: id, version }, include: includeIssuedQuote,
+      });
+      if (!issued || request.issuedQuotes[0]?.id !== issued.id)
+        throw new ConflictException('此報價版本已失效，請查看最新版本');
+      const customer = await tx.customer.findFirst({
+        where: { id: request.customerId, entityId: dto.entityId, isActive: true },
+        select: { email: true, statementEmail: true },
+      });
+      if (!customer || ![customer.email, customer.statementEmail]
+        .some((email) => email && emailKey(email) === recipientEmail))
+        throw new BadRequestException('收件信箱須與目前啟用客戶主檔的電子郵件一致');
+      this.assertQuoteSnapshot(request, issued.quotation, true);
+      const quoteCutoff = this.assertQuoteValidUntil(issued.quotation);
+      const existing = await tx.b2bQuoteEmailAccess.findUnique({
+        where: { issuedQuoteId: issued.id },
+      });
+      if (issued.status === 'sent' && existing?.sendState === 'SENT' &&
+          existing.sentAt && !existing.revokedAt && existing.recipientEmail === recipientEmail)
+        return { alreadySent: true as const, recipientEmail, sentAt: existing.sentAt };
+      if (issued.status !== 'delivery_pending' || issued.quotation.status !== 'pending')
+        throw new ConflictException('此正式報價已送達或不可寄送');
+      const now = new Date();
+      if (existing?.sendState === 'SENDING' && existing.sendLeaseUntil > now &&
+          !existing.revokedAt)
+        throw new ConflictException('此報價正在寄送，請稍後確認結果');
+      const expiresAt = new Date(Math.min(now.getTime() + 24 * 60 * 60 * 1000,
+        quoteCutoff?.getTime() ?? Number.MAX_SAFE_INTEGER));
+      if (expiresAt <= now)
+        throw new ConflictException('正式報價已逾有效期限，請重新開立');
+      const token = randomBytes(32).toString('base64url');
+      const attemptId = randomUUID();
+      const access = await tx.b2bQuoteEmailAccess.upsert({
+        where: { issuedQuoteId: issued.id },
+        create: {
+          issuedQuoteId: issued.id, tokenHash: sha256(token), recipientEmail,
+          verificationReason: reason, verifiedBy: actorId, verifiedAt: now,
+          expiresAt, sendState: 'SENDING', attemptId,
+          sendLeaseUntil: new Date(now.getTime() + 5 * 60 * 1000),
+        },
+        update: {
+          tokenHash: sha256(token), recipientEmail, verificationReason: reason,
+          verifiedBy: actorId, verifiedAt: now, expiresAt, sendState: 'SENDING',
+          attemptId, sendLeaseUntil: new Date(now.getTime() + 5 * 60 * 1000),
+          sentAt: null, consumedAt: null, revokedAt: null,
+        },
+      });
+      await tx.auditLog.create({ data: {
+        userId: actorId, tableName: 'b2b_quote_email_accesses', recordId: access.id,
+        action: 'EMAIL_ATTEMPT',
+        newData: { requestId: id, version, recipientEmail, verificationReason: reason,
+          verifiedAt: now.toISOString(), expiresAt: expiresAt.toISOString(), attemptId },
+      } });
+      return { alreadySent: false as const, accessId: access.id, attemptId,
+        token, recipientEmail, quotationNo: issued.quotation.quotationNo, expiresAt };
+    }, { maxWait: 5_000, timeout: 20_000 });
+    if (prepared.alreadySent)
+      return { deliveryStatus: 'sent', recipientEmail: prepared.recipientEmail,
+        sentAt: prepared.sentAt };
+
+    try {
+      await this.quoteMail.send({ to: prepared.recipientEmail,
+        quotationNo: prepared.quotationNo, token: prepared.token,
+        expiresAt: prepared.expiresAt });
+    } catch {
+      await this.db.$transaction(async (tx) => {
+        const failedAt = new Date();
+        const changed = await tx.b2bQuoteEmailAccess.updateMany({
+          where: { id: prepared.accessId, attemptId: prepared.attemptId, sendState: 'SENDING' },
+          data: { sendState: 'FAILED', revokedAt: failedAt },
+        });
+        if (changed.count)
+          await tx.auditLog.create({ data: {
+            tableName: 'b2b_quote_email_accesses', recordId: prepared.accessId,
+            action: 'EMAIL_FAILED',
+            newData: { requestId: id, version, attemptId: prepared.attemptId,
+              failedAt: failedAt.toISOString() },
+          } });
+      });
+      throw new ServiceUnavailableException('私密報價電子郵件未成功交付 SMTP');
+    }
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM b2b_purchase_requests WHERE id=${id} AND entity_id=${dto.entityId} FOR UPDATE`;
+      const latest = await tx.b2bIssuedQuote.findFirst({
+        where: { requestId: id }, orderBy: { version: 'desc' },
+        select: { id: true, version: true, quotationId: true, status: true },
+      });
+      const access = await tx.b2bQuoteEmailAccess.findUnique({
+        where: { id: prepared.accessId },
+      });
+      if (!latest || latest.id !== access?.issuedQuoteId || latest.version !== version ||
+          latest.status !== 'delivery_pending' || access.sendState !== 'SENDING' ||
+          access.attemptId !== prepared.attemptId || access.revokedAt)
+        throw new ConflictException('寄送期間報價已更新，舊連結不可使用');
+      const sentAt = new Date();
+      await tx.b2bQuoteEmailAccess.update({
+        where: { id: access.id }, data: { sendState: 'SENT', sentAt },
+      });
+      await tx.b2bIssuedQuote.update({
+        where: { id: latest.id }, data: { status: 'sent' },
+      });
+      await tx.salesQuotation.update({
+        where: { id: latest.quotationId }, data: { status: 'sent' },
+      });
+      await tx.auditLog.create({ data: {
+        userId: actorId, tableName: 'b2b_quote_email_accesses', recordId: access.id,
+        action: 'EMAIL_SMTP_ACCEPTED',
+        newData: { requestId: id, version, recipientEmail: access.recipientEmail,
+          sentAt: sentAt.toISOString(), expiresAt: access.expiresAt.toISOString(),
+          attemptId: prepared.attemptId },
+      } });
+      return { deliveryStatus: 'sent', recipientEmail: access.recipientEmail, sentAt };
+    }, { maxWait: 5_000, timeout: 20_000 });
+  }
+
+  private async emailQuoteAccess(tx: Prisma.TransactionClient | PrismaService, token: string) {
+    this.ensurePrivateQuoteEnabled();
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token))
+      throw new NotFoundException('找不到此私密正式報價');
+    const access = await tx.b2bQuoteEmailAccess.findUnique({
+      where: { tokenHash: sha256(token) },
+      include: { issuedQuote: { include: includeIssuedQuote } },
+    });
+    if (!access || access.sendState !== 'SENT' || !access.sentAt || access.revokedAt ||
+        access.expiresAt <= new Date())
+      throw new NotFoundException('找不到此私密正式報價');
+    const issued = access.issuedQuote;
+    const request = await tx.b2bPurchaseRequest.findFirst({
+      where: { id: issued.requestId, sourceKind: 'GUEST' }, include: includeRequest,
+    });
+    if (!request || request.issuedQuotes[0]?.id !== issued.id ||
+        !['sent', 'accepted'].includes(issued.status))
+      throw new NotFoundException('找不到此私密正式報價');
+    const customer = await tx.customer.findFirst({
+      where: { id: request.customerId, entityId: request.entityId, isActive: true },
+      select: { email: true, statementEmail: true },
+    });
+    if (!customer || ![customer.email, customer.statementEmail]
+      .some((email) => email && emailKey(email) === access.recipientEmail))
+      throw new NotFoundException('找不到此私密正式報價');
+    this.assertQuoteSnapshot(request, issued.quotation, true);
+    this.assertQuoteValidUntil(issued.quotation);
+    return { access, issued, request };
+  }
+
+  async previewEmailQuote(dto: B2bQuoteTokenDto) {
+    const { request, issued } = await this.emailQuoteAccess(this.db, dto.token);
+    return { ...this.publicFormalQuote(request, issued), quotePath: '/b2b/private-quote' };
+  }
+
+  async acceptEmailQuote(dto: B2bQuoteTokenDto) {
+    this.ensurePrivateQuoteEnabled();
+    if (!/^[A-Za-z0-9_-]{43}$/.test(dto.token))
+      throw new NotFoundException('找不到此私密正式報價');
+    const candidate = await this.db.b2bQuoteEmailAccess.findUnique({
+      where: { tokenHash: sha256(dto.token) },
+      select: { issuedQuote: { select: { requestId: true } } },
+    });
+    if (!candidate) throw new NotFoundException('找不到此私密正式報價');
+    const id = candidate.issuedQuote.requestId;
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM b2b_purchase_requests WHERE id=${id} FOR UPDATE`;
+      const { access, issued, request } = await this.emailQuoteAccess(tx, dto.token);
+      if (issued.status === 'accepted') {
+        if (!access.consumedAt || issued.acceptedByEmail !== access.recipientEmail ||
+            !issued.acceptedAt)
+          throw new ConflictException('報價接受證據不一致，請聯絡業務');
+        return { ...this.publicFormalQuote(request, issued), quotePath: '/b2b/private-quote' };
+      }
+      if (issued.status !== 'sent' || access.consumedAt ||
+          issued.quotation.status !== 'sent')
+        throw new ConflictException('此正式報價尚不可接受');
+      const acceptedAt = new Date();
+      const updated = await tx.b2bIssuedQuote.update({
+        where: { id: issued.id },
+        data: { status: 'accepted', acceptedAt, acceptedByEmail: access.recipientEmail },
+      });
+      await tx.b2bQuoteEmailAccess.update({
+        where: { id: access.id }, data: { consumedAt: acceptedAt },
+      });
+      await tx.salesQuotation.update({
+        where: { id: issued.quotationId }, data: { status: 'accepted' },
+      });
+      await tx.auditLog.create({ data: {
+        tableName: 'b2b_issued_quotes', recordId: issued.id,
+        action: 'ACCEPT_BY_VERIFIED_EMAIL',
+        newData: { requestId: request.id, version: issued.version,
+          recipientEmail: access.recipientEmail, verifiedBy: access.verifiedBy,
+          verifiedAt: access.verifiedAt.toISOString(),
+          verificationReason: access.verificationReason,
+          smtpAcceptedAt: access.sentAt!.toISOString(), acceptedAt: acceptedAt.toISOString(),
+          emailAccessId: access.id },
+      } });
+      return { ...this.publicFormalQuote(request, { ...updated, quotation: issued.quotation }),
+        quotePath: '/b2b/private-quote' };
+    }, { maxWait: 5_000, timeout: 20_000 });
+  }
+
   private async assertWmsReady(request: RequestRecord, tx: Prisma.TransactionClient) {
     const productIds = request.items.map((item) => item.productId);
     const products = await tx.product.findMany({
@@ -954,12 +1308,13 @@ export class B2bService {
       });
       if (previous?.status === 'accepted')
         throw new ConflictException('客戶已接受報價，不可重新開立版本');
+      const previousOpen = previous && ['sent', 'delivery_pending'].includes(previous.status);
       const lines = this.quoteLinesForIssue(request, dto,
-        previous?.status === 'sent' ? previous.quotation : undefined);
+        previousOpen ? previous.quotation : undefined);
       const subtotal = lines.reduce((sum, line) => sum.add(line.lineTotal), new Prisma.Decimal(0));
       const tax = quoteTax(subtotal);
       const total = subtotal.add(tax);
-      if (previous?.status === 'sent' &&
+      if (previousOpen &&
           (previous.quotation.validUntil?.toISOString().slice(0, 10) || null) === (dto.validUntil || null) &&
           previous.quotation.paymentTerms === paymentTerms &&
           previous.quotation.deliveryTerms === deliveryTerms &&
@@ -970,9 +1325,14 @@ export class B2bService {
             new Prisma.Decimal(item.unitPriceOriginal).equals(lines[index].unitPrice)))
         return this.publicFormalQuote(request, previous);
       await this.assertWmsReady(request, tx);
-      if (previous?.status === 'sent') {
+      if (previousOpen) {
         await tx.b2bIssuedQuote.update({ where: { id: previous.id }, data: { status: 'superseded' } });
         await tx.salesQuotation.update({ where: { id: previous.quotationId }, data: { status: 'expired' } });
+        if (request.sourceKind === 'GUEST')
+          await tx.b2bQuoteEmailAccess.updateMany({
+            where: { issuedQuoteId: previous.id, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
       }
       const version = (previous?.version || 0) + 1;
       const taxByIndex = allocateQuoteTax(lines, subtotal, tax);
@@ -984,7 +1344,7 @@ export class B2bService {
           quotationDate: new Date(),
           validUntil: date,
           currency: 'TWD',
-          status: 'sent',
+          status: request.sourceKind === 'GUEST' ? 'pending' : 'sent',
           paymentTerms,
           deliveryTerms,
           reference: request.requestNumber,
@@ -1013,6 +1373,7 @@ export class B2bService {
       const issued = await tx.b2bIssuedQuote.create({
         data: {
           requestId: id, quotationId: quotation.id, version, issuedBy: actorId,
+          status: request.sourceKind === 'GUEST' ? 'delivery_pending' : 'sent',
           sellerName: seller.name, sellerTaxId: seller.taxId,
           buyerName: request.customer.companyName || request.customer.name,
           buyerTaxId: request.customer.taxId,
@@ -1027,7 +1388,8 @@ export class B2bService {
     if (!Number.isSafeInteger(version) || version < 1)
       throw new NotFoundException('找不到此正式報價');
     const request = await this.db.b2bPurchaseRequest.findFirst({
-      where: { id, entityId: identity.entityId, customerId: identity.customerId },
+      where: { id, entityId: identity.entityId, customerId: identity.customerId,
+        sourceKind: 'PORTAL' },
       include: includeRequest,
     });
     if (!request) throw new NotFoundException('找不到此正式報價');
@@ -1056,9 +1418,10 @@ export class B2bService {
     if (!Number.isSafeInteger(version) || version < 1)
       throw new NotFoundException('找不到此正式報價');
     return this.db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM b2b_purchase_requests WHERE id=${id} AND entity_id=${identity.entityId} AND customer_id=${identity.customerId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM b2b_purchase_requests WHERE id=${id} AND entity_id=${identity.entityId} AND customer_id=${identity.customerId} AND source_kind='PORTAL' FOR UPDATE`;
       const request = await tx.b2bPurchaseRequest.findFirst({
-        where: { id, entityId: identity.entityId, customerId: identity.customerId },
+        where: { id, entityId: identity.entityId, customerId: identity.customerId,
+          sourceKind: 'PORTAL' },
         include: includeRequest,
       });
       if (!request) throw new NotFoundException('找不到此正式報價');
@@ -1113,7 +1476,8 @@ export class B2bService {
       if (request.salesOrderId || request.status === 'order_confirmed')
         throw new ConflictException('已建立銷售訂單，不可撤回已接受的報價');
       if (request.status !== 'stock_confirmed' || request.issuedQuotes[0]?.id !== issued.id ||
-          issued.status !== 'accepted' || !issued.acceptedAt || !issued.acceptedByAccountId)
+          issued.status !== 'accepted' || !issued.acceptedAt ||
+          !(issued.acceptedByAccountId || issued.acceptedByEmail))
         throw new ConflictException('只能撤回目前已接受且尚未接單的正式報價');
       const withdrawnAt = new Date();
       const withdrawn = await tx.b2bIssuedQuote.update({
@@ -1121,6 +1485,10 @@ export class B2bService {
         data: { status: 'withdrawn', withdrawnAt, withdrawnBy: actorId, withdrawalReason: reason },
       });
       await tx.salesQuotation.update({ where: { id: issued.quotationId }, data: { status: 'withdrawn' } });
+      if (request.sourceKind === 'GUEST')
+        await tx.b2bQuoteEmailAccess.updateMany({
+          where: { issuedQuoteId: issued.id, revokedAt: null }, data: { revokedAt: withdrawnAt },
+        });
       await tx.b2bRequestItem.updateMany({
         where: { requestId: id }, data: { confirmedQuantity: null },
       });
@@ -1166,18 +1534,34 @@ export class B2bService {
         throw new ConflictException('須先由人員全數核庫；數量有差異時應取得客戶重新確認');
       }
       if (row.issuedQuotes[0]?.status !== 'accepted' ||
-        !row.issuedQuotes[0]?.acceptedAt || !row.issuedQuotes[0]?.acceptedByAccountId)
-        throw new ConflictException('須先開立正式報價並取得客戶登入確認');
+        !row.issuedQuotes[0]?.acceptedAt ||
+        !(row.sourceKind === 'PORTAL'
+          ? row.issuedQuotes[0]?.acceptedByAccountId && !row.issuedQuotes[0]?.acceptedByEmail
+          : row.sourceKind === 'GUEST' && row.issuedQuotes[0]?.acceptedByEmail &&
+            !row.issuedQuotes[0]?.acceptedByAccountId))
+        throw new ConflictException('須先開立正式報價並取得客戶確認');
       const issued = await tx.b2bIssuedQuote.findFirst({
         where: { requestId: id, version: row.issuedQuotes[0].version },
         include: includeIssuedQuote,
       });
       if (!issued || issued.id !== row.issuedQuotes[0].id || issued.status !== 'accepted' ||
-          !issued.acceptedAt || !issued.acceptedByAccountId ||
+          !issued.acceptedAt || !(issued.acceptedByAccountId || issued.acceptedByEmail) ||
           issued.acceptedAt.getTime() !== row.issuedQuotes[0].acceptedAt.getTime() ||
           issued.acceptedByAccountId !== row.issuedQuotes[0].acceptedByAccountId ||
+          issued.acceptedByEmail !== row.issuedQuotes[0].acceptedByEmail ||
           issued.quotation.status !== 'accepted')
         throw new ConflictException('正式報價接受紀錄不一致，請人工查核');
+      if (row.sourceKind === 'GUEST') {
+        const evidence = await tx.b2bQuoteEmailAccess.findUnique({
+          where: { issuedQuoteId: issued.id },
+        });
+        if (!evidence || evidence.sendState !== 'SENT' || !evidence.sentAt ||
+            !evidence.consumedAt || evidence.revokedAt ||
+            evidence.recipientEmail !== issued.acceptedByEmail ||
+            evidence.consumedAt.getTime() !== issued.acceptedAt.getTime() ||
+            evidence.verifiedAt > evidence.sentAt || evidence.sentAt > evidence.consumedAt)
+          throw new ConflictException('電子郵件接受證據不一致，請人工查核');
+      }
       const acceptedQuote = this.assertQuoteSnapshot(row, issued.quotation, true);
       if (row.currency !== 'TWD' ||
         !row.items.reduce((sum, item) => sum.add(item.lineTotal), new Prisma.Decimal(0)).equals(row.subtotal) ||

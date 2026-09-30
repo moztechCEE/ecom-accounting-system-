@@ -34,6 +34,7 @@ function requestRow(overrides: Record<string, unknown> = {}) {
     accountId: 'account-a',
     requestId,
     sourceHash: 'hash',
+    sourceKind: 'PORTAL',
     requestNumber: 'B2B-TEST',
     customerPoNumber: 'PO-01',
     status: 'pending_stock_review',
@@ -164,6 +165,8 @@ function makeDb() {
     b2bStockReview: { create: jest.fn().mockResolvedValue({ id: 'review-event' }) },
     b2bIssuedQuote: { findFirst: jest.fn().mockImplementation(async () => issuedQuoteRow()),
       findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+    b2bQuoteEmailAccess: { updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      findUnique: jest.fn() },
     salesQuotation: { create: jest.fn(), update: jest.fn() },
     inventorySnapshot: { update: jest.fn() },
     inventoryTransaction: { create: jest.fn(), findFirst: jest.fn() },
@@ -412,7 +415,25 @@ describe('B2B account and request boundaries', () => {
       id: 'someone-else',
       entityId: 'entity-a',
       customerId: 'customer-a',
+      sourceKind: 'PORTAL',
     });
+  });
+  it('excludes guest-origin requests from every customer account route', async () => {
+    db.b2bPurchaseRequest.findMany.mockResolvedValue([]);
+    await service.requests(identity.entityId, identity.customerId);
+    expect(db.b2bPurchaseRequest.findMany.mock.calls[0][0].where).toEqual({
+      entityId: identity.entityId,
+      customerId: identity.customerId,
+      sourceKind: 'PORTAL',
+    });
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(null);
+    await expect(service.detail(identity, requestId)).rejects.toThrow(NotFoundException);
+    await expect(service.formalQuote(identity, requestId, 1)).rejects.toThrow(NotFoundException);
+    await expect(service.acceptQuote(identity, requestId, 1)).rejects.toThrow(NotFoundException);
+    expect(db.b2bPurchaseRequest.findFirst.mock.calls.map(([query]: any[]) => query.where))
+      .toEqual(Array(3).fill({ id: requestId, entityId: identity.entityId,
+        customerId: identity.customerId, sourceKind: 'PORTAL' }));
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1);
   });
   it('requires shortfall explanation and rejects an over-confirmation', async () => {
     db.b2bPurchaseRequest.findFirst.mockResolvedValue(requestRow());
@@ -581,6 +602,31 @@ describe('B2B account and request boundaries', () => {
       salesOrderId: 'order-a',
       alreadyConfirmed: false,
     });
+  });
+  it('converts a guest email acceptance only with SMTP and consumption evidence', async () => {
+    const acceptedAt = new Date('2026-09-24T01:00:00Z');
+    const reviewed = requestRow({ sourceKind: 'GUEST', accountId: null,
+      status: 'stock_confirmed', reviewedAt: new Date(),
+      issuedQuotes: [{ id: 'issued-quote', version: 1, status: 'accepted',
+        acceptedAt, acceptedByAccountId: null, acceptedByEmail: 'buyer@example.test' }] });
+    reviewed.items[0].confirmedQuantity = 3 as never;
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
+    db.b2bIssuedQuote.findFirst.mockResolvedValue(issuedQuoteRow({ acceptedAt,
+      acceptedByAccountId: null, acceptedByEmail: 'buyer@example.test' }));
+    const input = { entityId: 'entity-a', warehouseId: 'warehouse-a', channelId: 'b2b-channel' };
+    await expect(service.confirm(requestId, input, 'staff'))
+      .rejects.toThrow('電子郵件接受證據不一致');
+    expect(salesOrders.createSalesOrder).not.toHaveBeenCalled();
+    db.b2bQuoteEmailAccess.findUnique.mockResolvedValue({
+      sendState: 'SENT', recipientEmail: 'buyer@example.test', revokedAt: null,
+      verifiedAt: new Date('2026-09-24T00:00:00Z'),
+      sentAt: new Date('2026-09-24T00:10:00Z'), consumedAt: acceptedAt,
+    });
+    salesOrders.createSalesOrder.mockResolvedValue({ id: 'guest-order' });
+    db.b2bPurchaseRequest.update.mockImplementation(({ data }: any) => ({ ...reviewed, ...data }));
+    const result = await service.confirm(requestId, input, 'staff');
+    expect(result).toMatchObject({ status: 'order_confirmed', salesOrderId: 'guest-order' });
+    expect(salesOrders.createSalesOrder).toHaveBeenCalledTimes(1);
   });
   it('creates one reserved order from accepted edited quote V2, not request list price, across replay', async () => {
     let reviewed = requestRow({ status: 'stock_confirmed', reviewedAt: new Date(),
@@ -760,7 +806,7 @@ describe('B2B account and request boundaries', () => {
     db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
     await expect(service.confirm(requestId, {
       entityId: 'entity-a', warehouseId: 'warehouse-a', channelId: 'b2b-channel',
-    }, 'staff')).rejects.toThrow('須先開立正式報價並取得客戶登入確認');
+    }, 'staff')).rejects.toThrow('須先開立正式報價並取得客戶確認');
     expect(salesOrders.createSalesOrder).not.toHaveBeenCalled();
   });
   it('issues an immutable quotation from reviewed snapshot and replays identical terms', async () => {
@@ -980,6 +1026,36 @@ describe('B2B account and request boundaries', () => {
     expect(db.b2bIssuedQuote.create.mock.calls[0][0].data).toMatchObject({
       requestId, version: 2, issuedBy: 'staff', deliveryDate: null,
     });
+  });
+  it.each(['delivery_pending', 'sent'])(
+    'keeps guest V2 delivery pending and revokes a prior %s version', async (previousStatus) => {
+    const reviewed = requestRow({ sourceKind: 'GUEST', accountId: null,
+      status: 'stock_confirmed', reviewedAt: new Date(),
+      issuedQuotes: [{ id: 'issued-v1', version: 1, status: previousStatus }] });
+    reviewed.items[0].confirmedQuantity = 3 as never;
+    db.b2bPurchaseRequest.findFirst.mockResolvedValue(reviewed);
+    db.b2bIssuedQuote.findFirst.mockResolvedValue(issuedQuoteRow({ id: 'issued-v1',
+      status: previousStatus, quotation: { ...issuedQuoteRow().quotation,
+        status: previousStatus === 'sent' ? 'sent' : 'pending' } }));
+    db.salesQuotation.create.mockImplementation(async ({ data }: any) => ({
+      ...data, id: 'quotation-v2', items: data.items.create,
+    }));
+    db.b2bIssuedQuote.create.mockImplementation(async ({ data }: any) => ({
+      ...data, id: 'issued-v2', acceptedAt: null,
+    }));
+    const quote = await service.issueQuote(requestId, {
+      entityId: 'entity-a', validUntil: '2099-12-31', paymentTerms: 'New terms',
+    }, 'staff');
+    expect(quote.status).toBe('delivery_pending');
+    expect(db.salesQuotation.create.mock.calls[0][0].data.status).toBe('pending');
+    expect(db.b2bIssuedQuote.update).toHaveBeenCalledWith({
+      where: { id: 'issued-v1' }, data: { status: 'superseded' },
+    });
+    expect(db.b2bQuoteEmailAccess.updateMany).toHaveBeenCalledWith({
+      where: { issuedQuoteId: 'issued-v1', revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(salesOrders.createSalesOrder).not.toHaveBeenCalled();
   });
   it('records customer acceptance only for the latest visible quote and scopes it to that customer', async () => {
     const reviewed = requestRow({ status: 'stock_confirmed', reviewedAt: new Date(),

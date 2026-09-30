@@ -46,7 +46,27 @@ export class B2bPriceBookListDto extends B2bPriceBookEntityDto {
   offset?: string;
 }
 
+export class B2bPublicCatalogQueryDto extends B2bPriceBookListDto {
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  brand?: string;
+
+  // Product.category is existing free-form data. Preserve its exact value so
+  // every category returned by facets can be used as a filter.
+  @IsOptional()
+  @IsString()
+  category?: string;
+}
+
 export class B2bPutPriceBookDto extends B2bPriceBookEntityDto {
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  brand?: string | null;
+
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   @Max(100000000)

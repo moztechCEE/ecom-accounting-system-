@@ -40,13 +40,27 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
           'GET /api/v1/health',
           'GET /api/v1/health/ready',
         ];
-        if (process.env.B2B_PUBLIC_CATALOG_ENABLED === 'true')
+        if (process.env.B2B_PUBLIC_CATALOG_ENABLED === 'true') {
           allowed.push('GET /api/v1/b2b/public/catalog');
+          allowed.push('GET /api/v1/b2b/public/catalog/facets');
+        }
         if (
           process.env.B2B_PUBLIC_CATALOG_ENABLED === 'true' &&
           process.env.B2B_PUBLIC_ORDER_ENABLED === 'true'
-        )
+        ) {
           allowed.push('POST /api/v1/b2b/public/requests');
+          if (
+            request.method === 'GET' &&
+            /^\/api\/v1\/b2b\/public\/orders\/G-[0-9A-F]{24}$/.test(
+              request.path.replace(/\/+$/, ''),
+            )
+          )
+            allowed.push(route);
+        }
+        if (process.env.B2B_PRIVATE_QUOTE_EMAIL_ENABLED === 'true') {
+          allowed.push('POST /api/v1/b2b/public/quote-access/preview');
+          allowed.push('POST /api/v1/b2b/public/quote-access/accept');
+        }
         if (!allowed.includes(route))
           throw new ForbiddenException('DEV 停用公開註冊、回呼與外部作業入口');
       }

@@ -25,6 +25,7 @@ function setCacheHeaders(res, filePath) {
   const ext = extname(filePath).toLowerCase();
   if (ext === '.html') {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.setHeader('Referrer-Policy', 'no-referrer');
     return;
   }
 
@@ -91,6 +92,7 @@ const server = http.createServer(async (req, res) => {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.setHeader('Referrer-Policy', 'no-referrer');
     res.end(html);
   } catch (error) {
     res.statusCode = 500;
