@@ -6,6 +6,7 @@ import {
   IsEmail,
   IsIn,
   IsInt,
+  IsNumber,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -116,4 +117,23 @@ export class B2bGuestRejectDto extends B2bGuestEntityDto {
   @MinLength(10)
   @MaxLength(1000)
   reason!: string;
+}
+
+export class B2bGuestConversionLineDto {
+  @IsUUID('4') id!: string;
+  @IsInt() @Min(1) @Max(1000) quantity!: number;
+  // Explicit staff-approved tax-exclusive amount; never derive this from MSRP.
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(100000000)
+  netUnitPrice!: number;
+}
+
+export class B2bGuestConvertDto extends B2bGuestEntityDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => B2bGuestConversionLineDto)
+  items!: B2bGuestConversionLineDto[];
 }

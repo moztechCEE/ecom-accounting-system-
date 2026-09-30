@@ -219,12 +219,14 @@ function fixture() {
       create: async ({ data }: any) => {
         const row = {
           status: 'pending_stock_review',
+          sourceKind: 'PORTAL',
           currency: 'TWD',
           salesOrderId: null,
           createdAt: new Date(),
           reviewedAt: null,
           reviewNote: null,
           deliveryDate: null,
+          stockReviews: [],
           ...data,
           items: data.items.create.map((i: any) => ({
             id: randomUUID(),

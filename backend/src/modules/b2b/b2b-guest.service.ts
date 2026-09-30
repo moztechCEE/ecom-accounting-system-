@@ -9,10 +9,11 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma, ProductType } from '@prisma/client';
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   B2bGuestListDto,
+  B2bGuestConvertDto,
   B2bGuestMatchDto,
   B2bGuestRejectDto,
   B2bGuestSubmitDto,
@@ -20,6 +21,9 @@ import {
 
 const WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMITS = { ip: 20, email: 6, entity: 100 } as const;
+const ORDER_LOOKUP_LIMIT = 60;
+const ORDER_LINK_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
+const PUBLIC_REFERENCE = /^G-[0-9A-F]{24}$/;
 const money = (amount: Prisma.Decimal) => amount.toFixed(2);
 
 function clean(value: string | undefined) {
@@ -203,8 +207,91 @@ export class B2bGuestService {
       );
   }
 
+  private async limitOrderLookup(secret: string, ip: string | undefined) {
+    // Use only Express req.ip after the trusted-proxy deployment check.
+    if (!ip || ip.length > 128)
+      throw new ServiceUnavailableException('無法確認來源位址');
+    const windowStart = new Date(
+      Math.floor(Date.now() / WINDOW_MS) * WINDOW_MS,
+    );
+    const keyHash = createHmac('sha256', secret)
+      .update(`order-lookup-ip\0${ip}\0${windowStart.toISOString()}`)
+      .digest('hex');
+    const bucket = await this.db.b2bGuestRateBucket.upsert({
+      where: { keyHash },
+      create: { keyHash, windowStart, attempts: 1 },
+      update: { attempts: { increment: 1 } },
+      select: { attempts: true },
+    });
+    await this.cleanupExpiredRateBuckets();
+    if (bucket.attempts > ORDER_LOOKUP_LIMIT)
+      throw new HttpException(
+        '目前查詢次數較多，請稍後再試',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+  }
+
   private response(row: { reference: string }) {
-    return { accepted: true, reference: row.reference };
+    return {
+      accepted: true,
+      reference: row.reference,
+      orderUrl: `/b2b/order/${row.reference}`,
+    };
+  }
+
+  // Bearer-link view: valid for 30 days after submission. Rejected inquiries
+  // and expired links are indistinguishable from unknown references.
+  async publicOrder(reference: string, ip: string | undefined) {
+    const secret = this.publicConfig();
+    await this.limitOrderLookup(secret, ip);
+    if (!PUBLIC_REFERENCE.test(reference))
+      throw new NotFoundException('找不到採購需求');
+    const cutoff = new Date(Date.now() - ORDER_LINK_LIFETIME_MS);
+    const row = await this.db.b2bGuestInquiry.findFirst({
+      where: {
+        reference,
+        status: { in: ['NEW', 'MATCHED'] },
+        createdAt: { gte: cutoff },
+        entity: { isActive: true },
+      },
+      select: {
+        reference: true,
+        status: true,
+        createdAt: true,
+        items: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+          select: {
+            sku: true,
+            name: true,
+            quantity: true,
+            msrp: true,
+            currency: true,
+            taxBasis: true,
+            lineTotal: true,
+          },
+        },
+      },
+    });
+    if (
+      !row ||
+      !['NEW', 'MATCHED'].includes(row.status) ||
+      row.createdAt < cutoff
+    )
+      throw new NotFoundException('找不到採購需求');
+    return {
+      reference: row.reference,
+      createdAt: row.createdAt,
+      status: row.status,
+      items: row.items.map((item) => ({
+        sku: item.sku,
+        name: item.name,
+        quantity: item.quantity,
+        msrp: money(item.msrp),
+        currency: item.currency,
+        taxBasis: item.taxBasis,
+        lineTotal: money(item.lineTotal),
+      })),
+    };
   }
 
   async submit(dto: B2bGuestSubmitDto, ip: string | undefined) {
@@ -352,6 +439,7 @@ export class B2bGuestService {
           createdAt: true,
           matchedCustomerId: true,
           matchedCustomer: { select: { name: true } },
+          purchaseRequest: { select: { id: true, requestNumber: true, status: true } },
           _count: { select: { items: true } },
         },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -373,6 +461,9 @@ export class B2bGuestService {
         createdAt: row.createdAt,
         matchedCustomerId: row.matchedCustomerId,
         matchedCustomerName: row.matchedCustomer?.name || null,
+        convertedRequestId: row.purchaseRequest?.id || null,
+        convertedRequestNumber: row.purchaseRequest?.requestNumber || null,
+        convertedRequestStatus: row.purchaseRequest?.status || null,
       })),
       total,
       limit,
@@ -387,6 +478,7 @@ export class B2bGuestService {
       where: { id, entityId },
       include: {
         matchedCustomer: { select: { name: true } },
+        purchaseRequest: { select: { id: true, requestNumber: true, status: true } },
         items: { orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] },
       },
     });
@@ -404,6 +496,9 @@ export class B2bGuestService {
       createdAt: row.createdAt,
       matchedCustomerId: row.matchedCustomerId,
       matchedCustomerName: row.matchedCustomer?.name || null,
+      convertedRequestId: row.purchaseRequest?.id || null,
+      convertedRequestNumber: row.purchaseRequest?.requestNumber || null,
+      convertedRequestStatus: row.purchaseRequest?.status || null,
       matchedAt: row.matchedAt,
       matchedBy: row.matchedBy,
       matchReason: row.matchReason,
@@ -477,6 +572,142 @@ export class B2bGuestService {
       });
     });
     return this.detail(dto.entityId, id);
+  }
+
+  async convert(id: string, dto: B2bGuestConvertDto, actorId: string) {
+    await this.company(dto.entityId);
+    if (!Array.isArray(dto.items) || dto.items.length < 1 || dto.items.length > 100)
+      throw new BadRequestException('請逐項填寫未稅採購單價');
+    const selected = new Map<string, { quantity: number; price: Prisma.Decimal }>();
+    for (const item of dto.items) {
+      if (!item || typeof item.id !== 'string' || selected.has(item.id))
+        throw new BadRequestException('採購品項重複或無效');
+      if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 1000)
+        throw new BadRequestException('採購數量無效');
+      if (typeof item.netUnitPrice !== 'number' || !Number.isFinite(item.netUnitPrice))
+        throw new BadRequestException('未稅採購單價應大於零且最多兩位小數');
+      const price = new Prisma.Decimal(item.netUnitPrice);
+      if (!price.isFinite() || price.lt('0.01') || price.gt(100000000) ||
+          price.decimalPlaces() > 2)
+        throw new BadRequestException('未稅採購單價應大於零且最多兩位小數');
+      selected.set(item.id, { quantity: item.quantity, price });
+    }
+    try {
+      return await this.db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM b2b_guest_inquiries WHERE id=${id} AND entity_id=${dto.entityId} FOR UPDATE`;
+        const guest = await tx.b2bGuestInquiry.findFirst({
+          where: { id, entityId: dto.entityId },
+          include: { items: { orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] } },
+        });
+        if (!guest) throw new NotFoundException('找不到採購需求');
+        if (guest.status !== 'MATCHED' || !guest.matchedCustomerId ||
+            !guest.matchedAt || !guest.matchedBy || !guest.matchReason)
+          throw new ConflictException('須先由人員核實並配對客戶');
+        const sourceItems = new Map(guest.items.map((item) => [item.id, item]));
+        if (selected.size > guest.items.length ||
+            [...selected].some(([itemId, chosen]) => {
+              const source = sourceItems.get(itemId);
+              return !source || chosen.quantity > source.quantity;
+            }))
+          throw new BadRequestException('品項或數量不可超過原始採購需求');
+
+        const sourceHash = createHash('sha256').update(JSON.stringify({
+          guestId: guest.id,
+          payloadHash: guest.payloadHash,
+          customerId: guest.matchedCustomerId,
+          selectedLines: [...selected].sort(([a], [b]) => a.localeCompare(b))
+            .map(([itemId, chosen]) => [itemId, chosen.quantity, chosen.price.toFixed(2)]),
+        })).digest('hex');
+        const existing = await tx.b2bPurchaseRequest.findUnique({
+          where: { sourceGuestInquiryId: id },
+          select: { id: true, requestNumber: true, sourceHash: true },
+        });
+        if (existing) {
+          if (existing.sourceHash !== sourceHash)
+            throw new ConflictException('此採購需求已轉入內部，請在正式報價中修訂價格');
+          return { requestId: existing.id, requestNumber: existing.requestNumber,
+            alreadyConverted: true };
+        }
+        const customer = await tx.customer.findFirst({
+          where: { id: guest.matchedCustomerId, entityId: dto.entityId, isActive: true },
+          select: { id: true },
+        });
+        if (!customer) throw new ConflictException('配對客戶已停用，請人工查核');
+        const chosenItems = guest.items.filter((item) => selected.has(item.id));
+        const productIds = chosenItems.map((item) => item.productId);
+        const products = await tx.product.findMany({
+          where: { id: { in: productIds }, entityId: dto.entityId,
+            isActive: true, type: ProductType.SIMPLE },
+          select: { id: true },
+        });
+        if (products.length !== productIds.length)
+          throw new ConflictException('需求中的商品已停用或不屬於此公司，請人工查核');
+
+        // Staff prices are tax-exclusive. Guest MSRP may include tax and must
+        // never be copied into a customer-specific quote or order.
+        const lines = chosenItems.map((item, sortOrder) => {
+          const chosen = selected.get(item.id)!;
+          const unitPrice = chosen.price;
+          return {
+            productId: item.productId,
+            sku: item.sku,
+            name: item.name,
+            quantity: chosen.quantity,
+            unitPrice,
+            lineTotal: unitPrice.mul(chosen.quantity),
+            sortOrder,
+          };
+        });
+        const subtotal = lines.reduce((sum, line) => sum.add(line.lineTotal), new Prisma.Decimal(0));
+        const tax = subtotal.mul('0.05').toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+        const requestId = randomUUID();
+        const request = await tx.b2bPurchaseRequest.create({
+          data: {
+            id: requestId,
+            entityId: dto.entityId,
+            customerId: customer.id,
+            accountId: null,
+            requestId: randomUUID(),
+            sourceHash,
+            sourceKind: 'GUEST',
+            sourceGuestInquiryId: guest.id,
+            requestNumber: `B2B-${requestId.toUpperCase()}`,
+            customerPoNumber: guest.customerPoNumber,
+            note: guest.note,
+            currency: 'TWD',
+            subtotal,
+            tax,
+            total: subtotal.add(tax),
+            items: { create: lines },
+          },
+          select: { id: true, requestNumber: true },
+        });
+        await tx.auditLog.create({
+          data: {
+            userId: actorId,
+            tableName: 'b2b_purchase_requests',
+            recordId: request.id,
+            action: 'CONVERT_GUEST_INQUIRY',
+            oldData: { guestInquiryId: guest.id, guestReference: guest.reference },
+            newData: {
+              sourceKind: 'GUEST', customerId: customer.id,
+              guestInquiryId: guest.id, requestNumber: request.requestNumber,
+              selectedLines: chosenItems.map((item) => ({
+                guestItemId: item.id,
+                quantity: selected.get(item.id)!.quantity,
+                netUnitPrice: selected.get(item.id)!.price.toFixed(2),
+              })),
+            },
+          },
+        });
+        return { requestId: request.id, requestNumber: request.requestNumber,
+          alreadyConverted: false };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if ((error as { code?: string }).code === 'P2034')
+        throw new ConflictException('採購需求剛更新，請重新載入後再試');
+      throw error;
+    }
   }
 
   async reject(id: string, dto: B2bGuestRejectDto, actorId: string) {

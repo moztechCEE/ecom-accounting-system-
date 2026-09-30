@@ -85,6 +85,7 @@ describe('B2B governed price books', () => {
     tx.b2bProductPriceBook.upsert.mockResolvedValue({
       id: 'book',
       productId,
+      brand: 'Corely',
       msrp: d('1000'),
       regularPrice: d('900'),
       groupBuyPrice: d('650'),
@@ -97,6 +98,7 @@ describe('B2B governed price books', () => {
       productId,
       {
         entityId: 'entity',
+        brand: ' Corely ',
         msrp: 1000,
         regularPrice: 900,
         groupBuyPrice: 650,
@@ -107,6 +109,7 @@ describe('B2B governed price books', () => {
       'staff',
     );
     expect(result).toMatchObject({
+      brand: 'Corely',
       msrp: '1000.00',
       regularPrice: '900.00',
       groupBuyPrice: '650.00',
@@ -116,6 +119,7 @@ describe('B2B governed price books', () => {
     expect(tx.b2bProductPriceBook.upsert.mock.calls[0][0].create).toMatchObject(
       {
         productId,
+        brand: 'Corely',
         msrp: d(1000),
         regularPrice: d(900),
         groupBuyPrice: d(650),
@@ -153,6 +157,59 @@ describe('B2B governed price books', () => {
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(tx.b2bProductPriceBook.upsert).not.toHaveBeenCalled();
+  });
+
+  it('allows staff to clear a previously assigned brand without changing the public flag', async () => {
+    const { tx, service } = fixture();
+    tx.b2bProductPriceBook.findUnique.mockResolvedValue({
+      id: 'book',
+      brand: 'Old',
+    });
+    tx.b2bProductPriceBook.upsert.mockResolvedValue({
+      id: 'book',
+      productId,
+      brand: null,
+      msrp: d('1000'),
+      regularPrice: null,
+      groupBuyPrice: null,
+      isPublic: false,
+      currency: 'TWD',
+      taxBasis: 'TAX_INCLUDED',
+      updatedAt: now,
+    });
+    const result = await service.putBook(
+      productId,
+      {
+        entityId: 'entity',
+        brand: null,
+        msrp: 1000,
+        isPublic: false,
+        currency: 'TWD',
+        taxBasis: 'TAX_INCLUDED',
+      },
+      'staff',
+    );
+    expect(tx.b2bProductPriceBook.upsert.mock.calls[0][0].update).toMatchObject(
+      { brand: null, isPublic: false },
+    );
+    expect(result).toMatchObject({ brand: null, isPublic: false });
+  });
+
+  it('suggests distinct staff-maintained brands across the company pricebook', async () => {
+    const { db, service } = fixture();
+    db.b2bProductPriceBook.findMany.mockResolvedValue([
+      { brand: 'Corely' },
+      { brand: 'Other' },
+    ]);
+    expect(await service.brands('entity')).toEqual({
+      brands: ['Corely', 'Other'],
+    });
+    expect(db.b2bProductPriceBook.findMany).toHaveBeenCalledWith({
+      where: { entityId: 'entity', brand: { not: null } },
+      select: { brand: true },
+      distinct: ['brand'],
+      orderBy: { brand: 'asc' },
+    });
   });
 
   it('treats group-buy as a standing organizer reference and fails closed without verified organizer classification', async () => {
@@ -259,6 +316,7 @@ describe('B2B governed price books', () => {
       db.b2bProductPriceBook.findMany.mockResolvedValue([
         {
           productId,
+          brand: 'Corely',
           msrp: d('1000'),
           currency: 'TWD',
           taxBasis: 'TAX_INCLUDED',
@@ -276,6 +334,7 @@ describe('B2B governed price books', () => {
           productId,
           sku: 'SKU',
           name: 'Item',
+          brand: 'Corely',
           category: 'Devices',
           msrp: '1000.00',
           currency: 'TWD',
@@ -294,12 +353,86 @@ describe('B2B governed price books', () => {
       });
       expect(query.select).toEqual({
         productId: true,
+        brand: true,
         msrp: true,
         currency: true,
         taxBasis: true,
         product: {
           select: { sku: true, name: true, category: true },
         },
+      });
+    } finally {
+      if (previous === undefined) delete process.env.B2B_PUBLIC_CATALOG_ENABLED;
+      else process.env.B2B_PUBLIC_CATALOG_ENABLED = previous;
+    }
+  });
+
+  it('filters the anonymous catalog by explicit brand and Product.category within the public eligibility boundary', async () => {
+    const { db, service } = fixture();
+    const previous = process.env.B2B_PUBLIC_CATALOG_ENABLED;
+    try {
+      process.env.B2B_PUBLIC_CATALOG_ENABLED = 'true';
+      await service.publicCatalog(
+        'entity',
+        20,
+        0,
+        undefined,
+        ' Corely ',
+        'Devices',
+      );
+      const query = db.b2bProductPriceBook.findMany.mock.calls[0][0];
+      expect(query.where).toMatchObject({
+        entityId: 'entity',
+        isPublic: true,
+        brand: 'Corely',
+        product: {
+          entityId: 'entity',
+          isActive: true,
+          type: 'SIMPLE',
+          category: 'Devices',
+          b2bCatalog: { some: { entityId: 'entity', isPublished: true } },
+        },
+      });
+    } finally {
+      if (previous === undefined) delete process.env.B2B_PUBLIC_CATALOG_ENABLED;
+      else process.env.B2B_PUBLIC_CATALOG_ENABLED = previous;
+    }
+  });
+
+  it('provides only facets of eligible public SIMPLE products', async () => {
+    const { db, service } = fixture();
+    const previous = process.env.B2B_PUBLIC_CATALOG_ENABLED;
+    try {
+      delete process.env.B2B_PUBLIC_CATALOG_ENABLED;
+      await expect(
+        service.publicCatalogFacets('entity'),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(db.b2bProductPriceBook.findMany).not.toHaveBeenCalled();
+      process.env.B2B_PUBLIC_CATALOG_ENABLED = 'true';
+      db.b2bProductPriceBook.findMany.mockResolvedValue([
+        { brand: 'Corely', product: { category: 'Devices' } },
+        { brand: 'Corely', product: { category: 'Accessories' } },
+        { brand: null, product: { category: 'Devices' } },
+        { brand: 'Other', product: { category: null } },
+      ]);
+      expect(await service.publicCatalogFacets('entity')).toEqual({
+        brands: ['Corely', 'Other'],
+        categories: ['Accessories', 'Devices'],
+      });
+      const query = db.b2bProductPriceBook.findMany.mock.calls[0][0];
+      expect(query.where).toMatchObject({
+        entityId: 'entity',
+        isPublic: true,
+        product: {
+          entityId: 'entity',
+          isActive: true,
+          type: 'SIMPLE',
+          b2bCatalog: { some: { entityId: 'entity', isPublished: true } },
+        },
+      });
+      expect(query.select).toEqual({
+        brand: true,
+        product: { select: { category: true } },
       });
     } finally {
       if (previous === undefined) delete process.env.B2B_PUBLIC_CATALOG_ENABLED;

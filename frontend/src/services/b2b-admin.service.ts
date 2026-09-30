@@ -1,9 +1,9 @@
 import api from './api'
-import type { B2BFormalQuote, B2BRequestDetail } from './b2b.service'
+import type { B2BFormalQuote, B2BRequestDetail, B2BRequestStatus } from './b2b.service'
 
 export interface B2BAdminSetup {
   company: { id: string; name: string; loginCode: string }
-  customers: Array<{ id: string; name: string; companyName: string; code?: string }>
+  customers: Array<{ id: string; name: string; companyName: string; code?: string; email?: string | null; statementEmail?: string | null }>
   vendors: Array<{ id: string; name: string }>
   channels: Array<{ id: string; name: string }>
   warehouses: Array<{ id: string; name: string; code?: string }>
@@ -16,6 +16,25 @@ export interface B2BAdminSetup {
 export interface B2BAdminRequest extends B2BRequestDetail {
   customerName: string
   customerId?: string
+  latestStockReviewId?: string | null
+}
+
+export interface B2BRequestStockSnapshot {
+  capturedAt: string
+  items: Array<{
+    requestItemId: string
+    productId: string
+    warehouses: Array<{
+      warehouseId: string
+      warehouseName: string
+      qtyOnHand: string
+      qtyAllocated: string
+      qtyAvailable: string
+    }>
+    totalOnHand: string
+    totalAllocated: string
+    totalAvailable: string
+  }>
 }
 
 export interface B2BProductOption { id: string; sku: string; name: string }
@@ -34,6 +53,7 @@ export interface B2BPriceBook {
   productId: string
   sku: string
   name: string
+  brand: string | null
   isPublished: boolean
   isPublic: boolean
   currency: 'TWD'
@@ -100,6 +120,9 @@ export interface B2BGuestRequestSummary {
   createdAt: string
   matchedCustomerId: string | null
   matchedCustomerName: string | null
+  convertedRequestId: string | null
+  convertedRequestNumber: string | null
+  convertedRequestStatus: B2BRequestStatus | null
 }
 
 export interface B2BGuestRequestDetail extends B2BGuestRequestSummary {
@@ -114,6 +137,17 @@ export interface B2BGuestRequestDetail extends B2BGuestRequestSummary {
   items: Array<{ id: string; productId: string; sku: string; name: string; quantity: number; msrp: string; currency: 'TWD'; taxBasis: 'TAX_INCLUDED' | 'TAX_EXCLUDED'; lineTotal: string }>
 }
 
+export interface B2BGuestConversionInput {
+  entityId: string
+  items: Array<{ id: string; quantity: number; netUnitPrice: number }>
+}
+
+export interface B2BGuestConversionResult {
+  requestId: string
+  requestNumber: string
+  alreadyConverted: boolean
+}
+
 export const b2bAdminService = {
   async productOptions(entityId: string, search = '', limit = 20): Promise<{ rows: B2BProductOption[]; total: number; limit: number; hasMore: boolean }> {
     const { data } = await api.get('/b2b/admin/product-options', { params: { entityId, search: search.trim().slice(0, 200), limit } })
@@ -123,7 +157,11 @@ export const b2bAdminService = {
     const { data } = await api.get<B2BAdminPage<B2BPriceBook>>('/b2b/admin/price-books', { params: { entityId, ...options } })
     return data
   },
-  async savePriceBook(productId: string, input: { entityId: string; currency: 'TWD'; taxBasis: B2BPriceBook['taxBasis']; msrp: number; regularPrice: number | null; groupBuyPrice: number | null; isPublic: boolean }): Promise<B2BPriceBook> {
+  async priceBookBrands(entityId: string): Promise<{ brands: string[] }> {
+    const { data } = await api.get<{ brands: string[] }>('/b2b/admin/price-books/brands', { params: { entityId } })
+    return data
+  },
+  async savePriceBook(productId: string, input: { entityId: string; currency: 'TWD'; taxBasis: B2BPriceBook['taxBasis']; msrp: number; regularPrice: number | null; groupBuyPrice: number | null; brand: string | null; isPublic: boolean }): Promise<B2BPriceBook> {
     const { data } = await api.put<B2BPriceBook>(`/b2b/admin/price-books/${encodeURIComponent(productId)}`, input)
     return data
   },
@@ -153,6 +191,10 @@ export const b2bAdminService = {
   },
   async matchGuestRequest(id: string, input: { entityId: string; customerId: string; reason: string }): Promise<B2BGuestRequestDetail> {
     const { data } = await api.post<B2BGuestRequestDetail>(`/b2b/admin/guest-requests/${encodeURIComponent(id)}/match`, input)
+    return data
+  },
+  async convertGuestRequest(id: string, input: B2BGuestConversionInput): Promise<B2BGuestConversionResult> {
+    const { data } = await api.post<B2BGuestConversionResult>(`/b2b/admin/guest-requests/${encodeURIComponent(id)}/convert`, input)
     return data
   },
   async rejectGuestRequest(id: string, input: { entityId: string; reason: string }): Promise<B2BGuestRequestDetail> {
@@ -196,6 +238,14 @@ export const b2bAdminService = {
   async reviewRequest(id: string, input: { entityId: string; items: Array<{ id: string; confirmedQuantity: number }>; reviewNote?: string; deliveryDate?: string }): Promise<void> {
     await api.post(`/b2b/admin/requests/${encodeURIComponent(id)}/review`, input)
   },
+  async stockSnapshot(id: string, entityId: string): Promise<B2BRequestStockSnapshot> {
+    const { data } = await api.get<B2BRequestStockSnapshot>(`/b2b/admin/requests/${encodeURIComponent(id)}/stock-snapshot`, { params: { entityId } })
+    return data
+  },
+  async reviseGuestRequest(id: string, input: { entityId: string; amendmentId: string; expectedStockReviewId: string; reason: string; items: Array<{ requestItemId: string; quantity: number }> }): Promise<{ requestId: string; requestNumber: string; alreadyApplied: boolean }> {
+    const { data } = await api.post(`/b2b/admin/requests/${encodeURIComponent(id)}/revise-guest`, input)
+    return data
+  },
   async formalQuote(id: string, version: number, entityId: string): Promise<B2BFormalQuote> {
     const { data } = await api.get<B2BFormalQuote>(`/b2b/admin/requests/${encodeURIComponent(id)}/quotes/${encodeURIComponent(version)}`, { params: { entityId } })
     return data
@@ -208,6 +258,10 @@ export const b2bAdminService = {
     deliveryTerms?: string
   }): Promise<B2BFormalQuote> {
     const { data } = await api.post<B2BFormalQuote>(`/b2b/admin/requests/${encodeURIComponent(id)}/quotes`, input)
+    return data
+  },
+  async emailGuestQuote(id: string, version: number, input: { entityId: string; recipientEmail: string; verificationReason: string }): Promise<{ deliveryStatus: string; recipientEmail: string; sentAt: string | null }> {
+    const { data } = await api.post(`/b2b/admin/requests/${encodeURIComponent(id)}/quotes/${encodeURIComponent(version)}/email`, input)
     return data
   },
   async withdrawQuote(id: string, version: number, input: { entityId: string; reason: string }): Promise<B2BFormalQuote> {

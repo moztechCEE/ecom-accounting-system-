@@ -28,9 +28,10 @@ export interface B2BCatalog {
 export type B2BRequestStatus = 'pending_stock_review' | 'stock_confirmed' | 'needs_adjustment' | 'order_confirmed'
 
 export interface B2BRequestDetail {
+  sourceKind: 'PORTAL' | 'GUEST'
   id: string
   requestNumber: string
-  customerPoNumber: string
+  customerPoNumber: string | null
   status: B2BRequestStatus
   salesOrderId: string | null
   currency: 'TWD'
@@ -54,7 +55,7 @@ export interface B2BRequestDetail {
   }>
   quotePath: string
   quoteVersion: number | null
-  quoteStatus: 'sent' | 'accepted' | 'superseded' | 'withdrawn' | null
+  quoteStatus: 'delivery_pending' | 'sent' | 'accepted' | 'superseded' | 'withdrawn' | null
   formalQuotePath: string | null
 }
 
@@ -62,7 +63,7 @@ export interface B2BFormalQuote {
   id: string
   requestId: string
   requestNumber: string
-  customerPoNumber: string
+  customerPoNumber: string | null
   quotationNo: string
   quotationDate: string
   sellerName: string
@@ -70,7 +71,7 @@ export interface B2BFormalQuote {
   buyerName: string
   buyerTaxId: string | null
   version: number
-  status: 'sent' | 'accepted' | 'superseded' | 'withdrawn'
+  status: 'delivery_pending' | 'sent' | 'accepted' | 'superseded' | 'withdrawn'
   validUntil: string | null
   acceptedAt: string | null
   withdrawnAt: string | null

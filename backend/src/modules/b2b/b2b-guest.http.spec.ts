@@ -30,6 +30,9 @@ const inquiryId = '33333333-3333-4333-8333-333333333333';
 const productId = '22222222-2222-4222-8222-222222222222';
 const customerId = '44444444-4444-4444-8444-444444444444';
 const publicPath = '/api/v1/b2b/public/requests';
+const publicReference = 'G-0123456789ABCDEF01234567';
+const publicOrderPath = `/api/v1/b2b/public/orders/${publicReference}`;
+const publicCreatedAt = new Date();
 const adminPath = '/api/v1/b2b/admin/guest-requests';
 const validRequest = {
   entityId: 'entity-a',
@@ -57,6 +60,7 @@ class StaffStrategy extends PassportStrategy(Strategy, 'jwt') {
 describe('B2B guest inquiry HTTP boundary', () => {
   let app: INestApplication;
   let match: jest.SpyInstance;
+  let convert: jest.SpyInstance;
   const token = new JwtService({ secret });
   const auth = (actor: string) => `Bearer ${token.sign({ sub: actor })}`;
   const previousEnv = {
@@ -65,7 +69,27 @@ describe('B2B guest inquiry HTTP boundary', () => {
     catalog: process.env.B2B_PUBLIC_CATALOG_ENABLED,
     rateSecret: process.env.B2B_PUBLIC_ORDER_RATE_SECRET,
   };
-  const createInquiry = jest.fn(async () => ({ reference: 'G-TEST-RECEIPT' }));
+  const createInquiry = jest.fn(async () => ({ reference: publicReference }));
+  const findInquiry = jest.fn(async () => ({
+    reference: publicReference,
+    createdAt: publicCreatedAt,
+    status: 'NEW',
+    companyName: 'Private company',
+    contactEmail: 'private@example.com',
+    matchedCustomerId: customerId,
+    items: [
+      {
+        sku: 'SKU-1',
+        name: 'Published item',
+        quantity: 2,
+        msrp: new Prisma.Decimal('100.00'),
+        currency: 'TWD',
+        taxBasis: 'TAX_INCLUDED',
+        lineTotal: new Prisma.Decimal('200.00'),
+        productId,
+      },
+    ],
+  }));
   const listInquiries = jest.fn(async () => []);
   const entityAccess = {
     assertAccess: jest.fn(
@@ -123,6 +147,7 @@ describe('B2B guest inquiry HTTP boundary', () => {
       },
       b2bGuestInquiry: {
         findUnique: jest.fn(async () => null),
+        findFirst: findInquiry,
         create: createInquiry,
         findMany: listInquiries,
         count: jest.fn(async () => 0),
@@ -150,6 +175,11 @@ describe('B2B guest inquiry HTTP boundary', () => {
       id: inquiryId,
       status: 'MATCHED',
     } as Awaited<ReturnType<B2bGuestService['match']>>);
+    convert = jest.spyOn(service, 'convert').mockResolvedValue({
+      requestId: inquiryId,
+      requestNumber: 'B2B-TEST',
+      alreadyConverted: false,
+    });
     const module = await Test.createTestingModule({
       imports: [PassportModule],
       controllers: [B2bGuestPublicController, B2bGuestAdminController],
@@ -177,7 +207,13 @@ describe('B2B guest inquiry HTTP boundary', () => {
     await app.listen(0, '127.0.0.1');
   });
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.B2B_PUBLIC_ORDER_ENABLED = 'true';
+    process.env.B2B_PUBLIC_CATALOG_ENABLED = 'true';
+    process.env.B2B_PUBLIC_ORDER_RATE_SECRET =
+      'isolated-guest-http-test-rate-secret-at-least-32-chars';
+  });
 
   afterAll(async () => {
     await app?.close();
@@ -200,10 +236,57 @@ describe('B2B guest inquiry HTTP boundary', () => {
 
     expect(response.body).toEqual({
       accepted: true,
-      reference: 'G-TEST-RECEIPT',
+      reference: publicReference,
+      orderUrl: `/b2b/order/${publicReference}`,
     });
     expect(response.headers['cache-control']).toBe('no-store');
     expect(createInquiry).toHaveBeenCalledTimes(1);
+  });
+
+  it('serves the anonymous order link with MSRP snapshot only and no cache', async () => {
+    const response = await request(app.getHttpServer())
+      .get(publicOrderPath)
+      .expect(200);
+    expect(response.body).toEqual({
+      reference: publicReference,
+      createdAt: publicCreatedAt.toISOString(),
+      status: 'NEW',
+      items: [
+        {
+          sku: 'SKU-1',
+          name: 'Published item',
+          quantity: 2,
+          msrp: '100.00',
+          currency: 'TWD',
+          taxBasis: 'TAX_INCLUDED',
+          lineTotal: '200.00',
+        },
+      ],
+    });
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['referrer-policy']).toBe('no-referrer');
+    expect(findInquiry).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 404 for unknown references and blocks malformed DEV paths', async () => {
+    findInquiry.mockResolvedValueOnce(null as never);
+    const response = await request(app.getHttpServer())
+      .get(publicOrderPath)
+      .expect(404);
+    expect(response.headers['cache-control']).toBe('no-store');
+    await request(app.getHttpServer())
+      .get('/api/v1/b2b/public/orders/G-guess')
+      .expect(403);
+    expect(findInquiry).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes public order GET when either public flag is disabled', async () => {
+    delete process.env.B2B_PUBLIC_ORDER_ENABLED;
+    await request(app.getHttpServer()).get(publicOrderPath).expect(403);
+    process.env.B2B_PUBLIC_ORDER_ENABLED = 'true';
+    delete process.env.B2B_PUBLIC_CATALOG_ENABLED;
+    await request(app.getHttpServer()).get(publicOrderPath).expect(403);
+    expect(findInquiry).not.toHaveBeenCalled();
   });
 
   it('rejects unexpected private-price fields at the request and item levels', async () => {
@@ -307,5 +390,32 @@ describe('B2B guest inquiry HTTP boundary', () => {
       'sales',
       'entity-a',
     );
+  });
+
+  it('limits conversion to sales staff and validates selected prices and quantities', async () => {
+    const path = `${adminPath}/${inquiryId}/convert`;
+    const body = { entityId: 'entity-a',
+      items: [{ id: inquiryId, quantity: 1, netUnitPrice: 60.25 }] };
+    await request(app.getHttpServer()).post(path).send(body).expect(401);
+    for (const actor of ['reader', 'creator', 'no-role']) {
+      await request(app.getHttpServer()).post(path)
+        .set('Authorization', auth(actor)).send(body).expect(403);
+    }
+    await request(app.getHttpServer()).post(path)
+      .set('Authorization', auth('matcher'))
+      .send({ ...body, entityId: 'entity-b' }).expect(403);
+    await request(app.getHttpServer()).post(path)
+      .set('Authorization', auth('matcher'))
+      .send({ ...body, items: [{ ...body.items[0], netUnitPrice: 0 }] }).expect(400);
+    await request(app.getHttpServer()).post(path)
+      .set('Authorization', auth('matcher'))
+      .send({ ...body, items: [{ ...body.items[0], quantity: 0 }] }).expect(400);
+    expect(convert).not.toHaveBeenCalled();
+
+    const response = await request(app.getHttpServer()).post(path)
+      .set('Authorization', auth('matcher')).send(body).expect(201);
+    expect(response.body).toEqual({ requestId: inquiryId,
+      requestNumber: 'B2B-TEST', alreadyConverted: false });
+    expect(convert).toHaveBeenCalledWith(inquiryId, body, 'matcher');
   });
 });

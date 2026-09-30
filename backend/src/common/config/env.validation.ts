@@ -142,6 +142,14 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   SMTP_FROM?: string;
+
+  @IsOptional()
+  @IsString()
+  B2B_PRIVATE_QUOTE_EMAIL_ENABLED?: string;
+
+  @IsOptional()
+  @IsString()
+  B2B_PRIVATE_QUOTE_FRONTEND_ORIGIN?: string;
 }
 
 /**

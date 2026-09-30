@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   HttpException,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -21,6 +22,7 @@ const requestId = '11111111-1111-4111-8111-111111111111';
 const productId = '22222222-2222-4222-8222-222222222222';
 const inquiryId = '33333333-3333-4333-8333-333333333333';
 const customerId = '44444444-4444-4444-8444-444444444444';
+const publicReference = 'G-0123456789ABCDEF01234567';
 const input: B2bGuestSubmitDto = {
   entityId,
   requestId,
@@ -61,6 +63,7 @@ function fixture() {
       count: jest.fn().mockResolvedValue(0),
       findFirst: jest.fn(),
     },
+    b2bGuestRateBucket: tx.b2bGuestRateBucket,
     b2bProductPriceBook: {
       findMany: jest.fn().mockResolvedValue([
         {
@@ -133,6 +136,15 @@ describe('B2B anonymous guest inquiry boundary', () => {
         )?.value,
       ),
     ).toEqual(['sales_orders:read', 'sales_orders:create']);
+    expect(
+      Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        Object.getOwnPropertyDescriptor(
+          B2bGuestAdminController.prototype,
+          'convert',
+        )?.value,
+      ),
+    ).toEqual(['sales_orders:read', 'sales_orders:create']);
   });
 
   it('fails closed unless both public flags and dedicated HMAC secret are configured', async () => {
@@ -157,7 +169,11 @@ describe('B2B anonymous guest inquiry boundary', () => {
   it('stores only HMAC rate keys, enforces triple publication, snapshots server MSRP and returns no PII', async () => {
     const { db, tx, service } = fixture();
     const result = await service.submit(input, '203.0.113.1');
-    expect(result).toEqual({ accepted: true, reference: 'G-REFERENCE' });
+    expect(result).toEqual({
+      accepted: true,
+      reference: 'G-REFERENCE',
+      orderUrl: '/b2b/order/G-REFERENCE',
+    });
     expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), {
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     });
@@ -207,6 +223,7 @@ describe('B2B anonymous guest inquiry boundary', () => {
     expect(await service.submit(input, '203.0.113.1')).toEqual({
       accepted: true,
       reference: 'G-REFERENCE',
+      orderUrl: '/b2b/order/G-REFERENCE',
     });
     expect(db.b2bGuestInquiry.create).toHaveBeenCalledTimes(1);
     await expect(
@@ -234,6 +251,143 @@ describe('B2B anonymous guest inquiry boundary', () => {
     );
     expect(db.b2bGuestInquiry.create).not.toHaveBeenCalled();
     expect(tx.b2bGuestRateBucket.upsert).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns only the submitted MSRP snapshot for a valid bearer reference', async () => {
+    const { db, tx, service } = fixture();
+    const createdAt = new Date();
+    db.b2bGuestInquiry.findFirst.mockResolvedValue({
+      reference: publicReference,
+      status: 'MATCHED',
+      createdAt,
+      companyName: 'private company',
+      contactEmail: 'private@example.com',
+      customerPoNumber: 'private-po',
+      matchedCustomerId: customerId,
+      items: [
+        {
+          sku: 'SKU-1',
+          name: 'Public item',
+          quantity: 2,
+          msrp: new Prisma.Decimal('100.00'),
+          currency: 'TWD',
+          taxBasis: 'TAX_INCLUDED',
+          lineTotal: new Prisma.Decimal('200.00'),
+          productId,
+          purchaseCost: '1.00',
+        },
+      ],
+    });
+
+    expect(await service.publicOrder(publicReference, '203.0.113.1')).toEqual({
+      reference: publicReference,
+      createdAt,
+      status: 'MATCHED',
+      items: [
+        {
+          sku: 'SKU-1',
+          name: 'Public item',
+          quantity: 2,
+          msrp: '100.00',
+          currency: 'TWD',
+          taxBasis: 'TAX_INCLUDED',
+          lineTotal: '200.00',
+        },
+      ],
+    });
+    const query = db.b2bGuestInquiry.findFirst.mock.calls[0][0];
+    expect(query.where).toMatchObject({
+      reference: publicReference,
+      status: { in: ['NEW', 'MATCHED'] },
+      entity: { isActive: true },
+    });
+    expect(query.where.createdAt.gte).toBeInstanceOf(Date);
+    expect(query.select).toEqual({
+      reference: true,
+      status: true,
+      createdAt: true,
+      items: {
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        select: {
+          sku: true,
+          name: true,
+          quantity: true,
+          msrp: true,
+          currency: true,
+          taxBasis: true,
+          lineTotal: true,
+        },
+      },
+    });
+    expect(tx.b2bGuestRateBucket.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          keyHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+        }),
+      }),
+    );
+    expect(
+      JSON.stringify(tx.b2bGuestRateBucket.upsert.mock.calls),
+    ).not.toContain('203.0.113.1');
+  });
+
+  it('hides unknown, rejected, expired and malformed public references', async () => {
+    const { db, service } = fixture();
+    await expect(
+      service.publicOrder(publicReference, '203.0.113.1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(db.b2bGuestInquiry.findFirst).toHaveBeenCalledTimes(1);
+
+    db.b2bGuestInquiry.findFirst.mockResolvedValue({
+      reference: publicReference,
+      status: 'REJECTED',
+      createdAt: new Date(),
+      items: [],
+    });
+    await expect(
+      service.publicOrder(publicReference, '203.0.113.1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    db.b2bGuestInquiry.findFirst.mockResolvedValue({
+      reference: publicReference,
+      status: 'NEW',
+      createdAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000),
+      items: [],
+    });
+    await expect(
+      service.publicOrder(publicReference, '203.0.113.1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.publicOrder('G-guess', '203.0.113.1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(db.b2bGuestInquiry.findFirst).toHaveBeenCalledTimes(3);
+  });
+
+  it('fails closed on GET flags, missing IP, and exhausted lookup quota', async () => {
+    const { db, tx, service } = fixture();
+    delete process.env.B2B_PUBLIC_ORDER_ENABLED;
+    await expect(
+      service.publicOrder(publicReference, '203.0.113.1'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    process.env.B2B_PUBLIC_ORDER_ENABLED = 'true';
+    delete process.env.B2B_PUBLIC_CATALOG_ENABLED;
+    await expect(
+      service.publicOrder(publicReference, '203.0.113.1'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    process.env.B2B_PUBLIC_CATALOG_ENABLED = 'true';
+    delete process.env.B2B_PUBLIC_ORDER_RATE_SECRET;
+    await expect(
+      service.publicOrder(publicReference, '203.0.113.1'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    process.env.B2B_PUBLIC_ORDER_RATE_SECRET =
+      'isolated-test-secret-long-enough-for-hmac-rate-keys';
+    await expect(
+      service.publicOrder(publicReference, undefined),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    tx.b2bGuestRateBucket.upsert.mockResolvedValueOnce({ attempts: 61 });
+    await expect(
+      service.publicOrder(publicReference, '203.0.113.1'),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(db.b2bGuestInquiry.findFirst).not.toHaveBeenCalled();
   });
 
   it('refuses unpublished product lines and duplicate product IDs', async () => {
