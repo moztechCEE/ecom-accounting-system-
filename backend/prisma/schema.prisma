@@ -222,6 +222,7 @@ model Entity {
   bankAccounts               BankAccount[]
   departments                Department[]
   employees                  Employee[]
+  performanceCycles          PerformanceCycle[]
   userMemberships            UserEntityMembership[]
   payrollPolicy              PayrollPolicy?
   payrollRuns                PayrollRun[]
@@ -1800,6 +1801,8 @@ model Employee {
   department           Department?                   @relation(fields: [departmentId], references: [id])
   supervisor           Employee?                     @relation("EmployeeSupervisor", fields: [supervisorEmployeeId], references: [id], onDelete: SetNull)
   directReports        Employee[]                    @relation("EmployeeSupervisor")
+  performanceReviewsAsSubject  PerformanceReview[]  @relation("PerformanceReviewSubject")
+  performanceReviewsAsReviewer PerformanceReview[]  @relation("PerformanceReviewReviewer")
   payrollItems         PayrollItem[]
   compensationSettings EmployeeCompensationSettings?
   onboardingDocuments  EmployeeOnboardingDocument[]
@@ -1815,6 +1818,47 @@ model Employee {
   @@unique([entityId, employeeNo])
   @@index([entityId])
   @@map("employees")
+}
+
+// A cycle fixes the assessment period; review assignments are snapshots and
+// do not follow later changes to an employee's reporting line.
+model PerformanceCycle {
+  id          String   @id @default(uuid())
+  entityId    String   @map("entity_id")
+  title       String
+  periodStart DateTime @map("period_start") @db.Date
+  periodEnd   DateTime @map("period_end") @db.Date
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  entity  Entity              @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  reviews PerformanceReview[]
+
+  @@unique([entityId, periodStart, periodEnd], map: "performance_cycles_entity_period_unique")
+  @@index([entityId, createdAt], map: "performance_cycles_entity_created_idx")
+  @@map("performance_cycles")
+}
+
+model PerformanceReview {
+  id                 String    @id @default(uuid())
+  cycleId            String    @map("cycle_id")
+  subjectEmployeeId  String    @map("subject_employee_id")
+  reviewerEmployeeId String    @map("reviewer_employee_id")
+  status             String    @default("DRAFT")
+  score              Int?
+  goals              String?
+  comment            String?
+  submittedAt        DateTime? @map("submitted_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  cycle    PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  subject  Employee         @relation("PerformanceReviewSubject", fields: [subjectEmployeeId], references: [id], onDelete: Restrict)
+  reviewer Employee         @relation("PerformanceReviewReviewer", fields: [reviewerEmployeeId], references: [id], onDelete: Restrict)
+
+  @@unique([cycleId, subjectEmployeeId], map: "performance_reviews_cycle_subject_unique")
+  @@index([reviewerEmployeeId, status], map: "performance_reviews_reviewer_status_idx")
+  @@index([subjectEmployeeId], map: "performance_reviews_subject_idx")
+  @@map("performance_reviews")
 }
 
 model EmployeeCompensationSettings {

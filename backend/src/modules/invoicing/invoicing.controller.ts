@@ -9,6 +9,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,9 +21,11 @@ import {
 import { InvoicingService } from './invoicing.service';
 import { IssueInvoiceDto } from './dto/issue-invoice.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { SensitiveResponseInterceptor } from '../product/sensitive-response.interceptor';
 
 /**
  * InvoicingController
@@ -38,7 +41,8 @@ import { Public } from '../../common/decorators/public.decorator';
  */
 @ApiTags('Invoicing')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@UseInterceptors(new SensitiveResponseInterceptor())
 @Controller('invoicing')
 export class InvoicingController {
   constructor(private readonly invoicingService: InvoicingService) {}
@@ -47,7 +51,7 @@ export class InvoicingController {
    * 查詢訂單的發票狀態
    */
   @Get('by-order/:orderId')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @ApiOperation({
     summary: '查詢訂單的發票狀態',
     description: '查詢指定訂單的所有發票記錄，包含發票明細和操作歷程',
@@ -66,7 +70,7 @@ export class InvoicingController {
   }
 
   @Get('queue')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @ApiOperation({
     summary: '查詢發票待辦隊列',
     description:
@@ -86,7 +90,7 @@ export class InvoicingController {
   }
 
   @Get('readiness')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @ApiOperation({
     summary: '查詢綠界電子發票開立 readiness',
     description:
@@ -97,7 +101,7 @@ export class InvoicingController {
   }
 
   @Get('provider-status/readiness')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @ApiOperation({
     summary: '盤點內部發票是否具備綠界狀態查詢條件',
     description:
@@ -119,7 +123,7 @@ export class InvoicingController {
   }
 
   @Get('ecpay/invoices')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @ApiOperation({
     summary: '向綠界查詢多筆電子發票（只讀）',
     description:
@@ -152,7 +156,7 @@ export class InvoicingController {
   }
 
   @Post('ecpay/invoices/sync-to-orders')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '從綠界銷項發票清單同步回填 SalesOrder / Invoice',
@@ -196,7 +200,7 @@ export class InvoicingController {
   }
 
   @Get('ecpay/word-settings')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @ApiOperation({
     summary: '查詢綠界財政部配號結果（只讀）',
     description:
@@ -218,7 +222,7 @@ export class InvoicingController {
    * 預覽發票內容
    */
   @Get('preview/:orderId')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @ApiOperation({
     summary: '預覽發票內容',
     description:
@@ -251,7 +255,7 @@ export class InvoicingController {
   }
 
   @Get(':invoiceId/provider-status')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @ApiOperation({
     summary: '向綠界查詢正式發票狀態（只讀）',
     description:
@@ -270,7 +274,7 @@ export class InvoicingController {
    * 開立正式發票
    */
   @Post('issue/:orderId')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: '開立正式發票（待綠界 API Adapter 啟用）',
@@ -312,7 +316,7 @@ export class InvoicingController {
   }
 
   @Post('issue-eligible')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '批次開立符合條件的訂單發票（待綠界 API Adapter 啟用）',
@@ -350,7 +354,7 @@ export class InvoicingController {
    * 作廢發票
    */
   @Post(':invoiceId/void')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '作廢發票（待綠界作廢 API Adapter 啟用）',
@@ -397,7 +401,7 @@ export class InvoicingController {
    * 開立折讓單
    */
   @Post(':invoiceId/allowance')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: '開立折讓單（待綠界折讓 API Adapter 啟用）',

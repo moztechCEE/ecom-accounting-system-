@@ -18,6 +18,8 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { SetRolePermissionsDto } from './dto/set-role-permissions.dto';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @ApiTags('roles')
 @ApiBearerAuth()
@@ -43,7 +45,8 @@ export class RolesController {
   }
 
   @Post()
-  @UseGuards(PermissionsGuard)
+  @UseGuards(PermissionsGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '建立角色（帳號與權限管理）' })
   async create(@Body() dto: CreateRoleDto) {
@@ -51,7 +54,8 @@ export class RolesController {
   }
 
   @Patch(':id')
-  @UseGuards(PermissionsGuard)
+  @UseGuards(PermissionsGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '更新角色（帳號與權限管理）' })
   async update(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
@@ -59,7 +63,8 @@ export class RolesController {
   }
 
   @Delete(':id')
-  @UseGuards(PermissionsGuard)
+  @UseGuards(PermissionsGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '刪除角色（帳號與權限管理）' })
   async remove(@Param('id') id: string, @CurrentUser('id') actorId: string) {
@@ -67,7 +72,8 @@ export class RolesController {
   }
 
   @Put(':id/permissions')
-  @UseGuards(PermissionsGuard)
+  @UseGuards(PermissionsGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '設定角色權限（帳號與權限管理）' })
   async setPermissions(

@@ -24,11 +24,13 @@ import {
 } from './dto/inventory-http.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';
+import { SensitiveResponseInterceptor } from '../product/sensitive-response.interceptor';
 
 @ApiTags('inventory')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard, EntityAccessGuard)
 @RequireEntityAccess('inventory')
+@UseInterceptors(new SensitiveResponseInterceptor())
 @Controller('inventory')
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}

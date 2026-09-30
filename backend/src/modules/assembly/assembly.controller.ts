@@ -1,12 +1,14 @@
-import { Controller, Get, Post, Body, Param, Put, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, UseGuards, UseInterceptors, Request } from '@nestjs/common';
 import { AssemblyService } from './assembly.service';
 import { CreateAssemblyOrderDto } from './dto/create-assembly-order.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { SensitiveResponseInterceptor } from '../product/sensitive-response.interceptor';
 
 @Controller('assembly-orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@UseInterceptors(new SensitiveResponseInterceptor())
 export class AssemblyController {
   constructor(private readonly assemblyService: AssemblyService) {}
 

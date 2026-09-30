@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -62,7 +63,13 @@ export class UsersController {
     @Query('limit') limit = '25',
     @Query('systemAdmins') systemAdmins: 'exclude' | 'only' | 'include' = 'exclude',
     @Query('q') search = '',
+    @Query('status') status: 'active' | 'inactive' | 'all' = 'all',
+    @Query('roleId') roleId?: string,
+    @Query('entityId') entityId?: string,
   ) {
+    if (!['active', 'inactive', 'all'].includes(status)) {
+      throw new BadRequestException('status must be active, inactive or all');
+    }
     const pageNumber = Math.max(1, Number.parseInt(page, 10) || 1);
     const limitNumber = Math.min(
       100,
@@ -73,6 +80,9 @@ export class UsersController {
       requesterId: userId,
       systemAdmins,
       search,
+      status,
+      roleId,
+      entityId,
     });
   }
 
@@ -83,7 +93,8 @@ export class UsersController {
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ resource: 'access_control', action: 'read' })
   @ApiOperation({ summary: '查詢指定使用者（帳號與權限管理）' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: string, @CurrentUser('id') actorId: string) {
+    await this.usersService.assertUserVisibleToActor(actorId, id);
     return this.usersService.findById(id);
   }
 
@@ -95,8 +106,8 @@ export class UsersController {
   @RequirePermissions({ resource: 'access_control', action: 'update' })
   @ApiOperation({ summary: '建立新使用者（帳號與權限管理）' })
   async createUser(@Body() dto: CreateUserDto, @CurrentUser('id') actorId: string) {
-    await this.usersService.assertAccessManagementAllowed(actorId, { data: dto, roleIds: dto.roleIds });
-    return this.usersService.createUser(dto);
+    const checked = await this.usersService.prepareManagedUserCreate(actorId, dto);
+    return this.usersService.createUser(checked);
   }
 
   /**

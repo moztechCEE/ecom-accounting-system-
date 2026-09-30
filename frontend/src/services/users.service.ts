@@ -36,10 +36,17 @@ export const usersService = {
   async list(
     page = 1,
     limit = 25,
-    options?: { systemAdmins?: 'exclude' | 'only' | 'include'; search?: string },
+    options?: {
+      systemAdmins?: 'exclude' | 'only' | 'include'
+      search?: string
+      status?: 'active' | 'inactive' | 'all'
+      roleId?: string
+      entityId?: string
+    },
   ): Promise<PaginatedResult<ManagedUser>> {
+    const { search, ...filters } = options || {}
     const response = await api.get<PaginatedResult<ManagedUser>>('/users', {
-      params: { page, limit, ...options },
+      params: { page, limit, q: search, ...filters },
     })
     return response.data
   },

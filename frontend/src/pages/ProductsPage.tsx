@@ -7,6 +7,7 @@ import { errorText } from '../features/sn-labels/api'
 import { useAuth } from '../contexts/AuthContext'
 import { inventoryService } from '../services/inventory.service'
 import { resolveEntityId } from '../services/entities.service'
+import { hasPermission } from '../utils/access'
 
 const { Title } = Typography
 const { Option } = Select
@@ -53,6 +54,8 @@ const downloadCsv = (filename: string, rows: Array<Array<string | number>>) => {
 const ProductsPage: React.FC = () => {
   const { user } = useAuth()
   const canWrite = !!user && (user.roles.some(r => ['ADMIN', 'SUPER_ADMIN'].includes(r)) || user.permissions.includes('inventory:update'))
+  const canViewCost = hasPermission(user, 'product_cost:read')
+  const canWriteCost = hasPermission(user, 'product_cost:update')
   const [editing, setEditing] = useState<Product | null>(null)
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -103,14 +106,39 @@ const ProductsPage: React.FC = () => {
     try {
       const { attributesList, snLabels, ...rest } = values
       const attributes = attributesList?.reduce((acc: any, curr: any) => {
-        if (curr.key) acc[curr.key] = curr.value
+        if (!curr.key) return acc
+        if (!canWriteCost && /cost|purchase.?price|supplier.?price/i.test(curr.key)) {
+          const previous = editing?.attributes?.[curr.key]
+          if (previous !== curr.value) throw new Error('此帳號沒有修改產品成本的權限')
+          return acc
+        }
+        acc[curr.key] = curr.value
         return acc
       }, {})
 
-      const data = { ...rest, name: rest.name.trim(), barcode: rest.barcode.trim(), modelNumber: rest.modelNumber?.trim(), attributes: { ...attributes, snLabels } }
+      // Only submit fields edited by this form. Product records may contain cost
+      // fields, and an unrelated edit must never resend their stored values.
+      const data = {
+        sku: rest.sku,
+        name: rest.name.trim(),
+        barcode: rest.barcode.trim(),
+        modelNumber: rest.modelNumber?.trim(),
+        type: rest.type,
+        hasSerialNumbers: rest.hasSerialNumbers,
+        parentId: rest.parentId,
+        packageLength: rest.packageLength,
+        packageWidth: rest.packageWidth,
+        packageHeight: rest.packageHeight,
+        weight: rest.weight,
+        grossWeight: rest.grossWeight,
+        netWeight: rest.netWeight,
+        hsCode: rest.hsCode,
+        countryOfOrigin: rest.countryOfOrigin,
+        attributes: { ...attributes, snLabels },
+      }
       if (editing) {
-        delete data.sku
-        await productService.update(editing.id, data)
+        const { sku: _sku, ...updates } = data
+        await productService.update(editing.id, updates)
       } else await productService.create({ ...data, sku: rest.sku.trim() })
       message.success(editing ? '產品已更新，下次選取會帶入儲存的 SN 建檔資料' : '產品建立成功')
       setIsModalVisible(false)
@@ -194,18 +222,20 @@ const ProductsPage: React.FC = () => {
       )
     },
     { title: '單位', dataIndex: 'unit', key: 'unit' },
-    { 
-      title: '移動平均成本', 
-      dataIndex: 'movingAverageCost', 
-      key: 'movingAverageCost',
-      render: (val: number) => `$${Number(val).toFixed(2)}`
-    },
-    { 
-      title: '最新進價', 
-      dataIndex: 'latestPurchasePrice', 
-      key: 'latestPurchasePrice',
-      render: (val: number) => `$${Number(val).toFixed(2)}`
-    },
+    ...(canViewCost ? [
+      {
+        title: '移動平均成本',
+        dataIndex: 'movingAverageCost',
+        key: 'movingAverageCost',
+        render: (val: number | null | undefined) => val == null ? '—' : `$${Number(val).toFixed(2)}`,
+      },
+      {
+        title: '最新進價',
+        dataIndex: 'latestPurchasePrice',
+        key: 'latestPurchasePrice',
+        render: (val: number | null | undefined) => val == null ? '—' : `$${Number(val).toFixed(2)}`,
+      },
+    ] : []),
   ]
 
   return (

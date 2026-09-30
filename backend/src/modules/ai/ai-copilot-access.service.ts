@@ -8,7 +8,7 @@ import {
 
 const TOOL_ACCESS: Record<
   string,
-  { module: DataAccessModule; permissions: string[]; sensitive?: boolean }
+  { module: DataAccessModule; permissions: string[]; sensitive?: boolean; sensitivePermission?: string }
 > = {
   get_sales_stats: { module: 'sales', permissions: ['sales_orders:read'] },
   find_sales_order: { module: 'sales', permissions: ['sales_orders:read'] },
@@ -17,7 +17,7 @@ const TOOL_ACCESS: Record<
   get_product_cost: {
     module: 'inventory',
     permissions: ['inventory:read'],
-    sensitive: true,
+    sensitivePermission: 'product_cost:read',
   },
   find_vendor: {
     module: 'purchasing',
@@ -35,7 +35,7 @@ const TOOL_ACCESS: Record<
   get_payroll_summary: {
     module: 'payroll',
     permissions: ['payroll_admin:read'],
-    sensitive: true,
+    sensitivePermission: 'employee_compensation:read',
   },
 };
 
@@ -79,6 +79,7 @@ export class AiCopilotAccessService {
       .filter(
         ([, rule]) =>
           (!rule.sensitive || isSuperAdmin) &&
+          (!rule.sensitivePermission || permissions.includes(rule.sensitivePermission)) &&
           (isAdmin ||
             rule.permissions.some((permission) =>
               permissions.includes(permission),
@@ -285,6 +286,10 @@ export class AiCopilotAccessService {
     if (!resolvedId) throw new ForbiddenException('請先選取公司再查詢每日簡報');
     if (!actor.isAdmin && !actor.permissions.includes('reports:read')) {
       throw new ForbiddenException('每日簡報需要財務報表查詢權限');
+    }
+    if (!['product_cost:read', 'financial_margin:read', 'financial_net_profit:read']
+      .every((permission) => actor.permissions.includes(permission))) {
+      throw new ForbiddenException('每日簡報需要成本、毛利與財務淨利查詢權限');
     }
     for (const module of ['accounting', 'sales'] as const) {
       const context = await this.entityAccess.assertAccess(

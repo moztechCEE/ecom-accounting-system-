@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:656f01227d5555fa2133a2b2ce5bcd93ea3b249ef111a322c1bb9c57f2bf292f",
+  "sourceVersion": "sha256:fd9fa764283593b510c46f25d3ba839de51efab1cd76b5683328909e31e5c265",
   "reviewedBaseCommit": "38a34b3a5faacf003820f56baed5c32039c1fc38",
-  "entryCount": 63,
+  "entryCount": 64,
   "groups": [
     "admin",
     "dashboard",
@@ -18,7 +18,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "30c2c0db284edd867a031d90f7ded239c9a39897553b11626642fe2ca37b928d",
+  "catalogSha256": "ea3e650ddefdc4cb77d7bd18a51f712533da89702db38091234755b8bc83d098",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -55,6 +55,7 @@
       "/manufacturing/assembly",
       "/payroll/employees",
       "/payroll/runs",
+      "/performance/reviews",
       "/profile",
       "/purchasing/b2b-shortages",
       "/purchasing/orders",
@@ -146,6 +147,14 @@
       "sha256": "64ab5b7368c76d09c376fc4c47936601636add1d177f1ee1ce50a3335994540d"
     },
     {
+      "path": "backend/src/modules/ai/ai-copilot-access.service.ts",
+      "sha256": "4f28efb226abe37faf40365e0d898b1436a75ab9db3849459e9ae90bf14a647c"
+    },
+    {
+      "path": "backend/src/modules/ai/ai-knowledge.service.ts",
+      "sha256": "c848c863d355dd102cc1fed752d1c89bde35f0c3bd44e6be1ef717ccec02798f"
+    },
+    {
       "path": "backend/src/modules/ai/ai.service.ts",
       "sha256": "205936f07978c988fb8f3f1312265416142f40324cf8edb86fffe57d76a09ad9"
     },
@@ -159,15 +168,15 @@
     },
     {
       "path": "backend/src/modules/assembly/assembly.controller.ts",
-      "sha256": "1a76227add9b43a9cc308cb9c2962cef512a41d2910562ca0814c0924e870698"
+      "sha256": "ff9cfb30090b3aae9dd558be86bf1bcb08db5b0681d6dd668ce744c9d903c62a"
     },
     {
       "path": "backend/src/modules/attendance/controllers/attendance.controller.ts",
-      "sha256": "5d97bc6969ed961574982044b64a43bd3211502d73932d65d5cb483803aebe6f"
+      "sha256": "47bb934568cf4bc73d197a40e6799502ef958a422a5d049939295fd136e61578"
     },
     {
       "path": "backend/src/modules/attendance/controllers/leave.controller.ts",
-      "sha256": "2c6172c6f34c87efc2219a9edaa7ea4a7c0d846c5e5940c9bf381f5c05883d0a"
+      "sha256": "c079e8a85aac50a1ab1cfc274c98fad26289314f6d7f7d35fdfd60cc643b7b56"
     },
     {
       "path": "backend/src/modules/auth/auth.controller.ts",
@@ -235,7 +244,7 @@
     },
     {
       "path": "backend/src/modules/integration/wms/wms-handover.module.ts",
-      "sha256": "a7bd1568cc7bd719b2c09ac20e6c0f85eda1a7723c42aec1f0164d1ca1de545e"
+      "sha256": "26a3103eba677a09326578bdf5f3b09acdd56214ba2a250bf7178c3312625f18"
     },
     {
       "path": "backend/src/modules/integration/wms/wms-handover.service.ts",
@@ -243,19 +252,31 @@
     },
     {
       "path": "backend/src/modules/inventory/inventory.controller.ts",
-      "sha256": "499abda49bea9b3dba7eccbc49cdd2976871f4ee20b528aa2950da6f231a6134"
+      "sha256": "3f751e5deee28cf0f3a86360b7e3532a5cb5ec8c4a2b3e84b3b76081466077a2"
     },
     {
       "path": "backend/src/modules/payroll/payroll.controller.ts",
-      "sha256": "18e20f4183ac8a2eaf8c84eeda50a568a09737bbb77a317d7b55d634e0e7762f"
+      "sha256": "9975bd80b247fb3f8ee06cd2530bf2ac41e0743db6cf77d373f34d42d5d42dec"
     },
     {
       "path": "backend/src/modules/payroll/payroll.service.ts",
-      "sha256": "35744b0886e31099e419cb1a22cfb3f727d174ee1fcbb62ac7560f819d923789"
+      "sha256": "baa81ce3f9f429447b72988b43380dd0db71dd1349f14566ec50022d73cc9808"
+    },
+    {
+      "path": "backend/src/modules/performance/performance.controller.ts",
+      "sha256": "a6600b55daed570b249b7736e1de51f2c803e9f1c88bea6ff6089d4a89c7ed23"
+    },
+    {
+      "path": "backend/src/modules/performance/performance.service.ts",
+      "sha256": "3736a31d7bf44f20a8a13a25401eeba8bf93200296c1541b32ef9278433ac7bd"
     },
     {
       "path": "backend/src/modules/product/product.controller.ts",
-      "sha256": "701f0da4056da81e23c4d0c26a5231c60049549ce4a61817dcbf2b5ec3700e3b"
+      "sha256": "e5a17fe02187984c7ae9e833f2ed85ed75d6f378cdea6de4d211a27490a7a4ac"
+    },
+    {
+      "path": "backend/src/modules/product/sensitive-response.interceptor.ts",
+      "sha256": "5155b1351b0409b876c734d3d44408bbbd15192797b03a665e16d467ee865e67"
     },
     {
       "path": "backend/src/modules/purchase/purchase-b2b-queue.service.ts",
@@ -263,7 +284,7 @@
     },
     {
       "path": "backend/src/modules/purchase/purchase.controller.ts",
-      "sha256": "8bdc59d243aca164f69bc20de0e377f986575698403e839d37a46c29b291fbae"
+      "sha256": "892e5f3c28d084d01c8e922ff90fe7ba4c89cd6b02b0a42b52e9173d54b0eaaa"
     },
     {
       "path": "backend/src/modules/purchase/purchase.service.ts",
@@ -275,11 +296,15 @@
     },
     {
       "path": "backend/src/modules/reports/reports.controller.ts",
-      "sha256": "6c6589efbfb66f063efe0be69bc029df373f10cea70be4a9af3177e1b92b9030"
+      "sha256": "dcbe5a4bf40cc6a3bd26fc417f1f1ef77bde27d4910c146beab7c4eccbda2280"
+    },
+    {
+      "path": "backend/src/modules/roles/role-policy.ts",
+      "sha256": "61f1761bcdf9b9dec3263b98afdab5bfa9fdb2558874eb52abe53c6f658ad85a"
     },
     {
       "path": "backend/src/modules/roles/roles.controller.ts",
-      "sha256": "1fa172314ffdc39f8403c6574d5a255369c33c5228e0f5ad1054fb90c46380f3"
+      "sha256": "6b86fa78ffe31c365f17e73da95cf3809522c001c4fbd0eaae31a4896bdb46ec"
     },
     {
       "path": "backend/src/modules/sales/customer.controller.ts",
@@ -287,7 +312,7 @@
     },
     {
       "path": "backend/src/modules/sales/sales.controller.ts",
-      "sha256": "841490abbfd7afdc67765fc463d5929ded5886afe64d05701f17e033ffc4a683"
+      "sha256": "9d9d12546954f3fd9174d1b9ae1fa37ccb833c645a1b0bd44393572ce27df69a"
     },
     {
       "path": "backend/src/modules/sales/sales.service.ts",
@@ -303,7 +328,11 @@
     },
     {
       "path": "backend/src/modules/users/users.controller.ts",
-      "sha256": "b3a886a1fd103b93ba8b95638b88eb2590817951e6046394ec474b36ec42280b"
+      "sha256": "d9dd6b2f271cf6e2146e7373a4220fd9fecdecf22d811ba65a0991af4e57b9c8"
+    },
+    {
+      "path": "backend/src/modules/users/users.service.ts",
+      "sha256": "ab2a27dfde7d2e8d11a0179049897c348b4a33b790b729d7190664e3d759e09f"
     },
     {
       "path": "backend/src/modules/vendor/vendor.controller.ts",
@@ -311,11 +340,11 @@
     },
     {
       "path": "frontend/src/App.tsx",
-      "sha256": "d5651fe856258dd189f3e84104a4fb075918990c1b3533929f5250f228152f40"
+      "sha256": "e16658a87fb7c9a980d0964d46b3b694db034be21bcecff7b00dafad2b367634"
     },
     {
       "path": "frontend/src/config/navigation.ts",
-      "sha256": "558e08417d878777a7e7101c2132c417909899c3bf805e4ab2d0176552a8fdc3"
+      "sha256": "da7309f7ef040300fd9eea26fe0cc4e931a45f64abdc3df2586a5fa12cf1718f"
     },
     {
       "path": "frontend/src/config/release.ts",
@@ -331,7 +360,7 @@
     },
     {
       "path": "frontend/src/pages/AccessControlPage.tsx",
-      "sha256": "91197ccf9f2cf6316c28b130a63eba881dcb83e8004c8197c4d4d88b4225ee26"
+      "sha256": "c69cff8b6872873cfbd6036590e21bce4b3c2423fb8ac551b803c58b969d8797"
     },
     {
       "path": "frontend/src/pages/AccountingPeriodsPage.tsx",
@@ -443,11 +472,11 @@
     },
     {
       "path": "frontend/src/pages/DashboardPage.tsx",
-      "sha256": "cf6387c282b6bf956530a29d8d812418c15d4f2cae43fbd1e8e67a0e688aa841"
+      "sha256": "db2477509990e664c4bb4ba9e2d4c7c303177bae6dab2e4a02d30912c12c6de2"
     },
     {
       "path": "frontend/src/pages/EmployeesPage.tsx",
-      "sha256": "d6d56635165f56ed2581cebdd79895dd4daaf5ee2ebc099ba7dcc027a277c56f"
+      "sha256": "1fb2914ba471cb7f94456f494f9d940ef55feeab966225bc66bb6a25b5e3c005"
     },
     {
       "path": "frontend/src/pages/ExpenseRequestsPage.tsx",
@@ -475,11 +504,15 @@
     },
     {
       "path": "frontend/src/pages/PayrollPage.tsx",
-      "sha256": "d56dc85ab05defd80a042d9b7d019ffd8728233d1e65daae745de29e9fea8419"
+      "sha256": "9f4e739abcabddf7f805e212d6a42cdc38ba9b31fc17a49957e448b23c7e630c"
+    },
+    {
+      "path": "frontend/src/pages/PerformanceReviewsPage.tsx",
+      "sha256": "22c99727ea56069754caaba6708c107f1092f4643c92cd3392be0ff1d0ac0cab"
     },
     {
       "path": "frontend/src/pages/ProductsPage.tsx",
-      "sha256": "ce15f9344f2030743895f4e1890b8f2a82a03380a7b5f1a1ba72116649e418d5"
+      "sha256": "cf2a194d64278e131b387d7e82ab0025e4c30fea28db915159b6f80e5633fbbf"
     },
     {
       "path": "frontend/src/pages/ProfilePage.tsx",
@@ -499,7 +532,7 @@
     },
     {
       "path": "frontend/src/pages/ReportsPage.tsx",
-      "sha256": "a27e7959d7f796ff5ec7127b19d9b83cbefe73cede0c0d9916abd5b53fc1d298"
+      "sha256": "188eaaa21eb07497291a487a056eba8df158cbf7220b7a21f694dafae4d15e18"
     },
     {
       "path": "frontend/src/pages/ResetPasswordPage.tsx",
@@ -572,6 +605,10 @@
     {
       "path": "frontend/src/services/inventory.service.ts",
       "sha256": "f4205876a7f5617e644c5a6417f5fc24831eca1bc812c56087eb3bde48a81a58"
+    },
+    {
+      "path": "frontend/src/services/performance.service.ts",
+      "sha256": "09ead9ecc1781f468f5ae5e7a0616a662e34ee8bdbf1ffd9b4085109b6fcea12"
     },
     {
       "path": "frontend/src/services/purchase.service.ts",

@@ -30,6 +30,8 @@ import {
 } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import { hasPermission } from "../utils/access";
 import PageSkeleton from "../components/PageSkeleton";
 import { GlassCard } from "../components/ui/GlassCard";
 import { resolveEntityId } from "../services/entities.service";
@@ -136,11 +138,11 @@ interface FinanceSummary {
 }
 
 interface WeeklyPnl {
-  revenue: number;
-  cost: number;
-  grossProfit: number;
-  grossMargin: number;
-  monthlyEarned: number;
+  revenue: number | null;
+  cost: number | null;
+  grossProfit: number | null;
+  grossMargin: number | null;
+  monthlyEarned: number | null;
 }
 
 interface PlatformContribution {
@@ -153,11 +155,11 @@ interface PlatformContribution {
 
 interface RevenueTrendPoint {
   date: string;
-  revenue: number;
-  profit: number;
-  netProfit: number;
-  payoutNet: number;
-  adSpend: number;
+  revenue: number | null;
+  profit: number | null;
+  netProfit: number | null;
+  payoutNet: number | null;
+  adSpend: number | null;
 }
 // ─── 金額格式化 ──────────────────────────────────────────
 
@@ -166,7 +168,19 @@ const fmtMoney = (n: number) =>
 
 const fmtSignedMoney = (n: number) => `${n < 0 ? "-" : ""}${fmtMoney(Math.abs(n))}`;
 
-const fmtPct = (n: number | null | undefined) => `${Number(n || 0).toFixed(1)}%`;
+const optionalNumber = (value: number | null | undefined): number | null =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
+
+const sumOptionalNumbers = (values: Array<number | null | undefined>): number | null =>
+  values.every((value) => optionalNumber(value) != null)
+    ? values.reduce<number>((sum, value) => sum + Number(value), 0)
+    : null;
+
+const fmtOptionalMoney = (value: number | null | undefined) =>
+  optionalNumber(value) == null ? "—" : fmtMoney(value as number);
+
+const fmtPct = (n: number | null | undefined) =>
+  optionalNumber(n) == null ? "—" : `${Number(n).toFixed(1)}%`;
 
 const fmtRoas = (n: number | null | undefined) =>
   n == null ? "—" : `${Number(n || 0).toFixed(2)}x`;
@@ -260,6 +274,10 @@ function getTaskToneMeta(tone: DashboardExecutiveOverview["tasks"][number]["tone
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canViewCost = hasPermission(user, "product_cost:read");
+  const canViewMargin = canViewCost && hasPermission(user, "financial_margin:read");
+  const canViewNetProfit = canViewMargin && hasPermission(user, "financial_net_profit:read");
   const hasSuccessfulSnapshotRef = useRef(false);
   const [loadState, setLoadState] =
     useState<DashboardLoadState>("initial-loading");
@@ -291,11 +309,11 @@ const DashboardPage: React.FC = () => {
     banking: false,
   })
   const [weeklyPnl, setWeeklyPnl] = useState<WeeklyPnl>({
-    revenue: 0,
-    cost: 0,
-    grossProfit: 0,
-    grossMargin: 0,
-    monthlyEarned: 0,
+    revenue: null,
+    cost: null,
+    grossProfit: null,
+    grossMargin: null,
+    monthlyEarned: null,
   })
   const [managementSummary, setManagementSummary] = useState<ManagementSummary | null>(null)
   const [rangeManagementSummary, setRangeManagementSummary] = useState<ManagementSummary | null>(null)
@@ -368,11 +386,11 @@ const DashboardPage: React.FC = () => {
             startDate: since,
             endDate: until,
           }),
-          dashboardService.getExecutiveOverview({
+          canViewNetProfit ? dashboardService.getExecutiveOverview({
             entityId,
             startDate: since,
             endDate: until,
-          }),
+          }) : Promise.resolve(null),
           dashboardService.getOperationsHub({
             entityId,
             startDate: since,
@@ -384,12 +402,12 @@ const DashboardPage: React.FC = () => {
             endDate: until,
             limit: 24,
           }),
-          dashboardService.getOrderReconciliationAudit({
+          canViewNetProfit ? dashboardService.getOrderReconciliationAudit({
             entityId,
             startDate: since,
             endDate: until,
             limit: 24,
-          }),
+          }) : Promise.resolve(null),
           arService.getReceivableMonitor({
             entityId,
             startDate: arMonitorStart,
@@ -413,12 +431,12 @@ const DashboardPage: React.FC = () => {
             startDate: todayStart,
             endDate: todayEnd,
           }),
-          dashboardService.getAdPerformanceSummary({
+          canViewNetProfit ? dashboardService.getAdPerformanceSummary({
             entityId,
             groupBy: rangeMode === 'all' || rangeMode === 'last1y' ? 'month' : 'day',
             startDate: since,
             endDate: until,
-          }),
+          }) : Promise.resolve(null),
           dashboardService.getConnectorReadiness({
             entityId,
           }),
@@ -441,15 +459,15 @@ const DashboardPage: React.FC = () => {
 
         const sectionResults: Array<[PromiseSettledResult<unknown>, string]> = [
           [summaryResult, DASHBOARD_SECTION_LABELS.overview],
-          [executiveResult, DASHBOARD_SECTION_LABELS.executive],
+          ...(canViewNetProfit ? [[executiveResult, DASHBOARD_SECTION_LABELS.executive] as [PromiseSettledResult<unknown>, string]] : []),
           [operationsResult, DASHBOARD_SECTION_LABELS.operations],
           [invoiceQueueResult, DASHBOARD_SECTION_LABELS.invoices],
-          [auditResult, DASHBOARD_SECTION_LABELS.audit],
+          ...(canViewNetProfit ? [[auditResult, DASHBOARD_SECTION_LABELS.audit] as [PromiseSettledResult<unknown>, string]] : []),
           [receivableResult, DASHBOARD_SECTION_LABELS.receivables],
           [trendResult, DASHBOARD_SECTION_LABELS.trend],
           [rangeFinancialResult, DASHBOARD_SECTION_LABELS.rangeFinancial],
           [todayFinancialResult, DASHBOARD_SECTION_LABELS.todayFinancial],
-          [adPerformanceResult, DASHBOARD_SECTION_LABELS.ads],
+          ...(canViewNetProfit ? [[adPerformanceResult, DASHBOARD_SECTION_LABELS.ads] as [PromiseSettledResult<unknown>, string]] : []),
           [connectorReadinessResult, DASHBOARD_SECTION_LABELS.connectors],
           [payablesResult, DASHBOARD_SECTION_LABELS.payables],
           [bankingResult, DASHBOARD_SECTION_LABELS.banking],
@@ -468,11 +486,11 @@ const DashboardPage: React.FC = () => {
           setRevenueTrend(
             (trendResult.value?.periods || []).map((period) => ({
               date: dayjs(period.startDate).tz(DASHBOARD_TZ).format('MM/DD'),
-              revenue: period.revenue,
-              profit: period.grossProfit,
-              netProfit: period.netProfit,
-              payoutNet: period.payoutNet,
-              adSpend: period.adSpendAmount,
+              revenue: optionalNumber(period.revenue),
+              profit: canViewMargin ? optionalNumber(period.grossProfit) : null,
+              netProfit: canViewNetProfit ? optionalNumber(period.netProfit) : null,
+              payoutNet: canViewNetProfit ? optionalNumber(period.payoutNet) : null,
+              adSpend: canViewNetProfit ? optionalNumber(period.adSpendAmount) : null,
             })),
           );
         }
@@ -480,17 +498,18 @@ const DashboardPage: React.FC = () => {
           setRangeManagementSummary(rangeFinancialResult.value);
           const summary = rangeFinancialResult.value?.summary;
           setWeeklyPnl(summary ? {
-            revenue: summary.revenue,
-            cost: summary.estimatedCogs + summary.operatingExpenses,
-            grossProfit: summary.grossProfit,
-            grossMargin: summary.grossMarginPct / 100,
-            monthlyEarned: summary.payoutNet,
+            revenue: optionalNumber(summary.revenue),
+            cost: canViewCost ? optionalNumber(summary.estimatedCogs) : null,
+            grossProfit: canViewMargin ? optionalNumber(summary.grossProfit) : null,
+            grossMargin: canViewMargin && optionalNumber(summary.grossMarginPct) != null
+              ? Number(summary.grossMarginPct) / 100 : null,
+            monthlyEarned: canViewNetProfit ? optionalNumber(summary.payoutNet) : null,
           } : {
-            revenue: 0,
-            cost: 0,
-            grossProfit: 0,
-            grossMargin: 0,
-            monthlyEarned: 0,
+            revenue: null,
+            cost: null,
+            grossProfit: null,
+            grossMargin: null,
+            monthlyEarned: null,
           });
         }
         if (adPerformanceResult.status === "fulfilled") setAdPerformance(adPerformanceResult.value);
@@ -516,9 +535,9 @@ const DashboardPage: React.FC = () => {
 
         const coreResults = [
           summaryResult,
-          executiveResult,
           receivableResult,
           rangeFinancialResult,
+          ...(canViewNetProfit ? [executiveResult] : []),
         ];
         const coreSuccessCount = coreResults.filter(
           (result) => result.status === "fulfilled",
@@ -556,7 +575,7 @@ const DashboardPage: React.FC = () => {
     return () => {
       ignore = true;
     };
-  }, [rangeMode, customRange, refreshToken]);
+  }, [rangeMode, customRange, refreshToken, canViewCost, canViewMargin, canViewNetProfit]);
 
   const handleCustomRangeChange = (value: RangeValue) => {
     if (!value || !value[0] || !value[1]) {
@@ -609,7 +628,7 @@ const DashboardPage: React.FC = () => {
           since,
           until,
         }),
-        adIntegrationsService.syncMetaAds({
+        (canViewNetProfit ? adIntegrationsService.syncMetaAds({
           entityId: storedEntityId,
           since,
           until,
@@ -625,8 +644,8 @@ const DashboardPage: React.FC = () => {
             error?.response?.data?.message ||
             error?.message ||
             "Meta Ads 同步失敗",
-        })),
-        adIntegrationsService.syncGoogleAds({
+        })) : Promise.resolve({ created: 0, updated: 0 })),
+        (canViewNetProfit ? adIntegrationsService.syncGoogleAds({
           entityId: storedEntityId,
           since,
           until,
@@ -642,7 +661,7 @@ const DashboardPage: React.FC = () => {
             error?.response?.data?.message ||
             error?.message ||
             "Google Ads 同步失敗",
-        })),
+        })) : Promise.resolve({ created: 0, updated: 0 })),
       ]);
 
       message.success(
@@ -660,11 +679,11 @@ const DashboardPage: React.FC = () => {
           shoplineCustomersResult.created + shoplineCustomersResult.updated
         } 筆、Shopline 金流 ${
           shoplineTransactionsResult.created + shoplineTransactionsResult.updated
-        } 筆、Meta 廣告費 ${
+        } 筆${canViewNetProfit ? `、Meta 廣告費 ${
           metaAdsResult.created + metaAdsResult.updated
         } 筆、Google 廣告費 ${
           googleAdsResult.created + googleAdsResult.updated
-        } 筆`,
+        } 筆` : ''}`,
       );
       setRefreshToken((prev) => prev + 1);
     } catch (error: unknown) {
@@ -675,6 +694,7 @@ const DashboardPage: React.FC = () => {
   };
 
   const handleAdSpendSync = async () => {
+    if (!canViewNetProfit) return;
     const storedEntityId = localStorage.getItem("entityId")?.trim();
     const { since, until } = resolveRange(rangeMode, DASHBOARD_TZ, customRange);
     setSyncingAdSpend(true);
@@ -792,9 +812,9 @@ const DashboardPage: React.FC = () => {
   const rangeLabel = getRangeModeLabel(rangeMode);
   const rangeFinancial = rangeManagementSummary?.summary;
   const selectedFinancial = rangeFinancial;
-  const selectedNetProfit = selectedFinancial?.netProfit ?? 0;
-  const selectedRevenue = selectedFinancial?.revenue ?? 0;
-  const selectedNetMarginPct = selectedFinancial?.netMarginPct;
+  const selectedNetProfit = canViewNetProfit ? optionalNumber(selectedFinancial?.netProfit) : null;
+  const selectedRevenue = optionalNumber(selectedFinancial?.revenue);
+  const selectedNetMarginPct = canViewNetProfit ? optionalNumber(selectedFinancial?.netMarginPct) : null;
   const selectedPeriodLabel =
     rangeMode === "custom" && customRange?.[0] && customRange?.[1]
       ? `${customRange[0].format("MM/DD")} - ${customRange[1].format("MM/DD")}`
@@ -841,32 +861,31 @@ const DashboardPage: React.FC = () => {
         key: definition.key,
         label: definition.label,
         gross: buckets.reduce((sum, bucket) => sum + Number(bucket.gross || 0), 0),
-        payoutNet: buckets.reduce((sum, bucket) => sum + Number(bucket.payoutNet || 0), 0),
-        feeTotal: buckets.reduce((sum, bucket) => sum + Number(bucket.feeTotal || 0), 0),
+        payoutNet: canViewNetProfit ? sumOptionalNumbers(buckets.map((bucket) => bucket.payoutNet)) : null,
         orderCount: buckets.reduce((sum, bucket) => sum + Number(bucket.orderCount || 0), 0),
         paymentCount: buckets.reduce((sum, bucket) => sum + Number(bucket.paymentCount || 0), 0),
         color: definition.color,
       }
     })
-    .filter((row) => row.gross > 0 || row.payoutNet > 0 || row.orderCount > 0)
+    .filter((row) => row.gross > 0 || (row.payoutNet ?? 0) > 0 || row.orderCount > 0)
     .sort((left, right) => right.gross - left.gross)
   const topPlatformRevenueRows = platformRevenueRows
-  const platformContribs: PlatformContribution[] = platformRevenueRows.map((row) => ({
+  const platformContribs: PlatformContribution[] = platformRevenueRows.filter((row) => canViewNetProfit && row.payoutNet != null).map((row) => ({
     platform: row.label,
-    net: row.payoutNet,
+    net: row.payoutNet as number,
     color: row.color,
   }))
   const adPerformanceRows = (adPerformance?.brands || [])
     .map((brand) => ({
       brand: brand.brand,
       revenue: Number(brand.revenue || 0),
-      adSpend: Number(brand.adSpend || 0),
+      adSpend: optionalNumber(brand.adSpend),
       roas: brand.roas,
       orderCount: Number(brand.orderCount || 0),
       revenueShare: Number(brand.revenueShare || 0),
-      adSpendShare: Number(brand.adSpendShare || 0),
+      adSpendShare: optionalNumber(brand.adSpendShare),
     }))
-    .sort((left, right) => right.adSpend - left.adSpend)
+    .sort((left, right) => (right.adSpend ?? -Infinity) - (left.adSpend ?? -Infinity))
   const topAdPerformanceRows = adPerformanceRows.slice(0, 5)
   const adSourceRows = (adPerformance?.sources || []).map((source) => ({
     ...source,
@@ -894,22 +913,22 @@ const DashboardPage: React.FC = () => {
   const overpaidAR = arSummary?.overpaidReceivableCount || 0;
   const overpaidARAmount = arSummary?.overpaidReceivableAmount || 0;
   const financialAuditIssueCount = auditSummary?.anomalousOrderCount || 0;
-  const adSpendAmount = rangeFinancial?.adSpendAmount || 0;
-  const adSpendCount = rangeFinancial?.adSpendCount || 0;
-  const adSpendTracked = adSpendCount > 0;
-  const historicalAdSpendCount = managementSummary?.summary?.adSpendCount || 0;
-  const hasHistoricalAdSpend = historicalAdSpendCount > 0;
+  const adSpendAmount = canViewNetProfit ? optionalNumber(rangeFinancial?.adSpendAmount) : null;
+  const adSpendCount = canViewNetProfit ? optionalNumber(rangeFinancial?.adSpendCount) : null;
+  const adSpendTracked = adSpendCount != null && adSpendCount > 0;
+  const historicalAdSpendCount = canViewNetProfit ? optionalNumber(managementSummary?.summary?.adSpendCount) : null;
+  const hasHistoricalAdSpend = historicalAdSpendCount != null && historicalAdSpendCount > 0;
   const adSpendCanSyncDaily = Boolean(adConnector?.internallyConfigured);
   const adSpendCanShowAmount = adSpendTracked || adSpendCanSyncDaily || hasHistoricalAdSpend;
   const adSpendNeedsSetup = !adSpendCanShowAmount;
   const adSpendNeedsSecretCheck = !adSpendTracked && hasHistoricalAdSpend && !adSpendCanSyncDaily;
-  const adSpendNeedsAttention = adSpendNeedsSetup || adSpendNeedsSecretCheck;
+  const adSpendNeedsAttention = canViewNetProfit && (adSpendNeedsSetup || adSpendNeedsSecretCheck);
   const adSpendStatusLabel = adSpendTracked
     ? "已入費用"
     : adSpendNeedsSecretCheck
       ? "需檢查 Secret"
       : adSpendCanSyncDaily || hasHistoricalAdSpend
-        ? "本區間 0"
+        ? "待確認"
         : "待串接";
   const adSpendHelper = adSpendTracked
     ? `${adSpendCount} 筆廣告費`
@@ -943,7 +962,7 @@ const DashboardPage: React.FC = () => {
       path: "/accounting/workbench?focus=missing-invoices",
       tone: missingInvoiceCount > 0 ? "warning" : "healthy",
     },
-    {
+    ...(canViewNetProfit ? [{
       key: "order-audit",
       title: "訂單對帳稽核異常",
       count: financialAuditIssueCount,
@@ -951,7 +970,7 @@ const DashboardPage: React.FC = () => {
       actionLabel: "看報表稽核",
       path: "/reports",
       tone: financialAuditIssueCount > 0 ? "warning" : "healthy",
-    },
+    }] : []),
     {
       key: "overdue-ar",
       title: "逾期應收帳款",
@@ -970,7 +989,7 @@ const DashboardPage: React.FC = () => {
       path: "/sales/invoices?focus=overpaid",
       tone: overpaidAR > 0 ? "critical" : "healthy",
     },
-    {
+    ...(canViewNetProfit ? [{
       key: "ad-spend",
       title: "廣告費串接",
       count: adSpendNeedsAttention ? 1 : 0,
@@ -978,7 +997,7 @@ const DashboardPage: React.FC = () => {
       actionLabel: "看串接準備",
       path: "/accounting/workbench?focus=connector-readiness",
       tone: adSpendNeedsAttention ? "warning" : "healthy",
-    },
+    }] : []),
   ];
   const riskPriorityRows = [
     {
@@ -1002,13 +1021,13 @@ const DashboardPage: React.FC = () => {
       helper: "發票待處理",
       path: "/accounting/workbench?focus=missing-invoices",
     },
-    {
+    ...(canViewNetProfit ? [{
       label: "稽核異常",
       count: financialAuditIssueCount,
       color: "#be123c",
       helper: "帳務資料有落差",
       path: "/reports",
-    },
+    }] : []),
     {
       label: "庫存警示",
       count: inventoryAlerts.length,
@@ -1016,13 +1035,13 @@ const DashboardPage: React.FC = () => {
       helper: "缺貨或低庫存",
       path: "/inventory/products",
     },
-    {
+    ...(canViewNetProfit ? [{
       label: "廣告串接",
       count: adSpendNeedsAttention ? 1 : 0,
       color: "#4f46e5",
       helper: adSpendNeedsSecretCheck ? "廣告憑證待確認" : "廣告費待串接",
       path: "/accounting/workbench?focus=connector-readiness",
-    },
+    }] : []),
   ]
     .filter((item) => item.count > 0)
     .sort((a, b) => b.count - a.count)
@@ -1088,18 +1107,18 @@ const DashboardPage: React.FC = () => {
       icon: <WarningOutlined />,
     },
   }[loadState];
-  const selectedFinancialAvailable = Boolean(selectedFinancial);
+  const selectedFinancialAvailable = selectedNetProfit != null;
   const overviewAvailable = Boolean(overview);
   const receivablesAvailable = Boolean(arSummary);
   const adFinancialAvailable = Boolean(rangeFinancial);
-  const adCardDataAvailable = adFinancialAvailable && (
+  const adCardDataAvailable = canViewNetProfit && adFinancialAvailable && (
     Boolean(connectorReadiness) || adSpendTracked || hasHistoricalAdSpend
   );
   const cashRiskDataAvailable = Boolean(arSummary) && (
     financeAvailability.payables || Boolean(executive?.expenses)
   );
   const financeWatchDataAvailable = Boolean(
-    invoiceSummary && auditSummary && arSummary && rangeManagementSummary,
+    invoiceSummary && arSummary && rangeManagementSummary && (!canViewNetProfit || auditSummary),
   );
   const legacyDashboardVisible = false;
 
@@ -1266,11 +1285,11 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className={`rounded-2xl border px-5 py-4 ${
+        <div className={`grid gap-4 md:grid-cols-2 ${canViewNetProfit ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
+          {canViewNetProfit && <div className={`rounded-2xl border px-5 py-4 ${
             !selectedFinancialAvailable
               ? "border-slate-200 bg-slate-50/70"
-              : selectedNetProfit < 0
+              : selectedNetProfit != null && selectedNetProfit < 0
                 ? "border-red-200 bg-red-50/70"
                 : "border-emerald-100 bg-emerald-50/60"
           }`}>
@@ -1278,24 +1297,24 @@ const DashboardPage: React.FC = () => {
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm">
                 <DollarOutlined />
               </div>
-              <Tag color={!selectedFinancialAvailable ? "default" : selectedNetProfit < 0 ? "red" : "green"}>
+              <Tag color={!selectedFinancialAvailable ? "default" : selectedNetProfit != null && selectedNetProfit < 0 ? "red" : "green"}>
                 {selectedFinancialAvailable ? selectedPeriodLabel : "資料未取得"}
               </Tag>
             </div>
             <div className="text-xs text-slate-500">{selectedPeriodLabel}淨利</div>
             <div className={`mt-1 text-2xl font-bold ${
-              selectedNetProfit < 0 ? "text-red-700" : "text-slate-900"
+              selectedNetProfit != null && selectedNetProfit < 0 ? "text-red-700" : "text-slate-900"
             }`}>
-              {selectedFinancialAvailable ? fmtSignedMoney(selectedNetProfit) : "—"}
+              {selectedNetProfit == null ? "—" : fmtSignedMoney(selectedNetProfit)}
             </div>
             <div className="mt-2 text-xs leading-5 text-slate-500">
               {selectedFinancialAvailable
-                ? `營收 ${fmtMoney(selectedRevenue)} · 淨利率 ${fmtPct(selectedNetMarginPct)}`
+                ? `營收 ${fmtOptionalMoney(selectedRevenue)} · 淨利率 ${fmtPct(selectedNetMarginPct)}`
                 : "本期損益區塊未成功載入"}
             </div>
-          </div>
+          </div>}
 
-          <div className={`rounded-2xl border px-5 py-4 ${
+          {canViewNetProfit && <div className={`rounded-2xl border px-5 py-4 ${
             adSpendNeedsAttention ? "border-amber-200 bg-amber-50/70" : "border-slate-100 bg-white/60"
           }`}>
             <div className="mb-3 flex items-center justify-between">
@@ -1309,7 +1328,7 @@ const DashboardPage: React.FC = () => {
             <div className="text-xs text-slate-500">{rangeLabel}廣告花費</div>
             <div className="mt-1 text-2xl font-bold text-slate-900">
               {adCardDataAvailable
-                ? (adSpendCanShowAmount ? fmtMoney(adSpendAmount) : "待串接")
+                ? (adSpendCanShowAmount ? fmtOptionalMoney(adSpendAmount) : "待串接")
                 : "—"}
             </div>
             <div className="mt-2 text-xs leading-5 text-slate-500">
@@ -1326,7 +1345,7 @@ const DashboardPage: React.FC = () => {
                 同步本區間廣告費
               </Button>
             )}
-          </div>
+          </div>}
 
           <div className={`rounded-2xl border px-5 py-4 ${
             cashRiskAmount > 0 ? "border-rose-200 bg-rose-50/70" : "border-slate-100 bg-white/60"
@@ -1367,15 +1386,17 @@ const DashboardPage: React.FC = () => {
             </div>
             <div className="mt-2 text-xs leading-5 text-slate-500">
               {financeWatchDataAvailable
-                ? `缺發票 ${missingInvoiceCount} · 訂單稽核 ${financialAuditIssueCount} · 廣告費 ${adSpendNeedsAttention ? "需確認" : "可追"}`
-                : "發票、稽核、應收或損益資料未完整載入"}
+                ? canViewNetProfit
+                  ? `缺發票 ${missingInvoiceCount} · 訂單稽核 ${financialAuditIssueCount} · 廣告費 ${adSpendNeedsAttention ? "需確認" : "可追"}`
+                  : `缺發票 ${missingInvoiceCount} · 應收 ${overdueAR} 筆待追`
+                : "發票或應收資料未完整載入"}
             </div>
           </div>
         </div>
       </div>
 
       {/* ── 平台營收與營業額對照 ── */}
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+      <div className={`grid gap-4 ${canViewNetProfit ? "xl:grid-cols-[1fr_1fr]" : "xl:grid-cols-1"}`}>
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div className="text-lg font-semibold text-slate-900">銷售通路</div>
@@ -1387,7 +1408,8 @@ const DashboardPage: React.FC = () => {
           {topPlatformRevenueRows.length > 0 ? (
             <div className="space-y-3">
               {topPlatformRevenueRows.map((row) => {
-                const netRate = row.gross > 0 ? (row.payoutNet / row.gross) * 100 : 0
+                const netRate = canViewNetProfit && row.gross > 0 && row.payoutNet != null
+                  ? (row.payoutNet / row.gross) * 100 : null
                 return (
                   <div key={row.key} className="rounded-2xl border border-slate-100 bg-white/65 px-4 py-3">
                     <div className="flex items-start gap-3">
@@ -1399,8 +1421,8 @@ const DashboardPage: React.FC = () => {
                         </div>
                         <div className="mt-2 grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
                           <div>訂單 {row.orderCount.toLocaleString("zh-TW")} 筆</div>
-                          <div>淨入帳 {fmtMoney(row.payoutNet)}</div>
-                          <div>淨入帳率 {fmtPct(netRate)}</div>
+                          {canViewNetProfit && <div>淨入帳 {fmtOptionalMoney(row.payoutNet)}</div>}
+                          {canViewNetProfit && <div>淨入帳率 {fmtPct(netRate)}</div>}
                         </div>
                       </div>
                     </div>
@@ -1415,7 +1437,7 @@ const DashboardPage: React.FC = () => {
           )}
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
+        {canViewNetProfit && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div className="text-lg font-semibold text-slate-900">營業額對照</div>
             <div className="flex flex-wrap gap-2">
@@ -1449,7 +1471,7 @@ const DashboardPage: React.FC = () => {
                     </div>
                     <div>
                       <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">廣告費</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900">{fmtMoney(row.adSpend)}</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900">{fmtOptionalMoney(row.adSpend)}</div>
                     </div>
                     <div>
                       <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">訂單</div>
@@ -1464,7 +1486,7 @@ const DashboardPage: React.FC = () => {
               {adPerformance ? "目前區間尚無資料" : "資料未取得"}
             </div>
           )}
-        </motion.div>
+        </motion.div>}
       </div>
 
       {/* ── CEO 快速圖表：趨勢、占比、風險 ── */}
@@ -1474,9 +1496,9 @@ const DashboardPage: React.FC = () => {
             <div className="text-lg font-semibold text-slate-900">30 天趨勢</div>
             <div className="flex flex-wrap gap-2 text-xs">
               <Tag color="default">營收</Tag>
-              <Tag color="green">淨利</Tag>
-              <Tag color="blue">淨入帳</Tag>
-              <Tag color="gold">廣告費</Tag>
+              {canViewNetProfit && <Tag color="green">淨利</Tag>}
+              {canViewNetProfit && <Tag color="blue">淨入帳</Tag>}
+              {canViewNetProfit && <Tag color="gold">廣告費</Tag>}
             </div>
           </div>
           {revenueTrend.length > 0 ? (
@@ -1487,14 +1509,14 @@ const DashboardPage: React.FC = () => {
                     <stop offset="5%" stopColor="#475569" stopOpacity={0.2} />
                     <stop offset="95%" stopColor="#475569" stopOpacity={0} />
                   </linearGradient>
-                  <linearGradient id="ceoProfitGrad" x1="0" y1="0" x2="0" y2="1">
+                  {canViewNetProfit && <linearGradient id="ceoProfitGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#16a34a" stopOpacity={0.18} />
                     <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="ceoCashGrad" x1="0" y1="0" x2="0" y2="1">
+                  </linearGradient>}
+                  {canViewNetProfit && <linearGradient id="ceoCashGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#2563eb" stopOpacity={0.16} />
                     <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
-                  </linearGradient>
+                  </linearGradient>}
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#94a3b8" }} tickLine={false} axisLine={false} interval={4} />
@@ -1504,9 +1526,9 @@ const DashboardPage: React.FC = () => {
                   formatter={(value: number, name: string) => [fmtMoney(Number(value)), name]}
                   contentStyle={{ borderRadius: "10px", border: "1px solid rgba(0,0,0,0.08)", fontSize: "12px" }} />
                 <Area type="monotone" dataKey="revenue" stroke="#475569" strokeWidth={2} fill="url(#ceoRevenueGrad)" name="營收" />
-                <Area type="monotone" dataKey="netProfit" stroke="#16a34a" strokeWidth={2} fill="url(#ceoProfitGrad)" name="淨利" />
-                <Area type="monotone" dataKey="payoutNet" stroke="#2563eb" strokeWidth={2} fill="url(#ceoCashGrad)" name="淨入帳" />
-                <Area type="monotone" dataKey="adSpend" stroke="#d97706" strokeWidth={2} fill="transparent" name="廣告費" />
+                {canViewNetProfit && <Area type="monotone" dataKey="netProfit" stroke="#16a34a" strokeWidth={2} fill="url(#ceoProfitGrad)" name="淨利" />}
+                {canViewNetProfit && <Area type="monotone" dataKey="payoutNet" stroke="#2563eb" strokeWidth={2} fill="url(#ceoCashGrad)" name="淨入帳" />}
+                {canViewNetProfit && <Area type="monotone" dataKey="adSpend" stroke="#d97706" strokeWidth={2} fill="transparent" name="廣告費" />}
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -1517,7 +1539,7 @@ const DashboardPage: React.FC = () => {
         </motion.div>
 
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-1">
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
+          {canViewNetProfit && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="text-lg font-semibold text-slate-900">銷售通路</div>
               <Tag className="rounded-full bg-slate-100 text-slate-500 border-slate-200 text-xs">淨入帳占比</Tag>
@@ -1549,7 +1571,7 @@ const DashboardPage: React.FC = () => {
                 {overview ? "尚無通路淨入帳資料" : "銷售與通路概況未取得"}
               </div>
             )}
-          </motion.div>
+          </motion.div>}
 
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
             <div className="mb-4 flex items-start justify-between gap-3">
@@ -1660,7 +1682,7 @@ const DashboardPage: React.FC = () => {
         </motion.div>
       </div>
 
-      {legacyDashboardVisible && <>
+      {legacyDashboardVisible && canViewNetProfit && <>
       {/* ── 舊版重複區塊：保留程式兼容，不再顯示 ── */}
       {/* ── 核心 KPI（4 張，全部真實資料）── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -1788,10 +1810,10 @@ const DashboardPage: React.FC = () => {
                     <stop offset="5%" stopColor="#334155" stopOpacity={0.2} />
                     <stop offset="95%" stopColor="#334155" stopOpacity={0} />
                   </linearGradient>
-                  <linearGradient id="profGrad" x1="0" y1="0" x2="0" y2="1">
+                  {canViewMargin && <linearGradient id="profGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#0d9488" stopOpacity={0.2} />
                     <stop offset="95%" stopColor="#0d9488" stopOpacity={0} />
-                  </linearGradient>
+                  </linearGradient>}
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} interval={4} />
@@ -1801,7 +1823,7 @@ const DashboardPage: React.FC = () => {
                   formatter={(value: number, name: string) => [fmtMoney(value), name === 'revenue' ? '營收' : '毛利']}
                   contentStyle={{ borderRadius: '10px', border: '1px solid rgba(0,0,0,0.08)', fontSize: '12px' }} />
                 <Area type="monotone" dataKey="revenue" stroke="#475569" strokeWidth={2} fill="url(#revGrad)" name="revenue" />
-                <Area type="monotone" dataKey="profit" stroke="#0d9488" strokeWidth={2} fill="url(#profGrad)" name="profit" />
+                {canViewMargin && <Area type="monotone" dataKey="profit" stroke="#0d9488" strokeWidth={2} fill="url(#profGrad)" name="profit" />}
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -1818,26 +1840,26 @@ const DashboardPage: React.FC = () => {
             <div className="space-y-3">
               {[
                 { label: '區間營收', value: weeklyPnl.revenue, color: 'text-slate-800' },
-                { label: '估算成本', value: weeklyPnl.cost, color: 'text-rose-600' },
-                { label: '毛利', value: weeklyPnl.grossProfit, color: 'text-teal-700' },
+                ...(canViewCost ? [{ label: '估算銷貨成本', value: weeklyPnl.cost, color: 'text-rose-600' }] : []),
+                ...(canViewMargin ? [{ label: '毛利', value: weeklyPnl.grossProfit, color: 'text-teal-700' }] : []),
               ].map((row) => (
                 <div key={row.label} className="flex items-center justify-between py-2 border-b border-slate-100">
                   <span className="text-sm text-slate-500">{row.label}</span>
-                  <span className={`font-bold text-sm ${row.color}`}>{fmtMoney(row.value)}</span>
+                  <span className={`font-bold text-sm ${row.color}`}>{fmtOptionalMoney(row.value)}</span>
                 </div>
               ))}
-              <div className="pt-1">
+              {canViewMargin && <div className="pt-1">
                 <div className="flex items-center justify-between mb-1.5 text-xs text-slate-500">
                   <span>毛利率</span>
-                  <span className="font-semibold text-slate-700">{(weeklyPnl.grossMargin * 100).toFixed(1)}%</span>
+                  <span className="font-semibold text-slate-700">{fmtPct(weeklyPnl.grossMargin == null ? null : weeklyPnl.grossMargin * 100)}</span>
                 </div>
-                <Progress percent={Math.round(weeklyPnl.grossMargin * 100)} strokeColor="#0d9488"
-                  trailColor="rgba(0,0,0,0.06)" size="small" showInfo={false} />
-              </div>
-              <div className="rounded-xl bg-slate-50 px-4 py-3 mt-1">
-                <div className="text-xs text-slate-400 mb-0.5">淨入帳（實賺）</div>
-                <div className="text-lg font-bold text-slate-900">{fmtMoney(weeklyPnl.monthlyEarned)}</div>
-              </div>
+                {weeklyPnl.grossMargin != null && <Progress percent={Math.round(weeklyPnl.grossMargin * 100)} strokeColor="#0d9488"
+                  trailColor="rgba(0,0,0,0.06)" size="small" showInfo={false} />}
+              </div>}
+              {canViewNetProfit && <div className="rounded-xl bg-slate-50 px-4 py-3 mt-1">
+                <div className="text-xs text-slate-400 mb-0.5">淨入帳（扣平台與金流費）</div>
+                <div className="text-lg font-bold text-slate-900">{fmtOptionalMoney(weeklyPnl.monthlyEarned)}</div>
+              </div>}
             </div>
           ) : (
             <div className="h-[160px] flex items-center justify-center text-sm text-slate-400">
@@ -1912,7 +1934,7 @@ const DashboardPage: React.FC = () => {
         </motion.div>
       )}
 
-      {legacyDashboardVisible && <>
+      {legacyDashboardVisible && canViewNetProfit && <>
       {/* ── 舊版重複待辦：保留程式兼容，不再顯示 ── */}
       {/* ── CEO 決策清單 ── */}
       <div className="grid gap-4 lg:grid-cols-2">

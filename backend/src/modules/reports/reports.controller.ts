@@ -9,7 +9,6 @@ import {
   UseInterceptors,
   NotImplementedException,
 } from '@nestjs/common';
-import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import {
   ApiTags,
   ApiOperation,
@@ -25,6 +24,7 @@ import { ReportsService } from './reports.service';
 import { ExpenseIntelligenceService } from './expense-intelligence.service';
 import { EntityAccessGuard } from '../../common/guards/entity-access.guard';
 import { RequireEntityAccess } from '../../common/decorators/entity-access.decorator';
+import { SensitiveResponseInterceptor } from '../product/sensitive-response.interceptor';
 
 /**
  * 報表控制器
@@ -35,7 +35,9 @@ import { RequireEntityAccess } from '../../common/decorators/entity-access.decor
 @UseGuards(JwtAuthGuard, PermissionsGuard, EntityAccessGuard)
 @RequirePermissions({ resource: 'reports', action: 'read' })
 @RequireEntityAccess('accounting')
-@UseInterceptors(CacheInterceptor) // Enable Caching for all reports
+// Authorization depends on the current user; URL-only caching can share a richer
+// response with a less privileged user requesting the same report URL.
+@UseInterceptors(new SensitiveResponseInterceptor(false, true))
 @Controller('reports')
 export class ReportsController {
   constructor(
@@ -44,6 +46,12 @@ export class ReportsController {
   ) {}
 
   @Post('analyze')
+  @RequirePermissions(
+    { resource: 'reports', action: 'read' },
+    { resource: 'product_cost', action: 'read' },
+    { resource: 'financial_margin', action: 'read' },
+    { resource: 'financial_net_profit', action: 'read' },
+  )
   @ApiOperation({ summary: 'AI 財務分析 (Expense Intelligence)' })
   @ApiResponse({ status: 200, description: '成功產生分析報告' })
   @ApiBody({
@@ -87,15 +95,12 @@ export class ReportsController {
   }
 
   @Get('income-statement')
-  @CacheTTL(300000) // Cache for 5 minutes (in ms for v5, or seconds for v4/v6? Nest Cache v5 uses ms usually)
-  // Check version: cache-manager v5 changed to milliseconds?
-  // CacheModule v3 (Nest v10) uses milliseconds.
-  // Let's assume ms to be safe or verify.
-  // "cache-manager": "^6.0.0" in package.json.
-  // NestJS Cache Manager usually takes milliseconds.
-  // Actually, @CacheTTL() behavior depends on the store. Redis store might expect seconds or ms.
-  // Let's use 60 seconds (60000 ms) to be safe for now, or just trust defaults.
-  // Let's put 60 * 1000 = 60000 if it is ms.
+  @RequirePermissions(
+    { resource: 'reports', action: 'read' },
+    { resource: 'product_cost', action: 'read' },
+    { resource: 'financial_margin', action: 'read' },
+    { resource: 'financial_net_profit', action: 'read' },
+  )
   @ApiOperation({ summary: '產生損益表 (Income Statement / P&L)' })
   @ApiResponse({ status: 200, description: '成功產生損益表' })
   @ApiQuery({ name: 'entityId', required: true, description: '實體ID' })
@@ -122,6 +127,12 @@ export class ReportsController {
   }
 
   @Get('balance-sheet')
+  @RequirePermissions(
+    { resource: 'reports', action: 'read' },
+    { resource: 'product_cost', action: 'read' },
+    { resource: 'financial_margin', action: 'read' },
+    { resource: 'financial_net_profit', action: 'read' },
+  )
   @ApiOperation({ summary: '產生資產負債表 (Balance Sheet)' })
   @ApiResponse({ status: 200, description: '成功產生資產負債表' })
   @ApiQuery({ name: 'entityId', required: true })
@@ -138,6 +149,12 @@ export class ReportsController {
   }
 
   @Get('cash-flow')
+  @RequirePermissions(
+    { resource: 'reports', action: 'read' },
+    { resource: 'product_cost', action: 'read' },
+    { resource: 'financial_margin', action: 'read' },
+    { resource: 'financial_net_profit', action: 'read' },
+  )
   @ApiOperation({ summary: '產生現金流量表 (Cash Flow Statement)' })
   @ApiResponse({ status: 200, description: '成功產生現金流量表' })
   @ApiQuery({ name: 'entityId', required: true })
@@ -156,6 +173,12 @@ export class ReportsController {
   }
 
   @Get('trial-balance')
+  @RequirePermissions(
+    { resource: 'reports', action: 'read' },
+    { resource: 'product_cost', action: 'read' },
+    { resource: 'financial_margin', action: 'read' },
+    { resource: 'financial_net_profit', action: 'read' },
+  )
   @ApiOperation({ summary: '產生試算表 (Trial Balance)' })
   @ApiResponse({ status: 200, description: '成功產生試算表' })
   @ApiQuery({ name: 'entityId', required: true })
@@ -169,6 +192,12 @@ export class ReportsController {
   }
 
   @Get('general-ledger')
+  @RequirePermissions(
+    { resource: 'reports', action: 'read' },
+    { resource: 'product_cost', action: 'read' },
+    { resource: 'financial_margin', action: 'read' },
+    { resource: 'financial_net_profit', action: 'read' },
+  )
   @ApiOperation({ summary: '產生總分類帳 (General Ledger)' })
   @ApiResponse({ status: 200, description: '成功產生總分類帳' })
   @ApiQuery({ name: 'accountId', required: true, description: '會計科目ID' })
@@ -255,6 +284,12 @@ export class ReportsController {
   }
 
   @Get('dashboard-executive-overview')
+  @RequirePermissions(
+    { resource: 'reports', action: 'read' },
+    { resource: 'product_cost', action: 'read' },
+    { resource: 'financial_margin', action: 'read' },
+    { resource: 'financial_net_profit', action: 'read' },
+  )
   @ApiOperation({ summary: '儀錶板 CEO 總覽' })
   @ApiResponse({ status: 200, description: '成功取得 CEO 視角的營運摘要' })
   @ApiQuery({ name: 'entityId', required: true })
@@ -312,6 +347,12 @@ export class ReportsController {
   }
 
   @Get('journal-approval-readiness')
+  @RequirePermissions(
+    { resource: 'reports', action: 'read' },
+    { resource: 'product_cost', action: 'read' },
+    { resource: 'financial_margin', action: 'read' },
+    { resource: 'financial_net_profit', action: 'read' },
+  )
   @ApiOperation({ summary: '只讀盤點已審核／未審核分錄與報表發布狀態' })
   @ApiResponse({ status: 200, description: '成功取得分錄審核盤點' })
   @ApiQuery({ name: 'entityId', required: true })
@@ -359,6 +400,12 @@ export class ReportsController {
   }
 
   @Get('monthly-channel-reconciliation')
+  @RequirePermissions(
+    { resource: 'reports', action: 'read' },
+    { resource: 'product_cost', action: 'read' },
+    { resource: 'financial_margin', action: 'read' },
+    { resource: 'financial_net_profit', action: 'read' },
+  )
   @ApiOperation({ summary: '按月份查看平台營收與綠界對帳矩陣' })
   @ApiResponse({ status: 200, description: '成功取得月度對帳矩陣' })
   @ApiQuery({ name: 'entityId', required: true })
@@ -377,6 +424,12 @@ export class ReportsController {
   }
 
   @Get('order-reconciliation-audit')
+  @RequirePermissions(
+    { resource: 'reports', action: 'read' },
+    { resource: 'product_cost', action: 'read' },
+    { resource: 'financial_margin', action: 'read' },
+    { resource: 'financial_net_profit', action: 'read' },
+  )
   @ApiOperation({ summary: '逐筆訂單對帳稽核' })
   @ApiResponse({
     status: 200,
