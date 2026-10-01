@@ -11,7 +11,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
-import { assertCustomRoleIdentity, isAccountAssignableRole, isPrivilegedRole, SYSTEM_ROLE_CODES } from './role-policy';
+import { assertCustomRoleIdentity, isAccountAssignableRole, isPrivilegedRole, isSystemRoleIdentity } from './role-policy';
 
 const ROLE_INCLUDE = {
   permissions: {
@@ -92,7 +92,7 @@ export class RolesService {
     if (dto.code !== undefined && dto.code !== existing.code) {
       throw new BadRequestException('角色代碼建立後不可修改，請建立新角色');
     }
-    if (dto.name !== undefined && dto.name !== existing.name && SYSTEM_ROLE_CODES.includes(dto.name.trim().toUpperCase())) {
+    if (dto.name !== undefined && dto.name !== existing.name && isSystemRoleIdentity(dto.name)) {
       throw new BadRequestException('系統角色名稱不可由其他角色使用');
     }
     try {

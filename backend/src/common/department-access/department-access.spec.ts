@@ -30,6 +30,17 @@ describe('department membership and additive supervisor permissions', () => {
     expect(effectivePermissionKeys({employee:employee(true),roles:[{role:role('PAYROLL',['payroll_admin:read'])}]})).toContain('payroll_admin:read');
     expect(departmentAccess(employee(true)).permissions).not.toContain('payroll_admin:read');
   });
+  it('grants repair work through the repair department while retaining explicit customer and financial review boundaries', () => {
+    const e = employee();
+    e.department.memberRole = { ...role('REPAIR_TECHNICIAN', ['repair_workbench:read', 'repair_workbench:update', 'mailroom:review', 'banking:read']), name: '維修師' };
+    const permissions = departmentAccess(e).permissions;
+    expect(permissions).toEqual(expect.arrayContaining(['repair_workbench:read', 'repair_workbench:update']));
+    expect(permissions).not.toContain('mailroom:review');
+    expect(permissions).not.toContain('banking:read');
+    expect(departmentAccess(e).roleNames).toContain('維修師');
+    e.isActive = false;
+    expect(departmentAccess(e).permissions).not.toContain('repair_workbench:update');
+  });
   it('revokes supervisor-only grants on demotion, retaining shared work', () => {
     const e = employee(true); e.isDepartmentSupervisor=false;
     expect(departmentAccess(e).permissions).toContain('wms_packing:execute');

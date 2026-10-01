@@ -1,0 +1,34 @@
+{
+  "environment": "isolated synthetic localhost preview",
+  "browser": "Codex in-app browser",
+  "checks": {
+    "technicianNavigation": true,
+    "claimDoesNotMoveCustody": true,
+    "authenticatedPersonalAcceptanceEnablesDocuments": true,
+    "csrTechnicalDocumentsReadOnly": true,
+    "currentInspectionReviewVisible": true,
+    "unpaidRepairDisabled": true,
+    "repairDraftSavedViaUI": true,
+    "draftSaveDoesNotReleaseRepair": true,
+    "documentFieldIdsUnique": true,
+    "viewportWidth1272MatchesDocumentWidth": true
+  },
+  "uiDraft": {
+    "itemId": "fixture-doa-held",
+    "itemVersion": 5,
+    "documentNumber": "REP-DOA-DEMO-HELD",
+    "documentStatus": "DRAFT",
+    "inspectionRevision": 1,
+    "itemStatus": "INSPECTING",
+    "repairAllowed": false
+  },
+  "notes": [
+    "HTTP e2e checkpoint held v4 precedes UI draft save to v5",
+    "Browser fixture does not send external websocket notifications",
+    "No physical hardware repair or bank confirmation was performed"
+  ],
+  "screenshots": [
+    "workbench-overview.jpg",
+    "payment-blocked.jpg"
+  ]
+}

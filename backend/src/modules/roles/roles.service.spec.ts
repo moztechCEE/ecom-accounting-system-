@@ -22,7 +22,7 @@ describe('Role administration boundaries', () => {
     service = new RolesService(prisma as any);
   });
 
-  it.each(['ADMIN', 'SUPER_ADMIN', 'ACCOUNTANT'])('rejects forged %s identity before writing', async code => {
+  it.each(['ADMIN', 'SUPER_ADMIN', 'ACCOUNTANT', 'REPAIR_TECHNICIAN', '維修師'])('rejects forged %s identity before writing', async code => {
     await expect(service.create({ code, name: 'Custom role' })).rejects.toThrow('系統角色');
     await expect(service.create({ code: 'CUSTOM_ROLE', name: code })).rejects.toThrow('系統角色');
     expect(prisma.role.create).not.toHaveBeenCalled();
@@ -32,6 +32,7 @@ describe('Role administration boundaries', () => {
     prisma.role.findUnique.mockResolvedValue({ id: 'custom', code: 'CUSTOM', name: '一般角色' });
     await expect(service.update('custom', { code: 'ADMIN' })).rejects.toThrow('角色代碼');
     await expect(service.update('custom', { name: 'SUPER_ADMIN' })).rejects.toThrow('系統角色名稱');
+    await expect(service.update('custom', { name: '維修師' })).rejects.toThrow('系統角色名稱');
     expect(prisma.role.update).not.toHaveBeenCalled();
   });
 
@@ -61,11 +62,19 @@ describe('Role administration boundaries', () => {
       { id: 'finance', code: 'ACCOUNTANT', name: '財務', _count: counts, permissions: [
         { permission: { resource: 'reports', action: 'read' } },
       ] },
+      { id: 'repair-technician', code: 'REPAIR_TECHNICIAN', name: '維修師', _count: counts, permissions: [
+        { permission: { resource: 'repair_workbench', action: 'read' } },
+        { permission: { resource: 'repair_workbench', action: 'update' } },
+      ] },
+      { id: 'repair-review', code: 'REPAIR_REVIEW', name: '維修覆核', _count: counts, permissions: [
+        { permission: { resource: 'repair_workbench', action: 'read' } },
+        { permission: { resource: 'mailroom', action: 'review' } },
+      ] },
     ]);
     prisma.userRole.count.mockResolvedValue(0);
     const roles = await service.findAll('account-admin');
     expect(roles.map(role => [role.id, role.assignableByAccountManager])).toEqual([
-      ['worker', true], ['finance', false],
+      ['worker', true], ['finance', false], ['repair-technician', true], ['repair-review', false],
     ]);
   });
 

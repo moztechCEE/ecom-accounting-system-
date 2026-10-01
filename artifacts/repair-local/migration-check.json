@@ -1,0 +1,7 @@
+{
+  "documentMigrationApplied": true,
+  "schemaDiff": "none",
+  "roleName": "維修師",
+  "userRoleAndPermissionLinksUnchanged": true,
+  "environment": "isolated synthetic localhost"
+}

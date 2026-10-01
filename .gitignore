@@ -143,3 +143,8 @@ vite.config.ts.timestamp-*
 
 # Playwright CLI local browser snapshots/logs
 .playwright-cli/
+
+# Isolated DOA PostgreSQL runtime (never commit database files)
+/artifacts/repair-local/postgres/
+/artifacts/repair-local/socket/
+/artifacts/repair-local/postgres.log

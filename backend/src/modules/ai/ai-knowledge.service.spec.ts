@@ -150,6 +150,8 @@ describe('Knowledge ACL and route parity', () => {
   });
 
   it.each([
+    ['/operations/repair?queue=waiting', 'repair_workbench:read'],
+    ['/operations/mailroom', 'mailroom:read'],
     ['/sales/quotations', 'purchase_orders:read'],
     ['/purchasing/b2b-shortages', 'purchase_orders:create'],
     ['/purchasing/supplier-accounts', 'purchase_orders:read'],
@@ -164,6 +166,60 @@ describe('Knowledge ACL and route parity', () => {
   ])('requires the relevant permission for %s', (path, permission) => {
     expect(access.canOpenPath(actor(), path)).toBe(false);
     expect(access.canOpenPath(actor([permission]), path)).toBe(true);
+  });
+
+  it('keeps repair and mailroom guidance separated and inbox guidance personal', () => {
+    const technician = actor(['repair_workbench:read', 'repair_workbench:update'], ['REPAIR_TECHNICIAN']);
+    const clerk = actor(['mailroom:read', 'mailroom:update'], ['MAILROOM_OPERATOR']);
+    const reviewer = actor(['mailroom:review'], ['CUSTOMER_SERVICE']);
+    expect(access.canOpenPath(technician, '/operations/mailroom')).toBe(false);
+    expect(access.canOpenPath(clerk, '/operations/repair')).toBe(false);
+    expect(access.canOpenPath(reviewer, '/operations/repair?queue=waiting')).toBe(false);
+    expect(access.canOpenPath(actor(['repair_workbench:update']), '/operations/repair')).toBe(false);
+    for (const current of [actor(), technician, clerk, reviewer])
+      expect(access.canOpenPath(current, '/my/inbox')).toBe(true);
+    expect(access.canOpenPath({ ...actor(), userId: '' }, '/my/inbox')).toBe(false);
+    const results = knowledge.search('', 512, '/operations/repair', 'zh-TW',
+      (entry) => access.canReadKnowledge(technician, entry));
+    expect(results.some((entry) => entry.id === 'repair-workbench')).toBe(true);
+    expect(results.some((entry) => entry.id === 'mailroom-workbench')).toBe(false);
+    expect(results.some((entry) => entry.id === 'personal-inbox')).toBe(true);
+    const related = results.find((entry) => entry.id === 'repair-workbench')!.sections
+      .find((section) => section.title === '相關指南')!.body;
+    expect(related).not.toContain('/operations/mailroom');
+    expect(related).not.toContain('/admin/access-control');
+  });
+
+  it('matches the enabled repair-only workspace without hiding a mixed-duty dashboard', () => {
+    const previous = process.env.MAILROOM_ENABLED;
+    try {
+      const technician = actor(['repair_workbench:read', 'repair_workbench:update', 'profile_self:read'], ['REPAIR_TECHNICIAN']);
+      process.env.MAILROOM_ENABLED = 'true';
+      expect(access.canOpenPath(technician, '/dashboard')).toBe(false);
+      expect(access.canOpenPath(actor([...technician.permissions, 'inventory:read']), '/dashboard')).toBe(true);
+      expect(access.canOpenPath(actor(technician.permissions, ['ADMIN']), '/dashboard')).toBe(true);
+      process.env.MAILROOM_ENABLED = 'false';
+      expect(access.canOpenPath(technician, '/dashboard')).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.MAILROOM_ENABLED;
+      else process.env.MAILROOM_ENABLED = previous;
+    }
+  });
+
+  it('does not register live AI operations when repair guide access is granted', async () => {
+    const grants = ['repair_workbench:read', 'repair_workbench:update'];
+    const service = new AiCopilotAccessService({ user: {
+      findUnique: jest.fn().mockResolvedValue({ isActive: true, roles: [{ role: {
+        code: 'REPAIR_TECHNICIAN', permissions: grants.map((grant) => {
+          const [resource, action] = grant.split(':');
+          return { permission: { resource, action } };
+        }),
+      } }] }),
+    } } as unknown as PrismaService, {} as EntityAccessService);
+    const technician = await service.getActor('technician');
+    expect(service.canOpenPath(technician, '/operations/repair')).toBe(true);
+    expect(technician.tools).toEqual([]);
+    await expect(service.authorize(technician, 'repair_workbench:update', 'entity-a')).rejects.toThrow();
   });
 
   it('keeps company administration superadmin-only and unknown destinations closed', () => {

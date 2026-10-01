@@ -38,6 +38,7 @@ export const ACTIONS = [
   'correct',
   'move',
   'assign',
+  'claim',
   'accept',
   'resolve_mismatch',
   'resolve_customer',
@@ -137,6 +138,31 @@ export type ItemState = {
     customerServiceUserId?: string | null;
   };
 };
+
+export const REPAIR_RETURN_STATUSES = [
+  'PENDING_REFURBISH',
+  'REFURBISHING',
+  'WAITING_REPAIR_ACCEPTANCE',
+  'REPAIR_RECEIVED',
+  'INSPECTING',
+  'WAITING_CUSTOMER',
+  'REPAIRING',
+  'WAITING_RETURN_ACCEPTANCE',
+  'PENDING_WELFARE_STOCK',
+] as const;
+
+export function isRepairWorkbenchItem(item: {
+  status: string;
+  repairOwnerId: string | null;
+  receipt: { category: string };
+}) {
+  return (
+    item.receipt.category === 'REPAIR' ||
+    (item.receipt.category === 'RETURN' &&
+      (Boolean(item.repairOwnerId) ||
+        REPAIR_RETURN_STATUSES.some((status) => status === item.status)))
+  );
+}
 
 export function can(actor: Actor, permission: string) {
   return actor.permissions.has('*') || actor.permissions.has(permission);
@@ -302,9 +328,8 @@ export function transition(
         changes.status = 'MISMATCH';
         changes.nextUserId = null;
       } else {
-        requireNext();
         changes.status = 'WAITING_REPAIR_ACCEPTANCE';
-        changes.nextUserId = command.nextUserId;
+        changes.nextUserId = command.nextUserId || null;
       }
       break;
     case 'resolve_mismatch':
@@ -319,11 +344,10 @@ export function transition(
         });
         break;
       }
-      requireNext();
       Object.assign(changes, {
         status: 'WAITING_REPAIR_ACCEPTANCE',
         matchResult: 'CONFIRMED_ACTUAL',
-        nextUserId: command.nextUserId,
+        nextUserId: command.nextUserId || null,
       });
       break;
     case 'resolve_customer':
@@ -504,6 +528,19 @@ export function transition(
       changes.nextUserId = command.nextUserId;
       if (item.status === 'WAITING_PICKUP')
         changes.recipientId = command.nextUserId;
+      break;
+    case 'claim':
+      requirePermission(actor, 'repair_workbench:update');
+      requireStage('WAITING_REPAIR_ACCEPTANCE', 'PENDING_REFURBISH');
+      if (!isRepairWorkbenchItem(item))
+        throw new BadRequestException('此物件不是維修或整新物件');
+      if (item.nextUserId || item.repairOwnerId)
+        throw new ConflictException('物件已有接收人，請重新整理');
+      if (command.nextUserId || command.confirmedItems || command.location)
+        throw new BadRequestException(
+          '認領只保留接收人，實物交接請另行本人簽收',
+        );
+      changes.nextUserId = actor.id;
       break;
     case 'accept':
       requireStage(

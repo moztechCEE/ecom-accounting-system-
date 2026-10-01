@@ -1,0 +1,77 @@
+.repair-workbench-page {
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.repair-workbench-page > *,
+.repair-workbench-page .ant-card,
+.repair-workbench-page .ant-table-wrapper {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.repair-workbench-page .mailroom-heading {
+  flex-wrap: wrap;
+}
+
+.repair-workbench-page .mailroom-heading > div {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.repair-workbench-page .mailroom-heading h2 {
+  overflow-wrap: anywhere;
+}
+
+.repair-workbench-page .ant-card-head-wrapper {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.repair-workbench-page .ant-card-head-title {
+  min-width: 0;
+  white-space: normal;
+}
+
+.repair-workbench-page .ant-card-extra {
+  max-width: 100%;
+}
+
+.repair-workbench-search {
+  width: 270px;
+  max-width: 100%;
+}
+
+.repair-workbench-drawer .ant-drawer-content-wrapper {
+  max-width: 100vw;
+}
+
+.repair-workbench-drawer .ant-card,
+.repair-workbench-drawer .ant-space-vertical,
+.repair-workbench-drawer .ant-table-wrapper {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.repair-workbench-drawer td,
+.repair-workbench-drawer th {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .repair-workbench-list .ant-card-head-wrapper {
+    align-items: stretch;
+  }
+
+  .repair-workbench-list .ant-card-extra {
+    flex: 1 1 100%;
+    width: 100%;
+    margin-inline-start: 0;
+  }
+
+  .repair-workbench-search {
+    width: 100%;
+  }
+}

@@ -48,6 +48,8 @@ import {
   type Task,
 } from "./model";
 import TabletAcceptance from "./TabletAcceptance";
+import RepairDocuments from "../repair/RepairDocuments";
+import type { RepairItem } from "../repair/repair-model";
 import "./mailroom.css";
 const { Text, Title, Paragraph } = Typography;
 const requestId = () => crypto.randomUUID();
@@ -996,6 +998,9 @@ function ItemDetail({
   return (
     <div className="mailroom-detail">
       <Title level={3}>{item.productName}</Title>
+      {canReview && (item.receipt.category === "REPAIR" || item.repairOwnerId) ? (
+        <RepairDocuments item={{...(item as RepairItem), editable: false}} entityId={entityId} onSaved={onSaved} />
+      ) : null}
       <Space wrap>
         <Tag>{CATEGORIES[item.receipt.category]}</Tag>
         <Tag color={statusColor(item.status)}>{STATUS[item.status]}</Tag>

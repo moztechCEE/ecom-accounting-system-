@@ -1,0 +1,60 @@
+{
+  "stage": "local-source-verification",
+  "date": "2026-10-02",
+  "sourceVersion": "sha256:eedca09f5de71a70385588bca2f4041c39bb7d27c9f9a9e4b1e31f24a30a6c10",
+  "reviewedBaseCommit": "e5adf5448839efb7c01d858361653e4e5841ee79",
+  "catalog": {
+    "bilingualGuides": 67,
+    "groups": 11,
+    "routes": 83,
+    "reviewedSourceHashes": 146
+  },
+  "results": {
+    "generation": "passed",
+    "readOnlyDriftCheck": "passed",
+    "allReviewedSourceHashComparisons": "passed",
+    "generatorTests": {
+      "passed": 13,
+      "failed": 0
+    },
+    "knowledgeAclTests": {
+      "passed": 30,
+      "failed": 0
+    },
+    "gitDiffCheck": "passed"
+  },
+  "businessSourceIncludes": [
+    "page",
+    "forms",
+    "model/helpers",
+    "CSS",
+    "controllers",
+    "services",
+    "DTOs",
+    "state contracts",
+    "role policy",
+    "two reviewed SQL migrations"
+  ],
+  "fixtureRuntimeIncludedInBusinessSourceHash": false,
+  "newAiExecutionTools": false,
+  "deployedDev": false,
+  "productionAcceptance": false,
+  "commands": [
+    "node scripts/dev/generate-copilot-knowledge.cjs --write",
+    "node scripts/dev/generate-copilot-knowledge.cjs --check",
+    "node --test scripts/dev/generate-copilot-knowledge.spec.cjs",
+    "cd backend && node_modules/.bin/jest --runInBand src/modules/ai/ai-knowledge.service.spec.ts",
+    "git diff --check"
+  ],
+  "finalSourceReview": {
+    "changedSource": "frontend/src/pages/repair/RepairDocuments.tsx",
+    "reviewedChanges": [
+      "Inspection and repair Forms have distinct names to prevent duplicate check-field DOM ids.",
+      "Part SKU is required for submission, matching the backend contract.",
+      "Printed footer shows the actual DRAFT/SUBMITTED document status conditionally."
+    ],
+    "guideContentChanged": false,
+    "testsRerun": false,
+    "previous13GeneratorAnd30AclResultsRetained": true
+  }
+}

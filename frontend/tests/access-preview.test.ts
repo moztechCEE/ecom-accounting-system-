@@ -4,6 +4,8 @@ import { canAccessRoute, effectiveAccess, groupPermissions, togglePermissionGrou
 import { navigationLeaves, visibleNavigation, workspaceNavigation } from '../src/config/navigation.ts'
 import type { Permission, Role } from '../src/types/index.ts'
 
+Object.defineProperty(globalThis, 'window', { value: { __APP_CONFIG__: { mailroomEnabled: false } }, configurable: true })
+
 const permission = (id: string, resource: string, action = 'read'): Permission => ({ id, resource, action })
 const role = (code: string, permissions: Permission[]): Role => ({
   id: code, code, name: code, hierarchyLevel: 3,

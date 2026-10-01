@@ -86,6 +86,16 @@ test('a configured navigation destination must resolve to an App route', (t) => 
   assert.equal(result.code, 1);
   assert.match(result.output, /Configured destination does not resolve to an App route: \/not-a-route/);
 });
+test('repair queue documentation cannot be omitted just because the base route is covered', (t) => {
+  const root = fixture(t);
+  edit(root, (data) => {
+    const repair = data.entries.find((entry) => entry.id === 'repair-workbench');
+    repair.aliases = repair.aliases.filter((route) => route !== '/operations/repair?queue=acceptance');
+  });
+  const result = run(root, '--write');
+  assert.equal(result.code, 1);
+  assert.match(result.output, /Routes without a guide: \/operations\/repair\?queue=acceptance/);
+});
 test('missing English boundaries are rejected', (t) => {
   const root = fixture(t);
   edit(root, (data) => { data.entries[0].translations.en.sections.boundaries = []; });
@@ -127,10 +137,14 @@ test('example CSV cells cannot contain spreadsheet formulas', (t) => {
   assert.equal(result.code, 1);
   assert.match(result.output, /CSV formula injection/);
 });
-test('a reviewed-source path cannot escape the checkout', (t) => {
+test('reviewed-source paths cannot escape the checkout or enroll Prisma seed scripts', (t) => {
   const root = fixture(t);
   edit(root, (data) => { data.entries[0].sourcePaths.push('../outside-secret'); });
   const result = run(root, '--write');
   assert.equal(result.code, 1);
   assert.match(result.output, /Unsafe source path/);
+  edit(root, (data) => { data.entries[0].sourcePaths.pop(); data.entries[0].sourcePaths.push('backend/prisma/seed.ts'); });
+  const seed = run(root, '--write');
+  assert.equal(seed.code, 1);
+  assert.match(seed.output, /Unreviewed source area: backend\/prisma\/seed.ts/);
 });

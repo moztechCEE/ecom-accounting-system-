@@ -143,6 +143,87 @@ describe('Mailroom physical custody and permissions', () => {
         .changes.status,
     ).toBe('REPAIRING');
   });
+  it('lets the clerk hand a matched repair to the unassigned claim pool without moving custody', () => {
+    const { changes } = transition(
+      item,
+      {
+        ...cmd,
+        action: 'inspect',
+        productName: '示範產品',
+        matchResult: 'MATCH',
+      },
+      mail,
+    );
+    expect(changes).toMatchObject({
+      status: 'WAITING_REPAIR_ACCEPTANCE',
+      nextUserId: null,
+    });
+    expect(changes).not.toHaveProperty('custodianId');
+    expect(changes).not.toHaveProperty('repairOwnerId');
+  });
+  it('claims only an unassigned repair and leaves physical custody, location and progress untouched', () => {
+    const waiting = {
+      ...item,
+      status: 'WAITING_REPAIR_ACCEPTANCE',
+      matchResult: 'MATCH',
+    };
+    expect(
+      transition(waiting, { ...cmd, action: 'claim' }, repair).changes,
+    ).toEqual({ nextUserId: repair.id });
+    for (const occupied of [
+      { nextUserId: 'someone' },
+      { repairOwnerId: 'someone' },
+    ])
+      expect(() =>
+        transition(
+          { ...waiting, ...occupied },
+          { ...cmd, action: 'claim' },
+          repair,
+        ),
+      ).toThrow('已有接收人');
+    expect(() =>
+      transition(waiting, { ...cmd, action: 'claim' }, mail),
+    ).toThrow('沒有此作業權限');
+    expect(() =>
+      transition(
+        { ...waiting, entityId: 'other' },
+        { ...cmd, action: 'claim' },
+        repair,
+      ),
+    ).toThrow('無此公司');
+    expect(() => transition(item, { ...cmd, action: 'claim' }, repair)).toThrow(
+      '目前進度',
+    );
+    expect(() =>
+      transition(
+        waiting,
+        { ...cmd, action: 'claim', confirmedItems: true, location: 'R-1' },
+        repair,
+      ),
+    ).toThrow('另行本人簽收');
+  });
+  it('requires a separate physical signature after a successful claim', () => {
+    const claimed = {
+      ...item,
+      status: 'WAITING_REPAIR_ACCEPTANCE',
+      nextUserId: repair.id,
+    };
+    expect(() =>
+      transition(claimed, { ...cmd, action: 'start_inspection' }, repair),
+    ).toThrow('本人已簽收');
+    expect(
+      transition(
+        claimed,
+        { ...cmd, action: 'accept', confirmedItems: true, location: 'R-1' },
+        repair,
+      ).changes,
+    ).toMatchObject({
+      status: 'REPAIR_RECEIVED',
+      repairOwnerId: repair.id,
+      custodianId: repair.id,
+      location: 'R-1',
+    });
+  });
   it.each([
     ['AA', 'PENDING_RESTOCK'],
     ['A', 'PENDING_DISPOSITION'],

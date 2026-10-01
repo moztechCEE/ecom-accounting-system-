@@ -2,12 +2,12 @@ import InboxShortcut from '../pages/mailroom/InboxShortcut'
 import React, { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Avatar, Button, Drawer, Dropdown, Grid, Input, Menu, Select } from 'antd'
-import { AppstoreOutlined, BankOutlined, CustomerServiceOutlined, DashboardOutlined, LogoutOutlined, MenuFoldOutlined, MenuOutlined, MenuUnfoldOutlined, SearchOutlined, SettingOutlined, ShoppingOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, BankOutlined, CustomerServiceOutlined, DashboardOutlined, LogoutOutlined, MenuFoldOutlined, MenuOutlined, MenuUnfoldOutlined, SearchOutlined, SettingOutlined, ShoppingOutlined, TeamOutlined, ToolOutlined, UserOutlined } from '@ant-design/icons'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
 import { PRODUCT } from '../config/product'
 import { activeNavigation, navigationParent, workspaceNavigation, type NavigationItem } from '../config/navigation'
-import { PERSONAL_PATHS, warehouseOnlyUser, warehouseWorkspace, hasWarehouseManagementAccess, warehouseAreas } from '../config/workspaces'
+import { PERSONAL_PATHS, repairOnlyUser, warehouseOnlyUser, operationsWorkspace, hasWarehouseManagementAccess, warehouseAreas, type OperationsWorkspace } from '../config/workspaces'
 import { stagedOperationsEnabled } from '../config/release'
 import CommandPalette from './CommandPalette'
 import NotificationCenter from './NotificationCenter'
@@ -21,6 +21,7 @@ const STORAGE_KEY = 'corely.operations.navigation.v1'
 const icons: Record<string, React.ReactNode> = {
   '/dashboard': <DashboardOutlined />, sales: <ShoppingOutlined />,
   service: <CustomerServiceOutlined />, warehouse: <AppstoreOutlined />, inventory: <AppstoreOutlined />,
+  repair: <ToolOutlined />,
   finance: <BankOutlined />, people: <TeamOutlined />, admin: <SettingOutlined />,
   '/profile': <UserOutlined />, personal: <UserOutlined />,
 }
@@ -42,15 +43,15 @@ export default function DashboardLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [menuSearch, setMenuSearch] = useState('')
-  const [workspace, setWorkspace] = useState<'all' | 'warehouse'>(() => warehouseWorkspace(user, location.pathname))
-  const activeWorkspace = warehouseOnlyUser(user) ? 'warehouse' : workspace
+  const [workspace, setWorkspace] = useState<OperationsWorkspace>(() => operationsWorkspace(user, location.pathname))
+  const activeWorkspace = repairOnlyUser(user) ? 'repair' : warehouseOnlyUser(user) ? 'warehouse' : workspace === 'repair' ? 'all' : workspace
   const items = workspaceNavigation(user, activeWorkspace)
   const active = activeNavigation(items, location.pathname, location.search)
   const parent = navigationParent(items, active?.key || '')
 
   useEffect(() => { document.title = PRODUCT.title }, [])
   useEffect(() => {
-    if (!PERSONAL_PATHS.includes(location.pathname)) setWorkspace(warehouseWorkspace(user, location.pathname))
+    if (!PERSONAL_PATHS.includes(location.pathname)) setWorkspace(operationsWorkspace(user, location.pathname))
   }, [location.pathname, user])
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences)) } catch { /* Storage may be unavailable. */ }
@@ -83,7 +84,7 @@ export default function DashboardLayout() {
       {!collapsed && <span>{PRODUCT.name}</span>}
     </div>
     {!collapsed && stagedOperationsEnabled() && warehouseAreas(user).length>0 && <div className="operations-nav-search">
-      <Select aria-label="工作區" value={activeWorkspace} style={{ width: '100%' }}
+      <Select<OperationsWorkspace> aria-label="工作區" value={activeWorkspace} style={{ width: '100%' }}
         options={[{value:'warehouse',label:'儲運作業'}, ...(!warehouseOnlyUser(user) ? [{value:'all',label:'營運管理'}] : [])]}
         onChange={value => {
           setWorkspace(value)

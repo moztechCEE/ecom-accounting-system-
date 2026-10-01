@@ -27,6 +27,15 @@ export class MailroomQuery {
     | 'mailroom'
     | 'repair'
     | 'mine';
+  @IsOptional()
+  @IsIn(['all', 'mine', 'acceptance', 'waiting', 'delivery', 'records'])
+  repairScope?:
+    | 'all'
+    | 'mine'
+    | 'acceptance'
+    | 'waiting'
+    | 'delivery'
+    | 'records';
   @IsOptional() @IsString() @MaxLength(100) search?: string;
   @IsOptional() @IsString() @MaxLength(40) status?: string;
   @IsOptional() @IsIn(['true', 'false']) awaiting?: string;

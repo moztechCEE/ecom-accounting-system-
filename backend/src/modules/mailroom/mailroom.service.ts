@@ -18,6 +18,8 @@ import { MailroomSyncService } from './mailroom-sync.service';
 import {
   can,
   fingerprint,
+  isRepairWorkbenchItem,
+  REPAIR_RETURN_STATUSES,
   requireEntity,
   requirePermission,
   STATUS_LABELS,
@@ -30,6 +32,11 @@ import {
   MailroomCommandDto,
   MailroomQuery,
 } from './mailroom.dto';
+import {
+  validateInspectionRelease,
+  validateInspectionSubmission,
+  validateRepairCompletion,
+} from './repair-document.contract';
 
 const actorSelect = {
   id: true,
@@ -48,6 +55,31 @@ const withReceipt = { receipt: true } as const;
 type Item = Prisma.MailroomItemGetPayload<{ include: typeof withReceipt }>;
 const json = (value: unknown) =>
   JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+const canViewRepairDocuments = (actor: Actor) =>
+  can(actor, 'repair_workbench:read') || can(actor, 'mailroom:review');
+const withoutRepairDocuments = <T extends object>(value: T): T => {
+  const result = { ...value } as T & {
+    repairInspection?: unknown;
+    repairReport?: unknown;
+  };
+  delete result.repairInspection;
+  delete result.repairReport;
+  return result;
+};
+function withoutRepairHistoryDocuments(
+  value: Prisma.JsonValue,
+): Prisma.JsonValue {
+  if (Array.isArray(value)) return value.map(withoutRepairHistoryDocuments);
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'repairInspection' && key !== 'repairReport')
+      .map(([key, nested]) => [
+        key,
+        withoutRepairHistoryDocuments(nested as Prisma.JsonValue),
+      ]),
+  );
+}
 
 @Injectable()
 export class MailroomService {
@@ -96,8 +128,7 @@ export class MailroomService {
     requireEntity(actor, item.entityId);
     if (
       can(actor, 'mailroom:read') ||
-      (can(actor, 'repair_workbench:read') &&
-        [item.nextUserId, item.repairOwnerId].includes(actor.id)) ||
+      (can(actor, 'repair_workbench:read') && isRepairWorkbenchItem(item)) ||
       item.recipientId === actor.id
     )
       return;
@@ -167,8 +198,15 @@ export class MailroomService {
     this.enabled();
     const actor = await this.actor(userId);
     requireEntity(actor, entityId);
-    requirePermission(actor, 'mailroom:read');
-    return this.sync.cases(entityId, search, undefined, options);
+    if (!can(actor, 'mailroom:read') && !can(actor, 'repair_workbench:read'))
+      throw new ForbiddenException('沒有此作業權限');
+    const result = await this.sync.cases(entityId, search, undefined, options);
+    return can(actor, 'mailroom:read')
+      ? result
+      : {
+          ...result,
+          items: result.items.filter((source) => source.type === 'REPAIR'),
+        };
   }
   private async customerService(
     source: SourceCase | undefined,
@@ -203,14 +241,43 @@ export class MailroomService {
     const where: Prisma.MailroomItemWhereInput = {
       entityId: query.entityId,
       ...(mode === 'mine' ? { recipientId: userId } : {}),
-      ...(mode === 'repair'
-        ? {
-            OR: [{ nextUserId: userId }, { repairOwnerId: userId }],
-            receipt: { category: { in: ['REPAIR', 'RETURN'] } },
-          }
-        : {}),
     };
     const and: Prisma.MailroomItemWhereInput[] = [];
+    if (mode === 'repair') {
+      and.push({
+        OR: [
+          { receipt: { category: 'REPAIR' } },
+          {
+            receipt: { category: 'RETURN' },
+            OR: [
+              { status: { in: [...REPAIR_RETURN_STATUSES] } },
+              { repairOwnerId: { not: null } },
+            ],
+          },
+        ],
+      });
+      switch (query.repairScope || 'all') {
+        case 'mine':
+          and.push({ OR: [{ nextUserId: userId }, { repairOwnerId: userId }] });
+          break;
+        case 'acceptance':
+          and.push({
+            status: { in: ['WAITING_REPAIR_ACCEPTANCE', 'PENDING_REFURBISH'] },
+          });
+          break;
+        case 'waiting':
+          and.push({ status: 'WAITING_CUSTOMER' });
+          break;
+        case 'delivery':
+          and.push({ status: 'WAITING_RETURN_ACCEPTANCE' });
+          break;
+        case 'records':
+          and.push({
+            status: { in: ['READY_FOR_DISPATCH', 'PENDING_WELFARE_STOCK'] },
+          });
+          break;
+      }
+    }
     if (query.status) and.push({ status: query.status });
     if (query.search?.trim())
       and.push({
@@ -250,11 +317,11 @@ export class MailroomService {
     ]);
     return {
       total,
-      items: await this.views(rows, userId),
+      items: await this.views(rows, userId, actor),
       page: query.page || 1,
     };
   }
-  private async views(items: Item[], userId: string) {
+  private async views(items: Item[], userId: string, actor: Actor) {
     const ids = [
       ...new Set(
         items
@@ -273,7 +340,7 @@ export class MailroomService {
     });
     const names = new Map(users.map((x) => [x.id, x.name]));
     return items.map(({ evidence, receipt, ...item }) => ({
-      ...item,
+      ...(canViewRepairDocuments(actor) ? item : withoutRepairDocuments(item)),
       statusLabel: STATUS_LABELS[item.status] || item.status,
       custodianName: names.get(item.custodianId) || '未綁定',
       nextUserName: item.nextUserId
@@ -345,9 +412,14 @@ export class MailroomService {
       }),
     ]);
     return {
-      ...(await this.views([item], userId))[0],
+      ...(await this.views([item], userId, actor))[0],
       evidence: item.evidence || [],
-      history,
+      history: canViewRepairDocuments(actor)
+        ? history
+        : history.map((entry) => ({
+            ...entry,
+            snapshot: withoutRepairHistoryDocuments(entry.snapshot),
+          })),
       deliverySummary: deliverySummary.map((x) => ({
         target: x.target,
         status: x.status,
@@ -377,7 +449,7 @@ export class MailroomService {
         id: task.id,
         kind: task.kind,
         createdAt: task.createdAt,
-        item: (await this.views([task.item], userId))[0],
+        item: (await this.views([task.item], userId, actor))[0],
       });
     }
     return result;
@@ -400,7 +472,7 @@ export class MailroomService {
       returnInspection: item.returnInspection,
     };
   }
-  private async record(
+  async record(
     tx: Prisma.TransactionClient,
     actor: Actor,
     item: Item,
@@ -428,6 +500,10 @@ export class MailroomService {
         note,
         snapshot: json({
           ...this.itemSnapshot(item),
+          repairInspection: (item as Item & { repairInspection?: unknown })
+            .repairInspection,
+          repairReport: (item as Item & { repairReport?: unknown })
+            .repairReport,
           ...(evidenceChanged ? { evidence: item.evidence || [] } : {}),
           ...(tabletHandoff ? { tabletHandoff } : {}),
         }),
@@ -573,7 +649,7 @@ export class MailroomService {
     }
     return notifications;
   }
-  private publish(notifications: Array<{ userId: string }>) {
+  publish(notifications: Array<{ userId: string }>) {
     for (const notification of notifications) {
       try {
         this.gateway.sendToUser(notification.userId, notification);
@@ -781,15 +857,15 @@ export class MailroomService {
         throw new BadRequestException('來源案件或申報品項不符');
     }
     let repairAllowed = false;
-    if (input.action === 'start_repair' && current.receipt.sourceCaseId)
+    if (input.action === 'start_repair' && current.receipt.sourceCaseId) {
+      const source = (
+        await this.sync.cases(input.entityId, '', current.receipt.sourceCaseId)
+      ).items[0];
       repairAllowed =
-        (
-          await this.sync.cases(
-            input.entityId,
-            '',
-            current.receipt.sourceCaseId,
-          )
-        ).items[0]?.repairAllowed === true;
+        source?.id === current.receipt.sourceCaseId &&
+        source.type === current.receipt.category &&
+        source.repairAllowed === true;
+    }
     const refreshCustomerService = [
       'inspect',
       'grade',
@@ -843,6 +919,17 @@ export class MailroomService {
       });
       const freshActor = await this.actor(userId, tx);
       requireEntity(freshActor, input.entityId);
+      if (input.action === 'claim') {
+        requirePermission(freshActor, 'repair_workbench:update');
+        const employee = await tx.employee.findFirst({
+          where: { userId, entityId: input.entityId, isActive: true },
+          select: { id: true },
+        });
+        if (!employee)
+          throw new BadRequestException(
+            '認領人必須是此公司已綁定帳號的在職員工',
+          );
+      }
       let clerk: Actor | undefined;
       if (context) {
         clerk = await this.actor(context.tabletClerkId, tx);
@@ -941,6 +1028,48 @@ export class MailroomService {
         )
           throw new ForbiddenException('僅此案件的承辦客服可確認顧客結果');
       }
+      const documents = item as Item & {
+        repairInspection?: unknown;
+        repairReport?: unknown;
+      };
+      let reviewedInspection: Prisma.InputJsonValue | undefined;
+      if (
+        input.action === 'resolve_customer' &&
+        (documents.repairInspection as { status?: string } | null)?.status ===
+          'SUBMITTED'
+      ) {
+        const inspection = validateInspectionSubmission(
+          documents.repairInspection,
+        );
+        reviewedInspection = json({
+          ...inspection,
+          review: {
+            inspectionRevision: inspection.revision,
+            actorId: freshActor.id,
+            name: freshActor.name,
+            confirmedAt: new Date().toISOString(),
+          },
+        });
+      }
+      if (['await_customer', 'start_repair'].includes(input.action)) {
+        const inspection = validateInspectionSubmission(
+          documents.repairInspection,
+        );
+        if (
+          input.action === 'start_repair' &&
+          !['REPAIR', 'REPLACE'].includes(inspection.data.plan)
+        )
+          throw new BadRequestException(
+            '送原廠或原件返還方案須由客服安排，不能直接開始維修',
+          );
+        if (input.action === 'start_repair')
+          validateInspectionRelease(documents.repairInspection);
+      }
+      if (['complete_repair', 'complete_refurbish'].includes(input.action))
+        validateRepairCompletion(
+          documents.repairInspection,
+          documents.repairReport,
+        );
       const { changes, replaceTasks } = transition(
         item,
         input,
@@ -949,6 +1078,7 @@ export class MailroomService {
       );
       if (reassignedInspection && changes.returnInspection === undefined)
         changes.returnInspection = reassignedInspection;
+      if (reviewedInspection) changes.repairInspection = reviewedInspection;
       if (input.action === 'identify') {
         if (
           (await tx.mailroomItem.count({

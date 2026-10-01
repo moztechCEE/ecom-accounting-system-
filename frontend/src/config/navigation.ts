@@ -1,16 +1,23 @@
 import { mailroomEnabled } from '../pages/mailroom/model'
 import type { User } from '../types'
 import { hasAnyPermission, isAdminUser } from '../utils/access'
-import { PERSONAL_PATHS, warehouseOnlyUser, hasWarehouseManagementAccess, WAREHOUSE_REPORTS } from './workspaces'
+import { PERSONAL_PATHS, REPAIR_PERSONAL_PATHS, repairOnlyUser, warehouseOnlyUser, hasWarehouseManagementAccess, WAREHOUSE_REPORTS, type OperationsWorkspace } from './workspaces'
 import { stagedOperationsEnabled } from './release'
 import { wmsPortalLinks, wmsPortalOrigin } from './wms-portal'
 
 export type NavigationItem = { key: string; label: string; externalUrl?: string; workRole?: 'dispatcher'; permissions?: string[]; adminOnly?: boolean; superAdminOnly?: boolean; children?: NavigationItem[] }
 export const NAVIGATION: NavigationItem[] = [
   { key: '/my/inbox', label: '我的待辦與收件' },
-  { key: 'mailroom', label: '收件與維修', children: [
+  { key: 'mailroom', label: '收發室', children: [
     { key: '/operations/mailroom', label: '收發室工作台', permissions: ['mailroom:read'] },
-    { key: '/operations/repair', label: '維修工作台', permissions: ['repair_workbench:read'] },
+  ] },
+  { key: 'repair', label: 'DOA 售後維修', permissions: ['repair_workbench:read'], children: [
+    { key: '/operations/repair', label: '案件總覽', permissions: ['repair_workbench:read'] },
+    { key: '/operations/repair?queue=acceptance', label: '待認領與簽收', permissions: ['repair_workbench:read'] },
+    { key: '/operations/repair?queue=mine', label: '我的檢修', permissions: ['repair_workbench:read'] },
+    { key: '/operations/repair?queue=waiting', label: '客服與付款進度', permissions: ['repair_workbench:read'] },
+    { key: '/operations/repair?queue=delivery', label: '複驗與交回', permissions: ['repair_workbench:read'] },
+    { key: '/operations/repair?queue=records', label: '檢修與維修紀錄', permissions: ['repair_workbench:read'] },
   ] },
   { key: '/dashboard', label: '營運總覽' },
   { key: 'sales', label: '訂單銷售', children: [
@@ -79,7 +86,7 @@ export const NAVIGATION: NavigationItem[] = [
 ]
 export function visibleNavigation(user: User | null | undefined, items = NAVIGATION, staged = stagedOperationsEnabled()): NavigationItem[] {
   return items.flatMap<NavigationItem>((original) => {
-    if (!mailroomEnabled() && ['mailroom','/my/inbox'].includes(original.key)) return []
+    if (!mailroomEnabled() && ['mailroom','repair','/my/inbox'].includes(original.key)) return []
     if (wmsPortalOrigin()) {
       const portal = wmsPortalLinks(user)
       if (original.key === 'warehouse') {
@@ -102,7 +109,7 @@ export function visibleNavigation(user: User | null | undefined, items = NAVIGAT
       ? {...original, children: [{key:'/sales/after-sales',label:'來回件',permissions:['after_sales_cases:read','sales_orders:read']}]}
       : original
     if (item.key === '/warehouse/workstation' && !hasWarehouseManagementAccess(user)) return []
-    if (item.key === '/dashboard' && warehouseOnlyUser(user)) return []
+    if (item.key === '/dashboard' && (warehouseOnlyUser(user) || repairOnlyUser(user))) return []
     if (item.superAdminOnly && !user?.roles?.includes('SUPER_ADMIN')) return []
     if (item.adminOnly && !isAdminUser(user) && !hasAnyPermission(user, item.permissions || [])) return []
     if (item.permissions?.length && !hasAnyPermission(user, item.permissions)) return []
@@ -111,8 +118,13 @@ export function visibleNavigation(user: User | null | undefined, items = NAVIGAT
     return item.children && !children?.length ? [] : [{ ...item, label, children }]
   })
 }
-export function workspaceNavigation(user: User | null | undefined, workspace: 'all' | 'warehouse'): NavigationItem[] {
+export function workspaceNavigation(user: User | null | undefined, workspace: OperationsWorkspace): NavigationItem[] {
   const items = visibleNavigation(user)
+  if (workspace === 'repair' || repairOnlyUser(user)) {
+    const personal = navigationLeaves(items).filter(item => REPAIR_PERSONAL_PATHS.includes(item.key))
+    return [...items.filter(item => item.key === 'repair'),
+      ...(personal.length ? [{ key: 'personal', label: '我的資訊', children: personal }] : [])]
+  }
   if (workspace === 'all' && !warehouseOnlyUser(user)) return items
   const personal = navigationLeaves(items).filter(item => PERSONAL_PATHS.includes(item.key))
   return [...items.filter(item => item.key === 'warehouse').map(item => ({...item, children: wmsPortalOrigin() ? item.children?.filter(child => child.key === '/warehouse') : item.children?.filter(child => child.key === '/warehouse' || child.key === '/warehouse/workstation')})),

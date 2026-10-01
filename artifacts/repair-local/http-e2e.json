@@ -1,0 +1,1441 @@
+{
+  "schema": "corely.repair-local-http-e2e.v1",
+  "runId": "mupzx1ru",
+  "startedAt": "2026-10-01T20:37:43.098Z",
+  "api": "http://127.0.0.1:57654/api/v1",
+  "entityId": "fixture-doa-company",
+  "result": "PASS",
+  "checks": [
+    {
+      "name": "fixed-fixture-actor-tech",
+      "passed": true
+    },
+    {
+      "name": "no-wildcard-tech",
+      "passed": true
+    },
+    {
+      "name": "fixed-fixture-actor-clerk",
+      "passed": true
+    },
+    {
+      "name": "no-wildcard-clerk",
+      "passed": true
+    },
+    {
+      "name": "fixed-fixture-actor-csr",
+      "passed": true
+    },
+    {
+      "name": "no-wildcard-csr",
+      "passed": true
+    },
+    {
+      "name": "fixed-fixture-actor-other",
+      "passed": true
+    },
+    {
+      "name": "no-wildcard-other",
+      "passed": true
+    },
+    {
+      "name": "fresh-start-owned",
+      "passed": true,
+      "evidence": {
+        "id": "fixture-doa-owned",
+        "status": "REPAIR_RECEIVED",
+        "version": 1,
+        "repairOwnerId": "fixture-doa-tech",
+        "custodianId": "fixture-doa-tech",
+        "nextUserId": "fixture-doa-tech",
+        "location": "維修工作站 DEMO-01",
+        "serialNumber": "SN-fixture-doa-source-owned",
+        "inspection": null,
+        "repair": null
+      }
+    },
+    {
+      "name": "no-existing-documents-owned",
+      "passed": true
+    },
+    {
+      "name": "fresh-start-replacement",
+      "passed": true,
+      "evidence": {
+        "id": "fixture-doa-unclaimed",
+        "status": "REPAIR_RECEIVED",
+        "version": 3,
+        "repairOwnerId": "fixture-doa-tech",
+        "custodianId": "fixture-doa-tech",
+        "nextUserId": "fixture-doa-tech",
+        "location": "維修工作站 DEMO-02",
+        "serialNumber": "SN-fixture-doa-source-unclaimed",
+        "inspection": null,
+        "repair": null
+      }
+    },
+    {
+      "name": "no-existing-documents-replacement",
+      "passed": true
+    },
+    {
+      "name": "fresh-start-held",
+      "passed": true,
+      "evidence": {
+        "id": "fixture-doa-held",
+        "status": "INSPECTING",
+        "version": 1,
+        "repairOwnerId": "fixture-doa-tech",
+        "custodianId": "fixture-doa-tech",
+        "nextUserId": "fixture-doa-tech",
+        "location": "維修工作站 DEMO-01",
+        "serialNumber": "SN-fixture-doa-source-held",
+        "inspection": null,
+        "repair": null
+      }
+    },
+    {
+      "name": "no-existing-documents-held",
+      "passed": true
+    },
+    {
+      "name": "fresh-start-waiting",
+      "passed": true,
+      "evidence": {
+        "id": "fixture-doa-waiting",
+        "status": "WAITING_CUSTOMER",
+        "version": 1,
+        "repairOwnerId": "fixture-doa-tech",
+        "custodianId": "fixture-doa-tech",
+        "nextUserId": "fixture-doa-tech",
+        "location": "維修工作站 DEMO-01",
+        "serialNumber": "SN-fixture-doa-source-waiting",
+        "inspection": {
+          "status": "SUBMITTED",
+          "revision": 1,
+          "number": "INS-DOA-DEMO-WAITING",
+          "plan": "REPLACE"
+        },
+        "repair": null
+      }
+    },
+    {
+      "name": "seeded-waiting-inspection-read-only",
+      "passed": true
+    },
+    {
+      "name": "customer-created-and-in-transit-sources-visible",
+      "passed": true
+    },
+    {
+      "name": "same-company-repair-overview",
+      "passed": true
+    },
+    {
+      "name": "csr-documents-read-only",
+      "passed": true
+    },
+    {
+      "name": "draft-incomplete-accepted",
+      "passed": true
+    },
+    {
+      "name": "draft-increments-once",
+      "passed": true
+    },
+    {
+      "name": "idempotent-exact-retry",
+      "passed": true
+    },
+    {
+      "name": "retry-and-denials-do-not-increment",
+      "passed": true
+    },
+    {
+      "name": "owned-inspection-started",
+      "passed": true
+    },
+    {
+      "name": "paid-estimate-submitted",
+      "passed": true
+    },
+    {
+      "name": "customer-handoff-keeps-technician-custody",
+      "passed": true
+    },
+    {
+      "name": "csr-received-waiting-customer-task",
+      "passed": true
+    },
+    {
+      "name": "csr-local-notification-persisted",
+      "passed": true
+    },
+    {
+      "name": "csr-can-review-paid-estimate",
+      "passed": true
+    },
+    {
+      "name": "csr-resolution-returns-task-to-tech",
+      "passed": true
+    },
+    {
+      "name": "csr-confirmation-bound-to-submitted-revision",
+      "passed": true
+    },
+    {
+      "name": "inspection-revision-clears-previous-csr-confirmation",
+      "passed": true
+    },
+    {
+      "name": "revised-inspection-needs-new-csr-confirmation",
+      "passed": true
+    },
+    {
+      "name": "tech-has-returned-inspection-task",
+      "passed": true
+    },
+    {
+      "name": "synthetic-source-repair-release",
+      "passed": true
+    },
+    {
+      "name": "allowed-source-starts-repair",
+      "passed": true
+    },
+    {
+      "name": "report-binds-current-inspection-revision",
+      "passed": true,
+      "evidence": {
+        "inspectionRevision": 3,
+        "reportInspectionRevision": 3
+      }
+    },
+    {
+      "name": "failed-qc-denial-keeps-progress",
+      "passed": true
+    },
+    {
+      "name": "pass-report-revision-preserves-failed-history",
+      "passed": true
+    },
+    {
+      "name": "completion-keeps-custody-until-clerk-signs",
+      "passed": true
+    },
+    {
+      "name": "clerk-item-and-history-documents-redacted",
+      "passed": true
+    },
+    {
+      "name": "clerk-list-documents-redacted",
+      "passed": true
+    },
+    {
+      "name": "clerk-return-task-documents-redacted",
+      "passed": true
+    },
+    {
+      "name": "owned-finished-and-clerk-custody",
+      "passed": true
+    },
+    {
+      "name": "completed-document-editable-false",
+      "passed": true
+    },
+    {
+      "name": "free-replacement-csr-reviewed-current-plan",
+      "passed": true
+    },
+    {
+      "name": "replacement-original-and-replacement-trace-recorded",
+      "passed": true
+    },
+    {
+      "name": "replacement-awaiting-clerk-keeps-tech-custody",
+      "passed": true
+    },
+    {
+      "name": "held-source-payment-pending",
+      "passed": true
+    },
+    {
+      "name": "held-remains-inspecting-awaiting-source-release",
+      "passed": true
+    },
+    {
+      "name": "waiting-fixture-was-read-only",
+      "passed": true
+    },
+    {
+      "name": "full-document-history-retained-for-tech",
+      "passed": true
+    },
+    {
+      "name": "local-outbox-remains-pending-fixture-doa-owned",
+      "passed": true
+    },
+    {
+      "name": "local-outbox-remains-pending-fixture-doa-unclaimed",
+      "passed": true
+    },
+    {
+      "name": "local-outbox-remains-pending-fixture-doa-held",
+      "passed": true
+    }
+  ],
+  "calls": [
+    {
+      "name": "guard-tech",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/users/me",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "guard-clerk",
+      "actor": "fixture-doa-clerk",
+      "method": "GET",
+      "path": "/users/me",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "guard-csr",
+      "actor": "fixture-doa-csr",
+      "method": "GET",
+      "path": "/users/me",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "guard-other",
+      "actor": "fixture-doa-other",
+      "method": "GET",
+      "path": "/users/me",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "guard-start-owned",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "guard-start-replacement",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-unclaimed?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "guard-start-held",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-held?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "guard-start-waiting",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-waiting?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "awaiting-repair-source-cases",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/source-cases?entityId=fixture-doa-company&awaiting=true",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "repair-all",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items?entityId=fixture-doa-company&view=repair&repairScope=all",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "csr-repair-overview-denied",
+      "actor": "fixture-doa-csr",
+      "method": "GET",
+      "path": "/mailroom/items?entityId=fixture-doa-company&view=repair",
+      "expectedStatus": 403,
+      "status": 403,
+      "error": {
+        "message": "沒有此作業權限",
+        "error": "Forbidden",
+        "statusCode": 403
+      }
+    },
+    {
+      "name": "tech-other-company-query-denied",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items?entityId=fixture-doa-other&view=repair",
+      "expectedStatus": 403,
+      "status": 403,
+      "error": {
+        "message": "無此公司存取權限",
+        "error": "Forbidden",
+        "statusCode": 403
+      }
+    },
+    {
+      "name": "other-company-actor-denied",
+      "actor": "fixture-doa-other",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 403,
+      "status": 403,
+      "error": {
+        "message": "無此公司存取權限",
+        "error": "Forbidden",
+        "statusCode": 403
+      }
+    },
+    {
+      "name": "cross-entity-item-read-denied",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-other-item?entityId=fixture-doa-company",
+      "expectedStatus": 404,
+      "status": 404,
+      "error": {
+        "message": "找不到物件",
+        "error": "Not Found",
+        "statusCode": 404
+      }
+    },
+    {
+      "name": "cross-entity-documents-read-denied",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/repair-workbench/items/fixture-doa-other-item/documents?entityId=fixture-doa-company",
+      "expectedStatus": 404,
+      "status": 404,
+      "error": {
+        "message": "找不到物件",
+        "error": "Not Found",
+        "statusCode": 404
+      }
+    },
+    {
+      "name": "cross-entity-action-denied",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-other-item/actions",
+      "expectedStatus": 404,
+      "status": 404,
+      "requestId": "doa-e2e-mupzx1ru-cross-entity-action-denied",
+      "expectedVersion": 1,
+      "error": {
+        "message": "找不到物件",
+        "error": "Not Found",
+        "statusCode": 404
+      }
+    },
+    {
+      "name": "other-company-save-denied",
+      "actor": "fixture-doa-other",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-owned/inspection",
+      "expectedStatus": 403,
+      "status": 403,
+      "requestId": "doa-e2e-mupzx1ru-other-company-save-denied",
+      "expectedVersion": 1,
+      "error": {
+        "message": "無此公司存取權限",
+        "error": "Forbidden",
+        "statusCode": 403
+      }
+    },
+    {
+      "name": "csr-document-save-denied",
+      "actor": "fixture-doa-csr",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-owned/inspection",
+      "expectedStatus": 403,
+      "status": 403,
+      "requestId": "doa-e2e-mupzx1ru-csr-document-save-denied",
+      "expectedVersion": 1,
+      "error": {
+        "message": "沒有此作業權限",
+        "error": "Forbidden",
+        "statusCode": 403
+      }
+    },
+    {
+      "name": "clerk-document-endpoint-denied",
+      "actor": "fixture-doa-clerk",
+      "method": "GET",
+      "path": "/repair-workbench/items/fixture-doa-waiting/documents?entityId=fixture-doa-company",
+      "expectedStatus": 403,
+      "status": 403,
+      "error": {
+        "message": "無檢修文件存取權限",
+        "error": "Forbidden",
+        "statusCode": 403
+      }
+    },
+    {
+      "name": "csr-waiting-documents-readable",
+      "actor": "fixture-doa-csr",
+      "method": "GET",
+      "path": "/repair-workbench/items/fixture-doa-waiting/documents?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-draft-save",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-owned/inspection",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-draft",
+      "expectedVersion": 1
+    },
+    {
+      "name": "owned-after-draft",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-draft-exact-retry",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-owned/inspection",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-draft",
+      "expectedVersion": 1
+    },
+    {
+      "name": "owned-draft-different-retry-conflict",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-owned/inspection",
+      "expectedStatus": 409,
+      "status": 409,
+      "requestId": "doa-e2e-mupzx1ru-owned-draft",
+      "expectedVersion": 1,
+      "error": {
+        "message": "同一操作識別碼的內容不同",
+        "error": "Conflict",
+        "statusCode": 409
+      }
+    },
+    {
+      "name": "owned-submit-incomplete-denied",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-owned/inspection",
+      "expectedStatus": 400,
+      "status": 400,
+      "requestId": "doa-e2e-mupzx1ru-owned-submit-incomplete-denied",
+      "expectedVersion": 2,
+      "error": {
+        "message": "請完成故障描述、測試條件、診斷與建議方案",
+        "error": "Bad Request",
+        "statusCode": 400
+      }
+    },
+    {
+      "name": "owned-stale-version-denied",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-owned/inspection",
+      "expectedStatus": 409,
+      "status": 409,
+      "requestId": "doa-e2e-mupzx1ru-owned-stale-version-denied",
+      "expectedVersion": 1,
+      "error": {
+        "message": "案件已更新，請重新載入後再儲存",
+        "error": "Conflict",
+        "statusCode": 409
+      }
+    },
+    {
+      "name": "owned-after-denied-writes",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-start-inspection",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-start-inspection",
+      "expectedVersion": 2
+    },
+    {
+      "name": "owned-inspecting",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-paid-inspection-submit",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-owned/inspection",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-paid-inspection-submit",
+      "expectedVersion": 3
+    },
+    {
+      "name": "owned-paid-inspection",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-unreviewed-start-denied",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 400,
+      "status": 400,
+      "requestId": "doa-e2e-mupzx1ru-owned-unreviewed-start-denied",
+      "expectedVersion": 4,
+      "error": {
+        "message": "目前檢修方案尚未由客服確認，請先交客服審核",
+        "error": "Bad Request",
+        "statusCode": 400
+      }
+    },
+    {
+      "name": "owned-await-customer",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-await-customer",
+      "expectedVersion": 4
+    },
+    {
+      "name": "owned-awaiting-csr",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "csr-handoff-task",
+      "actor": "fixture-doa-csr",
+      "method": "GET",
+      "path": "/mailroom/tasks?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "csr-local-notification",
+      "actor": "fixture-doa-csr",
+      "method": "GET",
+      "path": "/notifications",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "csr-owned-documents-read-only",
+      "actor": "fixture-doa-csr",
+      "method": "GET",
+      "path": "/repair-workbench/items/fixture-doa-owned/documents?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-tech-cannot-resolve-customer",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 403,
+      "status": 403,
+      "requestId": "doa-e2e-mupzx1ru-owned-tech-cannot-resolve-customer",
+      "expectedVersion": 5,
+      "error": {
+        "message": "僅此案件的承辦客服可確認顧客結果",
+        "error": "Forbidden",
+        "statusCode": 403
+      }
+    },
+    {
+      "name": "owned-csr-resolve-customer",
+      "actor": "fixture-doa-csr",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-csr-resolve-customer",
+      "expectedVersion": 5
+    },
+    {
+      "name": "owned-returned-to-tech",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-csr-cannot-repair",
+      "actor": "fixture-doa-csr",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 403,
+      "status": 403,
+      "requestId": "doa-e2e-mupzx1ru-owned-csr-cannot-repair",
+      "expectedVersion": 6,
+      "error": {
+        "message": "沒有此作業權限",
+        "error": "Forbidden",
+        "statusCode": 403
+      }
+    },
+    {
+      "name": "owned-revised-inspection-submit",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-owned/inspection",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-revised-inspection-submit",
+      "expectedVersion": 6
+    },
+    {
+      "name": "owned-revised-inspection",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-revised-unreviewed-start-denied",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 400,
+      "status": 400,
+      "requestId": "doa-e2e-mupzx1ru-owned-revised-unreviewed-start-denied",
+      "expectedVersion": 7,
+      "error": {
+        "message": "目前檢修方案尚未由客服確認，請先交客服審核",
+        "error": "Bad Request",
+        "statusCode": 400
+      }
+    },
+    {
+      "name": "owned-revised-await-customer",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-revised-await-customer",
+      "expectedVersion": 7
+    },
+    {
+      "name": "owned-revised-waiting-csr",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-revised-csr-resolve",
+      "actor": "fixture-doa-csr",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-revised-csr-resolve",
+      "expectedVersion": 8
+    },
+    {
+      "name": "owned-revised-reviewed",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "tech-returned-task",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/tasks?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-source-release",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/repair-workbench/items/fixture-doa-owned/documents?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-start-repair",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-start-repair",
+      "expectedVersion": 9
+    },
+    {
+      "name": "owned-repairing",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-part-identity-required",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-owned/repair-report",
+      "expectedStatus": 400,
+      "status": 400,
+      "requestId": "doa-e2e-mupzx1ru-owned-part-identity-required",
+      "expectedVersion": 10,
+      "error": {
+        "message": "使用料件請填寫名稱、SKU 與正數數量；未使用請留空清單",
+        "error": "Bad Request",
+        "statusCode": 400
+      }
+    },
+    {
+      "name": "owned-failed-report-submit",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-owned/repair-report",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-failed-report-submit",
+      "expectedVersion": 10
+    },
+    {
+      "name": "owned-failed-report",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-failed-qc-cannot-complete",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 400,
+      "status": 400,
+      "requestId": "doa-e2e-mupzx1ru-owned-failed-qc-cannot-complete",
+      "expectedVersion": 11,
+      "error": {
+        "message": "複驗通過後才能交回收發室",
+        "error": "Bad Request",
+        "statusCode": 400
+      }
+    },
+    {
+      "name": "owned-after-failed-qc-denial",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-pass-report-submit",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-owned/repair-report",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-pass-report-submit",
+      "expectedVersion": 11
+    },
+    {
+      "name": "owned-pass-report",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-complete-repair",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-owned-complete-repair",
+      "expectedVersion": 12
+    },
+    {
+      "name": "owned-ready-for-return",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "clerk-logistics-detail-redacted",
+      "actor": "fixture-doa-clerk",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "clerk-logistics-list-redacted",
+      "actor": "fixture-doa-clerk",
+      "method": "GET",
+      "path": "/mailroom/items?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "clerk-return-task-redacted",
+      "actor": "fixture-doa-clerk",
+      "method": "GET",
+      "path": "/mailroom/tasks?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "clerk-return-needs-confirmation",
+      "actor": "fixture-doa-clerk",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 400,
+      "status": 400,
+      "requestId": "doa-e2e-mupzx1ru-clerk-return-needs-confirmation",
+      "expectedVersion": 13,
+      "error": {
+        "message": "請逐件核對、確認簽收並填寫存放位置",
+        "error": "Bad Request",
+        "statusCode": 400
+      }
+    },
+    {
+      "name": "clerk-accept-return",
+      "actor": "fixture-doa-clerk",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-owned/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-clerk-accept-return",
+      "expectedVersion": 13
+    },
+    {
+      "name": "owned-final",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-owned?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "owned-completed-documents-locked",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/repair-workbench/items/fixture-doa-owned/documents?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "replacement-start-inspection",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-unclaimed/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-replacement-start-inspection",
+      "expectedVersion": 3
+    },
+    {
+      "name": "replacement-inspecting",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-unclaimed?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "replacement-inspection-submit",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-unclaimed/inspection",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-replacement-inspection-submit",
+      "expectedVersion": 4
+    },
+    {
+      "name": "replacement-inspection",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-unclaimed?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "replacement-free-unreviewed-start-denied",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-unclaimed/actions",
+      "expectedStatus": 400,
+      "status": 400,
+      "requestId": "doa-e2e-mupzx1ru-replacement-free-unreviewed-start-denied",
+      "expectedVersion": 5,
+      "error": {
+        "message": "目前檢修方案尚未由客服確認，請先交客服審核",
+        "error": "Bad Request",
+        "statusCode": 400
+      }
+    },
+    {
+      "name": "replacement-await-customer",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-unclaimed/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-replacement-await-customer",
+      "expectedVersion": 5
+    },
+    {
+      "name": "replacement-waiting-csr",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-unclaimed?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "replacement-csr-resolve",
+      "actor": "fixture-doa-csr",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-unclaimed/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-replacement-csr-resolve",
+      "expectedVersion": 6
+    },
+    {
+      "name": "replacement-reviewed",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-unclaimed?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "replacement-start-work",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-unclaimed/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-replacement-start-work",
+      "expectedVersion": 7
+    },
+    {
+      "name": "replacement-working",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-unclaimed?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "replacement-trace-required",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-unclaimed/repair-report",
+      "expectedStatus": 400,
+      "status": 400,
+      "requestId": "doa-e2e-mupzx1ru-replacement-trace-required",
+      "expectedVersion": 8,
+      "error": {
+        "message": "替換請記錄品況、SKU、替換 SN、來源與原件去向",
+        "error": "Bad Request",
+        "statusCode": 400
+      }
+    },
+    {
+      "name": "replacement-original-serial-reuse-denied",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-unclaimed/repair-report",
+      "expectedStatus": 409,
+      "status": 409,
+      "requestId": "doa-e2e-mupzx1ru-replacement-original-serial-reuse-denied",
+      "expectedVersion": 8,
+      "error": {
+        "message": "替換件序號與原件相同，請核對實物；原機維修應記為維修",
+        "error": "Conflict",
+        "statusCode": 409
+      }
+    },
+    {
+      "name": "replacement-report-submit",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-unclaimed/repair-report",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-replacement-report-submit",
+      "expectedVersion": 8
+    },
+    {
+      "name": "replacement-report",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-unclaimed?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "replacement-complete",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-unclaimed/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-replacement-complete",
+      "expectedVersion": 9
+    },
+    {
+      "name": "replacement-final",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-unclaimed?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "held-inspection-submit",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/repair-workbench/items/fixture-doa-held/inspection",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-held-inspection-submit",
+      "expectedVersion": 1
+    },
+    {
+      "name": "held-submitted-inspection",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-held?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "held-unreviewed-start-denied",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-held/actions",
+      "expectedStatus": 400,
+      "status": 400,
+      "requestId": "doa-e2e-mupzx1ru-held-unreviewed-start-denied",
+      "expectedVersion": 2,
+      "error": {
+        "message": "目前檢修方案尚未由客服確認，請先交客服審核",
+        "error": "Bad Request",
+        "statusCode": 400
+      }
+    },
+    {
+      "name": "held-await-customer",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-held/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-held-await-customer",
+      "expectedVersion": 2
+    },
+    {
+      "name": "held-waiting-csr",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-held?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "held-csr-resolve",
+      "actor": "fixture-doa-csr",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-held/actions",
+      "expectedStatus": 201,
+      "status": 201,
+      "requestId": "doa-e2e-mupzx1ru-held-csr-resolve",
+      "expectedVersion": 3
+    },
+    {
+      "name": "held-reviewed-source-held",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-held?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "held-source-not-released",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/repair-workbench/items/fixture-doa-held/documents?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "held-start-repair-blocked",
+      "actor": "fixture-doa-tech",
+      "method": "POST",
+      "path": "/mailroom/items/fixture-doa-held/actions",
+      "expectedStatus": 409,
+      "status": 409,
+      "requestId": "doa-e2e-mupzx1ru-held-start-repair-blocked",
+      "expectedVersion": 4,
+      "error": {
+        "message": "售後案件尚未確認顧客同意及必要款項，暫不能開始維修",
+        "error": "Conflict",
+        "statusCode": 409
+      }
+    },
+    {
+      "name": "held-final",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-held?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    },
+    {
+      "name": "waiting-unchanged",
+      "actor": "fixture-doa-tech",
+      "method": "GET",
+      "path": "/mailroom/items/fixture-doa-waiting?entityId=fixture-doa-company",
+      "expectedStatus": 200,
+      "status": 200
+    }
+  ],
+  "isolation": {
+    "fixedLocalhostPort": 57654,
+    "fixedSyntheticActors": [
+      "fixture-doa-tech",
+      "fixture-doa-clerk",
+      "fixture-doa-csr",
+      "fixture-doa-other"
+    ],
+    "databaseAccess": false,
+    "dataReset": false,
+    "externalDelivery": false
+  },
+  "limitations": [
+    "Source repairAllowed is a fixed synthetic fixture value; this does not verify customer approval or real accounting/payment integration.",
+    "Replacement trace fields are recorded; no formal inventory reservation, posting, or movement is performed.",
+    "Notifications and compatible outbox records are persisted locally; no external delivery or websocket delivery is tested."
+  ],
+  "initialStates": {
+    "owned": {
+      "id": "fixture-doa-owned",
+      "status": "REPAIR_RECEIVED",
+      "version": 1,
+      "repairOwnerId": "fixture-doa-tech",
+      "custodianId": "fixture-doa-tech",
+      "nextUserId": "fixture-doa-tech",
+      "location": "維修工作站 DEMO-01",
+      "serialNumber": "SN-fixture-doa-source-owned",
+      "inspection": null,
+      "repair": null
+    },
+    "replacement": {
+      "id": "fixture-doa-unclaimed",
+      "status": "REPAIR_RECEIVED",
+      "version": 3,
+      "repairOwnerId": "fixture-doa-tech",
+      "custodianId": "fixture-doa-tech",
+      "nextUserId": "fixture-doa-tech",
+      "location": "維修工作站 DEMO-02",
+      "serialNumber": "SN-fixture-doa-source-unclaimed",
+      "inspection": null,
+      "repair": null
+    },
+    "held": {
+      "id": "fixture-doa-held",
+      "status": "INSPECTING",
+      "version": 1,
+      "repairOwnerId": "fixture-doa-tech",
+      "custodianId": "fixture-doa-tech",
+      "nextUserId": "fixture-doa-tech",
+      "location": "維修工作站 DEMO-01",
+      "serialNumber": "SN-fixture-doa-source-held",
+      "inspection": null,
+      "repair": null
+    },
+    "waiting": {
+      "id": "fixture-doa-waiting",
+      "status": "WAITING_CUSTOMER",
+      "version": 1,
+      "repairOwnerId": "fixture-doa-tech",
+      "custodianId": "fixture-doa-tech",
+      "nextUserId": "fixture-doa-tech",
+      "location": "維修工作站 DEMO-01",
+      "serialNumber": "SN-fixture-doa-source-waiting",
+      "inspection": {
+        "status": "SUBMITTED",
+        "revision": 1,
+        "number": "INS-DOA-DEMO-WAITING",
+        "plan": "REPLACE"
+      },
+      "repair": null
+    }
+  },
+  "finalStates": {
+    "owned": {
+      "id": "fixture-doa-owned",
+      "status": "READY_FOR_DISPATCH",
+      "version": 14,
+      "repairOwnerId": "fixture-doa-tech",
+      "custodianId": "fixture-doa-clerk",
+      "nextUserId": null,
+      "location": "收發室待寄回 DEMO-HTTP-01",
+      "serialNumber": "SN-fixture-doa-source-owned",
+      "inspection": {
+        "status": "SUBMITTED",
+        "revision": 3,
+        "number": "INS-DOA-DEMO-OWNED",
+        "plan": "REPAIR",
+        "review": {
+          "name": "客服覆核（示範）",
+          "actorId": "fixture-doa-csr",
+          "confirmedAt": "2026-10-01T20:37:43.586Z",
+          "inspectionRevision": 3
+        }
+      },
+      "repair": {
+        "status": "SUBMITTED",
+        "revision": 2,
+        "inspectionRevision": 3,
+        "outcome": "REPAIRED",
+        "qcResult": "PASS"
+      }
+    },
+    "replacement": {
+      "id": "fixture-doa-unclaimed",
+      "status": "WAITING_RETURN_ACCEPTANCE",
+      "version": 10,
+      "repairOwnerId": "fixture-doa-tech",
+      "custodianId": "fixture-doa-tech",
+      "nextUserId": "fixture-doa-clerk",
+      "location": "維修工作站 DEMO-02",
+      "serialNumber": "SN-fixture-doa-source-unclaimed",
+      "inspection": {
+        "status": "SUBMITTED",
+        "revision": 1,
+        "number": "INS-DOA-DEMO-UNCLAIMED",
+        "plan": "REPLACE",
+        "review": {
+          "name": "客服覆核（示範）",
+          "actorId": "fixture-doa-csr",
+          "confirmedAt": "2026-10-01T20:37:43.822Z",
+          "inspectionRevision": 1
+        }
+      },
+      "repair": {
+        "status": "SUBMITTED",
+        "revision": 1,
+        "inspectionRevision": 1,
+        "outcome": "REPLACED",
+        "qcResult": "PASS",
+        "replacementCondition": "REFURBISHED",
+        "replacementSku": "DOA-DEMO-PB",
+        "replacementSerial": "SN-DOA-DEMO-REFURBISHED-HTTP-01",
+        "replacementSource": "合成示範：退貨品複驗合格整新品庫位 DEMO-RF-01",
+        "originalDisposition": "合成示範：原件 SN-fixture-doa-source-unclaimed 移至待故障處置 DEMO-HOLD-01",
+        "inventoryReference": "DEMO-INVENTORY-TRACE-HTTP-01（僅追蹤欄位，未正式庫存異動）"
+      }
+    },
+    "held": {
+      "id": "fixture-doa-held",
+      "status": "INSPECTING",
+      "version": 4,
+      "repairOwnerId": "fixture-doa-tech",
+      "custodianId": "fixture-doa-tech",
+      "nextUserId": "fixture-doa-tech",
+      "location": "維修工作站 DEMO-01",
+      "serialNumber": "SN-fixture-doa-source-held",
+      "inspection": {
+        "status": "SUBMITTED",
+        "revision": 1,
+        "number": "INS-DOA-DEMO-HELD",
+        "plan": "REPAIR",
+        "review": {
+          "name": "客服覆核（示範）",
+          "actorId": "fixture-doa-csr",
+          "confirmedAt": "2026-10-01T20:37:43.953Z",
+          "inspectionRevision": 1
+        }
+      },
+      "repair": null
+    },
+    "waiting": {
+      "id": "fixture-doa-waiting",
+      "status": "WAITING_CUSTOMER",
+      "version": 1,
+      "repairOwnerId": "fixture-doa-tech",
+      "custodianId": "fixture-doa-tech",
+      "nextUserId": "fixture-doa-tech",
+      "location": "維修工作站 DEMO-01",
+      "serialNumber": "SN-fixture-doa-source-waiting",
+      "inspection": {
+        "status": "SUBMITTED",
+        "revision": 1,
+        "number": "INS-DOA-DEMO-WAITING",
+        "plan": "REPLACE"
+      },
+      "repair": null
+    }
+  },
+  "finishedAt": "2026-10-01T20:37:43.989Z",
+  "mutationAttempted": true
+}

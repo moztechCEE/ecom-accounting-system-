@@ -1,10 +1,12 @@
 import MailroomPage from './pages/mailroom/MailroomPage'
+import RepairWorkbenchPage from './pages/repair/RepairWorkbenchPage'
+import { mailroomEnabled } from './pages/mailroom/model'
 import React from 'react'
 import PerformanceReviewsPage from './pages/PerformanceReviewsPage'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { loginDestination } from './utils/login-destination'
-import { warehouseOnlyUser } from './config/workspaces'
+import { repairOnlyUser, warehouseOnlyUser } from './config/workspaces'
 import WarehouseReportsPage from './pages/WarehouseReportsPage'
 import WarehousePortalPage from './pages/WarehousePortalPage'
 import WarehouseWorkspacePage from './pages/WarehouseWorkspacePage'
@@ -67,7 +69,7 @@ import WmsHandoverReconciliationPage from './pages/WmsHandoverReconciliationPage
 function HomeEntry({ dashboard = false }: { dashboard?: boolean }) {
   const { user, loading } = useAuth()
   if (loading) return null
-  if (dashboard && !warehouseOnlyUser(user)) return <DashboardPage />
+  if (dashboard && !warehouseOnlyUser(user) && !repairOnlyUser(user)) return <DashboardPage />
   return <Navigate to={loginDestination(user)} replace />
 }
 const App: React.FC = () => {
@@ -95,7 +97,7 @@ const App: React.FC = () => {
               <Route element={<DashboardLayout />}>
                 <Route index element={<HomeEntry />} />
                 <Route path="operations/mailroom" element={<PermissionRoute anyPermissions={['mailroom:read']}><MailroomPage /></PermissionRoute>} />
-                <Route path="operations/repair" element={<PermissionRoute anyPermissions={['repair_workbench:read']}><MailroomPage mode="repair" /></PermissionRoute>} />
+                <Route path="operations/repair" element={mailroomEnabled() ? <PermissionRoute anyPermissions={['repair_workbench:read']}><RepairWorkbenchPage /></PermissionRoute> : <Navigate to="/dashboard" replace />} />
                 <Route path="my/inbox" element={<MailroomPage mode="mine" />} />
                 <Route path="dashboard" element={<HomeEntry dashboard />} />
                 <Route path="reconciliation" element={<PermissionRoute anyPermissions={['banking:read', 'reports:read', 'accounts:read']}><ReconciliationCenterPage /></PermissionRoute>} />

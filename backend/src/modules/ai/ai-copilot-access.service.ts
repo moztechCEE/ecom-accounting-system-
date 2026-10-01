@@ -99,10 +99,15 @@ export class AiCopilotAccessService {
       return false;
     const pathname = path.split('?')[0];
     if (pathname === '/auth/change-password') return true;
+    // This is only a static guide destination. The inbox API still restricts
+    // each physical item and task to its authorized recipient.
+    if (pathname === '/my/inbox') return Boolean(actor.userId?.trim());
     // Match frontend/config/workspaces.ts: dashboard navigation is available
-    // to signed-in users except warehouse-only operators. This is guide access,
+    // to signed-in users except warehouse-only and enabled repair-only users.
+    // This is guide access,
     // not authorization for dashboard metrics or any live Copilot data tool.
-    if (pathname === '/dashboard') return !this.isWarehouseOnlyActor(actor);
+    if (pathname === '/dashboard')
+      return !this.isWarehouseOnlyActor(actor) && !this.isRepairOnlyActor(actor);
     if (pathname === '/admin/entities') return actor.isSuperAdmin;
     if (
       [
@@ -114,6 +119,8 @@ export class AiCopilotAccessService {
     )
       return actor.isAdmin;
     const routes: Record<string, string[]> = {
+      '/operations/mailroom': ['mailroom:read'],
+      '/operations/repair': ['repair_workbench:read'],
       '/ap/expenses': [
         'expense_self:read',
         'accounts:read',
@@ -244,6 +251,20 @@ export class AiCopilotAccessService {
       (permission) =>
         !permission.startsWith('wms_') && !personal.includes(permission),
     );
+  }
+
+  private isRepairOnlyActor(actor: CopilotActor): boolean {
+    if (
+      actor.isAdmin ||
+      process.env.MAILROOM_ENABLED !== 'true' ||
+      !actor.permissions.includes('repair_workbench:read')
+    ) return false;
+    const allowed = [
+      'repair_workbench:read', 'repair_workbench:update',
+      'attendance_self:read', 'leave_self:read', 'profile_self:read',
+      'expense_self:read', 'expense_self:create',
+    ];
+    return actor.permissions.every((permission) => allowed.includes(permission));
   }
 
   actorVersion(actor: CopilotActor): string {

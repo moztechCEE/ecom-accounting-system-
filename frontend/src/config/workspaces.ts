@@ -1,6 +1,8 @@
 import type { User } from '../types'
+import { mailroomEnabled } from '../pages/mailroom/model'
 import { hasPermission, isAdminUser } from '../utils/access'
 
+export type OperationsWorkspace = 'all' | 'warehouse' | 'repair'
 export type WarehouseArea = 'dispatch' | 'pick' | 'pack'
 export const WAREHOUSE_AREAS: { key: WarehouseArea; label: string; permission: string }[] = [
   { key: 'dispatch', label: '訂單拋轉', permission: 'wms_orders:create' },
@@ -14,6 +16,17 @@ export const WAREHOUSE_REPORTS = [
   { key: 'defects', label: '新品不良分析', permission: 'wms_defects:read' },
 ] as const
 export const PERSONAL_PATHS = ['/my/inbox', '/attendance/dashboard', '/attendance/leaves', '/ap/expenses', '/profile']
+export const REPAIR_PERSONAL_PATHS = [...PERSONAL_PATHS, '/payroll/runs']
+export function repairOnlyUser(user: User | null | undefined) {
+  return !isAdminUser(user) && hasPermission(user, 'repair_workbench:read') && mailroomEnabled() &&
+    !(user?.permissions || []).some(permission =>
+      !['repair_workbench:read', 'repair_workbench:update', 'attendance_self:read', 'leave_self:read',
+        'profile_self:read', 'expense_self:read', 'expense_self:create',
+        'payroll_self:read', 'payroll_self_breakdown:read'].includes(permission))
+}
+export function operationsWorkspace(user: User | null | undefined, pathname: string): OperationsWorkspace {
+  return repairOnlyUser(user) ? 'repair' : warehouseWorkspace(user, pathname)
+}
 export const isWarehousePath = (pathname: string) => pathname === '/warehouse' || pathname.startsWith('/warehouse/')
 export function hasWarehouseManagementAccess(user: User | null | undefined) {
   return hasPermission(user, 'wms_tasks:read') &&

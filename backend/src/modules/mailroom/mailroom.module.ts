@@ -6,9 +6,11 @@ import { MailroomService } from './mailroom.service';
 import { MailroomSyncService } from './mailroom-sync.service';
 import { MailroomTabletController } from './mailroom-tablet.controller';
 import { MailroomTabletService } from './mailroom-tablet.service';
+import { RepairWorkbenchController } from './repair-workbench.controller';
+import { RepairWorkbenchService } from './repair-workbench.service';
 @Module({
   imports: [NotificationModule, AuthModule],
-  controllers: [MailroomController, MailroomTabletController],
-  providers: [MailroomService, MailroomSyncService, MailroomTabletService],
+  controllers: [MailroomController, MailroomTabletController, RepairWorkbenchController],
+  providers: [MailroomService, MailroomSyncService, MailroomTabletService, RepairWorkbenchService],
 })
 export class MailroomModule {}

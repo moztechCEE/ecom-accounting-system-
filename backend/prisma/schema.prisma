@@ -2350,6 +2350,8 @@ model MailroomItem {
   disposition         String?
   conditionNote       String?  @map("condition_note")
   returnInspection    Json?    @map("return_inspection")
+  repairInspection    Json?    @map("repair_inspection")
+  repairReport        Json?    @map("repair_report")
   evidence            Json?
   location            String
   custodianId         String   @map("custodian_id")

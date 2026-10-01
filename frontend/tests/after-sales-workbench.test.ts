@@ -8,6 +8,8 @@ import {
 import { loginDestination } from '../src/utils/login-destination.ts'
 import type { User } from '../src/types/index.ts'
 
+Object.defineProperty(globalThis, 'window', { value: { __APP_CONFIG__: { mailroomEnabled: false } }, configurable: true })
+
 test('all six legacy case types and eighteen statuses are represented', () => {
   assert.equal(Object.keys(afterSalesTypes).length, 6)
   assert.equal(Object.keys(afterSalesStatuses).length, 18)

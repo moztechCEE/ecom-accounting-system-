@@ -1,6 +1,6 @@
 export const RESOURCE_TRANSLATIONS: Record<string, string> = {
   mailroom: '收發室工作台',
-  repair_workbench: '維修工作台',
+  repair_workbench: 'DOA 售後維修工作台',
   accounts: '會計科目',
   journal_entries: '會計分錄',
   sales_orders: '銷售訂單',
@@ -56,7 +56,7 @@ export const ACTION_TRANSLATIONS: Record<string, string> = {
 
 export const ROLE_TRANSLATIONS: Record<string, string> = {
   MAILROOM_OPERATOR: '收發室人員',
-  REPAIR_TECHNICIAN: '維修人員',
+  REPAIR_TECHNICIAN: '維修師',
   SUPER_ADMIN: '最高管理員',
   WAREHOUSE_OPERATOR: '倉儲人員',
   ADMIN: '系統管理員',

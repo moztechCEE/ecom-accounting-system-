@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reviewedBaseCommit": "38a34b3a5faacf003820f56baed5c32039c1fc38",
+  "reviewedBaseCommit": "e5adf5448839efb7c01d858361653e4e5841ee79",
   "locales": [
     "zh-TW",
     "en"
@@ -33,7 +33,7 @@
         ],
         "boundaries": [
           "儀表板數字與 AI 摘要不能替代原單據；載入失敗或沒有資料不表示金額為零。",
-          "儲運專用角色可能直接進入儲運工作區；不是所有人都有同一首頁。",
+          "儲運專用角色會進入儲運工作區；工作台啟用時，只有維修與個人權限的維修師進入 DOA 售後維修工作區，營運總覽入口會隱藏。兼任其他作業的人員仍依合併權限使用營運總覽。",
           "成本、毛利、淨利，以及可反推出費用的廣告費、平台費、淨入帳等指標，依專用讀取權限顯示；無權限時不可把缺少的指標解讀為零。完整高階財務總覽需成本、毛利及淨利三項讀取授權。",
           "收發室／維修權限已開通且工作台啟用時，一般同仁登入會進入對應工作台；右上角「我的待辦」保留未完成交接。"
         ],
@@ -59,7 +59,7 @@
             ],
             "boundaries": [
               "Metrics and AI summaries do not replace source documents; failed or missing data is not a zero balance.",
-              "Warehouse-only users may land in their warehouse workspace instead.",
+              "Warehouse-only users enter their warehouse workspace. With the workbench enabled, technicians holding only repair and personal permissions enter the DOA after-sales repair workspace, with the dashboard destination hidden. Mixed-duty staff keep dashboard access according to their combined grants.",
               "Cost, margin and net-profit figures, and advertising spend, platform fees or net payout that could reveal expenses, depend on separate read grants; a missing metric is not zero. The full executive financial overview requires all three grants.",
               "When enabled, mailroom and repair staff land on their workbench. My inbox keeps handoffs pending until the assigned work is completed."
             ],
@@ -77,7 +77,8 @@
         "frontend/src/pages/DashboardPage.tsx",
         "frontend/src/utils/login-destination.ts",
         "frontend/src/config/workspaces.ts",
-        "backend/src/modules/reports/reports.controller.ts"
+        "backend/src/modules/reports/reports.controller.ts",
+        "backend/src/modules/ai/ai-copilot-access.service.ts"
       ]
     },
     {
@@ -493,7 +494,7 @@
           "建立或編輯帳號時先選最符合工作內容的職務範本；兼任時才增加角色。一般管理者新增帳號會自動歸入其唯一所屬公司；需要存取本人資料的職務，接著在員工管理連結員工資料並核對有效權限。",
           "只有最高管理員可在「角色」建立或修改共用角色及其權限，並設定帳號可存取公司與各模組資料範圍。",
           "部門與主管身分在員工管理維護；考績評核另需專用權限及逐筆指派，不能只憑主管職稱取得。",
-          "收發室使用「收發室人員」範本，維修部使用「維修人員」範本；確認同公司的有效員工綁定。客服覆核 mailroom:review 由最高管理員明確指派，部門預設角色不授予此覆核權限。"
+          "收發室使用「收發室人員」範本，維修部使用「維修師」範本 REPAIR_TECHNICIAN，包含 repair_workbench:read／update；確認同公司的有效員工綁定。客服覆核 mailroom:review 由最高管理員明確指派，維修師及部門預設角色不授予此覆核權限或會計入帳確認權限。"
         ],
         "boundaries": [
           "具有帳號更新權限的一般管理者只能維護一般帳號並指派明確開放的作業角色；管理員、敏感或未知權限角色，以及共用角色政策，均由最高管理員處理。",
@@ -524,7 +525,7 @@
               "When creating or editing an account, choose the closest job template first and add another role only for a second duty. An ordinary account manager’s new account is assigned to their sole company. For self-scoped work, link the employee record in employee management and then check effective access.",
               "Only a super administrator creates or changes shared roles and their permissions, and sets an account’s company access and module data scopes.",
               "Maintain department and supervisor identity in employee records. Performance review also requires explicit permission and assignment; a supervisor title alone is insufficient.",
-              "Assign MAILROOM_OPERATOR or REPAIR_TECHNICIAN to linked active employees in the same company. A policy administrator explicitly grants mailroom:review to customer-service reviewers; department defaults do not grant that review permission."
+              "Assign MAILROOM_OPERATOR or the Repair technician template REPAIR_TECHNICIAN to linked active employees in the same company. The technician has repair_workbench:read/update. A policy administrator explicitly grants mailroom:review to customer-service reviewers; technician and department defaults do not grant review or accounting payment-confirmation permission."
             ],
             "boundaries": [
               "An account manager with update access can maintain ordinary accounts and assign only explicitly approved operational roles. Administrator, sensitive or unknown-permission roles and shared role policy require a super administrator.",
@@ -551,7 +552,9 @@
         "frontend/src/utils/access.ts",
         "backend/src/common/department-access/department-access.ts",
         "backend/src/modules/users/users.service.ts",
-        "backend/src/modules/roles/role-policy.ts"
+        "backend/src/modules/roles/role-policy.ts",
+        "backend/src/modules/roles/roles.service.ts",
+        "backend/prisma/migrations/20261002100000_repair_technician_role/migration.sql"
       ],
       "permissions": [
         "access_control:read",
@@ -4517,7 +4520,8 @@
           "工作台需先啟用，操作仍依公司、權限、逐件指派及目前進度限制；售後建案不代表實物已到貨。",
           "AA 須為全新未使用且配件完整，預定重新入庫；A 瑕疵補寄或福利品；B／C 整理後福利品。本階段只記錄去向，不會自動加庫存、扣退款或發送 LINE 訊息。",
           "品項不符與退貨檢查只交承辦客服；承辦客服須以員工信箱對應同公司、在職且有覆核權限的帳號。未完成映射會提示，不廣播給全部客服。",
-          "客服接手檢查結果不等於完成整新或核准退款。「待同步」也不代表售後或 AI 已收到。"
+          "客服接手檢查結果不等於完成整新或核准退款。「待同步」也不代表售後或 AI 已收到。",
+          "收發室基本讀取權限不自動包含檢修與維修文件；完整技術文件及版本需 repair_workbench:read 或 mailroom:review，填寫仍限本人已簽收且保管物件的維修師。"
         ],
         "related": [
           "repair-workbench",
@@ -4546,7 +4550,8 @@
               "The workbench must be enabled. Company, permissions, assignment and current state remain authoritative; creating a case does not mean physical arrival.",
               "AA requires an unused product with complete accessories and is intended for restock; A goes to replacement or welfare sale; B/C is refurbished for welfare sale. This phase records disposition without posting stock, deducting refunds or sending LINE messages.",
               "Mismatches and return inspection go only to the responsible customer-service staff member. Their email must map to an active employee in the same company with review permission. Missing mappings are flagged without broadcasting to all reviewers.",
-              "Acknowledging inspection does not complete refurbishment or approve a refund. Pending sync does not mean after-sales or AI received the event."
+              "Acknowledging inspection does not complete refurbishment or approve a refund. Pending sync does not mean after-sales or AI received the event.",
+              "Basic mailroom read access does not include inspection and repair records. Full technical records and versions require repair_workbench:read or mailroom:review; only the personally accepting technician with current custody can write them."
             ],
             "related": [
               "repair-workbench",
@@ -4565,7 +4570,9 @@
         "frontend/src/pages/mailroom/model.ts",
         "backend/src/modules/mailroom/mailroom-tablet.controller.ts",
         "backend/src/modules/mailroom/mailroom-tablet.service.ts",
-        "backend/src/modules/mailroom/mailroom.dto.ts"
+        "backend/src/modules/mailroom/mailroom.dto.ts",
+        "backend/src/modules/ai/ai-copilot-access.service.ts",
+        "frontend/src/pages/repair/RepairDocuments.tsx"
       ],
       "permissions": [
         "mailroom:read"
@@ -4573,76 +4580,118 @@
     },
     {
       "id": "repair-workbench",
-      "title": "維修工作台",
-      "summary": "只查看本人被指派或已接手的物件，核對實物後逐件簽收。",
+      "title": "DOA 售後維修工作台",
+      "summary": "維修師查看客服已建案、在途、待簽收及本人處理案件，填寫檢修單與維修單。顧客維修依客服確認及必要款項放行；公司退貨整新依本人工作單、複驗與實物交接。",
       "keywords": [
-        "維修工作台",
-        "收發室",
-        "簽收",
-        "待辦"
+        "DOA",
+        "售後維修工作台",
+        "維修師",
+        "檢修單",
+        "維修單",
+        "待簽收",
+        "付費維修",
+        "替換",
+        "整新品",
+        "入帳確認",
+        "跨部門交接"
       ],
       "path": "/operations/repair",
       "module": "mailroom",
       "category": "收件與維修",
-      "group": "mailroom",
+      "group": "repair",
       "sections": {
         "steps": [
-          "只查看本人被指派或已接手的物件，核對實物後逐件簽收；也可在收發室平板驗證本人身分後點選簽收，不需手寫簽名。",
-          "開始檢測，記錄問題交客服確認；顧客同意及必要款項以售後系統為準。",
-          "維修或整新完成後交回收發室，由收發室本人簽收，再安排寄回或福利品入庫。"
+          "側邊欄以「DOA 售後維修」為分類，工作台正式名稱為「DOA 售後維修工作台」，使用案件總覽、待認領與簽收、我的檢修、客服與付款進度、複驗與交回、檢修與維修紀錄六個清單。案件總覽保留客服已建案、待到貨與在途資訊；建案或認領均不代表收到實物。",
+          "核對原申報及實收 SKU／SN、配件與位置；由本人認領或接受指派，再本人確認實物簽收。簽收後才開始實物檢測；交接前保管責任仍在原持有人。",
+          "維修師本人填寫檢修單：顧客故障描述、測試項目與條件、測試結果、能否重現、原因與依據、保固／收費建議、處理方案及估價。未重現或原因不明要據實保留；檢修單不能當作已完成維修。 檢修單及維修單各自保存草稿、正式送出與版本歷史。 列印內部檢修單時使用已保存版本，不包含未保存修改。",
+          "顧客維修案件（REPAIR）無論建議免費或付費，都須將已提交檢修單交客服，針對目前版次覆核並記錄結果；正式對客報價、顧客同意與必要款項入帳另以售後來源為準。開始維修或替換須同時有目前版次覆核及來源 repairAllowed。本地覆核不代表顧客已同意或已入帳。公司退貨庫存整新（RETURN／REFURBISHING）另依本人檢修、維修單及複驗交回，不套用顧客付款或客服維修放行門檻。",
+          "維修師本人填寫維修單，記錄實際維修或一對一替換、零件與工時、修後複驗結果；替換另留原機／替換機 SN、全新品或整新品品況、來源與原機去向。內部料源及成本與對客說明分開；對客內容應符合實際處置。",
+          "複驗結果須通過（PASS）後才可交回收發室，收發室本人簽收後才完成實物交接。案件進度、交辦待發送／已發送／已接收／已回覆及通知送達狀態分別核對；等待案件顯示卡住原因與下一位負責人。"
         ],
         "boundaries": [
-          "工作台需先啟用，實際操作仍依公司、權限、逐件指派及目前進度限制。",
-          "AA 重新入庫；A 瑕疵補寄或福利品；B／C 整理後福利品。本階段只記錄去向，不會自動加庫存、扣退款或發送 LINE 訊息。",
-          "客服同步的「待同步」不能解讀為對方已收到。品項不符須由有覆核權限的客服記錄顧客確認結果。"
+          "「維修師」職務範本使用 REPAIR_TECHNICIAN，授予 repair_workbench:read 與 repair_workbench:update；它不授予客服審核、會計入帳確認、庫存核銷或跨公司權限。實際操作仍受啟用開關、公司、逐件指派、本人簽收及目前進度限制。",
+          "所有顧客維修方案（REPAIR）須客服覆核目前檢修版次及售後來源放行；付費案件另須完成正式報價、顧客同意與必要款項確認。檢修提交新版使舊覆核失效，須重交客服；本地覆核與匯款回報均不代表已入帳。本輪不新增會計入帳、AI 客服報價或虛擬帳號對帳連線。公司退貨整新（RETURN）不要求顧客同意、付款或維修版次客服覆核；仍須本人工作單及複驗合格才能交回。舊待客服案件缺檢修單可退回補填，但這不形成覆核或開工放行。",
+          "案件狀態、交辦狀態及通知狀態各自保存。待發送不等於已發送，已發送不等於對方接手，已讀通知不等於完成交辦；同步送達也不是顧客同意或會計入帳證明。",
+          "整新品必須有檢測、必要整新與複驗合格紀錄，AA／A／B／C 外觀分級不能直接作為替換資格。案件只記錄替換品與庫存需求時，不代表 WMS 已預留、出庫或正式核銷；不得把待串接紀錄當成庫存異動。",
+          "本人填寫的檢修單與維修單分別保留診斷和實際處理證據；維修單綁定檢修單版次，檢修改版後須重新提交維修單。送原廠或原件退回方案不能直接當作已修理或已替換完成。靜態指南不建立新的 AI 執行工具，不代替現場檢驗、安全基準或技術主管訂定的各機種合格值。"
         ],
         "related": [
           "mailroom-workbench",
-          "personal-inbox"
+          "personal-inbox",
+          "access-control"
         ]
       },
       "translations": {
         "en": {
-          "title": "Repair workbench",
-          "summary": "See items assigned to you or already accepted by you, and sign for each physical piece.",
+          "title": "DOA after-sales repair workbench",
+          "summary": "Technicians see created, in-transit, pending-receipt and assigned cases and complete inspection and repair records. Customer repairs require review and any needed payment release; company return refurbishment follows technician records, verification and physical handoff.",
           "category": "Receiving and repair",
           "keywords": [
-            "Repair workbench",
-            "mailroom",
+            "DOA",
+            "repair technician",
+            "inspection sheet",
+            "repair order",
+            "paid repair",
+            "replacement",
+            "refurbished stock",
+            "payment confirmation",
             "handoff"
           ],
           "sections": {
             "steps": [
-              "See items assigned to you or already accepted by you and confirm each physical piece. You can also verify your identity and accept on the mailroom tablet without a handwritten signature.",
-              "Inspect the item and send questions to customer service. Customer consent and required payment come from the after-sales system.",
-              "After repair or refurbishment, hand items back to the mailroom for personal acceptance before dispatch or warehouse processing."
+              "The sidebar group is DOA after-sales repair, and the formal page name is DOA after-sales repair workbench. Use its six queues: case overview, claim and acceptance, my inspections, customer-service and payment progress, verification and return, and inspection and repair records. Overview retains created, awaiting-arrival and in-transit cases; creating or claiming a case does not mean physical receipt.",
+              "Compare claimed and actual SKU, serial number, accessories and location. Claim or accept an assignment, then personally confirm the physical item before inspection. Custody stays with the current holder until the next recipient accepts it.",
+              "The technician personally completes the inspection sheet: customer symptom, test items and conditions, results, reproducibility, cause and supporting evidence, warranty/fee suggestion, proposed action and estimate. Preserve not-reproduced or undetermined findings. An inspection sheet is not a completed repair record. Inspection and repair records each retain drafts, submitted versions and version history. Printing the internal inspection sheet uses its saved version and excludes unsaved edits.",
+              "For customer repair cases (REPAIR), both free and paid proposals require customer-service review against the current submitted inspection revision. Formal customer quoting, consent and any needed accounting receipt remain separate in the after-sales source. Starting repair or replacement requires both current-revision review and source repairAllowed. Local review is neither customer consent nor confirmed funds. Company return refurbishment (RETURN/REFURBISHING) separately follows technician documents, verification and physical return; customer payment and repair-review release gates do not apply.",
+              "The technician personally completes the repair record: actual repair or one-for-one replacement, parts, labor and post-work verification. Replacement additionally keeps old and replacement serial numbers, new or refurbished condition, source and original-item disposition. Separate internal stock source and costs from customer-facing content, which must reflect actual treatment.",
+              "Verification must pass (PASS) before the item can be returned to the mailroom for personal acceptance. Track case progress, pending/sent/received/replied handoffs and notification delivery separately. Waiting items identify the blocker and next responsible person."
             ],
             "boundaries": [
-              "The workbench must be enabled. Company, permissions, item assignment and current state remain authoritative.",
-              "AA returns to stock; A goes to replacement or welfare sale; B/C is refurbished for welfare sale. This phase records the intended disposition without posting stock, deducting refunds or sending LINE messages.",
-              "Pending sync does not mean the destination received the event. A permitted customer-service reviewer must record customer confirmation for a mismatch."
+              "The Repair technician job template uses REPAIR_TECHNICIAN with repair_workbench:read and repair_workbench:update. It grants no customer-service review, accounting payment confirmation, inventory posting or cross-company access. Feature enablement, company, item assignment, personal acceptance and current state remain authoritative.",
+              "Every customer repair proposal (REPAIR) requires current-revision customer-service review and after-sales release; paid work additionally needs formal quoting, customer consent and confirmed required funds. New inspection submission invalidates old review and must return to customer service. Local review and reported remittance are not confirmed payment. This phase adds no accounting receipt, AI customer-service quoting or virtual-account reconciliation connection. Company return refurbishment (RETURN) requires no customer consent, payment or repair-revision customer-service review, but still needs technician documents and successful verification before return. A legacy waiting case without inspection may return for backfill without creating review or repair release.",
+              "Case, handoff and notification states are separate. Pending is not sent, sent is not accepted, and reading a notification does not complete a task. Sync delivery is neither customer consent nor evidence of received funds.",
+              "Refurbished replacements require inspection, any needed refurbishment and successful verification. AA/A/B/C cosmetic grading does not establish replacement eligibility. Recording replacement identity or stock needs does not reserve, ship or post WMS stock; pending integration records are not inventory movements.",
+              "Inspection and repair records retain the technician’s diagnosis and actual work evidence separately. A repair record binds to the inspection revision and must be resubmitted after inspection changes. Factory service and original-item return plans cannot directly be marked repaired or replaced. This static guide adds no AI execution tools and cannot replace physical inspection, safety criteria or model-specific acceptance limits established by the technical lead."
             ],
             "related": [
               "mailroom-workbench",
-              "personal-inbox"
+              "personal-inbox",
+              "access-control"
             ]
           }
         }
       },
       "sourcePaths": [
-        "frontend/src/pages/mailroom/MailroomPage.tsx",
-        "frontend/src/pages/mailroom/InboxShortcut.tsx",
+        "frontend/src/config/navigation.ts",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/App.tsx",
+        "frontend/src/pages/repair/RepairWorkbenchPage.tsx",
+        "frontend/src/pages/repair/RepairDocuments.tsx",
+        "frontend/src/pages/repair/repair-model.ts",
+        "frontend/src/pages/mailroom/TabletAcceptance.tsx",
         "backend/src/modules/mailroom/mailroom.controller.ts",
         "backend/src/modules/mailroom/mailroom.service.ts",
         "backend/src/modules/mailroom/mailroom.contract.ts",
-        "frontend/src/pages/mailroom/TabletAcceptance.tsx",
-        "frontend/src/pages/mailroom/model.ts",
-        "backend/src/modules/mailroom/mailroom-tablet.controller.ts",
-        "backend/src/modules/mailroom/mailroom-tablet.service.ts",
-        "backend/src/modules/mailroom/mailroom.dto.ts"
+        "backend/src/modules/mailroom/repair-workbench.controller.ts",
+        "backend/src/modules/mailroom/repair-workbench.service.ts",
+        "backend/src/modules/mailroom/repair-document.contract.ts",
+        "backend/src/modules/mailroom/repair-document.dto.ts",
+        "backend/src/modules/roles/role-policy.ts",
+        "backend/src/modules/ai/ai-copilot-access.service.ts",
+        "frontend/src/pages/repair/repair.css",
+        "backend/src/modules/mailroom/mailroom.module.ts",
+        "backend/prisma/migrations/20261002100000_repair_technician_role/migration.sql",
+        "backend/prisma/migrations/20261002110000_repair_documents/migration.sql"
       ],
       "permissions": [
         "repair_workbench:read"
+      ],
+      "aliases": [
+        "/operations/repair?queue=acceptance",
+        "/operations/repair?queue=mine",
+        "/operations/repair?queue=waiting",
+        "/operations/repair?queue=delivery",
+        "/operations/repair?queue=records"
       ]
     },
     {
@@ -4663,12 +4712,14 @@
         "steps": [
           "由右上角「我的待辦」或站內通知進入指定物件。",
           "確認名稱、位置與實物後，由收件本人勾選確認並簽領。",
-          "通知已讀僅代表看過；待辦於完成簽領或處理後結束。"
+          "通知已讀僅代表看過；待辦於完成簽領或處理後結束。",
+          "承辦客服從本人指定的顧客維修待辦（REPAIR）唯讀查看檢修單與維修單，針對目前檢修版次覆核並記錄結果；不能代維修師填寫技術紀錄。本地覆核不等於正式對客報價、顧客同意或會計入帳，這些另以售後來源為準。"
         ],
         "boundaries": [
           "工作台需先啟用，實際操作仍依公司、權限、逐件指派及目前進度限制。",
           "AA 重新入庫；A 瑕疵補寄或福利品；B／C 整理後福利品。本階段只記錄去向，不會自動加庫存、扣退款或發送 LINE 訊息。",
-          "客服同步的「待同步」不能解讀為對方已收到。品項不符須由有覆核權限的客服記錄顧客確認結果。"
+          "客服同步的「待同步」不能解讀為對方已收到。品項不符須由有覆核權限的客服記錄顧客確認結果。",
+          "檢修與維修文件及完整版本歷史另需 repair_workbench:read 或 mailroom:review；能進入我的待辦不會自動取得這些文件或他人的實物操作權。"
         ],
         "related": [
           "mailroom-workbench",
@@ -4689,12 +4740,14 @@
             "steps": [
               "Open the addressed item from My inbox or an in-app notification.",
               "Verify the item and location, then personally confirm physical receipt.",
-              "Reading a notification does not complete the task; the actual handoff or processing does."
+              "Reading a notification does not complete the task; the actual handoff or processing does.",
+              "Responsible customer service reads inspection and repair records from their assigned customer repair task (REPAIR) and records review against the current inspection revision. They cannot write technical records on the technician’s behalf. Local review is not formal customer quoting, consent or accounting receipt; these remain authoritative in the after-sales source."
             ],
             "boundaries": [
               "The workbench must be enabled. Company, permissions, item assignment and current state remain authoritative.",
               "AA returns to stock; A goes to replacement or welfare sale; B/C is refurbished for welfare sale. This phase records the intended disposition without posting stock, deducting refunds or sending LINE messages.",
-              "Pending sync does not mean the destination received the event. A permitted customer-service reviewer must record customer confirmation for a mismatch."
+              "Pending sync does not mean the destination received the event. A permitted customer-service reviewer must record customer confirmation for a mismatch.",
+              "Inspection and repair documents and full version history additionally require repair_workbench:read or mailroom:review. Opening My inbox does not grant these records or authority over another person’s physical items."
             ],
             "related": [
               "mailroom-workbench",
@@ -4713,7 +4766,9 @@
         "frontend/src/pages/mailroom/model.ts",
         "backend/src/modules/mailroom/mailroom-tablet.controller.ts",
         "backend/src/modules/mailroom/mailroom-tablet.service.ts",
-        "backend/src/modules/mailroom/mailroom.dto.ts"
+        "backend/src/modules/mailroom/mailroom.dto.ts",
+        "backend/src/modules/ai/ai-copilot-access.service.ts",
+        "frontend/src/pages/repair/RepairDocuments.tsx"
       ]
     }
   ],

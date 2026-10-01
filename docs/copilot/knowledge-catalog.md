@@ -21,6 +21,7 @@ The bilingual entries cover navigation groups and route or filter entry points, 
 | People / 人資考勤 | Employee supervisors, attendance, leave review, performance reviews and payroll / 員工主管、出勤、請假審核、考績與薪資 |
 | Administration / 系統管理 | Access, companies, reimbursement policies, settings, brands and import preview / 權限、公司、報銷政策、設定、品牌與匯入預覽 |
 | Personal and assistant / 個人與助手 | Profile, authentication guidance and AI limits / 個人資料、驗證流程與 AI 邊界 |
+| Mailroom and repair / 收發與維修 | Personal physical handoff, DOA inspection and repair records, and controlled payment release / 本人實物簽收、DOA 檢修與維修紀錄及付款放行 |
 
 ## Feature boundaries / 功能界線
 
@@ -35,6 +36,7 @@ The bilingual entries cover navigation groups and route or filter entry points, 
 - Copilot product-cost lookup and coworker-payroll summary require separate sensitive read grants. A daily financial briefing additionally requires cost, margin and net-profit grants and matching company scope; guides do not grant live tools. / Copilot 商品成本與同仁薪資彙總各需敏感資料讀取授權；每日財務簡報還需成本、毛利、淨利與相應公司資料範圍。操作指南不開放即時工具。
 - Account maintenance is separate from role policy. Ordinary account managers work only within their assigned companies and can grant only approved operational roles; a sole company is assigned to new accounts automatically. Super administrators handle multi-company cases, shared roles and data scopes. Cost requires `product_cost:read`; margin additionally requires `financial_margin:read`, and net profit, advertising spend, platform fees and net payout additionally require `financial_net_profit:read`. Coworker compensation needs `employee_compensation:read`. / 帳號維護與角色政策分開：一般管理者只在所屬公司內管理帳號並指派核准的作業角色，若僅屬一家公司則新帳號自動歸入該公司。跨公司、共用角色與資料範圍由最高管理員處理。成本需 `product_cost:read`，毛利再需 `financial_margin:read`，淨利、廣告費、平台費與淨入帳另需 `financial_net_profit:read`；同仁薪資需 `employee_compensation:read`。
 - Performance reviews are at `/performance/reviews`. A reviewer needs explicit read/write permission and a record assignment; supervisor status alone grants neither review access nor pay access. HR review management creates cycles and assignments, while submitted reviews are locked. / 考績入口為 `/performance/reviews`。評核人需明確讀寫權限及逐筆指派，部門主管身分不自動取得考績或薪資；人資管理權限可建週期與指派，送出後鎖定。
+- The DOA after-sales repair workbench uses `/operations/repair` with overview, acceptance, mine, waiting, delivery and records queues. `REPAIR_TECHNICIAN` supplies repair read/update only; it does not grant customer-service review, payment confirmation or stock posting. Technicians personally complete inspection and repair records. Chargeable work requires reviewed quoting, customer consent, accountant-confirmed funds and release. Actual repair or replacement, condition and old/new serial numbers remain traceable. AI customer-service delivery, automatic virtual-account reconciliation and formal WMS posting are not enabled by this guide. / DOA 售後維修工作台以 `/operations/repair` 及總覽、待簽收、我的維修、等待、交回、紀錄清單呈現。`REPAIR_TECHNICIAN` 僅授予維修讀取／更新，不授予客服覆核、入帳確認或庫存過帳。維修師本人填寫檢修單與維修單；收費案件須經報價覆核、顧客同意、會計確認入帳及放行。實際維修或替換、品況及新舊 SN 均留存；指南不啟用 AI 客服發送、虛擬帳號自動對帳或 WMS 正式核銷。
 - Examples are synthetic form/preview data, not ready-to-run API requests or company records. / JSON 與 CSV 範例是虛構填表或預覽資料，不是真實單據或可執行 API 請求。
 
 ## Ownership and contract / 維護與契約
@@ -64,5 +66,7 @@ node scripts/dev/generate-copilot-knowledge.cjs --check
 ```
 
 The generator hashes only the explicitly curated `sourcePaths`, the catalog and the original snapshot. It does not crawl the repository, ingest secrets or build a vector index. `sourceVersion` is a deterministic content hash, not a claim that all repository code was reviewed. `reviewedBaseCommit` records the starting revision; exact per-source hashes identify the files used at generation. Source-manifest coverage is documentation coverage, not operational acceptance or executor coverage.
+
+The reviewed DOA source list also includes its page, forms, shared helpers, CSS, controllers, services, DTOs, state contracts and two SQL migrations. Migration access is limited to timestamped `backend/prisma/migrations/*/migration.sql` sources explicitly listed in the catalog; seed scripts and fixture runtimes remain excluded. / DOA 已審閱來源另包含頁面、表單、共用 helper、CSS、controller、service、DTO、狀態契約與兩份 SQL migration。migration 僅允許明列於語料的時間戳記目錄 `migration.sql`，不納入 seed 或 fixture runtime。
 
 來源版本只涵蓋明確列入 `sourcePaths` 的已審閱檔案及語料，不代表審閱整個 repo。manifest 的 coverage 是操作文件覆蓋，不等於所有功能已通過現場驗收或已接入 AI 執行工具。

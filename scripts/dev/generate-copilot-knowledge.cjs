@@ -14,7 +14,9 @@ const sha = (data) => crypto.createHash('sha256').update(data).digest('hex');
 const json = (value) => JSON.stringify(value, null, 2) + '\n';
 function read(relative) {
   assert(!path.isAbsolute(relative) && !relative.split('/').includes('..'), `Unsafe source path: ${relative}`);
-  assert(/^(frontend\/src\/|backend\/src\/|docs\/copilot\/)/.test(relative), `Unreviewed source area: ${relative}`);
+  const reviewedCodeArea = /^(frontend\/src\/|backend\/src\/|docs\/copilot\/)/.test(relative);
+  const reviewedMigration = /^backend\/prisma\/migrations\/[0-9]{14}_[a-z0-9_-]+\/migration\.sql$/.test(relative);
+  assert(reviewedCodeArea || reviewedMigration, `Unreviewed source area: ${relative}`);
   assert(!/(^|\/)(?:\.env[^/]*|node_modules|dist|secrets?)(\/|$)/i.test(relative), `Prohibited source: ${relative}`);
   const absolute = path.join(ROOT, relative);
   assert(fs.realpathSync(absolute).startsWith(ROOT + path.sep), `Source escapes checkout: ${relative}`);
@@ -154,7 +156,7 @@ function build() {
   }
   const missing = routeInfo.requiredRoutes.filter((route) => !covered.has(route));
   assert.deepEqual(missing, [], `Routes without a guide: ${missing.join(', ')}`);
-  const expectedGroups = ['dashboard','sales','service','warehouse','inventory','finance','people','admin','profile','mailroom'].sort();
+  const expectedGroups = ['dashboard','sales','service','warehouse','inventory','finance','people','admin','profile','mailroom','repair'].sort();
   assert.deepEqual([...new Set(entries.map((entry) => entry.group))].sort(), expectedGroups, 'Navigation group coverage incomplete');
   const sortedSources = [...sources].sort(([a],[b]) => a.localeCompare(b)).map(([sourcePath, digest]) => ({ path: sourcePath, sha256: digest }));
   const catalogSha256 = sha(sourceText), legacySha256 = sha(legacyText);
