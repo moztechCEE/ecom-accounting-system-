@@ -1,3 +1,4 @@
+import { MailroomModule } from './modules/mailroom/mailroom.module';
 import { Module } from '@nestjs/common';
 import { SnLabelsModule } from './modules/sn-labels/sn-labels.module';
 import { APP_GUARD } from '@nestjs/core';
@@ -137,6 +138,7 @@ import { WmsWorkbenchModule } from './modules/integration/wms/wms-workbench.modu
     WmsHandoverModule,
     WmsPortalModule,
     NotificationModule,
+    MailroomModule,
     AiModule,
     AttendanceModule,
     PurchaseModule,

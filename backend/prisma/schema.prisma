@@ -2309,6 +2309,125 @@ model InvoiceSourceEvidence {
   @@map("invoice_source_evidences")
 }
 
+// Mailroom custody is independent of inventory, refunds and shipment posting.
+model MailroomReceipt {
+  id             String   @id @default(uuid())
+  entityId       String   @map("entity_id")
+  number         String   @unique
+  category       String
+  sourceCaseId   String?  @map("source_case_id")
+  sourceNumber   String?  @map("source_number")
+  sourceSnapshot Json?    @map("source_snapshot")
+  customerServiceUserId String? @map("customer_service_user_id")
+  carrier        String?
+  trackingNumber String?  @map("tracking_number")
+  senderLabel    String?  @map("sender_label")
+  receivedById   String   @map("received_by_id")
+  receivedAt     DateTime @default(now()) @map("received_at")
+  requestId      String   @map("request_id")
+  requestHash    String   @map("request_hash")
+  items          MailroomItem[]
+
+  @@unique([entityId, receivedById, requestId])
+  @@index([entityId, receivedAt])
+  @@index([entityId, sourceCaseId])
+  @@map("mailroom_receipts")
+}
+
+model MailroomItem {
+  id                  String   @id @default(uuid())
+  receiptId           String   @map("receipt_id")
+  receipt             MailroomReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  entityId            String   @map("entity_id")
+  label               String
+  declared            Json?
+  productName         String   @map("product_name")
+  sku                 String?
+  serialNumber        String?  @map("serial_number")
+  status              String
+  matchResult         String   @default("PENDING") @map("match_result")
+  grade               String?
+  disposition         String?
+  conditionNote       String?  @map("condition_note")
+  returnInspection    Json?    @map("return_inspection")
+  evidence            Json?
+  location            String
+  custodianId         String   @map("custodian_id")
+  recipientId         String?  @map("recipient_id")
+  nextUserId          String?  @map("next_user_id")
+  repairOwnerId       String?  @map("repair_owner_id")
+  version             Int      @default(1)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  actions             MailroomAction[]
+  tasks               MailroomTask[]
+
+  @@index([entityId, status, createdAt])
+  @@index([recipientId, status])
+  @@index([nextUserId, status])
+  @@map("mailroom_items")
+}
+
+model MailroomAction {
+  id           String   @id @default(uuid())
+  entityId     String   @map("entity_id")
+  itemId       String   @map("item_id")
+  item         MailroomItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  actorId      String   @map("actor_id")
+  actorName    String   @map("actor_name")
+  requestId    String   @map("request_id")
+  requestHash  String   @map("request_hash")
+  action       String
+  fromStatus   String?  @map("from_status")
+  toStatus     String   @map("to_status")
+  version      Int
+  note         String?
+  snapshot     Json
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([entityId, actorId, requestId])
+  @@unique([itemId, version])
+  @@map("mailroom_actions")
+}
+
+model MailroomTask {
+  id          String   @id @default(uuid())
+  entityId    String   @map("entity_id")
+  itemId      String   @map("item_id")
+  item        MailroomItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  userId      String   @map("user_id")
+  kind        String
+  status      String   @default("OPEN")
+  version     Int
+  createdAt   DateTime @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@unique([itemId, userId, kind, version])
+  @@index([userId, status, createdAt])
+  @@map("mailroom_tasks")
+}
+
+model MailroomDelivery {
+  id           String   @id @default(uuid())
+  eventId      String   @map("event_id")
+  entityId     String   @map("entity_id")
+  itemId       String   @map("item_id")
+  target       String
+  payload      Json
+  status       String   @default("PENDING")
+  attempts     Int      @default(0)
+  nextAttemptAt DateTime @default(now()) @map("next_attempt_at")
+  leaseUntil   DateTime? @map("lease_until")
+  leaseToken   String?  @map("lease_token")
+  lastError    String?  @map("last_error")
+  deliveredAt  DateTime? @map("delivered_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([eventId, target])
+  @@index([status, nextAttemptAt])
+  @@map("mailroom_deliveries")
+}
+
 model Notification {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")

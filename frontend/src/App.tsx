@@ -1,3 +1,4 @@
+import MailroomPage from './pages/mailroom/MailroomPage'
 import React from 'react'
 import PerformanceReviewsPage from './pages/PerformanceReviewsPage'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
@@ -93,6 +94,9 @@ const App: React.FC = () => {
               <Route path="auth/change-password" element={<ForcePasswordChangePage />} />
               <Route element={<DashboardLayout />}>
                 <Route index element={<HomeEntry />} />
+                <Route path="operations/mailroom" element={<PermissionRoute anyPermissions={['mailroom:read']}><MailroomPage /></PermissionRoute>} />
+                <Route path="operations/repair" element={<PermissionRoute anyPermissions={['repair_workbench:read']}><MailroomPage mode="repair" /></PermissionRoute>} />
+                <Route path="my/inbox" element={<MailroomPage mode="mine" />} />
                 <Route path="dashboard" element={<HomeEntry dashboard />} />
                 <Route path="reconciliation" element={<PermissionRoute anyPermissions={['banking:read', 'reports:read', 'accounts:read']}><ReconciliationCenterPage /></PermissionRoute>} />
                 <Route path="reconciliation/timeout" element={<PermissionRoute anyPermissions={['reconciliation_timeout:read', 'accounts:read', 'journal_entries:read']}><TimeoutReconciliationPage /></PermissionRoute>} />

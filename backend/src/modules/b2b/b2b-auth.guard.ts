@@ -1,3 +1,4 @@
+import { MAILROOM_SERVICE_AUTH, authenticateMailroomReader } from '../mailroom/mailroom.auth';
 import { WMS_HANDOVER_AUTH, authenticateWmsHandover } from '../integration/wms/wms-handover.auth';
 import { ExecutionContext, Injectable, SetMetadata } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -21,6 +22,9 @@ export class B2bAwareJwtAuthGuard extends JwtAuthGuard {
   canActivate(context: ExecutionContext) {
     if (this.b2bReflector.getAllAndOverride<boolean>(WMS_HANDOVER_AUTH, [context.getHandler(), context.getClass()])) {
       return authenticateWmsHandover(context.switchToHttp().getRequest());
+    }
+    if (this.b2bReflector.getAllAndOverride<boolean>(MAILROOM_SERVICE_AUTH, [context.getHandler(), context.getClass()])) {
+      return authenticateMailroomReader(context.switchToHttp().getRequest());
     }
     const mode = this.b2bReflector.getAllAndOverride<string>(B2B_AUTH_MODE, [
       context.getHandler(),

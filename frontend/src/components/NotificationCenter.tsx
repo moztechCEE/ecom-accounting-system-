@@ -51,7 +51,7 @@ const NotificationCenter: React.FC = () => {
     
     // Subscribe to real-time notifications
     const unsubscribe = webSocketService.subscribe((newNotification) => {
-      setNotifications(prev => [newNotification, ...prev])
+      setNotifications(prev => [newNotification, ...prev.filter(n => n.id !== newNotification.id)])
       message.info(`新通知: ${newNotification.title}`)
     })
 

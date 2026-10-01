@@ -34,7 +34,8 @@
         "boundaries": [
           "儀表板數字與 AI 摘要不能替代原單據；載入失敗或沒有資料不表示金額為零。",
           "儲運專用角色可能直接進入儲運工作區；不是所有人都有同一首頁。",
-          "成本、毛利、淨利，以及可反推出費用的廣告費、平台費、淨入帳等指標，依專用讀取權限顯示；無權限時不可把缺少的指標解讀為零。完整高階財務總覽需成本、毛利及淨利三項讀取授權。"
+          "成本、毛利、淨利，以及可反推出費用的廣告費、平台費、淨入帳等指標，依專用讀取權限顯示；無權限時不可把缺少的指標解讀為零。完整高階財務總覽需成本、毛利及淨利三項讀取授權。",
+          "收發室／維修權限已開通且工作台啟用時，一般同仁登入會進入對應工作台；右上角「我的待辦」保留未完成交接。"
         ],
         "related": [
           "reports",
@@ -59,7 +60,8 @@
             "boundaries": [
               "Metrics and AI summaries do not replace source documents; failed or missing data is not a zero balance.",
               "Warehouse-only users may land in their warehouse workspace instead.",
-              "Cost, margin and net-profit figures, and advertising spend, platform fees or net payout that could reveal expenses, depend on separate read grants; a missing metric is not zero. The full executive financial overview requires all three grants."
+              "Cost, margin and net-profit figures, and advertising spend, platform fees or net payout that could reveal expenses, depend on separate read grants; a missing metric is not zero. The full executive financial overview requires all three grants.",
+              "When enabled, mailroom and repair staff land on their workbench. My inbox keeps handoffs pending until the assigned work is completed."
             ],
             "related": [
               "reports",
@@ -490,7 +492,8 @@
           "在「使用者」依姓名或 Email、帳號狀態與職務範本篩選，選定帳號後查看目前角色、敏感資料標示及有效權限。",
           "建立或編輯帳號時先選最符合工作內容的職務範本；兼任時才增加角色。一般管理者新增帳號會自動歸入其唯一所屬公司；需要存取本人資料的職務，接著在員工管理連結員工資料並核對有效權限。",
           "只有最高管理員可在「角色」建立或修改共用角色及其權限，並設定帳號可存取公司與各模組資料範圍。",
-          "部門與主管身分在員工管理維護；考績評核另需專用權限及逐筆指派，不能只憑主管職稱取得。"
+          "部門與主管身分在員工管理維護；考績評核另需專用權限及逐筆指派，不能只憑主管職稱取得。",
+          "收發室使用「收發室人員」範本，維修部使用「維修人員」範本；確認同公司的有效員工綁定。客服覆核 mailroom:review 由最高管理員明確指派，部門預設角色不授予此覆核權限。"
         ],
         "boundaries": [
           "具有帳號更新權限的一般管理者只能維護一般帳號並指派明確開放的作業角色；管理員、敏感或未知權限角色，以及共用角色政策，均由最高管理員處理。",
@@ -520,7 +523,8 @@
               "In Users, filter by name or email, account status and job template. Open an account to inspect roles, sensitive-data labels and effective access.",
               "When creating or editing an account, choose the closest job template first and add another role only for a second duty. An ordinary account manager’s new account is assigned to their sole company. For self-scoped work, link the employee record in employee management and then check effective access.",
               "Only a super administrator creates or changes shared roles and their permissions, and sets an account’s company access and module data scopes.",
-              "Maintain department and supervisor identity in employee records. Performance review also requires explicit permission and assignment; a supervisor title alone is insufficient."
+              "Maintain department and supervisor identity in employee records. Performance review also requires explicit permission and assignment; a supervisor title alone is insufficient.",
+              "Assign MAILROOM_OPERATOR or REPAIR_TECHNICIAN to linked active employees in the same company. A policy administrator explicitly grants mailroom:review to customer-service reviewers; department defaults do not grant that review permission."
             ],
             "boundaries": [
               "An account manager with update access can maintain ordinary accounts and assign only explicitly approved operational roles. Administrator, sensitive or unknown-permission roles and shared role policy require a super administrator.",
@@ -4485,6 +4489,231 @@
       ],
       "permissions": [
         "inventory:read"
+      ]
+    },
+    {
+      "id": "mailroom-workbench",
+      "title": "收發室工作台",
+      "summary": "售後待到貨案件自動列入清單，收到實物後逐件登記、核對、檢查與交接。",
+      "keywords": [
+        "收發室工作台",
+        "收發室",
+        "簽收",
+        "待辦"
+      ],
+      "path": "/operations/mailroom",
+      "module": "mailroom",
+      "category": "收件與維修",
+      "group": "mailroom",
+      "sections": {
+        "steps": [
+          "待到貨清單自動顯示售後維修與退貨案件及尚未到貨數量；選定案件後，只登記這次實際收到的物件。",
+          "維修品保留原申報並核對實收 SKU／SN；一致時指派維修人員，不一致交承辦客服確認。",
+          "維修人員可在收發室平板輸入本人員編、密碼及已設定的驗證碼，再勾選實物確認簽收；收發室帳號持續登入。",
+          "退貨品必須記錄品項核對、包裝、外觀、配件、AA／A／B／C 與至少一張照片；承辦客服另有接手檢查結果的待辦。",
+          "交接前原保管人仍負責物件，本人簽收後才變更保管人。信件、包裹與待辨識件也逐件保留位置及歷程。"
+        ],
+        "boundaries": [
+          "工作台需先啟用，操作仍依公司、權限、逐件指派及目前進度限制；售後建案不代表實物已到貨。",
+          "AA 須為全新未使用且配件完整，預定重新入庫；A 瑕疵補寄或福利品；B／C 整理後福利品。本階段只記錄去向，不會自動加庫存、扣退款或發送 LINE 訊息。",
+          "品項不符與退貨檢查只交承辦客服；承辦客服須以員工信箱對應同公司、在職且有覆核權限的帳號。未完成映射會提示，不廣播給全部客服。",
+          "客服接手檢查結果不等於完成整新或核准退款。「待同步」也不代表售後或 AI 已收到。"
+        ],
+        "related": [
+          "repair-workbench",
+          "personal-inbox"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Mailroom workbench",
+          "summary": "After-sales cases appear in the awaiting-arrival queue; register, verify, inspect and hand over each physical item after arrival.",
+          "category": "Receiving and repair",
+          "keywords": [
+            "Mailroom workbench",
+            "mailroom",
+            "handoff"
+          ],
+          "sections": {
+            "steps": [
+              "The awaiting-arrival queue shows repair and return cases and remaining quantities. Select a case and register only the physical pieces received this time.",
+              "Preserve the original repair claim and compare actual SKU and serial number. Assign matching items to repair; send mismatches to the responsible customer-service staff member.",
+              "On the mailroom tablet, the assigned technician enters their employee number, password and configured verification code, then confirms physical receipt. The clerk stays signed in.",
+              "Returns require an item match, packaging, appearance, accessories, AA/A/B/C grade and at least one photo. Responsible customer service receives a separate inspection acknowledgment task.",
+              "Custody stays with the sender until personal acceptance. Letters, parcels and unidentified items also retain individual locations and history."
+            ],
+            "boundaries": [
+              "The workbench must be enabled. Company, permissions, assignment and current state remain authoritative; creating a case does not mean physical arrival.",
+              "AA requires an unused product with complete accessories and is intended for restock; A goes to replacement or welfare sale; B/C is refurbished for welfare sale. This phase records disposition without posting stock, deducting refunds or sending LINE messages.",
+              "Mismatches and return inspection go only to the responsible customer-service staff member. Their email must map to an active employee in the same company with review permission. Missing mappings are flagged without broadcasting to all reviewers.",
+              "Acknowledging inspection does not complete refurbishment or approve a refund. Pending sync does not mean after-sales or AI received the event."
+            ],
+            "related": [
+              "repair-workbench",
+              "personal-inbox"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/pages/mailroom/MailroomPage.tsx",
+        "frontend/src/pages/mailroom/InboxShortcut.tsx",
+        "backend/src/modules/mailroom/mailroom.controller.ts",
+        "backend/src/modules/mailroom/mailroom.service.ts",
+        "backend/src/modules/mailroom/mailroom.contract.ts",
+        "frontend/src/pages/mailroom/TabletAcceptance.tsx",
+        "frontend/src/pages/mailroom/model.ts",
+        "backend/src/modules/mailroom/mailroom-tablet.controller.ts",
+        "backend/src/modules/mailroom/mailroom-tablet.service.ts",
+        "backend/src/modules/mailroom/mailroom.dto.ts"
+      ],
+      "permissions": [
+        "mailroom:read"
+      ]
+    },
+    {
+      "id": "repair-workbench",
+      "title": "維修工作台",
+      "summary": "只查看本人被指派或已接手的物件，核對實物後逐件簽收。",
+      "keywords": [
+        "維修工作台",
+        "收發室",
+        "簽收",
+        "待辦"
+      ],
+      "path": "/operations/repair",
+      "module": "mailroom",
+      "category": "收件與維修",
+      "group": "mailroom",
+      "sections": {
+        "steps": [
+          "只查看本人被指派或已接手的物件，核對實物後逐件簽收；也可在收發室平板驗證本人身分後點選簽收，不需手寫簽名。",
+          "開始檢測，記錄問題交客服確認；顧客同意及必要款項以售後系統為準。",
+          "維修或整新完成後交回收發室，由收發室本人簽收，再安排寄回或福利品入庫。"
+        ],
+        "boundaries": [
+          "工作台需先啟用，實際操作仍依公司、權限、逐件指派及目前進度限制。",
+          "AA 重新入庫；A 瑕疵補寄或福利品；B／C 整理後福利品。本階段只記錄去向，不會自動加庫存、扣退款或發送 LINE 訊息。",
+          "客服同步的「待同步」不能解讀為對方已收到。品項不符須由有覆核權限的客服記錄顧客確認結果。"
+        ],
+        "related": [
+          "mailroom-workbench",
+          "personal-inbox"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "Repair workbench",
+          "summary": "See items assigned to you or already accepted by you, and sign for each physical piece.",
+          "category": "Receiving and repair",
+          "keywords": [
+            "Repair workbench",
+            "mailroom",
+            "handoff"
+          ],
+          "sections": {
+            "steps": [
+              "See items assigned to you or already accepted by you and confirm each physical piece. You can also verify your identity and accept on the mailroom tablet without a handwritten signature.",
+              "Inspect the item and send questions to customer service. Customer consent and required payment come from the after-sales system.",
+              "After repair or refurbishment, hand items back to the mailroom for personal acceptance before dispatch or warehouse processing."
+            ],
+            "boundaries": [
+              "The workbench must be enabled. Company, permissions, item assignment and current state remain authoritative.",
+              "AA returns to stock; A goes to replacement or welfare sale; B/C is refurbished for welfare sale. This phase records the intended disposition without posting stock, deducting refunds or sending LINE messages.",
+              "Pending sync does not mean the destination received the event. A permitted customer-service reviewer must record customer confirmation for a mismatch."
+            ],
+            "related": [
+              "mailroom-workbench",
+              "personal-inbox"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/pages/mailroom/MailroomPage.tsx",
+        "frontend/src/pages/mailroom/InboxShortcut.tsx",
+        "backend/src/modules/mailroom/mailroom.controller.ts",
+        "backend/src/modules/mailroom/mailroom.service.ts",
+        "backend/src/modules/mailroom/mailroom.contract.ts",
+        "frontend/src/pages/mailroom/TabletAcceptance.tsx",
+        "frontend/src/pages/mailroom/model.ts",
+        "backend/src/modules/mailroom/mailroom-tablet.controller.ts",
+        "backend/src/modules/mailroom/mailroom-tablet.service.ts",
+        "backend/src/modules/mailroom/mailroom.dto.ts"
+      ],
+      "permissions": [
+        "repair_workbench:read"
+      ]
+    },
+    {
+      "id": "personal-inbox",
+      "title": "我的待辦與收件",
+      "summary": "由右上角「我的待辦」或站內通知進入指定物件。",
+      "keywords": [
+        "我的待辦與收件",
+        "收發室",
+        "簽收",
+        "待辦"
+      ],
+      "path": "/my/inbox",
+      "module": "mailroom",
+      "category": "收件與維修",
+      "group": "mailroom",
+      "sections": {
+        "steps": [
+          "由右上角「我的待辦」或站內通知進入指定物件。",
+          "確認名稱、位置與實物後，由收件本人勾選確認並簽領。",
+          "通知已讀僅代表看過；待辦於完成簽領或處理後結束。"
+        ],
+        "boundaries": [
+          "工作台需先啟用，實際操作仍依公司、權限、逐件指派及目前進度限制。",
+          "AA 重新入庫；A 瑕疵補寄或福利品；B／C 整理後福利品。本階段只記錄去向，不會自動加庫存、扣退款或發送 LINE 訊息。",
+          "客服同步的「待同步」不能解讀為對方已收到。品項不符須由有覆核權限的客服記錄顧客確認結果。"
+        ],
+        "related": [
+          "mailroom-workbench",
+          "repair-workbench"
+        ]
+      },
+      "translations": {
+        "en": {
+          "title": "My tasks and receipts",
+          "summary": "Open the addressed item from My inbox or an in-app notification.",
+          "category": "Receiving and repair",
+          "keywords": [
+            "My tasks and receipts",
+            "mailroom",
+            "handoff"
+          ],
+          "sections": {
+            "steps": [
+              "Open the addressed item from My inbox or an in-app notification.",
+              "Verify the item and location, then personally confirm physical receipt.",
+              "Reading a notification does not complete the task; the actual handoff or processing does."
+            ],
+            "boundaries": [
+              "The workbench must be enabled. Company, permissions, item assignment and current state remain authoritative.",
+              "AA returns to stock; A goes to replacement or welfare sale; B/C is refurbished for welfare sale. This phase records the intended disposition without posting stock, deducting refunds or sending LINE messages.",
+              "Pending sync does not mean the destination received the event. A permitted customer-service reviewer must record customer confirmation for a mismatch."
+            ],
+            "related": [
+              "mailroom-workbench",
+              "repair-workbench"
+            ]
+          }
+        }
+      },
+      "sourcePaths": [
+        "frontend/src/pages/mailroom/MailroomPage.tsx",
+        "frontend/src/pages/mailroom/InboxShortcut.tsx",
+        "backend/src/modules/mailroom/mailroom.controller.ts",
+        "backend/src/modules/mailroom/mailroom.service.ts",
+        "backend/src/modules/mailroom/mailroom.contract.ts",
+        "frontend/src/pages/mailroom/TabletAcceptance.tsx",
+        "frontend/src/pages/mailroom/model.ts",
+        "backend/src/modules/mailroom/mailroom-tablet.controller.ts",
+        "backend/src/modules/mailroom/mailroom-tablet.service.ts",
+        "backend/src/modules/mailroom/mailroom.dto.ts"
       ]
     }
   ],
