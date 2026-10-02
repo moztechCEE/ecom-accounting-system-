@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:ebc3e8be7bbddecca5e97776649e0daf88d766c6256572222a4a2c5a34fb159d",
+  "sourceVersion": "sha256:fff7f8e44e1bfe71417b203d5f892f91a3269bdc1c5a6688f8ebd17b61bf853c",
   "reviewedBaseCommit": "9165c7123b10750b598a95f9badfc9c00ed04abd",
   "entryCount": 60,
   "groups": [
@@ -18,7 +18,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "eaa09089cd7d0e0b8a7c9bce680e1a6575bd993f67c9e501194b6f2d76f64ff4",
+  "catalogSha256": "33b9647f594ac7ae54aef4d1d8980a50c00f69a07f9af7d2b75fb19b644c5db7",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -287,6 +287,10 @@
     {
       "path": "backend/src/modules/sn-labels/sn-labels.controller.ts",
       "sha256": "9135b6f0b462cc61f1d8301069fc9924bf0747acc9603bf275032a6a99126887"
+    },
+    {
+      "path": "backend/src/modules/sn-labels/sn-labels.export.ts",
+      "sha256": "3bad67b1b5af0f6a62364dc873afa07023276dc0d1b2a6b2b2c906a6ea1b5292"
     },
     {
       "path": "backend/src/modules/users/users.controller.ts",

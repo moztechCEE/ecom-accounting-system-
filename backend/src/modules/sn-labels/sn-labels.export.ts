@@ -200,12 +200,10 @@ export class SnLabelsExport {
           fit('一箱共 ' + item.quantity + ' 入', 37 * s, 3 * s, 3 * s, 20 * s);
           fit('款式: ' + (d.style || '—'), 3 * s, 9 * s, 2.5 * s, 28 * s);
           fit('顏色: ' + (d.color || '—'), 3 * s, 14 * s, 2.5 * s, 28 * s);
-          bars(d.barcode, 32 * s, 9 * s, 25 * s, 7 * s);
-          fit(d.barcode, 33 * s, 17 * s, 1.7 * s, 24 * s);
           bars(item.id, 3 * s, 24 * s, 54 * s, 9 * s);
           fit('箱號: ' + item.id, 3 * s, 35 * s, 2.5 * s, 54 * s);
           if (kind !== 'cartons-no-sn') {
-            qr(item.serials.join('ㆍ'), 3 * s, 41 * s, 31 * s);
+            qr(item.serials.join(','), 3 * s, 41 * s, 31 * s);
             fit('箱內序號', 36 * s, 44 * s, 2.4 * s, 21 * s);
             fit(item.serials[0], 35 * s, 52 * s, 2.2 * s, 22 * s);
             text('至', 43 * s, 58 * s, 2 * s, 10 * s);
