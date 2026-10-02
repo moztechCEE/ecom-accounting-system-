@@ -322,6 +322,29 @@ class GuardsTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Unrelated template runtime'):
             deploy.assert_runtime_preserved(self.live[r.API], valid, r.API, False)
 
+    def test_portable_metadata_is_ignored_but_effective_runtime_is_preserved(self):
+        for name in r.DEV:
+            metadata = self.live[name]['spec']['template']['metadata']
+            metadata['annotations'].update({'run.googleapis.com/client-name': 'gcloud',
+                                            'run.googleapis.com/client-version': 'synthetic-version'})
+            metadata['labels'] = {'client.knative.dev/nonce': 'synthetic-nonce', 'retained-label': 'fixed'}
+            st = state(self.live)
+            _, spec = deploy.planned_spec('candidate-api' if name == r.API else 'candidate-web', st, self.live)
+            clean = spec['spec']['template']['metadata']
+            self.assertNotIn('run.googleapis.com/client-name', clean['annotations'])
+            self.assertNotIn('run.googleapis.com/client-version', clean['annotations'])
+            self.assertEqual(clean['labels'], {'retained-label': 'fixed'})
+            deploy.assert_runtime_preserved(self.live[name], spec, name, False)
+            for mutate in (
+                lambda template: template['spec'].update(serviceAccountName='unreviewed-account'),
+                lambda template: template['spec']['containers'][0]['resources']['limits'].update(memory='2Gi'),
+                lambda template: template['metadata']['labels'].update({'retained-label': 'changed'}),
+            ):
+                changed = copy.deepcopy(spec)
+                mutate(changed['spec']['template'])
+                with self.assertRaisesRegex(RuntimeError, 'Unrelated template runtime'):
+                    deploy.assert_runtime_preserved(self.live[name], changed, name, False)
+
     def test_web_candidates_keep_b2b_preview_and_use_candidate_then_stable_api(self):
         st = state(self.live)
         _, candidate = deploy.planned_spec('candidate-web', st, self.live)

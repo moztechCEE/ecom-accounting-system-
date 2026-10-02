@@ -123,7 +123,8 @@ def initialize(args, directory):
 
 
 def assert_runtime_preserved(before, after, name, events_enabled):
-    old, new = copy.deepcopy(before['spec']['template']), copy.deepcopy(after['spec']['template'])
+    old = release.portable(before)['spec']['template']
+    new = release.portable(after)['spec']['template']
     for template in (old, new):
         template.setdefault('metadata', {}).pop('name', None)
         template['spec']['containers'][0].pop('image', None)
