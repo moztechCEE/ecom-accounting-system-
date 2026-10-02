@@ -78,19 +78,35 @@ const aiPaths = new Set([
 ]);
 const aiFetchContext = new AsyncLocalStorage();
 const aiFetchToken = Symbol('approved-dev-ai-fetch');
-// The first mailroom DEV release reads only the paired synthetic after-sales
-// company. Events, customer messaging and all production origins remain closed.
+// The mailroom DEV exception is restricted to the paired synthetic company.
+// Event writes require a separate flag and the canonical isolated after-sales host.
 const mailroomOrigin = process.env.ERP_DEV_MAILROOM_SOURCE_URL || '';
 const mailroomEnabled = process.env.ERP_DEV_MAILROOM_SOURCE_ENABLED === 'true' &&
   process.env.MAILROOM_ENABLED === 'true' &&
   /^https:\/\/(?:[a-z][a-z0-9-]{0,61}---)?moztech-after-sales-dev-sp5g377smq-de\.a\.run\.app$/.test(mailroomOrigin);
+const mailroomEventsEnabled = mailroomEnabled && process.env.ERP_DEV_MAILROOM_EVENTS_ENABLED === 'true' &&
+  process.env.MAILROOM_SYNC_ENABLED === 'true' &&
+  mailroomOrigin === 'https://moztech-after-sales-dev-sp5g377smq-de.a.run.app';
 const mailroomHost = mailroomEnabled ? new URL(mailroomOrigin).hostname : '';
 const mailroomFetchContext = new AsyncLocalStorage();
 const mailroomFetchToken = Symbol('approved-dev-mailroom-source-fetch');
 function approvedMailroomFetch(url, options) {
   if (!mailroomEnabled || url.origin !== mailroomOrigin || url.username || url.password || url.hash ||
-      !options || options.method !== 'GET' || options.redirect !== 'error' || options.body !== undefined ||
-      !/^\/api\/integration\/mailroom\/cases(?:\/[A-Za-z0-9_-]{1,128})?$/.test(url.pathname)) return false;
+      !options || options.redirect !== 'error') return false;
+  const read = options.method === 'GET' && options.body === undefined &&
+    /^\/api\/integration\/mailroom\/cases(?:\/[A-Za-z0-9_-]{1,128})?$/.test(url.pathname);
+  const event = mailroomEventsEnabled && options.method === 'POST' && !url.search &&
+    url.pathname === '/api/integration/mailroom/events' && typeof options.body === 'string' &&
+    Buffer.byteLength(options.body, 'utf8') < 40 * 1024;
+  if (!read && !event) return false;
+  if (event) {
+    let payload;
+    try { payload = JSON.parse(options.body); } catch { return false; }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
+        payload.schema !== 'corely.mailroom.v1' || payload.entityId !== 'doa-dev-qa-20261002' ||
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(payload.eventId || '') ||
+        payload.inventoryPosted !== false || payload.refundExecuted !== false) return false;
+  }
   const keys = [...url.searchParams.keys()];
   if (keys.length > 3 || new Set(keys).size !== keys.length ||
       keys.some(key => !['search', 'awaiting', 'cursor'].includes(key) || url.searchParams.get(key).length > 128) ||
@@ -109,8 +125,8 @@ function approvedMailroomFetch(url, options) {
     value.target === 'AFTER_SALES' && [mailroomOrigin, mailroomOrigin + '/'].includes(value.baseUrl) &&
     value.keyId === headers.get('x-mailroom-key') && typeof value.secret === 'string' && value.secret.length >= 32);
   if (!entry) return false;
-  const signature = createHmac('sha256', entry.secret).update(['mailroom.v1', 'GET', url.pathname + url.search,
-    headers.get('x-mailroom-time'), entry.entityId, createHash('sha256').update('').digest('hex')].join('\n')).digest();
+  const signature = createHmac('sha256', entry.secret).update(['mailroom.v1', options.method, url.pathname + url.search,
+    headers.get('x-mailroom-time'), entry.entityId, createHash('sha256').update(event ? options.body : '').digest('hex')].join('\n')).digest();
   return timingSafeEqual(signature, Buffer.from(headers.get('x-mailroom-signature'), 'hex'));
 }
 const connect = net.Socket.prototype.connect;
@@ -131,12 +147,16 @@ net.Socket.prototype.connect = function (...args) {
 const fetch = globalThis.fetch;
 globalThis.fetch = async (input, options = {}) => {
   const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
-  if ((typeof input === 'string' || input instanceof URL) && approvedMailroomFetch(url, options)) {
-    const headers = new Headers(options.headers);
+  // Snapshot the signed body and headers once before validation and forwarding.
+  const mailroomOptions = { method: options.method, redirect: options.redirect, body: options.body,
+    headers: new Headers(options.headers), signal: options.signal };
+  if ((typeof input === 'string' || input instanceof URL) && approvedMailroomFetch(url, mailroomOptions)) {
+    const headers = mailroomOptions.headers;
     return mailroomFetchContext.run(mailroomFetchToken, () => fetch(url.href, {
-      method: 'GET', redirect: 'error', signal: options.signal,
+      method: mailroomOptions.method, redirect: 'error', signal: mailroomOptions.signal,
       headers: Object.fromEntries(['content-type', 'x-mailroom-key', 'x-mailroom-entity', 'x-mailroom-time', 'x-mailroom-signature']
         .map(key => [key, headers.get(key)])),
+      ...(mailroomOptions.method === 'POST' ? { body: mailroomOptions.body } : {}),
     }));
   }
   if ((typeof input === 'string' || input instanceof URL) && approvedWorkspaceFetch(url, options)) {

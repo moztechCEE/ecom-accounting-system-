@@ -2,6 +2,8 @@ import {
   Injectable,
   ServiceUnavailableException,
   BadGatewayException,
+  OnModuleInit,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
@@ -18,8 +20,32 @@ type Connection = {
 };
 
 @Injectable()
-export class MailroomSyncService {
+export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
   private running = false;
+  private devDeliveryTimer?: ReturnType<typeof setInterval>;
+  private devDeliveryEnabled() {
+    return (
+      process.env.ERP_DEV_SANDBOX === 'true' &&
+      process.env.RUNTIME_SCHEDULES_ENABLED === 'false' &&
+      process.env.ERP_DEV_MAILROOM_EVENTS_ENABLED === 'true' &&
+      process.env.ERP_DEV_MAILROOM_SOURCE_ENABLED === 'true' &&
+      process.env.ERP_DEV_MAILROOM_SOURCE_URL ===
+        'https://moztech-after-sales-dev-sp5g377smq-de.a.run.app' &&
+      process.env.MAILROOM_ENABLED === 'true' &&
+      process.env.MAILROOM_SYNC_ENABLED === 'true'
+    );
+  }
+  onModuleInit() {
+    if (!this.devDeliveryEnabled() || this.devDeliveryTimer) return;
+    this.devDeliveryTimer = setInterval(() => {
+      void this.deliverPending().catch(() => undefined);
+    }, 15000);
+    this.devDeliveryTimer.unref();
+  }
+  onModuleDestroy() {
+    if (this.devDeliveryTimer) clearInterval(this.devDeliveryTimer);
+    this.devDeliveryTimer = undefined;
+  }
   constructor(private readonly prisma: PrismaService) {}
   private connection(entityId: string, target: string): Connection {
     let entries: Connection[];
@@ -154,10 +180,15 @@ export class MailroomSyncService {
     if (
       this.running ||
       process.env.MAILROOM_ENABLED !== 'true' ||
-      process.env.MAILROOM_SYNC_ENABLED !== 'true'
+      process.env.MAILROOM_SYNC_ENABLED !== 'true' ||
+      (process.env.ERP_DEV_SANDBOX === 'true' && !this.devDeliveryEnabled())
     )
       return;
     this.running = true;
+    const scope =
+      process.env.ERP_DEV_SANDBOX === 'true'
+        ? Prisma.sql`AND entity_id=${'doa-dev-qa-20261002'} AND target=${'AFTER_SALES'}`
+        : Prisma.empty;
     try {
       for (let n = 0; n < 20; n++) {
         const token = randomUUID();
@@ -171,8 +202,8 @@ export class MailroomSyncService {
           }>
         >(Prisma.sql`
           UPDATE mailroom_deliveries SET status='SENDING', lease_token=${token}, lease_until=NOW()+INTERVAL '30 seconds', attempts=attempts+1
-          WHERE id=(SELECT id FROM mailroom_deliveries WHERE (status='PENDING' AND next_attempt_at<=NOW()) OR
-            (status='SENDING' AND lease_until<NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1)
+          WHERE id=(SELECT id FROM mailroom_deliveries WHERE ((status='PENDING' AND next_attempt_at<=NOW()) OR
+            (status='SENDING' AND lease_until<NOW())) ${scope} ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1)
           RETURNING id, entity_id, target, payload, attempts`);
         const row = rows[0];
         if (!row) break;
