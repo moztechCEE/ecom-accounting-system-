@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:eedca09f5de71a70385588bca2f4041c39bb7d27c9f9a9e4b1e31f24a30a6c10",
-  "reviewedBaseCommit": "e5adf5448839efb7c01d858361653e4e5841ee79",
+  "sourceVersion": "sha256:4735a269edabe1465c8945f8a49d341a429b4e97f90bc282a87e1c6ec369d671",
+  "reviewedBaseCommit": "2c2200f0c9238ced04f1b415f54f96555d1801eb",
   "entryCount": 67,
   "groups": [
     "admin",
@@ -20,7 +20,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "fe54fb87172a748d0f80003bdf1ceddf51c9c2d7e38198edf87ea1d562221063",
+  "catalogSha256": "0eb79bd48607e064ce48f198d7c81d63ae460b75e81d3387aa6af389ed7ff258",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -166,7 +166,7 @@
     },
     {
       "path": "backend/src/modules/ai/ai-copilot-access.service.ts",
-      "sha256": "2ef25c36caa13b8064990ae1411bbcd6ed5446de6b320e6c87b79545791b09f0"
+      "sha256": "5d4b076c310b7a10a14abe25bd37f575f92262b59e28e58e9ac04d06d43cfe2e"
     },
     {
       "path": "backend/src/modules/ai/ai-knowledge.service.ts",
@@ -391,6 +391,10 @@
     {
       "path": "backend/src/modules/sn-labels/sn-labels.controller.ts",
       "sha256": "9135b6f0b462cc61f1d8301069fc9924bf0747acc9603bf275032a6a99126887"
+    },
+    {
+      "path": "backend/src/modules/sn-labels/sn-labels.export.ts",
+      "sha256": "3bad67b1b5af0f6a62364dc873afa07023276dc0d1b2a6b2b2c906a6ea1b5292"
     },
     {
       "path": "backend/src/modules/users/users.controller.ts",

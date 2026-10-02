@@ -196,6 +196,7 @@ describe('Knowledge ACL and route parity', () => {
       const technician = actor(['repair_workbench:read', 'repair_workbench:update', 'profile_self:read'], ['REPAIR_TECHNICIAN']);
       process.env.MAILROOM_ENABLED = 'true';
       expect(access.canOpenPath(technician, '/dashboard')).toBe(false);
+      expect(access.canOpenPath(actor([...technician.permissions, 'payroll_self:read', 'payroll_self_breakdown:read'], ['REPAIR_TECHNICIAN']), '/dashboard')).toBe(false);
       expect(access.canOpenPath(actor([...technician.permissions, 'inventory:read']), '/dashboard')).toBe(true);
       expect(access.canOpenPath(actor(technician.permissions, ['ADMIN']), '/dashboard')).toBe(true);
       process.env.MAILROOM_ENABLED = 'false';

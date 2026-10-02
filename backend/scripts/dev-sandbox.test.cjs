@@ -290,3 +290,55 @@ test('DEV paired fetch context refuses wrong socket destination or TLS servernam
     assert.equal(calls.socket.length,1);
   `, pairedEnv);
 });
+
+const mailroomDevOrigin = 'https://moztech-after-sales-dev-sp5g377smq-de.a.run.app';
+const mailroomDevSecret = 'sandbox-mailroom-dev-key-20261002-32';
+function isolatedMailroomCase(source, patch = {}) {
+  const setup = `
+    const crypto = require('node:crypto');
+    const origin = ${JSON.stringify(mailroomDevOrigin)};
+    function signed(path) {
+      const timestamp=String(Math.floor(Date.now()/1000));
+      const signature=crypto.createHmac('sha256',${JSON.stringify(mailroomDevSecret)}).update([
+        'mailroom.v1','GET',path,timestamp,'doa-dev-qa-20261002',crypto.createHash('sha256').update('').digest('hex')
+      ].join('\\n')).digest('hex');
+      return { method:'GET',redirect:'error',headers:{'content-type':'application/json','x-mailroom-key':'dev-mailroom',
+        'x-mailroom-entity':'doa-dev-qa-20261002','x-mailroom-time':timestamp,'x-mailroom-signature':signature} };
+    }
+    const path='/api/integration/mailroom/cases?search=&awaiting=true';
+  `;
+  const result = spawnSync(process.execPath, ['-e', fakeTransportSource + setup + '(async()=>{' + source + '})().catch(e=>{console.error(e);process.exitCode=1;});'], {
+    env: { ...env, MAILROOM_ENABLED:'true', ERP_DEV_MAILROOM_SOURCE_ENABLED:'true', ERP_DEV_MAILROOM_SOURCE_URL:mailroomDevOrigin,
+      MAILROOM_CONNECTIONS:JSON.stringify([{entityId:'doa-dev-qa-20261002',target:'AFTER_SALES',baseUrl:mailroomDevOrigin,keyId:'dev-mailroom',secret:mailroomDevSecret}]), ...patch },
+  });
+  assert.equal(result.status,0,result.stderr.toString());
+}
+test('DEV mailroom permits only signed synthetic-company reads and preserves socket isolation',()=>{
+  isolatedMailroomCase(`
+    await fetch(origin+path,{...signed(path),dispatcher:{unsafe:true}});
+    const detail='/api/integration/mailroom/cases/dev-case-1';
+    await fetch(origin+detail,signed(detail));
+    assert.equal(calls.fetch.length,2);assert.equal(calls.socket.length,2);
+    assert.ok(calls.fetch.every(c=>c.options.dispatcher===undefined&&c.options.redirect==='error'));
+    assert.throws(()=>new net.Socket().connect({host:new URL(origin).hostname,port:443}),check);
+  `);
+});
+test('DEV mailroom rejects production, writes, unsigned requests, other companies and stale signatures',()=>{
+  isolatedMailroomCase(`
+    for(const url of [origin.replace('-dev','')+path,origin.replace('https:','http:')+path,
+      origin+'.evil.invalid'+path,origin+path+'&extra=yes',origin+path+'&search=duplicate',
+      origin+'/api/integration/mailroom/events',origin+path+'#fragment'])
+      await assert.rejects(fetch(url,signed(path)),check);
+    for(const patch of [{method:'POST',body:'{}'},{redirect:'follow'},{body:'{}'},
+      {headers:{...signed(path).headers,'x-mailroom-signature':'0'.repeat(64)}},
+      {headers:{...signed(path).headers,'x-mailroom-entity':'tw-entity-001'}},
+      {headers:{...signed(path).headers,'x-mailroom-time':'1000000000'}},
+      {headers:{...signed(path).headers,Host:'example.com'}}])
+      await assert.rejects(fetch(origin+path,{...signed(path),...patch}),check);
+    await assert.rejects(fetch(new Request(origin+path,signed(path))),check);
+    assert.equal(calls.fetch.length,0);assert.equal(calls.socket.length,0);
+  `);
+  for(const patch of [{ERP_DEV_MAILROOM_SOURCE_ENABLED:'false'},{MAILROOM_ENABLED:'false'},
+    {ERP_DEV_MAILROOM_SOURCE_URL:'https://moztech-after-sales-sp5g377smq-de.a.run.app'},
+    {MAILROOM_CONNECTIONS:'[]'}]) isolatedMailroomCase(`await assert.rejects(fetch(origin+path,signed(path)),check);assert.equal(calls.fetch.length,0);`,patch);
+});

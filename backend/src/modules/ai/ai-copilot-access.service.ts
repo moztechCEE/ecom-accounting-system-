@@ -263,6 +263,7 @@ export class AiCopilotAccessService {
       'repair_workbench:read', 'repair_workbench:update',
       'attendance_self:read', 'leave_self:read', 'profile_self:read',
       'expense_self:read', 'expense_self:create',
+      'payroll_self:read', 'payroll_self_breakdown:read',
     ];
     return actor.permissions.every((permission) => allowed.includes(permission));
   }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reviewedBaseCommit": "e5adf5448839efb7c01d858361653e4e5841ee79",
+  "reviewedBaseCommit": "2c2200f0c9238ced04f1b415f54f96555d1801eb",
   "locales": [
     "zh-TW",
     "en"
@@ -1440,11 +1440,11 @@
         "steps": [
           "選擇產品並填入批次資料，先檢查序號規則與標籤預覽。",
           "有庫存修改權限者將草稿儲存成正式批次，再依批次進行箱號配對與標籤下載。",
-          "核對匯出的欄位、產品、序號與箱內順序，再進行實際列印與掃描驗收。"
+          "規格箱貼紙用箱號條碼掃描箱號；有 SN 版本的 QR Code 以半形逗號分隔箱內序號。核對匯出的箱號、序號與箱內順序，再進行實際列印與掃描驗收。"
         ],
         "boundaries": [
           "瀏覽器草稿與伺服器批次分開；看到預覽不表示已建立正式序號。",
-          "請保留 SKU、序號、箱號來源關係；目前指南不代表支援任意倉庫 Excel 匯入。"
+          "規格箱貼紙不印產品國際條碼，但產品資料與匯出明細仍保留該欄位。請保留 SKU、序號、箱號來源關係；目前指南不代表支援任意倉庫 Excel 匯入。"
         ],
         "related": [
           "products",
@@ -1464,11 +1464,11 @@
             "steps": [
               "Choose the product, fill in batch data and check serial rules and label preview.",
               "With inventory-update access, save the draft as a persisted batch, then pair cartons and download labels.",
-              "Check exported fields, products, serials and carton order before physical printing and scanner acceptance."
+              "Use the carton barcode to scan the carton ID. The QR Code on the SN carton label joins the serials with ASCII commas. Check exported carton IDs, serials and their order before physical printing and scanner acceptance."
             ],
             "boundaries": [
               "Browser drafts and persisted batches are distinct; a preview is not a registered serial batch.",
-              "Preserve SKU, serial and carton links. This guide does not imply arbitrary warehouse Excel import support."
+              "The carton label omits the product barcode, while product data and detailed exports still retain it. Preserve SKU, serial and carton links. This guide does not imply arbitrary warehouse Excel import support."
             ],
             "related": [
               "products",
@@ -1481,7 +1481,8 @@
         "frontend/src/config/navigation.ts",
         "frontend/src/App.tsx",
         "frontend/src/pages/SnLabelsPage.tsx",
-        "backend/src/modules/sn-labels/sn-labels.controller.ts"
+        "backend/src/modules/sn-labels/sn-labels.controller.ts",
+        "backend/src/modules/sn-labels/sn-labels.export.ts"
       ],
       "permissions": [
         "inventory:read"
