@@ -115,7 +115,9 @@ def source_options(enabled=False, url=None, secret=None, version=None, events_en
     require(not enabled or (url and secret and version), 'Source enabling needs confirmed DEV origin and pinned DEV connection reference')
     require(enabled or not url, 'Source URL is only accepted with explicit source enabling')
     require(not events_enabled or enabled, 'DEV event delivery requires source enabling')
-    return {'enabled': bool(enabled), 'url': source_origin(url) if enabled else None,
+    origin = source_origin(url) if enabled else None
+    require(not events_enabled or origin == 'https://' + SOURCE_HOST, 'DEV event delivery requires the canonical after-sales DEV origin')
+    return {'enabled': bool(enabled), 'url': origin,
             'secret': secret, 'version': version, 'eventsEnabled': events_enabled}
 
 
@@ -140,6 +142,8 @@ def guards(value):
         if events == 'true':
             require(sync == 'true' and env.get('ERP_DEV_MAILROOM_SOURCE_ENABLED', {}).get('value') == 'true',
                     'DEV event delivery requires the paired DEV source and sync switches')
+            require(env.get('ERP_DEV_MAILROOM_SOURCE_URL', {}).get('value') == 'https://' + SOURCE_HOST,
+                    'DEV event delivery requires the canonical after-sales DEV origin')
             require(value['spec']['template'].get('metadata', {}).get('annotations', {}).get('run.googleapis.com/cpu-throttling') == 'false',
                     'DEV event delivery requires CPU allocation between requests')
         else:

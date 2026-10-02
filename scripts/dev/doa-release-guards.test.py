@@ -273,6 +273,18 @@ class GuardsTest(unittest.TestCase):
         _, web = deploy.planned_spec('candidate-web', st, self.live)
         self.assertEqual(web['spec']['template']['metadata']['annotations'], self.live[r.WEB]['spec']['template']['metadata']['annotations'])
 
+    def test_events_reject_tagged_origin_while_source_read_can_use_it(self):
+        tagged = 'https://qa-01---' + r.SOURCE_HOST
+        self.assertEqual(r.source_options(True, tagged, r.CONNECTION_SECRET, '1')['url'], tagged)
+        with self.assertRaisesRegex(RuntimeError, 'canonical after-sales DEV origin'):
+            r.source_options(True, tagged, r.CONNECTION_SECRET, '1', True)
+        st = state(self.live)
+        st['sourceOptions'] = r.source_options(True, 'https://' + r.SOURCE_HOST, r.CONNECTION_SECRET, '1', True)
+        _, spec = deploy.planned_spec('candidate-api', st, self.live)
+        r.set_env(spec, 'ERP_DEV_MAILROOM_SOURCE_URL', tagged)
+        with self.assertRaisesRegex(RuntimeError, 'canonical after-sales DEV origin'):
+            r.guards(spec)
+
     def test_event_delivery_guard_rejects_missing_pairing_and_global_switches(self):
         st = state(self.live)
         st['sourceOptions'] = r.source_options(True, 'https://' + r.SOURCE_HOST, r.CONNECTION_SECRET, '1', True)
