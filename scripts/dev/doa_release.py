@@ -1,8 +1,8 @@
 """DOA DEV release guards. Only allowlisted cloud metadata reads exist here.
 
-API and web can have different serving source/builds. A reviewed, tagged web
-preview may remain the template while an older revision still serves traffic.
-Build overlays use that current template's immutable image and retain all tags.
+API and web can have different serving source/builds. A tagged web preview may
+remain the template while an older revision still serves traffic. Build overlays
+use the proven serving image; current template configuration and tags are retained.
 Configuration snapshots remain private; no secret payload is accessed or printed.
 """
 import re
@@ -158,7 +158,7 @@ def build_images(build, source):
 def capture_baseline(evidence):
     require(set(evidence) == set(DEV), 'Need independent API and web source/build evidence')
     live = snapshot_all()
-    serving_images, images, revisions, templates = {}, {}, {}, {}
+    serving_images, images, template_images, revisions, templates = {}, {}, {}, {}, {}
     for name in DEV:
         value = live[name]
         guards(value)
@@ -180,11 +180,12 @@ def capture_baseline(evidence):
         if latest != current[0][0]:
             require(any(row.get('tag') and row.get('revisionName') == latest and not row.get('percent', 0)
                         for row in value['spec'].get('traffic', [])), 'Existing template candidate must have an explicit preserved zero-traffic tag')
-        serving_images[name], images[name], revisions[name], templates[name] = proven, base_image, serving, template
+        serving_images[name], images[name] = proven, proven
+        template_images[name], revisions[name], templates[name] = base_image, serving, template
     return {'capturedAt': timestamp(), 'servingEvidence': evidence,
             'sourceEvidence': 'per-service-successful-build-source-tags-and-serving-digests',
             'services': live, 'activeRevisions': revisions, 'templateRevisions': templates,
-            'servingImages': serving_images, 'images': images}
+            'servingImages': serving_images, 'images': images, 'templateImages': template_images}
 
 
 def verify_context(context):

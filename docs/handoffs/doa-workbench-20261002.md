@@ -71,3 +71,13 @@ REPAIR_LOCAL_TEST=true node scripts/repair-preview.mjs
 ```
 
 後續先整合其他已核准 DEV 變更，再發布隔離 DEV candidate，驗證真實帳號、來源對應及受影響流程；完成 DEV 驗收後才進正式。不得把這次本機合成測試直接當作串接、庫存、款項或實物營運驗收。
+
+## 2026-10-02 DEV 發布準備
+
+使用者另行授權 DEV 發布及收發室視窗協調。已保留收發室凍結來源 `cbd9c3b9`，並合併目前接流量的 DEV API 來源 `9f00b55f`（SN 箱貼）、Web 來源 `870e3b18`。未知的零流量 template 僅保留設定／標籤，建置基底使用已確認來源與成功 build 的 serving digest，避免將未證明 runtime 當成發布基底。
+
+新增固定 DEV 的 scoped migration 工具與候選發布工具，套用範圍只有四項 mailroom／DOA migrations；DB 檢查確認其餘 migrations 已套用，僅保留已知歷史 checksum 例外。SQL 與 ledger 同交易，既有員工角色／權限關聯不變；不跑全庫 migrate deploy 或 seed。
+
+ERP sandbox 保持開啟、全域排程及外部 outbox 關閉。唯一新增連線是固定售後 DEV 的 HMAC GET cases：只讀 `doa-dev-qa-20261002` 合成公司，禁止正式 hostname、其他公司、事件 POST、任意 transport／redirect／socket。配對 DEV secrets 只取固定 version 1；金鑰不進 repo、指南或建置 archive。三個正常 JWT 帳號及員工將供隔離核對，並非本機 bearer fixture。
+
+發布候選／實際 DEV revisions、digest、四項 migration 與線上驗證另記正式發布收據。此段為發布前準備，尚不能當成 DEV 已完成或跨系統營運驗收。

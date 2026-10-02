@@ -136,7 +136,9 @@ class GuardsTest(unittest.TestCase):
         baseline = self.baseline()
         self.assertEqual(baseline['servingEvidence'], EVIDENCE)
         self.assertEqual(baseline['servingImages'][r.WEB], image(r.WEB))
-        self.assertEqual(baseline['images'][r.WEB], image(r.WEB, template=True))
+        self.assertEqual(baseline['images'], baseline['servingImages'])
+        self.assertEqual(baseline['templateImages'][r.WEB], image(r.WEB, template=True))
+        self.assertNotEqual(baseline['images'][r.WEB], baseline['templateImages'][r.WEB])
         self.assertEqual(r.tags(baseline['services'][r.WEB])['b2b-preview'], r.WEB + '-b2b-preview')
         self.assertEqual(set(baseline['services']), set(r.DEV + r.PROTECTED))
 
@@ -319,6 +321,37 @@ class GuardsTest(unittest.TestCase):
         (context / 'frontend/server.mjs').write_text('changed runtime\n')
         with self.assertRaisesRegex(RuntimeError, 'context changed'):
             r.verify_context(context)
+
+    def test_prepared_overlay_copies_both_reviewed_runtime_files_and_excludes_private_manifest_upload(self):
+        source_root = self.directory / 'source'
+        for relative, content in (
+            ('backend/dist/app.js', 'compiled backend'), ('frontend/dist/index.html', 'compiled frontend'),
+            ('backend/prisma/schema.prisma', 'reviewed schema'),
+            ('backend/scripts/dev-sandbox.cjs', 'reviewed DEV guard'), ('frontend/server.mjs', 'reviewed runtime config'),
+        ):
+            path = source_root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        baseline = self.baseline()
+        context = self.directory / 'prepared'
+        with patch.object(r, 'ROOT', source_root), patch.object(r, 'clean_source', return_value=SOURCE), patch.object(r, 'verify_source'), \
+             patch.object(r, 'capture_baseline', return_value=baseline), patch.object(r, 'snapshot_all', return_value=self.live), \
+             patch.object(subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as process:
+            _, manifest = build.prepare(context, EVIDENCE)
+        self.assertEqual(len(process.call_args_list), 5)
+        self.assertTrue(all('gcloud' not in call.args[0] for call in process.call_args_list))
+        self.assertIn('manifest.json', (context / '.gcloudignore').read_text().splitlines())
+        self.assertIn('.gcloudignore', manifest['filesSha256'])
+        self.assertNotIn('manifest.json', manifest['filesSha256'])
+        self.assertEqual((context / 'frontend/server.mjs').read_text(), 'reviewed runtime config')
+        self.assertEqual((context / 'frontend/Dockerfile').read_text().splitlines()[0], 'FROM ' + image(r.WEB))
+        self.assertNotIn(image(r.WEB, template=True), (context / 'frontend/Dockerfile').read_text())
+        self.assertEqual(manifest['baseline']['templateImages'][r.WEB], image(r.WEB, template=True))
+        self.assertEqual((context / 'backend/Dockerfile').read_text().splitlines()[0], 'FROM ' + image(r.API))
+        self.assertIn('COPY server.mjs /app/server.mjs', (context / 'frontend/Dockerfile').read_text())
+        self.assertIn('WORKDIR /app', (context / 'frontend/Dockerfile').read_text())
+        self.assertIn('COPY dev-sandbox.cjs /app/scripts/dev-sandbox.cjs', (context / 'backend/Dockerfile').read_text())
+        self.assertEqual(set(manifest['reviewedRuntimeFiles']), set(r.REVIEWED_RUNTIME_FILES))
 
     def acceptance(self, st):
         return {'version': 1, 'sourceSha': SOURCE, 'buildId': BUILD_ID, 'images': st['images'],
