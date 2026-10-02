@@ -107,14 +107,16 @@ def source_origin(value):
     return 'https://' + host
 
 
-def source_options(enabled=False, url=None, secret=None, version=None):
+def source_options(enabled=False, url=None, secret=None, version=None, events_enabled=False):
+    require(isinstance(enabled, bool) and isinstance(events_enabled, bool), 'Source release switches must be booleans')
     require(not secret or secret == CONNECTION_SECRET, 'Only the fixed DEV connection secret is allowed')
     require(not version or version == CONNECTION_VERSION, 'Only reviewed fixed secret version 1 is allowed')
     require(bool(secret) == bool(version), 'Connection secret and pinned version must be supplied together')
     require(not enabled or (url and secret and version), 'Source enabling needs confirmed DEV origin and pinned DEV connection reference')
     require(enabled or not url, 'Source URL is only accepted with explicit source enabling')
+    require(not events_enabled or enabled, 'DEV event delivery requires source enabling')
     return {'enabled': bool(enabled), 'url': source_origin(url) if enabled else None,
-            'secret': secret, 'version': version}
+            'secret': secret, 'version': version, 'eventsEnabled': events_enabled}
 
 
 def guards(value):
@@ -132,7 +134,16 @@ def guards(value):
     require(value['spec']['template']['spec'].get('serviceAccountName') ==
             account + '@' + PROJECT + '.iam.gserviceaccount.com', 'Unexpected DEV service account')
     if name == API:
-        require(env.get('MAILROOM_SYNC_ENABLED', {}).get('value', 'false') == 'false', 'External mailroom event delivery must remain disabled')
+        events = env.get('ERP_DEV_MAILROOM_EVENTS_ENABLED', {}).get('value', 'false')
+        sync = env.get('MAILROOM_SYNC_ENABLED', {}).get('value', 'false')
+        require(events in ('true', 'false') and sync in ('true', 'false'), 'Mailroom delivery switches must be explicit booleans')
+        if events == 'true':
+            require(sync == 'true' and env.get('ERP_DEV_MAILROOM_SOURCE_ENABLED', {}).get('value') == 'true',
+                    'DEV event delivery requires the paired DEV source and sync switches')
+            require(value['spec']['template'].get('metadata', {}).get('annotations', {}).get('run.googleapis.com/cpu-throttling') == 'false',
+                    'DEV event delivery requires CPU allocation between requests')
+        else:
+            require(sync == 'false', 'External mailroom event delivery must remain disabled')
         for key in ('MAILROOM_CONNECTIONS', 'MAILROOM_READERS'):
             if key in env:
                 require(env[key].get('valueFrom', {}).get('secretKeyRef') ==

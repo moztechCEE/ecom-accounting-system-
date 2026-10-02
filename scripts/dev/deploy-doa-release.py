@@ -5,6 +5,7 @@
     --build-id UUID --migration-receipt /tmp/migrations.json
     [--mailroom-source-enabled --mailroom-source-url FIXED_DEV_ORIGIN
      --mailroom-connections-secret corely-mailroom-dev-connections --mailroom-connections-version 1]
+    [--mailroom-events-enabled]
   check-phase --phase candidate-api --state-dir /tmp/erp-doa-release
   record-phase --phase candidate-api --state-dir /tmp/erp-doa-release
 
@@ -21,7 +22,8 @@ Promotion requires --acceptance-receipt PATH on check-phase, a private JSON
 record binding sourceSha, buildId, images, candidateRevisions, validatedAt and
 checks {authentication, permissions, affectedWorkflows, visibleUi}: all true.
 Functional acceptance is performed by a person/test harness, never inferred by
-this helper. DOA, SN and preserved web previews require their own checks. Enabled source reading also needs checks.doaSourceRead=true.
+this helper. DOA, SN and preserved web previews require their own checks. Enabled
+source reading needs checks.doaSourceRead=true; event delivery needs doaSourceWrite=true.
 Final-web uses stable API; candidate-web is isolated to the tagged candidate API.
 Original tags, runtime configuration and 100% old traffic remain until promotion.
 """
@@ -91,7 +93,7 @@ def initialize(args, directory):
     state = {'version': 1, 'project': release.PROJECT, 'region': release.REGION,
              'createdAt': release.timestamp(), 'sourceSha': source, 'buildId': args.build_id,
              'context': str(context), 'manifestSha256': release.digest_file(context / 'manifest.json'),
-             'images': images, 'migrationReceipt': receipt, 'sourceOptions': release.source_options(args.mailroom_source_enabled, args.mailroom_source_url, args.mailroom_connections_secret, args.mailroom_connections_version),
+             'images': images, 'migrationReceipt': receipt, 'sourceOptions': release.source_options(args.mailroom_source_enabled, args.mailroom_source_url, args.mailroom_connections_secret, args.mailroom_connections_version, args.mailroom_events_enabled),
              'baseline': live, 'expected': live, 'completed': [],
              'rollbackRevisions': {s: release.active(live[s])[0][0] for s in release.DEV},
              'tags': {'candidate': candidate_tag, 'final': final_tag},
@@ -120,8 +122,21 @@ def initialize(args, directory):
             'wmsIntegrationChanged': False, 'cloudMutationExecuted': False}
 
 
+def assert_runtime_preserved(before, after, name, events_enabled):
+    old, new = copy.deepcopy(before['spec']['template']), copy.deepcopy(after['spec']['template'])
+    for template in (old, new):
+        template.setdefault('metadata', {}).pop('name', None)
+        template['spec']['containers'][0].pop('image', None)
+        template['spec']['containers'][0].pop('env', None)
+    if name == release.API and events_enabled:
+        old['metadata'].setdefault('annotations', {})['run.googleapis.com/cpu-throttling'] = 'false'
+    release.require(old == new, 'Unrelated template runtime configuration changed')
+
+
 def planned_spec(phase, state, live):
     release.require(phase in PHASES, 'Unknown release phase')
+    options = state['sourceOptions']
+    release.require(options == release.source_options(options['enabled'], options['url'], options['secret'], options['version'], options['eventsEnabled']), 'Invalid source release options')
     name = release.API if phase in ('candidate-api', 'promote-api') else release.WEB
     result = release.portable(live[name])
     if phase.startswith('promote-'):
@@ -140,11 +155,12 @@ def planned_spec(phase, state, live):
                 if origin not in origins:
                     origins.append(origin)
             release.set_env(result, 'CORS_ORIGIN', ','.join(origins))
-            options = state['sourceOptions']
-            release.require(options == release.source_options(options['enabled'], options['url'], options['secret'], options['version']), 'Invalid source release options')
             release.set_env(result, 'MAILROOM_ENABLED', 'true')
-            release.set_env(result, 'MAILROOM_SYNC_ENABLED', 'false')
+            release.set_env(result, 'MAILROOM_SYNC_ENABLED', 'true' if options['eventsEnabled'] else 'false')
+            release.set_env(result, 'ERP_DEV_MAILROOM_EVENTS_ENABLED', 'true' if options['eventsEnabled'] else 'false')
             release.set_env(result, 'ERP_DEV_MAILROOM_SOURCE_ENABLED', 'true' if options['enabled'] else 'false')
+            if options['eventsEnabled']:
+                result['spec']['template']['metadata'].setdefault('annotations', {})['run.googleapis.com/cpu-throttling'] = 'false'
             if options['enabled']:
                 release.set_env(result, 'ERP_DEV_MAILROOM_SOURCE_URL', options['url'])
             if options['secret']:
@@ -166,10 +182,11 @@ def planned_spec(phase, state, live):
     release.require(sum(i.get('percent', 0) for i in result['spec']['traffic']) == 100, 'Traffic must total 100%')
     for tag, revision in release.tags(live[name]).items():
         release.require(release.tags(result).get(tag) == revision, 'Existing traffic tag changed')
-    allowed = ({'CORS_ORIGIN', 'MAILROOM_ENABLED', 'MAILROOM_SYNC_ENABLED', 'ERP_DEV_MAILROOM_SOURCE_ENABLED', 'ERP_DEV_MAILROOM_SOURCE_URL', 'MAILROOM_CONNECTIONS', 'MAILROOM_READERS'} if name == release.API else {'API_URL', 'WS_URL', 'MAILROOM_ENABLED'})
+    allowed = ({'CORS_ORIGIN', 'MAILROOM_ENABLED', 'MAILROOM_SYNC_ENABLED', 'ERP_DEV_MAILROOM_SOURCE_ENABLED', 'ERP_DEV_MAILROOM_SOURCE_URL', 'ERP_DEV_MAILROOM_EVENTS_ENABLED', 'MAILROOM_CONNECTIONS', 'MAILROOM_READERS'} if name == release.API else {'API_URL', 'WS_URL', 'MAILROOM_ENABLED'})
     old_env, new_env = release.env_map(live[name]), release.env_map(result)
     for key in set(old_env) | set(new_env):
         release.require(key in allowed or new_env.get(key) == old_env.get(key), 'Unrelated environment changed: ' + key)
+    assert_runtime_preserved(live[name], result, name, options['eventsEnabled'])
     return name, result
 
 
@@ -185,6 +202,8 @@ def acceptance_receipt(path, state):
     checks += ('doaWorkbench', 'snLabels', 'existingWebPreviewPreserved')
     if state['sourceOptions']['enabled']:
         checks += ('doaSourceRead',)
+    if state['sourceOptions']['eventsEnabled']:
+        checks += ('doaSourceWrite',)
     release.require(all(value.get('checks', {}).get(key) is True for key in checks), 'Functional acceptance is incomplete')
     final = next(p for p in state['completed'] if p['phase'] == 'final-web')
     release.require(validated >= release.parse_time(final['observedAt']), 'Acceptance predates final candidate deployment')
@@ -285,6 +304,7 @@ def main():
     parser.add_argument('--build-id')
     parser.add_argument('--migration-receipt', type=Path)
     parser.add_argument('--mailroom-source-enabled', action='store_true')
+    parser.add_argument('--mailroom-events-enabled', action='store_true')
     parser.add_argument('--mailroom-source-url')
     parser.add_argument('--mailroom-connections-secret', choices=(release.CONNECTION_SECRET,))
     parser.add_argument('--mailroom-connections-version', choices=(release.CONNECTION_VERSION,))
@@ -292,7 +312,7 @@ def main():
     parser.add_argument('--acceptance-receipt', type=Path)
     args = parser.parse_args()
     release.require((args.mode in ('check-phase', 'record-phase')) == bool(args.phase), 'Phase argument mismatch')
-    release.require(args.mode == 'init' or not (args.context_dir or args.build_id or args.migration_receipt or args.mailroom_source_enabled or args.mailroom_source_url or args.mailroom_connections_secret or args.mailroom_connections_version),
+    release.require(args.mode == 'init' or not (args.context_dir or args.build_id or args.migration_receipt or args.mailroom_source_enabled or args.mailroom_source_url or args.mailroom_events_enabled or args.mailroom_connections_secret or args.mailroom_connections_version),
                     'Build/migration/B2B arguments are for init only')
     release.require(not args.acceptance_receipt or (args.mode == 'check-phase' and args.phase.startswith('promote-')),
                     'Acceptance argument is for promotion preflight only')

@@ -237,6 +237,7 @@ class GuardsTest(unittest.TestCase):
         self.assertEqual(r.env_map(spec)['WMS_WORKSPACE_READ_ENABLED']['value'], 'true')
         self.assertEqual(r.env_map(spec)['MAILROOM_ENABLED']['value'], 'true')
         self.assertEqual(r.env_map(spec)['MAILROOM_SYNC_ENABLED']['value'], 'false')
+        self.assertEqual(r.env_map(spec)['ERP_DEV_MAILROOM_EVENTS_ENABLED']['value'], 'false')
         self.assertEqual(r.env_map(spec)['ERP_DEV_MAILROOM_SOURCE_ENABLED']['value'], 'false')
         self.assertEqual(spec['spec']['traffic'][:-1], self.live[r.API]['spec']['traffic'])
         self.assertNotIn('percent', spec['spec']['traffic'][-1])
@@ -253,6 +254,61 @@ class GuardsTest(unittest.TestCase):
         r.env_map(spec)['MAILROOM_READERS']['valueFrom']['secretKeyRef']['name'] = 'production-secret'
         with self.assertRaises(RuntimeError):
             r.guards(spec)
+
+    def test_events_require_source_and_only_change_dev_api_cpu_annotation(self):
+        with self.assertRaisesRegex(RuntimeError, 'requires source enabling'):
+            r.source_options(events_enabled=True)
+        st = state(self.live)
+        st['sourceOptions'] = r.source_options(True, 'https://' + r.SOURCE_HOST, r.CONNECTION_SECRET, '1', True)
+        annotations = self.live[r.API]['spec']['template']['metadata']['annotations']
+        annotations['autoscaling.knative.dev/minScale'] = '0'
+        annotations['run.googleapis.com/cpu-throttling'] = 'true'
+        _, spec = deploy.planned_spec('candidate-api', st, self.live)
+        self.assertEqual(r.env_map(spec)['ERP_DEV_MAILROOM_EVENTS_ENABLED']['value'], 'true')
+        self.assertEqual(r.env_map(spec)['MAILROOM_SYNC_ENABLED']['value'], 'true')
+        self.assertEqual(r.env_map(spec)['RUNTIME_SCHEDULES_ENABLED']['value'], 'false')
+        self.assertEqual(spec['spec']['template']['metadata']['annotations'],
+                         {**annotations, 'run.googleapis.com/cpu-throttling': 'false'})
+        r.guards(spec)
+        _, web = deploy.planned_spec('candidate-web', st, self.live)
+        self.assertEqual(web['spec']['template']['metadata']['annotations'], self.live[r.WEB]['spec']['template']['metadata']['annotations'])
+
+    def test_event_delivery_guard_rejects_missing_pairing_and_global_switches(self):
+        st = state(self.live)
+        st['sourceOptions'] = r.source_options(True, 'https://' + r.SOURCE_HOST, r.CONNECTION_SECRET, '1', True)
+        _, valid = deploy.planned_spec('candidate-api', st, self.live)
+        for key, value in [('ERP_DEV_SANDBOX', 'false'), ('MAILROOM_ENABLED', 'false'), ('ERP_DEV_MAILROOM_SOURCE_ENABLED', 'false'),
+                           ('MAILROOM_SYNC_ENABLED', 'false'), ('RUNTIME_SCHEDULES_ENABLED', 'true'),
+                           ('ERP_DEV_MAILROOM_SOURCE_URL', 'https://production.run.app')]:
+            spec = copy.deepcopy(valid)
+            r.set_env(spec, key, value)
+            with self.assertRaises(RuntimeError):
+                r.guards(spec)
+        spec = copy.deepcopy(valid)
+        spec['spec']['template']['metadata']['annotations']['run.googleapis.com/cpu-throttling'] = 'true'
+        with self.assertRaisesRegex(RuntimeError, 'CPU allocation'):
+            r.guards(spec)
+        spec = copy.deepcopy(valid)
+        r.env_map(spec)['MAILROOM_CONNECTIONS']['valueFrom']['secretKeyRef']['key'] = 'latest'
+        with self.assertRaises(RuntimeError):
+            r.guards(spec)
+
+    def test_only_event_enabled_api_cpu_change_is_allowed_in_runtime(self):
+        st = state(self.live)
+        st['sourceOptions'] = r.source_options(True, 'https://' + r.SOURCE_HOST, r.CONNECTION_SECRET, '1', True)
+        _, valid = deploy.planned_spec('candidate-api', st, self.live)
+        for mutate in (
+            lambda template: template['metadata']['annotations'].update({'autoscaling.knative.dev/minScale': '1'}),
+            lambda template: template['metadata']['annotations'].update({'run.googleapis.com/cloudsql-instances': 'different'}),
+            lambda template: template['spec'].update(containerConcurrency=80),
+            lambda template: template['spec']['containers'][0]['resources']['limits'].update(memory='2Gi'),
+        ):
+            spec = copy.deepcopy(valid)
+            mutate(spec['spec']['template'])
+            with self.assertRaisesRegex(RuntimeError, 'Unrelated template runtime'):
+                deploy.assert_runtime_preserved(self.live[r.API], spec, r.API, True)
+        with self.assertRaisesRegex(RuntimeError, 'Unrelated template runtime'):
+            deploy.assert_runtime_preserved(self.live[r.API], valid, r.API, False)
 
     def test_web_candidates_keep_b2b_preview_and_use_candidate_then_stable_api(self):
         st = state(self.live)
@@ -423,6 +479,20 @@ class GuardsTest(unittest.TestCase):
         r.private_json(path, self.acceptance(st))
         with self.assertRaisesRegex(RuntimeError, 'incomplete'):
             deploy.acceptance_receipt(path, st)
+
+    def test_event_promotion_requires_separate_source_write_acceptance(self):
+        st = state(self.live)
+        st['sourceOptions'] = r.source_options(True, 'https://' + r.SOURCE_HOST, r.CONNECTION_SECRET, '1', True)
+        st['completed'] = [{'phase': 'final-web', 'observedAt': NOW}]
+        path = self.directory / 'write-acceptance.json'
+        value = self.acceptance(st)
+        value['checks']['doaSourceRead'] = True
+        r.private_json(path, value)
+        with self.assertRaisesRegex(RuntimeError, 'incomplete'):
+            deploy.acceptance_receipt(path, st)
+        value['checks']['doaSourceWrite'] = True
+        r.private_json(path, value)
+        deploy.acceptance_receipt(path, st)
 
     def test_complete_plan_observation_preserves_protected_services_and_b2b_tag(self):
         st = state(self.live)
