@@ -9,6 +9,7 @@ declare global {
       defaultEntityId?: string
       b2bPublicOrderEnabled?: boolean
       wsUrl?: string
+      mailroomEnabled?: boolean
       stagedOperationsEnabled?: boolean
       wmsPortalUrl?: string
       devEnvironment?: boolean

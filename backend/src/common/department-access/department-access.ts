@@ -13,6 +13,7 @@ const PERSONAL = ['attendance_self:read', 'leave_self:read', 'profile_self:read'
 // system-wide audit access. Those remain explicit individual role assignments.
 const OPERATIONAL_RESOURCES = new Set([
   'attendance_self','leave_self','profile_self','expense_self',
+  'mailroom','repair_workbench',
   'inventory','sales_orders','wms_tasks','wms_picking','wms_packing',
   'wms_orders','wms_overview','wms_exceptions','wms_scan_errors','wms_defects',
 ]);
@@ -26,7 +27,7 @@ export function departmentAccess(employee?: EmployeeAccess | null) {
   const roles = [department.memberRole, ...(isSupervisor ? [department.supervisorRole] : [])]
     .filter(role => role && !['ADMIN','SUPER_ADMIN'].includes(role.code) && !['ADMIN','SUPER_ADMIN'].includes(role.name));
   const permissions = roles.flatMap(role => role!.permissions
-    .filter(({ permission }) => OPERATIONAL_RESOURCES.has(permission.resource))
+    .filter(({ permission }) => OPERATIONAL_RESOURCES.has(permission.resource) && !(permission.resource === 'mailroom' && permission.action === 'review'))
     .map(({ permission }) => `${permission.resource}:${permission.action}`));
   return {
     permissions: [...new Set([...PERSONAL, ...permissions, ...(isSupervisor ? ['attendance_team:read','attendance_team:review'] : [])])],

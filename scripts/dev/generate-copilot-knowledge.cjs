@@ -154,7 +154,7 @@ function build() {
   }
   const missing = routeInfo.requiredRoutes.filter((route) => !covered.has(route));
   assert.deepEqual(missing, [], `Routes without a guide: ${missing.join(', ')}`);
-  const expectedGroups = ['dashboard','sales','service','warehouse','inventory','finance','people','admin','profile'].sort();
+  const expectedGroups = ['dashboard','sales','service','warehouse','inventory','finance','people','admin','profile','mailroom'].sort();
   assert.deepEqual([...new Set(entries.map((entry) => entry.group))].sort(), expectedGroups, 'Navigation group coverage incomplete');
   const sortedSources = [...sources].sort(([a],[b]) => a.localeCompare(b)).map(([sourcePath, digest]) => ({ path: sourcePath, sha256: digest }));
   const catalogSha256 = sha(sourceText), legacySha256 = sha(legacyText);

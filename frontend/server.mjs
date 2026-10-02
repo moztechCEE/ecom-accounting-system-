@@ -70,6 +70,7 @@ const server = http.createServer(async (req, res) => {
         wsUrl,
         defaultEntityId,
         b2bPublicOrderEnabled: process.env.B2B_PUBLIC_ORDER_ENABLED === 'true',
+        mailroomEnabled: process.env.MAILROOM_ENABLED === 'true',
         stagedOperationsEnabled: process.env.STAGED_OPERATIONS_ENABLED === 'true',
         devEnvironment: process.env.ERP_DEV_ENVIRONMENT === 'true',
         dataSnapshotDate: process.env.ERP_DEV_SNAPSHOT_DATE || '',

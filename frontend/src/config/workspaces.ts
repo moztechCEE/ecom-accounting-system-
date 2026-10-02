@@ -13,7 +13,7 @@ export const WAREHOUSE_REPORTS = [
   { key: 'scan-errors', label: '刷錯分析', permission: 'wms_scan_errors:read' },
   { key: 'defects', label: '新品不良分析', permission: 'wms_defects:read' },
 ] as const
-export const PERSONAL_PATHS = ['/attendance/dashboard', '/attendance/leaves', '/ap/expenses', '/profile']
+export const PERSONAL_PATHS = ['/my/inbox', '/attendance/dashboard', '/attendance/leaves', '/ap/expenses', '/profile']
 export const isWarehousePath = (pathname: string) => pathname === '/warehouse' || pathname.startsWith('/warehouse/')
 export function hasWarehouseManagementAccess(user: User | null | undefined) {
   return hasPermission(user, 'wms_tasks:read') &&

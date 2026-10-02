@@ -1,3 +1,4 @@
+import InboxShortcut from '../pages/mailroom/InboxShortcut'
 import React, { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Avatar, Button, Drawer, Dropdown, Grid, Input, Menu, Select } from 'antd'
@@ -125,6 +126,7 @@ export default function DashboardLayout() {
         </div>
         <div className="operations-header-actions">
           <ClawHelpButton>這頁怎麼用</ClawHelpButton>
+          <InboxShortcut />
           <NotificationCenter />
           <Dropdown trigger={['click']} menu={{ items: [
             { key: 'profile', label: '個人資料', icon: <UserOutlined />, onClick: () => navigate('/profile') },

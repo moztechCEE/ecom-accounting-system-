@@ -1,3 +1,4 @@
+import { mailroomEnabled } from '../pages/mailroom/model'
 import type { User } from '../types'
 import { hasAnyPermission, isAdminUser } from '../utils/access'
 import { PERSONAL_PATHS, warehouseOnlyUser, hasWarehouseManagementAccess, WAREHOUSE_REPORTS } from './workspaces'
@@ -6,6 +7,11 @@ import { wmsPortalLinks, wmsPortalOrigin } from './wms-portal'
 
 export type NavigationItem = { key: string; label: string; externalUrl?: string; workRole?: 'dispatcher'; permissions?: string[]; adminOnly?: boolean; superAdminOnly?: boolean; children?: NavigationItem[] }
 export const NAVIGATION: NavigationItem[] = [
+  { key: '/my/inbox', label: '我的待辦與收件' },
+  { key: 'mailroom', label: '收件與維修', children: [
+    { key: '/operations/mailroom', label: '收發室工作台', permissions: ['mailroom:read'] },
+    { key: '/operations/repair', label: '維修工作台', permissions: ['repair_workbench:read'] },
+  ] },
   { key: '/dashboard', label: '營運總覽' },
   { key: 'sales', label: '訂單銷售', children: [
     { key: '/sales/orders', label: '銷售訂單', permissions: ['sales_orders:read'] },
@@ -73,6 +79,7 @@ export const NAVIGATION: NavigationItem[] = [
 ]
 export function visibleNavigation(user: User | null | undefined, items = NAVIGATION, staged = stagedOperationsEnabled()): NavigationItem[] {
   return items.flatMap<NavigationItem>((original) => {
+    if (!mailroomEnabled() && ['mailroom','/my/inbox'].includes(original.key)) return []
     if (wmsPortalOrigin()) {
       const portal = wmsPortalLinks(user)
       if (original.key === 'warehouse') {

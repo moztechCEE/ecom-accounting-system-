@@ -1,13 +1,14 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:fd9fa764283593b510c46f25d3ba839de51efab1cd76b5683328909e31e5c265",
+  "sourceVersion": "sha256:8d7113693e5ba6080f56fd9e449ca4709ddf74eb2b77a9f673998424052b06e4",
   "reviewedBaseCommit": "38a34b3a5faacf003820f56baed5c32039c1fc38",
-  "entryCount": 64,
+  "entryCount": 67,
   "groups": [
     "admin",
     "dashboard",
     "finance",
     "inventory",
+    "mailroom",
     "people",
     "profile",
     "sales",
@@ -18,7 +19,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "ea3e650ddefdc4cb77d7bd18a51f712533da89702db38091234755b8bc83d098",
+  "catalogSha256": "eee298c426c8ef36b7a4b188fe17c39bdda44eed635997b1dd32c5cf80cac041",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -53,6 +54,9 @@
       "/inventory/sn-labels",
       "/login",
       "/manufacturing/assembly",
+      "/my/inbox",
+      "/operations/mailroom",
+      "/operations/repair",
       "/payroll/employees",
       "/payroll/runs",
       "/performance/reviews",
@@ -136,7 +140,7 @@
     },
     {
       "path": "backend/src/common/department-access/department-access.ts",
-      "sha256": "68dcc1692ab3c45472aba6d9753829a6d3e830dc9bf981d0595f017bbf306984"
+      "sha256": "c0b9cd1f3672eb0457972a97de404fbb441e482fc5b167bd9bfe2d48bf365dc4"
     },
     {
       "path": "backend/src/common/guards/jwt-auth.guard.ts",
@@ -255,6 +259,30 @@
       "sha256": "3f751e5deee28cf0f3a86360b7e3532a5cb5ec8c4a2b3e84b3b76081466077a2"
     },
     {
+      "path": "backend/src/modules/mailroom/mailroom-tablet.controller.ts",
+      "sha256": "b61f142f408508034c450397565bc2c71425871f45ed0d8e7e3105d73ca2c21c"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-tablet.service.ts",
+      "sha256": "dc0db379192a50695b96a17ad57f178054b3ab93ef19fdd8202be74985ba12a7"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom.contract.ts",
+      "sha256": "e94258a1c1bf012386f5624a2c630c0a007470e66ca0357081f6719fe5dadff7"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom.controller.ts",
+      "sha256": "74a391ad5810390a07761dcb6808f6eb672245fddb94b962c460967f86fb3547"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom.dto.ts",
+      "sha256": "1aea19db6a5b13cc801cb46f6bc797f9686a8ecab926939f3f38e58ae484fc69"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom.service.ts",
+      "sha256": "217ab6ed80670bdddc55521ce884036a134d640b89513e9f958b2cc6bf408f43"
+    },
+    {
       "path": "backend/src/modules/payroll/payroll.controller.ts",
       "sha256": "9975bd80b247fb3f8ee06cd2530bf2ac41e0743db6cf77d373f34d42d5d42dec"
     },
@@ -300,7 +328,7 @@
     },
     {
       "path": "backend/src/modules/roles/role-policy.ts",
-      "sha256": "61f1761bcdf9b9dec3263b98afdab5bfa9fdb2558874eb52abe53c6f658ad85a"
+      "sha256": "878ec3b1c1df5b01068d3394e7075f5548f3abc15233667349aa184c1f7aa835"
     },
     {
       "path": "backend/src/modules/roles/roles.controller.ts",
@@ -340,11 +368,11 @@
     },
     {
       "path": "frontend/src/App.tsx",
-      "sha256": "e16658a87fb7c9a980d0964d46b3b694db034be21bcecff7b00dafad2b367634"
+      "sha256": "1dad745a146743672794223921b3f2ab1ac596988c56d3c4bea866ee6a22768b"
     },
     {
       "path": "frontend/src/config/navigation.ts",
-      "sha256": "da7309f7ef040300fd9eea26fe0cc4e931a45f64abdc3df2586a5fa12cf1718f"
+      "sha256": "3652463b8eb49e161d8e059c5c9a64db41fc1d7920f28b7db4e96996deb28065"
     },
     {
       "path": "frontend/src/config/release.ts",
@@ -356,7 +384,7 @@
     },
     {
       "path": "frontend/src/config/workspaces.ts",
-      "sha256": "6eb05f03ef7d95ac4f5548ed149867381ac8e21c1f5f2bf5dd220eb2279a1d8e"
+      "sha256": "ee95620eac86f8b17f33d1e3b201b4811c3f0640131fad72f81b6e4b5ff10b64"
     },
     {
       "path": "frontend/src/pages/AccessControlPage.tsx",
@@ -440,7 +468,7 @@
     },
     {
       "path": "frontend/src/pages/b2b/GuestShopPage.tsx",
-      "sha256": "3d6b828d8499d3b6a35529ad05db65562b38dc6238bb97a85854523ea5e9aff9"
+      "sha256": "01df59fde78c8e51e8f7c4ce98e516c24f6371887d4a9feb1d1be2a222a72cb1"
     },
     {
       "path": "frontend/src/pages/b2b/order.ts",
@@ -501,6 +529,22 @@
     {
       "path": "frontend/src/pages/LoginPage.tsx",
       "sha256": "872101eafb274b646f39fc2d6ea9a2a05b4db7acf010c043cc7daaf207dcae1b"
+    },
+    {
+      "path": "frontend/src/pages/mailroom/InboxShortcut.tsx",
+      "sha256": "96660d6bf61978896700945146a11bbeee9633d841e6899b4c79bd70b69e66e9"
+    },
+    {
+      "path": "frontend/src/pages/mailroom/MailroomPage.tsx",
+      "sha256": "1b8d72e68d6cfd71aade4d33cdf80c58b1668512f0d2e6277a9b084b3db0bbf9"
+    },
+    {
+      "path": "frontend/src/pages/mailroom/model.ts",
+      "sha256": "592e795f90153e4acb689139932c636b71359bbf5e4572cda7e53a15c242f4b5"
+    },
+    {
+      "path": "frontend/src/pages/mailroom/TabletAcceptance.tsx",
+      "sha256": "dd4be754b188a37de5c6099dce1e0a9305d201d177f513457e36e146e419c355"
     },
     {
       "path": "frontend/src/pages/PayrollPage.tsx",
@@ -624,7 +668,7 @@
     },
     {
       "path": "frontend/src/utils/login-destination.ts",
-      "sha256": "3b2c45ba9c08cde04c01cb2793007f29c274ebd8341dcfd91496e8974d851e84"
+      "sha256": "d7ec6087d99e78f748fbd4b2c2c4cb41a1fa57355c4daa49518bc75099811402"
     }
   ]
 }

@@ -1,0 +1,127 @@
+.mailroom-page {
+  max-width: 1500px;
+  margin: 0 auto;
+  display: grid;
+  gap: 22px;
+}
+.mailroom-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+.mailroom-heading h2 {
+  margin: 6px 0 9px;
+}
+.mailroom-eyebrow {
+  color: #176a70;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+  font-weight: 600;
+}
+.mailroom-process {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+  background: rgba(20, 113, 116, 0.055);
+  border: 1px solid rgba(20, 113, 116, 0.14);
+  border-radius: 12px;
+  padding: 17px 22px;
+}
+.mailroom-process span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+}
+.mailroom-process b {
+  border: 1px solid rgba(20, 113, 116, 0.3);
+  border-radius: 50%;
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  color: #176a70;
+}
+.mailroom-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.mailroom-item-link {
+  padding: 0 !important;
+  height: auto !important;
+  font-weight: 600;
+  max-width: 290px;
+  text-align: left;
+  white-space: normal;
+}
+.mailroom-meta {
+  display: block;
+  font-size: 11px;
+  opacity: 0.65;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.mailroom-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.mailroom-action {
+  margin-top: 20px;
+}
+.mailroom-action .ant-alert {
+  margin-bottom: 16px;
+}
+.mailroom-detail .ant-descriptions-item-content {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .mailroom-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .mailroom-form-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .mailroom-process {
+    gap: 12px;
+    padding: 14px;
+  }
+}
+
+.mailroom-page,
+.mailroom-list {
+  min-width: 0;
+}
+.mailroom-list .ant-table-thead > tr > th {
+  white-space: nowrap;
+}
+.mailroom-load-more {
+  margin-top: 20px;
+}
+.mailroom-tablet-modal .ant-modal-footer .ant-btn {
+  min-height: 44px;
+  font-size: 15px;
+}
+.mailroom-tablet-modal .ant-input,
+.mailroom-tablet-modal .ant-input-affix-wrapper {
+  min-height: 44px;
+}
+.mailroom-tablet-modal .ant-checkbox-wrapper {
+  padding: 8px 0;
+}
+@media (max-width: 760px) {
+  .mailroom-tablet-modal .ant-modal-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .mailroom-tablet-modal .ant-modal-footer .ant-btn {
+    margin: 0;
+    flex: 1 1 200px;
+  }
+}
