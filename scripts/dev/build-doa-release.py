@@ -102,12 +102,16 @@ def main():
     for label in ('api', 'web'):
         parser.add_argument('--' + label + '-live-source-sha')
         parser.add_argument('--' + label + '-live-build-id')
+        parser.add_argument('--' + label + '-live-build-region', choices=release.SERVING_BUILD_REGIONS,
+                            default=release.BUILD_REGION, help='Historical serving build region (default: global)')
     parser.add_argument('--context-dir', type=Path)
     parser.add_argument('--verify-context', type=Path)
     args = parser.parse_args()
     if args.verify_context:
         release.require(not (args.context_dir or args.api_live_source_sha or args.api_live_build_id or args.web_live_source_sha or args.web_live_build_id),
                         '--verify-context cannot be mixed with preparation arguments')
+        release.require(args.api_live_build_region == release.BUILD_REGION and args.web_live_build_region == release.BUILD_REGION,
+                        '--verify-context reuses pinned manifest build regions; do not override them')
         context = release.private_directory(args.verify_context)
         manifest = release.verify_context(context)
         release.require(release.clean_source() == manifest['sourceSha'], 'Checkout differs from prepared source')
@@ -116,8 +120,10 @@ def main():
     else:
         release.require(args.api_live_source_sha and args.api_live_build_id and args.web_live_source_sha and args.web_live_build_id,
                         'Preparation needs independently verified API and web serving source/builds')
-        evidence = {release.API: {'sourceSha': args.api_live_source_sha, 'buildId': args.api_live_build_id},
-                    release.WEB: {'sourceSha': args.web_live_source_sha, 'buildId': args.web_live_build_id}}
+        evidence = {release.API: {'sourceSha': args.api_live_source_sha, 'buildId': args.api_live_build_id,
+                                 'buildRegion': args.api_live_build_region},
+                    release.WEB: {'sourceSha': args.web_live_source_sha, 'buildId': args.web_live_build_id,
+                                 'buildRegion': args.web_live_build_region}}
         context, manifest = prepare(args.context_dir, evidence)
     print(json.dumps(submission(context, manifest), indent=2))
 

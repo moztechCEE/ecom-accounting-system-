@@ -6,6 +6,7 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -25,7 +26,8 @@ build = load('doa_build', 'build-doa-release.py')
 SOURCE, API_SOURCE, WEB_SOURCE = 'c' * 40, 'a' * 40, 'b' * 40
 BUILD_ID, API_BUILD, WEB_BUILD = 'c' * 8 + '-1111-2222-3333-' + 'c' * 12, 'a' * 8 + '-1111-2222-3333-' + 'a' * 12, 'b' * 8 + '-1111-2222-3333-' + 'b' * 12
 NOW = '2026-01-01T00:00:00+00:00'
-EVIDENCE = {r.API: {'sourceSha': API_SOURCE, 'buildId': API_BUILD}, r.WEB: {'sourceSha': WEB_SOURCE, 'buildId': WEB_BUILD}}
+EVIDENCE = {r.API: {'sourceSha': API_SOURCE, 'buildId': API_BUILD, 'buildRegion': 'asia-east1'},
+            r.WEB: {'sourceSha': WEB_SOURCE, 'buildId': WEB_BUILD, 'buildRegion': 'global'}}
 
 
 def image(name, candidate=False, template=False):
@@ -118,11 +120,12 @@ class GuardsTest(unittest.TestCase):
 
     def baseline(self, live=None, broken_build=False):
         live = live or self.live
-        def metadata(kind, target):
+        def metadata(kind, target, *, build_region=r.BUILD_REGION):
             if kind == 'service':
                 return copy.deepcopy(live[target])
             if kind == 'build':
                 name = r.API if target == API_BUILD else r.WEB
+                self.assertEqual(build_region, EVIDENCE[name]['buildRegion'])
                 built = cloud_build(name, EVIDENCE[name]['sourceSha'])
                 if broken_build:
                     built['results']['images'][0]['digest'] = 'sha256:' + 'f' * 64
@@ -158,6 +161,46 @@ class GuardsTest(unittest.TestCase):
         for kind, target in [('secret', 'anything'), ('service', 'unlisted-service'), ('revision', 'ecom-accounting-backend-revision'), ('build', 'bad')]:
             with self.assertRaises(RuntimeError):
                 r.cloud(kind, target)
+
+    def test_historical_build_reads_use_explicit_allowlisted_region_without_fallback(self):
+        for region in r.SERVING_BUILD_REGIONS:
+            with patch.object(subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, '{}', '')) as process:
+                self.assertEqual(r.cloud('build', API_BUILD, build_region=region), {})
+                self.assertEqual(process.call_args.args[0], ['gcloud', 'builds', 'describe', API_BUILD,
+                                                            '--region=' + region, '--project=' + r.PROJECT, '--format=json'])
+                self.assertEqual(process.call_count, 1)
+        with patch.object(subprocess, 'run') as process:
+            with self.assertRaisesRegex(RuntimeError, 'region is outside'):
+                r.cloud('build', API_BUILD, build_region='us-central1')
+            with self.assertRaisesRegex(RuntimeError, 'only to build'):
+                r.cloud('service', r.API, build_region='asia-east1')
+            process.assert_not_called()
+        with patch.object(subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', 'sensitive error')) as process:
+            with self.assertRaisesRegex(RuntimeError, 'credential-bearing output suppressed'):
+                r.cloud('build', API_BUILD, build_region='asia-east1')
+            self.assertEqual(process.call_count, 1)
+
+    def test_invalid_or_missing_serving_region_fails_before_cloud_read(self):
+        for mutate in (lambda row: row.update(buildRegion='us-central1'), lambda row: row.pop('buildRegion')):
+            evidence = copy.deepcopy(EVIDENCE)
+            mutate(evidence[r.API])
+            with patch.object(r, 'cloud') as metadata:
+                with self.assertRaises(RuntimeError):
+                    r.capture_baseline(evidence)
+                metadata.assert_not_called()
+
+    def test_prepare_cli_pins_serving_regions_and_context_verification_rejects_override(self):
+        argv = ['build-doa-release.py', '--api-live-source-sha', API_SOURCE, '--api-live-build-id', API_BUILD,
+                '--api-live-build-region', 'asia-east1', '--web-live-source-sha', WEB_SOURCE, '--web-live-build-id', WEB_BUILD]
+        with patch.object(sys, 'argv', argv), patch.object(build, 'prepare', return_value=(self.directory, {})) as prepare, \
+             patch.object(build, 'submission', return_value={}), patch('builtins.print'):
+            build.main()
+        prepare.assert_called_once_with(None, EVIDENCE)
+        with patch.object(sys, 'argv', ['build-doa-release.py', '--verify-context', str(self.directory),
+                                       '--api-live-build-region', 'asia-east1']), patch.object(r, 'private_directory') as context:
+            with self.assertRaisesRegex(RuntimeError, 'reuses pinned manifest build regions'):
+                build.main()
+            context.assert_not_called()
 
     def test_production_database_account_and_mailroom_event_delivery_are_rejected(self):
         for key, value in [('DB_NAME', 'erp'), ('ERP_DEV_SANDBOX', 'false'), ('RUNTIME_SCHEDULES_ENABLED', 'true'), ('MAILROOM_SYNC_ENABLED', 'true')]:
@@ -308,6 +351,7 @@ class GuardsTest(unittest.TestCase):
             path.parent.mkdir(exist_ok=True)
             path.write_text('reviewed runtime\n')
         manifest = {'version': 1, 'project': r.PROJECT, 'region': r.REGION, 'devOnly': True, 'sourceSha': SOURCE,
+                    'baseline': {'servingEvidence': EVIDENCE},
                     'migrationChecksums': r.MIGRATIONS, 'prerequisiteMigrationChecksums': r.PREREQUISITE_MIGRATIONS,
                     'images': [r.REGISTRY + name + ':doa-' + SOURCE for name in r.DEV],
                     'reviewedRuntimeFiles': {'backend/scripts/dev-sandbox.cjs': r.digest_file(context / 'backend/dev-sandbox.cjs'),
@@ -315,6 +359,12 @@ class GuardsTest(unittest.TestCase):
                     'filesSha256': r.files_manifest(context)}
         r.private_json(context / 'manifest.json', manifest)
         checked = r.verify_context(context)
+        invalid = copy.deepcopy(manifest)
+        invalid['baseline']['servingEvidence'][r.API]['buildRegion'] = 'us-central1'
+        r.private_json(context / 'manifest.json', invalid)
+        with self.assertRaisesRegex(RuntimeError, 'region is outside'):
+            r.verify_context(context)
+        r.private_json(context / 'manifest.json', manifest)
         plan = build.submission(context, checked)
         self.assertFalse(plan['submitted'])
         self.assertEqual(plan['mode'], 'plan-only')

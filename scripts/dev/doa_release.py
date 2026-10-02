@@ -5,6 +5,7 @@ remain the template while an older revision still serves traffic. Build overlays
 use the proven serving image; current template configuration and tags are retained.
 Configuration snapshots remain private; no secret payload is accessed or printed.
 """
+import json
 import re
 import subprocess
 from urllib.parse import urlsplit
@@ -15,7 +16,7 @@ ROOT, PROJECT, REGION, BUILD_REGION = common.ROOT, common.PROJECT, common.REGION
 API, WEB, DEV, PROTECTED, REGISTRY = common.API, common.WEB, common.DEV, common.PROTECTED, common.REGISTRY
 # Reuse only environment-independent helpers and the existing fixed read allowlist.
 require, timestamp, digest_file, digest_json = common.require, common.timestamp, common.digest_file, common.digest_json
-git, clean_source, cloud, ready, active = common.git, common.clean_source, common.cloud, common.ready, common.active
+git, clean_source, ready, active = common.git, common.clean_source, common.ready, common.active
 tags, portable, fingerprint, identity = common.tags, common.portable, common.fingerprint, common.identity
 env_map, set_env, image_of = common.env_map, common.set_env, common.image_of
 private_directory, private_json, private_read = common.private_directory, common.private_json, common.private_read
@@ -42,6 +43,33 @@ UNCHANGED_RUNTIME = tuple(p for p in common.UNCHANGED_RUNTIME if p not in REVIEW
 SOURCE_HOST = 'moztech-after-sales-dev-sp5g377smq-de.a.run.app'
 CONNECTION_SECRET = 'corely-mailroom-dev-connections'
 CONNECTION_VERSION = '1'
+SERVING_BUILD_REGIONS = ('global', 'asia-east1')
+
+
+def cloud(kind, target, *, build_region=BUILD_REGION):
+    """Read fixed-project metadata; only historical builds may select a region."""
+    require(build_region in SERVING_BUILD_REGIONS, 'Historical build region is outside read allowlist')
+    if kind != 'build' or build_region == BUILD_REGION:
+        require(kind == 'build' or build_region == BUILD_REGION, 'Build region applies only to build metadata reads')
+        return common.cloud(kind, target)
+    require(re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', target or ''),
+            'Expected Cloud Build UUID')
+    result = subprocess.run(['gcloud', 'builds', 'describe', target, '--region=' + build_region,
+                             '--project=' + PROJECT, '--format=json'], text=True, capture_output=True)
+    require(result.returncode == 0, 'Cloud metadata read failed; credential-bearing output suppressed')
+    return json.loads(result.stdout)
+
+
+def validate_serving_evidence(evidence):
+    require(isinstance(evidence, dict) and set(evidence) == set(DEV),
+            'Need independent API and web source/build evidence')
+    for row in evidence.values():
+        require(isinstance(row, dict) and set(row) == {'sourceSha', 'buildId', 'buildRegion'} and
+                all(isinstance(value, str) for value in row.values()), 'Serving evidence must pin source, build ID and region')
+        require(re.fullmatch(r'[0-9a-f]{40}', row['sourceSha']) and
+                re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', row['buildId']),
+                'Invalid serving source/build evidence')
+        require(row['buildRegion'] in SERVING_BUILD_REGIONS, 'Historical build region is outside read allowlist')
 
 
 def verify_source(source, live_sources):
@@ -156,7 +184,7 @@ def build_images(build, source):
 
 
 def capture_baseline(evidence):
-    require(set(evidence) == set(DEV), 'Need independent API and web source/build evidence')
+    validate_serving_evidence(evidence)
     live = snapshot_all()
     serving_images, images, template_images, revisions, templates = {}, {}, {}, {}, {}
     for name in DEV:
@@ -171,7 +199,8 @@ def capture_baseline(evidence):
         tags(value)
         serving = cloud('revision', current[0][0])
         require(ready(serving), 'Serving revision is not Ready: ' + name)
-        proven = build_image(cloud('build', evidence[name]['buildId']), name, evidence[name]['sourceSha'], historical=True)
+        proven = build_image(cloud('build', evidence[name]['buildId'], build_region=evidence[name]['buildRegion']),
+                             name, evidence[name]['sourceSha'], historical=True)
         require(serving['status'].get('imageDigest') == proven, 'Serving build digest does not match active revision: ' + name)
         template = cloud('revision', latest)
         base_image = template.get('status', {}).get('imageDigest', '')
@@ -196,6 +225,7 @@ def verify_context(context):
     require(files_manifest(context) == manifest.get('filesSha256'), 'Prepared build context changed')
     source = manifest.get('sourceSha', '')
     require(re.fullmatch(r'[0-9a-f]{40}', source), 'Invalid manifest source SHA')
+    validate_serving_evidence(manifest.get('baseline', {}).get('servingEvidence'))
     require(manifest.get('migrationChecksums') == MIGRATIONS and
             manifest.get('prerequisiteMigrationChecksums') == PREREQUISITE_MIGRATIONS, 'Manifest migration checksums changed')
     require(manifest.get('images') == [REGISTRY + s + ':doa-' + source for s in DEV], 'Unexpected build image destinations')
