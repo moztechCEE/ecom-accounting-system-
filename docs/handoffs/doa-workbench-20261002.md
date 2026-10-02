@@ -1,6 +1,6 @@
-# DOA 售後維修工作台：本機第一版交接（2026-10-02）
+# DOA 售後維修工作台：DEV 發布與第一版交接
 
-已製作獨立的維修師工作台、認領／本人簽收、兩張電子工作單、客服確認版本及維修交回流程。這份紀錄描述本機實作與合成資料驗證；尚未部署 DEV 或正式環境，不是營運驗收。
+已製作獨立的維修師工作台、認領／本人簽收、兩張電子工作單、客服確認版本及維修交回流程，並於 2026-10-03（台北時間）完成 DEV 發布。DEV 前後端各 100% 流量已切換，正常登入、兩案流程、售後同步及畫面核對通過；正式環境未變更。下方保留本機第一版歷史，最新發布事實以末段「DEV 發布結果」為準，合成資料驗證不代表實物營運驗收。
 
 ## 程式來源與工作範圍
 
@@ -57,9 +57,9 @@
 - 本機 CUA 實測認領不移保管、本人簽收才可填表、客服唯讀文件、待款項時不能開始維修，維修單草稿實際保存且仍不放行未付款案件，以及整頁沒有橫向溢出。UI 草稿保存把 held 從 HTTP 檢查點 v4 更新為 v5，沒有改變檢修確認或來源放行。詳見 `artifacts/repair-local/ui-check.json`；畫面證據在 `artifacts/repair-local/`。
 - Corely Claw 中英文指南已配合本版流程：67 份雙語指南、11 群組、83 路由；146 筆來源雜湊逐筆一致，13 項產生器及 30 項指南權限測試通過。詳見 `artifacts/repair-local/knowledge-check.json`；指南不新增 AI 資料或操作工具。
 
-## 本機預覽
+## 本機預覽歷史（已停止）
 
-開啟 `http://127.0.0.1:57656/_repair_fixture`，可切維修師、收發室與客服。固定合成帳號只在 opt-in fixture 生效，不是正式登入。
+原 `http://127.0.0.1:57656/_repair_fixture` 可切維修師、收發室與客服，已停止服務。後續核對使用 DEV 正常登入。固定本機合成帳號只在 opt-in fixture 生效。
 
 API：127.0.0.1:57654；DB：127.0.0.1:57663/doa_workbench；Web：127.0.0.1:57656。嚴格守衛不接受原收發室 57643 DB。DB cluster／log／socket 已排除版本控制。重啟不覆蓋文件；一次性流程測試重跑保護不會重設已完成案件。
 
@@ -70,7 +70,7 @@ NODE_ENV=production REPAIR_LOCAL_TEST=true DATABASE_URL='postgresql://local:doa-
 REPAIR_LOCAL_TEST=true node scripts/repair-preview.mjs
 ```
 
-後續先整合其他已核准 DEV 變更，再發布隔離 DEV candidate，驗證真實帳號、來源對應及受影響流程；完成 DEV 驗收後才進正式。不得把這次本機合成測試直接當作串接、庫存、款項或實物營運驗收。
+以上為第一版本機驗證紀錄。整合及 DEV 發布已完成如下；正式發布仍需使用者核對 DEV 後另行確認。
 
 ## 2026-10-02 DEV 發布準備
 
@@ -80,4 +80,25 @@ REPAIR_LOCAL_TEST=true node scripts/repair-preview.mjs
 
 ERP sandbox 保持開啟、全域排程及外部 outbox 關閉。唯一新增連線是固定售後 DEV 的 HMAC GET cases：只讀 `doa-dev-qa-20261002` 合成公司，禁止正式 hostname、其他公司、事件 POST、任意 transport／redirect／socket。配對 DEV secrets 只取固定 version 1；金鑰不進 repo、指南或建置 archive。三個正常 JWT 帳號及員工將供隔離核對，並非本機 bearer fixture。
 
-發布候選／實際 DEV revisions、digest、四項 migration 與線上驗證另記正式發布收據。此段為發布前準備，尚不能當成 DEV 已完成或跨系統營運驗收。
+此段保留發布前準備的歷史設定。實際 DEV 已另啟用下述限定合成公司的售後事件回傳；發布結果及界線如下。
+
+## 2026-10-03 DEV 發布結果
+
+- 核對入口：`https://corely-erp-dev-sp5g377smq-de.a.run.app/operations/repair`；收發室入口 `/operations/mailroom`。
+- 建置來源 `73e3b6c0e7a3d0b85e98e968303c5e2166722fe1`，Cloud Build `da9c474a-4feb-4b87-82ac-f5c28b947070` 成功。保留凍結收發室 `cbd9c3b9` 與原接流量 API `9f00b55f`／Web `870e3b18` 來源及既有 B2B 預覽。
+- API `corely-erp-api-dev-doa-73e3b6c0e7a3-c`、Web `corely-erp-dev-doa-73e3b6c0e7a3-f` 各 100%；所有原標籤保留。API digest `sha256:83a097fa9085b8062d83a1e8805ed0524c3ddc8dd33d7521186f67fe12ecde03`，Web digest `sha256:3b8d0926021eea2ea260206b81033d5e98e9799a83d2ed052d1db637990097a8`。
+- 四項 scoped migration 已在 `erp_dev_20260921` 套用：`20261001090000_mailroom_workbenches`、`20261002090000_mailroom_intake_review`、`20261002100000_repair_technician_role`、`20261002110000_repair_documents`。既有使用者角色／權限關聯保留，未跑全庫 seed。
+- 合成公司 `DOADEV`／`doa-dev-qa-20261002` 使用正常員工登入與伺服器 JWT：QA7001 維修師、QA7002 收發室、QA7003 限定客服。帳密在版本控制以外的本機私密檔，未放入此文件、Git 或建置 archive。
+- 候選正常登入／權限／來源讀取：53 次請求、68 項檢查通過；兩案例正常作業：44 次請求、95 項檢查通過；SN 唯讀預覽：25 次請求、38 項檢查通過，沒有配置 SN 或寫庫存。切換後主入口再次正常登入／讀取：56 次請求、70 項檢查通過。不同測試有重疊，不合計成獨立覆蓋數。
+- `DEV-R-001`：免費整新品替換，完成本人簽收、檢修提交、當版客服確認、來源放行、維修報告、逐項複驗及收發室交回簽收；ERP v10 `READY_FOR_DISPATCH`，兩張工作單 v1 已提交。
+- `DEV-R-002`：399 元付費方案，檢修及客服確認完成但未入帳；ERP v6 `INSPECTING`，開始維修回應 409、沒有維修報告。未建立假付款或款項放行。
+- 售後 DEV HMAC GET／POST 已配對。ERP outbox 16 筆 `AFTER_SALES DELIVERED`，各嘗試一次；售後端 16 個事件與時間軸連續且和 ERP 版本、產品／SKU／SN 一致，其他三件合成來源未推進。首次售後冷啟動曾超過 8 秒 timeout，售後 owner 已將該 DEV service 設 min=1，原 revision／template／traffic 不變，後續讀回正常。
+- 外部 AI 客服仍未配對：16 筆 `AI_CUSTOMER_SERVICE PENDING`、attempts=0。全域排程／seed 仍關閉，DEV timer 僅租用限定 QA 公司售後目標，不發真實 AI／LINE 通知。
+- CUA 已在 DEV 主入口選 DOADEV、用 QA7001 正常登入，看到六個維修工作台入口、在途 `DEV-R-003`、上述兩件實收案件及已保存工作單。候選畫面另外確認未付款「開始維修」停用及售後已接收／AI 待發送。
+- 原本機 API 57654、Web 57656、PostgreSQL 57663 及本輪 Cloud SQL proxy 15442 均已停止，確認無監聽；保留本機資料及證據，後續核對以 DEV 為主。
+
+去敏發布收據、畫面與私密帳號交付檔位於主協調目錄 `artifacts/repair-dev-20261002/`：`release-receipt.json`、`canonical-ui.json`、`dev-repair-workbench.png`、`local-stopped.json`、`DEV-測試帳號.txt`。售後配對收據位於 `artifacts/mailroom-dev-20261002/aftersales-pairing-receipt.json`。這些協調 artifacts 不進 repo。
+
+DEV 回滾來源保留：API `corely-erp-api-dev-sn-9f00b55f-c`、Web `corely-erp-dev-access-870e3b18-r`。如需回滾，先重新盤點當時服務設定及流量，避免覆蓋其他後續發布；本輪沒有回滾或倒退 migration。只切回 HTTP 流量不保證停止仍存活 revision 的 DEV sender；若目的是停止投遞，需一併停用專用 sender／售後 DEV 事件入口。
+
+仍待串接：AI 客服對客報價／同意與拒絕、會計／虛擬帳號入帳事件、報價與同意版本綁定，以及整新品資格、庫存預留／扣帳／成本過帳。替換 SKU／SN 與庫存參考目前只是追溯紀錄。正式服務、WMS 及真實顧客／付款／退款／庫存資料均未變更；公司實物操作驗收另行進行。
