@@ -69,7 +69,7 @@ HMAC-SHA256 原文：以換行串接 mailroom.v1、HTTP method、原始 pathname
 - ERP 29 項針對流程／平板簽收測試；售後 8 項來源與契約測試，另有實際 PostgreSQL queue 測試。
 - 既有本機 PostgreSQL 整合及擴充後 mailroom-refinements.e2e.ts。驗證包含真 bcrypt 錯密碼 401、錯簽收人 403、成功與重送 200、改內容 409；無密碼／JWT 業務歷程；不完整退貨檢查回滾；精準通知去重；承辦 A 轉 B 後關閉 A 待辦、拒絕 A 確認且允許 B 接手；相同檢查保留確認、改照片重新交辦；客服接手不改實物狀態；本機全部庫存與付款表前後一致。
 - ERP 前端、Nest 及售後 Next.js 建置；Nest 原 tsconfig.build 的型別檢查。ERP 整庫 strict tsc 仍有既有不相關錯誤，不能聲稱全部清零。
-- 瀏覽器已驗證完整維修流程：單件到貨、核對、平板錯密碼保留收發室登入、正確本人簽收、維修接手。本機 worker 投遞後，DEMO-R-003 顯示已收 1／4、尚待 3 並留在待到貨；AI 同步顯示只代表本機 ACK stub。截圖 artifacts/mailroom-local/awaiting-cases-20261002.png、tablet-accepted-20261002.png。
+- 瀏覽器已驗證收件至維修接手流程：單件到貨、核對、平板錯密碼保留收發室登入、正確本人簽收、維修接手；後續處理由本機 PostgreSQL 整合测试驗證。本機 worker 投遞後，DEMO-R-003 顯示已收 1／4、尚待 3 並留在待到貨；AI 同步顯示只代表本機 ACK stub。截圖 artifacts/mailroom-local/awaiting-cases-20261002.png、tablet-accepted-20261002.png。
 - 最後承辦人更新、相同檢查重送及 AA 規則修正後，對應整合測試、Nest／前端／售後建置及原 build config 型別檢查均通過；67 份指南／78 路由／134 來源雜湊檢查與 12 項指南生成測試亦通過。
 
 2026-10-01 的 94 套件／846 項 ERP 測試、售後 11 項保護測試及瀏覽器信件簽領，是上一輪紀錄，沒有在今天冒充重跑。以上均屬本機示範，不代表 DEV／正式實體倉庫驗收。
