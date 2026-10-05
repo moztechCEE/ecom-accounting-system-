@@ -29,9 +29,12 @@ export const REPAIR_WORKFLOW_ACTIONS = [
 export type RepairWorkflowAction = (typeof REPAIR_WORKFLOW_ACTIONS)[number];
 export type PhysicalCustody =
   | 'TECHNICIAN'
+  | 'MAILROOM'
   | 'FACTORY_CARRIER'
   | 'FACTORY'
-  | 'INVENTORY';
+  | 'INVENTORY'
+  | 'LINKED_CASE'
+  | 'UNKNOWN';
 export type RepairWorkflow = {
   schema: 1;
   inventoryReceipt?: Record<string, unknown>;
@@ -96,6 +99,7 @@ export type RepairWorkflow = {
 };
 export type WorkflowItem = {
   status: string;
+  physicalCustody?: PhysicalCustody;
   repairOwnerId: string | null;
   custodianId: string;
   repairInspection?: unknown;
@@ -110,14 +114,24 @@ export function repairWorkflow(value: unknown): RepairWorkflow {
   return structuredClone(value) as RepairWorkflow;
 }
 export function physicalCustody(item: WorkflowItem): PhysicalCustody {
-  if (item.status === 'STOCKED') return 'INVENTORY';
+  if (item.status === 'STOCKED') {
+    if (
+      item.physicalCustody === 'LINKED_CASE' ||
+      item.physicalCustody === 'UNKNOWN'
+    )
+      return item.physicalCustody;
+    return 'INVENTORY';
+  }
   // An inconsistent or legacy factory status must never enable technician edits.
   if (item.status === 'FACTORY_RECEIVED') return 'FACTORY';
   if (['FACTORY_OUTBOUND', 'FACTORY_RETURNING'].includes(item.status))
     return 'FACTORY_CARRIER';
-  return (
-    repairWorkflow(item.repairWorkflow).factory?.physicalCustody || 'TECHNICIAN'
-  );
+  const external = repairWorkflow(item.repairWorkflow).factory?.physicalCustody;
+  if (external === 'FACTORY' || external === 'FACTORY_CARRIER') return external;
+  if (!item.custodianId) return 'UNKNOWN';
+  return item.repairOwnerId && item.custodianId === item.repairOwnerId
+    ? 'TECHNICIAN'
+    : 'MAILROOM';
 }
 export function repairStatusLabel(item: WorkflowItem): string {
   const purpose = repairWorkflow(item.repairWorkflow).release?.purpose;

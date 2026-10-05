@@ -17,6 +17,7 @@ import {
 import { NotificationGateway } from '../notification/notification.gateway';
 import { MailroomSyncService } from './mailroom-sync.service';
 import { AfterSalesStockService } from '../integration/after-sales/after-sales-stock.service';
+import { consumedReturnCustody } from './repair-stock-custody.contract';
 import { sourceSyncSummary } from './mailroom-source.contract';
 import {
   can,
@@ -26,6 +27,7 @@ import {
   requireEntity,
   requirePermission,
   transition,
+  STATUS_LABELS,
   type Actor,
   type SourceCase,
 } from './mailroom.contract';
@@ -348,6 +350,82 @@ export class MailroomService {
     };
   }
   async views(items: Item[], userId: string, actor: Actor) {
+    const donors = items.filter(
+      (item) => item.status === 'STOCKED' && item.receipt.category === 'RETURN',
+    );
+    for (const donor of donors) this.canRead(actor, donor);
+    const consumedUnits = donors.length
+      ? await this.prisma.afterSalesStockUnit.findMany({
+          // Authorize through the already scoped source item. A malformed foreign
+          // child is detected as UNKNOWN without exposing its linked case.
+          where: {
+            sourceItemId: { in: donors.map((item) => item.id) },
+            status: 'CONSUMED',
+          },
+          select: {
+            id: true,
+            entityId: true,
+            productId: true,
+            warehouseId: true,
+            sourceItemId: true,
+            serialNumber: true,
+            kind: true,
+            status: true,
+            qualification: true,
+            reservations: {
+              where: { status: 'POSTED' },
+              take: 2,
+              orderBy: { createdAt: 'desc' },
+              select: {
+                id: true,
+                entityId: true,
+                unitId: true,
+                itemId: true,
+                status: true,
+                outTransactionId: true,
+                outTransaction: {
+                  select: {
+                    id: true,
+                    entityId: true,
+                    productId: true,
+                    warehouseId: true,
+                    direction: true,
+                    quantity: true,
+                    referenceType: true,
+                    referenceId: true,
+                  },
+                },
+                item: {
+                  select: {
+                    id: true,
+                    entityId: true,
+                    sku: true,
+                    status: true,
+                    version: true,
+                    custodianId: true,
+                    repairOwnerId: true,
+                    location: true,
+                    receipt: {
+                      select: {
+                        entityId: true,
+                        category: true,
+                        sourceCaseId: true,
+                        sourceNumber: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+      : [];
+    const custody = new Map(
+      donors.map((item) => [
+        item.id,
+        consumedReturnCustody(item, consumedUnits),
+      ]),
+    );
     const ids = [
       ...new Set(
         items
@@ -357,6 +435,7 @@ export class MailroomService {
             x.recipientId,
             x.repairOwnerId,
             repairWorkflow(x.repairWorkflow).csr?.ownerId,
+            custody.get(x.id)?.linkedReplacementCustody?.custodianId,
           ])
           .filter(Boolean),
       ),
@@ -366,12 +445,29 @@ export class MailroomService {
       select: { id: true, name: true },
     });
     const names = new Map(users.map((x) => [x.id, x.name]));
+    for (const projection of custody.values()) {
+      const linked = projection?.linkedReplacementCustody;
+      if (linked) {
+        linked.custodianName = names.get(linked.custodianId) || '未綁定';
+        linked.statusLabel = STATUS_LABELS[linked.status] || linked.status;
+      }
+    }
     return items.map(({ evidence, receipt, ...item }) => ({
       ...(canViewRepairDocuments(actor) ? item : withoutRepairDocuments(item)),
-      statusLabel: repairStatusLabel({ ...item, receipt }),
-      physicalCustody: isRepairWorkbenchItem({ ...item, receipt })
-        ? physicalCustody({ ...item, receipt })
-        : undefined,
+      statusLabel:
+        custody.get(item.id)?.statusLabel ||
+        repairStatusLabel({ ...item, receipt }),
+      ...(custody.get(item.id)?.linkedReplacementCustody
+        ? {
+            linkedReplacementCustody: custody.get(item.id)!
+              .linkedReplacementCustody,
+          }
+        : {}),
+      physicalCustody:
+        custody.get(item.id)?.physicalCustody ||
+        (isRepairWorkbenchItem({ ...item, receipt })
+          ? physicalCustody({ ...item, receipt })
+          : undefined),
       releasePurpose:
         repairWorkflow(item.repairWorkflow).release?.purpose || null,
       custodianName: names.get(item.custodianId) || '未綁定',
