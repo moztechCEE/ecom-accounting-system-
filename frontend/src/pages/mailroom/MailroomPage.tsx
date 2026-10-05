@@ -20,7 +20,6 @@ import {
   Timeline,
   Typography,
   Upload,
-  message,
 } from "antd";
 import {
   InboxOutlined,
@@ -50,6 +49,8 @@ import {
 import TabletAcceptance from "./TabletAcceptance";
 import SourceCasePicker from "./SourceCasePicker";
 import RepairDocuments from "../repair/RepairDocuments";
+import { useRepairFeedback } from "../repair/repair-feedback";
+import type { RepairMessage } from "../repair/repair-feedback";
 import type { RepairItem } from "../repair/repair-model";
 import { currentItemCustody } from "./item-custody";
 import "./mailroom.css";
@@ -101,6 +102,7 @@ export default function MailroomPage({
 }: {
   mode?: "mailroom" | "repair" | "mine";
 }) {
+  const { message, contextHolder } = useRepairFeedback();
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const entityId =
@@ -188,7 +190,7 @@ export default function MailroomPage({
     } finally {
       if (id === detailGeneration.current) setDetailLoading(false);
     }
-  }, [selectedId, entityId]);
+  }, [selectedId, entityId, message]);
   useEffect(() => {
     void refresh();
     const backgroundRefresh = () => {
@@ -239,11 +241,14 @@ export default function MailroomPage({
   }
   if (!enabled)
     return (
-      <Alert
-        type="info"
-        message="收發室工作台尚未啟用"
-        description="完成測試與帳號設定後即可開放。"
-      />
+      <>
+        {contextHolder}
+        <Alert
+          type="info"
+          message="收發室工作台尚未啟用"
+          description="完成測試與帳號設定後即可開放。"
+        />
+      </>
     );
   const visible =
     mode === "mine"
@@ -258,6 +263,7 @@ export default function MailroomPage({
       : rows;
   return (
     <div className="mailroom-page">
+      {contextHolder}
       <div className="mailroom-heading">
         <div>
           <Text className="mailroom-eyebrow">
@@ -504,6 +510,7 @@ export default function MailroomPage({
         <Spin spinning={detailLoading}>
           {detail ? (
             <ItemDetail
+              feedback={message}
               key={detail.id + ":" + detail.version}
               item={detail}
               userId={user?.id || ""}
@@ -523,6 +530,7 @@ export default function MailroomPage({
         </Spin>
       </Drawer>
       <ReceiptDrawer
+        feedback={message}
         initialSource={createSource}
         open={create}
         entityId={entityId}
@@ -786,6 +794,7 @@ function AwaitingCases({
   );
 }
 function ItemDetail({
+  feedback,
   item,
   userId,
   entityId,
@@ -796,6 +805,7 @@ function ItemDetail({
   canAdmin,
   onSaved,
 }: {
+  feedback: RepairMessage;
   item: Item;
   userId: string;
   entityId: string;
@@ -806,6 +816,7 @@ function ItemDetail({
   canAdmin: boolean;
   onSaved: () => Promise<void>;
 }) {
+  const message = feedback;
   const [action, setAction] = useState<string>(),
     [busy, setBusy] = useState(false),
     [photos, setPhotos] = useState<string[]>([]),
@@ -1006,6 +1017,7 @@ function ItemDetail({
       {canReview &&
       (item.receipt.category === "REPAIR" || item.repairOwnerId) ? (
         <RepairDocuments
+          feedback={message}
           item={{ ...(item as RepairItem), editable: false }}
           entityId={entityId}
           onSaved={onSaved}
@@ -1596,6 +1608,7 @@ function sourcePhysicalRows(source: Source) {
     .slice(0, 50);
 }
 function ReceiptDrawer({
+  feedback,
   initialSource,
   open,
   entityId,
@@ -1603,6 +1616,7 @@ function ReceiptDrawer({
   onClose,
   onCreated,
 }: {
+  feedback: RepairMessage;
   initialSource?: Source;
   open: boolean;
   entityId: string;
@@ -1610,6 +1624,7 @@ function ReceiptDrawer({
   onClose: () => void;
   onCreated: (id: string) => void;
 }) {
+  const message = feedback;
   const [form] = Form.useForm(),
     [busy, setBusy] = useState(false),
     [source, setSource] = useState<Source>(),
