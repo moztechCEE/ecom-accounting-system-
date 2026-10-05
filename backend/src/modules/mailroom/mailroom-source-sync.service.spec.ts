@@ -335,9 +335,102 @@ describe('durable source cursor and authorized ERP notifications', () => {
       'accounting',
       'source',
     ]);
-    expect(storedNotices[0].data.targetPath).toBe(
+    expect(
+      storedNotices.find((notice) => notice.userId === 'accounting').data
+        .targetPath,
+    ).toBe('/operations/after-sales/accounting?entityId=company');
+    expect(
+      storedNotices.find((notice) => notice.userId === 'source').data
+        .targetPath,
+    ).toBe('/operations/after-sales/cases?entityId=company');
+  });
+
+  it('an unreceived REPAIR points each current role to an authorized view, retaining company and source context without granting source access', async () => {
+    receipts = [];
+    const beforeRoles = structuredClone(roles);
+    await service.consume(company, instance);
+    const paths = new Map(
+      storedNotices.map((notice) => [notice.userId, notice.data.targetPath]),
+    );
+    expect(paths.get('tech')).toBe('/operations/repair?entityId=company');
+    expect(paths.get('clerk')).toBe('/operations/mailroom?entityId=company');
+    expect(paths.get('source')).toBe(
       '/operations/after-sales/cases?entityId=company',
     );
+    expect(paths.get('accounting')).toBe(
+      '/operations/after-sales/accounting?entityId=company',
+    );
+    expect(paths.get('csr')).toBe('/my/inbox?entityId=company');
+    expect(paths.has('self')).toBe(false);
+    expect(paths.has('foreign')).toBe(false);
+    expect(paths.has('revoked')).toBe(false);
+    expect(
+      storedNotices.every(
+        (notice) =>
+          notice.data.entityId === company &&
+          notice.data.sourceCaseId === 'case-1',
+      ),
+    ).toBe(true);
+    expect(roles).toEqual(beforeRoles);
+    expect(cursor.cursor).toBe(1n);
+    expect(changes.size).toBe(1);
+    await service.consume(company, instance);
+    expect(storedNotices).toHaveLength(5);
+  });
+
+  it('CSR and QA reviewer case readers need ENTITY scope; shipping and invoice readers get only their original authorized module', async () => {
+    receipts = [];
+    const permissions: Record<string, string[]> = {
+      csr: ['after_sales_cases:read', 'mailroom:review'],
+      reviewer: [
+        'after_sales_cases:read',
+        'mailroom:read',
+        'repair_workbench:read',
+      ],
+      shipping: ['after_sales_shipping:read'],
+      invoice: ['after_sales_invoices:read'],
+      selfTech: ['after_sales_cases:read', 'repair_workbench:read'],
+    };
+    db.user.findMany.mockResolvedValue(
+      Object.keys(permissions).map((id) => ({
+        id,
+        salesDataScope: id === 'selfTech' ? 'SELF' : 'ENTITY',
+      })),
+    );
+    mailroom.actor.mockImplementation(async (id: string) => ({
+      id,
+      name: id,
+      entityIds: [company],
+      permissions: new Set(permissions[id]),
+    }));
+    await service.consume(company, instance);
+    const paths = new Map(
+      storedNotices.map((notice) => [notice.userId, notice.data.targetPath]),
+    );
+    expect(paths.get('csr')).toBe(
+      '/operations/after-sales/cases?entityId=company',
+    );
+    expect(paths.get('reviewer')).toBe(
+      '/operations/after-sales/cases?entityId=company',
+    );
+    expect(paths.get('shipping')).toBe(
+      '/operations/after-sales/shipping?entityId=company',
+    );
+    expect(paths.get('invoice')).toBe(
+      '/operations/after-sales/invoices?entityId=company',
+    );
+    expect(paths.get('selfTech')).toBe('/operations/repair?entityId=company');
+  });
+
+  it('native physical items retain their Inbox path for all recipients rather than opening an unassigned source module', async () => {
+    await service.consume(company, instance);
+    expect(
+      storedNotices.every(
+        (notice) =>
+          notice.data.targetPath === '/my/inbox?itemId=piece&entityId=company',
+      ),
+    ).toBe(true);
+    expect(receipts[0].items[0].custodianId).toBe('tech');
   });
 
   it('a source or mismatched projection failure leaves the cursor and all notifications untouched, releases the lease and retries later', async () => {

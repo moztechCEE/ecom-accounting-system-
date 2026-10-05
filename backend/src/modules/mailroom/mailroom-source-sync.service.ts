@@ -274,6 +274,7 @@ export class MailroomSourceSyncService
               return originalModule || physicalReader;
             });
             for (const recipient of recipients) {
+              const actor = actors.get(recipient.id)!;
               const item =
                 items.find(
                   (item) =>
@@ -281,6 +282,37 @@ export class MailroomSourceSyncService
                     item.nextUserId === recipient.id ||
                     item.custodianId === recipient.id,
                 ) || items[0];
+              // A source change can arrive before any physical receipt. Do not
+              // send technicians or clerks to a source module they cannot open.
+              const sourceModule =
+                can(actor, '*') || recipient.salesDataScope === 'ENTITY'
+                  ? (
+                      [
+                        ['after_sales_cases:read', 'cases'],
+                        ['after_sales_shipping:read', 'shipping'],
+                        ['after_sales_accounting:read', 'accounting'],
+                        ['after_sales_invoices:read', 'invoices'],
+                      ] as const
+                    ).find(([permission]) => can(actor, permission))?.[1]
+                  : undefined;
+              const targetPath = item
+                ? '/my/inbox?itemId=' +
+                  encodeURIComponent(item.id) +
+                  '&entityId=' +
+                  encodeURIComponent(entityId)
+                : sourceModule
+                  ? '/operations/after-sales/' +
+                    sourceModule +
+                    '?entityId=' +
+                    encodeURIComponent(entityId)
+                  : can(actor, 'repair_workbench:read') &&
+                      event.caseType === 'REPAIR'
+                    ? '/operations/repair?entityId=' +
+                      encodeURIComponent(entityId)
+                    : can(actor, 'mailroom:read')
+                      ? '/operations/mailroom?entityId=' +
+                        encodeURIComponent(entityId)
+                      : '/my/inbox?entityId=' + encodeURIComponent(entityId);
               notices.push(
                 await this.notifications.createDeferred(tx, {
                   userId: recipient.id,
@@ -301,13 +333,7 @@ export class MailroomSourceSyncService
                     sourceCaseId: event.caseId,
                     sourceEventId: event.id,
                     sourceCaseType: event.caseType,
-                    targetPath: item
-                      ? '/my/inbox?itemId=' +
-                        item.id +
-                        '&entityId=' +
-                        encodeURIComponent(entityId)
-                      : '/operations/after-sales/cases?entityId=' +
-                        encodeURIComponent(entityId),
+                    targetPath,
                   },
                 }),
               );
