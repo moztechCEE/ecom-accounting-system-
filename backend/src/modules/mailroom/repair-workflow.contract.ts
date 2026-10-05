@@ -27,9 +27,14 @@ export const REPAIR_WORKFLOW_ACTIONS = [
   'complete_factory',
 ] as const;
 export type RepairWorkflowAction = (typeof REPAIR_WORKFLOW_ACTIONS)[number];
-export type PhysicalCustody = 'TECHNICIAN' | 'FACTORY_CARRIER' | 'FACTORY';
+export type PhysicalCustody =
+  | 'TECHNICIAN'
+  | 'FACTORY_CARRIER'
+  | 'FACTORY'
+  | 'INVENTORY';
 export type RepairWorkflow = {
   schema: 1;
+  inventoryReceipt?: Record<string, unknown>;
   csr?: {
     status: 'SENT' | 'ACCEPTED' | 'RESOLVED';
     inspectionRevision: number;
@@ -105,6 +110,7 @@ export function repairWorkflow(value: unknown): RepairWorkflow {
   return structuredClone(value) as RepairWorkflow;
 }
 export function physicalCustody(item: WorkflowItem): PhysicalCustody {
+  if (item.status === 'STOCKED') return 'INVENTORY';
   // An inconsistent or legacy factory status must never enable technician edits.
   if (item.status === 'FACTORY_RECEIVED') return 'FACTORY';
   if (['FACTORY_OUTBOUND', 'FACTORY_RETURNING'].includes(item.status))

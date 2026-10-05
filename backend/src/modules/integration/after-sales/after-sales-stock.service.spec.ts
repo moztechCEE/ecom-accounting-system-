@@ -127,6 +127,83 @@ describe('formal replacement posting and replay boundaries', () => {
     await expect(invoke()).rejects.toThrow('外部正式庫存');
     expect(tx.inventoryTransaction.create).not.toHaveBeenCalled();
   });
+  test('formally returned STOCKED refurb unit needs its exact IN and current QC before OUT', async () => {
+    const inbound = {
+      inTransactionId: 'IN',
+      unitId: 'unit',
+      sourceItemId: 'return',
+      quantity: 1,
+      warehouseId: 'warehouse',
+      toCustodianId: 'stock-owner',
+      toLocation: 'stock-area',
+      inspectionRevision: 2,
+      reportRevision: 1,
+    };
+    row.unit.kind = 'REFURBISHED';
+    row.unit.sourceItemId = 'return';
+    row.unit.qualification = { inbound };
+    const returned: any = {
+      id: 'return',
+      status: 'STOCKED',
+      receipt: { category: 'RETURN' },
+      sku: 'SKU',
+      serialNumber: null,
+      custodianId: 'stock-owner',
+      location: 'stock-area',
+      repairWorkflow: { inventoryReceipt: inbound },
+      repairInspection: {
+        status: 'SUBMITTED',
+        revision: 2,
+        data: {
+          complaint: 'SYNTHETIC',
+          testConditions: 'SYNTHETIC',
+          diagnosis: 'SYNTHETIC',
+          planNote: 'SYNTHETIC',
+          plan: 'REPAIR',
+          checks: [
+            { name: 'SYNTHETIC', result: 'PASS', observation: 'SYNTHETIC' },
+          ],
+        },
+      },
+      repairReport: {
+        status: 'SUBMITTED',
+        revision: 1,
+        inspectionRevision: 2,
+        data: {
+          outcome: 'REPAIRED',
+          workPerformed: 'SYNTHETIC',
+          qcNotes: 'SYNTHETIC',
+          deliveredAccessories: 'SYNTHETIC',
+          parts: [],
+          qcResult: 'PASS',
+          checks: [
+            { name: 'SYNTHETIC', result: 'PASS', observation: 'SYNTHETIC' },
+          ],
+        },
+      },
+    };
+    tx.mailroomItem = { findFirst: jest.fn(async () => returned) };
+    tx.inventoryTransaction.findFirst = jest.fn(async () => null);
+    await expect(invoke(undefined, 'SKU', 'REFURBISHED')).rejects.toThrow(
+      '正式入庫流水',
+    );
+    tx.inventoryTransaction.findFirst.mockResolvedValue({
+      quantity: new Prisma.Decimal(1),
+    });
+    returned.repairReport.inspectionRevision = 1;
+    await expect(invoke(undefined, 'SKU', 'REFURBISHED')).rejects.toThrow(
+      '同版',
+    );
+    expect(tx.inventoryTransaction.create).not.toHaveBeenCalled();
+    returned.repairReport.inspectionRevision = 2;
+    expect(await invoke(undefined, 'SKU', 'REFURBISHED')).toMatchObject({
+      status: 'POSTED',
+      postingId: 'OUT',
+      quantity: 1,
+    });
+    await invoke(undefined, 'SKU', 'REFURBISHED');
+    expect(tx.inventoryTransaction.create).toHaveBeenCalledTimes(2);
+  });
   test('qualified labels cannot exceed formally on hand', async () => {
     const owner = {
       id: 'owner',

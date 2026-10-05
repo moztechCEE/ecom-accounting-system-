@@ -10,6 +10,7 @@ import {
   Min,
 } from 'class-validator';
 import { AfterSalesStockService } from './after-sales-stock.service';
+import { ReceiveReturnStockDto } from './after-sales-stock.dto';
 class StockQuery {
   @IsString() @IsNotEmpty() entityId!: string;
   @IsOptional() @IsUUID() itemId?: string;
@@ -57,6 +58,12 @@ export class AfterSalesStockController {
     @Body() body: ReservationDto,
   ) {
     return this.stock.reserve(req.user.id, body);
+  }
+  @Post('receive-return') receiveReturn(
+    @Req() req: { user: { id: string } },
+    @Body() body: ReceiveReturnStockDto,
+  ) {
+    return this.stock.receiveReturn(req.user.id, body);
   }
   @Post('reservations/:id/release') release(
     @Req() req: { user: { id: string }; headers: { origin?: string } },

@@ -5,11 +5,19 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type InventorySerialNumber } from '@prisma/client';
 import { AuthService } from '../../auth/auth.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { EntityAccessService } from '../../../common/entity-access/entity-access.service';
 import { ConfigService } from '@nestjs/config';
+import { fingerprint } from '../../mailroom/mailroom.contract';
+import { repairWorkflow } from '../../mailroom/repair-workflow.contract';
+import type { ReceiveReturnStockDto } from './after-sales-stock.dto';
+import {
+  jsonObject,
+  validateRefurbishedReturn,
+  returnStockUnitId,
+} from './after-sales-stock.contract';
 import {
   DEPARTMENT_ACCESS_SELECT,
   effectivePermissionKeys,
@@ -22,15 +30,6 @@ type Inspection = {
     replacementSku?: string;
     replacementCondition?: string;
     plan?: string;
-  };
-};
-type Report = {
-  status?: string;
-  inspectionRevision?: number;
-  data?: {
-    qcResult?: string;
-    outcome?: string;
-    checks?: { result?: string }[];
   };
 };
 @Injectable()
@@ -212,12 +211,480 @@ export class AfterSalesStockService {
           sku: true,
           serialNumber: true,
           grade: true,
-          receipt: { select: { sourceNumber: true } },
+          matchResult: true,
+          version: true,
+          status: true,
+          location: true,
+          custodianId: true,
+          declared: true,
+          repairInspection: true,
+          repairReport: true,
+          repairWorkflow: true,
+          receipt: {
+            select: { sourceNumber: true, category: true, receivedById: true },
+          },
         },
         take: 200,
       }),
     ]);
-    return { products, warehouses, serials, returnItems };
+    return {
+      products,
+      warehouses,
+      serials,
+      returnItems: returnItems.map((item) => {
+        let refurbishmentEligible = false;
+        try {
+          validateRefurbishedReturn(item, item.sku || '', item.serialNumber);
+          refurbishmentEligible =
+            ['MATCH', 'CONFIRMED_ACTUAL'].includes(item.matchResult) &&
+            jsonObject(item.declared).quantity === 1;
+        } catch {
+          /* Display actual eligibility without returning technical or customer documents. */
+        }
+        return {
+          id: item.id,
+          label: item.label,
+          sku: item.sku,
+          serialNumber: item.serialNumber,
+          grade: item.grade,
+          version: item.version,
+          status: item.status,
+          location: item.location,
+          custodianId: item.custodianId,
+          receivedById: item.receipt.receivedById,
+          receipt: { sourceNumber: item.receipt.sourceNumber },
+          inspectionRevision:
+            jsonObject(item.repairInspection).revision ?? null,
+          reportRevision: jsonObject(item.repairReport).revision ?? null,
+          reportInspectionRevision:
+            jsonObject(item.repairReport).inspectionRevision ?? null,
+          qcResult:
+            jsonObject(jsonObject(item.repairReport).data).qcResult ?? null,
+          declaredQuantity: jsonObject(item.declared).quantity ?? null,
+          refurbishmentEligible,
+        };
+      }),
+    };
+  }
+  /** A stock owner personally receives one completed RETURN unit, never a held customer REPAIR unit. */
+  async receiveReturn(userId: string, input: ReceiveReturnStockDto) {
+    await this.authorize(userId, input.entityId, true);
+    if (
+      input.quantity !== 1 ||
+      input.confirmedItems !== true ||
+      ![
+        input.unitLabel,
+        input.sourceLocation,
+        input.location,
+        input.ownershipReference,
+        input.inspectionReference,
+      ].every((x) => typeof x === 'string' && !!x.trim())
+    )
+      throw new BadRequestException(
+        '須逐件點收數量一、確認實物、原位置、目的庫存位置及所有權與檢驗依據',
+      );
+    const hash = fingerprint(input);
+    try {
+      return await this.db.$transaction(
+        async (tx) => {
+          await this.authorizeTransaction(tx, userId, input.entityId);
+          await tx.$queryRaw`SELECT id FROM mailroom_items WHERE id=${input.sourceItemId} AND entity_id=${input.entityId} FOR UPDATE`;
+          const returned = await tx.mailroomItem.findFirst({
+            where: { id: input.sourceItemId, entityId: input.entityId },
+            include: { receipt: true },
+          });
+          if (!returned) throw new NotFoundException('公司來源退貨實物不存在');
+          const existing = await tx.afterSalesStockUnit.findUnique({
+            where: { sourceItemId: returned.id },
+          });
+          if (existing) {
+            const inbound = jsonObject(
+              jsonObject(existing.qualification).inbound,
+            );
+            if (
+              existing.entityId !== input.entityId ||
+              inbound.requestId !== input.requestId ||
+              inbound.requestHash !== hash ||
+              inbound.actorId !== userId
+            )
+              throw new ConflictException(
+                '來源實物已入庫或登錄；同一入庫重試不可變更內容',
+              );
+            return { unit: existing, inbound, duplicate: true };
+          }
+          if (
+            returned.version !== input.expectedVersion ||
+            returned.location !== input.sourceLocation.trim() ||
+            !['PENDING_RESTOCK', 'PENDING_WELFARE_STOCK'].includes(
+              returned.status,
+            )
+          )
+            throw new ConflictException(
+              '退貨實物版本、目前位置或入庫節點已變動',
+            );
+          if (!['MATCH', 'CONFIRMED_ACTUAL'].includes(returned.matchResult))
+            throw new ConflictException('來源退貨尚未完成品項核對');
+          const declared = jsonObject(returned.declared);
+          if (
+            declared.quantity !== 1 ||
+            typeof declared.id !== 'string' ||
+            !declared.id ||
+            !returned.receipt.sourceCaseId
+          )
+            throw new ConflictException(
+              '僅支援來源申報數量一的可辨識實物；多件須先建立逐件身分，不能增加庫存',
+            );
+          const sourceCaseId = returned.receipt.sourceCaseId;
+          const sourceCaseItemId = declared.id;
+          // The external one-piece declaration cannot be received again through a second mailroom receipt.
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.entityId + ':return-stock:' + sourceCaseId + ':' + sourceCaseItemId}))`;
+          const repeated = await tx.$queryRaw<
+            { id: string }[]
+          >`SELECT u.id FROM after_sales_stock_units u JOIN mailroom_items mi ON mi.id=u.source_item_id JOIN mailroom_receipts mr ON mr.id=mi.receipt_id WHERE u.entity_id=${input.entityId} AND mr.source_case_id=${sourceCaseId} AND mi.declared->>'id'=${sourceCaseItemId} LIMIT 1`;
+          if (repeated.length)
+            throw new ConflictException('此來源申報實物已由其他收件登錄庫存');
+          const clerk = await tx.user.findUnique({
+            where: { id: returned.custodianId },
+            include: {
+              roles: {
+                include: {
+                  role: {
+                    include: { permissions: { include: { permission: true } } },
+                  },
+                },
+              },
+              employee: { select: DEPARTMENT_ACCESS_SELECT },
+              entityMemberships: true,
+            },
+          });
+          if (
+            !clerk?.isActive ||
+            clerk.mustChangePassword ||
+            (clerk.employee && !clerk.employee.isActive) ||
+            !(
+              clerk.employee?.entityId === input.entityId ||
+              clerk.entityMemberships.some(
+                (x) => x.entityId === input.entityId,
+              ) ||
+              clerk.roles.some((x) => x.role.code === 'SUPER_ADMIN')
+            ) ||
+            !(
+              effectivePermissionKeys(clerk).includes('mailroom:update') ||
+              clerk.roles.some((x) =>
+                ['ADMIN', 'SUPER_ADMIN'].includes(x.role.code),
+              )
+            )
+          )
+            throw new ConflictException(
+              '須由同公司目前有效的收發人員先簽收退貨實物',
+            );
+          await tx.$queryRaw`SELECT id FROM products WHERE id=${input.productId} AND entity_id=${input.entityId} FOR UPDATE`;
+          await tx.$queryRaw`SELECT id FROM warehouses WHERE id=${input.warehouseId} AND entity_id=${input.entityId} FOR UPDATE`;
+          const product = await tx.product.findFirst({
+            where: {
+              id: input.productId,
+              entityId: input.entityId,
+              isActive: true,
+            },
+          });
+          const warehouse = await tx.warehouse.findFirst({
+            where: {
+              id: input.warehouseId,
+              entityId: input.entityId,
+              isActive: true,
+            },
+          });
+          if (
+            !product ||
+            !warehouse ||
+            !['SIMPLE', 'MANUFACTURED'].includes(product.type)
+          )
+            throw new NotFoundException('公司可入庫的實體商品或倉位不存在');
+          const sn = input.serialNumber?.trim() || null;
+          const revisions = validateRefurbishedReturn(
+            returned,
+            product.sku,
+            sn,
+          );
+          if (product.hasSerialNumbers && !sn)
+            throw new ConflictException('有序號商品須使用來源實物的實際 SN');
+          if (
+            typeof declared.sku === 'string' &&
+            declared.sku &&
+            declared.sku !== product.sku
+          )
+            throw new ConflictException('來源申報 SKU 與已核對實物不一致');
+          const previousIn = await tx.inventoryTransaction.findFirst({
+            where: {
+              entityId: input.entityId,
+              direction: 'IN',
+              referenceType: 'AFTER_SALES_RETURN',
+              referenceId: returned.id,
+            },
+          });
+          if (previousIn)
+            throw new ConflictException(
+              '來源實物已有正式入庫流水，請核對原紀錄',
+            );
+          let previousSerial: InventorySerialNumber | null = null;
+          if (sn) {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.entityId + ':return-stock-sn:' + sn}))`;
+            await tx.$queryRaw`SELECT id FROM inventory_serial_numbers WHERE entity_id=${input.entityId} AND serial_number=${sn} FOR UPDATE`;
+            previousSerial = await tx.inventorySerialNumber.findFirst({
+              where: { entityId: input.entityId, serialNumber: sn },
+            });
+            if (previousSerial) {
+              if (
+                previousSerial.productId !== product.id ||
+                !['SOLD', 'RETURNED', 'DEFECTIVE'].includes(
+                  previousSerial.status,
+                )
+              )
+                throw new ConflictException(
+                  '此 SN 已有可用／預留庫存或屬於其他品項，不可重複入庫',
+                );
+              if (
+                await tx.afterSalesStockUnit.findFirst({
+                  where: {
+                    inventorySerialId: previousSerial.id,
+                    status: { in: ['QUALIFIED', 'RESERVED'] },
+                  },
+                })
+              )
+                throw new ConflictException(
+                  '此 SN 已有有效合格標籤或預留，不能再入庫',
+                );
+              if (
+                previousSerial.status !== 'SOLD' &&
+                previousSerial.warehouseId
+              ) {
+                const oldBalance = await tx.inventorySnapshot.findUnique({
+                  where: {
+                    entityId_warehouseId_productId: {
+                      entityId: input.entityId,
+                      warehouseId: previousSerial.warehouseId,
+                      productId: product.id,
+                    },
+                  },
+                });
+                if (oldBalance?.qtyOnHand.gt(0))
+                  throw new ConflictException(
+                    '退回或瑕疵 SN 的原倉位仍有正式存貨，須先核對不可重複增加',
+                  );
+              }
+            }
+          }
+          const snapshotKey = {
+            entityId: input.entityId,
+            warehouseId: input.warehouseId,
+            productId: input.productId,
+          };
+          await tx.$queryRaw`SELECT id FROM inventory_snapshots WHERE entity_id=${input.entityId} AND warehouse_id=${input.warehouseId} AND product_id=${input.productId} FOR UPDATE`;
+          const current = await tx.inventorySnapshot.findUnique({
+            where: { entityId_warehouseId_productId: snapshotKey },
+          });
+          if (
+            current &&
+            (current.qtyOnHand.lt(0) ||
+              current.qtyAllocated.lt(0) ||
+              current.qtyAvailable.lt(0) ||
+              !current.qtyAvailable
+                .plus(current.qtyAllocated)
+                .eq(current.qtyOnHand))
+          )
+            throw new ConflictException(
+              '正式庫存餘額不一致，請先由庫存人員核對',
+            );
+          const movement = await tx.inventoryTransaction.create({
+            data: {
+              ...snapshotKey,
+              quantity: 1,
+              direction: 'IN',
+              referenceType: 'AFTER_SALES_RETURN',
+              referenceId: returned.id,
+              occurredAt: new Date(),
+              reason: `合格退貨正式入庫；來源 ${sourceCaseId}/${sourceCaseItemId}；操作 ${userId}；請求 ${input.requestId}`,
+            },
+          });
+          await tx.inventorySnapshot.upsert({
+            where: { entityId_warehouseId_productId: snapshotKey },
+            create: {
+              ...snapshotKey,
+              qtyOnHand: 1,
+              qtyAvailable: 1,
+              qtyAllocated: 0,
+            },
+            update: {
+              qtyOnHand: { increment: 1 },
+              qtyAvailable: { increment: 1 },
+            },
+          });
+          const serialData = {
+            warehouseId: input.warehouseId,
+            status: 'AVAILABLE',
+            inboundRefType: 'AFTER_SALES_RETURN',
+            inboundRefId: movement.id,
+            outboundRefType: null,
+            outboundRefId: null,
+          };
+          if (previousSerial) {
+            const revived = await tx.inventorySerialNumber.updateMany({
+              where: {
+                id: previousSerial.id,
+                entityId: input.entityId,
+                productId: product.id,
+                status: previousSerial.status,
+              },
+              data: serialData,
+            });
+            if (revived.count !== 1)
+              throw new ConflictException(
+                '退貨 SN 狀態已改變，本次入庫交易須整筆回復',
+              );
+          }
+          const serial =
+            previousSerial ||
+            (sn
+              ? await tx.inventorySerialNumber.create({
+                  data: {
+                    ...snapshotKey,
+                    serialNumber: sn,
+                    ...serialData,
+                  },
+                })
+              : null);
+          const unitId = returnStockUnitId(
+            input.entityId,
+            sourceCaseId,
+            sourceCaseItemId,
+          );
+          const inbound = {
+            unitId,
+            inTransactionId: movement.id,
+            sourceItemId: returned.id,
+            sourceCaseId,
+            sourceCaseItemId,
+            requestId: input.requestId,
+            requestHash: hash,
+            actorId: userId,
+            quantity: 1,
+            sourceItemVersion: returned.version,
+            inventoryItemVersion: returned.version + 1,
+            fromCustodianId: returned.custodianId,
+            toCustodianId: userId,
+            fromLocation: returned.location,
+            toLocation: input.location.trim(),
+            warehouseId: warehouse.id,
+            ...revisions,
+            receivedAt: new Date().toISOString(),
+            externalInventoryPosted: false,
+            ...(previousSerial
+              ? {
+                  previousSerial: {
+                    id: previousSerial.id,
+                    entityId: previousSerial.entityId,
+                    productId: previousSerial.productId,
+                    warehouseId: previousSerial.warehouseId,
+                    serialNumber: previousSerial.serialNumber,
+                    status: previousSerial.status,
+                    inboundRefType: previousSerial.inboundRefType,
+                    inboundRefId: previousSerial.inboundRefId,
+                    outboundRefType: previousSerial.outboundRefType,
+                    outboundRefId: previousSerial.outboundRefId,
+                  },
+                }
+              : {}),
+            ...(serial
+              ? {
+                  receivedSerial: {
+                    id: serial.id,
+                    serialNumber: sn,
+                    ...serialData,
+                  },
+                }
+              : {}),
+          };
+          const unit = await tx.afterSalesStockUnit.create({
+            data: {
+              id: unitId,
+              ...snapshotKey,
+              unitLabel: input.unitLabel.trim(),
+              serialNumber: sn,
+              inventorySerialId: serial?.id,
+              kind: 'REFURBISHED',
+              sourceItemId: returned.id,
+              qualifiedById: userId,
+              qualification: {
+                sourceReference: movement.id,
+                ownershipReference: input.ownershipReference.trim(),
+                inspectionReference: input.inspectionReference.trim(),
+                sku: product.sku,
+                name: product.name,
+                hasSerialNumbers: product.hasSerialNumbers,
+                externalInventoryPosted: false,
+                inbound,
+              },
+            },
+          });
+          const updated = await tx.mailroomItem.update({
+            where: { id: returned.id },
+            data: {
+              status: 'STOCKED',
+              custodianId: userId,
+              location: input.location.trim(),
+              nextUserId: null,
+              version: { increment: 1 },
+              repairWorkflow: {
+                ...repairWorkflow(returned.repairWorkflow),
+                inventoryReceipt: inbound,
+              } as Prisma.InputJsonValue,
+            },
+            include: { receipt: true },
+          });
+          const actor = await tx.user.findUniqueOrThrow({
+            where: { id: userId },
+            select: { name: true },
+          });
+          await tx.mailroomAction.create({
+            data: {
+              entityId: input.entityId,
+              itemId: returned.id,
+              actorId: userId,
+              actorName: actor.name,
+              requestId: input.requestId,
+              requestHash: hash,
+              action: 'after_sales_stock_received',
+              fromStatus: returned.status,
+              toStatus: updated.status,
+              version: updated.version,
+              note: `退貨單件正式入庫 ${movement.id}`,
+              snapshot: JSON.parse(
+                JSON.stringify(updated),
+              ) as Prisma.InputJsonValue,
+            },
+          });
+          await tx.mailroomTask.updateMany({
+            where: {
+              itemId: returned.id,
+              entityId: input.entityId,
+              status: 'OPEN',
+            },
+            data: { status: 'COMPLETED', completedAt: new Date() },
+          });
+          return { unit, inbound, duplicate: false };
+        },
+        { isolationLevel: 'Serializable' },
+      );
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        ['P2002', 'P2034'].includes(error.code)
+      )
+        throw new ConflictException(
+          '入庫實物或庫存版本已變動，請以同一入庫內容重試並核對原紀錄',
+        );
+      throw error;
+    }
   }
   async qualify(
     userId: string,
@@ -313,37 +780,11 @@ export class AfterSalesStockService {
             where: { id: input.sourceItemId, entityId: input.entityId },
             include: { receipt: true },
           });
-          const report = returned?.repairReport as Report | null;
-          if (
-            !returned ||
-            returned.receipt.category !== 'RETURN' ||
-            ![
-              'PENDING_RESTOCK',
-              'PENDING_WELFARE_STOCK',
-              'READY_FOR_DISPATCH',
-            ].includes(returned.status) ||
-            !(
-              report?.status === 'SUBMITTED' &&
-              report?.data?.qcResult === 'PASS' &&
-              ['REPAIRED', 'FACTORY_REPAIRED'].includes(
-                report.data.outcome || '',
-              ) &&
-              Array.isArray(report.data.checks) &&
-              report.data.checks.length > 0 &&
-              report.data.checks.every((check) => check.result === 'PASS') &&
-              report.inspectionRevision ===
-                (returned.repairInspection as Inspection | null)?.revision &&
-              (returned.repairInspection as Inspection | null)?.status ===
-                'SUBMITTED'
-            )
-          )
-            throw new ConflictException('退貨品尚未完成合格檢查或整新複驗');
-          if (
-            returned.sku !== product.sku ||
-            (returned.serialNumber &&
-              returned.serialNumber !== serial?.serialNumber)
-          )
-            throw new ConflictException('來源品項或 SN 與入庫商品不一致');
+          validateRefurbishedReturn(
+            returned,
+            product.sku,
+            serial?.serialNumber,
+          );
         }
         return tx.afterSalesStockUnit.create({
           data: {
@@ -633,29 +1074,46 @@ export class AfterSalesStockService {
         where: { id: unit.sourceItemId, entityId },
         include: { receipt: true },
       });
-      const inspection = returned?.repairInspection as Inspection | null;
-      const report = returned?.repairReport as Report | null;
-      if (
-        !returned ||
-        returned.receipt.category !== 'RETURN' ||
-        returned.sku !== product?.sku ||
-        (returned.serialNumber &&
-          returned.serialNumber !== unit.serialNumber) ||
-        ![
-          'PENDING_RESTOCK',
-          'PENDING_WELFARE_STOCK',
-          'READY_FOR_DISPATCH',
-        ].includes(returned.status) ||
-        inspection?.status !== 'SUBMITTED' ||
-        report?.status !== 'SUBMITTED' ||
-        report.inspectionRevision !== inspection.revision ||
-        report.data?.qcResult !== 'PASS' ||
-        !['REPAIRED', 'FACTORY_REPAIRED'].includes(report.data.outcome || '') ||
-        !Array.isArray(report.data.checks) ||
-        !report.data.checks.length ||
-        report.data.checks.some((check) => check.result !== 'PASS')
-      )
-        throw new ConflictException('整新品來源檢測或實物狀態已改變，不能出庫');
+      if (returned?.status === 'STOCKED') {
+        const inbound = jsonObject(jsonObject(unit.qualification).inbound);
+        const physical = jsonObject(
+          jsonObject(returned.repairWorkflow).inventoryReceipt,
+        );
+        if (
+          typeof inbound.inTransactionId !== 'string' ||
+          inbound.unitId !== unit.id ||
+          inbound.sourceItemId !== returned.id ||
+          physical.inTransactionId !== inbound.inTransactionId ||
+          physical.unitId !== unit.id ||
+          inbound.quantity !== 1 ||
+          inbound.warehouseId !== unit.warehouseId ||
+          physical.toCustodianId !== returned.custodianId ||
+          physical.toLocation !== returned.location ||
+          inbound.inspectionRevision !==
+            jsonObject(returned.repairInspection).revision ||
+          inbound.reportRevision !== jsonObject(returned.repairReport).revision
+        )
+          throw new ConflictException('整新品來源正式入庫與實物交接證明不符');
+        const incoming = await tx.inventoryTransaction.findFirst({
+          where: {
+            id: inbound.inTransactionId,
+            entityId,
+            productId: unit.productId,
+            warehouseId: unit.warehouseId,
+            direction: 'IN',
+            referenceType: 'AFTER_SALES_RETURN',
+            referenceId: returned.id,
+          },
+        });
+        if (!incoming || !incoming.quantity.eq(1))
+          throw new ConflictException('整新品正式入庫流水缺失');
+      }
+      validateRefurbishedReturn(
+        returned,
+        product?.sku || '',
+        unit.serialNumber,
+        returned?.status === 'STOCKED',
+      );
     }
     if (row.status !== 'RESERVED' || row.expiresAt <= new Date())
       throw new ConflictException('預留已失效，請重新預留');
