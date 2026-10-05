@@ -4893,7 +4893,7 @@
           "合格退貨作換機正式出庫後，原入庫紀錄保留為歷史。現在實物保管與位置依同公司已核對的換機案件物流投影；出庫關聯不明時顯示待核對，不以歷史入庫人員當作目前持有人。此投影不授予換機案件的技術單或顧客財務資料。",
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "來源維修入口保留原 /cases/repairs 轉到 /cases?type=REPAIR&queue=technician 的精確別名；只在本輪所選維修入口接受此完整查詢，仍核對公司、目前 iframe、同源與路徑，不放寬其他路徑、角色或寫入權限。"
+          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
         ],
         "related": [
           "repair-workbench",
@@ -4928,7 +4928,7 @@
               "After formal replacement outbound, the qualified return retains its original inbound history. Current holder and location follow the verified same-company replacement logistics projection. An unknown outbound relation is marked for verification instead of presenting the historical stock recipient as current custody. This projection grants no technical document or customer financial access to the replacement case.",
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "The original repair entry redirects from /cases/repairs to the exact /cases?type=REPAIR&queue=technician alias. Accept that complete query only for the currently requested repairs entry, preserving company, current frame, same-origin, path, role and write checks."
+              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
             ],
             "related": [
               "repair-workbench",
@@ -5004,7 +5004,7 @@
           "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "來源維修入口保留原 /cases/repairs 轉到 /cases?type=REPAIR&queue=technician 的精確別名；只在本輪所選維修入口接受此完整查詢，仍核對公司、目前 iframe、同源與路徑，不放寬其他路徑、角色或寫入權限。"
+          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
         ],
         "related": [
           "after-sales-customer-workbench",
@@ -5038,7 +5038,7 @@
               "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "The original repair entry redirects from /cases/repairs to the exact /cases?type=REPAIR&queue=technician alias. Accept that complete query only for the currently requested repairs entry, preserving company, current frame, same-origin, path, role and write checks."
+              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
             ],
             "related": [
               "after-sales-customer-workbench",
@@ -5113,7 +5113,7 @@
           "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "來源維修入口保留原 /cases/repairs 轉到 /cases?type=REPAIR&queue=technician 的精確別名；只在本輪所選維修入口接受此完整查詢，仍核對公司、目前 iframe、同源與路徑，不放寬其他路徑、角色或寫入權限。"
+          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5144,7 +5144,7 @@
               "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "The original repair entry redirects from /cases/repairs to the exact /cases?type=REPAIR&queue=technician alias. Accept that complete query only for the currently requested repairs entry, preserving company, current frame, same-origin, path, role and write checks."
+              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5201,7 +5201,7 @@
           "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "來源維修入口保留原 /cases/repairs 轉到 /cases?type=REPAIR&queue=technician 的精確別名；只在本輪所選維修入口接受此完整查詢，仍核對公司、目前 iframe、同源與路徑，不放寬其他路徑、角色或寫入權限。"
+          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5232,7 +5232,7 @@
               "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "The original repair entry redirects from /cases/repairs to the exact /cases?type=REPAIR&queue=technician alias. Accept that complete query only for the currently requested repairs entry, preserving company, current frame, same-origin, path, role and write checks."
+              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5289,7 +5289,7 @@
           "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "來源維修入口保留原 /cases/repairs 轉到 /cases?type=REPAIR&queue=technician 的精確別名；只在本輪所選維修入口接受此完整查詢，仍核對公司、目前 iframe、同源與路徑，不放寬其他路徑、角色或寫入權限。"
+          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5320,7 +5320,7 @@
               "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "The original repair entry redirects from /cases/repairs to the exact /cases?type=REPAIR&queue=technician alias. Accept that complete query only for the currently requested repairs entry, preserving company, current frame, same-origin, path, role and write checks."
+              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5377,7 +5377,7 @@
           "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "來源維修入口保留原 /cases/repairs 轉到 /cases?type=REPAIR&queue=technician 的精確別名；只在本輪所選維修入口接受此完整查詢，仍核對公司、目前 iframe、同源與路徑，不放寬其他路徑、角色或寫入權限。"
+          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5408,7 +5408,7 @@
               "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "The original repair entry redirects from /cases/repairs to the exact /cases?type=REPAIR&queue=technician alias. Accept that complete query only for the currently requested repairs entry, preserving company, current frame, same-origin, path, role and write checks."
+              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5465,7 +5465,7 @@
           "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "來源維修入口保留原 /cases/repairs 轉到 /cases?type=REPAIR&queue=technician 的精確別名；只在本輪所選維修入口接受此完整查詢，仍核對公司、目前 iframe、同源與路徑，不放寬其他路徑、角色或寫入權限。"
+          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5496,7 +5496,7 @@
               "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "The original repair entry redirects from /cases/repairs to the exact /cases?type=REPAIR&queue=technician alias. Accept that complete query only for the currently requested repairs entry, preserving company, current frame, same-origin, path, role and write checks."
+              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5553,7 +5553,7 @@
           "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "來源維修入口保留原 /cases/repairs 轉到 /cases?type=REPAIR&queue=technician 的精確別名；只在本輪所選維修入口接受此完整查詢，仍核對公司、目前 iframe、同源與路徑，不放寬其他路徑、角色或寫入權限。"
+          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5584,7 +5584,7 @@
               "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "The original repair entry redirects from /cases/repairs to the exact /cases?type=REPAIR&queue=technician alias. Accept that complete query only for the currently requested repairs entry, preserving company, current frame, same-origin, path, role and write checks."
+              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5641,7 +5641,7 @@
           "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "來源維修入口保留原 /cases/repairs 轉到 /cases?type=REPAIR&queue=technician 的精確別名；只在本輪所選維修入口接受此完整查詢，仍核對公司、目前 iframe、同源與路徑，不放寬其他路徑、角色或寫入權限。"
+          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5672,7 +5672,7 @@
               "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "The original repair entry redirects from /cases/repairs to the exact /cases?type=REPAIR&queue=technician alias. Accept that complete query only for the currently requested repairs entry, preserving company, current frame, same-origin, path, role and write checks."
+              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5729,7 +5729,7 @@
           "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "來源維修入口保留原 /cases/repairs 轉到 /cases?type=REPAIR&queue=technician 的精確別名；只在本輪所選維修入口接受此完整查詢，仍核對公司、目前 iframe、同源與路徑，不放寬其他路徑、角色或寫入權限。"
+          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5760,7 +5760,7 @@
               "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "The original repair entry redirects from /cases/repairs to the exact /cases?type=REPAIR&queue=technician alias. Accept that complete query only for the currently requested repairs entry, preserving company, current frame, same-origin, path, role and write checks."
+              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5817,7 +5817,7 @@
           "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "來源維修入口保留原 /cases/repairs 轉到 /cases?type=REPAIR&queue=technician 的精確別名；只在本輪所選維修入口接受此完整查詢，仍核對公司、目前 iframe、同源與路徑，不放寬其他路徑、角色或寫入權限。"
+          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5848,7 +5848,7 @@
               "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "The original repair entry redirects from /cases/repairs to the exact /cases?type=REPAIR&queue=technician alias. Accept that complete query only for the currently requested repairs entry, preserving company, current frame, same-origin, path, role and write checks."
+              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
             ],
             "related": [
               "after-sales-native-cases",
