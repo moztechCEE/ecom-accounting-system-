@@ -34,8 +34,13 @@ export function createAfterSalesLaunchSession() {
       if (current !== attempt || attempt.phase !== 'LOADING' || attempt.frame !== frame) return 'ignored'
       try {
         const expected = new URL('/after-sales-app' + attempt.sourcePath, origin), actual = new URL(actualUrl)
-        if (actual.origin !== origin || actual.pathname !== expected.pathname || actual.search !== expected.search ||
-          (reportedPath !== expected.pathname && reportedPath !== expected.pathname.slice('/after-sales-app'.length))) return 'mismatch'
+        const repairAlias = attempt.section === 'repairs' && actual.pathname === '/after-sales-app/cases' &&
+          actual.searchParams.size === 2 && actual.searchParams.getAll('type').length === 1 &&
+          actual.searchParams.get('type') === 'REPAIR' && actual.searchParams.getAll('queue').length === 1 &&
+          actual.searchParams.get('queue') === 'technician'
+        const canonical = actual.pathname === expected.pathname && actual.search === expected.search
+        if (actual.origin !== origin || actual.hash || (!canonical && !repairAlias) ||
+          (reportedPath !== actual.pathname && reportedPath !== actual.pathname.slice('/after-sales-app'.length))) return 'mismatch'
       } catch { return 'mismatch' }
       attempt.phase = 'READY'; return 'ready'
     },

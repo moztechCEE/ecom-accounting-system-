@@ -1,14 +1,17 @@
 import { useRef, useState } from 'react';
-import { Alert, Button, Card, Checkbox, Descriptions, Form, Input, Space, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Checkbox, Descriptions, Form, Input, Space, Tag, Typography } from 'antd';
 import { repairService } from '../../services/repair';
 import { errorText } from '../mailroom/model';
 import { CUSTODY, CSR_STATUS, WORKFLOW_ACTIONS, repairReportReady } from './repair-model';
 import type { RepairItem, RepairWorkflowAction, RepairWorkflowCommand } from './repair-model';
 import { currentPhysicalCustody } from '../mailroom/item-custody';
+import { useRepairFeedback } from './repair-feedback';
+import type { RepairMessage } from './repair-feedback';
 const TECH_ACTIONS:RepairWorkflowAction[]=['return_original','send_factory','accept_factory','request_factory_return','cancel_factory','receive_factory','complete_factory'];
 type Fields={note:string;confirmedItems?:boolean;location?:string;factoryName?:string;reference?:string;carrier?:string;trackingNumber?:string};
 const required=[{required:true,whitespace:true,message:'請填寫實際作業資料'}];
-export default function RepairWorkflowPanel({item,entityId,canUpdate,onSaved,onDirtyChange,onBeforeAction}:{item:RepairItem;entityId:string;canUpdate:boolean;onSaved:()=>Promise<void>;onDirtyChange:(dirty:boolean)=>void;onBeforeAction:()=>Promise<boolean>}) {
+export default function RepairWorkflowPanel({item,entityId,canUpdate,onSaved,onDirtyChange,onBeforeAction,feedback}:{item:RepairItem;entityId:string;canUpdate:boolean;onSaved:()=>Promise<void>;onDirtyChange:(dirty:boolean)=>void;onBeforeAction:()=>Promise<boolean>;feedback?:RepairMessage}) {
+  const {message,contextHolder}=useRepairFeedback(feedback);
   const [action,setAction]=useState<RepairWorkflowAction>();
   const [form]=Form.useForm<Fields>();
   const [busy,setBusy]=useState(false);
@@ -40,6 +43,7 @@ export default function RepairWorkflowPanel({item,entityId,canUpdate,onSaved,onD
     finally{running.current=false;setBusy(false);}
   }
   return <>
+    {contextHolder}
     {handoff&&<Card size="small" title="客服部門交辦">
       <Space wrap style={{marginBottom:12}}><Tag color={handoff.status==='ACCEPTED'?'blue':handoff.status==='RESOLVED'?'green':'orange'}>{CSR_STATUS[handoff.status] || handoff.status}</Tag><Tag>依檢修 v{handoff.inspectionRevision}</Tag>{handoff.quoteRevision!=null&&<Tag>售後報價 v{handoff.quoteRevision}</Tag>}{handoff.decision&&<Tag>{handoff.decision==='APPROVE'?'方案確認通過':'方案拒絕／不進行維修'}</Tag>}</Space>
       <Descriptions size="small" column={2} items={[

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Alert, Button, Card, Col, Collapse, Descriptions, Empty, Form, Input, InputNumber, Modal, Row, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd'
+import { Alert, Button, Card, Col, Collapse, Descriptions, Empty, Form, Input, InputNumber, Row, Select, Space, Table, Tabs, Tag, Typography } from 'antd'
 import type { FormInstance } from 'antd'
 import { PrinterOutlined } from '@ant-design/icons'
 import { useAuth } from '../../contexts/AuthContext'
@@ -9,6 +9,8 @@ import { errorText } from '../mailroom/model'
 import { FEES, PLANS, RESULTS, inspectionReviewCurrent } from './repair-model'
 import type { InspectionData, RepairData, RepairDocument, RepairItem } from './repair-model'
 import RepairReplacementStock from './RepairReplacementStock'
+import { useRepairFeedback } from './repair-feedback'
+import type { RepairMessage } from './repair-feedback'
 
 const INSPECTION_STAGES = ['REPAIR_RECEIVED', 'INSPECTING', 'REFURBISHING']
 const REPORT_STAGES = ['INSPECTING', 'REPAIRING', 'REFURBISHING']
@@ -102,7 +104,7 @@ function SavedDocument({ document, kind, customerRepair }: { document: RepairDoc
   </div>
 }
 
-function printDocument(item: RepairItem, kind: 'inspection' | 'repair') {
+function printDocument(item: RepairItem, kind: 'inspection' | 'repair', message: RepairMessage) {
   const document = kind === 'inspection' ? item.repairInspection : item.repairReport
   if (!document) return
   const printable = window.open('', '_blank', 'width=900,height=750')
@@ -155,7 +157,8 @@ function printDocument(item: RepairItem, kind: 'inspection' | 'repair') {
   printable.print()
 }
 
-export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange, onBeforeSave }: { item: RepairItem; entityId: string; onSaved: () => void; onDirtyChange?: (dirty: boolean) => void; onBeforeSave?: () => Promise<boolean> }) {
+export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange, onBeforeSave, feedback }: { item: RepairItem; entityId: string; onSaved: () => void; onDirtyChange?: (dirty: boolean) => void; onBeforeSave?: () => Promise<boolean>; feedback?: RepairMessage }) {
+  const { modal, message, contextHolder } = useRepairFeedback(feedback)
   const { user } = useAuth()
   const customerRepair = item.receipt.category === 'REPAIR'
   const [inspectionForm] = Form.useForm<InspectionData>()
@@ -194,7 +197,7 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
       if (status === 'SUBMITTED') await form.validateFields()
       const otherForm = kind === 'inspection' ? repairForm : inspectionForm
       if (otherForm.isFieldsTouched()) {
-        const discard = await new Promise<boolean>(resolve => Modal.confirm({
+        const discard = await new Promise<boolean>(resolve => modal.confirm({
           title: `另一張${kind === 'inspection' ? '維修單' : '檢修單'}有未保存修改`,
           content: '保存本單後會重新載入案件，另一張未保存的修改會遺失。您可以取消，返回整理或保存草稿。',
           okText: '保存本單並放棄另一張修改', cancelText: '取消，保留草稿',
@@ -256,6 +259,7 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
   const history = [...versions.entries()].sort(([, first], [, second]) => Date.parse(second.document.updatedAt) - Date.parse(first.document.updatedAt))
 
   return <div>
+    {contextHolder}
     <Space wrap style={{ marginBottom: 12 }}><Typography.Text strong>本人檢修與維修紀錄</Typography.Text><Tag>案件版本 {item.version}</Tag></Space>
     <Alert type="info" showIcon style={{ marginBottom: 16 }} message={customerRepair ? '保存草稿不代表提交。檢修單保存新版本後須重新取得客服方案確認；原版本與確認紀錄保留在歷程。' : '退貨庫存整新為公司內部作業，提交及更正均保留版本；交回仍須檢修與維修版次一致、複驗通過。'} />
     {!ownSigned && <Alert type="warning" showIcon style={{ marginBottom: 16 }} message="目前為唯讀；認領不等於本人已簽收。工作單由有編輯權且已簽收、保管此物件的維修師填寫。" />}
@@ -264,7 +268,7 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
       { key: 'inspection', label: '檢修單', forceRender: true, children: <>
         <DocumentHeading document={item.repairInspection} title="檢修單" inspection={customerRepair} />
         <Typography.Paragraph type="secondary">{customerRepair ? 'ERP 客服確認的是本版處理方案；顧客同意與收款仍以售後來源放行為準。' : '公司退貨庫存整新不套用顧客維修的客服方案確認、顧客同意或收款放行。'}</Typography.Paragraph>
-        <Space wrap style={{ marginBottom: 16 }}><Button icon={<PrinterOutlined />} disabled={!item.repairInspection || !!busy} onClick={() => printDocument(item, 'inspection')}>列印內部檢修單</Button><Typography.Text type="secondary">列印已保存版本；不含未保存修改。</Typography.Text></Space>
+        <Space wrap style={{ marginBottom: 16 }}><Button icon={<PrinterOutlined />} disabled={!item.repairInspection || !!busy} onClick={() => printDocument(item, 'inspection', message)}>列印內部檢修單</Button><Typography.Text type="secondary">列印已保存版本；不含未保存修改。</Typography.Text></Space>
         <Form name={`repair-inspection-${item.id}`} form={inspectionForm} layout="vertical" initialValues={inspectionInitial} onValuesChange={() => onDirtyChange?.(true)} disabled={!canInspect || !!busy}>
           <Form.Item name="complaint" label="客訴／故障描述" rules={requiredText()}><Input.TextArea rows={3} maxLength={2000} showCount /></Form.Item>
           <Row gutter={16}>
@@ -294,7 +298,7 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
       </> },
       { key: 'repair', label: '維修單', forceRender: true, children: <>
         <DocumentHeading document={item.repairReport} title="維修單" />
-        <Space wrap style={{ marginBottom: 16 }}><Button icon={<PrinterOutlined />} disabled={!item.repairReport || !!busy} onClick={() => printDocument(item, 'repair')}>列印內部維修單</Button><Typography.Text type="secondary">列印已保存版本；維修單保留依據的檢修版次。</Typography.Text></Space>
+        <Space wrap style={{ marginBottom: 16 }}><Button icon={<PrinterOutlined />} disabled={!item.repairReport || !!busy} onClick={() => printDocument(item, 'repair', message)}>列印內部維修單</Button><Typography.Text type="secondary">列印已保存版本；維修單保留依據的檢修版次。</Typography.Text></Space>
         {item.repairReport && item.repairReport.inspectionRevision !== item.repairInspection?.revision && <Alert type="warning" showIcon style={{ marginBottom: 16 }} message="維修單與目前檢修版次不一致" description="請依目前已提交的檢修單重新提交維修單，確認處置內容及複驗結果後才能交回。" />}
         <Alert type="info" showIcon style={{ marginBottom: 16 }} message="只記錄實際執行內容。替換請如實填寫替換；不得捏造原機修理紀錄。總複驗未通過可以留單，仍不能交回收發室。" />
         <Form name={`repair-report-${item.id}`} form={repairForm} layout="vertical" initialValues={repairInitial} onValuesChange={() => onDirtyChange?.(true)} disabled={!canReport || !!busy}>
@@ -305,7 +309,7 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
             <Alert type="info" showIcon style={{marginBottom:16}} message="原廠返還後，維修師本人核對與複驗" description="照原廠處理憑據填寫實際內容；原廠收件或返還在途不代表本人已收回。尚未返還或複驗不通過時，不得交回作完成件。" />
           </>}
           {outcome === 'REPLACED' && <>
-            {canReport && !busy && <div style={{ marginBottom: 16 }}><RepairReplacementStock item={{...item,entityId}} onSelected={selection => {
+            {canReport && !busy && <div style={{ marginBottom: 16 }}><RepairReplacementStock feedback={message} item={{...item,entityId}} onSelected={selection => {
               setSelectedRequiresSerial(!!item.serialNumber || selection.hasSerialNumbers === true)
               repairForm.setFieldsValue({ replacementSku: selection.sku, replacementCondition: selection.condition, replacementSerial: selection.serialNumber || '', replacementSource: selection.unitLabel, inventoryReference: selection.reservationId })
               onDirtyChange?.(true)

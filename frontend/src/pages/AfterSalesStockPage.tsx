@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Checkbox, Form, Input, Modal, Select, Space, Table, Tag, message } from 'antd'
+import { Alert, Button, Card, Checkbox, Form, Input, Select, Space, Table, Tag } from 'antd'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { hasAnyPermission } from '../utils/access'
@@ -8,8 +8,10 @@ import type { ReplacementUnit, RepairStockCatalog, StockQualification, StockRetu
 import { buildReturnStockReceipt, canReceiveReturnStock, validateReturnStockReceipt } from '../services/repair-stock-return'
 import type { StockReturnFormValues, StockReturnReceiptInput } from '../services/repair-stock-return'
 import { useRepairNavigationGuard } from './repair/repair-navigation'
-const confirmDiscard = () => new Promise<boolean>(resolve => Modal.confirm({ title: '庫存表單尚未完成', content: '請先完成或確認放棄表單。入庫已送出而未取得回執時，請先重試或查核正式入庫，不要另建一筆。既有預留不會因離開頁面而取消。', okText: '離開頁面', cancelText: '保留表單', maskClosable: false, onOk: () => resolve(true), onCancel: () => resolve(false) }))
+import { useRepairFeedback } from './repair/repair-feedback'
 export default function AfterSalesStockPage() {
+  const { modal, message, contextHolder } = useRepairFeedback()
+  const confirmDiscard = useCallback(() => new Promise<boolean>(resolve => modal.confirm({ title: '庫存表單尚未完成', content: '請先完成或確認放棄表單。入庫已送出而未取得回執時，請先重試或查核正式入庫，不要另建一筆。既有預留不會因離開頁面而取消。', okText: '離開頁面', cancelText: '保留表單', maskClosable: false, onOk: () => resolve(true), onCancel: () => resolve(false) })), [modal])
   const { user } = useAuth()
   const [params] = useSearchParams()
   const entityId = params.get('entityId') || localStorage.getItem('entityId') || ''
@@ -64,7 +66,7 @@ export default function AfterSalesStockPage() {
         input = buildReturnStockReceipt(entityId, values, selectedReturn,
           catalog?.products.find(value => value.id === values.productId), crypto.randomUUID())
         const draft = input
-        const allowed = await new Promise<boolean>(resolve => Modal.confirm({
+        const allowed = await new Promise<boolean>(resolve => modal.confirm({
           title: '確認本人點收並正式入庫一件整新品',
           content: `來源 ${selectedReturn?.label}；${selectedReturn?.sku}。將由來源位置「${draft.sourceLocation}」交接至「${draft.location}」，正式 ERP 入庫 +1 並登錄整新品。這不代表外部庫存已過帳。`,
           okText: '確認本人簽收並入庫', cancelText: '返回核對', maskClosable: false,
@@ -93,9 +95,10 @@ export default function AfterSalesStockPage() {
     try { await repairStockService.release(entityId, id); await load(); message.success('未使用的預留已釋放') }
     catch { message.error('無法釋放，請核對案件及庫存狀態；已出庫不能在此回補') } finally { setBusy(false) }
   }
-  if (!entityId) return <Alert type="warning" message="請先選擇作業公司" />
-  if (!canRead) return <Alert type="warning" message="沒有售後庫存讀取權限" />
+  if (!entityId) return <>{contextHolder}<Alert type="warning" message="請先選擇作業公司" /></>
+  if (!canRead) return <>{contextHolder}<Alert type="warning" message="沒有售後庫存讀取權限" /></>
   return <Space direction="vertical" style={{ width: '100%' }}>
+    {contextHolder}
     <h2>售後替換與整新品庫存</h2>
     <Alert type="info" showIcon message="合格實物 → 正式入庫／合格登錄 → 案件預留 → 正式使用" description="合格退貨由庫存負責人本人點收後正式入庫；已正式入庫的商品則只登錄合格資料，不增加數量。預留、取消釋放、ERP 入庫與出庫保留不同流水；外部庫存回執另外追蹤。" />
     {failure && <Alert type="error" message={failure} />}

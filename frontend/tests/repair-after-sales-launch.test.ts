@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { AFTER_SALES_READY_TIMEOUT_MS, AFTER_SALES_SOURCE_PATHS, afterSalesFrameFailure, createAfterSalesLaunchSession } from '../src/pages/repair/after-sales-launch'
+import { AFTER_SALES_READY_TIMEOUT_MS, AFTER_SALES_SOURCE_PATHS, afterSalesFrameFailure, createAfterSalesLaunchSession } from '../src/pages/repair/after-sales-launch.ts'
 
 const origin = 'https://aftersales-review---corely-erp-dev-sp5g377smq-de.a.run.app'
 test('a slower previous section response cannot submit after a newer launch or unmount', async () => {
@@ -60,6 +60,45 @@ test('an unhydrated HTML failure reaches a finite deadline and cannot later appe
   const retry = guard.begin('cases', 'company')
   assert.notEqual(retry.id, attempt.id)
   assert.equal(guard.attach(retry, {}), true)
+})
+test('the original repair redirect proves only the requested repair queue, in either query order', () => {
+  for (const query of ['type=REPAIR&queue=technician', 'queue=technician&type=REPAIR']) {
+    const guard = createAfterSalesLaunchSession(), frame = {}, attempt = guard.begin('repairs', 'company')
+    guard.attach(attempt, frame)
+    assert.equal(guard.ready(attempt, frame, '/cases', origin + '/after-sales-app/cases?' + query, origin), 'ready')
+    assert.equal(attempt.phase, 'READY')
+  }
+  const guard = createAfterSalesLaunchSession(), frame = {}, attempt = guard.begin('repairs', 'company')
+  guard.attach(attempt, frame)
+  assert.equal(guard.ready(attempt, frame, '/cases/repairs', origin + '/after-sales-app/cases/repairs', origin), 'ready')
+})
+test('repair readiness rejects missing, duplicate, wrong or unknown alias parameters and wrong paths', () => {
+  const guard = createAfterSalesLaunchSession(), frame = {}, attempt = guard.begin('repairs', 'company')
+  guard.attach(attempt, frame)
+  for (const query of ['', '?type=REPAIR', '?queue=technician', '?type=REPAIR&queue=warehouse',
+    '?type=RESHIPMENT&queue=technician', '?type=repair&queue=technician',
+    '?type=REPAIR&type=REPAIR&queue=technician', '?type=REPAIR&queue=technician&queue=technician',
+    '?type=REPAIR&queue=technician&error=denied', '?type=REPAIR&queue=technician#other']) {
+    assert.equal(guard.ready(attempt, frame, '/cases', origin + '/after-sales-app/cases' + query, origin), 'mismatch', query)
+  }
+  const query = '?type=REPAIR&queue=technician'
+  for (const [path, url] of [
+    ['/cases', origin + '/cases' + query],
+    ['/cases/repairs', origin + '/after-sales-app/cases' + query],
+    ['/cases', 'https://other.example.invalid/after-sales-app/cases' + query],
+  ]) assert.equal(guard.ready(attempt, frame, path, url, origin), 'mismatch')
+  assert.equal(attempt.phase, 'LOADING')
+})
+test('a repair alias cannot authorize another section, stale request, wrong frame or a different company', () => {
+  const guard = createAfterSalesLaunchSession(), frame = {}, old = guard.begin('repairs', 'company-a')
+  guard.attach(old, frame)
+  const current = guard.begin('cases', 'company-b'), nextFrame = {}
+  guard.attach(current, nextFrame)
+  const url = origin + '/after-sales-app/cases?type=REPAIR&queue=technician'
+  assert.equal(guard.ready(old, frame, '/cases', url, origin), 'ignored')
+  assert.equal(guard.ready(current, frame, '/cases', url, origin), 'ignored')
+  assert.equal(guard.ready(current, nextFrame, '/cases', url, origin), 'mismatch')
+  assert.equal(current.phase, 'LOADING')
 })
 test('JSON, plain-text proxy failure and Next error document expose a retryable error', () => {
   assert.equal(afterSalesFrameFailure('{"error":"權限已撤回"}', 'application/json'), '權限已撤回')

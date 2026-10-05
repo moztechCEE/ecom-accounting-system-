@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Select, Space, Tag, message } from 'antd'
+import { Alert, Button, Select, Space, Tag } from 'antd'
 import { repairStockService } from '../../services/repair-stock'
 import type { ReplacementUnit } from '../../services/repair-stock'
 import type { RepairItem } from './repair-model'
+import { useRepairFeedback } from './repair-feedback'
+import type { RepairMessage } from './repair-feedback'
 export type ReplacementSelection = { reservationId: string; unitLabel: string; sku: string; condition: 'NEW' | 'REFURBISHED'; serialNumber?: string; hasSerialNumbers?: boolean; version: number }
-export default function RepairReplacementStock({ item, onSelected, onReleased }: {
-  item: RepairItem & { entityId: string }; onSelected: (value: ReplacementSelection) => void; onReleased?: (reservationId: string) => void
+export default function RepairReplacementStock({ item, onSelected, onReleased, feedback }: {
+  item: RepairItem & { entityId: string }; onSelected: (value: ReplacementSelection) => void; onReleased?: (reservationId: string) => void; feedback?: RepairMessage
 }) {
+  const { message, contextHolder } = useRepairFeedback(feedback)
   const [units, setUnits] = useState<ReplacementUnit[]>([]), [selected, setSelected] = useState<string>(), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const generation = useRef(0), operation = useRef<{ unitId: string; requestId: string } | undefined>(undefined)
   const load = useCallback(async () => {
@@ -38,6 +41,7 @@ export default function RepairReplacementStock({ item, onSelected, onReleased }:
     catch { setError('取消預留未完成，請核對目前權限、實物及庫存狀態；已出庫不能在此回補') } finally { setBusy(false) }
   }
   return <Space direction="vertical" style={{ width: '100%' }}>
+    {contextHolder}
     <Alert type="info" showIcon message="換機使用合格庫存" description="選擇已檢驗合格實物。預留獨立保存，放棄維修單草稿或離開頁面不會取消預留；不用的預留請明確取消。正式出庫仍須本版維修單、複驗及放行。" />
     {error && <Alert type="warning" message={error} />}
     {own.map(({ unit, row }) => <Space key={row.id} wrap><Tag color="blue">本案已預留：{unit.unitLabel}</Tag><span>{row.expiresAt ? `效期 ${new Date(row.expiresAt).toLocaleString('zh-TW')}` : ''}</span><Button danger disabled={busy} onClick={() => void release(row.id)}>取消本案預留</Button></Space>)}

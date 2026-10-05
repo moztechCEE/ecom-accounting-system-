@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Modal, Spin } from 'antd'
+import { Alert, Button, Spin } from 'antd'
 import { useParams, useSearchParams } from 'react-router-dom'
 import api from '../services/api'
 import CustomerRepairQueue from './repair/CustomerRepairQueue'
 import { useRepairNavigationGuard } from './repair/repair-navigation'
+import { useRepairFeedback } from './repair/repair-feedback'
 import { AFTER_SALES_READY_TIMEOUT_MS, afterSalesFrameFailure, createAfterSalesLaunchSession } from './repair/after-sales-launch'
 import type { AfterSalesAttempt } from './repair/after-sales-launch'
 
 type FrameLaunch = { attempt: AfterSalesAttempt; ticket: string; name: string }
 export default function AfterSalesModulePage() {
+  const { modal, contextHolder } = useRepairFeedback()
   const { section = 'cases' } = useParams()
   const [params] = useSearchParams()
   const entityId = params.get('entityId') || localStorage.getItem('entityId') || ''
@@ -19,7 +21,7 @@ export default function AfterSalesModulePage() {
   const [height, setHeight] = useState(950)
   const dirty = useRef(false)
   const iframeDirty = useRef(false), customerDirty = useRef(false)
-  useRepairNavigationGuard(dirty, () => new Promise<boolean>(resolve => Modal.confirm({ title: '售後表單有未儲存修改',
+  useRepairNavigationGuard(dirty, () => new Promise<boolean>(resolve => modal.confirm({ title: '售後表單有未儲存修改',
     content: '請先儲存，或確認放棄修改後再離開。', okText: '放棄修改', cancelText: '保留表單',
     onOk: () => resolve(true), onCancel: () => resolve(false) })))
   const clearDeadline = useCallback(() => { if (deadline.current !== undefined) clearTimeout(deadline.current); deadline.current = undefined }, [])
@@ -94,9 +96,10 @@ export default function AfterSalesModulePage() {
     } catch { showFailure(attempt, '售後頁面無法驗證來源，請重新開啟') }
   }
   return <div>
+    {contextHolder}
     {section === 'workbench' && entityId && <CustomerRepairQueue entityId={entityId} onDirtyChange={value => { customerDirty.current = value; dirty.current = value || iframeDirty.current }} />}
     {error && <Alert type="error" showIcon message="售後工作台未能開啟" description={error} action={<Button onClick={() => void (async () => {
-      if (iframeDirty.current && !await new Promise<boolean>(resolve => Modal.confirm({ title: '售後表單尚未儲存', content: '重新開啟會放棄原售後表單修改；維修轉客服回覆仍保留。', okText: '重新開啟', cancelText: '保留表單', onOk: () => resolve(true), onCancel: () => resolve(false) }))) return
+      if (iframeDirty.current && !await new Promise<boolean>(resolve => modal.confirm({ title: '售後表單尚未儲存', content: '重新開啟會放棄原售後表單修改；維修轉客服回覆仍保留。', okText: '重新開啟', cancelText: '保留表單', onOk: () => resolve(true), onCancel: () => resolve(false) }))) return
       await launch()
     })()}>重新開啟</Button>} />}
     {loading && <div role="status" style={{ padding: 24 }}><Spin /> 正在開啟售後工作台…</div>}

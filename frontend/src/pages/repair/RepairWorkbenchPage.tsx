@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, Modal, Space, Spin, Table, Tabs, Tag, Timeline, Typography, message } from 'antd';
+import { Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, Space, Spin, Table, Tabs, Tag, Timeline, Typography } from 'antd';
 import { ReloadOutlined, ToolOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -13,20 +13,23 @@ import { QUEUES, PLANS, REPAIR_STATUS, WORKFLOW_ACTIONS, sourceQuoteConsentCurre
 import RepairDocuments from './RepairDocuments';
 import RepairWorkflowPanel from './RepairWorkflowPanel';
 import { useRepairNavigationGuard } from './repair-navigation';
+import { useRepairFeedback } from './repair-feedback';
+import type { RepairMessage } from './repair-feedback';
 import '../mailroom/mailroom.css';
 import './repair.css';
 import { currentItemCustody } from '../mailroom/item-custody';
 const { Title, Text, Paragraph } = Typography;
 const time = (value: string) => dayjs(value).format('MM/DD HH:mm');
 const documentReady = (item: RepairItem) => item.repairInspection?.status === 'SUBMITTED';
-const confirmDiscard = () => new Promise<boolean>(resolve => Modal.confirm({
-  title: '目前工作單有未保存的修改',
-  content: '重新載入或離開會放棄未保存的工作單修改。請先保存草稿，或確認以已保存的版本繼續。',
-  okText: '放棄未保存修改並繼續', cancelText: '取消，保留草稿', maskClosable: false,
-  onOk: () => { resolve(true); }, onCancel: () => { resolve(false); },
-}));
 
 export default function RepairWorkbenchPage() {
+  const { modal, message, contextHolder } = useRepairFeedback();
+  const confirmDiscard = useCallback(() => new Promise<boolean>(resolve => modal.confirm({
+    title: '目前工作單有未保存的修改',
+    content: '重新載入或離開會放棄未保存的工作單修改。請先保存草稿，或確認以已保存的版本繼續。',
+    okText: '放棄未保存修改並繼續', cancelText: '取消，保留草稿', maskClosable: false,
+    onOk: () => { resolve(true); }, onCancel: () => { resolve(false); },
+  })), [modal]);
   const { user } = useAuth();
   const canRead = hasPermission(user, 'repair_workbench:read');
   const [params, setParams] = useSearchParams();
@@ -73,7 +76,7 @@ export default function RepairWorkbenchPage() {
       if (request === detailGeneration.current) setDetail(result);
     } catch (error) {if (request === detailGeneration.current) message.error(errorText(error));}
     finally {if (request === detailGeneration.current) setDetailBusy(false);}
-  }, [selectedId, entityId, enabled, canRead]);
+  }, [selectedId, entityId, enabled, canRead, confirmDiscard, message]);
   useEffect(() => {
     const requests = generation;
     void refresh();
@@ -91,10 +94,11 @@ export default function RepairWorkbenchPage() {
     if (id) next.set('itemId', id);else next.delete('itemId');
     setParams(next);
   }
-  if (!enabled) return <Alert type="info" message="維修師工作台尚未啟用" description="完成測試與帳號設定後即可開放。" />;
-  if (!canRead) return <Alert type="warning" message="沒有 維修師工作台讀取權限" />;
-  if (!entityId) return <Alert type="warning" message="請先選擇作業公司" />;
+  if (!enabled) return <>{contextHolder}<Alert type="info" message="維修師工作台尚未啟用" description="完成測試與帳號設定後即可開放。" /></>;
+  if (!canRead) return <>{contextHolder}<Alert type="warning" message="沒有 維修師工作台讀取權限" /></>;
+  if (!entityId) return <>{contextHolder}<Alert type="warning" message="請先選擇作業公司" /></>;
   return <div className="mailroom-page repair-workbench-page">
+    {contextHolder}
     <div className="mailroom-heading"><div><Title level={2}><ToolOutlined /> 維修師工作台</Title><Paragraph type="secondary">DOA、一般送修與公司退貨整新共用檢修、替換及原廠返還流程；每一步保留本人簽收與工作單。</Paragraph></div><Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading}>重新整理</Button></div>
     <Tabs activeKey={queue} onChange={key => {void (async()=>{if (detailDirty.current) {if (!await confirmDiscard()) return;detailDirty.current=false;}const next = new URLSearchParams(params);if (key==='all') next.delete('queue');else next.set('queue', key);next.delete('itemId');setPagination({queue:key as RepairQueue,page:1});setParams(next);})();}} items={Object.entries(QUEUES).map(([key,label])=>({key,label}))} />
     {(queue === 'all' || queue === 'acceptance') && <ArrivalPreview entityId={entityId} />}
@@ -113,7 +117,7 @@ export default function RepairWorkbenchPage() {
     <Drawer rootClassName="repair-workbench-drawer" width={980} open={!!selectedId} title="維修案件" onClose={()=>void open()} destroyOnHidden>
       <Spin spinning={detailBusy}>{detail ? <>
         {changed && <Alert type="info" showIcon message="案件有新進度" description="請先保存目前草稿，再重新載入案件。" action={<Button onClick={()=>void loadDetail(true)}>重新載入</Button>} style={{marginBottom:16}} />}
-        <RepairDetail key={`${detail.id}:${detail.version}`} item={detail} entityId={entityId} onDirtyChange={dirty=>{detailDirty.current=dirty;}} onSaved={async()=>{detailDirty.current=false;await loadDetail();await refresh(true);}} />
+        <RepairDetail confirmDiscard={confirmDiscard} feedback={message} key={`${detail.id}:${detail.version}`} item={detail} entityId={entityId} onDirtyChange={dirty=>{detailDirty.current=dirty;}} onSaved={async()=>{detailDirty.current=false;await loadDetail();await refresh(true);}} />
       </> : !detailBusy && <Empty description="請重新載入案件" />}</Spin>
     </Drawer>
   </div>;
@@ -151,7 +155,8 @@ function ArrivalPreview({entityId}:{entityId:string}) {
     {cursor&&<Button style={{marginTop:12}} loading={busy} onClick={()=>void load(cursor)}>載入更多</Button>}
   </Card>;
 }
-function RepairDetail({item,entityId,onSaved,onDirtyChange}:{item:RepairItem;entityId:string;onSaved:()=>Promise<void>;onDirtyChange:(dirty:boolean)=>void}) {
+function RepairDetail({item,entityId,onSaved,onDirtyChange,feedback,confirmDiscard}:{item:RepairItem;entityId:string;onSaved:()=>Promise<void>;onDirtyChange:(dirty:boolean)=>void;feedback:RepairMessage;confirmDiscard:()=>Promise<boolean>}) {
+  const message = feedback;
   const {user}=useAuth();
   const custody=currentItemCustody(item);
   const [location,setLocation]=useState(item.location);
@@ -216,8 +221,8 @@ function RepairDetail({item,entityId,onSaved,onDirtyChange}:{item:RepairItem;ent
       <Space wrap>{actions.map(action=><Button key={action.name} type="primary" loading={busy} disabled={action.disabled || busy} onClick={()=>void act(action.name)}>{action.label}</Button>)}</Space>
       {own&&!documentReady(item)&&<Paragraph type="secondary" style={{marginTop:12,marginBottom:0}}>請先提交完整檢修單，才可交客服確認或開始處理。</Paragraph>}
     </Card>}
-    <RepairWorkflowPanel item={item} entityId={entityId} canUpdate={canUpdate && item.repairOwnerId===user?.id} onSaved={onSaved} onDirtyChange={dirty=>{workflowDirty.current=dirty;publishDirty();}} onBeforeAction={async()=>!(documentsDirty.current || actionDirty.current) || await confirmDiscard()} />
-    <RepairDocuments item={item} entityId={entityId} onSaved={onSaved} onBeforeSave={async()=>!(workflowDirty.current || actionDirty.current) || await confirmDiscard()} onDirtyChange={dirty=>{documentsDirty.current=dirty;publishDirty();}} />
+    <RepairWorkflowPanel feedback={message} item={item} entityId={entityId} canUpdate={canUpdate && item.repairOwnerId===user?.id} onSaved={onSaved} onDirtyChange={dirty=>{workflowDirty.current=dirty;publishDirty();}} onBeforeAction={async()=>!(documentsDirty.current || actionDirty.current) || await confirmDiscard()} />
+    <RepairDocuments feedback={message} item={item} entityId={entityId} onSaved={onSaved} onBeforeSave={async()=>!(workflowDirty.current || actionDirty.current) || await confirmDiscard()} onDirtyChange={dirty=>{documentsDirty.current=dirty;publishDirty();}} />
     <Card size="small" title="跨部門同步與交接">
       <Paragraph type="secondary">同步成功表示對方系統已收到事件；實物仍須由下一位同仁本人簽收。</Paragraph>
       <Space wrap style={{marginBottom:16}}>{(item.deliverySummary||[]).map(value=><Tag key={`${value.target}:${value.status}`} color={value.status==='DELIVERED'?'green':value.status==='PENDING'?'orange':'default'}>{value.target==='AFTER_SALES'?'售後系統':value.target==='AI_CUSTOMER_SERVICE'?'AI 客服系統':value.target} · {value.status==='DELIVERED'?'系統已接收':value.status==='PENDING'?'待發送':value.status==='FAILED'?'發送失敗':value.status} ({value.count})</Tag>)}</Space>
