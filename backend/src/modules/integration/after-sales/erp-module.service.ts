@@ -9,6 +9,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { AuthService } from '../../auth/auth.service';
 import { EntityAccessService } from '../../../common/entity-access/entity-access.service';
 import {
+  hasSourceAdministrationPermissions,
   matchesSignature,
   moduleGrants,
   serviceSignature,
@@ -54,19 +55,22 @@ export class ErpAfterSalesModuleService {
     const privileged = roles.some((r: string) =>
       ['SUPER_ADMIN', 'ADMIN'].includes(r),
     );
-    const grants = moduleGrants(user.effectivePermissions || [], privileged);
+    const permissions = user.effectivePermissions || [];
+    const grants = moduleGrants(permissions, privileged);
     if (!grants.read.length) throw new ForbiddenException('沒有售後模組權限');
-    const role = privileged
-      ? 'admin'
-      : roles.includes('ACCOUNTANT')
-        ? 'accounting'
-        : roles.includes('CUSTOMER_SERVICE') || roles.includes('DOA_DEV_QA_CSR')
-          ? 'customer_service'
-          : roles.includes('REPAIR_TECHNICIAN')
-            ? 'technician'
-            : roles.includes('MAILROOM_OPERATOR')
-              ? 'warehouse'
-              : 'sales';
+    const role =
+      privileged || hasSourceAdministrationPermissions(permissions)
+        ? 'admin'
+        : roles.includes('ACCOUNTANT')
+          ? 'accounting'
+          : roles.includes('CUSTOMER_SERVICE') ||
+              roles.includes('DOA_DEV_QA_CSR')
+            ? 'customer_service'
+            : roles.includes('REPAIR_TECHNICIAN')
+              ? 'technician'
+              : roles.includes('MAILROOM_OPERATOR')
+                ? 'warehouse'
+                : 'sales';
     return {
       userId: user.id,
       email: user.email,

@@ -15,6 +15,35 @@ export const SOURCE_MODULE_RESOURCES = {
   audit_logs: 'after_sales_audit',
   settings: 'after_sales_settings',
 } as const;
+// A source supervisor is limited to the after-sales subsystem. It never makes
+// the ERP user a native administrator or bypasses the explicit module grants.
+export const SOURCE_ADMIN_PERMISSIONS = [
+  'after_sales_cases:read',
+  'after_sales_cases:update',
+  'after_sales_shipping:read',
+  'after_sales_shipping:update',
+  'after_sales_invoices:read',
+  'after_sales_invoices:update',
+  'after_sales_accounting:read',
+  'after_sales_accounting:update',
+  'after_sales_products:read',
+  'after_sales_products:update',
+  'after_sales_faqs:read',
+  'after_sales_faqs:update',
+  'after_sales_imports:read',
+  'after_sales_imports:update',
+  'after_sales_users:read',
+  'after_sales_users:update',
+  'after_sales_settings:read',
+  'after_sales_settings:update',
+  'after_sales_audit:read',
+] as const;
+export function hasSourceAdministrationPermissions(permissions: string[]) {
+  const granted = new Set(permissions);
+  return SOURCE_ADMIN_PERMISSIONS.every((permission) =>
+    granted.has(permission),
+  );
+}
 export const SOURCE_SECTIONS = {
   workbench: '/dashboard',
   cases: '/cases',
