@@ -100,6 +100,53 @@ test('a repair alias cannot authorize another section, stale request, wrong fram
   assert.equal(guard.ready(current, nextFrame, '/cases', url, origin), 'mismatch')
   assert.equal(current.phase, 'LOADING')
 })
+const originalListRedirects = {
+  reshipments: 'RESHIPMENT', 'exchange-returns': 'EXCHANGE_RETURN',
+  'refund-pickups': 'REFUND_PICKUP', 'private-purchases': 'PRIVATE_PURCHASE',
+}
+test('each original typed case entry accepts only its corresponding bare type redirect or literal page', () => {
+  for (const [section,type] of Object.entries(originalListRedirects)) {
+    for (const mounted of [false,true]) {
+      const guard = createAfterSalesLaunchSession(), frame = {}, attempt = guard.begin(section, 'company')
+      guard.attach(attempt, frame)
+      assert.equal(guard.ready(attempt, frame, mounted ? '/after-sales-app/cases' : '/cases', origin + '/after-sales-app/cases?type=' + type, origin), 'ready', section)
+    }
+    const guard = createAfterSalesLaunchSession(), frame = {}, attempt = guard.begin(section, 'company')
+    guard.attach(attempt, frame)
+    assert.equal(guard.ready(attempt, frame, '/cases/' + section, origin + '/after-sales-app/cases/' + section, origin), 'ready')
+  }
+})
+test('typed case readiness rejects cross-type, missing, duplicate and extra alias parameters', () => {
+  for (const [section,type] of Object.entries(originalListRedirects)) {
+    const guard = createAfterSalesLaunchSession(), frame = {}, attempt = guard.begin(section, 'company')
+    guard.attach(attempt, frame)
+    for (const query of ['', '?type=', '?type=' + type.toLowerCase(), '?type=' + type + '&type=' + type,
+      '?type=' + type + '&queue=all', '?type=' + type + '&keyword=DEV', '?type=' + type + '&unknown=x',
+      '?type=' + type + '#other', '?type=REPAIR&queue=technician', '?type=CUSTOMER_ISSUE',
+      ...Object.values(originalListRedirects).filter(value => value !== type).map(value => '?type=' + value)]) {
+      assert.equal(guard.ready(attempt, frame, '/cases', origin + '/after-sales-app/cases' + query, origin), 'mismatch', section + query)
+    }
+    for (const [path,url] of [
+      ['/cases',origin + '/cases?type=' + type],
+      ['/cases/' + section,origin + '/after-sales-app/cases?type=' + type],
+      ['/cases','https://other.example.invalid/after-sales-app/cases?type=' + type],
+    ]) assert.equal(guard.ready(attempt, frame, path, url, origin), 'mismatch')
+    assert.equal(attempt.phase, 'LOADING')
+  }
+})
+test('original typed aliases cannot authorize the generic case page, another company, stale frame or request', () => {
+  for (const [section,type] of Object.entries(originalListRedirects)) {
+    const guard = createAfterSalesLaunchSession(), oldFrame = {}, old = guard.begin(section, 'company-a')
+    guard.attach(old, oldFrame)
+    const currentFrame = {}, current = guard.begin('cases', 'company-b')
+    guard.attach(current, currentFrame)
+    const url = origin + '/after-sales-app/cases?type=' + type
+    assert.equal(guard.ready(old, oldFrame, '/cases', url, origin), 'ignored')
+    assert.equal(guard.ready(current, oldFrame, '/cases', url, origin), 'ignored')
+    assert.equal(guard.ready(current, currentFrame, '/cases', url, origin), 'mismatch')
+    assert.equal(current.phase, 'LOADING')
+  }
+})
 test('JSON, plain-text proxy failure and Next error document expose a retryable error', () => {
   assert.equal(afterSalesFrameFailure('{"error":"權限已撤回"}', 'application/json'), '權限已撤回')
   assert.match(afterSalesFrameFailure('售後模組暫時無法連線') || '', /重新開啟/)

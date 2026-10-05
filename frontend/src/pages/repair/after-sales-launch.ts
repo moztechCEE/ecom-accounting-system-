@@ -8,6 +8,10 @@ export const AFTER_SALES_SOURCE_PATHS = {
   products: '/products', faqs: '/faqs', imports: '/imports', users: '/users',
   'audit-logs': '/audit-logs', settings: '/settings',
 } as const
+const CASE_LIST_REDIRECT_TYPES = {
+  reshipments: 'RESHIPMENT', 'exchange-returns': 'EXCHANGE_RETURN',
+  'refund-pickups': 'REFUND_PICKUP', 'private-purchases': 'PRIVATE_PURCHASE',
+} as const
 export type AfterSalesAttempt = {
   id: number; section: string; entityId: string; sourcePath: string
   phase: 'REQUESTING' | 'LOADING' | 'READY' | 'ERROR'; frame?: object
@@ -38,8 +42,12 @@ export function createAfterSalesLaunchSession() {
           actual.searchParams.size === 2 && actual.searchParams.getAll('type').length === 1 &&
           actual.searchParams.get('type') === 'REPAIR' && actual.searchParams.getAll('queue').length === 1 &&
           actual.searchParams.get('queue') === 'technician'
+        const listType = CASE_LIST_REDIRECT_TYPES[attempt.section as keyof typeof CASE_LIST_REDIRECT_TYPES]
+        const caseListAlias = !!listType && actual.pathname === '/after-sales-app/cases' &&
+          actual.searchParams.size === 1 && actual.searchParams.getAll('type').length === 1 &&
+          actual.searchParams.get('type') === listType
         const canonical = actual.pathname === expected.pathname && actual.search === expected.search
-        if (actual.origin !== origin || actual.hash || (!canonical && !repairAlias) ||
+        if (actual.origin !== origin || actual.hash || (!canonical && !repairAlias && !caseListAlias) ||
           (reportedPath !== actual.pathname && reportedPath !== actual.pathname.slice('/after-sales-app'.length))) return 'mismatch'
       } catch { return 'mismatch' }
       attempt.phase = 'READY'; return 'ready'
