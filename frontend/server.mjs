@@ -3,6 +3,39 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
+import { fileURLToPath } from 'node:url';
+
+export const AFTER_SALES_LOGOUT_PATH = '/after-sales-app/api/integration/erp/logout';
+export const AFTER_SALES_LOGOUT_ORIGINS = [
+  'https://corely-erp-dev-sp5g377smq-de.a.run.app',
+  'https://aftersales-review---corely-erp-dev-sp5g377smq-de.a.run.app',
+  'https://aftersales-final---corely-erp-dev-sp5g377smq-de.a.run.app',
+];
+const afterSalesSessionCookie = '__Secure-erp-aftersales-session';
+
+// Clearing this browser cookie needs no upstream session, secret or database.
+// It remains available when the module is disabled or its upstream is offline.
+export function handleAfterSalesLogout(req, res, requestUrl) {
+  if (requestUrl.pathname !== AFTER_SALES_LOGOUT_PATH) return false;
+  const headers = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' };
+  if (req.method !== 'POST') {
+    res.writeHead(405, { ...headers, Allow: 'POST' }); res.end(); return true;
+  }
+  const origin = req.headers.origin;
+  if (!AFTER_SALES_LOGOUT_ORIGINS.includes(origin) ||
+    new URL(origin).host !== req.headers.host) {
+    res.writeHead(403, headers); res.end(); return true;
+  }
+  const names = new Set([afterSalesSessionCookie]);
+  for (const pair of (req.headers.cookie || '').split(';')) {
+    const name = pair.split('=', 1)[0].trim();
+    if (/^__Secure-erp-aftersales-session\.\d+$/.test(name)) names.add(name);
+  }
+  res.writeHead(204, { ...headers, 'Set-Cookie': [...names].map(name =>
+    `${name}=; Path=/after-sales-app; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`,
+  ) });
+  res.end(); return true;
+}
 
 const port = Number(process.env.PORT || 8080);
 const distDir = resolve('dist');
@@ -48,6 +81,7 @@ function sendFile(res, filePath) {
 
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url || '/', `http://${req.headers.host}`);
+  if (handleAfterSalesLogout(req, res, requestUrl)) return;
 
   // The original Next application keeps its own Server Actions and rendering.
   // Only this fixed same-origin mount is forwarded; it cannot proxy arbitrary URLs.
@@ -137,6 +171,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(port, '0.0.0.0', () => {
-  console.log(`Frontend server listening on 0.0.0.0:${port}`);
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  server.listen(port, '0.0.0.0', () => {
+    console.log(`Frontend server listening on 0.0.0.0:${port}`);
+  });
+}

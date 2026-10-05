@@ -167,3 +167,19 @@ test('the parameterized container cannot document an unreviewed source section',
   assert.equal(result.code,1);
   assert.match(result.output,/unknown reviewed after-sales section/);
 });
+
+test('reviewed logout cookie behavior is locked to the exact web runtime source', (t) => {
+  const root = fixture(t);
+  fs.appendFileSync(path.join(root, 'frontend/server.mjs'), '\n// Synthetic changed logout behavior\n');
+  const result = run(root);
+  assert.equal(result.code, 1);
+  assert.match(result.output, /Knowledge drift/);
+  assert.match(result.output, /frontend\/server.mjs/);
+});
+test('reviewing the fixed web runtime does not enroll other frontend runtime or fixture files', (t) => {
+  const root = fixture(t);
+  edit(root, data => { data.entries[0].sourcePaths.push('frontend/arbitrary-server.mjs'); });
+  const result = run(root, '--write');
+  assert.equal(result.code, 1);
+  assert.match(result.output, /Unreviewed source area: frontend\/arbitrary-server.mjs/);
+});

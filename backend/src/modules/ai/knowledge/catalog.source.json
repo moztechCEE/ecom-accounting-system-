@@ -4865,7 +4865,8 @@
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。",
-          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。"
+          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
         ],
         "related": [
           "repair-workbench",
@@ -4894,7 +4895,8 @@
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock.",
-              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration."
+              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
             ],
             "related": [
               "repair-workbench",
@@ -4925,7 +4927,10 @@
         "backend/prisma/schema.prisma",
         "backend/prisma/migrations/20261005150000_mailroom_source_feed/migration.sql",
         "backend/src/modules/mailroom/mailroom.service.ts",
-        "frontend/src/pages/repair/after-sales-launch.ts"
+        "frontend/src/pages/repair/after-sales-launch.ts",
+        "frontend/server.mjs",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/services/after-sales-logout.ts"
       ]
     },
     {
@@ -4957,7 +4962,8 @@
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。",
-          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。"
+          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
         ],
         "related": [
           "after-sales-customer-workbench",
@@ -4986,7 +4992,8 @@
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock.",
-              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration."
+              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
             ],
             "related": [
               "after-sales-customer-workbench",
@@ -5011,7 +5018,10 @@
         "backend/prisma/schema.prisma",
         "backend/prisma/migrations/20261005150000_mailroom_source_feed/migration.sql",
         "backend/src/modules/mailroom/mailroom.service.ts",
-        "frontend/src/pages/repair/after-sales-launch.ts"
+        "frontend/src/pages/repair/after-sales-launch.ts",
+        "frontend/server.mjs",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/services/after-sales-logout.ts"
       ],
       "aliases": [
         "/operations/after-sales/repairs",
@@ -5051,7 +5061,8 @@
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
-          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。"
+          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5077,7 +5088,8 @@
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
-              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration."
+              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5094,7 +5106,10 @@
         "backend/src/modules/integration/after-sales/erp-module.service.ts",
         "backend/src/modules/integration/after-sales/erp-module.contract.ts",
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
-        "frontend/src/pages/repair/after-sales-launch.ts"
+        "frontend/src/pages/repair/after-sales-launch.ts",
+        "frontend/server.mjs",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/services/after-sales-logout.ts"
       ]
     },
     {
@@ -5124,7 +5139,8 @@
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
-          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。"
+          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5150,7 +5166,8 @@
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
-              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration."
+              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5167,7 +5184,10 @@
         "backend/src/modules/integration/after-sales/erp-module.service.ts",
         "backend/src/modules/integration/after-sales/erp-module.contract.ts",
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
-        "frontend/src/pages/repair/after-sales-launch.ts"
+        "frontend/src/pages/repair/after-sales-launch.ts",
+        "frontend/server.mjs",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/services/after-sales-logout.ts"
       ]
     },
     {
@@ -5197,7 +5217,8 @@
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
-          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。"
+          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5223,7 +5244,8 @@
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
-              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration."
+              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5240,7 +5262,10 @@
         "backend/src/modules/integration/after-sales/erp-module.service.ts",
         "backend/src/modules/integration/after-sales/erp-module.contract.ts",
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
-        "frontend/src/pages/repair/after-sales-launch.ts"
+        "frontend/src/pages/repair/after-sales-launch.ts",
+        "frontend/server.mjs",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/services/after-sales-logout.ts"
       ]
     },
     {
@@ -5270,7 +5295,8 @@
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
-          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。"
+          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5296,7 +5322,8 @@
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
-              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration."
+              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5313,7 +5340,10 @@
         "backend/src/modules/integration/after-sales/erp-module.service.ts",
         "backend/src/modules/integration/after-sales/erp-module.contract.ts",
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
-        "frontend/src/pages/repair/after-sales-launch.ts"
+        "frontend/src/pages/repair/after-sales-launch.ts",
+        "frontend/server.mjs",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/services/after-sales-logout.ts"
       ]
     },
     {
@@ -5343,7 +5373,8 @@
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
-          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。"
+          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5369,7 +5400,8 @@
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
-              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration."
+              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5386,7 +5418,10 @@
         "backend/src/modules/integration/after-sales/erp-module.service.ts",
         "backend/src/modules/integration/after-sales/erp-module.contract.ts",
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
-        "frontend/src/pages/repair/after-sales-launch.ts"
+        "frontend/src/pages/repair/after-sales-launch.ts",
+        "frontend/server.mjs",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/services/after-sales-logout.ts"
       ]
     },
     {
@@ -5416,7 +5451,8 @@
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
-          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。"
+          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5442,7 +5478,8 @@
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
-              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration."
+              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5459,7 +5496,10 @@
         "backend/src/modules/integration/after-sales/erp-module.service.ts",
         "backend/src/modules/integration/after-sales/erp-module.contract.ts",
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
-        "frontend/src/pages/repair/after-sales-launch.ts"
+        "frontend/src/pages/repair/after-sales-launch.ts",
+        "frontend/server.mjs",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/services/after-sales-logout.ts"
       ]
     },
     {
@@ -5489,7 +5529,8 @@
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
-          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。"
+          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5515,7 +5556,8 @@
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
-              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration."
+              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5532,7 +5574,10 @@
         "backend/src/modules/integration/after-sales/erp-module.service.ts",
         "backend/src/modules/integration/after-sales/erp-module.contract.ts",
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
-        "frontend/src/pages/repair/after-sales-launch.ts"
+        "frontend/src/pages/repair/after-sales-launch.ts",
+        "frontend/server.mjs",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/services/after-sales-logout.ts"
       ]
     },
     {
@@ -5562,7 +5607,8 @@
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
-          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。"
+          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5588,7 +5634,8 @@
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
-              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration."
+              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5605,7 +5652,10 @@
         "backend/src/modules/integration/after-sales/erp-module.service.ts",
         "backend/src/modules/integration/after-sales/erp-module.contract.ts",
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
-        "frontend/src/pages/repair/after-sales-launch.ts"
+        "frontend/src/pages/repair/after-sales-launch.ts",
+        "frontend/server.mjs",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/services/after-sales-logout.ts"
       ]
     },
     {
@@ -5635,7 +5685,8 @@
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
-          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。"
+          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5661,7 +5712,8 @@
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
-              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration."
+              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5678,7 +5730,10 @@
         "backend/src/modules/integration/after-sales/erp-module.service.ts",
         "backend/src/modules/integration/after-sales/erp-module.contract.ts",
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
-        "frontend/src/pages/repair/after-sales-launch.ts"
+        "frontend/src/pages/repair/after-sales-launch.ts",
+        "frontend/server.mjs",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/services/after-sales-logout.ts"
       ]
     },
     {

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:ea87527136c156e2a65208929074df3b05869337c3ee144cff924658b0670afa",
+  "sourceVersion": "sha256:68103e591fbc46cd115d0193dbc0026f885a0a00ff0613e2598136bd7ccffd17",
   "reviewedBaseCommit": "ac9c85a7dc39647f7b1eda9ad8ac9cf3b74de962",
   "entryCount": 79,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "cf6fd3c69e408ce88f2ee31d9cafd2a8db75115d380e802fad583c93f16dfd77",
+  "catalogSha256": "b356db74c9cfc3f62537ecd6cfb072292150741f02dc7aa94cdb0c4842beaa9b",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -495,6 +495,10 @@
       "sha256": "edbc2a1adc3fc0fa13a4fc086fa350e01ba62248a2b80dcd8426b557ff6a1003"
     },
     {
+      "path": "frontend/server.mjs",
+      "sha256": "83b7dba6133e31db622df53ae7c1e5d1b23c29ff2a9c52b133cca71fd2bac8de"
+    },
+    {
       "path": "frontend/src/App.tsx",
       "sha256": "f68b18d16a6cf7378d206bccc6eac2dae7522b0c013b4ee68271a1884cb2e949"
     },
@@ -513,6 +517,10 @@
     {
       "path": "frontend/src/config/workspaces.ts",
       "sha256": "e77e15ff14f72b688e9e58f1945531dc1a0bee7988568efe7ab7f61c19efc080"
+    },
+    {
+      "path": "frontend/src/contexts/AuthContext.tsx",
+      "sha256": "ada0c17f2b474129d29451af3681103ecb36861e8078ee18b061358cace21f04"
     },
     {
       "path": "frontend/src/pages/AccessControlPage.tsx",
@@ -809,6 +817,10 @@
     {
       "path": "frontend/src/pages/WmsHandoverReconciliationPage.tsx",
       "sha256": "5753d6ab5a30e71c9b3b5ba72087dfd775b617c89b91bf5e95b85510a51b0bc2"
+    },
+    {
+      "path": "frontend/src/services/after-sales-logout.ts",
+      "sha256": "f95b32affb2f358135303134bcf23cc473123cb813aa737c257538466f6d4a87"
     },
     {
       "path": "frontend/src/services/b2b-private-quote.service.ts",

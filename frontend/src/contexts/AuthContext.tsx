@@ -4,6 +4,7 @@ import { message } from 'antd'
 import { wmsPortalOrigin } from '../config/wms-portal'
 import { authService } from '../services/auth.service'
 import { webSocketService } from '../services/websocket.service'
+import { clearAfterSalesBrowserSession, clearInvalidErpSession, completeErpLogin, completeErpLogout } from '../services/after-sales-logout'
 import { User, LoginRequest } from '../types'
 
 interface AuthContextType {
@@ -15,6 +16,10 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+const clearModuleSession = () => clearAfterSalesBrowserSession(
+  window.location.origin, window.__APP_CONFIG__?.afterSalesModuleEnabled === true,
+)
 
 const DEFAULT_ENTITY_ID =
   window.__APP_CONFIG__?.defaultEntityId?.trim() ||
@@ -40,8 +45,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ensureDefaultEntityId()
           setUser(currentUser)
           webSocketService.connect()
-        } catch (error) {
-          authService.logout()
+        } catch {
+          await clearInvalidErpSession({ clearModuleSession, logoutLocal: () => authService.logout() })
         }
       }
       setLoading(false)
@@ -62,7 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const login = async (data: LoginRequest) => {
-    const response = await authService.login(data)
+    const response = await completeErpLogin({ clearModuleSession, login: () => authService.login(data) })
     if (data.entityId?.trim()) {
       localStorage.setItem('entityId', data.entityId.trim())
     } else {
@@ -74,14 +79,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const logout = async () => {
-    if (wmsPortalOrigin()) {
-      try { await api.post('/wms/portal/logout') }
-      catch { message.error('無法完成登出，請稍後重試'); return false }
+    try {
+      await completeErpLogout({
+        clearModuleSession,
+        logoutWms: wmsPortalOrigin() ? () => api.post('/wms/portal/logout') : undefined,
+        logoutLocal: () => {
+          authService.logout()
+          setUser(null)
+          webSocketService.disconnect()
+        },
+      })
+      return true
+    } catch {
+      message.error('無法完成登出，請稍後重試')
+      return false
     }
-    authService.logout()
-    setUser(null)
-    webSocketService.disconnect()
-    return true
   }
 
   return (
@@ -91,6 +103,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   )
 }
 
+// The existing context exposes its paired consumer hook to the application's pages.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context = useContext(AuthContext)
   if (context === undefined) {
