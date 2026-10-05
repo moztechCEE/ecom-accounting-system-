@@ -108,9 +108,9 @@ async function acceptance(client) {
         }));
       assert.equal(await inCount(), 0);
     });
-    await check('declared quantity greater than one fails instead of guessing physical units', async () => {
+    await check('invalid fractional declared quantity fails instead of guessing physical units', async () => {
       await assert.rejects(step(async () => {
-        await tx.mailroomItem.update({ where: { id: sources[0].id }, data: { declared: { ...sources[0].declared, quantity: 2 } } });
+        await tx.mailroomItem.update({ where: { id: sources[0].id }, data: { declared: { ...sources[0].declared, quantity: 1.5 } } });
         return stock.receiveReturn(ownerId, requests[0]);
       })); assert.equal(await inCount(), 0);
     });

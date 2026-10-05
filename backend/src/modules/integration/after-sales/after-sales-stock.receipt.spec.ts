@@ -110,6 +110,7 @@ describe('stock owner receives a qualified RETURN as a real one-piece IN', () =>
       ...documents(),
       receipt: {
         id: uuid(4),
+        entityId: 'company',
         category: 'RETURN',
         sourceCaseId: 'synthetic-source-case',
         receivedById: uuid(20),
@@ -135,7 +136,11 @@ describe('stock owner receives a qualified RETURN as a real one-piece IN', () =>
     stored = null;
     serial = null;
     tx = {
-      $queryRaw: jest.fn(async () => []),
+      $queryRaw: jest.fn(async (sql) =>
+        String(sql).includes('JOIN mailroom_items')
+          ? [{ received: 0n, repeatedSerial: false }]
+          : [],
+      ),
       $executeRaw: jest.fn(),
       $transaction: jest.fn(async (fn) => fn(tx)),
       user: {
@@ -316,7 +321,8 @@ describe('stock owner receives a qualified RETURN as a real one-piece IN', () =>
     'location',
     'quantity',
     'unconfirmed',
-    'declared-many',
+    'declared-invalid',
+    'foreign-receipt',
     'repair-case',
     'not-returned',
     'mismatch',
@@ -334,7 +340,9 @@ describe('stock owner receives a qualified RETURN as a real one-piece IN', () =>
       if (which === 'location') input.sourceLocation = 'SYNTHETIC OLD LOCATION';
       if (which === 'quantity') input.quantity = 2;
       if (which === 'unconfirmed') input.confirmedItems = false;
-      if (which === 'declared-many') source.declared.quantity = 2;
+      if (which === 'declared-invalid') source.declared.quantity = 1.5;
+      if (which === 'foreign-receipt')
+        source.receipt.entityId = 'other-company';
       if (which === 'repair-case') source.receipt.category = 'REPAIR';
       if (which === 'not-returned') source.status = 'WAITING_RETURN_ACCEPTANCE';
       if (which === 'mismatch') source.matchResult = 'MISMATCH';
@@ -461,7 +469,9 @@ describe('stock owner receives a qualified RETURN as a real one-piece IN', () =>
   });
   test('a second receipt for the same external single piece is denied', async () => {
     tx.$queryRaw.mockImplementation(async (sql) =>
-      String(sql).includes('JOIN mailroom_items') ? [{ id: uuid(55) }] : [],
+      String(sql).includes('JOIN mailroom_items')
+        ? [{ received: 1n, repeatedSerial: false }]
+        : [],
     );
     await expect(service.receiveReturn(owner.id, input)).rejects.toThrow(
       '其他收件',
@@ -476,6 +486,111 @@ describe('stock owner receives a qualified RETURN as a real one-piece IN', () =>
       '已有正式入庫',
     );
     expect(tx.inventorySnapshot.upsert).not.toHaveBeenCalled();
+  });
+  test('a declared two-piece line receives independent native units as IN one each, including permanent consumed capacity', async () => {
+    source.declared.quantity = 2;
+    const original = structuredClone(source);
+    const units: any[] = [];
+    tx.afterSalesStockUnit.findUnique.mockImplementation(
+      async ({ where }) =>
+        units.find((unit) => unit.sourceItemId === where.sourceItemId) || null,
+    );
+    tx.afterSalesStockUnit.create.mockImplementation(async ({ data }) => {
+      units.push(data);
+      return data;
+    });
+    tx.$queryRaw.mockImplementation(async (sql) =>
+      String(sql).includes('JOIN mailroom_items')
+        ? [{ received: BigInt(units.length), repeatedSerial: false }]
+        : [],
+    );
+    const first = await service.receiveReturn(owner.id, input);
+    units[0].status = 'CONSUMED';
+    source = {
+      ...structuredClone(original),
+      id: uuid(31),
+      serialNumber: 'SYNTHETIC-SN-2',
+    };
+    const secondRequest = {
+      ...input,
+      sourceItemId: source.id,
+      serialNumber: source.serialNumber,
+      requestId: uuid(32),
+      unitLabel: 'SYNTHETIC UNIT 2',
+    };
+    const second = await service.receiveReturn(owner.id, secondRequest);
+    expect(first.unit.id).not.toBe(second.unit.id);
+    expect(units.map((unit) => unit.sourceItemId)).toEqual([
+      original.id,
+      uuid(31),
+    ]);
+    expect(
+      tx.inventoryTransaction.create.mock.calls.map(
+        ([args]) => args.data.quantity,
+      ),
+    ).toEqual([1, 1]);
+    expect(tx.inventorySnapshot.upsert).toHaveBeenCalledTimes(2);
+    expect(
+      (await service.receiveReturn(owner.id, secondRequest)).duplicate,
+    ).toBe(true);
+    source = {
+      ...structuredClone(original),
+      id: uuid(33),
+      serialNumber: 'SYNTHETIC-SN-3',
+    };
+    await expect(
+      service.receiveReturn(owner.id, {
+        ...input,
+        sourceItemId: source.id,
+        serialNumber: source.serialNumber,
+        requestId: uuid(34),
+      }),
+    ).rejects.toThrow('不能超量入庫');
+    expect(tx.inventoryTransaction.create).toHaveBeenCalledTimes(2);
+  });
+  test('a consumed same-line SOLD SN cannot return twice even when line capacity remains', async () => {
+    source.declared.quantity = 2;
+    tx.$queryRaw.mockImplementation(async (sql) =>
+      String(sql).includes('JOIN mailroom_items')
+        ? [{ received: 1n, repeatedSerial: true }]
+        : [],
+    );
+    serial = { id: uuid(66), productId: input.productId, status: 'SOLD' };
+    await expect(service.receiveReturn(owner.id, input)).rejects.toThrow(
+      '同一來源品項的序號',
+    );
+    expect(tx.inventoryTransaction.create).not.toHaveBeenCalled();
+  });
+  test.each([
+    'DELETED',
+    'missing-line',
+    'foreign-case',
+    'sku-changed',
+    'quantity-invalid',
+  ])('current source snapshot rejects %s before IN', async (which) => {
+    source.receipt.sourceSnapshot = {
+      id: source.receipt.sourceCaseId,
+      type: 'RETURN',
+      items: [structuredClone(source.declared)],
+    };
+    const snapshot = source.receipt.sourceSnapshot;
+    if (which === 'DELETED') snapshot.sourceSync = { availability: 'DELETED' };
+    if (which === 'missing-line') snapshot.items = [];
+    if (which === 'foreign-case') snapshot.id = 'foreign-case';
+    if (which === 'sku-changed') snapshot.items[0].sku = 'other-SKU';
+    if (which === 'quantity-invalid') snapshot.items[0].quantity = 0;
+    await expect(service.receiveReturn(owner.id, input)).rejects.toThrow();
+    expect(tx.inventoryTransaction.create).not.toHaveBeenCalled();
+  });
+  test('multi-piece UUID uses native identity without changing old one-piece UUID', () => {
+    const old = returnStockUnitId('company', 'case', 'line');
+    expect(returnStockUnitId('company', 'case', 'line', undefined)).toBe(old);
+    expect(returnStockUnitId('company', 'case', 'line', 'native-1')).not.toBe(
+      old,
+    );
+    expect(returnStockUnitId('company', 'case', 'line', 'native-1')).not.toBe(
+      returnStockUnitId('company', 'case', 'line', 'native-2'),
+    );
   });
   test('a labeled nonserial return adds one real unit to other existing stock; replay cannot add again', async () => {
     source.serialNumber = null;

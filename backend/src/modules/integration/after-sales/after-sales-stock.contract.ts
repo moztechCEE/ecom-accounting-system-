@@ -14,17 +14,21 @@ export const jsonObject = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
-/** The existing UUID primary key also prevents a second receipt of one external declared unit. */
+/** Preserve the single-piece key; a multi-piece external line needs each native physical identity. */
 export function returnStockUnitId(
   entityId: string,
   sourceCaseId: string,
   sourceCaseItemId: string,
+  nativeItemId?: string,
 ) {
   const hash = fingerprint({
-    protocol: 'corely.aftersales.return-stock.v1',
+    protocol: nativeItemId
+      ? 'corely.aftersales.return-stock.v2'
+      : 'corely.aftersales.return-stock.v1',
     entityId,
     sourceCaseId,
     sourceCaseItemId,
+    ...(nativeItemId ? { nativeItemId } : {}),
   });
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }

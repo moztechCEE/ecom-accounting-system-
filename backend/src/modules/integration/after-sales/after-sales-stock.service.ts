@@ -235,9 +235,12 @@ export class AfterSalesStockService {
         let refurbishmentEligible = false;
         try {
           validateRefurbishedReturn(item, item.sku || '', item.serialNumber);
+          const quantity = jsonObject(item.declared).quantity;
           refurbishmentEligible =
             ['MATCH', 'CONFIRMED_ACTUAL'].includes(item.matchResult) &&
-            jsonObject(item.declared).quantity === 1;
+            typeof quantity === 'number' &&
+            Number.isSafeInteger(quantity) &&
+            quantity > 0;
         } catch {
           /* Display actual eligibility without returning technical or customer documents. */
         }
@@ -293,7 +296,8 @@ export class AfterSalesStockService {
             where: { id: input.sourceItemId, entityId: input.entityId },
             include: { receipt: true },
           });
-          if (!returned) throw new NotFoundException('公司來源退貨實物不存在');
+          if (!returned || returned.receipt.entityId !== input.entityId)
+            throw new NotFoundException('公司來源退貨實物不存在');
           const existing = await tx.afterSalesStockUnit.findUnique({
             where: { sourceItemId: returned.id },
           });
@@ -326,23 +330,62 @@ export class AfterSalesStockService {
             throw new ConflictException('來源退貨尚未完成品項核對');
           const declared = jsonObject(returned.declared);
           if (
-            declared.quantity !== 1 ||
+            typeof declared.quantity !== 'number' ||
+            !Number.isSafeInteger(declared.quantity) ||
+            declared.quantity < 1 ||
             typeof declared.id !== 'string' ||
             !declared.id ||
             !returned.receipt.sourceCaseId
           )
             throw new ConflictException(
-              '僅支援來源申報數量一的可辨識實物；多件須先建立逐件身分，不能增加庫存',
+              '來源申報數量須為正整數；本次只可點收一件具獨立實物身分的退貨',
             );
           const sourceCaseId = returned.receipt.sourceCaseId;
           const sourceCaseItemId = declared.id;
-          // The external one-piece declaration cannot be received again through a second mailroom receipt.
+          // Serialize all received physical units of this external line, including consumed stock.
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.entityId + ':return-stock:' + sourceCaseId + ':' + sourceCaseItemId}))`;
-          const repeated = await tx.$queryRaw<
-            { id: string }[]
-          >`SELECT u.id FROM after_sales_stock_units u JOIN mailroom_items mi ON mi.id=u.source_item_id JOIN mailroom_receipts mr ON mr.id=mi.receipt_id WHERE u.entity_id=${input.entityId} AND mr.source_case_id=${sourceCaseId} AND mi.declared->>'id'=${sourceCaseItemId} LIMIT 1`;
-          if (repeated.length)
-            throw new ConflictException('此來源申報實物已由其他收件登錄庫存');
+          let declaredQuantity = declared.quantity;
+          const snapshot = jsonObject(returned.receipt.sourceSnapshot);
+          const sourceSync = jsonObject(snapshot.sourceSync);
+          if (
+            sourceSync.availability &&
+            sourceSync.availability !== 'AVAILABLE'
+          )
+            throw new ConflictException('來源案件目前無法確認，不能增加庫存');
+          if (snapshot.id) {
+            const currentLine = Array.isArray(snapshot.items)
+              ? snapshot.items
+                  .map(jsonObject)
+                  .find((item) => item.id === sourceCaseItemId)
+              : undefined;
+            if (
+              snapshot.id !== sourceCaseId ||
+              snapshot.type !== 'RETURN' ||
+              !currentLine ||
+              typeof currentLine.quantity !== 'number' ||
+              !Number.isSafeInteger(currentLine.quantity) ||
+              currentLine.quantity < 1 ||
+              (currentLine.sku && currentLine.sku !== returned.sku)
+            )
+              throw new ConflictException(
+                '目前來源品項或申報數量已變動，請重新核對',
+              );
+            declaredQuantity = currentLine.quantity;
+          }
+          const counts = await tx.$queryRaw<
+            { received: bigint; repeatedSerial: boolean }[]
+          >`SELECT COUNT(*)::bigint AS received, COALESCE(BOOL_OR(u.serial_number=${returned.serialNumber}), FALSE) AS "repeatedSerial" FROM after_sales_stock_units u JOIN mailroom_items mi ON mi.id=u.source_item_id JOIN mailroom_receipts mr ON mr.id=mi.receipt_id WHERE u.entity_id=${input.entityId} AND mi.entity_id=${input.entityId} AND mr.entity_id=${input.entityId} AND mr.source_case_id=${sourceCaseId} AND mi.declared->>'id'=${sourceCaseItemId}`;
+          if (
+            counts.length !== 1 ||
+            BigInt(counts[0].received) >= BigInt(declaredQuantity)
+          )
+            throw new ConflictException(
+              '此來源申報數量已由其他收件登錄庫存，不能超量入庫',
+            );
+          if (returned.serialNumber && counts[0].repeatedSerial)
+            throw new ConflictException(
+              '同一來源品項的序號已正式入庫，不可重複入庫',
+            );
           const clerk = await tx.user.findUnique({
             where: { id: returned.custodianId },
             include: {
@@ -557,6 +600,9 @@ export class AfterSalesStockService {
             input.entityId,
             sourceCaseId,
             sourceCaseItemId,
+            declared.quantity > 1 || declaredQuantity > 1
+              ? returned.id
+              : undefined,
           );
           const inbound = {
             unitId,
@@ -564,6 +610,7 @@ export class AfterSalesStockService {
             sourceItemId: returned.id,
             sourceCaseId,
             sourceCaseItemId,
+            declaredQuantity,
             requestId: input.requestId,
             requestHash: hash,
             actorId: userId,

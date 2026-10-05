@@ -814,6 +814,58 @@ export class MailroomService {
     }
     void this.sync.deliverPending().catch(() => undefined);
   }
+  /** One native row is one physical piece; the external line quantity is only its total capacity. */
+  private async reserveSourceCapacity(
+    tx: Prisma.TransactionClient,
+    entityId: string,
+    baseline: SourceCase,
+    incomingLineIds: (string | undefined)[],
+    excludeNativeId?: string,
+  ): Promise<SourceCase> {
+    const incoming = new Map<string, number>();
+    for (const id of incomingLineIds) {
+      if (!id || !baseline.items.some((item) => item.id === id))
+        throw new BadRequestException('請將每件物件關聯到來源申報品項');
+      incoming.set(id, (incoming.get(id) || 0) + 1);
+    }
+    // Use the same sorted line keys for separate clerks and identification of unknown parcels.
+    const lineIds = [...incoming.keys()].sort();
+    for (const lineId of lineIds)
+      await tx.$executeRaw(
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${entityId + ':mailroom-source-line:' + baseline.id + ':' + lineId}))`,
+      );
+    // Do not rely on asynchronously projected remainingQuantity. Read the signed source
+    // after the local capacity lock, then count every existing physical native row.
+    const source = (await this.sync.cases(entityId, '', baseline.id)).items[0];
+    if (
+      !source ||
+      source.id !== baseline.id ||
+      source.type !== baseline.type ||
+      ['CANCELLED', 'CLOSED', 'COMPLETED'].includes(source.status)
+    )
+      throw new ConflictException('來源案件已變動，請重新核對');
+    for (const lineId of lineIds) {
+      const declared = source.items.find((item) => item.id === lineId);
+      if (
+        !declared ||
+        !Number.isSafeInteger(declared.quantity) ||
+        declared.quantity < 1
+      )
+        throw new ConflictException('來源申報數量須為正整數，請重新核對');
+      const rows = await tx.$queryRaw<{ received: bigint }[]>(
+        Prisma.sql`SELECT COUNT(*)::bigint AS received FROM mailroom_items mi JOIN mailroom_receipts mr ON mr.id=mi.receipt_id WHERE mi.entity_id=${entityId} AND mr.entity_id=${entityId} AND mr.source_case_id=${source.id} AND mi.declared->>'id'=${lineId}${excludeNativeId ? Prisma.sql` AND mi.id<>${excludeNativeId}` : Prisma.empty}`,
+      );
+      if (
+        rows.length !== 1 ||
+        BigInt(rows[0].received) + BigInt(incoming.get(lineId)!) >
+          BigInt(declared.quantity)
+      )
+        throw new ConflictException(
+          '本次實物數量超過來源申報數量，請核對已收件物件',
+        );
+    }
+    return source;
+  }
   async create(userId: string, input: CreateReceiptDto) {
     this.enabled();
     const actor = await this.actor(userId);
@@ -856,6 +908,7 @@ export class MailroomService {
         .items[0];
       if (
         !source ||
+        source.id !== input.sourceCaseId ||
         source.type !== input.category ||
         ['CANCELLED', 'CLOSED', 'COMPLETED'].includes(source.status)
       )
@@ -896,6 +949,16 @@ export class MailroomService {
           notifications: [],
         };
       }
+      const freshActor = await this.actor(userId, tx);
+      requirePermission(freshActor, 'mailroom:create');
+      requireEntity(freshActor, input.entityId);
+      if (source)
+        source = await this.reserveSourceCapacity(
+          tx,
+          input.entityId,
+          source,
+          input.items.map((item) => item.sourceItemId),
+        );
       const number =
         'MR-' +
         new Date().toISOString().slice(0, 10).replace(/-/g, '') +
@@ -950,7 +1013,7 @@ export class MailroomService {
         notifications.push(
           ...(await this.record(
             tx,
-            actor,
+            freshActor,
             item,
             'receive',
             input.requestId + ':' + i,
@@ -998,18 +1061,31 @@ export class MailroomService {
     ) {
       if (!input.sourceCaseId)
         throw new BadRequestException('請選擇對應售後案件');
-      identifiedSource = (
-        await this.sync.cases(input.entityId, '', input.sourceCaseId)
-      ).items[0];
-      if (
-        !identifiedSource ||
-        identifiedSource.type !== input.targetCategory ||
-        ['CANCELLED', 'CLOSED', 'COMPLETED'].includes(
-          identifiedSource.status,
-        ) ||
-        !identifiedSource.items.some((x) => x.id === input.sourceItemId)
-      )
-        throw new BadRequestException('來源案件或申報品項不符');
+      const committed = await this.prisma.mailroomAction.findUnique({
+        where: {
+          entityId_actorId_requestId: {
+            entityId: input.entityId,
+            actorId: userId,
+            requestId: input.requestId,
+          },
+        },
+        select: { id: true },
+      });
+      if (!committed) {
+        identifiedSource = (
+          await this.sync.cases(input.entityId, '', input.sourceCaseId)
+        ).items[0];
+        if (
+          !identifiedSource ||
+          identifiedSource.id !== input.sourceCaseId ||
+          identifiedSource.type !== input.targetCategory ||
+          ['CANCELLED', 'CLOSED', 'COMPLETED'].includes(
+            identifiedSource.status,
+          ) ||
+          !identifiedSource.items.some((x) => x.id === input.sourceItemId)
+        )
+          throw new BadRequestException('來源案件或申報品項不符');
+      }
     }
     let repairAllowed = false;
     let repairSource: SourceCase | undefined;
@@ -1127,6 +1203,14 @@ export class MailroomService {
         include: withReceipt,
       });
       this.canRead(freshActor, item);
+      if (identifiedSource)
+        identifiedSource = await this.reserveSourceCapacity(
+          tx,
+          input.entityId,
+          identifiedSource,
+          [input.sourceItemId],
+          item.id,
+        );
       if (
         clerk &&
         (item.custodianId !== clerk.id ||
