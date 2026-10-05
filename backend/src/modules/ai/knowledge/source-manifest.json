@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:e1aacd79a7b3bc3af050a65007547fa3752e863d88da1e59472873ec364ac911",
+  "sourceVersion": "sha256:2bddaf50bee48d84690f5726c884c28910b03fc1a27a9806e59c4468c9619945",
   "reviewedBaseCommit": "ac9c85a7dc39647f7b1eda9ad8ac9cf3b74de962",
   "entryCount": 79,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "f1a97382653a63c595e6231009dcd8a034a0d7508dfd6de8362c9385544a64fd",
+  "catalogSha256": "e9a0aced0e597d17f88ef491ab68697e768c92436d09f6c0c4d63d8334c09f09",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -320,7 +320,7 @@
     },
     {
       "path": "backend/src/modules/integration/after-sales/erp-module.contract.ts",
-      "sha256": "8c03d8e1dac83d148c5f7387ef4f04a9ad1d952a136004969fa7f7a79cf4d62c"
+      "sha256": "d4bbfcda0f3426d8ddc616dd4203410ccb7567ea4d80c194a554e6fdf422fc64"
     },
     {
       "path": "backend/src/modules/integration/after-sales/erp-module.controller.ts",
@@ -328,7 +328,7 @@
     },
     {
       "path": "backend/src/modules/integration/after-sales/erp-module.service.ts",
-      "sha256": "00dd6fa9d49e46e3707866e813aa5b3944e71c73bfe25cc1e04a663c1a6ec8fa"
+      "sha256": "f3d1d091cbe5a74ce9cbe9a34b5671fdb7a56a947f1b2ecf3419d574356f3de3"
     },
     {
       "path": "backend/src/modules/integration/wms/wms-handover.module.ts",
@@ -344,7 +344,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-source-sync.service.ts",
-      "sha256": "6cabb56cec256c324e1fba0e85b3e2111e5a7f3096f79cbba615e5a2dd62a597"
+      "sha256": "96901e3a3ac3bf1db3e49d7b982ba5daeb0c34fc42db561f5ea70dffe144444a"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-source.contract.ts",

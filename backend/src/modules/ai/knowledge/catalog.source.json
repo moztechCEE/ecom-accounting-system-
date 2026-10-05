@@ -4875,12 +4875,14 @@
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
+          "非 ERP 管理員只有明確取得全部 19 項售後整合授權（九組 read／update 與稽核 read），作業公司為 ENTITY 範圍，且既有來源帳號仍有效並為 admin，才以來源 admin 角色使用完整售後頁面。這不授予 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍；模組與每次寫入仍依明確授權及目前來源權限取交集。缺任一項時保留原作業角色，不因來源 admin 帳號擴權。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。",
           "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
           "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
-          "合格退貨作換機正式出庫後，原入庫紀錄保留為歷史。現在實物保管與位置依同公司已核對的換機案件物流投影；出庫關聯不明時顯示待核對，不以歷史入庫人員當作目前持有人。此投影不授予換機案件的技術單或顧客財務資料。"
+          "合格退貨作換機正式出庫後，原入庫紀錄保留為歷史。現在實物保管與位置依同公司已核對的換機案件物流投影；出庫關聯不明時顯示待核對，不以歷史入庫人員當作目前持有人。此投影不授予換機案件的技術單或顧客財務資料。",
+          "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。"
         ],
         "related": [
           "repair-workbench",
@@ -4906,12 +4908,14 @@
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
+              "A non-administrator ERP actor uses the source admin role only with all 19 explicit after-sales integration grants (nine read/update pairs plus audit read), ENTITY company scope and an existing active source admin account. This grants no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority. Modules and each write still intersect explicit grants with current source permissions. Missing any grant retains the operational role; an existing source admin account cannot widen it.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock.",
               "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
               "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
-              "After formal replacement outbound, the qualified return retains its original inbound history. Current holder and location follow the verified same-company replacement logistics projection. An unknown outbound relation is marked for verification instead of presenting the historical stock recipient as current custody. This projection grants no technical document or customer financial access to the replacement case."
+              "After formal replacement outbound, the qualified return retains its original inbound history. Current holder and location follow the verified same-company replacement logistics projection. An unknown outbound relation is marked for verification instead of presenting the historical stock recipient as current custody. This projection grants no technical document or customer financial access to the replacement case.",
+              "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance."
             ],
             "related": [
               "repair-workbench",
@@ -4978,11 +4982,13 @@
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
+          "非 ERP 管理員只有明確取得全部 19 項售後整合授權（九組 read／update 與稽核 read），作業公司為 ENTITY 範圍，且既有來源帳號仍有效並為 admin，才以來源 admin 角色使用完整售後頁面。這不授予 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍；模組與每次寫入仍依明確授權及目前來源權限取交集。缺任一項時保留原作業角色，不因來源 admin 帳號擴權。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。",
           "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
-          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
+          "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。"
         ],
         "related": [
           "after-sales-customer-workbench",
@@ -5008,11 +5014,13 @@
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
+              "A non-administrator ERP actor uses the source admin role only with all 19 explicit after-sales integration grants (nine read/update pairs plus audit read), ENTITY company scope and an existing active source admin account. This grants no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority. Modules and each write still intersect explicit grants with current source permissions. Missing any grant retains the operational role; an existing source admin account cannot widen it.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock.",
               "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
-              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
+              "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance."
             ],
             "related": [
               "after-sales-customer-workbench",
@@ -5079,10 +5087,12 @@
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
+          "非 ERP 管理員只有明確取得全部 19 項售後整合授權（九組 read／update 與稽核 read），作業公司為 ENTITY 範圍，且既有來源帳號仍有效並為 admin，才以來源 admin 角色使用完整售後頁面。這不授予 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍；模組與每次寫入仍依明確授權及目前來源權限取交集。缺任一項時保留原作業角色，不因來源 admin 帳號擴權。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
-          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
+          "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5106,10 +5116,12 @@
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
+              "A non-administrator ERP actor uses the source admin role only with all 19 explicit after-sales integration grants (nine read/update pairs plus audit read), ENTITY company scope and an existing active source admin account. This grants no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority. Modules and each write still intersect explicit grants with current source permissions. Missing any grant retains the operational role; an existing source admin account cannot widen it.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
-              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
+              "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5158,10 +5170,12 @@
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
+          "非 ERP 管理員只有明確取得全部 19 項售後整合授權（九組 read／update 與稽核 read），作業公司為 ENTITY 範圍，且既有來源帳號仍有效並為 admin，才以來源 admin 角色使用完整售後頁面。這不授予 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍；模組與每次寫入仍依明確授權及目前來源權限取交集。缺任一項時保留原作業角色，不因來源 admin 帳號擴權。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
-          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
+          "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5185,10 +5199,12 @@
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
+              "A non-administrator ERP actor uses the source admin role only with all 19 explicit after-sales integration grants (nine read/update pairs plus audit read), ENTITY company scope and an existing active source admin account. This grants no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority. Modules and each write still intersect explicit grants with current source permissions. Missing any grant retains the operational role; an existing source admin account cannot widen it.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
-              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
+              "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5237,10 +5253,12 @@
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
+          "非 ERP 管理員只有明確取得全部 19 項售後整合授權（九組 read／update 與稽核 read），作業公司為 ENTITY 範圍，且既有來源帳號仍有效並為 admin，才以來源 admin 角色使用完整售後頁面。這不授予 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍；模組與每次寫入仍依明確授權及目前來源權限取交集。缺任一項時保留原作業角色，不因來源 admin 帳號擴權。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
-          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
+          "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5264,10 +5282,12 @@
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
+              "A non-administrator ERP actor uses the source admin role only with all 19 explicit after-sales integration grants (nine read/update pairs plus audit read), ENTITY company scope and an existing active source admin account. This grants no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority. Modules and each write still intersect explicit grants with current source permissions. Missing any grant retains the operational role; an existing source admin account cannot widen it.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
-              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
+              "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5316,10 +5336,12 @@
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
+          "非 ERP 管理員只有明確取得全部 19 項售後整合授權（九組 read／update 與稽核 read），作業公司為 ENTITY 範圍，且既有來源帳號仍有效並為 admin，才以來源 admin 角色使用完整售後頁面。這不授予 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍；模組與每次寫入仍依明確授權及目前來源權限取交集。缺任一項時保留原作業角色，不因來源 admin 帳號擴權。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
-          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
+          "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5343,10 +5365,12 @@
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
+              "A non-administrator ERP actor uses the source admin role only with all 19 explicit after-sales integration grants (nine read/update pairs plus audit read), ENTITY company scope and an existing active source admin account. This grants no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority. Modules and each write still intersect explicit grants with current source permissions. Missing any grant retains the operational role; an existing source admin account cannot widen it.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
-              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
+              "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5395,10 +5419,12 @@
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
+          "非 ERP 管理員只有明確取得全部 19 項售後整合授權（九組 read／update 與稽核 read），作業公司為 ENTITY 範圍，且既有來源帳號仍有效並為 admin，才以來源 admin 角色使用完整售後頁面。這不授予 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍；模組與每次寫入仍依明確授權及目前來源權限取交集。缺任一項時保留原作業角色，不因來源 admin 帳號擴權。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
-          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
+          "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5422,10 +5448,12 @@
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
+              "A non-administrator ERP actor uses the source admin role only with all 19 explicit after-sales integration grants (nine read/update pairs plus audit read), ENTITY company scope and an existing active source admin account. This grants no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority. Modules and each write still intersect explicit grants with current source permissions. Missing any grant retains the operational role; an existing source admin account cannot widen it.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
-              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
+              "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5474,10 +5502,12 @@
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
+          "非 ERP 管理員只有明確取得全部 19 項售後整合授權（九組 read／update 與稽核 read），作業公司為 ENTITY 範圍，且既有來源帳號仍有效並為 admin，才以來源 admin 角色使用完整售後頁面。這不授予 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍；模組與每次寫入仍依明確授權及目前來源權限取交集。缺任一項時保留原作業角色，不因來源 admin 帳號擴權。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
-          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
+          "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5501,10 +5531,12 @@
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
+              "A non-administrator ERP actor uses the source admin role only with all 19 explicit after-sales integration grants (nine read/update pairs plus audit read), ENTITY company scope and an existing active source admin account. This grants no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority. Modules and each write still intersect explicit grants with current source permissions. Missing any grant retains the operational role; an existing source admin account cannot widen it.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
-              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
+              "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5553,10 +5585,12 @@
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
+          "非 ERP 管理員只有明確取得全部 19 項售後整合授權（九組 read／update 與稽核 read），作業公司為 ENTITY 範圍，且既有來源帳號仍有效並為 admin，才以來源 admin 角色使用完整售後頁面。這不授予 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍；模組與每次寫入仍依明確授權及目前來源權限取交集。缺任一項時保留原作業角色，不因來源 admin 帳號擴權。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
-          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
+          "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5580,10 +5614,12 @@
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
+              "A non-administrator ERP actor uses the source admin role only with all 19 explicit after-sales integration grants (nine read/update pairs plus audit read), ENTITY company scope and an existing active source admin account. This grants no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority. Modules and each write still intersect explicit grants with current source permissions. Missing any grant retains the operational role; an existing source admin account cannot widen it.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
-              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
+              "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5632,10 +5668,12 @@
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
+          "非 ERP 管理員只有明確取得全部 19 項售後整合授權（九組 read／update 與稽核 read），作業公司為 ENTITY 範圍，且既有來源帳號仍有效並為 admin，才以來源 admin 角色使用完整售後頁面。這不授予 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍；模組與每次寫入仍依明確授權及目前來源權限取交集。缺任一項時保留原作業角色，不因來源 admin 帳號擴權。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
-          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
+          "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5659,10 +5697,12 @@
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
+              "A non-administrator ERP actor uses the source admin role only with all 19 explicit after-sales integration grants (nine read/update pairs plus audit read), ENTITY company scope and an existing active source admin account. This grants no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority. Modules and each write still intersect explicit grants with current source permissions. Missing any grant retains the operational role; an existing source admin account cannot widen it.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
-              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
+              "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5711,10 +5751,12 @@
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
+          "非 ERP 管理員只有明確取得全部 19 項售後整合授權（九組 read／update 與稽核 read），作業公司為 ENTITY 範圍，且既有來源帳號仍有效並為 admin，才以來源 admin 角色使用完整售後頁面。這不授予 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍；模組與每次寫入仍依明確授權及目前來源權限取交集。缺任一項時保留原作業角色，不因來源 admin 帳號擴權。",
           "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
-          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
+          "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5738,10 +5780,12 @@
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
+              "A non-administrator ERP actor uses the source admin role only with all 19 explicit after-sales integration grants (nine read/update pairs plus audit read), ENTITY company scope and an existing active source admin account. This grants no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority. Modules and each write still intersect explicit grants with current source permissions. Missing any grant retains the operational role; an existing source admin account cannot widen it.",
               "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
-              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
+              "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance."
             ],
             "related": [
               "after-sales-native-cases",
