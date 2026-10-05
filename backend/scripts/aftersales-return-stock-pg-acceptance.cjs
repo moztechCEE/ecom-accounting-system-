@@ -56,7 +56,7 @@ async function acceptance(client) {
     for (let index = 0; index < resources.length; index++) {
       const grants = permissions.filter(p => p.resource === resources[index]);
       assert.equal(grants.length, 2, 'Existing reviewed permissions required');
-      await tx.role.create({ data: { id: roleIds[index], code: 'RETURN_PG_QA_' + index + '_' + token, name: 'SYNTHETIC RETURN PG QA', permissions: { create: grants.map(p => ({ permissionId: p.id })) } } });
+      await tx.role.create({ data: { id: roleIds[index], code: 'RETURN_PG_QA_' + index + '_' + token, name: 'SYNTHETIC RETURN PG QA ' + index + ' ' + token, permissions: { create: grants.map(p => ({ permissionId: p.id })) } } });
     }
     for (const [id, roleId] of [[ownerId, roleIds[0]], [clerkId, roleIds[1]], [firstClerkId, roleIds[1]], [techId, roleIds[2]]])
       await tx.user.create({ data: { id, email: 'synthetic-return-' + id + '@example.invalid', passwordHash: 'SYNTHETIC_UNUSABLE_PASSWORD', name: 'SYNTHETIC QA', inventoryDataScope: id === ownerId ? 'ENTITY' : 'SELF',
