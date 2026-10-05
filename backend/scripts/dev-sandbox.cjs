@@ -95,10 +95,11 @@ function approvedMailroomFetch(url, options) {
       !options || options.redirect !== 'error') return false;
   const read = options.method === 'GET' && options.body === undefined &&
     /^\/api\/integration\/mailroom\/cases(?:\/[A-Za-z0-9_-]{1,128})?$/.test(url.pathname);
+  const changes = mailroomEnabled && options.method === 'GET' && options.body === undefined && url.pathname === '/api/integration/mailroom/changes';
   const event = mailroomEventsEnabled && options.method === 'POST' && !url.search &&
     url.pathname === '/api/integration/mailroom/events' && typeof options.body === 'string' &&
     Buffer.byteLength(options.body, 'utf8') < 40 * 1024;
-  if (!read && !event) return false;
+  if (!read && !event && !changes) return false;
   if (event) {
     let payload;
     try { payload = JSON.parse(options.body); } catch { return false; }
@@ -108,7 +109,13 @@ function approvedMailroomFetch(url, options) {
         payload.inventoryPosted !== false || payload.refundExecuted !== false) return false;
   }
   const keys = [...url.searchParams.keys()];
-  if (keys.length > 3 || new Set(keys).size !== keys.length ||
+  if (changes) {
+    if (keys.length > 2 || new Set(keys).size !== keys.length || keys.some(k => !['cursor','limit'].includes(k)) ||
+      !/^(0|[1-9][0-9]{0,18})$/.test(url.searchParams.get('cursor') || '0') ||
+      BigInt(url.searchParams.get('cursor') || '0') > 9223372036854775807n ||
+      !/^[0-9]{1,3}$/.test(url.searchParams.get('limit') || '100') ||
+      Number(url.searchParams.get('limit') || '100') < 1 || Number(url.searchParams.get('limit') || '100') > 100) return false;
+  } else if (keys.length > 3 || new Set(keys).size !== keys.length ||
       keys.some(key => !['search', 'awaiting', 'cursor'].includes(key) || url.searchParams.get(key).length > 128) ||
       (url.searchParams.has('awaiting') && url.searchParams.get('awaiting') !== 'true') ||
       (url.pathname !== '/api/integration/mailroom/cases' && keys.length)) return false;

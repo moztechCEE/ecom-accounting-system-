@@ -89,6 +89,7 @@ export class AfterSalesCaseService {
     },
     createdBy?: string,
   ) {
+    if (this.configService.get('AFTER_SALES_MODULE_ENABLED') === 'true') throw new BadRequestException('請從售後案件中心建立案件，避免建立兩份主單');
     const entityId = data.entityId?.trim();
     if (!entityId) throw new BadRequestException('entityId is required');
     if (!VALID_REASON_CATEGORIES.has(data.reasonCategory)) {

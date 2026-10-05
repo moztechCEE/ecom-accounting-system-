@@ -1,4 +1,5 @@
 import { MAILROOM_SERVICE_AUTH, authenticateMailroomReader } from '../mailroom/mailroom.auth';
+import { ERP_AFTER_SALES_SERVICE_AUTH } from '../integration/after-sales/erp-module.contract';
 import { WMS_HANDOVER_AUTH, authenticateWmsHandover } from '../integration/wms/wms-handover.auth';
 import { ExecutionContext, Injectable, SetMetadata } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -20,6 +21,8 @@ export class B2bAwareJwtAuthGuard extends JwtAuthGuard {
     super(b2bReflector);
   }
   canActivate(context: ExecutionContext) {
+    // This one handler authenticates its exact GET path and signature in the controller service.
+    if (this.b2bReflector.getAllAndOverride<boolean>(ERP_AFTER_SALES_SERVICE_AUTH, [context.getHandler(), context.getClass()])) return true;
     if (this.b2bReflector.getAllAndOverride<boolean>(WMS_HANDOVER_AUTH, [context.getHandler(), context.getClass()])) {
       return authenticateWmsHandover(context.switchToHttp().getRequest());
     }

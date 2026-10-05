@@ -9,6 +9,7 @@ declare global {
       wsUrl?: string
       mailroomEnabled?: boolean
       stagedOperationsEnabled?: boolean
+      afterSalesModuleEnabled?: boolean
       wmsPortalUrl?: string
       devEnvironment?: boolean
       dataSnapshotDate?: string

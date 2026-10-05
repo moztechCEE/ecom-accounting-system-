@@ -2,6 +2,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import http from 'node:http';
+import https from 'node:https';
 
 const port = Number(process.env.PORT || 8080);
 const distDir = resolve('dist');
@@ -48,6 +49,38 @@ function sendFile(res, filePath) {
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url || '/', `http://${req.headers.host}`);
 
+  // The original Next application keeps its own Server Actions and rendering.
+  // Only this fixed same-origin mount is forwarded; it cannot proxy arbitrary URLs.
+  if (requestUrl.pathname === '/after-sales-app' || requestUrl.pathname.startsWith('/after-sales-app/')) {
+    const upstream = process.env.AFTER_SALES_MODULE_URL || '';
+    const enabled = process.env.AFTER_SALES_MODULE_ENABLED === 'true';
+    if (!enabled || !/^https:\/\/corely-aftersales-module-dev-sp5g377smq-de\.a\.run\.app$/.test(upstream)) {
+      res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ error: '售後整合模組尚未開通' })); return;
+    }
+    const target = new URL(upstream + requestUrl.pathname + requestUrl.search);
+    const headers = { ...req.headers, host: target.hostname,
+      'x-forwarded-host': req.headers.host, 'x-forwarded-proto': 'https' };
+    delete headers['x-erp-operation-mode'];
+    const forwarded = https.request(target, { method: req.method, headers, timeout: 60000 }, response => {
+      const responseHeaders = { ...response.headers, 'Cache-Control': 'no-store' };
+      delete responseHeaders['x-frame-options'];
+      const mountedRedirect = (value) => {
+        if (typeof value !== 'string') return value;
+        const [destination, ...suffix] = value.split(';');
+        let local = destination;
+        try { const parsed = new URL(destination, upstream); if (parsed.origin === upstream && destination.startsWith('http')) local = parsed.pathname + parsed.search + parsed.hash; } catch { return value; }
+        if (local.startsWith('/') && !local.startsWith('//') && !local.startsWith('/after-sales-app')) local = '/after-sales-app' + local;
+        return [local,...suffix].join(';');
+      };
+      for (const key of ['location','x-action-redirect']) if (responseHeaders[key]) responseHeaders[key] = mountedRedirect(responseHeaders[key]);
+      res.writeHead(response.statusCode || 502, responseHeaders); response.pipe(res);
+    });
+    forwarded.on('error', () => { if (!res.headersSent) res.writeHead(502, { 'Cache-Control': 'no-store' }); res.end('售後模組暫時無法連線'); });
+    forwarded.on('timeout', () => forwarded.destroy());
+    req.on('aborted', () => forwarded.destroy()); req.pipe(forwarded); return;
+  }
+
   if (requestUrl.pathname === '/healthz') {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -72,6 +105,7 @@ const server = http.createServer(async (req, res) => {
         b2bPublicOrderEnabled: process.env.B2B_PUBLIC_ORDER_ENABLED === 'true',
         mailroomEnabled: process.env.MAILROOM_ENABLED === 'true',
         stagedOperationsEnabled: process.env.STAGED_OPERATIONS_ENABLED === 'true',
+        afterSalesModuleEnabled: process.env.AFTER_SALES_MODULE_ENABLED === 'true',
         devEnvironment: process.env.ERP_DEV_ENVIRONMENT === 'true',
         dataSnapshotDate: process.env.ERP_DEV_SNAPSHOT_DATE || '',
       })};`,

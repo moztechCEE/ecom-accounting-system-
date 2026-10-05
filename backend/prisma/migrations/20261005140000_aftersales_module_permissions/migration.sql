@@ -1,0 +1,22 @@
+-- Register capabilities only; do not grant any existing staff additional access.
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_cases-read','after_sales_cases','read','查看售後案件',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_cases-update','after_sales_cases','update','維護售後案件',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_shipping-read','after_sales_shipping','read','查看售後物流',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_shipping-update','after_sales_shipping','update','維護售後物流',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_invoices-read','after_sales_invoices','read','查看售後發票',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_invoices-update','after_sales_invoices','update','維護售後發票',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_accounting-read','after_sales_accounting','read','查看售後對帳',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_accounting-update','after_sales_accounting','update','維護售後對帳',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_products-read','after_sales_products','read','查看售後產品',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_products-update','after_sales_products','update','維護售後產品',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_faqs-read','after_sales_faqs','read','查看售後FAQ',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_faqs-update','after_sales_faqs','update','維護售後FAQ',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_imports-read','after_sales_imports','read','查看售後匯入',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_imports-update','after_sales_imports','update','維護售後匯入',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_users-read','after_sales_users','read','查看售後人員',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_users-update','after_sales_users','update','維護售後人員',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_audit-read','after_sales_audit','read','查看售後紀錄',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_settings-read','after_sales_settings','read','查看售後設定',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_settings-update','after_sales_settings','update','維護售後設定',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_stock-read','after_sales_stock','read','查看售後整新品庫存',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;
+INSERT INTO permissions (id,resource,action,description,created_at) VALUES ('after_sales_stock-update','after_sales_stock','update','維護售後整新品庫存',CURRENT_TIMESTAMP) ON CONFLICT (resource,action) DO NOTHING;

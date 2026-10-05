@@ -541,6 +541,7 @@ model Product {
 
 // 庫存序號追蹤 (SN)
 model InventorySerialNumber {
+  afterSalesUnits AfterSalesStockUnit[]
   id           String  @id @default(uuid())
   entityId     String  @map("entity_id")
   productId    String  @map("product_id")
@@ -663,6 +664,9 @@ model InventorySnapshot {
 
 // 庫存異動流水（入庫/出庫/預留/釋放/調整）
 model InventoryTransaction {
+  afterSalesReserve AfterSalesStockReservation? @relation("AfterSalesReserve")
+  afterSalesRelease AfterSalesStockReservation? @relation("AfterSalesRelease")
+  afterSalesOut AfterSalesStockReservation? @relation("AfterSalesOut")
   wmsOutPosting WmsShipmentPosting? @relation("WmsOut")
   wmsReleasePosting WmsShipmentPosting? @relation("WmsRelease")
   id            String   @id @default(uuid())
@@ -2335,6 +2339,7 @@ model MailroomReceipt {
 }
 
 model MailroomItem {
+  stockReservations AfterSalesStockReservation[]
   id                  String   @id @default(uuid())
   receiptId           String   @map("receipt_id")
   receipt             MailroomReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
@@ -2352,6 +2357,7 @@ model MailroomItem {
   returnInspection    Json?    @map("return_inspection")
   repairInspection    Json?    @map("repair_inspection")
   repairReport        Json?    @map("repair_report")
+  repairWorkflow      Json?    @map("repair_workflow")
   evidence            Json?
   location            String
   custodianId         String   @map("custodian_id")
@@ -2368,6 +2374,54 @@ model MailroomItem {
   @@index([recipientId, status])
   @@index([nextUserId, status])
   @@map("mailroom_items")
+}
+
+model AfterSalesStockUnit {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  inventorySerialId String? @map("inventory_serial_id")
+  inventorySerial InventorySerialNumber? @relation(fields: [inventorySerialId], references: [id], onDelete: Restrict)
+  productId String @map("product_id")
+  warehouseId String @map("warehouse_id")
+  unitLabel String @map("unit_label")
+  serialNumber String? @map("serial_number")
+  kind String
+  status String @default("QUALIFIED")
+  qualification Json
+  sourceItemId String? @unique @map("source_item_id")
+  qualifiedById String @map("qualified_by_id")
+  qualifiedAt DateTime @default(now()) @map("qualified_at")
+  reservations AfterSalesStockReservation[]
+  @@index([entityId, status])
+  @@unique([entityId, unitLabel])
+  @@map("after_sales_stock_units")
+}
+
+model AfterSalesStockReservation {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  itemId String @map("item_id")
+  item MailroomItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  unitId String @map("unit_id")
+  unit AfterSalesStockUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  activeKey String? @unique @map("active_key")
+  requestId String @map("request_id")
+  status String @default("RESERVED")
+  expiresAt DateTime @map("expires_at")
+  actorId String @map("actor_id")
+  reserveTransactionId String @unique @map("reserve_transaction_id")
+  reserveTransaction InventoryTransaction @relation("AfterSalesReserve", fields: [reserveTransactionId], references: [id], onDelete: Restrict)
+  releaseTransactionId String? @unique @map("release_transaction_id")
+  releaseTransaction InventoryTransaction? @relation("AfterSalesRelease", fields: [releaseTransactionId], references: [id], onDelete: Restrict)
+  outTransactionId String? @unique @map("out_transaction_id")
+  outTransaction InventoryTransaction? @relation("AfterSalesOut", fields: [outTransactionId], references: [id], onDelete: Restrict)
+  externalStatus String @default("NOT_CONFIGURED") @map("external_status")
+  externalReference String? @map("external_reference")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@unique([entityId, requestId])
+  @@index([entityId, itemId, status])
+  @@map("after_sales_stock_reservations")
 }
 
 model MailroomAction {
@@ -3133,4 +3187,32 @@ model WmsShipmentPosting {
   inventoryOut InventoryTransaction @relation("WmsOut", fields:[inventoryOutId], references:[id], onDelete:Restrict)
   inventoryRelease InventoryTransaction @relation("WmsRelease", fields:[inventoryReleaseId], references:[id], onDelete:Restrict)
   @@map("wms_shipment_postings")
+}
+
+model MailroomSourceCursor {
+ id String @id @default(uuid())
+ entityId String @map("entity_id")
+ sourceInstance String @map("source_instance")
+ cursor BigInt @default(0)
+ version Int @default(1)
+ leaseToken String? @map("lease_token")
+ leaseUntil DateTime? @map("lease_until")
+ updatedAt DateTime @updatedAt @map("updated_at")
+ changes MailroomSourceChange[]
+ @@unique([entityId, sourceInstance])
+ @@map("mailroom_source_cursors")
+}
+model MailroomSourceChange {
+ initial Boolean @default(false)
+ id String @id @default(uuid())
+ cursorId String @map("cursor_id")
+ cursor MailroomSourceCursor @relation(fields:[cursorId], references:[id], onDelete: Cascade)
+ sourceEventId String @map("source_event_id")
+ caseId String @map("case_id")
+ change String
+ sourceChannel String @map("source_channel")
+ occurredAt DateTime @map("occurred_at")
+ processedAt DateTime @default(now()) @map("processed_at")
+ @@unique([cursorId, sourceEventId])
+ @@map("mailroom_source_changes")
 }
