@@ -59,7 +59,9 @@ function setCacheHeaders(res, filePath) {
   const ext = extname(filePath).toLowerCase();
   if (ext === '.html') {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
-    res.setHeader('Referrer-Policy', 'no-referrer');
+    // Same-origin iframe form POSTs need a non-null Origin for the strict SSO
+    // gate. External destinations still receive no referrer under this policy.
+    res.setHeader('Referrer-Policy', 'same-origin');
     return;
   }
 
