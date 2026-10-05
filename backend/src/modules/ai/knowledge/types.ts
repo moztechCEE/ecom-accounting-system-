@@ -18,7 +18,11 @@ export interface KnowledgeEntry {
   /** OR within permissions; combined with roles and route access using AND. */
   permissions?: string[];
   roles?: string[];
-  availability?: 'staged' | 'wms-portal' | 'preview-only';
+  availability?:
+    | 'staged'
+    | 'wms-portal'
+    | 'preview-only'
+    | 'after-sales-module';
   sections: KnowledgeSections;
   translations: {
     en: {
@@ -29,7 +33,12 @@ export interface KnowledgeEntry {
       sections: KnowledgeSections;
     };
   };
-  examples?: { format: 'json' | 'csv'; title: string; titleEn?: string; content: string }[];
+  examples?: {
+    format: 'json' | 'csv';
+    title: string;
+    titleEn?: string;
+    content: string;
+  }[];
   sources: { path: string; sha256: string }[];
   sourceVersion: string;
 }

@@ -1,4 +1,7 @@
-import { DEPARTMENT_ACCESS_SELECT, effectivePermissionKeys } from '../../common/department-access/department-access';
+import {
+  DEPARTMENT_ACCESS_SELECT,
+  effectivePermissionKeys,
+} from '../../common/department-access/department-access';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
@@ -8,7 +11,12 @@ import {
 
 const TOOL_ACCESS: Record<
   string,
-  { module: DataAccessModule; permissions: string[]; sensitive?: boolean; sensitivePermission?: string }
+  {
+    module: DataAccessModule;
+    permissions: string[];
+    sensitive?: boolean;
+    sensitivePermission?: string;
+  }
 > = {
   get_sales_stats: { module: 'sales', permissions: ['sales_orders:read'] },
   find_sales_order: { module: 'sales', permissions: ['sales_orders:read'] },
@@ -79,7 +87,8 @@ export class AiCopilotAccessService {
       .filter(
         ([, rule]) =>
           (!rule.sensitive || isSuperAdmin) &&
-          (!rule.sensitivePermission || permissions.includes(rule.sensitivePermission)) &&
+          (!rule.sensitivePermission ||
+            permissions.includes(rule.sensitivePermission)) &&
           (isAdmin ||
             rule.permissions.some((permission) =>
               permissions.includes(permission),
@@ -107,7 +116,9 @@ export class AiCopilotAccessService {
     // This is guide access,
     // not authorization for dashboard metrics or any live Copilot data tool.
     if (pathname === '/dashboard')
-      return !this.isWarehouseOnlyActor(actor) && !this.isRepairOnlyActor(actor);
+      return (
+        !this.isWarehouseOnlyActor(actor) && !this.isRepairOnlyActor(actor)
+      );
     if (pathname === '/admin/entities') return actor.isSuperAdmin;
     if (
       [
@@ -121,6 +132,29 @@ export class AiCopilotAccessService {
     const routes: Record<string, string[]> = {
       '/operations/mailroom': ['mailroom:read'],
       '/operations/repair': ['repair_workbench:read'],
+      '/operations/after-sales/workbench': ['after_sales_cases:read'],
+      '/operations/after-sales/cases': ['after_sales_cases:read'],
+      '/operations/after-sales/customers': ['after_sales_cases:read'],
+      '/operations/after-sales/quotes': ['after_sales_cases:read'],
+      '/operations/after-sales/repairs': ['after_sales_cases:read'],
+      '/operations/after-sales/reshipments': ['after_sales_cases:read'],
+      '/operations/after-sales/exchange-returns': ['after_sales_cases:read'],
+      '/operations/after-sales/refund-pickups': ['after_sales_cases:read'],
+      '/operations/after-sales/private-purchases': ['after_sales_cases:read'],
+      '/operations/after-sales/customer-issues': ['after_sales_cases:read'],
+      '/operations/after-sales/shipping': ['after_sales_shipping:read'],
+      '/operations/after-sales/accounting': ['after_sales_accounting:read'],
+      '/operations/after-sales/invoices': ['after_sales_invoices:read'],
+      '/operations/after-sales/products': ['after_sales_products:read'],
+      '/operations/after-sales/faqs': ['after_sales_faqs:read'],
+      '/operations/after-sales/imports': ['after_sales_imports:read'],
+      '/operations/after-sales/users': ['after_sales_users:read'],
+      '/operations/after-sales/audit-logs': ['after_sales_audit:read'],
+      '/operations/after-sales/settings': ['after_sales_settings:read'],
+      '/inventory/after-sales-stock': [
+        'inventory:read',
+        'after_sales_stock:read',
+      ],
       '/ap/expenses': [
         'expense_self:read',
         'accounts:read',
@@ -258,14 +292,22 @@ export class AiCopilotAccessService {
       actor.isAdmin ||
       process.env.MAILROOM_ENABLED !== 'true' ||
       !actor.permissions.includes('repair_workbench:read')
-    ) return false;
+    )
+      return false;
     const allowed = [
-      'repair_workbench:read', 'repair_workbench:update',
-      'attendance_self:read', 'leave_self:read', 'profile_self:read',
-      'expense_self:read', 'expense_self:create',
-      'payroll_self:read', 'payroll_self_breakdown:read',
+      'repair_workbench:read',
+      'repair_workbench:update',
+      'attendance_self:read',
+      'leave_self:read',
+      'profile_self:read',
+      'expense_self:read',
+      'expense_self:create',
+      'payroll_self:read',
+      'payroll_self_breakdown:read',
     ];
-    return actor.permissions.every((permission) => allowed.includes(permission));
+    return actor.permissions.every((permission) =>
+      allowed.includes(permission),
+    );
   }
 
   actorVersion(actor: CopilotActor): string {
@@ -309,8 +351,13 @@ export class AiCopilotAccessService {
     if (!actor.isAdmin && !actor.permissions.includes('reports:read')) {
       throw new ForbiddenException('每日簡報需要財務報表查詢權限');
     }
-    if (!['product_cost:read', 'financial_margin:read', 'financial_net_profit:read']
-      .every((permission) => actor.permissions.includes(permission))) {
+    if (
+      ![
+        'product_cost:read',
+        'financial_margin:read',
+        'financial_net_profit:read',
+      ].every((permission) => actor.permissions.includes(permission))
+    ) {
       throw new ForbiddenException('每日簡報需要成本、毛利與財務淨利查詢權限');
     }
     for (const module of ['accounting', 'sales'] as const) {

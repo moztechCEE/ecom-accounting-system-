@@ -25,22 +25,98 @@ describe('Knowledge ACL and route parity', () => {
   );
   const knowledge = new AiKnowledgeService();
 
+  it.each([
+    ['workbench', 'cases'],
+    ['cases', 'cases'],
+    ['customers', 'cases'],
+    ['quotes', 'cases'],
+    ['repairs', 'cases'],
+    ['reshipments', 'cases'],
+    ['exchange-returns', 'cases'],
+    ['refund-pickups', 'cases'],
+    ['private-purchases', 'cases'],
+    ['customer-issues', 'cases'],
+    ['shipping', 'shipping'],
+    ['accounting', 'accounting'],
+    ['invoices', 'invoices'],
+    ['products', 'products'],
+    ['faqs', 'faqs'],
+    ['imports', 'imports'],
+    ['users', 'users'],
+    ['audit-logs', 'audit'],
+    ['settings', 'settings'],
+  ])(
+    'requires the dedicated source read scope for %s and never borrows another ERP module',
+    (section, resource) => {
+      const path = '/operations/after-sales/' + section;
+      expect(
+        access.canOpenPath(
+          actor([
+            'accounts:read',
+            'inventory:read',
+            'sales_orders:read',
+            'access_control:read',
+          ]),
+          path,
+        ),
+      ).toBe(false);
+      expect(
+        access.canOpenPath(
+          actor(['after_sales_' + resource + ':update']),
+          path,
+        ),
+      ).toBe(false);
+      expect(
+        access.canOpenPath(actor(['after_sales_' + resource + ':read']), path),
+      ).toBe(true);
+      expect(access.canOpenPath(actor([], ['ADMIN']), path)).toBe(true);
+    },
+  );
+  it('does not grant unknown source destinations or source privileges to repair-only staff', () => {
+    expect(
+      access.canOpenPath(
+        actor([], ['SUPER_ADMIN']),
+        '/operations/after-sales/unknown',
+      ),
+    ).toBe(false);
+    expect(
+      access.canOpenPath(
+        actor(
+          ['repair_workbench:read', 'repair_workbench:update'],
+          ['REPAIR_TECHNICIAN'],
+        ),
+        '/operations/after-sales/cases',
+      ),
+    ).toBe(false);
+    expect(
+      access.canOpenPath(
+        actor(['after_sales_faqs:read']),
+        '/operations/after-sales/invoices',
+      ),
+    ).toBe(false);
+  });
   it('fails closed without a server authorization policy', () => {
     expect(knowledge.search('')).toEqual([]);
   });
 
   it('requires dedicated permissions before offering cost and compensation tools', async () => {
     const grants = ['inventory:read', 'payroll_admin:read'];
-    const findUnique = jest.fn().mockImplementation(async () => ({
-      isActive: true,
-      roles: [{ role: {
-        code: 'MANAGER',
-        permissions: grants.map((grant) => {
-          const [resource, action] = grant.split(':');
-          return { permission: { resource, action } };
-        }),
-      } }],
-    }));
+    const findUnique = jest.fn().mockImplementation(() =>
+      Promise.resolve({
+        isActive: true,
+        roles: [
+          {
+            role: {
+              code: 'MANAGER',
+              permissions: grants.map((grant) => {
+                const [resource, action] = grant.split(':');
+                return { permission: { resource, action } };
+              }),
+            },
+          },
+        ],
+      }),
+    );
     const service = new AiCopilotAccessService(
       { user: { findUnique } } as unknown as PrismaService,
       { assertAccess: jest.fn() } as unknown as EntityAccessService,
@@ -49,9 +125,13 @@ describe('Knowledge ACL and route parity', () => {
     expect(manager.tools).not.toContain('get_product_cost');
     expect(manager.tools).not.toContain('get_payroll_summary');
     grants.push('product_cost:read');
-    expect((await service.getActor('manager')).tools).toContain('get_product_cost');
+    expect((await service.getActor('manager')).tools).toContain(
+      'get_product_cost',
+    );
     grants.push('employee_compensation:read');
-    expect((await service.getActor('manager')).tools).toContain('get_payroll_summary');
+    expect((await service.getActor('manager')).tools).toContain(
+      'get_payroll_summary',
+    );
   });
 
   it('refuses finance AI briefing without net-profit permission', async () => {
@@ -60,7 +140,9 @@ describe('Knowledge ACL and route parity', () => {
       {} as PrismaService,
       { assertAccess } as unknown as EntityAccessService,
     );
-    await expect(service.authorizeBriefing(actor(['reports:read']), 'entity-a')).rejects.toThrow('財務淨利');
+    await expect(
+      service.authorizeBriefing(actor(['reports:read']), 'entity-a'),
+    ).rejects.toThrow('財務淨利');
     expect(assertAccess).not.toHaveBeenCalled();
   });
 
@@ -169,23 +251,46 @@ describe('Knowledge ACL and route parity', () => {
   });
 
   it('keeps repair and mailroom guidance separated and inbox guidance personal', () => {
-    const technician = actor(['repair_workbench:read', 'repair_workbench:update'], ['REPAIR_TECHNICIAN']);
-    const clerk = actor(['mailroom:read', 'mailroom:update'], ['MAILROOM_OPERATOR']);
+    const technician = actor(
+      ['repair_workbench:read', 'repair_workbench:update'],
+      ['REPAIR_TECHNICIAN'],
+    );
+    const clerk = actor(
+      ['mailroom:read', 'mailroom:update'],
+      ['MAILROOM_OPERATOR'],
+    );
     const reviewer = actor(['mailroom:review'], ['CUSTOMER_SERVICE']);
     expect(access.canOpenPath(technician, '/operations/mailroom')).toBe(false);
     expect(access.canOpenPath(clerk, '/operations/repair')).toBe(false);
-    expect(access.canOpenPath(reviewer, '/operations/repair?queue=waiting')).toBe(false);
-    expect(access.canOpenPath(actor(['repair_workbench:update']), '/operations/repair')).toBe(false);
+    expect(
+      access.canOpenPath(reviewer, '/operations/repair?queue=waiting'),
+    ).toBe(false);
+    expect(
+      access.canOpenPath(
+        actor(['repair_workbench:update']),
+        '/operations/repair',
+      ),
+    ).toBe(false);
     for (const current of [actor(), technician, clerk, reviewer])
       expect(access.canOpenPath(current, '/my/inbox')).toBe(true);
-    expect(access.canOpenPath({ ...actor(), userId: '' }, '/my/inbox')).toBe(false);
-    const results = knowledge.search('', 512, '/operations/repair', 'zh-TW',
-      (entry) => access.canReadKnowledge(technician, entry));
+    expect(access.canOpenPath({ ...actor(), userId: '' }, '/my/inbox')).toBe(
+      false,
+    );
+    const results = knowledge.search(
+      '',
+      512,
+      '/operations/repair',
+      'zh-TW',
+      (entry) => access.canReadKnowledge(technician, entry),
+    );
     expect(results.some((entry) => entry.id === 'repair-workbench')).toBe(true);
-    expect(results.some((entry) => entry.id === 'mailroom-workbench')).toBe(false);
+    expect(results.some((entry) => entry.id === 'mailroom-workbench')).toBe(
+      false,
+    );
     expect(results.some((entry) => entry.id === 'personal-inbox')).toBe(true);
-    const related = results.find((entry) => entry.id === 'repair-workbench')!.sections
-      .find((section) => section.title === '相關指南')!.body;
+    const related = results
+      .find((entry) => entry.id === 'repair-workbench')!
+      .sections.find((section) => section.title === '相關指南')!.body;
     expect(related).not.toContain('/operations/mailroom');
     expect(related).not.toContain('/admin/access-control');
   });
@@ -193,12 +298,41 @@ describe('Knowledge ACL and route parity', () => {
   it('matches the enabled repair-only workspace without hiding a mixed-duty dashboard', () => {
     const previous = process.env.MAILROOM_ENABLED;
     try {
-      const technician = actor(['repair_workbench:read', 'repair_workbench:update', 'profile_self:read'], ['REPAIR_TECHNICIAN']);
+      const technician = actor(
+        [
+          'repair_workbench:read',
+          'repair_workbench:update',
+          'profile_self:read',
+        ],
+        ['REPAIR_TECHNICIAN'],
+      );
       process.env.MAILROOM_ENABLED = 'true';
       expect(access.canOpenPath(technician, '/dashboard')).toBe(false);
-      expect(access.canOpenPath(actor([...technician.permissions, 'payroll_self:read', 'payroll_self_breakdown:read'], ['REPAIR_TECHNICIAN']), '/dashboard')).toBe(false);
-      expect(access.canOpenPath(actor([...technician.permissions, 'inventory:read']), '/dashboard')).toBe(true);
-      expect(access.canOpenPath(actor(technician.permissions, ['ADMIN']), '/dashboard')).toBe(true);
+      expect(
+        access.canOpenPath(
+          actor(
+            [
+              ...technician.permissions,
+              'payroll_self:read',
+              'payroll_self_breakdown:read',
+            ],
+            ['REPAIR_TECHNICIAN'],
+          ),
+          '/dashboard',
+        ),
+      ).toBe(false);
+      expect(
+        access.canOpenPath(
+          actor([...technician.permissions, 'inventory:read']),
+          '/dashboard',
+        ),
+      ).toBe(true);
+      expect(
+        access.canOpenPath(
+          actor(technician.permissions, ['ADMIN']),
+          '/dashboard',
+        ),
+      ).toBe(true);
       process.env.MAILROOM_ENABLED = 'false';
       expect(access.canOpenPath(technician, '/dashboard')).toBe(true);
     } finally {
@@ -209,18 +343,33 @@ describe('Knowledge ACL and route parity', () => {
 
   it('does not register live AI operations when repair guide access is granted', async () => {
     const grants = ['repair_workbench:read', 'repair_workbench:update'];
-    const service = new AiCopilotAccessService({ user: {
-      findUnique: jest.fn().mockResolvedValue({ isActive: true, roles: [{ role: {
-        code: 'REPAIR_TECHNICIAN', permissions: grants.map((grant) => {
-          const [resource, action] = grant.split(':');
-          return { permission: { resource, action } };
-        }),
-      } }] }),
-    } } as unknown as PrismaService, {} as EntityAccessService);
+    const service = new AiCopilotAccessService(
+      {
+        user: {
+          findUnique: jest.fn().mockResolvedValue({
+            isActive: true,
+            roles: [
+              {
+                role: {
+                  code: 'REPAIR_TECHNICIAN',
+                  permissions: grants.map((grant) => {
+                    const [resource, action] = grant.split(':');
+                    return { permission: { resource, action } };
+                  }),
+                },
+              },
+            ],
+          }),
+        },
+      } as unknown as PrismaService,
+      {} as EntityAccessService,
+    );
     const technician = await service.getActor('technician');
     expect(service.canOpenPath(technician, '/operations/repair')).toBe(true);
     expect(technician.tools).toEqual([]);
-    await expect(service.authorize(technician, 'repair_workbench:update', 'entity-a')).rejects.toThrow();
+    await expect(
+      service.authorize(technician, 'repair_workbench:update', 'entity-a'),
+    ).rejects.toThrow();
   });
 
   it('keeps company administration superadmin-only and unknown destinations closed', () => {
@@ -300,5 +449,40 @@ describe('Knowledge ACL and route parity', () => {
     expect(entries.some((entry) => entry.id === 'system-settings')).toBe(false);
     expect(JSON.stringify(entries)).not.toContain('/admin/settings');
     expect(JSON.stringify(entries)).not.toContain('/admin/access-control');
+  });
+});
+
+describe('Replacement-stock static destinations', () => {
+  it('accepts explicit stock read but rejects stock update alone and item-specific technician access', () => {
+    const access = new AiCopilotAccessService(
+      {} as PrismaService,
+      {} as EntityAccessService,
+    );
+    const actor = {
+      userId: 'fixture',
+      roles: ['EMPLOYEE'],
+      isAdmin: false,
+      isSuperAdmin: false,
+      permissions: ['after_sales_stock:read'],
+      tools: [],
+    };
+    expect(access.canOpenPath(actor, '/inventory/after-sales-stock')).toBe(
+      true,
+    );
+    expect(
+      access.canOpenPath(
+        { ...actor, permissions: ['after_sales_stock:update'] },
+        '/inventory/after-sales-stock',
+      ),
+    ).toBe(false);
+    expect(
+      access.canOpenPath(
+        {
+          ...actor,
+          permissions: ['repair_workbench:read', 'repair_workbench:update'],
+        },
+        '/inventory/after-sales-stock',
+      ),
+    ).toBe(false);
   });
 });

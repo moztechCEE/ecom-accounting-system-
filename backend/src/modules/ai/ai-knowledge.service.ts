@@ -88,15 +88,19 @@ export class AiKnowledgeService {
       return [title + (found.path ? ` (${found.path})` : '')];
     });
     const availability =
-      entry.availability === 'staged'
+      entry.availability === 'after-sales-module'
         ? locale === 'en'
-          ? 'This is a staged feature guide. It may not be enabled in the current environment; an accessible guide does not mean the feature is active.'
-          : '這是分階段開放功能的操作指南，目前環境可能尚未啟用；能閱讀指南不表示功能已開放。'
-        : entry.availability === 'wms-portal'
+          ? 'Opening the original after-sales module requires enabled company binding, dedicated ERP grants and an active source account. Guide access does not prove source connection or completed business operations.'
+          : '原售後模組須先啟用、綁定公司並具備專用 ERP 授權及有效來源帳號；可閱讀指南不代表來源已連線或業務操作已完成。'
+        : entry.availability === 'staged'
           ? locale === 'en'
-            ? 'Warehouse portal access requires an enabled connection and current warehouse authorization. This guide does not verify connection or completed warehouse work.'
-            : '儲運入口需已啟用串接並通過目前儲運權限檢查；本指南不代表已確認連線或完成倉庫作業。'
-          : '';
+            ? 'This is a staged feature guide. It may not be enabled in the current environment; an accessible guide does not mean the feature is active.'
+            : '這是分階段開放功能的操作指南，目前環境可能尚未啟用；能閱讀指南不表示功能已開放。'
+          : entry.availability === 'wms-portal'
+            ? locale === 'en'
+              ? 'Warehouse portal access requires an enabled connection and current warehouse authorization. This guide does not verify connection or completed warehouse work.'
+              : '儲運入口需已啟用串接並通過目前儲運權限檢查；本指南不代表已確認連線或完成倉庫作業。'
+            : '';
     const sections = [
       {
         title: locale === 'en' ? 'Steps' : '操作步驟',

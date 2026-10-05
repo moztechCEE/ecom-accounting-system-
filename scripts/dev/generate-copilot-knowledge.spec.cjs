@@ -148,3 +148,22 @@ test('reviewed-source paths cannot escape the checkout or enroll Prisma seed scr
   assert.equal(seed.code, 1);
   assert.match(seed.output, /Unreviewed source area: backend\/prisma\/seed.ts/);
 });
+
+
+test('all reviewed source sections stay documented even without a sidebar leaf', (t) => {
+  const root=fixture(t);
+  edit(root, data => {
+    const cases=data.entries.find(entry => entry.id === 'after-sales-native-cases');
+    cases.aliases=cases.aliases.filter(route => route !== '/operations/after-sales/private-purchases');
+  });
+  const result=run(root,'--write');
+  assert.equal(result.code,1);
+  assert.match(result.output,/Routes without a guide: \/operations\/after-sales\/private-purchases/);
+});
+test('the parameterized container cannot document an unreviewed source section', (t) => {
+  const root=fixture(t);
+  edit(root,data => {data.entries.find(entry => entry.id === 'after-sales-native-cases').aliases.push('/operations/after-sales/unreviewed');});
+  const result=run(root,'--write');
+  assert.equal(result.code,1);
+  assert.match(result.output,/unknown reviewed after-sales section/);
+});

@@ -16,7 +16,8 @@ function read(relative) {
   assert(!path.isAbsolute(relative) && !relative.split('/').includes('..'), `Unsafe source path: ${relative}`);
   const reviewedCodeArea = /^(frontend\/src\/|backend\/src\/|docs\/copilot\/)/.test(relative);
   const reviewedMigration = /^backend\/prisma\/migrations\/[0-9]{14}_[a-z0-9_-]+\/migration\.sql$/.test(relative);
-  assert(reviewedCodeArea || reviewedMigration, `Unreviewed source area: ${relative}`);
+  const reviewedSchema = relative === 'backend/prisma/schema.prisma';
+  assert(reviewedCodeArea || reviewedMigration || reviewedSchema, `Unreviewed source area: ${relative}`);
   assert(!/(^|\/)(?:\.env[^/]*|node_modules|dist|secrets?)(\/|$)/i.test(relative), `Prohibited source: ${relative}`);
   const absolute = path.join(ROOT, relative);
   assert(fs.realpathSync(absolute).startsWith(ROOT + path.sep), `Source escapes checkout: ${relative}`);
@@ -84,10 +85,17 @@ function collectRoutes() {
   const workspaces = read('frontend/src/config/workspaces.ts');
   const reportsSection = workspaces.slice(workspaces.indexOf('WAREHOUSE_REPORTS'));
   const reports = [...reportsSection.matchAll(/key:\s*['"]([^'"]+)['"]/g)].map((m) => '/warehouse/' + m[1]);
-  for (const destination of [...nav, ...portal, ...reports]) {
+  const queueBlock = read('frontend/src/pages/repair/repair-model.ts').match(/export const QUEUES = \{([\s\S]*?)\} as const/)?.[1];
+  assert(queueBlock, 'Missing reviewed repair queue definition');
+  const repairQueues = [...queueBlock.matchAll(/\b([a-z]+)\s*:/g)].map((match) => match[1]).filter((key) => key !== 'all').map((key) => '/operations/repair?queue=' + key);
+  const sectionBlock = read('backend/src/modules/integration/after-sales/erp-module.contract.ts').match(/export const SOURCE_SECTIONS = \{([\s\S]*?)\} as const/)?.[1];
+  assert(sectionBlock, 'Missing reviewed after-sales section definition');
+  const sourceModuleRoutes = [...sectionBlock.matchAll(/(?:^|,)\s*(?:'([^']+)'|([a-z][a-z-]*))\s*:/g)].map((match) => '/operations/after-sales/' + (match[1] || match[2]));
+  assert(sourceModuleRoutes.length, 'Missing reviewed after-sales sections');
+  for (const destination of [...nav, ...portal, ...reports, ...repairQueues, ...sourceModuleRoutes]) {
     assert(routeExists(normalizeRoute(destination), staticRoutes), `Configured destination does not resolve to an App route: ${destination}`);
   }
-  return { staticRoutes, requiredRoutes: [...new Set([...staticRoutes.filter((r) => r !== '/' && !r.includes(':')), ...nav, ...portal, ...reports])].sort(), portal };
+  return { staticRoutes, requiredRoutes: [...new Set([...staticRoutes.filter((r) => r !== '/' && !r.includes(':')), ...nav, ...portal, ...reports, ...repairQueues, ...sourceModuleRoutes])].sort(), portal, sourceModuleRoutes };
 }
 function build() {
   const sourceText = read(SOURCE);
@@ -120,10 +128,11 @@ function build() {
     }
     assert.deepEqual(entry.sections.related, entry.translations.en.sections.related, `${entry.id}: locale related IDs differ`);
     for (const field of ['permissions','roles']) if (entry[field]) strings(entry[field], `${entry.id}.${field}`);
-    if (entry.availability) assert(['staged','wms-portal','preview-only'].includes(entry.availability));
+    if (entry.availability) assert(['staged','wms-portal','preview-only','after-sales-module'].includes(entry.availability));
     for (const route of [entry.path, ...(entry.aliases || [])].filter(Boolean)) {
       assert(route.startsWith('/') && !route.startsWith('//') && !/[\r\n#]/.test(route), `${entry.id}: invalid route`);
       const normalized = normalizeRoute(route);
+      if (normalized.startsWith('/operations/after-sales/')) assert(routeInfo.sourceModuleRoutes.includes(normalized), `${entry.id}: unknown reviewed after-sales section: ${route}`);
       assert(routeExists(normalized, routeInfo.staticRoutes), `${entry.id}: route does not exist: ${route}`);
       covered.add(route);
       covered.add(normalized);
@@ -156,7 +165,7 @@ function build() {
   }
   const missing = routeInfo.requiredRoutes.filter((route) => !covered.has(route));
   assert.deepEqual(missing, [], `Routes without a guide: ${missing.join(', ')}`);
-  const expectedGroups = ['dashboard','sales','service','warehouse','inventory','finance','people','admin','profile','mailroom','repair'].sort();
+  const expectedGroups = ['dashboard','sales','service','warehouse','inventory','finance','people','admin','profile','mailroom','repair','workbenches'].sort();
   assert.deepEqual([...new Set(entries.map((entry) => entry.group))].sort(), expectedGroups, 'Navigation group coverage incomplete');
   const sortedSources = [...sources].sort(([a],[b]) => a.localeCompare(b)).map(([sourcePath, digest]) => ({ path: sourcePath, sha256: digest }));
   const catalogSha256 = sha(sourceText), legacySha256 = sha(legacyText);
