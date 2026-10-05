@@ -1,4 +1,7 @@
 import type { Item } from '../mailroom/model';
+import type { PhysicalCustody } from '../mailroom/model';
+export type { PhysicalCustody } from '../mailroom/model';
+export { CUSTODY } from '../mailroom/item-custody';
 export type RepairCheck = { name: string; result: 'PASS'|'FAIL'|'NOT_TESTED'; observation: string };
 export type InspectionData = {
   complaint:string; reproduction:'YES'|'INTERMITTENT'|'NO'|'NOT_TESTED'; testConditions:string;
@@ -16,7 +19,6 @@ export type RepairDocument<T=InspectionData|RepairData> = {
   number:string;revision:number;status:'DRAFT'|'SUBMITTED';authorId:string;authorName:string;updatedAt:string;submittedAt?:string;inspectionRevision?:number;review?:{inspectionRevision:number;actorId:string;name:string;confirmedAt:string;planHash?:string;decision?:'APPROVE'|'DECLINE';quoteRevision?:number|null};data:T;
 };
 export type RepairWorkflowAction = 'claim_customer'|'resolve_customer'|'return_original'|'send_factory'|'accept_factory'|'request_factory_return'|'cancel_factory'|'receive_factory'|'complete_factory';
-export type PhysicalCustody = 'TECHNICIAN'|'FACTORY_CARRIER'|'FACTORY'|'INVENTORY';
 export type RepairWorkflow = {
   csr?: {status:'SENT'|'ACCEPTED'|'RESOLVED';inspectionRevision:number;estimateRevision?:number;quoteRevision?:number|null;planHash?:string;ownerId?:string;ownerName?:string;sentAt?:string;acceptedAt?:string;resolvedAt?:string;decision?:'APPROVE'|'DECLINE';note?:string};
   factory?: {stage:string;physicalCustody:'TECHNICIAN'|'FACTORY_CARRIER'|'FACTORY';factoryName?:string;reference?:string;carrier?:string;trackingNumber?:string;sentAt?:string;acceptedAt?:string;returnedAt?:string;note?:string;cancelled?:boolean;cancelledAt?:string;cancellationNote?:string;acceptanceNote?:string;returnNote?:string;receiptNote?:string};
@@ -67,7 +69,6 @@ export const WORKFLOW_ACTIONS: Record<RepairWorkflowAction,string> = {
 export const REPAIR_STATUS:Record<string,string> = {
   FACTORY_OUTBOUND:'送原廠交運中',FACTORY_RECEIVED:'原廠已收件',FACTORY_RETURNING:'原廠返還途中',
 };
-export const CUSTODY:Record<PhysicalCustody,string> = {TECHNICIAN:'維修師本人持有',FACTORY_CARRIER:'承運商持有（原廠交運）',FACTORY:'原廠持有',INVENTORY:'庫存負責人本人持有'};
 export const CSR_STATUS = {SENT:'已交辦，待客服接手',ACCEPTED:'客服已本人接手',RESOLVED:'客服已回覆方案結果'};
 export function repairReportReady(item:RepairItem):boolean {
   const inspection=item.repairInspection;const report=item.repairReport;

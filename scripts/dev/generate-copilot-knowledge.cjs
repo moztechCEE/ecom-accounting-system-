@@ -17,7 +17,7 @@ function read(relative) {
   const reviewedCodeArea = /^(frontend\/src\/|backend\/src\/|docs\/copilot\/)/.test(relative);
   const reviewedMigration = /^backend\/prisma\/migrations\/[0-9]{14}_[a-z0-9_-]+\/migration\.sql$/.test(relative);
   const reviewedSchema = relative === 'backend/prisma/schema.prisma';
-  const reviewedWebRuntime = relative === 'frontend/server.mjs';
+  const reviewedWebRuntime = relative === 'frontend/server.mjs' || relative === 'frontend/index.html';
   assert(reviewedCodeArea || reviewedMigration || reviewedSchema || reviewedWebRuntime, `Unreviewed source area: ${relative}`);
   assert(!/(^|\/)(?:\.env[^/]*|node_modules|dist|secrets?)(\/|$)/i.test(relative), `Prohibited source: ${relative}`);
   const absolute = path.join(ROOT, relative);

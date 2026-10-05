@@ -42,6 +42,21 @@ test('first request freezes one current physical unit and keeps independent insp
   assert.equal('sourceReference' in input, false)
 })
 
+test('a multi-unit source line never becomes a bulk IN; each physical native item is submitted separately', () => {
+  const firstNative = { ...source, declared: { id: 'synthetic-source-line', quantity: 3 } }
+  const secondNative = { ...firstNative, id: '10000000-0000-4000-8000-000000000005', label: 'synthetic-return-unit-2' }
+  const first = create({}, firstNative)
+  const second = buildReturnStockReceipt('synthetic-entity', { ...values, sourceItemId: secondNative.id, unitLabel: 'DEV-UNIT-2' }, secondNative, product, '10000000-0000-4000-8000-000000000006')
+  assert.equal(first.quantity, 1)
+  assert.equal(second.quantity, 1)
+  assert.notEqual(first.sourceItemId, second.sourceItemId)
+  assert.notEqual(first.unitLabel, second.unitLabel)
+  assert.notEqual(first.requestId, second.requestId)
+  assert.equal('declared' in first, false)
+  assert.equal('declared' in second, false)
+  assert.equal(Object.isFrozen(second), true)
+})
+
 test('retry retains the first request id, full payload and expected source version', () => {
   const input = create()
   const wire = JSON.stringify(input)

@@ -4530,7 +4530,8 @@
           "品項不符與退貨檢查只交承辦客服；承辦客服須以員工信箱對應同公司、在職且有覆核權限的帳號。未完成映射會提示，不廣播給全部客服。",
           "客服接手檢查結果不等於完成整新或核准退款。「待同步」也不代表售後或 AI 已收到。",
           "收發室基本讀取權限不自動包含檢修與維修文件；完整技術文件及版本需 repair_workbench:read 或 mailroom:review，填寫仍限本人已簽收且保管物件的維修師。",
-          "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。"
+          "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。",
+          "合格退貨作換機正式出庫後，原入庫紀錄保留為歷史。現在實物保管與位置依同公司已核對的換機案件物流投影；出庫關聯不明時顯示待核對，不以歷史入庫人員當作目前持有人。此投影不授予換機案件的技術單或顧客財務資料。"
         ],
         "related": [
           "repair-workbench",
@@ -4564,7 +4565,8 @@
               "Mismatches and return inspection go only to the responsible customer-service staff member. Their email must map to an active employee in the same company with review permission. Missing mappings are flagged without broadcasting to all reviewers.",
               "Acknowledging inspection does not complete refurbishment or approve a refund. Pending sync does not mean after-sales or AI received the event.",
               "Basic mailroom read access does not include inspection and repair records. Full technical records and versions require repair_workbench:read or mailroom:review; only the personally accepting technician with current custody can write them.",
-              "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock."
+              "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock.",
+              "After formal replacement outbound, the qualified return retains its original inbound history. Current holder and location follow the verified same-company replacement logistics projection. An unknown outbound relation is marked for verification instead of presenting the historical stock recipient as current custody. This projection grants no technical document or customer financial access to the replacement case."
             ],
             "related": [
               "repair-workbench",
@@ -4595,7 +4597,9 @@
         "backend/src/modules/mailroom/mailroom-sync.service.ts",
         "backend/src/modules/notification/notification.service.ts",
         "backend/prisma/schema.prisma",
-        "backend/prisma/migrations/20261005150000_mailroom_source_feed/migration.sql"
+        "backend/prisma/migrations/20261005150000_mailroom_source_feed/migration.sql",
+        "frontend/src/pages/mailroom/item-custody.ts",
+        "backend/src/modules/mailroom/repair-stock-custody.contract.ts"
       ],
       "permissions": [
         "mailroom:read"
@@ -4640,7 +4644,8 @@
           "案件狀態、交辦狀態及通知狀態各自保存。待發送不等於已發送，已發送不等於對方接手，已讀通知不等於完成交辦；同步送達也不是顧客同意或會計入帳證明。",
           "整新品須有公司所有權／退款依據、正式入庫及檢驗整新複驗紀錄，AA／A／B／C 外觀分級不代表替換資格。ERP 預留、釋放、正式出庫各有流水；原件退回、替換出庫及原件重新入庫分開。無 SN 商品用實物標籤，不虛構 SN。ECOUNT／WMS 回執獨立追蹤，未設定或待確認不顯示已核銷；若啟用外部確認門檻，未確認會阻擋完成。",
           "本人填寫的檢修單與維修單分別保留診斷和實際處理證據；維修單綁定檢修單版次，檢修改版後須重新提交維修單。送原廠或原件退回方案不能直接當作已修理或已替換完成。靜態指南不建立新的 AI 執行工具，不代替現場檢驗、安全基準或技術主管訂定的各機種合格值。 原廠處理返還使用 FACTORY_REPAIRED，附原廠委修單號，須本人收到後完成逐項 PASS 複驗才交回；原件未修退回使用 RETURN_UNREPAIRED，不冒充 REPAIRED。",
-          "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。"
+          "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。",
+          "合格退貨作換機正式出庫後，原入庫紀錄保留為歷史。現在實物保管與位置依同公司已核對的換機案件物流投影；出庫關聯不明時顯示待核對，不以歷史入庫人員當作目前持有人。此投影不授予換機案件的技術單或顧客財務資料。"
         ],
         "related": [
           "mailroom-workbench",
@@ -4684,7 +4689,8 @@
               "Case, handoff and notification states are separate. Pending is not sent, sent is not accepted, and reading a notification does not complete a task. Sync delivery is neither customer consent nor evidence of received funds.",
               "Refurbished units require ownership/refund evidence, formal receipt and inspection/refurbishment verification; AA/A/B/C cosmetic grades do not qualify replacements. ERP reservation, release and final outbound posting have separate movements. Original return, replacement outbound and original re-receipt remain distinct. Non-serial products use unit labels. ECOUNT/WMS acknowledgements are separate: unconfigured or pending is not posted. An enabled external-confirmation requirement blocks completion until confirmed.",
               "Inspection and repair records retain the technician’s diagnosis and actual work evidence separately. A repair record binds to the inspection revision and must be resubmitted after inspection changes. Factory service and original-item return plans cannot directly be marked repaired or replaced. This static guide adds no AI execution tools and cannot replace physical inspection, safety criteria or model-specific acceptance limits established by the technical lead. Factory returns use FACTORY_REPAIRED with the original factory reference and require personal receipt plus all PASS checks before handback. Unrepaired originals use RETURN_UNREPAIRED rather than pretending to be repaired.",
-              "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock."
+              "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock.",
+              "After formal replacement outbound, the qualified return retains its original inbound history. Current holder and location follow the verified same-company replacement logistics projection. An unknown outbound relation is marked for verification instead of presenting the historical stock recipient as current custody. This projection grants no technical document or customer financial access to the replacement case."
             ],
             "related": [
               "mailroom-workbench",
@@ -4734,7 +4740,10 @@
         "backend/src/modules/mailroom/mailroom-sync.service.ts",
         "backend/src/modules/notification/notification.service.ts",
         "backend/prisma/schema.prisma",
-        "backend/prisma/migrations/20261005150000_mailroom_source_feed/migration.sql"
+        "backend/prisma/migrations/20261005150000_mailroom_source_feed/migration.sql",
+        "frontend/src/pages/mailroom/item-custody.ts",
+        "frontend/src/pages/mailroom/model.ts",
+        "backend/src/modules/mailroom/repair-stock-custody.contract.ts"
       ],
       "permissions": [
         "repair_workbench:read"
@@ -4773,7 +4782,8 @@
           "AA 重新入庫；A 瑕疵補寄或福利品；B／C 整理後福利品。本階段只記錄去向，不會自動加庫存、扣退款或發送 LINE 訊息。",
           "客服同步的「待同步」不能解讀為對方已收到。品項不符須由有覆核權限的客服記錄顧客確認結果。",
           "檢修與維修文件及完整版本歷史另需 repair_workbench:read 或 mailroom:review；能進入我的待辦不會自動取得這些文件或他人的實物操作權。",
-          "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。"
+          "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。",
+          "合格退貨作換機正式出庫後，原入庫紀錄保留為歷史。現在實物保管與位置依同公司已核對的換機案件物流投影；出庫關聯不明時顯示待核對，不以歷史入庫人員當作目前持有人。此投影不授予換機案件的技術單或顧客財務資料。"
         ],
         "related": [
           "mailroom-workbench",
@@ -4802,7 +4812,8 @@
               "AA returns to stock; A goes to replacement or welfare sale; B/C is refurbished for welfare sale. This phase records the intended disposition without posting stock, deducting refunds or sending LINE messages.",
               "Pending sync does not mean the destination received the event. A permitted customer-service reviewer must record customer confirmation for a mismatch.",
               "Inspection and repair documents and full version history additionally require repair_workbench:read or mailroom:review. Opening My inbox does not grant these records or authority over another person’s physical items.",
-              "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock."
+              "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock.",
+              "After formal replacement outbound, the qualified return retains its original inbound history. Current holder and location follow the verified same-company replacement logistics projection. An unknown outbound relation is marked for verification instead of presenting the historical stock recipient as current custody. This projection grants no technical document or customer financial access to the replacement case."
             ],
             "related": [
               "mailroom-workbench",
@@ -4833,7 +4844,9 @@
         "backend/src/modules/mailroom/mailroom-sync.service.ts",
         "backend/src/modules/notification/notification.service.ts",
         "backend/prisma/schema.prisma",
-        "backend/prisma/migrations/20261005150000_mailroom_source_feed/migration.sql"
+        "backend/prisma/migrations/20261005150000_mailroom_source_feed/migration.sql",
+        "frontend/src/pages/mailroom/item-custody.ts",
+        "backend/src/modules/mailroom/repair-stock-custody.contract.ts"
       ]
     },
     {
@@ -4866,7 +4879,8 @@
           "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
           "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。",
           "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
-          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。"
+          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
+          "合格退貨作換機正式出庫後，原入庫紀錄保留為歷史。現在實物保管與位置依同公司已核對的換機案件物流投影；出庫關聯不明時顯示待核對，不以歷史入庫人員當作目前持有人。此投影不授予換機案件的技術單或顧客財務資料。"
         ],
         "related": [
           "repair-workbench",
@@ -4896,7 +4910,8 @@
               "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
               "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock.",
               "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
-              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance."
+              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
+              "After formal replacement outbound, the qualified return retains its original inbound history. Current holder and location follow the verified same-company replacement logistics projection. An unknown outbound relation is marked for verification instead of presenting the historical stock recipient as current custody. This projection grants no technical document or customer financial access to the replacement case."
             ],
             "related": [
               "repair-workbench",
@@ -4929,8 +4944,12 @@
         "backend/src/modules/mailroom/mailroom.service.ts",
         "frontend/src/pages/repair/after-sales-launch.ts",
         "frontend/server.mjs",
+        "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
-        "frontend/src/services/after-sales-logout.ts"
+        "frontend/src/services/after-sales-logout.ts",
+        "frontend/src/pages/mailroom/item-custody.ts",
+        "frontend/src/pages/mailroom/model.ts",
+        "backend/src/modules/mailroom/repair-stock-custody.contract.ts"
       ]
     },
     {
@@ -5020,6 +5039,7 @@
         "backend/src/modules/mailroom/mailroom.service.ts",
         "frontend/src/pages/repair/after-sales-launch.ts",
         "frontend/server.mjs",
+        "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts"
       ],
@@ -5108,6 +5128,7 @@
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
         "frontend/src/pages/repair/after-sales-launch.ts",
         "frontend/server.mjs",
+        "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts"
       ]
@@ -5186,6 +5207,7 @@
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
         "frontend/src/pages/repair/after-sales-launch.ts",
         "frontend/server.mjs",
+        "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts"
       ]
@@ -5264,6 +5286,7 @@
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
         "frontend/src/pages/repair/after-sales-launch.ts",
         "frontend/server.mjs",
+        "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts"
       ]
@@ -5342,6 +5365,7 @@
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
         "frontend/src/pages/repair/after-sales-launch.ts",
         "frontend/server.mjs",
+        "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts"
       ]
@@ -5420,6 +5444,7 @@
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
         "frontend/src/pages/repair/after-sales-launch.ts",
         "frontend/server.mjs",
+        "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts"
       ]
@@ -5498,6 +5523,7 @@
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
         "frontend/src/pages/repair/after-sales-launch.ts",
         "frontend/server.mjs",
+        "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts"
       ]
@@ -5576,6 +5602,7 @@
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
         "frontend/src/pages/repair/after-sales-launch.ts",
         "frontend/server.mjs",
+        "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts"
       ]
@@ -5654,6 +5681,7 @@
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
         "frontend/src/pages/repair/after-sales-launch.ts",
         "frontend/server.mjs",
+        "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts"
       ]
@@ -5732,6 +5760,7 @@
         "backend/prisma/migrations/20261005140000_aftersales_module_permissions/migration.sql",
         "frontend/src/pages/repair/after-sales-launch.ts",
         "frontend/server.mjs",
+        "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts"
       ]
@@ -5765,14 +5794,15 @@
           "核對目前公司、品項及正式倉位，選擇全新品或整新品；無 SN 商品填唯一實物標籤，有 SN 商品選可用庫存的真實 SN。",
           "「已正式入庫後登錄合格商品」須有既有正式入庫來源、所有權及檢驗依據；整新品另綁同版已提交、逐項 PASS 的檢修及維修紀錄。此動作不增加庫存數量，所有權／退貨接收依據不代表退款完成。",
           "「合格退貨正式入庫並登錄整新品」只供公司範圍的庫存負責人本人點收一件。選擇待入庫合格 RETURN、核對來源位置、SKU、真實 SN／不可重用實物標籤，填目的倉位及實際位置、所有權與本版檢驗依據並確認點件。後端在同一交易轉移收發實物保管至本人、狀態 STOCKED／版本加一、正式 ERP IN +1 並登錄整新品；維修師逐件預留權不授予入庫。",
-          "有 SN 退貨須與來源真實 SN 及商品一致；可新增或由已售出狀態安全收回，既有可用／預留或錯品項序號會阻擋。無 SN 仍按外部來源單件與不可重用標籤識別，既有同 SKU 數量不代替這一件退貨，也不能整批補入。逾時保留第一次 requestId、來源版本及完全相同資料重試；正式回執核對單件、流水、本人保管、原／目的位置與版次後才顯示成功，重試不另加數量。",
+          "有 SN 退貨須與來源真實 SN 及商品一致；可新增或由已售出狀態安全收回，既有可用／預留或錯品項序號會阻擋。來源案件總量可多件，但每個實收物件各自以真實 SN 或不可重用標籤識別，每次只點收一件；既有同 SKU 數量不代替這一件退貨，也不能按來源總量整批補入。逾時保留第一次 requestId、來源版本及完全相同資料重試；正式回執核對單件、流水、本人保管、原／目的位置與版次後才顯示成功，重試不另加數量。",
           "維修師僅可替本人持有的案件預留合格實物，SKU／品況須與已提交替換方案一致。預留保留數量及真實 SN，回填維修單，不算正式出庫。預留獨立保存，放棄表單或離開不會取消；維修師可在本人案件的選取元件明確取消未使用預留。",
           "未使用的預留可由具權限者取消釋放；已出庫不能取消回補。換機完成須本版工作單及逐項複驗通過，核對預留、品項、品況、SN、效期、數量後才正式出庫。 整新品出庫時在同一交易鎖定來源退貨實物，重新核對本版已提交工作單、逐項 PASS、處置、SKU、SN 與目前實物狀態；來源檢修改版或狀態改變會阻擋出庫。同一來源實物只可登錄一件替換庫存。"
         ],
         "boundaries": [
           "讀寫分開；庫存管理需公司範圍及庫存授權，維修師逐件預留不授予整個庫存管理權。",
           "正式 ERP IN、合格登錄、預留／釋放、ERP OUT、外部 ECOUNT／WMS 確認及實物交接分別追蹤。入庫回執 externalInventoryPosted=false 不代表外部已過帳；退款、顧客維修件退回與公司合格退貨入庫也分開。",
-          "此指南不執行 AI 庫存操作，不代表部署、退款、付款、倉庫或外部系統已驗收。"
+          "此指南不執行 AI 庫存操作，不代表部署、退款、付款、倉庫或外部系統已驗收。",
+          "合格退貨作換機正式出庫後，原入庫紀錄保留為歷史。現在實物保管與位置依同公司已核對的換機案件物流投影；出庫關聯不明時顯示待核對，不以歷史入庫人員當作目前持有人。此投影不授予換機案件的技術單或顧客財務資料。"
         ],
         "related": [
           "repair-workbench",
@@ -5801,14 +5831,15 @@
               "Verify company, product and formal warehouse, then choose new or refurbished condition. Non-serial products use unique unit labels; serial products use real available inventory serials.",
               "The already-received qualification action requires existing formal inbound, ownership and inspection evidence, with current submitted passing inspection and report records for refurbished units. It adds no stock quantity. Ownership or return-receipt evidence is not proof of a completed refund.",
               "Formal return receipt is limited to a company-scoped stock owner personally receiving one qualified RETURN unit. Verify source location, SKU and real serial or non-reusable unit label, then specify the formal warehouse, destination physical location, ownership and current inspection evidence and confirm item count. One transaction transfers current clerk custody to the stock owner, sets STOCKED with version +1, posts ERP IN +1 and registers the refurbished unit. Item-specific technician reservation does not grant inbound authority.",
-              "Serial returns must match the real source serial and product; a new serial or a safely returned sold serial may be received, while available/reserved or mismatched serials block receipt. Non-serial units require one declared external source unit and a non-reusable label even when the SKU already has other stock; bulk receipt is rejected. A timeout retry preserves the first request ID, source version and identical body. Success requires the formal single-unit transaction and matching personal custody, source/destination location and version receipt; duplicate retry adds no quantity.",
+              "Serial returns must match the real source serial and product; a new serial or a safely returned sold serial may be received, while available/reserved or mismatched serials block receipt. A source case line may contain multiple units, but each native received item needs its own real serial or non-reusable label and is received one at a time. Existing stock of the SKU does not identify this returned unit; the source total must not be posted as a bulk receipt. A timeout retry preserves the first request ID, source version and identical body. Success requires the formal single-unit transaction and matching personal custody, source/destination location and version receipt; duplicate retry adds no quantity.",
               "Technicians may reserve qualified units only for their own held item. SKU and condition must match the submitted replacement plan. Reservation holds quantity and any real serial, and fills the repair form without final outbound posting. Reservation persists independently when a draft is discarded or the page is left; technicians can explicitly release unused reservations from their own item picker.",
               "Authorized staff may release unused reservations; posted units cannot be replenished by cancellation. Completion needs current work records and all passing checks, with reservation, product, condition, serial, expiry and quantity verified before outbound posting. Refurbished outbound locks the source return in the same transaction and rechecks current submitted work records, every PASS check, outcome, SKU, serial and physical state. Revised inspection or changed custody/state blocks outbound. A source item can qualify only one replacement unit."
             ],
             "boundaries": [
               "Read and write grants are separate. Inventory management requires company scope and inventory grants; item-specific technician reservation grants no broad stock management.",
               "ERP IN, qualification, reservation/release, ERP OUT, external ECOUNT/WMS confirmation and physical custody remain separate. externalInventoryPosted=false on an inbound receipt does not claim external posting. Refund completion, return of a customer repair unit and company return inbound also remain separate.",
-              "This guide executes no AI stock operation and proves no deployment, refund, payment, warehouse or external-system acceptance."
+              "This guide executes no AI stock operation and proves no deployment, refund, payment, warehouse or external-system acceptance.",
+              "After formal replacement outbound, the qualified return retains its original inbound history. Current holder and location follow the verified same-company replacement logistics projection. An unknown outbound relation is marked for verification instead of presenting the historical stock recipient as current custody. This projection grants no technical document or customer financial access to the replacement case."
             ],
             "related": [
               "repair-workbench",
@@ -5840,7 +5871,10 @@
         "backend/src/modules/integration/after-sales/after-sales-stock.contract.ts",
         "backend/src/modules/integration/after-sales/after-sales-stock.dto.ts",
         "backend/src/modules/mailroom/mailroom.contract.ts",
-        "backend/src/modules/mailroom/repair-workflow.contract.ts"
+        "backend/src/modules/mailroom/repair-workflow.contract.ts",
+        "frontend/src/pages/mailroom/item-custody.ts",
+        "frontend/src/pages/mailroom/model.ts",
+        "backend/src/modules/mailroom/repair-stock-custody.contract.ts"
       ]
     }
   ],

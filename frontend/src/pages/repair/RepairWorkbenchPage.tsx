@@ -9,12 +9,13 @@ import api from '../../services/api';
 import { repairService } from '../../services/repair';
 import { webSocketService } from '../../services/websocket.service';
 import { ACTIONS, STATUS, errorText, mailroomEnabled, type Source } from '../mailroom/model';
-import { QUEUES, PLANS, REPAIR_STATUS, WORKFLOW_ACTIONS, CUSTODY, sourceQuoteConsentCurrent, inspectionReviewCurrent, repairStartReady, repairReportReady, type RepairQueue, type RepairItem } from './repair-model';
+import { QUEUES, PLANS, REPAIR_STATUS, WORKFLOW_ACTIONS, sourceQuoteConsentCurrent, inspectionReviewCurrent, repairStartReady, repairReportReady, type RepairQueue, type RepairItem } from './repair-model';
 import RepairDocuments from './RepairDocuments';
 import RepairWorkflowPanel from './RepairWorkflowPanel';
 import { useRepairNavigationGuard } from './repair-navigation';
 import '../mailroom/mailroom.css';
 import './repair.css';
+import { currentItemCustody } from '../mailroom/item-custody';
 const { Title, Text, Paragraph } = Typography;
 const time = (value: string) => dayjs(value).format('MM/DD HH:mm');
 const documentReady = (item: RepairItem) => item.repairInspection?.status === 'SUBMITTED';
@@ -102,8 +103,8 @@ export default function RepairWorkbenchPage() {
     <Card className="repair-workbench-list" title={QUEUES[queue]} extra={<Input.Search className="repair-workbench-search" placeholder="案件號／品名／SKU／SN" allowClear onSearch={value=>{setPagination({queue,page:1});setSearch(value);}} />}>
       <Table<RepairItem> rowKey="id" loading={loading} dataSource={rows} scroll={{x:1000}} locale={{emptyText:<Empty description="此分類目前沒有案件" />}} pagination={{current:page,total,pageSize:50,onChange:value=>setPagination({queue,page:value}),showSizeChanger:false}} columns={[
         {title:'案件與產品',key:'product',render:(_,item)=><><Button type="link" style={{padding:0}} onClick={()=>void open(item.id)}>{item.receipt.sourceNumber || item.label}</Button><div>{item.productName}</div><Text type="secondary">{item.sku || '未提供 SKU'} · {item.serialNumber || '未提供 SN'}</Text></>},
-        {title:'作業狀態',dataIndex:'status',render:(value:string)=><Tag color={value==='WAITING_CUSTOMER'?'orange':'blue'}>{REPAIR_STATUS[value] || STATUS[value] || value}</Tag>},
-        {title:'實物保管／位置',key:'custody',render:(_,item)=><>{item.repairWorkflow?.factory?.physicalCustody && item.repairWorkflow.factory.physicalCustody!=='TECHNICIAN'?CUSTODY[item.repairWorkflow.factory.physicalCustody]:item.custodianName}<div><Text type="secondary">{item.location}</Text></div></>},
+        {title:'作業狀態',dataIndex:'status',render:(value:string,item)=><Tag color={value==='WAITING_CUSTOMER'?'orange':'blue'}>{item.statusLabel || REPAIR_STATUS[value] || STATUS[value] || value}</Tag>},
+        {title:'實物保管／位置',key:'custody',render:(_,item)=>{const custody=currentItemCustody(item);return <>{custody.holder}<div><Text type="secondary">{custody.location}</Text></div>{custody.notice&&<Text type="secondary">{custody.notice}</Text>}</>;}},
         {title:'目前交辦／接收',key:'next',render:(_,item)=>item.status==='WAITING_CUSTOMER'?'承辦客服處理中':item.nextUserName || (['WAITING_REPAIR_ACCEPTANCE','PENDING_REFURBISH'].includes(item.status)?'待維修師認領':'—')},
         {title:'工作單',key:'documents',render:(_,item)=><Space direction="vertical" size={2}><Text>{item.repairInspection ? `檢修單 v${item.repairInspection.revision} · ${item.repairInspection.status==='SUBMITTED'?'已提交':'草稿'}` : '尚無檢修單'}</Text><Text type="secondary">{item.repairReport ? `維修單 v${item.repairReport.revision} · ${item.repairReport.status==='SUBMITTED'?'已提交':'草稿'}` : '尚無維修單'}</Text></Space>},
         {title:'',key:'open',render:(_,item)=><Button onClick={()=>void open(item.id)}>開啟案件</Button>},
@@ -152,6 +153,7 @@ function ArrivalPreview({entityId}:{entityId:string}) {
 }
 function RepairDetail({item,entityId,onSaved,onDirtyChange}:{item:RepairItem;entityId:string;onSaved:()=>Promise<void>;onDirtyChange:(dirty:boolean)=>void}) {
   const {user}=useAuth();
+  const custody=currentItemCustody(item);
   const [location,setLocation]=useState(item.location);
   const [confirmed,setConfirmed]=useState(false);
   const [note,setNote]=useState('');
@@ -187,10 +189,11 @@ function RepairDetail({item,entityId,onSaved,onDirtyChange}:{item:RepairItem;ent
   if(own&&item.status==='INSPECTING'&&['REPAIR','REPLACE'].includes(plan || ''))actions.push({name:'start_repair',label:plan==='REPLACE'?'開始替換處理':'開始維修',disabled:!repairStartReady(item)});
   if(own&&['REPAIRING','REFURBISHING'].includes(item.status))actions.push({name:item.status==='REFURBISHING'?'complete_refurbish':'complete_repair',label:'複驗完成，交回收發室',disabled:!repairReportReady(item)||!note.trim()});
   return <Space direction="vertical" size={20} style={{width:'100%'}}>
-    <div><Title level={3}>{item.productName}</Title><Space wrap><Tag color="blue">{REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag><Text>{item.receipt.sourceNumber || item.label}</Text>{item.receipt.category==='RETURN'&&<Tag>退貨整新</Tag>}</Space></div>
+    <div><Title level={3}>{item.productName}</Title><Space wrap><Tag color="blue">{item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag><Text>{item.receipt.sourceNumber || item.label}</Text>{item.receipt.category==='RETURN'&&<Tag>退貨整新</Tag>}</Space></div>
     <Descriptions bordered size="small" column={{xs:1,sm:2}} items={[
       {key:'sku',label:'SKU',children:item.sku || '未提供'}, {key:'sn',label:'原件 SN',children:item.serialNumber || '未提供'},
-      {key:'custodian',label:'目前實物保管',children:item.repairWorkflow?.factory?.physicalCustody && item.repairWorkflow.factory.physicalCustody!=='TECHNICIAN'?CUSTODY[item.repairWorkflow.factory.physicalCustody]:item.custodianName},{key:'location',label:'存放位置',children:item.location},
+      {key:'custodian',label:'目前實物保管',children:custody.holder},{key:'location',label:'目前實物位置',children:custody.location},
+      ...(custody.transferred?[{key:'linked',label:'換機出庫',children:[custody.notice,custody.reference,custody.status].filter(Boolean).join(' · ')},{key:'in-history',label:'原退貨入庫紀錄',children:`${item.custodianName} / ${item.location}（歷史接收，不代表目前持有）`}]:[]),
       {key:'handoff',label:'目前交辦',children:item.status==='WAITING_CUSTOMER'?(item.receipt.customerServiceUserId?'承辦客服（已指派）':'承辦客服（尚未對應）'):waiting?'維修師（待本人簽收）':['REPAIR_RECEIVED','INSPECTING','REPAIRING','REFURBISHING'].includes(item.status)?'維修師檢修處理':item.status==='WAITING_RETURN_ACCEPTANCE'?'收發室（待本人簽收）':REPAIR_STATUS[item.status] || STATUS[item.status] || item.status},
       {key:'next',label:'下一位實物接收人',children:item.nextUserName || '待安排'}, {key:'receipt',label:'收發室收件單',children:item.receipt.number},
       {key:'source',label:'售後來源狀態',children:item.release?.sourceStatusLabel || item.release?.sourceStatus || item.release?.message || '無來源'},

@@ -168,13 +168,15 @@ test('the parameterized container cannot document an unreviewed source section',
   assert.match(result.output,/unknown reviewed after-sales section/);
 });
 
-test('reviewed logout cookie behavior is locked to the exact web runtime source', (t) => {
+test('reviewed session behavior and document referrer policy are locked to exact web runtime sources', (t) => {
   const root = fixture(t);
   fs.appendFileSync(path.join(root, 'frontend/server.mjs'), '\n// Synthetic changed logout behavior\n');
+  fs.appendFileSync(path.join(root, 'frontend/index.html'), '\n<!-- Synthetic changed document referrer policy -->\n');
   const result = run(root);
   assert.equal(result.code, 1);
   assert.match(result.output, /Knowledge drift/);
   assert.match(result.output, /frontend\/server.mjs/);
+  assert.match(result.output, /frontend\/index.html/);
 });
 test('reviewing the fixed web runtime does not enroll other frontend runtime or fixture files', (t) => {
   const root = fixture(t);
@@ -182,4 +184,8 @@ test('reviewing the fixed web runtime does not enroll other frontend runtime or 
   const result = run(root, '--write');
   assert.equal(result.code, 1);
   assert.match(result.output, /Unreviewed source area: frontend\/arbitrary-server.mjs/);
+  edit(root, data => { data.entries[0].sourcePaths.pop(); data.entries[0].sourcePaths.push('frontend/arbitrary-index.html'); });
+  const html = run(root, '--write');
+  assert.equal(html.code, 1);
+  assert.match(html.output, /Unreviewed source area: frontend\/arbitrary-index.html/);
 });

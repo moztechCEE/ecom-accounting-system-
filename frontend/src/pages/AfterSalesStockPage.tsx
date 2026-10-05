@@ -117,7 +117,7 @@ export default function AfterSalesStockPage() {
       <Button htmlType="submit" type="primary" loading={busy} disabled={!catalog}>登錄合格商品</Button>
     </Form></Card>}
     {canReceive && <Card title="合格退貨正式入庫並登錄整新品">
-      <Alert type="info" showIcon message="庫存負責人本人簽收；單件正式 ERP 入庫 +1" description="只接受已完成當版檢修與逐項合格複驗、交由收發保管的退貨實物。外觀分級不代替功能檢驗。選定真實 SKU、SN／實物標籤及目的倉位後，由本人點件簽收；技師不能在維修工作台自行入庫。無產品 SN 時，每件須貼不可重用的實物標籤；來源數量必須為一，不能整批補入。" />
+      <Alert type="info" showIcon message="庫存負責人本人簽收；單件正式 ERP 入庫 +1" description="只接受已完成當版檢修與逐項合格複驗、交由收發保管的退貨實物。外觀分級不代替功能檢驗。選定真實 SKU、SN／實物標籤及目的倉位後，由本人點件簽收；技師不能在維修工作台自行入庫。來源案件可有多件，本次僅點收這一件；有 SN 逐件核對真實 SN，無產品 SN 時每件須貼不可重用的實物標籤，不將來源總量整批入庫。" />
       {receiveAttempt && <Alert type="warning" showIcon message="本筆入庫已送出，尚未確認回執" description="資料與來源版次已保留，請重試同一筆；不要修改資料或另建入庫。離開頁面後，應先由正式流水核對是否已完成。" />}
       {inboundReceipt && <Alert type="success" showIcon message={`正式 ERP 入庫回執：${inboundReceipt.inbound.inTransactionId}`} description={`一件；${inboundReceipt.inbound.fromLocation} → ${inboundReceipt.inbound.toLocation}；原實物版本 ${inboundReceipt.inbound.sourceItemVersion} → 已入庫版本 ${inboundReceipt.inbound.inventoryItemVersion}。外部庫存尚未過帳，請另核對外部回執。`} />}
       {!returns.length && !receiveAttempt && <Alert type="info" message="目前沒有可正式入庫的合格退貨；請先完成原檢修與收發簽收流程" />}

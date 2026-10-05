@@ -4,6 +4,7 @@ import { repairService } from '../../services/repair';
 import { errorText } from '../mailroom/model';
 import { CUSTODY, CSR_STATUS, WORKFLOW_ACTIONS, repairReportReady } from './repair-model';
 import type { RepairItem, RepairWorkflowAction, RepairWorkflowCommand } from './repair-model';
+import { currentPhysicalCustody } from '../mailroom/item-custody';
 const TECH_ACTIONS:RepairWorkflowAction[]=['return_original','send_factory','accept_factory','request_factory_return','cancel_factory','receive_factory','complete_factory'];
 type Fields={note:string;confirmedItems?:boolean;location?:string;factoryName?:string;reference?:string;carrier?:string;trackingNumber?:string};
 const required=[{required:true,whitespace:true,message:'請填寫實際作業資料'}];
@@ -16,7 +17,7 @@ export default function RepairWorkflowPanel({item,entityId,canUpdate,onSaved,onD
   const operation=useRef<{body:string;requestId:string}|null>(null);
   const workflow=item.repairWorkflow;
   const available=canUpdate?TECH_ACTIONS.filter(value=>item.allowedWorkflowActions?.includes(value)):[];
-  const physical=workflow?.factory?.physicalCustody || item.physicalCustody;
+  const physical=currentPhysicalCustody(item);
   const handoff=workflow?.csr;
   const confirmPhysical=action==='return_original'||action==='send_factory'||action==='receive_factory';
   const tracking=action==='send_factory'||action==='request_factory_return';

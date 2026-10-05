@@ -104,6 +104,8 @@ export type Item = {
   location: string;
   custodianId: string;
   custodianName: string;
+  physicalCustody?: PhysicalCustody;
+  linkedReplacementCustody?: LinkedReplacementCustody;
   nextUserId: string | null;
   nextUserName: string | null;
   recipientId: string | null;
@@ -141,6 +143,25 @@ export type Item = {
     lastError: string | null;
     createdAt: string;
   }[];
+};
+export type PhysicalCustody =
+  | "TECHNICIAN" | "MAILROOM" | "FACTORY_CARRIER" | "FACTORY"
+  | "INVENTORY" | "LINKED_CASE" | "UNKNOWN";
+/** A read projection of the replacement item's current logistics, not its technical or financial record. */
+export type LinkedReplacementCustody = {
+  unitId: string;
+  reservationId: string;
+  outTransactionId: string;
+  itemId: string;
+  sourceCaseId: string | null;
+  sourceNumber: string | null;
+  status: string;
+  statusLabel: string;
+  custodianId: string;
+  custodianName: string;
+  location: string;
+  physicalCustody: "TECHNICIAN" | "MAILROOM" | "FACTORY_CARRIER" | "FACTORY";
+  targetVersion: number;
 };
 export type Task = { id: string; kind: string; createdAt: string; item: Item };
 export function mailroomEnabled() {

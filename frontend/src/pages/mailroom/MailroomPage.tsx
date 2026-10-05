@@ -51,6 +51,7 @@ import TabletAcceptance from "./TabletAcceptance";
 import SourceCasePicker from "./SourceCasePicker";
 import RepairDocuments from "../repair/RepairDocuments";
 import type { RepairItem } from "../repair/repair-model";
+import { currentItemCustody } from "./item-custody";
 import "./mailroom.css";
 const { Text, Title, Paragraph } = Typography;
 const requestId = () => crypto.randomUUID();
@@ -445,7 +446,7 @@ export default function MailroomPage({
                 width: 230,
                 render: (s: string, item) => (
                   <>
-                    <Tag color={statusColor(s)}>{STATUS[s] || s}</Tag>
+                    <Tag color={statusColor(s)}>{item.statusLabel || STATUS[s] || s}</Tag>
                     {item.grade ? (
                       <div className="mailroom-meta">
                         {item.grade} 級 · {DISPOSITIONS[item.disposition || ""]}
@@ -458,12 +459,14 @@ export default function MailroomPage({
                 title: "位置／保管人",
                 width: 200,
                 key: "custody",
-                render: (_, item) => (
-                  <>
-                    <div>{item.location}</div>
-                    <Text type="secondary">{item.custodianName}</Text>
-                  </>
-                ),
+                render: (_, item) => {
+                  const custody = currentItemCustody(item);
+                  return <>
+                    <div>{custody.location}</div>
+                    <Text type="secondary">{custody.holder}</Text>
+                    {custody.notice && <div><Text type="secondary">{custody.notice}</Text></div>}
+                  </>;
+                },
               },
               {
                 title: "下一位同仁",
@@ -986,6 +989,7 @@ function ItemDetail({
       setBusy(false);
     }
   }
+  const custody = currentItemCustody(item);
   const canTablet =
     canMail &&
     item.custodianId === userId &&
@@ -1009,7 +1013,7 @@ function ItemDetail({
       ) : null}
       <Space wrap>
         <Tag>{CATEGORIES[item.receipt.category]}</Tag>
-        <Tag color={statusColor(item.status)}>{STATUS[item.status]}</Tag>
+        <Tag color={statusColor(item.status)}>{item.statusLabel || STATUS[item.status]}</Tag>
         <Text type="secondary">{item.label}</Text>
       </Space>
       <Descriptions
@@ -1038,8 +1042,12 @@ function ItemDetail({
           { key: "actual", label: "實收品項", children: item.productName },
           { key: "sku", label: "SKU", children: item.sku || "未提供" },
           { key: "sn", label: "SN", children: item.serialNumber || "未提供" },
-          { key: "location", label: "存放位置", children: item.location },
-          { key: "owner", label: "目前保管", children: item.custodianName },
+          { key: "location", label: "目前實物位置", children: custody.location },
+          { key: "owner", label: "目前保管", children: custody.holder },
+          ...(custody.transferred ? [
+            { key: "linked", label: "換機出庫", children: [custody.notice, custody.reference, custody.status].filter(Boolean).join(" · ") },
+            { key: "in-history", label: "原退貨入庫紀錄", children: `${item.custodianName} / ${item.location}（歷史接收，不代表目前持有）` },
+          ] : []),
           {
             key: "next",
             label: "下一位同仁",

@@ -9,6 +9,7 @@ import { errorText, mailroomEnabled } from '../mailroom/model';
 import { CSR_STATUS, PLANS, sourceQuoteConsentCurrent, inspectionReviewCurrent } from './repair-model';
 import type { RepairItem, RepairWorkflowCommand } from './repair-model';
 import RepairDocuments from './RepairDocuments';
+import { currentItemCustody } from '../mailroom/item-custody';
 const confirmDiscard=()=>new Promise<boolean>(resolve=>Modal.confirm({title:'客服回覆尚未保存',content:'離開會放棄目前回覆，請先保存或確認放棄。',okText:'放棄未保存回覆',cancelText:'保留回覆',maskClosable:false,onOk:()=>{resolve(true);},onCancel:()=>{resolve(false);}}));
 /** Native departmental acceptance; source customer consent and finance remain separate. */
 export default function CustomerRepairQueue({entityId,onDirtyChange}:{entityId:string;onDirtyChange?:(dirty:boolean)=>void}) {
@@ -58,7 +59,7 @@ export default function CustomerRepairQueue({entityId,onDirtyChange}:{entityId:s
     <Table<RepairItem> rowKey="id" dataSource={rows} loading={busy} scroll={{x:650}} pagination={{current:page,total,pageSize:30,showSizeChanger:false,onChange:setPage}} locale={{emptyText:<Empty description="目前沒有待客服處理的維修交辦" />}} columns={[
       {title:'案件／產品',key:'case',render:(_,value)=><><Button type="link" onClick={()=>void select(value.id)}>{value.receipt.sourceNumber || value.label}</Button><div>{value.productName} · {value.serialNumber || '未提供 SN'}</div></>},
       {title:'交辦',key:'csr',render:(_,value)=><Space direction="vertical" size={2}><Tag>{value.repairWorkflow?.csr?CSR_STATUS[value.repairWorkflow.csr.status]:'等待接手'}</Tag><Typography.Text type="secondary">檢修 v{value.repairInspection?.revision || '—'}</Typography.Text></Space>},
-      {title:'實物保管',dataIndex:'custodianName'},
+      {title:'實物保管',key:'custody',render:(_,item)=>{const custody=currentItemCustody(item);return <>{custody.holder}{custody.notice&&<div>{custody.notice}</div>}</>;}},
       {title:'',key:'open',render:(_,value)=><Button onClick={()=>void select(value.id)}>檢視與接手</Button>},
     ]} />
     <Drawer rootClassName="repair-workbench-drawer" title="客服維修交辦" width={940} open={!!selected} onClose={()=>void select()} destroyOnHidden>
@@ -72,6 +73,7 @@ export default function CustomerRepairQueue({entityId,onDirtyChange}:{entityId:s
 function CustomerReview({item,entityId,userId,onDirty,onSaved}:{item:RepairItem;entityId:string;userId:string;onDirty:(dirty:boolean)=>void;onSaved:()=>Promise<void>}) {
   const [form]=Form.useForm<{decision:'APPROVE'|'DECLINE';note:string}>();const [busy,setBusy]=useState(false);const [failure,setFailure]=useState('');
   const running=useRef(false);const operation=useRef<{body:string;requestId:string}|null>(null);
+  const custody=currentItemCustody(item);
   const csr=item.repairWorkflow?.csr;
   const canClaim=item.allowedWorkflowActions?.includes('claim_customer')===true;
   const canResolve=item.allowedWorkflowActions?.includes('resolve_customer')===true && csr?.status==='ACCEPTED' && csr.ownerId===userId;
@@ -89,7 +91,8 @@ function CustomerReview({item,entityId,userId,onDirty,onSaved}:{item:RepairItem;
       {key:'case',label:'售後主單',children:item.receipt.sourceNumber || item.label},
       {key:'plan',label:'本版檢修方案',children:item.repairInspection?`${PLANS[item.repairInspection.data.plan]} · 檢修 v${item.repairInspection.revision} · ${inspectionReviewCurrent(item.repairInspection)?'本版已確認':'本版待確認'}`:'尚無已提交檢修單'},
       {key:'stage',label:'部門交辦',children:csr?CSR_STATUS[csr.status]:'尚無交辦'},
-      {key:'custody',label:'目前實物保管',children:`${item.custodianName} / ${item.location}`},
+      {key:'custody',label:'目前實物保管',children:`${custody.holder} / ${custody.location}`},
+      ...(custody.transferred?[{key:'linked',label:'換機出庫',children:[custody.notice,custody.reference,custody.status].filter(Boolean).join(' · ')}]:[]),
     ]} />
     <Alert showIcon type="info" message="方案確認、顧客同意及款項入帳分開記錄" description="此處接手及回覆維修師方案，不代替對客報價、顧客確認或會計收款。拒修結果回到維修師，按未修原件退回。" />
     {failure&&<Alert type="error" showIcon message={failure} />}
