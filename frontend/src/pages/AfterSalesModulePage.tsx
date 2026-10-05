@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Spin } from 'antd'
+import { Alert, Button, Modal, Spin } from 'antd'
 import { useParams, useSearchParams } from 'react-router-dom'
 import api from '../services/api'
 import CustomerRepairQueue from './repair/CustomerRepairQueue'
 import { useRepairNavigationGuard } from './repair/repair-navigation'
-import { Modal } from 'antd'
+import { AFTER_SALES_READY_TIMEOUT_MS, afterSalesFrameFailure, createAfterSalesLaunchSession } from './repair/after-sales-launch'
+import type { AfterSalesAttempt } from './repair/after-sales-launch'
 
+type FrameLaunch = { attempt: AfterSalesAttempt; ticket: string; name: string }
 export default function AfterSalesModulePage() {
   const { section = 'cases' } = useParams()
   const [params] = useSearchParams()
   const entityId = params.get('entityId') || localStorage.getItem('entityId') || ''
   const frame = useRef<HTMLIFrameElement>(null)
+  const session = useRef(createAfterSalesLaunchSession()), deadline = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [frameLaunch, setFrameLaunch] = useState<FrameLaunch>()
   const [error, setError] = useState(''), [loading, setLoading] = useState(true)
   const [height, setHeight] = useState(950)
   const dirty = useRef(false)
@@ -18,41 +22,84 @@ export default function AfterSalesModulePage() {
   useRepairNavigationGuard(dirty, () => new Promise<boolean>(resolve => Modal.confirm({ title: '售後表單有未儲存修改',
     content: '請先儲存，或確認放棄修改後再離開。', okText: '放棄修改', cancelText: '保留表單',
     onOk: () => resolve(true), onCancel: () => resolve(false) })))
+  const clearDeadline = useCallback(() => { if (deadline.current !== undefined) clearTimeout(deadline.current); deadline.current = undefined }, [])
+  const showFailure = useCallback((attempt: AfterSalesAttempt, message: string) => {
+    if (session.current.current() !== attempt) return
+    session.current.fail(attempt); clearDeadline(); setFrameLaunch(undefined); setError(message); setLoading(false)
+  }, [clearDeadline])
   const launch = useCallback(async () => {
+    clearDeadline(); session.current.invalidate(); setFrameLaunch(undefined)
+    iframeDirty.current = false; dirty.current = customerDirty.current
+    setHeight(950); setLoading(true); setError('')
     if (!entityId) { setError('請先選擇有售後來源權限的公司'); setLoading(false); return }
-    setLoading(true); setError('')
+    let attempt: AfterSalesAttempt
+    try { attempt = session.current.begin(section, entityId) }
+    catch { setError('售後功能入口不存在'); setLoading(false); return }
+    deadline.current = setTimeout(() => {
+      if (session.current.timeout(attempt)) showFailure(attempt, '售後頁面未能在限定時間內開啟，請重新開啟；若持續發生，請聯絡管理者')
+    }, AFTER_SALES_READY_TIMEOUT_MS)
     try {
       const { data } = await api.post('/after-sales/module/launch', { entityId, section })
+      if (!session.current.isCurrent(attempt)) return
       const result = data.data || data
-      if (result.action !== '/after-sales-app/api/integration/erp/session' || typeof result.ticket !== 'string') throw new Error('售後入口回應無效')
-      const form = document.createElement('form')
-      form.method = 'POST'; form.action = result.action; form.target = 'erp-after-sales-frame'
-      const input = document.createElement('input'); input.type = 'hidden'; input.name = 'ticket'; input.value = result.ticket
-      form.append(input); document.body.append(form); form.submit(); form.remove()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : '無法開啟售後工作台'); setLoading(false) }
-  }, [entityId, section])
-  useEffect(() => { iframeDirty.current = false; customerDirty.current = false; dirty.current = false; void launch() }, [launch])
+      if (result.action !== '/after-sales-app/api/integration/erp/session' || typeof result.ticket !== 'string' || !result.ticket || result.ticket.length > 8192) throw new Error('售後入口回應無效')
+      setFrameLaunch({ attempt, ticket: result.ticket, name: `erp-after-sales-frame-${attempt.id}` })
+    } catch (cause) {
+      if (session.current.isCurrent(attempt)) showFailure(attempt, cause instanceof Error ? cause.message : '無法開啟售後工作台')
+    }
+  }, [entityId, section, clearDeadline, showFailure])
+  useEffect(() => {
+    iframeDirty.current = false; customerDirty.current = false; dirty.current = false; void launch()
+    const currentSession = session.current
+    return () => { currentSession.invalidate(); clearDeadline() }
+  }, [launch, clearDeadline])
+  const visibleLaunch = frameLaunch?.attempt.section === section && frameLaunch.attempt.entityId === entityId ? frameLaunch : undefined
+  const attachFrame = useCallback((node: HTMLIFrameElement | null) => {
+    frame.current = node
+    if (!node || !visibleLaunch) return
+    const { attempt, ticket, name } = visibleLaunch
+    if (!node.contentWindow || !session.current.attach(attempt, node.contentWindow)) return
+    const form = document.createElement('form')
+    form.method = 'POST'; form.action = '/after-sales-app/api/integration/erp/session'; form.target = name
+    const input = document.createElement('input'); input.type = 'hidden'; input.name = 'ticket'; input.value = ticket
+    form.append(input); document.body.append(form)
+    try { form.submit() } catch { showFailure(attempt, '無法開啟售後登入入口，請重新開啟') }
+    finally { form.remove() }
+  }, [visibleLaunch, showFailure])
   useEffect(() => {
     const receive = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin || event.source !== frame.current?.contentWindow || event.data?.source !== 'corely.aftersales.v1') return
-      if (event.data.ready) { setLoading(false); setError('') }
+      const attempt = session.current.current()
+      if (!attempt || event.origin !== window.location.origin || event.source !== frame.current?.contentWindow || event.source !== attempt.frame || event.data?.source !== 'corely.aftersales.v1') return
+      if (event.data.ready && attempt.phase === 'LOADING') {
+        let url = ''
+        try { url = frame.current?.contentWindow?.location.href || '' } catch { /* Cross-origin or error documents cannot prove readiness. */ }
+        const result = session.current.ready(attempt, event.source, event.data.path, url, window.location.origin)
+        if (result === 'mismatch') { showFailure(attempt, '售後頁面與所選入口不一致，請重新開啟並核對公司與功能權限'); return }
+        if (result === 'ready') { clearDeadline(); setLoading(false); setError('') }
+      }
+      if (attempt.phase !== 'READY') return
       if (typeof event.data.dirty === 'boolean') { iframeDirty.current = event.data.dirty; dirty.current = iframeDirty.current || customerDirty.current }
       if (Number.isFinite(event.data.height)) setHeight(Math.min(16000, Math.max(700, event.data.height)))
     }
-    const protect = (event: BeforeUnloadEvent) => { if (dirty.current) { event.preventDefault(); event.returnValue = '' } }
-    window.addEventListener('message', receive); window.addEventListener('beforeunload', protect)
-    return () => { window.removeEventListener('message', receive); window.removeEventListener('beforeunload', protect) }
-  }, [])
+    window.addEventListener('message', receive)
+    return () => window.removeEventListener('message', receive)
+  }, [clearDeadline, showFailure])
+  const checkFrame = () => {
+    const attempt = session.current.current()
+    if (!attempt || frame.current?.contentWindow !== attempt.frame || attempt.phase === 'ERROR') return
+    try {
+      const doc = frame.current?.contentDocument
+      const failure = afterSalesFrameFailure(doc?.body?.textContent || '', doc?.contentType || '', !!doc?.getElementById('__next_error__'))
+      if (failure) showFailure(attempt, failure)
+    } catch { showFailure(attempt, '售後頁面無法驗證來源，請重新開啟') }
+  }
   return <div>
     {section === 'workbench' && entityId && <CustomerRepairQueue entityId={entityId} onDirtyChange={value => { customerDirty.current = value; dirty.current = value || iframeDirty.current }} />}
     {error && <Alert type="error" showIcon message="售後工作台未能開啟" description={error} action={<Button onClick={() => void (async () => {
       if (iframeDirty.current && !await new Promise<boolean>(resolve => Modal.confirm({ title: '售後表單尚未儲存', content: '重新開啟會放棄原售後表單修改；維修轉客服回覆仍保留。', okText: '重新開啟', cancelText: '保留表單', onOk: () => resolve(true), onCancel: () => resolve(false) }))) return
-      iframeDirty.current = false; dirty.current = customerDirty.current; await launch()
+      await launch()
     })()}>重新開啟</Button>} />}
     {loading && <div role="status" style={{ padding: 24 }}><Spin /> 正在開啟售後工作台…</div>}
-    <iframe ref={frame} name="erp-after-sales-frame" title="售後案件與流程工作台" onLoad={() => {
-      const body = frame.current?.contentDocument?.body?.textContent || ''
-      if (body.trim().startsWith('{')) { try { const result = JSON.parse(body); if (result.error) { setError(result.error); setLoading(false) } } catch { /* Normal HTML remains handled by the ready message. */ } }
-    }} style={{ width: '100%', height, border: 0, display: error ? 'none' : 'block' }} />
+    {visibleLaunch && <iframe key={visibleLaunch.attempt.id} ref={attachFrame} name={visibleLaunch.name} title="售後案件與流程工作台" onLoad={checkFrame} onError={() => showFailure(visibleLaunch.attempt, '售後頁面載入失敗，請重新開啟')} style={{ width: '100%', height, border: 0, display: error ? 'none' : 'block' }} />}
   </div>
 }
