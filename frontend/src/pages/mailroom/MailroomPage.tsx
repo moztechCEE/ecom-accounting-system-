@@ -48,6 +48,7 @@ import {
   type Task,
 } from "./model";
 import TabletAcceptance from "./TabletAcceptance";
+import SourceCasePicker from "./SourceCasePicker";
 import RepairDocuments from "../repair/RepairDocuments";
 import type { RepairItem } from "../repair/repair-model";
 import "./mailroom.css";
@@ -998,8 +999,13 @@ function ItemDetail({
   return (
     <div className="mailroom-detail">
       <Title level={3}>{item.productName}</Title>
-      {canReview && (item.receipt.category === "REPAIR" || item.repairOwnerId) ? (
-        <RepairDocuments item={{...(item as RepairItem), editable: false}} entityId={entityId} onSaved={onSaved} />
+      {canReview &&
+      (item.receipt.category === "REPAIR" || item.repairOwnerId) ? (
+        <RepairDocuments
+          item={{ ...(item as RepairItem), editable: false }}
+          entityId={entityId}
+          onSaved={onSaved}
+        />
       ) : null}
       <Space wrap>
         <Tag>{CATEGORIES[item.receipt.category]}</Tag>
@@ -1598,14 +1604,12 @@ function ReceiptDrawer({
 }) {
   const [form] = Form.useForm(),
     [busy, setBusy] = useState(false),
-    [sources, setSources] = useState<Source[]>([]),
-    [sourceBusy, setSourceBusy] = useState(false),
+    [source, setSource] = useState<Source>(),
     [error, setError] = useState("");
-  const category = Form.useWatch("category", form),
-    sourceId = Form.useWatch("sourceCaseId", form);
-  const operation = useRef<{ body: string; id: string } | undefined>(undefined),
-    lookup = useRef(0);
+  const category = Form.useWatch("category", form);
+  const operation = useRef<{ body: string; id: string } | undefined>(undefined);
   const isCase = ["REPAIR", "RETURN"].includes(category);
+  const isCorrespondence = ["LETTER", "PARCEL"].includes(category);
   useEffect(() => {
     if (open) {
       form.resetFields();
@@ -1619,40 +1623,15 @@ function ReceiptDrawer({
           : { category: "REPAIR", items: [{ productName: "" }] },
       );
       setError("");
-      setSources(initialSource ? [initialSource] : []);
+      setSource(initialSource);
       operation.current = undefined;
     }
-    return () => {
-      lookup.current++;
-    };
   }, [open, form, initialSource]);
-  async function findSources(search = "") {
-    const id = ++lookup.current;
-    setSourceBusy(true);
-    try {
-      const result = await api.get<{ items: Source[] }>(
-        "/mailroom/source-cases",
-        { params: { entityId, search } },
-      );
-      if (id === lookup.current) {
-        setSources(
-          initialSource &&
-            !result.data.items.some((item) => item.id === initialSource.id)
-            ? [initialSource, ...result.data.items]
-            : result.data.items,
-        );
-        setError("");
-      }
-    } catch (e) {
-      if (id === lookup.current) setError(errorText(e));
-    } finally {
-      if (id === lookup.current) setSourceBusy(false);
-    }
-  }
   async function submit() {
     try {
       const values = await form.validateFields();
       const caseCategory = ["REPAIR", "RETURN"].includes(values.category);
+      const correspondence = ["LETTER", "PARCEL"].includes(values.category);
       const body = JSON.stringify({
         entityId,
         category: values.category,
@@ -1672,8 +1651,9 @@ function ReceiptDrawer({
             sourceItemId?: string;
           }) => ({
             productName: row.productName,
-            sku: row.sku,
-            serialNumber: row.serialNumber,
+            ...(!correspondence
+              ? { sku: row.sku, serialNumber: row.serialNumber }
+              : {}),
             ...(caseCategory ? { sourceItemId: row.sourceItemId } : {}),
           }),
         ),
@@ -1694,7 +1674,6 @@ function ReceiptDrawer({
       setBusy(false);
     }
   }
-  const source = sources.find((x) => x.id === sourceId);
   return (
     <Drawer
       title="登記收件"
@@ -1745,7 +1724,7 @@ function ReceiptDrawer({
               label,
             }))}
             onChange={() => {
-              setSources([]);
+              setSource(undefined);
               form.setFieldsValue({
                 sourceCaseId: undefined,
                 recipientId: undefined,
@@ -1756,34 +1735,21 @@ function ReceiptDrawer({
         </Form.Item>
         {isCase ? (
           <>
-            <Space.Compact style={{ width: "100%", marginBottom: 12 }}>
-              <Input.Search
-                placeholder="輸入售後案件編號後搜尋"
-                aria-label="搜尋售後案件"
-                loading={sourceBusy}
-                onSearch={(value) => void findSources(value)}
-              />
-              <Button onClick={() => void findSources()}>最近案件</Button>
-            </Space.Compact>
             <Form.Item
               name="sourceCaseId"
               label="對應售後案件"
-              rules={[{ required: true, message: "請先搜尋並選擇案件" }]}
+              rules={[{ required: true, message: "請輸入並選擇售後案件" }]}
             >
-              <Select
-                loading={sourceBusy}
-                options={sources
-                  .filter((x) => x.type === category)
-                  .map((x) => ({
-                    value: x.id,
-                    label: `${x.number} · ${x.customerLabel}`,
-                  }))}
-                onChange={(id) => {
-                  const selected = sources.find((x) => x.id === id);
-                  form.setFieldValue(
-                    "items",
-                    selected ? sourcePhysicalRows(selected) : [],
-                  );
+              <SourceCasePicker
+                entityId={entityId}
+                active={open && isCase}
+                selectedSource={source}
+                onSelectSource={(selected) => {
+                  setSource(selected);
+                  form.setFieldsValue({
+                    category: selected.type,
+                    items: sourcePhysicalRows(selected),
+                  });
                 }}
               />
             </Form.Item>
@@ -1824,7 +1790,11 @@ function ReceiptDrawer({
           {field("物流公司", "carrier")}
           {field("物流單號", "trackingNumber")}
         </div>
-        {field("寄件人／單位", "senderLabel")}
+        {field(
+          isCorrespondence ? "對方公司名稱／寄件人姓名" : "寄件人／單位",
+          "senderLabel",
+          isCorrespondence,
+        )}
         {field("收件存放位置", "location", true)}
         <Divider orientation="left">實際收到的物件</Divider>
         <Form.List
@@ -1874,19 +1844,27 @@ function ReceiptDrawer({
                   ) : null}
                   <Form.Item
                     name={[item.name, "productName"]}
-                    label="實收品項／信件名稱"
+                    label={
+                      category === "LETTER"
+                        ? "信件名稱／內容"
+                        : category === "PARCEL"
+                          ? "包裹內容／名稱"
+                          : "實收品項／信件名稱"
+                    }
                     rules={[{ required: true, whitespace: true }]}
                   >
                     <Input maxLength={200} />
                   </Form.Item>
-                  <div className="mailroom-form-grid">
-                    <Form.Item name={[item.name, "sku"]} label="SKU">
-                      <Input maxLength={100} />
-                    </Form.Item>
-                    <Form.Item name={[item.name, "serialNumber"]} label="SN">
-                      <Input maxLength={100} />
-                    </Form.Item>
-                  </div>
+                  {!isCorrespondence && (
+                    <div className="mailroom-form-grid">
+                      <Form.Item name={[item.name, "sku"]} label="SKU">
+                        <Input maxLength={100} />
+                      </Form.Item>
+                      <Form.Item name={[item.name, "serialNumber"]} label="SN">
+                        <Input maxLength={100} />
+                      </Form.Item>
+                    </div>
+                  )}
                 </Card>
               ))}
               <Button

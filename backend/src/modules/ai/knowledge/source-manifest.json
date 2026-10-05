@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:4735a269edabe1465c8945f8a49d341a429b4e97f90bc282a87e1c6ec369d671",
+  "sourceVersion": "sha256:f5e67bacc50dcef645dfa7946f5b2d98bcd53508199d54d257cfb18ef937b4bf",
   "reviewedBaseCommit": "2c2200f0c9238ced04f1b415f54f96555d1801eb",
   "entryCount": 67,
   "groups": [
@@ -20,7 +20,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "0eb79bd48607e064ce48f198d7c81d63ae460b75e81d3387aa6af389ed7ff258",
+  "catalogSha256": "01321b9414118163c6b63f6b5c9f563309a112500951eec3a8bba7013715e422",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -578,11 +578,19 @@
     },
     {
       "path": "frontend/src/pages/mailroom/MailroomPage.tsx",
-      "sha256": "7aa56fa82ff013251148bccc4da11beb1cdc5af4b0c3132d3ea6a653829bb5f6"
+      "sha256": "78a0b233add8b0cc854f17980ac8bbf48fe746d0e6acf921d20312364f39b788"
     },
     {
       "path": "frontend/src/pages/mailroom/model.ts",
-      "sha256": "592e795f90153e4acb689139932c636b71359bbf5e4572cda7e53a15c242f4b5"
+      "sha256": "df3b7e46eb917e6871a1aa9e8ac95ed9510221d1af6e4a4a68ba73de0b12c5a8"
+    },
+    {
+      "path": "frontend/src/pages/mailroom/source-search.ts",
+      "sha256": "3001cb6879b5c444b44f55417b74357d5de860f9ed3253d694bd44dd7d6c8f2d"
+    },
+    {
+      "path": "frontend/src/pages/mailroom/SourceCasePicker.tsx",
+      "sha256": "383319a77d692ea2bc97e21a2617ad884a24b75a9abb77481e57e339bd5f2459"
     },
     {
       "path": "frontend/src/pages/mailroom/TabletAcceptance.tsx",

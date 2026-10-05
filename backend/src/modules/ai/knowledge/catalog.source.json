@@ -4512,10 +4512,12 @@
       "sections": {
         "steps": [
           "待到貨清單自動顯示售後維修與退貨案件及尚未到貨數量；選定案件後，只登記這次實際收到的物件。",
+          "登記收件時，在對應售後案件輸入部分編號（例如 T）即可即時搜尋，最近更新優先；可載入較早案件，選案後自動帶入維修或退貨類別與申報品項。",
           "維修品保留原申報並核對實收 SKU／SN；一致時指派維修人員，不一致交承辦客服確認。",
           "維修人員可在收發室平板輸入本人員編、密碼及已設定的驗證碼，再勾選實物確認簽收；收發室帳號持續登入。",
           "退貨品必須記錄品項核對、包裝、外觀、配件、AA／A／B／C 與至少一張照片；承辦客服另有接手檢查結果的待辦。",
-          "交接前原保管人仍負責物件，本人簽收後才變更保管人。信件、包裹與待辨識件也逐件保留位置及歷程。"
+          "交接前原保管人仍負責物件，本人簽收後才變更保管人。信件、包裹與待辨識件也逐件保留位置及歷程。",
+          "公司信件與同仁包裹填寫對方公司名稱或寄件人姓名、內容名稱與收件同仁；不填 SKU 或 SN。"
         ],
         "boundaries": [
           "工作台需先啟用，操作仍依公司、權限、逐件指派及目前進度限制；售後建案不代表實物已到貨。",
@@ -4542,10 +4544,12 @@
           "sections": {
             "steps": [
               "The awaiting-arrival queue shows repair and return cases and remaining quantities. Select a case and register only the physical pieces received this time.",
+              "When registering receipt, type part of a case number (for example T) to search as you type, with recently updated cases first. Load older matches when needed; selecting a case fills its repair or return category and declared items.",
               "Preserve the original repair claim and compare actual SKU and serial number. Assign matching items to repair; send mismatches to the responsible customer-service staff member.",
               "On the mailroom tablet, the assigned technician enters their employee number, password and configured verification code, then confirms physical receipt. The clerk stays signed in.",
               "Returns require an item match, packaging, appearance, accessories, AA/A/B/C grade and at least one photo. Responsible customer service receives a separate inspection acknowledgment task.",
-              "Custody stays with the sender until personal acceptance. Letters, parcels and unidentified items also retain individual locations and history."
+              "Custody stays with the sender until personal acceptance. Letters, parcels and unidentified items also retain individual locations and history.",
+              "For letters and staff parcels, enter the sender company or sender name, contents and recipient. SKU and serial-number fields are not used."
             ],
             "boundaries": [
               "The workbench must be enabled. Company, permissions, assignment and current state remain authoritative; creating a case does not mean physical arrival.",
@@ -4573,7 +4577,9 @@
         "backend/src/modules/mailroom/mailroom-tablet.service.ts",
         "backend/src/modules/mailroom/mailroom.dto.ts",
         "backend/src/modules/ai/ai-copilot-access.service.ts",
-        "frontend/src/pages/repair/RepairDocuments.tsx"
+        "frontend/src/pages/repair/RepairDocuments.tsx",
+        "frontend/src/pages/mailroom/SourceCasePicker.tsx",
+        "frontend/src/pages/mailroom/source-search.ts"
       ],
       "permissions": [
         "mailroom:read"
@@ -4769,7 +4775,9 @@
         "backend/src/modules/mailroom/mailroom-tablet.service.ts",
         "backend/src/modules/mailroom/mailroom.dto.ts",
         "backend/src/modules/ai/ai-copilot-access.service.ts",
-        "frontend/src/pages/repair/RepairDocuments.tsx"
+        "frontend/src/pages/repair/RepairDocuments.tsx",
+        "frontend/src/pages/mailroom/SourceCasePicker.tsx",
+        "frontend/src/pages/mailroom/source-search.ts"
       ]
     }
   ],

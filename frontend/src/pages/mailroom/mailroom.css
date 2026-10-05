@@ -103,6 +103,48 @@
 .mailroom-load-more {
   margin-top: 20px;
 }
+.mailroom-source-controls {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.mailroom-source-select {
+  flex: 1;
+  min-width: 0;
+}
+.mailroom-source-recent {
+  flex-shrink: 0;
+}
+.mailroom-source-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.mailroom-source-option > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mailroom-source-option .ant-tag {
+  margin: 0;
+}
+.mailroom-source-date {
+  display: block;
+  font-size: 11px;
+}
+.mailroom-source-more {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding-top: 4px;
+}
+@media (max-width: 480px) {
+  .mailroom-source-controls {
+    flex-wrap: wrap;
+  }
+  .mailroom-source-select {
+    flex-basis: 100%;
+  }
+}
 .mailroom-tablet-modal .ant-modal-footer .ant-btn {
   min-height: 44px;
   font-size: 15px;

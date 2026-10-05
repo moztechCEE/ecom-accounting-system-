@@ -59,6 +59,7 @@ export type Person = {
 export type Source = {
   id: string;
   number: string;
+  version?: string;
   type: string;
   status: string;
   statusLabel?: string;
