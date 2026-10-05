@@ -91,4 +91,28 @@ describe('Mailroom source search URL signatures', () => {
     expect(received.pathname).toBe('/api/integration/mailroom/cases/case-1');
     expect(received.search).toBe('');
   });
+
+  it('signs an exact GET changes path with a decimal bigint cursor, and validates before advancing it', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          events: [],
+          nextCursor: '9007199254740995',
+          hasMore: false,
+        }),
+    } as Response);
+    const result = await service.changes(entry.entityId, '9007199254740995');
+    expect(result.nextCursor).toBe('9007199254740995');
+    const received = capturedRequest();
+    expect(received.pathname).toBe('/api/integration/mailroom/changes');
+    expect([...received.searchParams.entries()]).toEqual([
+      ['cursor', '9007199254740995'],
+      ['limit', '100'],
+    ]);
+    await expect(service.changes(entry.entityId, '1e20')).rejects.toThrow(
+      '游標',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

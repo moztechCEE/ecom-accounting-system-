@@ -10,6 +10,10 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { signRequest, type SourceCase } from './mailroom.contract';
+import {
+  validateSourceChanges,
+  validSourceCursor,
+} from './mailroom-source.contract';
 type Connection = {
   entityId: string;
   target: 'AFTER_SALES' | 'AI_CUSTOMER_SERVICE';
@@ -18,11 +22,66 @@ type Connection = {
   secret: string;
   eventsPath?: string;
 };
+const connections = (): Connection[] => {
+  let value: unknown;
+  try {
+    value = JSON.parse(process.env.MAILROOM_CONNECTIONS || '[]') as unknown;
+  } catch {
+    throw new ServiceUnavailableException('收發室串接設定格式有誤');
+  }
+  if (
+    !Array.isArray(value) ||
+    value.some((entry: unknown) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+        return true;
+      const item = entry as Record<string, unknown>;
+      return (
+        typeof item.entityId !== 'string' ||
+        !item.entityId ||
+        item.entityId.length > 128 ||
+        !['AFTER_SALES', 'AI_CUSTOMER_SERVICE'].includes(String(item.target)) ||
+        typeof item.baseUrl !== 'string' ||
+        typeof item.keyId !== 'string' ||
+        typeof item.secret !== 'string' ||
+        (item.eventsPath !== undefined && typeof item.eventsPath !== 'string')
+      );
+    })
+  )
+    throw new ServiceUnavailableException('收發室串接設定格式有誤');
+  return value as Connection[];
+};
 
 @Injectable()
 export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
   private running = false;
   private devDeliveryTimer?: ReturnType<typeof setInterval>;
+  private sourceConsumer?: () => Promise<unknown>;
+  registerSourceConsumer(consumer?: () => Promise<unknown>) {
+    this.sourceConsumer = consumer;
+  }
+  sourceScopes() {
+    const entries = connections();
+    const entities = [
+      ...new Set(
+        entries
+          .filter((x) => x?.target === 'AFTER_SALES')
+          .map((x) => x.entityId),
+      ),
+    ];
+    return entities.map((entityId) => {
+      const connection = this.connection(entityId, 'AFTER_SALES');
+      const origin = new URL(connection.baseUrl).origin;
+      return { entityId, sourceInstance: origin };
+    });
+  }
+  sourcePollingEnabled() {
+    return (
+      process.env.MAILROOM_SOURCE_SYNC_ENABLED === 'true' &&
+      process.env.MAILROOM_ENABLED === 'true' &&
+      process.env.MAILROOM_SYNC_ENABLED === 'true' &&
+      (process.env.ERP_DEV_SANDBOX !== 'true' || this.devDeliveryEnabled())
+    );
+  }
   private devDeliveryEnabled() {
     return (
       process.env.ERP_DEV_SANDBOX === 'true' &&
@@ -48,15 +107,9 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
   }
   constructor(private readonly prisma: PrismaService) {}
   private connection(entityId: string, target: string): Connection {
-    let entries: Connection[];
-    try {
-      entries = JSON.parse(process.env.MAILROOM_CONNECTIONS || '[]');
-    } catch {
-      throw new ServiceUnavailableException('收發室串接設定格式有誤');
-    }
-    const entry = Array.isArray(entries)
-      ? entries.find((x) => x.entityId === entityId && x.target === target)
-      : undefined;
+    const entry = connections().find(
+      (x) => x.entityId === entityId && x.target === target,
+    );
     if (!entry || !entry.secret || entry.secret.length < 32 || !entry.keyId)
       throw new ServiceUnavailableException('此公司的串接尚未設定');
     let url: URL;
@@ -86,7 +139,7 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
     method: string,
     path: string,
     body = '',
-  ) {
+  ): Promise<unknown> {
     if (!path.startsWith('/') || path.startsWith('//') || path.includes('#'))
       throw new ServiceUnavailableException('串接路徑不正確');
     if (new URL(path, entry.baseUrl).origin !== new URL(entry.baseUrl).origin)
@@ -113,14 +166,15 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
       ...(method === 'POST' ? { body } : {}),
     });
     if (!response.ok)
-      throw new BadGatewayException(
-        '上游回應 ' + response.status + '，資料尚未同步',
-      );
+      throw new BadGatewayException({
+        message: '上游回應 ' + response.status + '，資料尚未同步',
+        upstreamStatus: response.status,
+      });
     const text = await response.text();
     if (text.length > 1024 * 1024)
       throw new BadGatewayException('上游回應過大');
     try {
-      return JSON.parse(text);
+      return JSON.parse(text) as unknown;
     } catch {
       throw new BadGatewayException('上游回應格式不符');
     }
@@ -140,28 +194,39 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
     const path =
       '/api/integration/mailroom/cases' +
       (id ? '/' + encodeURIComponent(id) : '?' + query.toString());
-    const result = await this.request(entry, 'GET', path);
+    const value = await this.request(entry, 'GET', path);
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      throw new BadGatewayException('售後案件資料格式不符');
+    const result = value as Record<string, unknown>;
     const items = id ? [result.item] : result.items;
     if (
       !Array.isArray(items) ||
       items.length > 50 ||
-      items.some(
-        (x) =>
-          !x ||
+      items.some((value: unknown) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value))
+          return true;
+        const x = value as Record<string, unknown>;
+        return (
           typeof x.id !== 'string' ||
           typeof x.number !== 'string' ||
+          typeof x.type !== 'string' ||
           !['REPAIR', 'RETURN'].includes(x.type) ||
           typeof x.version !== 'string' ||
           !Array.isArray(x.items) ||
-          x.items.some(
-            (i: any) =>
-              !i ||
+          x.items.some((value: unknown) => {
+            if (!value || typeof value !== 'object' || Array.isArray(value))
+              return true;
+            const i = value as Record<string, unknown>;
+            return (
               typeof i.id !== 'string' ||
               typeof i.name !== 'string' ||
               !Number.isInteger(i.quantity) ||
-              i.quantity < 1,
-          ),
-      )
+              typeof i.quantity !== 'number' ||
+              i.quantity < 1
+            );
+          })
+        );
+      })
     )
       throw new BadGatewayException('售後案件資料格式不符');
     // The source service is authoritative; client-supplied snapshots are never used.
@@ -171,10 +236,28 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
       (typeof result.nextCursor !== 'string' || result.nextCursor.length > 128)
     )
       throw new BadGatewayException('售後案件分頁格式不符');
-    return { items, nextCursor: result.nextCursor ?? null };
+    return {
+      items: items as SourceCase[],
+      nextCursor:
+        typeof result.nextCursor === 'string' ? result.nextCursor : null,
+    };
+  }
+  async changes(entityId: string, cursor: string) {
+    if (!validSourceCursor(cursor))
+      throw new ServiceUnavailableException('來源游標格式不符');
+    const entry = this.connection(entityId, 'AFTER_SALES');
+    const path =
+      '/api/integration/mailroom/changes?' +
+      new URLSearchParams({ cursor, limit: '100' }).toString();
+    return validateSourceChanges(
+      await this.request(entry, 'GET', path),
+      cursor,
+    );
   }
   @Interval(15000)
   async deliverPending() {
+    if (this.sourcePollingEnabled())
+      void this.sourceConsumer?.().catch(() => undefined);
     if (
       this.running ||
       process.env.MAILROOM_ENABLED !== 'true' ||
@@ -208,13 +291,21 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
         try {
           const entry = this.connection(row.entity_id, row.target);
           const payload = row.payload as { eventId: string };
-          const result = await this.request(
+          const value = await this.request(
             entry,
             'POST',
             entry.eventsPath || '/api/integration/mailroom/events',
             JSON.stringify(payload),
           );
-          if (result.accepted !== true || result.eventId !== payload.eventId)
+          const result = value as {
+            accepted?: unknown;
+            eventId?: unknown;
+          } | null;
+          if (
+            !result ||
+            result.accepted !== true ||
+            result.eventId !== payload.eventId
+          )
             throw new Error('ack_invalid');
           await this.prisma.mailroomDelivery.updateMany({
             where: { id: row.id, leaseToken: token },

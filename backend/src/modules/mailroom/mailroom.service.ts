@@ -17,6 +17,7 @@ import {
 import { NotificationGateway } from '../notification/notification.gateway';
 import { MailroomSyncService } from './mailroom-sync.service';
 import { AfterSalesStockService } from '../integration/after-sales/after-sales-stock.service';
+import { sourceSyncSummary } from './mailroom-source.contract';
 import {
   can,
   fingerprint,
@@ -400,6 +401,7 @@ export class MailroomService {
         trackingNumber: receipt.trackingNumber,
         senderLabel: receipt.senderLabel,
         receivedAt: receipt.receivedAt,
+        sourceSync: sourceSyncSummary(receipt.sourceSnapshot),
       },
     }));
   }

@@ -166,6 +166,16 @@ function worker(patch = {}, queue = []) {
       if (name==='node:crypto') return crypto;
       if (name.endsWith('prisma.service')) return {};
       if (name==='./mailroom.contract') return {signRequest(){return 'synthetic';}};
+      if (name==='./mailroom-source.contract') {
+        const source=readFileSync(path.join(__dirname,'../src/modules/mailroom/mailroom-source.contract.ts'),'utf8');
+        const contract={exports:{},require(name){
+          if(name==='@nestjs/common')return{BadGatewayException};
+          throw new Error('unexpected source contract import '+name);
+        }};
+        vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,
+          target:ts.ScriptTarget.ES2022}}).outputText,contract);
+        return contract.exports;
+      }
       throw new Error('unexpected mock import '+name);
     },
   };
@@ -232,4 +242,22 @@ test('DEV worker is closed unless both sync and events flags are enabled; produc
   assert.equal(production.timers.length,0);assert.equal(production.queries.length,1);
   assert.ok(!production.queries[0].text.includes('AND entity_id='));
   assert.equal(production.queries[0].values.length,1);
+});
+test('DEV source polling shares the 15-second independent timer only after explicit opt-in and unregisters cleanly',async()=>{
+  const off=worker();let offCalls=0;
+  off.service.registerSourceConsumer(async()=>{offCalls++;});
+  await off.service.deliverPending();assert.equal(offCalls,0);
+  const fixture=worker({MAILROOM_SOURCE_SYNC_ENABLED:'true'});let calls=0;
+  fixture.service.registerSourceConsumer(async()=>{calls++;});
+  fixture.service.onModuleInit();fixture.timers[0].callback();
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(calls,1);
+  fixture.service.registerSourceConsumer(undefined);
+  await fixture.service.deliverPending();assert.equal(calls,1);
+  fixture.service.onModuleDestroy();assert.equal(fixture.cleared.length,1);
+  for(const patch of [{MAILROOM_SYNC_ENABLED:'false'},{ERP_DEV_MAILROOM_EVENTS_ENABLED:'false'},
+    {ERP_DEV_MAILROOM_SOURCE_ENABLED:'false'},{ERP_DEV_MAILROOM_SOURCE_URL:origin.replace('-dev','')}]) {
+    const blocked=worker({MAILROOM_SOURCE_SYNC_ENABLED:'true',...patch});let count=0;
+    blocked.service.registerSourceConsumer(async()=>{count++;});
+    await blocked.service.deliverPending();assert.equal(count,0);
+  }
 });

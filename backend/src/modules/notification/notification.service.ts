@@ -10,14 +10,31 @@ export class NotificationService {
     private readonly gateway: NotificationGateway,
   ) {}
 
+  // Persist under the caller's transaction. Push only after its durable cursor commits.
+  async createDeferred(
+    tx: Prisma.TransactionClient,
+    data: Prisma.NotificationUncheckedCreateInput,
+  ) {
+    return tx.notification.create({ data });
+  }
+  publishPersisted(notifications: Array<{ userId: string }>) {
+    for (const notification of notifications) {
+      try {
+        this.gateway.sendToUser(notification.userId, notification);
+      } catch {
+        /* The persisted unread notification remains available after reconnect. */
+      }
+    }
+  }
+
   async create(data: Prisma.NotificationUncheckedCreateInput) {
     const notification = await this.prisma.notification.create({
       data,
     });
-    
+
     // Real-time push
     this.gateway.sendToUser(data.userId, notification);
-    
+
     return notification;
   }
 
