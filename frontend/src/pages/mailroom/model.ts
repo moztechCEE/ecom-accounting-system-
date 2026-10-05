@@ -25,6 +25,7 @@ export const STATUS: Record<string, string> = {
   COLLECTED: "已簽領",
 };
 export const ACTIONS: Record<string, string> = {
+  send_intake: "交客服建案",
   identify: "補登收件歸屬",
   receive: "登記收件",
   inspect: "核對實收品項",
@@ -49,6 +50,15 @@ export const DISPOSITIONS: Record<string, string> = {
   WELFARE_SALE: "福利品販售",
   REFURBISH_THEN_WELFARE: "整理後福利品販售",
 };
+export const INTAKE_STATUS: Record<string, string> = { SENT: "等待指定客服接手", ACCEPTED: "客服補建／綁案中", RESOLVED: "已綁定售後案件" };
+export type CaseIntake = {
+  status: "SENT" | "ACCEPTED" | "RESOLVED";
+  lastAction?: "send_intake" | "claim_intake" | "bind_intake" | null; lastRequestId?: string | null;
+  sentToUserId: string; sentToUserName: string;
+  ownerId: string | null; ownerName: string | null;
+  sentAt: string; acceptedAt: string | null; resolvedAt: string | null;
+  sourceCaseId: string | null; sourceItemId: string | null; sourceNumber: string | null;
+};
 export type Person = {
   id: string;
   name: string;
@@ -56,6 +66,8 @@ export type Person = {
   department: string;
   repair: boolean;
   mailroom: boolean;
+  customerService?: boolean;
+  intakeCustomerService?: boolean;
 };
 export type Source = {
   id: string;
@@ -83,6 +95,8 @@ export type Source = {
 };
 export type Item = {
   id: string;
+  caseIntake?: CaseIntake | null;
+  allowedIntakeActions?: string[];
   label: string;
   productName: string;
   sku: string | null;

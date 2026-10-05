@@ -29,6 +29,6 @@ import { PermissionsGuard } from '../../../common/guards/permissions.guard';
     PermissionsGuard,
     AfterSalesSourceGuard,
   ],
-  exports: [AfterSalesLegacyAdapter],
+  exports: [AfterSalesLegacyAdapter, ErpAfterSalesModuleService],
 })
 export class AfterSalesIntegrationModule {}

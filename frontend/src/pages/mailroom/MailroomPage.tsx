@@ -36,6 +36,7 @@ import api from "../../services/api";
 import { webSocketService } from "../../services/websocket.service";
 import {
   ACTIONS,
+  INTAKE_STATUS,
   CATEGORIES,
   DISPOSITIONS,
   STATUS,
@@ -53,6 +54,8 @@ import { useRepairFeedback } from "../repair/repair-feedback";
 import type { RepairMessage } from "../repair/repair-feedback";
 import type { RepairItem } from "../repair/repair-model";
 import { currentItemCustody } from "./item-custody";
+import { hasIntakeAction, matchesIntakeReceipt } from "./intake-actions";
+import { mailroomIntake } from "../../services/mailroom-intake";
 import "./mailroom.css";
 const { Text, Title, Paragraph } = Typography;
 const requestId = () => crypto.randomUUID();
@@ -828,6 +831,7 @@ function ItemDetail({
     ownRepair =
       canRepair && item.repairOwnerId === userId && item.custodianId === userId;
   const actions: string[] = [];
+  if (canMail && hasIntakeAction(item, "send_intake", userId)) actions.push("send_intake");
   if (
     canReview &&
     (canAdmin || item.receipt.customerServiceUserId === userId) &&
@@ -840,6 +844,7 @@ function ItemDetail({
   if (
     canMail &&
     item.receipt.category === "UNMATCHED" &&
+    !item.caseIntake &&
     item.status === "RECEIVED"
   )
     actions.push("identify");
@@ -976,7 +981,7 @@ function ItemDetail({
         return;
       }
       const body = JSON.stringify({
-        ...values,
+        ...(action === "send_intake" ? { csrUserId: values.csrUserId, note: values.note } : values),
         entityId,
         action,
         expectedVersion: item.version,
@@ -994,6 +999,9 @@ function ItemDetail({
       setAction(undefined);
       await onSaved();
     } catch (e) {
+      if (action === "send_intake" && operation.current && !(e as { errorFields?: unknown }).errorFields) {
+        try { const latest = await mailroomIntake.item(entityId, item.id); const request = { ...JSON.parse(operation.current.body), requestId: operation.current.id }; if (matchesIntakeReceipt(latest, request, userId)) { setAction(undefined); message.success("已從本次交辦回執核對操作成功"); await onSaved(); return; } } catch { /* Keep the same command/request for explicit reconciliation or exact retry. */ }
+      }
       if (!(e as { errorFields?: unknown }).errorFields)
         setFailure(errorText(e));
     } finally {
@@ -1074,6 +1082,7 @@ function ItemDetail({
           },
         ]}
       />
+      {item.caseIntake && <Alert showIcon type="info" style={{ marginTop: 16 }} message={`客服補建交辦：${INTAKE_STATUS[item.caseIntake.status]}`} description={`指定／受理客服：${item.caseIntake.ownerName || item.caseIntake.sentToUserName}。此交辦不移轉實物，實物仍依目前保管與位置紀錄。${item.caseIntake.sourceNumber ? `已綁定來源 ${item.caseIntake.sourceNumber}。` : "建立來源案件後，需由受理客服回此原收件完成綁定。"}`} />}
       {missingCustomerService ? (
         <Alert
           type="warning"
@@ -1202,6 +1211,10 @@ function ItemDetail({
               location: item.location,
             }}
           >
+            {action === "send_intake" && <>
+              <Alert type="info" showIcon message="指定客服補建案件，實物仍由目前收發人員保管" description="客服本人接手後，使用原售後表單建案並綁回此原收件；不重新登記收件。接手前可改交另一位具補建與受理權限的同仁。" />
+              <Form.Item name="csrUserId" label="指定補建客服" rules={[{ required: true, message: "請指定具補建與受理權限的客服" }]}><Select showSearch optionFilterProp="label" options={people.filter(person => person.intakeCustomerService === true).map(person => ({ value: person.id, label: `${person.department} · ${person.name}` }))} notFoundContent="目前沒有本公司具補建與受理權限的同仁" /></Form.Item>
+            </>}
             {action === "identify" ? (
               <>
                 <Form.Item
@@ -1423,6 +1436,7 @@ function ItemDetail({
               rules={
                 [
                   "identify",
+                  "send_intake",
                   "acknowledge_inspection",
                   "inspect",
                   "grade",

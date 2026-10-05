@@ -37,6 +37,9 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 export const ACTIONS = [
   'identify',
+  'send_intake',
+  'claim_intake',
+  'bind_intake',
   'inspect',
   'grade',
   'correct',
@@ -73,6 +76,8 @@ export type Command = {
   targetCategory?: 'REPAIR' | 'RETURN' | 'LETTER' | 'PARCEL';
   sourceCaseId?: string;
   sourceItemId?: string;
+  sourceVersion?: string;
+  csrUserId?: string;
   entityId: string;
   requestId: string;
   expectedVersion: number;

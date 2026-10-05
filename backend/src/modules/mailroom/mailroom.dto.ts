@@ -88,6 +88,8 @@ export class MailroomCommandDto {
   @IsString() @Matches(/^[A-Za-z0-9_-]{8,80}$/) requestId!: string;
   @IsInt() @Min(1) @Max(2147483646) expectedVersion!: number;
   @IsIn(ACTIONS) action!: ActionName;
+  @IsOptional() @IsString() @MaxLength(128) csrUserId?: string;
+  @IsOptional() @IsString() @MaxLength(80) sourceVersion?: string;
   @IsOptional() @IsString() @MaxLength(200) productName?: string;
   @IsOptional() @IsString() @MaxLength(100) sku?: string;
   @IsOptional() @IsString() @MaxLength(100) serialNumber?: string;

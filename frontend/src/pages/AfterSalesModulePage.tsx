@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Spin } from 'antd'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+import CustomerIntakeQueue from './mailroom/CustomerIntakeQueue'
+import { mailroomIntake } from '../services/mailroom-intake'
+import { intakeReturnEntry, intakeSourceEntry } from './mailroom/intake-actions'
+import type { Item } from './mailroom/model'
 import api from '../services/api'
 import CustomerRepairQueue from './repair/CustomerRepairQueue'
 import { useRepairNavigationGuard } from './repair/repair-navigation'
@@ -12,15 +17,18 @@ type FrameLaunch = { attempt: AfterSalesAttempt; ticket: string; name: string }
 export default function AfterSalesModulePage() {
   const { modal, contextHolder } = useRepairFeedback()
   const { section = 'cases' } = useParams()
+  const navigate = useNavigate(), {user} = useAuth()
   const [params] = useSearchParams()
   const entityId = params.get('entityId') || localStorage.getItem('entityId') || ''
+  const intakeItemId=params.get('intakeItemId') || ''
+  const [intakeContext,setIntakeContext]=useState<{entityId:string;itemId:string;item:Item}>()
   const frame = useRef<HTMLIFrameElement>(null)
   const session = useRef(createAfterSalesLaunchSession()), deadline = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [frameLaunch, setFrameLaunch] = useState<FrameLaunch>()
   const [error, setError] = useState(''), [loading, setLoading] = useState(true)
   const [height, setHeight] = useState(950)
   const dirty = useRef(false)
-  const iframeDirty = useRef(false), customerDirty = useRef(false)
+  const iframeDirty = useRef(false), customerDirty = useRef(false), intakeDirty = useRef(false)
   useRepairNavigationGuard(dirty, () => new Promise<boolean>(resolve => modal.confirm({ title: '售後表單有未儲存修改',
     content: '請先儲存，或確認放棄修改後再離開。', okText: '放棄修改', cancelText: '保留表單',
     onOk: () => resolve(true), onCancel: () => resolve(false) })))
@@ -31,7 +39,7 @@ export default function AfterSalesModulePage() {
   }, [clearDeadline])
   const launch = useCallback(async () => {
     clearDeadline(); session.current.invalidate(); setFrameLaunch(undefined)
-    iframeDirty.current = false; dirty.current = customerDirty.current
+    iframeDirty.current = false; dirty.current = customerDirty.current || intakeDirty.current
     setHeight(950); setLoading(true); setError('')
     if (!entityId) { setError('請先選擇有售後來源權限的公司'); setLoading(false); return }
     let attempt: AfterSalesAttempt
@@ -51,7 +59,7 @@ export default function AfterSalesModulePage() {
     }
   }, [entityId, section, clearDeadline, showFailure])
   useEffect(() => {
-    iframeDirty.current = false; customerDirty.current = false; dirty.current = false; void launch()
+    iframeDirty.current = false; customerDirty.current = false; intakeDirty.current=false; dirty.current = false; void launch()
     const currentSession = session.current
     return () => { currentSession.invalidate(); clearDeadline() }
   }, [launch, clearDeadline])
@@ -80,12 +88,14 @@ export default function AfterSalesModulePage() {
         if (result === 'ready') { clearDeadline(); setLoading(false); setError('') }
       }
       if (attempt.phase !== 'READY') return
-      if (typeof event.data.dirty === 'boolean') { iframeDirty.current = event.data.dirty; dirty.current = iframeDirty.current || customerDirty.current }
+      if (typeof event.data.dirty === 'boolean') { iframeDirty.current = event.data.dirty; dirty.current = iframeDirty.current || customerDirty.current || intakeDirty.current }
       if (Number.isFinite(event.data.height)) setHeight(Math.min(16000, Math.max(700, event.data.height)))
     }
     window.addEventListener('message', receive)
     return () => window.removeEventListener('message', receive)
   }, [clearDeadline, showFailure])
+  useEffect(()=>{let current=true;if(section!=='cases' || !entityId || !intakeItemId || !/^[A-Za-z0-9_-]{1,160}$/.test(intakeItemId))return;void mailroomIntake.item(entityId,intakeItemId).then(item=>{if(current && item.caseIntake && item.caseIntake.ownerId===user?.id && ['ACCEPTED','RESOLVED'].includes(item.caseIntake.status))setIntakeContext({entityId,itemId:intakeItemId,item});}).catch(()=>{/* Original source form remains independent; invalid intake context gives no bind capability. */});return()=>{current=false;};},[section,entityId,intakeItemId,user?.id])
+  const visibleIntake=intakeContext?.entityId===entityId && intakeContext.itemId===intakeItemId ? intakeContext.item:undefined
   const checkFrame = () => {
     const attempt = session.current.current()
     if (!attempt || frame.current?.contentWindow !== attempt.frame || attempt.phase === 'ERROR') return
@@ -97,7 +107,9 @@ export default function AfterSalesModulePage() {
   }
   return <div>
     {contextHolder}
-    {section === 'workbench' && entityId && <CustomerRepairQueue entityId={entityId} onDirtyChange={value => { customerDirty.current = value; dirty.current = value || iframeDirty.current }} />}
+    {section === 'workbench' && entityId && <CustomerRepairQueue entityId={entityId} onDirtyChange={value => { customerDirty.current = value; dirty.current = value || iframeDirty.current || intakeDirty.current }} />}
+    {section==='workbench' && entityId && <CustomerIntakeQueue key={entityId} entityId={entityId} initialItemId={intakeItemId} onDirtyChange={value=>{intakeDirty.current=value;dirty.current=value||iframeDirty.current||customerDirty.current;}} onOpenSource={itemId=>navigate(intakeSourceEntry(entityId,itemId))} />}
+    {section==='cases' && visibleIntake && <Alert showIcon type="info" style={{marginBottom:16}} message={`原收件 ${visibleIntake.label}：${visibleIntake.caseIntake?.status==='RESOLVED'?'已綁定來源案件':'客服本人補建中'}`} description="請沿用下方原售後『新增案件』表單。案件建立成功後，返回同一原收件選擇來源品項與版次完成綁定；此提示不表示案件已建立或實物已交接。" action={<Button onClick={()=>navigate(intakeReturnEntry(entityId,visibleIntake.id))}>返回原收件綁案</Button>} />}
     {error && <Alert type="error" showIcon message="售後工作台未能開啟" description={error} action={<Button onClick={() => void (async () => {
       if (iframeDirty.current && !await new Promise<boolean>(resolve => modal.confirm({ title: '售後表單尚未儲存', content: '重新開啟會放棄原售後表單修改；維修轉客服回覆仍保留。', okText: '重新開啟', cancelText: '保留表單', onOk: () => resolve(true), onCancel: () => resolve(false) }))) return
       await launch()

@@ -1,3 +1,10 @@
+import { ErpAfterSalesModuleService } from '../integration/after-sales/erp-module.service';
+import {
+  allowedIntakeActions,
+  caseIntake,
+  caseIntakeSummary,
+  isIntakeReader,
+} from './mailroom-intake.contract';
 import {
   BadRequestException,
   ConflictException,
@@ -105,6 +112,7 @@ export class MailroomService {
     private readonly gateway: NotificationGateway,
     private readonly sync: MailroomSyncService,
     @Optional() private readonly stock?: AfterSalesStockService,
+    @Optional() private readonly sourceModule?: ErpAfterSalesModuleService,
   ) {}
   enabled() {
     if (process.env.MAILROOM_ENABLED !== 'true')
@@ -148,7 +156,8 @@ export class MailroomService {
       can(actor, 'mailroom:read') ||
       (can(actor, 'repair_workbench:read') && isRepairWorkbenchItem(item)) ||
       (can(actor, 'mailroom:review') && isRepairWorkbenchItem(item)) ||
-      item.recipientId === actor.id
+      item.recipientId === actor.id ||
+      isIntakeReader(actor, item.repairWorkflow)
     )
       return;
     throw new ForbiddenException('無此物件存取權限');
@@ -163,6 +172,52 @@ export class MailroomService {
     if (!employee)
       throw new BadRequestException('接收人必須是此公司已綁定帳號的在職員工');
     if (permission) requirePermission(actor, permission);
+    return actor;
+  }
+  /** The same Source module actor gate used by SSO, intersected with native CSR acceptance rights. */
+  async intakeCustomerService(
+    userId: string,
+    entityId: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const actor = await this.actor(userId, tx);
+    requireEntity(actor, entityId);
+    requirePermission(actor, 'mailroom:review');
+    requirePermission(actor, 'after_sales_cases:read');
+    requirePermission(actor, 'after_sales_cases:update');
+    if (!tx) {
+      if (!this.sourceModule)
+        throw new ServiceUnavailableException('售後建案模組尚未開通');
+      const sourceActor = await this.sourceModule.actor(userId, entityId);
+      if (
+        sourceActor.entityId !== entityId ||
+        !sourceActor.modules.includes('dashboard') ||
+        !sourceActor.modules.includes('cases') ||
+        !sourceActor.writeModules.includes('cases')
+      )
+        throw new ForbiddenException('接手客服需要售後工作台與建案權限');
+    }
+    // Re-read transaction-local employee/scope after the external gate. A revoked role or
+    // ENTITY→SELF downgrade cannot proceed using the earlier authorization snapshot.
+    const scope = await (tx || this.prisma).user.findUnique({
+      where: { id: userId },
+      select: {
+        salesDataScope: true,
+        roles: { select: { role: { select: { code: true } } } },
+      },
+    });
+    if (
+      !scope ||
+      (scope.salesDataScope !== 'ENTITY' &&
+        !scope.roles.some((entry) => entry.role.code === 'SUPER_ADMIN'))
+    )
+      throw new ForbiddenException('客服建案需要公司範圍權限');
+    const employee = await (tx || this.prisma).employee.findFirst({
+      where: { userId, entityId, isActive: true },
+      select: { id: true },
+    });
+    if (!employee)
+      throw new ForbiddenException('接手客服必須是此公司已綁定帳號的在職員工');
     return actor;
   }
   async people(userId: string, entityId: string) {
@@ -194,6 +249,8 @@ export class MailroomService {
       department: string;
       repair: boolean;
       mailroom: boolean;
+      customerService: boolean;
+      intakeCustomerService: boolean;
     }> = [];
     for (const row of rows) {
       const person = await this.actor(row.userId!);
@@ -204,6 +261,12 @@ export class MailroomService {
         department: row.department?.name || '未分部門',
         repair: can(person, 'repair_workbench:update'),
         mailroom: can(person, 'mailroom:update'),
+        customerService: can(person, 'mailroom:review'),
+        intakeCustomerService: can(person, 'mailroom:review')
+          ? await this.intakeCustomerService(row.userId!, entityId)
+              .then(() => true)
+              .catch(() => false)
+          : false,
       });
     }
     return result;
@@ -217,17 +280,30 @@ export class MailroomService {
     this.enabled();
     const actor = await this.actor(userId);
     requireEntity(actor, entityId);
-    if (!can(actor, 'mailroom:read') && !can(actor, 'repair_workbench:read'))
+    let intakeCsr = false;
+    if (
+      can(actor, 'mailroom:review') &&
+      can(actor, 'after_sales_cases:read') &&
+      can(actor, 'after_sales_cases:update')
+    ) {
+      await this.intakeCustomerService(userId, entityId);
+      intakeCsr = true;
+    }
+    if (
+      !can(actor, 'mailroom:read') &&
+      !can(actor, 'repair_workbench:read') &&
+      !intakeCsr
+    )
       throw new ForbiddenException('沒有此作業權限');
     const result = await this.sync.cases(entityId, search, undefined, options);
-    return can(actor, 'mailroom:read')
+    return can(actor, 'mailroom:read') || intakeCsr
       ? result
       : {
           ...result,
           items: result.items.filter((source) => source.type === 'REPAIR'),
         };
   }
-  private async customerService(
+  async customerService(
     source: SourceCase | undefined,
     entityId: string,
     tx?: Prisma.TransactionClient,
@@ -452,6 +528,18 @@ export class MailroomService {
         linked.statusLabel = STATUS_LABELS[linked.status] || linked.status;
       }
     }
+    const intakeEligible = new Map<string, boolean>();
+    for (const entityId of new Set(
+      items
+        .filter((item) => isIntakeReader(actor, item.repairWorkflow))
+        .map((item) => item.entityId),
+    ))
+      intakeEligible.set(
+        entityId,
+        await this.intakeCustomerService(userId, entityId)
+          .then(() => true)
+          .catch(() => false),
+      );
     return items.map(({ evidence, receipt, ...item }) => ({
       ...(canViewRepairDocuments(actor) ? item : withoutRepairDocuments(item)),
       statusLabel:
@@ -468,6 +556,12 @@ export class MailroomService {
         (isRepairWorkbenchItem({ ...item, receipt })
           ? physicalCustody({ ...item, receipt })
           : undefined),
+      caseIntake: caseIntakeSummary(item.repairWorkflow),
+      allowedIntakeActions: allowedIntakeActions(
+        { ...item, receipt },
+        actor,
+        intakeEligible.get(item.entityId) || false,
+      ),
       releasePurpose:
         repairWorkflow(item.repairWorkflow).release?.purpose || null,
       custodianName: names.get(item.custodianId) || '未綁定',
@@ -511,6 +605,12 @@ export class MailroomService {
     if (!item || item.entityId !== entityId)
       throw new NotFoundException('找不到物件');
     this.canRead(actor, item);
+    if (
+      !can(actor, 'mailroom:read') &&
+      !isRepairWorkbenchItem(item) &&
+      isIntakeReader(actor, item.repairWorkflow)
+    )
+      await this.intakeCustomerService(userId, entityId);
     const [history, deliveries, deliverySummary] = await Promise.all([
       this.prisma.mailroomAction.findMany({
         where: { itemId: id },
@@ -578,6 +678,8 @@ export class MailroomService {
     for (const task of tasks) {
       try {
         this.canRead(actor, task.item);
+        if (task.kind.startsWith('INTAKE_') && !can(actor, 'mailroom:read'))
+          await this.intakeCustomerService(userId, entityId);
       } catch {
         continue;
       }
@@ -646,6 +748,7 @@ export class MailroomService {
           repairReport: (item as Item & { repairReport?: unknown })
             .repairReport,
           repairWorkflow: item.repairWorkflow,
+          caseIntake: caseIntakeSummary(item.repairWorkflow),
           ...(evidenceChanged ? { evidence: item.evidence || [] } : {}),
           ...(tabletHandoff ? { tabletHandoff } : {}),
         }),
@@ -691,6 +794,12 @@ export class MailroomService {
         item.receipt.customerServiceUserId
       )
         recipients.set(item.receipt.customerServiceUserId, 'RETURN_REVIEW');
+      const intake = caseIntake(item.repairWorkflow);
+      if (intake && intake.status !== 'RESOLVED')
+        recipients.set(
+          intake.status === 'ACCEPTED' ? intake.ownerId! : intake.sentToUserId,
+          intake.status === 'ACCEPTED' ? 'INTAKE_ACCEPTED' : 'INTAKE_SENT',
+        );
       const existing = await tx.mailroomTask.findMany({
         where: { itemId: item.id, status: 'OPEN' },
       });
@@ -722,7 +831,8 @@ export class MailroomService {
           continue;
         if (
           (userId === item.receipt.customerServiceUserId ||
-            kind === 'CUSTOMER_ACCEPTED') &&
+            kind === 'CUSTOMER_ACCEPTED' ||
+            kind.startsWith('INTAKE_')) &&
           !can(receiver, 'mailroom:review')
         )
           continue;
@@ -741,11 +851,15 @@ export class MailroomService {
             data: {
               userId,
               title:
-                kind === 'RETURN_REVIEW'
-                  ? '退貨檢查完成，待客服接手'
-                  : kind === 'CUSTOMER_ACCEPTED'
-                    ? '客服已接手檢修交辦'
-                    : repairStatusLabel(item),
+                kind === 'INTAKE_SENT'
+                  ? '待補建售後案件，請本人接手'
+                  : kind === 'INTAKE_ACCEPTED'
+                    ? '客服已接手補建案件'
+                    : kind === 'RETURN_REVIEW'
+                      ? '退貨檢查完成，待客服接手'
+                      : kind === 'CUSTOMER_ACCEPTED'
+                        ? '客服已接手檢修交辦'
+                        : repairStatusLabel(item),
               message:
                 item.label + ' · ' + item.productName + ' · ' + item.location,
               type: item.status === 'MISMATCH' ? 'warning' : 'info',
@@ -753,11 +867,15 @@ export class MailroomService {
               data: {
                 itemId: item.id,
                 entityId: item.entityId,
-                targetPath:
-                  '/my/inbox?itemId=' +
-                  item.id +
-                  '&entityId=' +
-                  encodeURIComponent(item.entityId),
+                targetPath: kind.startsWith('INTAKE_')
+                  ? '/operations/after-sales/workbench?entityId=' +
+                    encodeURIComponent(item.entityId) +
+                    '&intakeItemId=' +
+                    encodeURIComponent(item.id)
+                  : '/my/inbox?itemId=' +
+                    encodeURIComponent(item.id) +
+                    '&entityId=' +
+                    encodeURIComponent(item.entityId),
               },
             },
           }),
@@ -815,12 +933,13 @@ export class MailroomService {
     void this.sync.deliverPending().catch(() => undefined);
   }
   /** One native row is one physical piece; the external line quantity is only its total capacity. */
-  private async reserveSourceCapacity(
+  async reserveSourceCapacity(
     tx: Prisma.TransactionClient,
     entityId: string,
     baseline: SourceCase,
     incomingLineIds: (string | undefined)[],
     excludeNativeId?: string,
+    fixedSnapshot?: SourceCase,
   ): Promise<SourceCase> {
     const incoming = new Map<string, number>();
     for (const id of incomingLineIds) {
@@ -836,10 +955,15 @@ export class MailroomService {
       );
     // Do not rely on asynchronously projected remainingQuantity. Read the signed source
     // after the local capacity lock, then count every existing physical native row.
-    const source = (await this.sync.cases(entityId, '', baseline.id)).items[0];
+    // Intake binding has a separately validated signed snapshot read immediately before this
+    // transaction; it preserves its Source version without HTTP under local row locks.
+    const source =
+      fixedSnapshot ||
+      (await this.sync.cases(entityId, '', baseline.id)).items[0];
     if (
       !source ||
       source.id !== baseline.id ||
+      (fixedSnapshot && source.version !== baseline.version) ||
       source.type !== baseline.type ||
       ['CANCELLED', 'CLOSED', 'COMPLETED'].includes(source.status)
     )
@@ -1203,6 +1327,12 @@ export class MailroomService {
         include: withReceipt,
       });
       this.canRead(freshActor, item);
+      if (
+        input.action === 'identify' &&
+        caseIntake(item.repairWorkflow)?.status !== undefined &&
+        caseIntake(item.repairWorkflow)?.status !== 'RESOLVED'
+      )
+        throw new ConflictException('已交客服補建，須由受理客服綁回案件');
       if (identifiedSource)
         identifiedSource = await this.reserveSourceCapacity(
           tx,

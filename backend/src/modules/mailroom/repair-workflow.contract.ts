@@ -1,3 +1,4 @@
+import { type CaseIntakeState } from './mailroom-intake.contract';
 import {
   BadRequestException,
   ConflictException,
@@ -37,6 +38,7 @@ export type PhysicalCustody =
   | 'UNKNOWN';
 export type RepairWorkflow = {
   schema: 1;
+  intake?: CaseIntakeState;
   inventoryReceipt?: Record<string, unknown>;
   csr?: {
     status: 'SENT' | 'ACCEPTED' | 'RESOLVED';

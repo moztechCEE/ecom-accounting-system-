@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Popover, Badge, List, Button, Typography, Empty, Tag, message } from 'antd'
 import { 
   BellOutlined, 
@@ -13,7 +13,9 @@ import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/zh-tw'
 import { notificationService, Notification } from '../services/notification.service'
 import { webSocketService } from '../services/websocket.service'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
+
+import { notificationRefreshInterval, createVisibleRefresh } from '../services/notification-refresh'
 
 dayjs.extend(relativeTime)
 dayjs.locale('zh-tw')
@@ -25,9 +27,11 @@ const NotificationCenter: React.FC = () => {
   const [activeTab, setActiveTab] = useState('all')
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
+  const navigate = useNavigate(), {pathname}=useLocation()
+  const refreshGate=useRef<ReturnType<typeof createVisibleRefresh> | null>(null)
 
   const fetchNotifications = useCallback(async () => {
+    if(!refreshGate.current) refreshGate.current=createVisibleRefresh(()=>document.visibilityState==='visible',async()=>{
     try {
       setLoading(true)
       const data = await notificationService.getNotifications()
@@ -37,6 +41,8 @@ const NotificationCenter: React.FC = () => {
     } finally {
       setLoading(false)
     }
+    });
+    await refreshGate.current();
   }, [])
 
   useEffect(() => {
@@ -55,14 +61,17 @@ const NotificationCenter: React.FC = () => {
       message.info(`新通知: ${newNotification.title}`)
     })
 
-    // Poll every minute as fallback
-    const interval = setInterval(fetchNotifications, 60000)
-    
-    return () => {
-      clearInterval(interval)
-      unsubscribe()
-    }
+    return () => unsubscribe()
   }, [fetchNotifications])
+
+  useEffect(()=>{
+    const refresh=()=>{void fetchNotifications();};
+    const interval=setInterval(refresh,notificationRefreshInterval(pathname));
+    window.addEventListener('focus',refresh);
+    const becameVisible=()=>{if(document.visibilityState==='visible')refresh();};
+    document.addEventListener('visibilitychange',becameVisible);
+    return()=>{clearInterval(interval);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',becameVisible);};
+  },[pathname,fetchNotifications])
 
   const unreadCount = notifications.filter(n => !n.read).length
 
@@ -71,7 +80,7 @@ const NotificationCenter: React.FC = () => {
       await notificationService.markAllAsRead()
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       message.success('已全部標示為已讀')
-    } catch (error) {
+    } catch {
       message.error('操作失敗')
     }
   }
