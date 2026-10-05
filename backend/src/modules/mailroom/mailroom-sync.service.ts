@@ -132,16 +132,14 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
     options: { awaiting?: boolean; cursor?: string } = {},
   ): Promise<{ items: SourceCase[]; nextCursor?: string | null }> {
     const entry = this.connection(entityId, 'AFTER_SALES');
+    // Next.js normalizes query strings using form encoding before verification.
+    // Use the same encoding for the transmitted URL and its HMAC, including spaces.
+    const query = new URLSearchParams({ search });
+    if (options.awaiting) query.set('awaiting', 'true');
+    if (options.cursor) query.set('cursor', options.cursor);
     const path =
       '/api/integration/mailroom/cases' +
-      (id
-        ? '/' + encodeURIComponent(id)
-        : '?search=' +
-          encodeURIComponent(search) +
-          (options.awaiting ? '&awaiting=true' : '') +
-          (options.cursor
-            ? '&cursor=' + encodeURIComponent(options.cursor)
-            : ''));
+      (id ? '/' + encodeURIComponent(id) : '?' + query.toString());
     const result = await this.request(entry, 'GET', path);
     const items = id ? [result.item] : result.items;
     if (
