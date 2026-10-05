@@ -72,6 +72,7 @@ async function acceptance(client) {
         status: 'PENDING_WELFARE_STOCK', grade: 'C', matchResult: 'MATCH', custodianId: clerkId, location: 'SYNTHETIC SIGNED CLERK AREA',
         declared: { id: 'synthetic-line-' + index + '-' + token, quantity: 1, sku: product.sku }, ...documents() } });
       sources.push(source);
+      await tx.mailroomTask.create({ data: { entityId, itemId: source.id, userId: clerkId, kind: 'RETURN_REVIEW', status: 'OPEN', version: source.version } });
     }
     const originalIn = await tx.inventoryTransaction.create({ data: { entityId, productId: products[1].id, warehouseId: oldWarehouse.id, direction: 'IN', quantity: 1,
       referenceType: 'SYNTHETIC_ORIGINAL_PURCHASE', referenceId: token, occurredAt: new Date(), reason: 'Synthetic historical purchase fixture; rollback-only' } });
@@ -144,6 +145,8 @@ async function acceptance(client) {
       const received = await tx.mailroomItem.findUniqueOrThrow({ where: { id: sources[index].id } });
       assert.equal(received.status, 'STOCKED'); assert.equal(received.custodianId, ownerId); assert.equal(received.location, warehouse.name);
       assert.equal(received.version, requests[index].expectedVersion + 1);
+      const review = await tx.mailroomTask.findFirstOrThrow({ where: { itemId: received.id, kind: 'RETURN_REVIEW' } });
+      assert.equal(review.status, 'OPEN'); assert.equal(review.completedAt, null); assert.equal(review.version, received.version);
       const history = await tx.mailroomAction.findFirstOrThrow({ where: { itemId: received.id, action: 'after_sales_stock_received' } });
       assert.equal(history.snapshot.repairWorkflow.inventoryReceipt.inTransactionId, result.inbound.inTransactionId);
       assert.equal(result.unit.kind, 'REFURBISHED'); assert.equal(result.inbound.externalInventoryPosted, false);

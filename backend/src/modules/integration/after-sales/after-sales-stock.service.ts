@@ -669,7 +669,8 @@ export class AfterSalesStockService {
               entityId: input.entityId,
               status: 'OPEN',
             },
-            data: { status: 'COMPLETED', completedAt: new Date() },
+            // Physical stock receipt does not resolve customer review or refund work.
+            data: { version: updated.version },
           });
           return { unit, inbound, duplicate: false };
         },

@@ -241,6 +241,13 @@ describe('stock owner receives a qualified RETURN as a real one-piece IN', () =>
     expect(
       repairWorkflow(source.repairWorkflow).inventoryReceipt,
     ).toMatchObject({ inTransactionId: uuid(8), toCustodianId: owner.id });
+    expect(tx.mailroomTask.updateMany.mock.calls[0][0]).toMatchObject({
+      where: { status: 'OPEN' },
+      data: { version: 9 },
+    });
+    expect(tx.mailroomTask.updateMany.mock.calls[0][0].data).not.toHaveProperty(
+      'status',
+    );
     expect(tx.mailroomAction.create.mock.calls[0][0].data).toMatchObject({
       action: 'after_sales_stock_received',
       fromStatus: 'PENDING_WELFARE_STOCK',
