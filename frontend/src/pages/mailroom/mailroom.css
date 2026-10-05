@@ -129,6 +129,10 @@
 .mailroom-source-option .ant-tag {
   margin: 0;
 }
+.ant-select-item-option-active .mailroom-source-option .ant-typography,
+.ant-select-item-option-selected .mailroom-source-option .ant-typography {
+  color: inherit;
+}
 .mailroom-source-date {
   display: block;
   font-size: 11px;
