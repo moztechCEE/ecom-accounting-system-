@@ -8,16 +8,10 @@ import { wmsPortalLinks, wmsPortalOrigin } from './wms-portal'
 export type NavigationItem = { key: string; label: string; externalUrl?: string; workRole?: 'dispatcher'; permissions?: string[]; adminOnly?: boolean; superAdminOnly?: boolean; children?: NavigationItem[] }
 export const NAVIGATION: NavigationItem[] = [
   { key: '/my/inbox', label: '我的待辦與收件' },
-  { key: 'mailroom', label: '收發室', children: [
+  { key: 'workbenches', label: '工作台', children: [
+    { key: '/operations/after-sales/workbench', label: 'DOA／售後處理台', permissions: ['after_sales_cases:read'] },
     { key: '/operations/mailroom', label: '收發室工作台', permissions: ['mailroom:read'] },
-  ] },
-  { key: 'repair', label: 'DOA 售後維修', permissions: ['repair_workbench:read'], children: [
-    { key: '/operations/repair', label: '案件總覽', permissions: ['repair_workbench:read'] },
-    { key: '/operations/repair?queue=acceptance', label: '待認領與簽收', permissions: ['repair_workbench:read'] },
-    { key: '/operations/repair?queue=mine', label: '我的檢修', permissions: ['repair_workbench:read'] },
-    { key: '/operations/repair?queue=waiting', label: '客服與付款進度', permissions: ['repair_workbench:read'] },
-    { key: '/operations/repair?queue=delivery', label: '複驗與交回', permissions: ['repair_workbench:read'] },
-    { key: '/operations/repair?queue=records', label: '檢修與維修紀錄', permissions: ['repair_workbench:read'] },
+    { key: '/operations/repair', label: '維修師工作台', permissions: ['repair_workbench:read'] },
   ] },
   { key: '/dashboard', label: '營運總覽' },
   { key: 'sales', label: '訂單銷售', children: [
@@ -27,15 +21,13 @@ export const NAVIGATION: NavigationItem[] = [
     { key: '/sales/b2b', label: '客戶採購入口', permissions: ['sales_orders:read'] },
   ] },
   { key: 'service', label: '售後管理中心', children: [
-    { key: '/sales/after-sales', label: '案件工作台', permissions: ['after_sales_cases:read'] },
-    { key: '/sales/after-sales/quotes', label: '案件報價', permissions: ['after_sales_cases:read'] },
-    { key: '/sales/after-sales?type=REPAIR', label: '維修案件', permissions: ['after_sales_cases:read'] },
-    { key: '/sales/after-sales?type=REPAIR&status=PENDING_QUOTE_CONFIRMATION', label: '維修報價', permissions: ['after_sales_cases:read'] },
-    { key: '/sales/after-sales?type=RESHIPMENT', label: '漏寄補寄', permissions: ['after_sales_cases:read'] },
-    { key: '/sales/after-sales?type=EXCHANGE_RETURN', label: '來回件', permissions: ['after_sales_cases:read'] },
-    { key: '/sales/after-sales?type=REFUND_PICKUP', label: '退款派車', permissions: ['after_sales_cases:read'] },
-    { key: '/sales/after-sales?type=PRIVATE_PURCHASE', label: '私下購買', permissions: ['after_sales_cases:read'] },
-    { key: '/sales/after-sales?type=CUSTOMER_ISSUE', label: '客戶問題', permissions: ['after_sales_cases:read'] },
+    { key: '/operations/after-sales/customers', label: '售後客戶資料', permissions: ['after_sales_cases:read'] },
+    { key: '/operations/after-sales/cases', label: '售後案件中心', permissions: ['after_sales_cases:read'] },
+    { key: '/operations/after-sales/quotes', label: '報價與顧客確認', permissions: ['after_sales_cases:read'] },
+    { key: '/operations/after-sales/shipping', label: '寄回與補寄物流', permissions: ['after_sales_shipping:read'] },
+    { key: '/operations/after-sales/customer-issues', label: '客訴案件', permissions: ['after_sales_cases:read'] },
+    { key: '/operations/after-sales/faqs', label: '售後 FAQ', permissions: ['after_sales_faqs:read'] },
+    { key: '/operations/after-sales/imports', label: '售後資料匯入', permissions: ['after_sales_imports:read'] },
   ] },
   { key: 'warehouse', label: '儲運管理中心', permissions: ['wms_tasks:read'], children: [
     { key: '/warehouse', label: '儲運工作台', permissions: ['wms_tasks:read'] },
@@ -48,12 +40,16 @@ export const NAVIGATION: NavigationItem[] = [
     { key: '/purchasing/supplier-accounts', label: '供應商帳號', permissions: ['purchase_orders:read'] },
     { key: '/vendors', label: '供應商', permissions: ['purchase_orders:read', 'purchase_orders:create', 'accounts:read'] },
     { key: '/inventory/products', label: '產品與庫存', permissions: ['inventory:read'] },
+    { key: '/inventory/after-sales-stock', label: '售後良品與整新品', permissions: ['inventory:read', 'after_sales_stock:read'] },
+    { key: '/operations/after-sales/products', label: '售後產品與服務價目', permissions: ['after_sales_products:read'] },
     { key: '/inventory/handover-reconciliation', label: '交運待核銷', permissions: ['inventory:read'] },
     { key: '/inventory/sn-labels', label: 'SN 與標籤', permissions: ['inventory:read'] },
     { key: '/manufacturing/assembly', label: '組裝工單', permissions: ['inventory:read'] },
   ] },
   { key: 'finance', label: '財務會計', children: [
     { key: '/accounting/workbench', label: '會計工作台', permissions: ['accounts:read', 'journal_entries:read'] },
+    { key: '/operations/after-sales/accounting', label: '售後收付款與退款', permissions: ['after_sales_accounting:read'] },
+    { key: '/operations/after-sales/invoices', label: '售後發票', permissions: ['after_sales_invoices:read'] },
     { key: '/reconciliation', label: '對帳中心', permissions: ['banking:read', 'reports:read', 'accounts:read'] },
     { key: '/sales/invoices', label: '應收帳款', permissions: ['sales_orders:read', 'accounts:read'] },
     { key: '/accounting/workbench?focus=missing-invoices', label: '發票核對', permissions: ['accounts:read', 'journal_entries:read'] },
@@ -75,8 +71,11 @@ export const NAVIGATION: NavigationItem[] = [
     { key: '/attendance/admin', label: '出勤審核', permissions: ['attendance_admin:read', 'attendance_team:read'] },
     { key: '/payroll/runs', label: '薪資管理', permissions: ['payroll_self:read', 'payroll_admin:read'] },
   ] },
-  { key: 'admin', label: '系統管理', adminOnly: true, permissions: ['access_control:read', 'access_control:update'], children: [
-    { key: '/admin/access-control', label: '帳號與權限' },
+  { key: 'admin', label: '系統管理', adminOnly: true, permissions: ['access_control:read', 'access_control:update', 'after_sales_users:read', 'after_sales_audit:read', 'after_sales_settings:read'], children: [
+    { key: '/admin/access-control', label: '帳號與權限', permissions: ['access_control:read', 'access_control:update'] },
+    { key: '/operations/after-sales/users', label: '售後來源帳號與權限', permissions: ['after_sales_users:read'] },
+    { key: '/operations/after-sales/audit-logs', label: '售後操作紀錄', permissions: ['after_sales_audit:read'] },
+    { key: '/operations/after-sales/settings', label: '售後來源設定', permissions: ['after_sales_settings:read'] },
     { key: '/admin/entities', label: '公司管理', superAdminOnly: true },
     { key: '/admin/reimbursement-items', label: '報銷項目', adminOnly: true },
     { key: '/admin/settings', label: '系統設定', adminOnly: true },
@@ -86,7 +85,9 @@ export const NAVIGATION: NavigationItem[] = [
 ]
 export function visibleNavigation(user: User | null | undefined, items = NAVIGATION, staged = stagedOperationsEnabled()): NavigationItem[] {
   return items.flatMap<NavigationItem>((original) => {
-    if (!mailroomEnabled() && ['mailroom','repair','/my/inbox'].includes(original.key)) return []
+    const sourceModuleEnabled=window.__APP_CONFIG__?.afterSalesModuleEnabled===true
+    if (original.key.startsWith('/operations/after-sales/') && !sourceModuleEnabled) return []
+    if (!mailroomEnabled() && ['/operations/mailroom','/operations/repair','/my/inbox'].includes(original.key)) return []
     if (wmsPortalOrigin()) {
       const portal = wmsPortalLinks(user)
       if (original.key === 'warehouse') {
@@ -105,9 +106,18 @@ export function visibleNavigation(user: User | null | undefined, items = NAVIGAT
       }
     }
     if (!staged && ['/warehouse/workstation', '/admin/after-sales-brands'].includes(original.key)) return []
-    const item = !staged && original.key === 'service'
-      ? {...original, children: [{key:'/sales/after-sales',label:'來回件',permissions:['after_sales_cases:read','sales_orders:read']}]}
-      : original
+    const item = original.key === 'service' && !sourceModuleEnabled
+      ? {...original,children:staged?[
+        {key:'/sales/after-sales',label:'案件工作台',permissions:['after_sales_cases:read']},
+        {key:'/sales/after-sales/quotes',label:'案件報價',permissions:['after_sales_cases:read']},
+        {key:'/sales/after-sales?type=REPAIR',label:'維修案件',permissions:['after_sales_cases:read']},
+        {key:'/sales/after-sales?type=REPAIR&status=PENDING_QUOTE_CONFIRMATION',label:'維修報價',permissions:['after_sales_cases:read']},
+        {key:'/sales/after-sales?type=RESHIPMENT',label:'漏寄補寄',permissions:['after_sales_cases:read']},
+        {key:'/sales/after-sales?type=EXCHANGE_RETURN',label:'來回件',permissions:['after_sales_cases:read']},
+        {key:'/sales/after-sales?type=REFUND_PICKUP',label:'退款派車',permissions:['after_sales_cases:read']},
+        {key:'/sales/after-sales?type=PRIVATE_PURCHASE',label:'私下購買',permissions:['after_sales_cases:read']},
+        {key:'/sales/after-sales?type=CUSTOMER_ISSUE',label:'客戶問題',permissions:['after_sales_cases:read']},
+      ]:[{key:'/sales/after-sales',label:'來回件',permissions:['after_sales_cases:read','sales_orders:read']}]} : original
     if (item.key === '/warehouse/workstation' && !hasWarehouseManagementAccess(user)) return []
     if (item.key === '/dashboard' && (warehouseOnlyUser(user) || repairOnlyUser(user))) return []
     if (item.superAdminOnly && !user?.roles?.includes('SUPER_ADMIN')) return []
@@ -122,7 +132,8 @@ export function workspaceNavigation(user: User | null | undefined, workspace: Op
   const items = visibleNavigation(user)
   if (workspace === 'repair' || repairOnlyUser(user)) {
     const personal = navigationLeaves(items).filter(item => REPAIR_PERSONAL_PATHS.includes(item.key))
-    return [...items.filter(item => item.key === 'repair'),
+    const repair = items.filter(item => item.key === 'workbenches').map(item => ({ ...item, children: item.children?.filter(child => child.key === '/operations/repair') }))
+    return [...repair,
       ...(personal.length ? [{ key: 'personal', label: '我的資訊', children: personal }] : [])]
   }
   if (workspace === 'all' && !warehouseOnlyUser(user)) return items

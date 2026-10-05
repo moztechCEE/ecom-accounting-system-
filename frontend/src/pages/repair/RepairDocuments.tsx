@@ -8,12 +8,13 @@ import { hasPermission } from '../../utils/access'
 import { errorText } from '../mailroom/model'
 import { FEES, PLANS, RESULTS, inspectionReviewCurrent } from './repair-model'
 import type { InspectionData, RepairData, RepairDocument, RepairItem } from './repair-model'
+import RepairReplacementStock from './RepairReplacementStock'
 
 const INSPECTION_STAGES = ['REPAIR_RECEIVED', 'INSPECTING', 'REFURBISHING']
 const REPORT_STAGES = ['INSPECTING', 'REPAIRING', 'REFURBISHING']
 const REPRODUCTION = { YES: '可重現', INTERMITTENT: '間歇發生', NO: '未重現', NOT_TESTED: '尚未測試' }
 const CAUSES = { CONFIRMED: '原因已確認', SUSPECTED: '推測原因，待驗證', UNKNOWN: '原因尚未確認' }
-const OUTCOMES = { REPAIRED: '原機實際維修', REPLACED: '實際替換' }
+const OUTCOMES = { REPAIRED: '原機實際維修', REPLACED: '實際替換', FACTORY_REPAIRED: '原廠處理返還' }
 const CONDITIONS = { NEW: '全新品', REFURBISHED: '複驗合格整新品' }
 const INTERNAL_FEES = { FREE: '公司內部整新處理', PAID: '內部估價項目', REVIEW: '內部處理範圍待確認' }
 const options = (labels: Record<string, string>) => Object.entries(labels).map(([value, label]) => ({ value, label }))
@@ -31,7 +32,7 @@ function DocumentHeading({ document, title, inspection = false }: { document?: R
       {document.inspectionRevision != null && <Tag>依檢修單 v{document.inspectionRevision}</Tag>}
       <Typography.Text type="secondary">{document.authorName} · {date(document.updatedAt)}</Typography.Text>
       {inspection && <>
-        <Tag color={inspectionReviewCurrent(document) ? 'green' : 'orange'}>{inspectionReviewCurrent(document) ? `客服已確認檢修 v${document.revision}` : '目前方案待客服確認'}</Tag>
+        <Tag color={inspectionReviewCurrent(document) ? document.review?.decision==='DECLINE'?'orange':'green' : 'orange'}>{inspectionReviewCurrent(document) ? `客服${document.review?.decision==='DECLINE'?'拒修':'確認'}檢修 v${document.revision}` : '目前方案待客服確認'}</Tag>
         <Typography.Text type="secondary">{document.review ? `${document.review.name} · 確認檢修 v${document.review.inspectionRevision} · ${date(document.review.confirmedAt)}${inspectionReviewCurrent(document) ? '' : '（非目前已提交版次）'}` : '尚無客服確認紀錄'}</Typography.Text>
       </>}
     </> : <Tag>尚未建立</Tag>}
@@ -72,13 +73,16 @@ function SavedDocument({ document, kind, customerRepair }: { document: RepairDoc
     return [
       ['客訴／故障描述', inspection.complaint], ['故障重現', REPRODUCTION[inspection.reproduction]],
       ['測試條件', inspection.testConditions], ['原因確定度', CAUSES[inspection.causeStatus]],
-      ['診斷', inspection.diagnosis], ['建議處理', PLANS[inspection.plan]], ['方案說明', inspection.planNote],
+      ['診斷', inspection.diagnosis], ['建議處理', PLANS[inspection.plan]],
+      ...(inspection.plan === 'REPLACE' ? [['方案替換品 SKU', inspection.replacementSku], ['方案替換品品況', inspection.replacementCondition ? CONDITIONS[inspection.replacementCondition] : '未填']] : []),
+      ['方案說明', inspection.planNote],
       ['費用建議', (customerRepair ? FEES : INTERNAL_FEES)[inspection.feeSuggestion]], ['內部估價', inspection.estimateAmount ?? '未填'], ['估價項目', inspection.estimateNote],
     ]
   })() : (() => {
     const repair = data as RepairData
     return [
       ['實際處置', OUTCOMES[repair.outcome]], ['施工／替換內容', repair.workPerformed], ['工時（分鐘）', repair.laborMinutes],
+      ...(repair.outcome === 'FACTORY_REPAIRED' ? [['原廠委修單號', repair.factoryReference]] : []),
       ['依據檢修版次', document.inspectionRevision != null ? `v${document.inspectionRevision}` : '未綁定；不可據此交付'],
       ['總複驗', RESULTS[repair.qcResult]], ['複驗說明', repair.qcNotes], ['交付配件', repair.deliveredAccessories],
       ...(repair.outcome === 'REPLACED' ? [
@@ -118,11 +122,13 @@ function printDocument(item: RepairItem, kind: 'inspection' | 'repair') {
     const inspection = data as InspectionData
     fields.push(
       ...(customerRepair ? [
-        ['ERP 客服方案確認', inspectionReviewCurrent(document) ? `本版已確認（檢修 v${document.revision}）` : '本版尚未確認'],
+        ['ERP 客服方案確認', inspectionReviewCurrent(document) ? `${document.review?.decision==='DECLINE'?'拒修':'確認'}本版（檢修 v${document.revision}）` : '本版尚未確認'],
+        ['關聯售後報價版次', document.review?.quoteRevision ? `v${document.review.quoteRevision}` : '未關聯'],
         ['客服確認紀錄', document.review ? `${document.review.name} · 檢修 v${document.review.inspectionRevision} · ${date(document.review.confirmedAt)}` : '尚無紀錄'],
       ] as [string, unknown][] : []),
       ['客訴／故障描述', inspection.complaint], ['故障重現', REPRODUCTION[inspection.reproduction]], ['測試條件', inspection.testConditions],
       ['原因確定度', CAUSES[inspection.causeStatus]], ['診斷', inspection.diagnosis], ['建議處理', PLANS[inspection.plan]],
+      ...(inspection.plan==='REPLACE'?[['方案替換品 SKU',inspection.replacementSku],['方案替換品品況',inspection.replacementCondition?CONDITIONS[inspection.replacementCondition]:'未填']] as [string,unknown][]:[]),
       ['方案說明', inspection.planNote], ['費用建議', (customerRepair ? FEES : INTERNAL_FEES)[inspection.feeSuggestion]], ['內部估價', inspection.estimateAmount ?? '未填'], ['估價項目', inspection.estimateNote],
     )
   } else {
@@ -132,6 +138,7 @@ function printDocument(item: RepairItem, kind: 'inspection' | 'repair') {
       ['目前檢修版次', item.repairInspection ? `v${item.repairInspection.revision}` : '尚未建立'],
       ['實際處置', OUTCOMES[repair.outcome]], ['實際施工／替換內容', repair.workPerformed], ['工時（分鐘）', repair.laborMinutes],
       ['總複驗', RESULTS[repair.qcResult]], ['複驗說明', repair.qcNotes], ['交付配件', repair.deliveredAccessories],
+      ...(repair.outcome === 'FACTORY_REPAIRED' ? [['原廠委修單號', repair.factoryReference]] as [string, unknown][] : []),
     )
     if (repair.outcome === 'REPLACED') fields.push(
       ['替換件品況', repair.replacementCondition ? CONDITIONS[repair.replacementCondition] : '未填'],
@@ -142,32 +149,34 @@ function printDocument(item: RepairItem, kind: 'inspection' | 'repair') {
   }
   const title = kind === 'inspection' ? '內部檢修單' : '內部維修單'
   printable.document.open()
-  printable.document.write(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${escape(document.number)} ${title}</title><style>@page{margin:16mm}body{font:14px sans-serif;color:#172534}h1{font-size:22px}p{line-height:1.6}table{width:100%;border-collapse:collapse;margin:16px 0;table-layout:fixed}th,td{border:1px solid #a9b6c4;padding:8px;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}th{background:#eef2f6}tr{break-inside:avoid}.label{width:25%}</style></head><body><h1>DOA 售後維修工作台 · ${title}</h1><p>僅供內部作業；本單為已保存版本，不含尚未儲存的修改。估價為維修師建議，對客報價須由客服審核。ERP 客服方案確認不等於顧客同意或款項入帳；這兩項仍須依售後來源案件核對。維修單須與目前已提交的檢修版次一致，且複驗通過，才能交回。</p><table>${fields.map(([label, value]) => `<tr><th class="label">${escape(label)}</th><td>${escape(value)}</td></tr>`).join('')}</table><h2>逐項檢測／複驗</h2><table><thead><tr><th>項目</th><th>結果</th><th>觀察／量測／未測原因</th></tr></thead><tbody>${(data.checks || []).map(check => `<tr><td>${escape(check.name)}</td><td>${escape(RESULTS[check.result])}</td><td>${escape(check.observation)}</td></tr>`).join('')}</tbody></table>${parts}<p>此單不是對客維修報告，也不代表已付款或已完成庫存出入庫。文件狀態：${document.status === 'DRAFT' ? '草稿（尚未提交）' : '已提交'}。</p></body></html>`)
+  printable.document.write(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${escape(document.number)} ${title}</title><style>@page{margin:16mm}body{font:14px sans-serif;color:#172534}h1{font-size:22px}p{line-height:1.6}table{width:100%;border-collapse:collapse;margin:16px 0;table-layout:fixed}th,td{border:1px solid #a9b6c4;padding:8px;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}th{background:#eef2f6}tr{break-inside:avoid}.label{width:25%}</style></head><body><h1>維修師工作台 · ${title}</h1><p>僅供內部作業；本單為已保存版本，不含尚未儲存的修改。估價為維修師建議，對客報價須由客服審核。ERP 客服方案確認不等於顧客同意或款項入帳；這兩項仍須依售後來源案件核對。維修單須與目前已提交的檢修版次一致，且複驗通過，才能交回。</p><table>${fields.map(([label, value]) => `<tr><th class="label">${escape(label)}</th><td>${escape(value)}</td></tr>`).join('')}</table><h2>逐項檢測／複驗</h2><table><thead><tr><th>項目</th><th>結果</th><th>觀察／量測／未測原因</th></tr></thead><tbody>${(data.checks || []).map(check => `<tr><td>${escape(check.name)}</td><td>${escape(RESULTS[check.result])}</td><td>${escape(check.observation)}</td></tr>`).join('')}</tbody></table>${parts}<p>此單不是對客維修報告，也不代表已付款或已完成庫存出入庫。文件狀態：${document.status === 'DRAFT' ? '草稿（尚未提交）' : '已提交'}。</p></body></html>`)
   printable.document.close()
   printable.focus()
   printable.print()
 }
 
-export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange }: { item: RepairItem; entityId: string; onSaved: () => void; onDirtyChange?: (dirty: boolean) => void }) {
+export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange, onBeforeSave }: { item: RepairItem; entityId: string; onSaved: () => void; onDirtyChange?: (dirty: boolean) => void; onBeforeSave?: () => Promise<boolean> }) {
   const { user } = useAuth()
   const customerRepair = item.receipt.category === 'REPAIR'
   const [inspectionForm] = Form.useForm<InspectionData>()
   const [repairForm] = Form.useForm<RepairData>()
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState('')
+  const [selectedRequiresSerial, setSelectedRequiresSerial] = useState(!!item.serialNumber || !!item.repairReport?.data.replacementSerial)
   const saving = useRef(false)
   const operation = useRef<{ body: string; requestId: string } | null>(null)
   const ownSigned = item.editable === true && !!user?.id && item.repairOwnerId === user.id && item.custodianId === user.id && hasPermission(user, 'repair_workbench:update')
   const canInspect = ownSigned && INSPECTION_STAGES.includes(item.status)
-  const canReport = ownSigned && REPORT_STAGES.includes(item.status)
+  const canReport = ownSigned && REPORT_STAGES.includes(item.status) && (['REPAIR', 'REPLACE'].includes(item.repairInspection?.data.plan || '') || item.repairInspection?.data.plan === 'FACTORY' && item.repairWorkflow?.factory?.stage === 'RETURNED' && item.repairWorkflow.factory.physicalCustody === 'TECHNICIAN')
   const inspectionInitial: InspectionData = item.repairInspection?.data || {
     complaint: '', reproduction: 'NOT_TESTED', testConditions: '', checks: [blankCheck()],
     diagnosis: '', causeStatus: 'UNKNOWN', plan: 'REPAIR', planNote: '', feeSuggestion: 'REVIEW', estimateNote: '',
   }
   const repairInitial: RepairData = item.repairReport?.data || {
-    outcome: item.repairInspection?.data.plan === 'REPLACE' ? 'REPLACED' : 'REPAIRED', workPerformed: '',
+    outcome: item.repairInspection?.data.plan === 'REPLACE' ? 'REPLACED' : item.repairInspection?.data.plan === 'FACTORY' ? 'FACTORY_REPAIRED' : 'REPAIRED', factoryReference: item.repairWorkflow?.factory?.reference, replacementSku:item.repairInspection?.data.replacementSku, replacementCondition:item.repairInspection?.data.replacementCondition, workPerformed: '',
     parts: [], laborMinutes: 0, checks: [blankCheck()], qcResult: 'NOT_TESTED', qcNotes: '', deliveredAccessories: '',
   }
+  const plan = Form.useWatch('plan', inspectionForm) || inspectionInitial.plan
   const fee = Form.useWatch('feeSuggestion', inspectionForm) || inspectionInitial.feeSuggestion
   const outcome = Form.useWatch('outcome', repairForm) || repairInitial.outcome
   const qc = Form.useWatch('qcResult', repairForm) || repairInitial.qcResult
@@ -181,6 +190,7 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
     setFailure('')
     let saved = false
     try {
+      if (onBeforeSave && !await onBeforeSave()) return
       if (status === 'SUBMITTED') await form.validateFields()
       const otherForm = kind === 'inspection' ? repairForm : inspectionForm
       if (otherForm.isFieldsTouched()) {
@@ -197,13 +207,14 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
       const data: InspectionData | RepairData = kind === 'inspection' ? {
         complaint: textValue(values.complaint), reproduction: values.reproduction || 'NOT_TESTED',
         testConditions: textValue(values.testConditions), checks, diagnosis: textValue(values.diagnosis), causeStatus: values.causeStatus || 'UNKNOWN',
-        plan: values.plan || 'REPAIR', planNote: textValue(values.planNote), feeSuggestion: values.feeSuggestion || 'REVIEW',
+        plan: values.plan || 'REPAIR', ...(values.plan === 'REPLACE' ? {replacementCondition: values.replacementCondition, replacementSku:textValue(values.replacementSku)} : {}), planNote: textValue(values.planNote), feeSuggestion: values.feeSuggestion || 'REVIEW',
         ...(typeof values.estimateAmount === 'number' ? { estimateAmount: values.estimateAmount } : {}), estimateNote: textValue(values.estimateNote),
       } : {
         outcome: values.outcome || 'REPAIRED', workPerformed: textValue(values.workPerformed),
         parts: (values.parts || []).map((part: RepairData['parts'][number]) => ({ name: textValue(part.name), sku: textValue(part.sku), quantity: typeof part.quantity === 'number' ? part.quantity : 1 })),
         laborMinutes: typeof values.laborMinutes === 'number' ? values.laborMinutes : 0, checks, qcResult: values.qcResult || 'NOT_TESTED',
         qcNotes: textValue(values.qcNotes), deliveredAccessories: textValue(values.deliveredAccessories),
+        ...(values.outcome === 'FACTORY_REPAIRED' ? {factoryReference:textValue(values.factoryReference)} : {}),
         ...(values.outcome === 'REPLACED' ? {
           ...(values.replacementCondition ? { replacementCondition: values.replacementCondition } : {}),
           replacementSku: textValue(values.replacementSku), replacementSerial: textValue(values.replacementSerial),
@@ -267,6 +278,13 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
             <Col xs={24} sm={12}><Form.Item name="plan" label="建議處理方式" rules={[{ required: true }]}><Select options={options(PLANS)} /></Form.Item></Col>
             <Col xs={24} sm={12}><Form.Item name="feeSuggestion" label={customerRepair ? '費用建議（交客服審核）' : '內部處理費用建議'} rules={[{ required: true }]}><Select options={options(customerRepair ? FEES : INTERNAL_FEES)} /></Form.Item></Col>
           </Row>
+          {plan === 'REPLACE' && <>
+            <Row gutter={16}>
+              <Col xs={24} sm={12}><Form.Item name="replacementSku" label="方案替換品 SKU" rules={requiredText('請先指定方案中顧客可確認的替換品 SKU')}><Input maxLength={100} /></Form.Item></Col>
+              <Col xs={24} sm={12}><Form.Item name="replacementCondition" label="方案替換品品況" rules={[{required:true,message:'請選擇實際擬交付品況'}]}><Select options={options(CONDITIONS)} /></Form.Item></Col>
+            </Row>
+            <Typography.Paragraph type="secondary">SKU 與全新品／合格整新品品況會隨方案版次一併送客服確認。方案改變必須重新提交與確認；原件與替換件實際資料另在維修單留存。</Typography.Paragraph>
+          </>}
           <Form.Item name="planNote" label="建議方案與處理範圍" rules={requiredText()}><Input.TextArea rows={2} maxLength={2000} showCount /></Form.Item>
           <Alert type="info" showIcon style={{ marginBottom: 16 }} message={customerRepair ? '此處是維修師估價，不是客服正式報價。顧客同意不等於入帳；付費案件須由客服完成同意與會計入帳確認後，通知開工。' : '估價僅作公司內部整新處置紀錄，不是對客報價，也不執行付款或庫存異動。'} />
           <Form.Item name="estimateAmount" label="內部估價金額" rules={[{ required: fee === 'PAID', type: 'number', min: fee === 'PAID' ? 0.01 : 0, max: 10000000, message: '付費建議需正數估價；金額最多 10,000,000' }]}><InputNumber min={0} max={10000000} precision={2} style={{ width: '100%' }} /></Form.Item>
@@ -282,15 +300,29 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
         <Form name={`repair-report-${item.id}`} form={repairForm} layout="vertical" initialValues={repairInitial} onValuesChange={() => onDirtyChange?.(true)} disabled={!canReport || !!busy}>
           <Form.Item name="outcome" label="實際處置" rules={[{ required: true }]}><Select options={options(OUTCOMES)} /></Form.Item>
           <Form.Item name="workPerformed" label="實際施工／替換內容" rules={requiredText()}><Input.TextArea rows={3} maxLength={4000} showCount /></Form.Item>
+          {outcome === 'FACTORY_REPAIRED' && <>
+            <Form.Item name="factoryReference" label="原廠委修單號（依送修紀錄）" rules={requiredText('請保留原廠送修時的同一委修单號')}><Input maxLength={200} readOnly /></Form.Item>
+            <Alert type="info" showIcon style={{marginBottom:16}} message="原廠返還後，維修師本人核對與複驗" description="照原廠處理憑據填寫實際內容；原廠收件或返還在途不代表本人已收回。尚未返還或複驗不通過時，不得交回作完成件。" />
+          </>}
           {outcome === 'REPLACED' && <>
+            {canReport && !busy && <div style={{ marginBottom: 16 }}><RepairReplacementStock item={{...item,entityId}} onSelected={selection => {
+              setSelectedRequiresSerial(!!item.serialNumber || selection.hasSerialNumbers === true)
+              repairForm.setFieldsValue({ replacementSku: selection.sku, replacementCondition: selection.condition, replacementSerial: selection.serialNumber || '', replacementSource: selection.unitLabel, inventoryReference: selection.reservationId })
+              onDirtyChange?.(true)
+            }} onReleased={id => {
+              if (repairForm.getFieldValue('inventoryReference') === id) {
+                repairForm.setFieldsValue({ inventoryReference: '', replacementSource: '', replacementSerial: '' })
+                onDirtyChange?.(true)
+              }
+            }} /></div>}
             <Form.Item name="replacementCondition" label="替換件品況" rules={[{ required: true, message: '請如實選擇全新品或複驗合格整新品' }]}><Select options={options(CONDITIONS)} /></Form.Item>
             <Row gutter={16}>
               <Col xs={24} sm={12}><Form.Item name="replacementSku" label="替換件 SKU" rules={requiredText()}><Input maxLength={100} /></Form.Item></Col>
-              <Col xs={24} sm={12}><Form.Item name="replacementSerial" label="替換件 SN" rules={requiredText()}><Input maxLength={100} /></Form.Item></Col>
+              <Col xs={24} sm={12}><Form.Item name="replacementSerial" label="替換件 SN（無 SN 商品可留白）" rules={selectedRequiresSerial ? requiredText('此件需 SN 追溯，請填寫替換實物的真實 SN') : []}><Input maxLength={100} /></Form.Item></Col>
             </Row>
             <Form.Item name="replacementSource" label="替換件來源／複驗紀錄關聯" rules={requiredText()}><Input maxLength={200} placeholder="記錄實際來源與可追查單號；沒有可用合格品請勿填作已替換。" /></Form.Item>
             <Form.Item name="originalDisposition" label={`原件去向（原件 SN：${item.serialNumber || '未提供'}）`} rules={requiredText()}><Input.TextArea rows={2} maxLength={1000} showCount /></Form.Item>
-            <Form.Item name="inventoryReference" label="庫存作業關聯（選填）" extra="此欄只記錄關聯單號，不會執行預留、出庫或原件入庫，也不代表庫存異動完成。"><Input maxLength={200} /></Form.Item>
+            <Form.Item name="inventoryReference" label="庫存預留關聯" extra="由合格庫存選取填入。預留與正式出庫分開；完成複驗並交回時後端核對本版方案後才過帳。原件入庫另依合格檢驗程序處理。"><Input maxLength={200} /></Form.Item>
           </>}
           <Form.List name="parts">{(fields, { add, remove }) => <>
             <Typography.Paragraph strong>實際使用零件</Typography.Paragraph>

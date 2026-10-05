@@ -15,7 +15,7 @@ export interface AiCopilotSource {
   path?: string;
   sourceVersion?: string;
   sources?: Array<{ path: string; sha256: string }>;
-  availability?: 'staged' | 'preview-only' | 'wms-portal';
+  availability?: 'staged' | 'preview-only' | 'wms-portal' | 'after-sales-module';
 }
 
 export interface AiStatus {
@@ -52,7 +52,7 @@ export interface AiKnowledgeEntry {
   examples: AiKnowledgeExample[];
   sources: Array<{ path: string; sha256: string }>;
   sourceVersion: string;
-  availability?: 'staged' | 'preview-only' | 'wms-portal';
+  availability?: 'staged' | 'preview-only' | 'wms-portal' | 'after-sales-module';
 }
 export interface AiKnowledgeLibrary {
   version: string;

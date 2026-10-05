@@ -29,6 +29,7 @@ export function safeGuidePath(path: unknown): string | null {
 }
 
 export function guideDestination(entry: { path?: string; availability?: string }, staged: boolean): string | null {
+  if (entry.availability === 'after-sales-module' && (typeof window === 'undefined' || window.__APP_CONFIG__?.afterSalesModuleEnabled !== true)) return null;
   return entry.availability === 'staged' && !staged ? null : safeGuidePath(entry.path);
 }
 

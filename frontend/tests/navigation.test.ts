@@ -9,7 +9,7 @@ import { stagedOperationsEnabled } from '../src/config/release.ts'
 import { getResourceName, getRoleName } from '../src/constants/translations.ts'
 import { canAccessRoute } from '../src/utils/access-preview.ts'
 
-Object.defineProperty(globalThis, 'window', {value:{__APP_CONFIG__:{stagedOperationsEnabled:true}},configurable:true})
+Object.defineProperty(globalThis, 'window', {value:{__APP_CONFIG__:{stagedOperationsEnabled:true,afterSalesModuleEnabled:true}},configurable:true})
 
 const admin = { roles: ['SUPER_ADMIN'], permissions: [] } as unknown as User
 const staff = { roles: ['CUSTOMER_SERVICE'], permissions: ['after_sales_cases:read'] } as unknown as User
@@ -36,14 +36,18 @@ test('SN label drafts belong to purchasing/inventory and respect inventory read 
   assert.equal(activeNavigation(items, '/inventory/sn-labels', '')?.label, 'SN 與標籤')
   assert(!navigationLeaves(visibleNavigation(staff)).some(i => i.key === '/inventory/sn-labels'))
 })
-test('UI-only release preserves existing after-sales entry and excludes staged commands',()=>{
-  const leaves=navigationLeaves(visibleNavigation(admin,undefined,false))
-  assert.equal(leaves.find(i=>i.key==='/sales/after-sales')?.label,'來回件')
-  assert(!leaves.some(i=>i.key==='/sales/after-sales/quotes'||i.key==='/admin/after-sales-brands'||i.key==='/warehouse/workstation'))
-  assert.equal(leaves.filter(i=>i.key.startsWith('/warehouse/')).length,4)
-  assert(navigationLeaves(visibleNavigation({...staff,permissions:['sales_orders:read']},undefined,false)).some(i=>i.key==='/sales/after-sales'))
+test('source integration preserves legacy entry while availability is disabled',()=>{
   const config=window.__APP_CONFIG__
-  try {window.__APP_CONFIG__=undefined;assert.equal(stagedOperationsEnabled(),false)} finally {window.__APP_CONFIG__=config}
+  try {
+    window.__APP_CONFIG__={...config,afterSalesModuleEnabled:false}
+    const leaves=navigationLeaves(visibleNavigation(admin,undefined,false))
+    assert.equal(leaves.find(i=>i.key==='/sales/after-sales')?.label,'來回件')
+    assert(!leaves.some(i=>i.key.startsWith('/operations/after-sales/')))
+    assert(!leaves.some(i=>i.key==='/admin/after-sales-brands'||i.key==='/warehouse/workstation'))
+    assert.equal(leaves.filter(i=>i.key.startsWith('/warehouse/')).length,4)
+    assert(navigationLeaves(visibleNavigation({...staff,permissions:['sales_orders:read']},undefined,false)).some(i=>i.key==='/sales/after-sales'))
+    window.__APP_CONFIG__=undefined;assert.equal(stagedOperationsEnabled(),false)
+  } finally {window.__APP_CONFIG__=config}
 })
 test('manager reports stay separate from picker and packer workstations',()=>{
   assert(isWarehousePath('/warehouse/logs'));assert(!isWarehousePath('/warehouse-other'))
@@ -95,23 +99,21 @@ test('warehouse-only users see only assigned work plus personal self-service',()
   assert(!scoped.includes('/reports'))
   assert.equal(navigationLeaves(visibleNavigation(admin)).find(i=>i.key==='/admin/after-sales-brands')?.label,'品牌設定')
 })
-test('source after-sales types remain accessible without unrelated financial access', () => {
+test('shared source case center retains six types without six sidebar queues', () => {
   const items = visibleNavigation(staff)
   const leaves = navigationLeaves(items)
   assert(items.some(item => item.key === 'service'))
   assert(!items.some(item => item.key === 'finance' || item.key === 'admin'))
-  for (const type of Object.keys(afterSalesTypes)) {
-    assert(leaves.some(item => new URLSearchParams(item.key.split('?')[1]).get('type') === type))
-  }
-  assert(!leaves.some(item => item.key.includes('/internal')))
+  assert.equal(Object.keys(afterSalesTypes).length,6)
+  assert(leaves.some(item=>item.key==='/operations/after-sales/cases'))
+  assert(!leaves.some(item => item.key.includes('/internal') || item.key.includes('?type=')))
 })
-test('specific source filters select the correct menu entry and parent', () => {
+test('source module destinations select their own native entry and parent', () => {
   const items = visibleNavigation(admin)
-  const selected = activeNavigation(items, '/sales/after-sales', '?type=REPAIR&status=PENDING_QUOTE_CONFIRMATION&page=2')
-  assert.equal(selected?.label, '維修報價')
-  assert.equal(navigationParent(items, selected!.key), 'service')
-  assert.equal(activeNavigation(items, '/sales/after-sales', '?type=REPAIR')?.label, '維修案件')
-  assert.equal(activeNavigation(items, '/sales/after-sales', '')?.label, '案件工作台')
+  assert.equal(activeNavigation(items, '/operations/after-sales/cases', '?type=REPAIR&page=2')?.label, '售後案件中心')
+  assert.equal(navigationParent(items, '/operations/after-sales/cases'), 'service')
+  assert.equal(activeNavigation(items, '/operations/after-sales/workbench', '')?.label, 'DOA／售後處理台')
+  assert.equal(navigationParent(items, '/operations/after-sales/workbench'), 'workbenches')
 })
 test('query and nested paths do not incorrectly select broad accounting links', () => {
   const items = visibleNavigation(admin)
@@ -124,27 +126,16 @@ test('no permission hides after-sales; company management remains super-admin on
   assert(!navigationLeaves(visibleNavigation({ ...admin, roles: ['ADMIN'] })).some(item => item.key === '/admin/entities'))
   assert(navigationLeaves(visibleNavigation(admin)).some(item => item.key === '/admin/entities'))
 })
-test('DOA repair queues share one authorized route and select the requested queue', () => {
+test('technicians use one workbench sidebar entry; all six queues remain page tabs', () => {
   withMailroomEnabled(true, () => {
     const items = visibleNavigation(repairTechnician)
-    const group = items.find(item => item.key === 'repair')
-    assert.equal(group?.label, 'DOA 售後維修')
-    assert.deepEqual(group?.children?.map(item => [item.key, item.label]), [
-      ['/operations/repair', '案件總覽'],
-      ['/operations/repair?queue=acceptance', '待認領與簽收'],
-      ['/operations/repair?queue=mine', '我的檢修'],
-      ['/operations/repair?queue=waiting', '客服與付款進度'],
-      ['/operations/repair?queue=delivery', '複驗與交回'],
-      ['/operations/repair?queue=records', '檢修與維修紀錄'],
-    ])
-    assert.equal(activeNavigation(items, '/operations/repair', '')?.label, '案件總覽')
-    for (const queue of ['acceptance', 'mine', 'waiting', 'delivery', 'records']) {
-      const selected = activeNavigation(items, '/operations/repair', `?queue=${queue}&page=2`)
-      assert.equal(selected?.key, `/operations/repair?queue=${queue}`)
-      assert.equal(navigationParent(items, selected!.key), 'repair')
-    }
-    assert.equal(getResourceName('repair_workbench'), 'DOA 售後維修工作台')
+    const group = items.find(item => item.key === 'workbenches')
+    assert.equal(group?.label, '工作台')
+    assert.deepEqual(group?.children?.map(item => [item.key, item.label]), [['/operations/repair', '維修師工作台']])
+    for (const queue of ['all','acceptance', 'mine', 'waiting', 'delivery', 'records']) assert.equal(activeNavigation(items, '/operations/repair', `?queue=${queue}`)?.key,'/operations/repair')
+    assert.equal(navigationParent(items, '/operations/repair'), 'workbenches')
     assert.equal(getRoleName('REPAIR_TECHNICIAN'), '維修師')
+    assert.equal(getResourceName('repair_workbench'), 'DOA 售後維修工作台')
   })
 })
 test('repair-only staff retain repair and personal information without customer, finance or stock privileges', () => {
@@ -157,7 +148,7 @@ test('repair-only staff retain repair and personal information without customer,
     assert.equal(operationsWorkspace(technician, '/operations/repair'), 'repair')
     assert.equal(operationsWorkspace(technician, '/profile'), 'repair')
     const items = workspaceNavigation(technician, 'all')
-    assert.deepEqual(items.map(item => item.key), ['repair', 'personal'])
+    assert.deepEqual(items.map(item => item.key), ['workbenches', 'personal'])
     assert.deepEqual(items.find(item => item.key === 'personal')?.children?.map(item => item.key), [
       '/my/inbox', '/ap/expenses', '/attendance/dashboard', '/attendance/leaves', '/profile',
     ])
@@ -173,7 +164,7 @@ test('repair-only staff retain repair and personal information without customer,
       permissions: [...technician.permissions, 'payroll_self:read', 'payroll_self_breakdown:read'],
     }
     assert(repairOnlyUser(employeeTechnician))
-    assert.deepEqual(workspaceNavigation(employeeTechnician, 'all').map(item => item.key), ['repair', 'personal'])
+    assert.deepEqual(workspaceNavigation(employeeTechnician, 'all').map(item => item.key), ['workbenches', 'personal'])
     assert(navigationLeaves(workspaceNavigation(employeeTechnician, 'all')).some(item => item.key === '/payroll/runs'))
     assert(!canAccessRoute(employeeTechnician, ['payroll_admin:read']))
   })
@@ -201,15 +192,15 @@ test('repair technicians land in DOA while mailroom staff, dual-duty navigation 
 })
 test('repair navigation and automatic landing require feature enablement plus repair read permission', () => {
   withMailroomEnabled(false, () => {
-    assert(!visibleNavigation(repairTechnician).some(item => item.key === 'repair'))
-    assert(!visibleNavigation(admin).some(item => item.key === 'repair'))
+    assert(!navigationLeaves(visibleNavigation(repairTechnician)).some(item => item.key === '/operations/repair'))
+    assert(!navigationLeaves(visibleNavigation(admin)).some(item => item.key === '/operations/repair'))
     assert(!repairOnlyUser(repairTechnician))
     assert.equal(loginDestination(repairTechnician), '/dashboard')
     assert.equal(operationsWorkspace(repairTechnician, '/dashboard'), 'all')
   })
   withMailroomEnabled(true, () => {
     const denied = { ...repairTechnician, permissions: ['repair_workbench:update', 'profile_self:read'] }
-    assert(!visibleNavigation(denied).some(item => item.key === 'repair'))
+    assert(!navigationLeaves(visibleNavigation(denied)).some(item => item.key === '/operations/repair'))
     assert(!repairOnlyUser(denied))
     assert.equal(loginDestination(denied), '/dashboard')
     assert(!canAccessRoute(denied, ['repair_workbench:read']))

@@ -88,3 +88,15 @@ test('mobile focus wraps at both boundaries and recovers focus outside the dialo
   assert.equal(focusWrapIndex(5, 2, false), null);
   assert.equal(focusWrapIndex(0, -1, true), null);
 });
+
+
+test('source guide launch respects module availability without inventing source access',()=>{
+  const entry={path:'/operations/after-sales/cases',availability:'after-sales-module'};
+  const previous=globalThis.window;
+  Object.defineProperty(globalThis,'window',{value:{__APP_CONFIG__:{afterSalesModuleEnabled:false}},configurable:true,writable:true});
+  try {
+    assert.equal(guideDestination(entry,true),null);
+    window.__APP_CONFIG__!.afterSalesModuleEnabled=true;
+    assert.equal(guideDestination(entry,false),entry.path);
+  } finally {Object.defineProperty(globalThis,'window',{value:previous,configurable:true,writable:true});}
+});
