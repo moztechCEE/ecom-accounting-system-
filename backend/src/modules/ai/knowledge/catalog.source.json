@@ -5739,14 +5739,18 @@
     {
       "id": "after-sales-stock",
       "title": "售後替換與整新品庫存",
-      "summary": "登錄已正式入庫的合格新品／整新品，保留所有權及檢驗來源；逐件預留、取消釋放及核對正式換機出庫。",
+      "summary": "庫存負責人本人點收合格退貨、正式單件入庫並登錄整新品；已入庫商品另登錄合格資料，再逐件預留、釋放與正式換機出庫。",
       "keywords": [
         "整新品",
         "替換",
         "預留",
         "出庫",
         "實物標籤",
-        "SN"
+        "SN",
+        "退貨入庫",
+        "STOCKED",
+        "本人點收",
+        "IN"
       ],
       "category": "採購庫存",
       "module": "inventory",
@@ -5759,13 +5763,15 @@
       "sections": {
         "steps": [
           "核對目前公司、品項及正式倉位，選擇全新品或整新品；無 SN 商品填唯一實物標籤，有 SN 商品選可用庫存的真實 SN。",
-          "登錄合格商品須有正式入庫來源、所有權／退款依據及檢驗基準紀錄。整新品另關聯公司退貨實物及已提交、版次一致且複驗合格的工作單；登錄不憑空增加數量。",
+          "「已正式入庫後登錄合格商品」須有既有正式入庫來源、所有權及檢驗依據；整新品另綁同版已提交、逐項 PASS 的檢修及維修紀錄。此動作不增加庫存數量，所有權／退貨接收依據不代表退款完成。",
+          "「合格退貨正式入庫並登錄整新品」只供公司範圍的庫存負責人本人點收一件。選擇待入庫合格 RETURN、核對來源位置、SKU、真實 SN／不可重用實物標籤，填目的倉位及實際位置、所有權與本版檢驗依據並確認點件。後端在同一交易轉移收發實物保管至本人、狀態 STOCKED／版本加一、正式 ERP IN +1 並登錄整新品；維修師逐件預留權不授予入庫。",
+          "有 SN 退貨須與來源真實 SN 及商品一致；可新增或由已售出狀態安全收回，既有可用／預留或錯品項序號會阻擋。無 SN 仍按外部來源單件與不可重用標籤識別，既有同 SKU 數量不代替這一件退貨，也不能整批補入。逾時保留第一次 requestId、來源版本及完全相同資料重試；正式回執核對單件、流水、本人保管、原／目的位置與版次後才顯示成功，重試不另加數量。",
           "維修師僅可替本人持有的案件預留合格實物，SKU／品況須與已提交替換方案一致。預留保留數量及真實 SN，回填維修單，不算正式出庫。預留獨立保存，放棄表單或離開不會取消；維修師可在本人案件的選取元件明確取消未使用預留。",
           "未使用的預留可由具權限者取消釋放；已出庫不能取消回補。換機完成須本版工作單及逐項複驗通過，核對預留、品項、品況、SN、效期、數量後才正式出庫。 整新品出庫時在同一交易鎖定來源退貨實物，重新核對本版已提交工作單、逐項 PASS、處置、SKU、SN 與目前實物狀態；來源檢修改版或狀態改變會阻擋出庫。同一來源實物只可登錄一件替換庫存。"
         ],
         "boundaries": [
           "讀寫分開；庫存管理需公司範圍及庫存授權，維修師逐件預留不授予整個庫存管理權。",
-          "預留、ERP 出庫、外部 ECOUNT／WMS 確認、實物交接各自追蹤。外部未設定／待確認不是已核銷；原件退回及重新入庫另走正式流程。",
+          "正式 ERP IN、合格登錄、預留／釋放、ERP OUT、外部 ECOUNT／WMS 確認及實物交接分別追蹤。入庫回執 externalInventoryPosted=false 不代表外部已過帳；退款、顧客維修件退回與公司合格退貨入庫也分開。",
           "此指南不執行 AI 庫存操作，不代表部署、退款、付款、倉庫或外部系統已驗收。"
         ],
         "related": [
@@ -5776,26 +5782,32 @@
       "translations": {
         "en": {
           "title": "After-sales replacement and refurbished stock",
-          "summary": "Register formally received qualified new or refurbished units with ownership and inspection evidence; reserve, release and verify actual replacement outbound posting.",
+          "summary": "Stock owners personally receive one qualified return, post formal inbound and register its refurbished unit; already received goods use separate qualification before item reservations and outbound.",
           "keywords": [
             "refurbished stock",
             "replacement",
             "reservation",
             "outbound",
             "unit label",
-            "serial"
+            "serial",
+            "return inbound",
+            "STOCKED",
+            "personal receipt",
+            "IN"
           ],
           "category": "Purchasing and inventory",
           "sections": {
             "steps": [
               "Verify company, product and formal warehouse, then choose new or refurbished condition. Non-serial products use unique unit labels; serial products use real available inventory serials.",
-              "Qualification needs formal receipt, ownership/refund evidence and inspection criteria/records. Refurbished units also link a company return with submitted, revision-matched passing work records. Qualification creates no stock quantity.",
+              "The already-received qualification action requires existing formal inbound, ownership and inspection evidence, with current submitted passing inspection and report records for refurbished units. It adds no stock quantity. Ownership or return-receipt evidence is not proof of a completed refund.",
+              "Formal return receipt is limited to a company-scoped stock owner personally receiving one qualified RETURN unit. Verify source location, SKU and real serial or non-reusable unit label, then specify the formal warehouse, destination physical location, ownership and current inspection evidence and confirm item count. One transaction transfers current clerk custody to the stock owner, sets STOCKED with version +1, posts ERP IN +1 and registers the refurbished unit. Item-specific technician reservation does not grant inbound authority.",
+              "Serial returns must match the real source serial and product; a new serial or a safely returned sold serial may be received, while available/reserved or mismatched serials block receipt. Non-serial units require one declared external source unit and a non-reusable label even when the SKU already has other stock; bulk receipt is rejected. A timeout retry preserves the first request ID, source version and identical body. Success requires the formal single-unit transaction and matching personal custody, source/destination location and version receipt; duplicate retry adds no quantity.",
               "Technicians may reserve qualified units only for their own held item. SKU and condition must match the submitted replacement plan. Reservation holds quantity and any real serial, and fills the repair form without final outbound posting. Reservation persists independently when a draft is discarded or the page is left; technicians can explicitly release unused reservations from their own item picker.",
               "Authorized staff may release unused reservations; posted units cannot be replenished by cancellation. Completion needs current work records and all passing checks, with reservation, product, condition, serial, expiry and quantity verified before outbound posting. Refurbished outbound locks the source return in the same transaction and rechecks current submitted work records, every PASS check, outcome, SKU, serial and physical state. Revised inspection or changed custody/state blocks outbound. A source item can qualify only one replacement unit."
             ],
             "boundaries": [
               "Read and write grants are separate. Inventory management requires company scope and inventory grants; item-specific technician reservation grants no broad stock management.",
-              "Reservation, ERP outbound, external ECOUNT/WMS confirmation and physical handoff stay separate. Unconfigured or pending external status is not posted; original return and re-receipt follow formal flows.",
+              "ERP IN, qualification, reservation/release, ERP OUT, external ECOUNT/WMS confirmation and physical custody remain separate. externalInventoryPosted=false on an inbound receipt does not claim external posting. Refund completion, return of a customer repair unit and company return inbound also remain separate.",
               "This guide executes no AI stock operation and proves no deployment, refund, payment, warehouse or external-system acceptance."
             ],
             "related": [
@@ -5823,7 +5835,12 @@
         "backend/src/modules/notification/notification.service.ts",
         "backend/prisma/schema.prisma",
         "backend/prisma/migrations/20261005150000_mailroom_source_feed/migration.sql",
-        "backend/src/modules/mailroom/mailroom.service.ts"
+        "backend/src/modules/mailroom/mailroom.service.ts",
+        "frontend/src/services/repair-stock-return.ts",
+        "backend/src/modules/integration/after-sales/after-sales-stock.contract.ts",
+        "backend/src/modules/integration/after-sales/after-sales-stock.dto.ts",
+        "backend/src/modules/mailroom/mailroom.contract.ts",
+        "backend/src/modules/mailroom/repair-workflow.contract.ts"
       ]
     }
   ],

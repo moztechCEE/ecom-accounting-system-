@@ -21,6 +21,7 @@ export const STATUS: Record<string, string> = {
   PENDING_REFURBISH: "B／C 待整新簽收",
   REFURBISHING: "整新中",
   PENDING_WELFARE_STOCK: "整新完成，待福利品入庫",
+  STOCKED: "合格退貨已正式入庫",
   COLLECTED: "已簽領",
 };
 export const ACTIONS: Record<string, string> = {

@@ -1,4 +1,5 @@
 import api from './api'
+import type { ReturnStockInboundProof, ReturnStockProduct, ReturnStockSource, StockReturnReceiptInput } from './repair-stock-return'
 
 export type StockReservation = { id: string; itemId: string; status: string; expiresAt?: string }
 export type ReplacementUnit = {
@@ -6,10 +7,15 @@ export type ReplacementUnit = {
   qualification: { sku: string; name?: string; hasSerialNumbers?: boolean }; reservations: StockReservation[]
 }
 export type RepairStockCatalog = {
-  products: { id: string; sku: string; name: string; hasSerialNumbers: boolean }[]
+  products: ReturnStockProduct[]
   warehouses: { id: string; code: string; name: string }[]
   serials: { id: string; productId: string; warehouseId: string; serialNumber: string }[]
-  returnItems: { id: string; label: string; sku?: string; grade?: string; receipt: { sourceNumber?: string } }[]
+  returnItems: ReturnStockSource[]
+}
+export type StockReturnReceiptResult = {
+  unit: ReplacementUnit
+  inbound: ReturnStockInboundProof
+  duplicate: boolean
 }
 export type StockQualification = {
   entityId: string; productId: string; warehouseId: string; unitLabel: string; kind: 'NEW' | 'REFURBISHED'
@@ -27,6 +33,9 @@ export const repairStockService = {
     return unwrap(await api.get<RepairStockCatalog | { data: RepairStockCatalog }>('/after-sales/stock/catalog', { params: { entityId } }))
   },
   async qualify(input: StockQualification) { await api.post('/after-sales/stock/qualify', input) },
+  async receiveReturn(input: StockReturnReceiptInput) {
+    return unwrap(await api.post<StockReturnReceiptResult | { data: StockReturnReceiptResult }>('/after-sales/stock/receive-return', input))
+  },
   async reserve(input: { entityId: string; itemId: string; unitId: string; requestId: string; expectedVersion: number }) {
     return unwrap(await api.post<StockReservation | { data: StockReservation }>('/after-sales/stock/reserve', input))
   },
