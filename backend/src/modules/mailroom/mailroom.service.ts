@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -15,6 +16,7 @@ import {
 } from '../../common/department-access/department-access';
 import { NotificationGateway } from '../notification/notification.gateway';
 import { MailroomSyncService } from './mailroom-sync.service';
+import { AfterSalesStockService } from '../integration/after-sales/after-sales-stock.service';
 import {
   can,
   fingerprint,
@@ -22,7 +24,6 @@ import {
   REPAIR_RETURN_STATUSES,
   requireEntity,
   requirePermission,
-  STATUS_LABELS,
   transition,
   type Actor,
   type SourceCase,
@@ -37,6 +38,14 @@ import {
   validateInspectionSubmission,
   validateRepairCompletion,
 } from './repair-document.contract';
+import {
+  currentCsrReview,
+  physicalCustody,
+  repairWorkflow,
+  sentCustomerWorkflow,
+  requireSourceConsent,
+  repairStatusLabel,
+} from './repair-workflow.contract';
 
 const actorSelect = {
   id: true,
@@ -61,9 +70,11 @@ const withoutRepairDocuments = <T extends object>(value: T): T => {
   const result = { ...value } as T & {
     repairInspection?: unknown;
     repairReport?: unknown;
+    repairWorkflow?: unknown;
   };
   delete result.repairInspection;
   delete result.repairReport;
+  delete result.repairWorkflow;
   return result;
 };
 function withoutRepairHistoryDocuments(
@@ -73,7 +84,10 @@ function withoutRepairHistoryDocuments(
   if (value === null || typeof value !== 'object') return value;
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([key]) => key !== 'repairInspection' && key !== 'repairReport')
+      .filter(
+        ([key]) =>
+          !['repairInspection', 'repairReport', 'repairWorkflow'].includes(key),
+      )
       .map(([key, nested]) => [
         key,
         withoutRepairHistoryDocuments(nested as Prisma.JsonValue),
@@ -87,6 +101,7 @@ export class MailroomService {
     private readonly prisma: PrismaService,
     private readonly gateway: NotificationGateway,
     private readonly sync: MailroomSyncService,
+    @Optional() private readonly stock?: AfterSalesStockService,
   ) {}
   enabled() {
     if (process.env.MAILROOM_ENABLED !== 'true')
@@ -129,6 +144,7 @@ export class MailroomService {
     if (
       can(actor, 'mailroom:read') ||
       (can(actor, 'repair_workbench:read') && isRepairWorkbenchItem(item)) ||
+      (can(actor, 'mailroom:review') && isRepairWorkbenchItem(item)) ||
       item.recipientId === actor.id
     )
       return;
@@ -266,7 +282,16 @@ export class MailroomService {
           });
           break;
         case 'waiting':
-          and.push({ status: 'WAITING_CUSTOMER' });
+          and.push({
+            status: {
+              in: [
+                'WAITING_CUSTOMER',
+                'FACTORY_OUTBOUND',
+                'FACTORY_RECEIVED',
+                'FACTORY_RETURNING',
+              ],
+            },
+          });
           break;
         case 'delivery':
           and.push({ status: 'WAITING_RETURN_ACCEPTANCE' });
@@ -321,7 +346,7 @@ export class MailroomService {
       page: query.page || 1,
     };
   }
-  private async views(items: Item[], userId: string, actor: Actor) {
+  async views(items: Item[], userId: string, actor: Actor) {
     const ids = [
       ...new Set(
         items
@@ -330,6 +355,7 @@ export class MailroomService {
             x.nextUserId,
             x.recipientId,
             x.repairOwnerId,
+            repairWorkflow(x.repairWorkflow).csr?.ownerId,
           ])
           .filter(Boolean),
       ),
@@ -341,8 +367,20 @@ export class MailroomService {
     const names = new Map(users.map((x) => [x.id, x.name]));
     return items.map(({ evidence, receipt, ...item }) => ({
       ...(canViewRepairDocuments(actor) ? item : withoutRepairDocuments(item)),
-      statusLabel: STATUS_LABELS[item.status] || item.status,
+      statusLabel: repairStatusLabel({ ...item, receipt }),
+      physicalCustody: isRepairWorkbenchItem({ ...item, receipt })
+        ? physicalCustody({ ...item, receipt })
+        : undefined,
+      releasePurpose:
+        repairWorkflow(item.repairWorkflow).release?.purpose || null,
       custodianName: names.get(item.custodianId) || '未綁定',
+      repairOwnerName: item.repairOwnerId
+        ? names.get(item.repairOwnerId) || '已停用／待轉派'
+        : null,
+      customerOwnerName: repairWorkflow(item.repairWorkflow).csr?.ownerId
+        ? names.get(repairWorkflow(item.repairWorkflow).csr!.ownerId!) ||
+          '已停用／待轉派'
+        : null,
       nextUserName: item.nextUserId
         ? names.get(item.nextUserId) || '已停用／待轉派'
         : null,
@@ -470,6 +508,11 @@ export class MailroomService {
       quantity: 1,
       evidenceCount: Array.isArray(item.evidence) ? item.evidence.length : 0,
       returnInspection: item.returnInspection,
+      releasePurpose:
+        repairWorkflow(item.repairWorkflow).release?.purpose || null,
+      physicalCustody: isRepairWorkbenchItem(item)
+        ? physicalCustody(item)
+        : undefined,
     };
   }
   async record(
@@ -504,6 +547,7 @@ export class MailroomService {
             .repairInspection,
           repairReport: (item as Item & { repairReport?: unknown })
             .repairReport,
+          repairWorkflow: item.repairWorkflow,
           ...(evidenceChanged ? { evidence: item.evidence || [] } : {}),
           ...(tabletHandoff ? { tabletHandoff } : {}),
         }),
@@ -525,8 +569,18 @@ export class MailroomService {
       if (item.nextUserId && item.status !== 'COLLECTED')
         recipients.set(item.nextUserId, item.status);
       if (['MISMATCH', 'WAITING_CUSTOMER'].includes(item.status)) {
-        if (item.receipt.customerServiceUserId)
-          recipients.set(item.receipt.customerServiceUserId, item.status);
+        const csr = repairWorkflow(item.repairWorkflow).csr;
+        const customerOwner =
+          item.status === 'WAITING_CUSTOMER' && csr?.status === 'ACCEPTED'
+            ? csr.ownerId
+            : item.receipt.customerServiceUserId;
+        if (customerOwner)
+          recipients.set(
+            customerOwner,
+            item.status === 'WAITING_CUSTOMER' && csr?.status === 'ACCEPTED'
+              ? 'CUSTOMER_ACCEPTED'
+              : item.status,
+          );
       }
       const inspection = item.returnInspection as {
         reviewedAt?: string;
@@ -569,7 +623,8 @@ export class MailroomService {
         )
           continue;
         if (
-          userId === item.receipt.customerServiceUserId &&
+          (userId === item.receipt.customerServiceUserId ||
+            kind === 'CUSTOMER_ACCEPTED') &&
           !can(receiver, 'mailroom:review')
         )
           continue;
@@ -590,7 +645,9 @@ export class MailroomService {
               title:
                 kind === 'RETURN_REVIEW'
                   ? '退貨檢查完成，待客服接手'
-                  : STATUS_LABELS[item.status],
+                  : kind === 'CUSTOMER_ACCEPTED'
+                    ? '客服已接手檢修交辦'
+                    : repairStatusLabel(item),
               message:
                 item.label + ' · ' + item.productName + ' · ' + item.location,
               type: item.status === 'MISMATCH' ? 'warning' : 'info',
@@ -857,14 +914,37 @@ export class MailroomService {
         throw new BadRequestException('來源案件或申報品項不符');
     }
     let repairAllowed = false;
-    if (input.action === 'start_repair' && current.receipt.sourceCaseId) {
-      const source = (
-        await this.sync.cases(input.entityId, '', current.receipt.sourceCaseId)
-      ).items[0];
+    let repairSource: SourceCase | undefined;
+    const requireCompletionRelease =
+      input.action === 'complete_repair' &&
+      (!!repairWorkflow(current.repairWorkflow).csr ||
+        (current.repairReport as { data?: { outcome?: string } } | null)?.data
+          ?.outcome === 'REPLACED');
+    if (
+      (input.action === 'start_repair' || requireCompletionRelease) &&
+      current.receipt.sourceCaseId
+    ) {
+      const committed = await this.prisma.mailroomAction.findUnique({
+        where: {
+          entityId_actorId_requestId: {
+            entityId: input.entityId,
+            actorId: userId,
+            requestId: input.requestId,
+          },
+        },
+      });
+      if (!committed)
+        repairSource = (
+          await this.sync.cases(
+            input.entityId,
+            '',
+            current.receipt.sourceCaseId,
+          )
+        ).items[0];
       repairAllowed =
-        source?.id === current.receipt.sourceCaseId &&
-        source.type === current.receipt.category &&
-        source.repairAllowed === true;
+        repairSource?.id === current.receipt.sourceCaseId &&
+        repairSource.type === current.receipt.category &&
+        repairSource.repairAllowed === true;
     }
     const refreshCustomerService = [
       'inspect',
@@ -1013,11 +1093,9 @@ export class MailroomService {
           inspection?.reviewedAt &&
           previousCustomerServiceUserId !== customerServiceUserId
         ) {
-          const {
-            reviewedAt: _time,
-            reviewedBy: _reviewer,
-            ...checks
-          } = inspection;
+          const checks = { ...inspection };
+          delete checks.reviewedAt;
+          delete checks.reviewedBy;
           reassignedInspection = json(checks);
           item.returnInspection = reassignedInspection as Prisma.JsonValue;
         }
@@ -1032,6 +1110,24 @@ export class MailroomService {
         repairInspection?: unknown;
         repairReport?: unknown;
       };
+      const workflow = repairWorkflow(item.repairWorkflow);
+      if (
+        [
+          'move',
+          'start_inspection',
+          'await_customer',
+          'start_repair',
+          'complete_repair',
+          'complete_refurbish',
+        ].includes(input.action) &&
+        isRepairWorkbenchItem(item) &&
+        physicalCustody(item) !== 'TECHNICIAN'
+      )
+        throw new ConflictException('實物目前在原廠或物流，須先由本人簽收返還');
+      if (input.action === 'resolve_customer' && workflow.csr)
+        throw new BadRequestException(
+          '請先本人接手客服交辦，再以檢修版本與顧客決定回覆',
+        );
       let reviewedInspection: Prisma.InputJsonValue | undefined;
       if (
         input.action === 'resolve_customer' &&
@@ -1064,18 +1160,105 @@ export class MailroomService {
           );
         if (input.action === 'start_repair')
           validateInspectionRelease(documents.repairInspection);
+        if (input.action === 'start_repair' && workflow.csr) {
+          currentCsrReview(item);
+          if (workflow.csr.decision !== 'APPROVE')
+            throw new ConflictException('顧客未同意目前檢修方案');
+          if (
+            !repairSource ||
+            repairSource.id !== item.receipt.sourceCaseId ||
+            repairSource.type !== item.receipt.category
+          )
+            throw new ConflictException('來源案件不符或尚未放行');
+          requireSourceConsent(repairSource, workflow.csr.quoteRevision, true);
+        }
       }
       if (['complete_repair', 'complete_refurbish'].includes(input.action))
         validateRepairCompletion(
           documents.repairInspection,
           documents.repairReport,
         );
+      if (requireCompletionRelease) {
+        if (
+          !repairAllowed ||
+          !repairSource ||
+          repairSource.id !== item.receipt.sourceCaseId ||
+          repairSource.type !== item.receipt.category
+        )
+          throw new ConflictException('目前售後同意與收款尚未放行');
+        if (workflow.csr) {
+          currentCsrReview(item);
+          if (workflow.csr.decision !== 'APPROVE')
+            throw new ConflictException('顧客尚未同意此處置');
+          requireSourceConsent(repairSource, workflow.csr.quoteRevision, true);
+        }
+      }
       const { changes, replaceTasks } = transition(
         item,
         input,
         freshActor,
         repairAllowed,
       );
+      if (input.action === 'await_customer') {
+        changes.repairWorkflow = json(
+          sentCustomerWorkflow(
+            item,
+            freshActor,
+            new Date().toISOString(),
+            latestAssignee?.releaseInfo?.quoteRevision || null,
+          ),
+        );
+        changes.nextUserId = null;
+      }
+      if (['complete_repair', 'complete_refurbish'].includes(input.action)) {
+        const report = validateRepairCompletion(
+          documents.repairInspection,
+          documents.repairReport,
+        );
+        let stockProof:
+          | Awaited<ReturnType<AfterSalesStockService['consumeForRepair']>>
+          | undefined;
+        if (report.data.outcome === 'REPLACED') {
+          if (
+            item.serialNumber &&
+            report.data.replacementSerial?.trim() === item.serialNumber.trim()
+          )
+            throw new BadRequestException('替換件序號不可與原件相同');
+          if (input.action !== 'complete_repair')
+            throw new BadRequestException('整新作業不可用換機出庫代替');
+          if (!this.stock)
+            throw new ServiceUnavailableException('售後換機正式庫存尚未設定');
+          stockProof = await this.stock.consumeForRepair(
+            tx,
+            item.entityId,
+            item,
+            freshActor.id,
+            input.requestId,
+            report.data.replacementSerial,
+            report.data.replacementSku,
+            report.data.replacementCondition,
+          );
+          if (
+            stockProof.status !== 'POSTED' ||
+            stockProof.entityId !== item.entityId ||
+            stockProof.itemId !== item.id ||
+            stockProof.quantity !== 1 ||
+            !stockProof.postingId
+          )
+            throw new ConflictException('正式換機庫存出庫證明不符，不能放行');
+        }
+        changes.repairWorkflow = json({
+          ...workflow,
+          release: {
+            purpose: report.data.outcome,
+            inspectionRevision: report.inspectionRevision,
+            releasedAt: new Date().toISOString(),
+            releasedBy: freshActor.id,
+            note: input.note,
+            ...(stockProof ? { stock: stockProof } : {}),
+          },
+        });
+      }
       if (reassignedInspection && changes.returnInspection === undefined)
         changes.returnInspection = reassignedInspection;
       if (reviewedInspection) changes.repairInspection = reviewedInspection;
@@ -1107,7 +1290,8 @@ export class MailroomService {
           );
       }
       if (input.nextUserId) {
-        const status = String(changes.status || item.status);
+        const status =
+          typeof changes.status === 'string' ? changes.status : item.status;
         await this.target(
           input.nextUserId,
           item.entityId,
@@ -1190,7 +1374,12 @@ export class MailroomService {
         version: item.version,
         category: item.receipt.category,
         status: item.status,
-        statusLabel: STATUS_LABELS[item.status],
+        statusLabel: repairStatusLabel(item),
+        releasePurpose:
+          repairWorkflow(item.repairWorkflow).release?.purpose || null,
+        physicalCustody: isRepairWorkbenchItem(item)
+          ? physicalCustody(item)
+          : undefined,
         declared: item.declared,
         productName: item.productName,
         sku: item.sku,

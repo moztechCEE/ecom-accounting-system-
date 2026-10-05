@@ -22,6 +22,9 @@ export const STATUS_LABELS: Record<string, string> = {
   INSPECTING: '檢測中',
   WAITING_CUSTOMER: '待客服確認',
   REPAIRING: '維修中',
+  FACTORY_OUTBOUND: '已交物流送原廠',
+  FACTORY_RECEIVED: '原廠已接收',
+  FACTORY_RETURNING: '原廠返還途中',
   WAITING_RETURN_ACCEPTANCE: '處理完成，待收發室簽收',
   READY_FOR_DISPATCH: '待安排寄回',
   PENDING_RESTOCK: 'AA 待重新入庫',
@@ -94,6 +97,14 @@ export type SourceCase = {
   version: string;
   status: string;
   repairAllowed: boolean;
+  releaseInfo?: {
+    quoteRevision: number;
+    customerApprovedQuoteRevision: number | null;
+    customerApprovedAt: string | null;
+    amount: number | null;
+    currency: string;
+    confirmedPaymentQuoteRevision: number | null;
+  } | null;
   statusLabel?: string;
   customerLabel: string;
   assigneeId?: string | null;
@@ -131,6 +142,7 @@ export type ItemState = {
   evidence?: unknown;
   conditionNote?: string | null;
   returnInspection?: unknown;
+  repairWorkflow?: unknown;
   receipt: {
     category: string;
     receivedById: string;
@@ -147,6 +159,9 @@ export const REPAIR_RETURN_STATUSES = [
   'INSPECTING',
   'WAITING_CUSTOMER',
   'REPAIRING',
+  'FACTORY_OUTBOUND',
+  'FACTORY_RECEIVED',
+  'FACTORY_RETURNING',
   'WAITING_RETURN_ACCEPTANCE',
   'PENDING_WELFARE_STOCK',
 ] as const;
@@ -360,7 +375,7 @@ export function transition(
         conditionNote: note,
       });
       break;
-    case 'grade':
+    case 'grade': {
       requireStage(
         'RECEIVED',
         'PENDING_RESTOCK',
@@ -465,6 +480,7 @@ export function transition(
           reviewedBy: previousInspection.reviewedBy,
         };
       break;
+    }
     case 'acknowledge_inspection':
       requirePermission(actor, 'mailroom:review');
       requireNote();

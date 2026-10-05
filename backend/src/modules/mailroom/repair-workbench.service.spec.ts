@@ -113,6 +113,9 @@ describe('RepairWorkbenchService document authorization, versions and release co
           );
         }),
       },
+      product: {
+        findFirst: jest.fn().mockResolvedValue({ hasSerialNumbers: false }),
+      },
       $queryRaw: jest.fn().mockResolvedValue([]),
       $transaction: jest.fn(async (callback: any) => callback(prisma)),
     };
@@ -144,18 +147,16 @@ describe('RepairWorkbenchService document authorization, versions and release co
       publish: jest.fn(),
     };
     sync = {
-      cases: jest
-        .fn()
-        .mockResolvedValue({
-          items: [
-            {
-              id: 'source-case',
-              type: 'REPAIR',
-              repairAllowed: false,
-              status: 'PENDING_PAYMENT',
-            },
-          ],
-        }),
+      cases: jest.fn().mockResolvedValue({
+        items: [
+          {
+            id: 'source-case',
+            type: 'REPAIR',
+            repairAllowed: false,
+            status: 'PENDING_PAYMENT',
+          },
+        ],
+      }),
     };
     service = new RepairWorkbenchService(prisma, mailroom, sync);
   });
@@ -179,18 +180,89 @@ describe('RepairWorkbenchService document authorization, versions and release co
   it('rejects a one-to-one replacement that reuses the original product serial', async () => {
     row.serialNumber = 'SN-ORIGINAL';
     row.repairInspection = {
-      revision: 1, status: 'SUBMITTED', data: { ...inspectionData, plan: 'REPLACE' },
+      revision: 1,
+      status: 'SUBMITTED',
+      data: { ...inspectionData, plan: 'REPLACE' },
     };
     const input = repairInput({
       data: {
-        ...repairData, outcome: 'REPLACED', parts: [], replacementCondition: 'REFURBISHED',
-        replacementSku: 'DEMO-PRODUCT', replacementSerial: row.serialNumber,
-        replacementSource: '複驗合格退貨整新品', originalDisposition: '原件待故障處置',
+        ...repairData,
+        outcome: 'REPLACED',
+        parts: [],
+        replacementCondition: 'REFURBISHED',
+        replacementSku: 'DEMO-PRODUCT',
+        replacementSerial: row.serialNumber,
+        replacementSource: '複驗合格退貨整新品',
+        originalDisposition: '原件待故障處置',
       },
     });
-    await expect(service.save('tech', 'piece', 'repair', input)).rejects.toThrow();
+    await expect(
+      service.save('tech', 'piece', 'repair', input),
+    ).rejects.toThrow();
     expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
     expect(mailroom.record).not.toHaveBeenCalled();
+  });
+
+  it('replacement plans require selected SKU and condition before submission, and nonserial products use a formal unit label rather than a fabricated serial', async () => {
+    const data: any = { ...inspectionData, plan: 'REPLACE' };
+    await expect(
+      service.save('tech', 'piece', 'inspection', inspectionInput({ data })),
+    ).rejects.toThrow('先選定');
+    data.replacementSku = 'DEMO-PRODUCT';
+    data.replacementCondition = 'REFURBISHED';
+    await service.save(
+      'tech',
+      'piece',
+      'inspection',
+      inspectionInput({ data }),
+    );
+    const report: any = {
+      ...repairData,
+      outcome: 'REPLACED',
+      replacementSku: 'DEMO-PRODUCT',
+      replacementCondition: 'REFURBISHED',
+      replacementSource: '單件合格整新品',
+      originalDisposition: '原件待故障品處置',
+      replacementSerial: '',
+    };
+    prisma.product.findFirst.mockResolvedValueOnce({ hasSerialNumbers: true });
+    await expect(
+      service.save(
+        'tech',
+        'piece',
+        'repair',
+        repairInput({ expectedVersion: 6, data: report }),
+      ),
+    ).rejects.toThrow('替換 SN');
+    prisma.product.findFirst.mockResolvedValueOnce({ hasSerialNumbers: false });
+    await service.save(
+      'tech',
+      'piece',
+      'repair',
+      repairInput({ expectedVersion: 6, data: report }),
+    );
+    expect(row.repairReport.data.replacementSerial).toBe('');
+    expect(prisma.product.findFirst).toHaveBeenCalledWith({
+      where: { entityId: 'company', sku: 'DEMO-PRODUCT' },
+      select: { hasSerialNumbers: true },
+    });
+  });
+
+  it('revising an inspection during work moves it back to inspection and invalidates all local customer consent', async () => {
+    row.status = 'REPAIRING';
+    row.repairInspection = {
+      revision: 3,
+      status: 'SUBMITTED',
+      review: { inspectionRevision: 3 },
+      data: inspectionData,
+    };
+    row.repairWorkflow = { schema: 1, csr: { status: 'RESOLVED' } };
+    await service.save('tech', 'piece', 'inspection', inspectionInput());
+    expect(row.status).toBe('INSPECTING');
+    expect(row.repairInspection.revision).toBe(4);
+    expect(row.repairInspection.review).toBeUndefined();
+    expect(row.repairWorkflow.csr).toBeUndefined();
+    expect(mailroom.record.mock.calls[0][8]).toBe(true);
   });
 
   it.each([

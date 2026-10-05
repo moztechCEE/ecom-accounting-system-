@@ -59,9 +59,16 @@ export class InspectionDataDto {
   @Max(10000000)
   estimateAmount?: number;
   @IsString() @MaxLength(2000) estimateNote!: string;
+  @IsOptional() @IsIn(['NEW', 'REFURBISHED']) replacementCondition?:
+    | 'NEW'
+    | 'REFURBISHED';
+  @IsOptional() @IsString() @MaxLength(100) replacementSku?: string;
 }
 export class RepairDataDto {
-  @IsIn(['REPAIRED', 'REPLACED']) outcome!: 'REPAIRED' | 'REPLACED';
+  @IsIn(['REPAIRED', 'REPLACED', 'FACTORY_REPAIRED']) outcome!:
+    | 'REPAIRED'
+    | 'REPLACED'
+    | 'FACTORY_REPAIRED';
   @IsString() @MaxLength(4000) workPerformed!: string;
   @IsArray()
   @ArrayMaxSize(50)
@@ -87,6 +94,7 @@ export class RepairDataDto {
   @IsOptional() @IsString() @MaxLength(200) replacementSource?: string;
   @IsOptional() @IsString() @MaxLength(1000) originalDisposition?: string;
   @IsOptional() @IsString() @MaxLength(200) inventoryReference?: string;
+  @IsOptional() @IsString() @MaxLength(200) factoryReference?: string;
   @IsString() @MaxLength(1000) deliveredAccessories!: string;
 }
 class DocumentBaseDto {
