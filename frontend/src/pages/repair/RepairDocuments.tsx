@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Alert, Button, Card, Col, Collapse, Descriptions, Empty, Form, Input, InputNumber, Row, Select, Space, Table, Tabs, Tag, Typography } from 'antd'
 import type { FormInstance } from 'antd'
 import { PrinterOutlined } from '@ant-design/icons'
@@ -26,25 +27,39 @@ const textValue = (value: unknown) => typeof value === 'string' ? value : ''
 const blankCheck = () => ({ name: '', result: 'NOT_TESTED' as const, observation: '' })
 
 function DocumentHeading({ document, title, inspection = false }: { document?: RepairDocument | null; title: string; inspection?: boolean }) {
-  return <Space wrap style={{ marginBottom: 16 }}>
-    <Typography.Text strong>{title}</Typography.Text>
-    {document ? <>
-      <Typography.Text>{document.number} · 文件 v{document.revision}</Typography.Text>
-      <Tag color={document.status === 'SUBMITTED' ? 'green' : 'default'}>{document.status === 'SUBMITTED' ? '已提交' : '草稿'}</Tag>
-      {document.inspectionRevision != null && <Tag>依檢修單 v{document.inspectionRevision}</Tag>}
+  return <div className="repair-document-heading">
+    <Space wrap className="repair-document-identity">
+      <Typography.Text strong>{title}</Typography.Text>
+      {document ? <>
+        <Typography.Text>{document.number} · 文件 v{document.revision}</Typography.Text>
+        <Tag color={document.status === 'SUBMITTED' ? 'green' : 'default'}>{document.status === 'SUBMITTED' ? '已提交' : '草稿'}</Tag>
+        {document.inspectionRevision != null && <Tag>依檢修單 v{document.inspectionRevision}</Tag>}
+      </> : <Tag>尚未建立</Tag>}
+    </Space>
+    {document && <div className="repair-document-meta">
       <Typography.Text type="secondary">{document.authorName} · {date(document.updatedAt)}</Typography.Text>
-      {inspection && <>
+      {inspection && <Space wrap>
         <Tag color={inspectionReviewCurrent(document) ? document.review?.decision==='DECLINE'?'orange':'green' : 'orange'}>{inspectionReviewCurrent(document) ? `客服${document.review?.decision==='DECLINE'?'拒修':'確認'}檢修 v${document.revision}` : '目前方案待客服確認'}</Tag>
         <Typography.Text type="secondary">{document.review ? `${document.review.name} · 確認檢修 v${document.review.inspectionRevision} · ${date(document.review.confirmedAt)}${inspectionReviewCurrent(document) ? '' : '（非目前已提交版次）'}` : '尚無客服確認紀錄'}</Typography.Text>
-      </>}
-    </> : <Tag>尚未建立</Tag>}
-  </Space>
+      </Space>}
+    </div>}
+  </div>
+}
+
+function DocumentSection({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  return <section className="repair-document-section" aria-label={title}>
+    <div className="repair-document-section-heading">
+      <Typography.Title level={5}>{title}</Typography.Title>
+      {description && <Typography.Paragraph type="secondary">{description}</Typography.Paragraph>}
+    </div>
+    <div className="repair-document-section-body">{children}</div>
+  </section>
 }
 
 function CheckFields({ editable, passing = false, title = '檢測項目' }: { editable: boolean; passing?: boolean; title?: string }) {
   return <Form.List name="checks" rules={[{ validator: (_, value) => Array.isArray(value) && value.length > 0 ? Promise.resolve() : Promise.reject(new Error('請至少填寫一項檢測')) }]}>
     {(fields, { add, remove }, { errors }) => <>
-      {fields.map((field, index) => <Card key={field.key} size="small" title={`${title} ${index + 1}`} style={{ marginBottom: 12 }}
+      {fields.map((field, index) => <Card key={field.key} className="repair-document-check" size="small" title={`${title} ${index + 1}`} style={{ marginBottom: 12 }}
         extra={editable ? <Button size="small" type="text" danger onClick={() => remove(field.name)}>移除</Button> : undefined}>
         <Row gutter={16}>
           <Col xs={24} sm={16}><Form.Item name={[field.name, 'name']} label="項目名稱" rules={requiredText('請填寫測試項目名稱')}><Input maxLength={160} /></Form.Item></Col>
@@ -239,10 +254,10 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
     } finally { saving.current = false; setBusy(null) }
   }
 
-  const buttons = (kind: 'inspection' | 'repair', editable: boolean) => editable ? <Space wrap>
+  const buttons = (kind: 'inspection' | 'repair', editable: boolean) => editable ? <div className="repair-document-actions"><Space wrap>
     <Button disabled={!!busy} loading={busy === `${kind}:DRAFT`} onClick={() => void save(kind, 'DRAFT')}>保存草稿</Button>
     <Button type="primary" disabled={!!busy} loading={busy === `${kind}:SUBMITTED`} onClick={() => void save(kind, 'SUBMITTED')}>提交{kind === 'inspection' ? '檢修單' : '維修單'}</Button>
-  </Space> : <Typography.Text type="secondary">唯讀：只有本人簽收的維修師，能在可作業階段填寫此單。</Typography.Text>
+  </Space><Typography.Text type="secondary">草稿可稍後續填；提交會保存新的文件版次。</Typography.Text></div> : <div className="repair-document-actions"><Typography.Text type="secondary">唯讀：只有本人簽收的維修師，能在可作業階段填寫此單。</Typography.Text></div>
 
   type Snapshot = { repairInspection?: RepairDocument<InspectionData> | null; repairReport?: RepairDocument<RepairData> | null }
   const versions = new Map<string, { kind: 'inspection' | 'repair'; document: RepairDocument; recordedAt: string }>()
@@ -258,18 +273,22 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
   }
   const history = [...versions.entries()].sort(([, first], [, second]) => Date.parse(second.document.updatedAt) - Date.parse(first.document.updatedAt))
 
-  return <div>
+  return <div className="repair-documents">
     {contextHolder}
-    <Space wrap style={{ marginBottom: 12 }}><Typography.Text strong>本人檢修與維修紀錄</Typography.Text><Tag>案件版本 {item.version}</Tag></Space>
-    <Alert type="info" showIcon style={{ marginBottom: 16 }} message={customerRepair ? '保存草稿不代表提交。檢修單保存新版本後須重新取得客服方案確認；原版本與確認紀錄保留在歷程。' : '退貨庫存整新為公司內部作業，提交及更正均保留版本；交回仍須檢修與維修版次一致、複驗通過。'} />
+    <Space wrap className="repair-documents-header"><Typography.Text strong>本人檢修與維修紀錄</Typography.Text><Tag>案件版本 {item.version}</Tag></Space>
     {!ownSigned && <Alert type="warning" showIcon style={{ marginBottom: 16 }} message="目前為唯讀；認領不等於本人已簽收。工作單由有編輯權且已簽收、保管此物件的維修師填寫。" />}
     {failure && <Alert type="error" showIcon style={{ marginBottom: 16 }} message={failure} />}
+    <Collapse className="repair-document-guidance" size="small" items={[{ key: 'guidance', label: '工作單、版本與估價說明', children: <>
+      <Typography.Paragraph>{customerRepair ? '保存草稿不代表提交。檢修單保存新版本後須重新取得客服方案確認；原版本與確認紀錄保留在歷程。' : '退貨庫存整新為公司內部作業，提交及更正均保留版本；交回仍須檢修與維修版次一致、複驗通過。'}</Typography.Paragraph>
+      <Typography.Paragraph>{customerRepair ? 'ERP 客服確認的是本版處理方案；顧客同意與收款仍以售後來源放行為準。' : '公司退貨庫存整新不套用顧客維修的客服方案確認、顧客同意或收款放行。'}</Typography.Paragraph>
+      <Typography.Paragraph>{customerRepair ? '此處是維修師估價，不是客服正式報價。顧客同意不等於入帳；付費案件須由客服完成同意與會計入帳確認後，通知開工。' : '估價僅作公司內部整新處置紀錄，不是對客報價，也不執行付款或庫存異動。'}</Typography.Paragraph>
+    </> }]} />
     <Tabs items={[
       { key: 'inspection', label: '檢修單', forceRender: true, children: <>
         <DocumentHeading document={item.repairInspection} title="檢修單" inspection={customerRepair} />
-        <Typography.Paragraph type="secondary">{customerRepair ? 'ERP 客服確認的是本版處理方案；顧客同意與收款仍以售後來源放行為準。' : '公司退貨庫存整新不套用顧客維修的客服方案確認、顧客同意或收款放行。'}</Typography.Paragraph>
-        <Space wrap style={{ marginBottom: 16 }}><Button icon={<PrinterOutlined />} disabled={!item.repairInspection || !!busy} onClick={() => printDocument(item, 'inspection', message)}>列印內部檢修單</Button><Typography.Text type="secondary">列印已保存版本；不含未保存修改。</Typography.Text></Space>
+        <div className="repair-document-tools"><Typography.Text type="secondary">列印已保存版本；不含未保存修改。</Typography.Text><Button icon={<PrinterOutlined />} disabled={!item.repairInspection || !!busy} onClick={() => printDocument(item, 'inspection', message)}>列印內部檢修單</Button></div>
         <Form name={`repair-inspection-${item.id}`} form={inspectionForm} layout="vertical" initialValues={inspectionInitial} onValuesChange={() => onDirtyChange?.(true)} disabled={!canInspect || !!busy}>
+          <DocumentSection title="故障與檢測" description="記錄收到的問題、測試環境及逐項觀察。">
           <Form.Item name="complaint" label="客訴／故障描述" rules={requiredText()}><Input.TextArea rows={3} maxLength={2000} showCount /></Form.Item>
           <Row gutter={16}>
             <Col xs={24} sm={12}><Form.Item name="reproduction" label="故障重現情況" rules={[{ required: true }]}><Select options={options(REPRODUCTION)} /></Form.Item></Col>
@@ -277,6 +296,8 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
           </Row>
           <Form.Item name="testConditions" label="測試條件／設備／參考基準" rules={requiredText()}><Input.TextArea rows={2} maxLength={2000} showCount placeholder="記錄實際測試環境與機種檢測基準；未測請註明原因。" /></Form.Item>
           <CheckFields editable={canInspect && !busy} />
+          </DocumentSection>
+          <DocumentSection title="診斷與估價" description={customerRepair ? '填寫處理方案與內部費用建議，交客服審核正式報價。' : '填寫公司內部整新方案與估價紀錄。'}>
           <Form.Item name="diagnosis" label="診斷與原因判斷" rules={requiredText()}><Input.TextArea rows={3} maxLength={2000} showCount placeholder="原因未確認時，記錄現有證據與尚待排除項目。" /></Form.Item>
           <Row gutter={16}>
             <Col xs={24} sm={12}><Form.Item name="plan" label="建議處理方式" rules={[{ required: true }]}><Select options={options(PLANS)} /></Form.Item></Col>
@@ -290,19 +311,22 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
             <Typography.Paragraph type="secondary">SKU 與全新品／合格整新品品況會隨方案版次一併送客服確認。方案改變必須重新提交與確認；原件與替換件實際資料另在維修單留存。</Typography.Paragraph>
           </>}
           <Form.Item name="planNote" label="建議方案與處理範圍" rules={requiredText()}><Input.TextArea rows={2} maxLength={2000} showCount /></Form.Item>
-          <Alert type="info" showIcon style={{ marginBottom: 16 }} message={customerRepair ? '此處是維修師估價，不是客服正式報價。顧客同意不等於入帳；付費案件須由客服完成同意與會計入帳確認後，通知開工。' : '估價僅作公司內部整新處置紀錄，不是對客報價，也不執行付款或庫存異動。'} />
           <Form.Item name="estimateAmount" label="內部估價金額" rules={[{ required: fee === 'PAID', type: 'number', min: fee === 'PAID' ? 0.01 : 0, max: 10000000, message: '付費建議需正數估價；金額最多 10,000,000' }]}><InputNumber min={0} max={10000000} precision={2} style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="estimateNote" label="估價項目／範圍／費用說明" rules={fee === 'PAID' ? requiredText('付費建議請填寫估價項目') : []}><Input.TextArea rows={2} maxLength={2000} showCount /></Form.Item>
+          </DocumentSection>
           {buttons('inspection', canInspect)}
         </Form>
       </> },
       { key: 'repair', label: '維修單', forceRender: true, children: <>
         <DocumentHeading document={item.repairReport} title="維修單" />
-        <Space wrap style={{ marginBottom: 16 }}><Button icon={<PrinterOutlined />} disabled={!item.repairReport || !!busy} onClick={() => printDocument(item, 'repair', message)}>列印內部維修單</Button><Typography.Text type="secondary">列印已保存版本；維修單保留依據的檢修版次。</Typography.Text></Space>
+        <div className="repair-document-tools"><Typography.Text type="secondary">列印已保存版本；維修單保留依據的檢修版次。</Typography.Text><Button icon={<PrinterOutlined />} disabled={!item.repairReport || !!busy} onClick={() => printDocument(item, 'repair', message)}>列印內部維修單</Button></div>
         {item.repairReport && item.repairReport.inspectionRevision !== item.repairInspection?.revision && <Alert type="warning" showIcon style={{ marginBottom: 16 }} message="維修單與目前檢修版次不一致" description="請依目前已提交的檢修單重新提交維修單，確認處置內容及複驗結果後才能交回。" />}
-        <Alert type="info" showIcon style={{ marginBottom: 16 }} message="只記錄實際執行內容。替換請如實填寫替換；不得捏造原機修理紀錄。總複驗未通過可以留單，仍不能交回收發室。" />
         <Form name={`repair-report-${item.id}`} form={repairForm} layout="vertical" initialValues={repairInitial} onValuesChange={() => onDirtyChange?.(true)} disabled={!canReport || !!busy}>
-          <Form.Item name="outcome" label="實際處置" rules={[{ required: true }]}><Select options={options(OUTCOMES)} /></Form.Item>
+          <DocumentSection title="實際處置" description="只記錄實際執行內容。替換請如實填寫替換；不得捏造原機修理紀錄。">
+          <Row gutter={16}>
+            <Col xs={24} sm={12}><Form.Item name="outcome" label="實際處置" rules={[{ required: true }]}><Select options={options(OUTCOMES)} /></Form.Item></Col>
+            <Col xs={24} sm={12}><Form.Item name="laborMinutes" label="實際工時（分鐘）" rules={[{ required: true, type: 'integer', min: 0, max: 100000 }]}><InputNumber min={0} max={100000} precision={0} style={{ width: '100%' }} /></Form.Item></Col>
+          </Row>
           <Form.Item name="workPerformed" label="實際施工／替換內容" rules={requiredText()}><Input.TextArea rows={3} maxLength={4000} showCount /></Form.Item>
           {outcome === 'FACTORY_REPAIRED' && <>
             <Form.Item name="factoryReference" label="原廠委修單號（依送修紀錄）" rules={requiredText('請保留原廠送修時的同一委修单號')}><Input maxLength={200} readOnly /></Form.Item>
@@ -328,9 +352,10 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
             <Form.Item name="originalDisposition" label={`原件去向（原件 SN：${item.serialNumber || '未提供'}）`} rules={requiredText()}><Input.TextArea rows={2} maxLength={1000} showCount /></Form.Item>
             <Form.Item name="inventoryReference" label="庫存預留關聯" extra="由合格庫存選取填入。預留與正式出庫分開；完成複驗並交回時後端核對本版方案後才過帳。原件入庫另依合格檢驗程序處理。"><Input maxLength={200} /></Form.Item>
           </>}
+          </DocumentSection>
+          <DocumentSection title="實際使用零件">
           <Form.List name="parts">{(fields, { add, remove }) => <>
-            <Typography.Paragraph strong>實際使用零件</Typography.Paragraph>
-            {fields.map((field, index) => <Card key={field.key} size="small" title={`零件 ${index + 1}`} style={{ marginBottom: 12 }}
+            {fields.map((field, index) => <Card key={field.key} className="repair-document-part" size="small" title={`零件 ${index + 1}`} style={{ marginBottom: 12 }}
               extra={canReport && !busy ? <Button type="text" size="small" danger onClick={() => remove(field.name)}>移除</Button> : undefined}>
               <Row gutter={16}>
                 <Col xs={24} sm={10}><Form.Item name={[field.name, 'name']} label="名稱" rules={requiredText()}><Input maxLength={160} /></Form.Item></Col>
@@ -341,11 +366,13 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
             {canReport && !busy && <Button block type="dashed" disabled={fields.length >= 50} onClick={() => add({ name: '', sku: '', quantity: 1 })} style={{ marginBottom: 20 }}>新增實際零件</Button>}
             {!fields.length && <Typography.Paragraph type="secondary">沒有登記使用零件。</Typography.Paragraph>}
           </>}</Form.List>
-          <Form.Item name="laborMinutes" label="實際工時（分鐘）" rules={[{ required: true, type: 'integer', min: 0, max: 100000 }]}><InputNumber min={0} max={100000} precision={0} style={{ width: '100%' }} /></Form.Item>
+          </DocumentSection>
+          <DocumentSection title="修後複驗" description="總複驗未通過可以留單，仍不能交回收發室。">
           <CheckFields editable={canReport && !busy} passing={qc === 'PASS'} title="修後／替換件複驗項目" />
           <Form.Item name="qcResult" label="總複驗結果" rules={[{ required: true }]}><Select options={options(RESULTS)} /></Form.Item>
           <Form.Item name="qcNotes" label="複驗說明與異常" rules={requiredText()}><Input.TextArea rows={2} maxLength={2000} showCount /></Form.Item>
           <Form.Item name="deliveredAccessories" label="交付配件（沒有也請註明）" rules={requiredText()}><Input.TextArea rows={2} maxLength={1000} showCount /></Form.Item>
+          </DocumentSection>
           {buttons('repair', canReport)}
         </Form>
       </> },

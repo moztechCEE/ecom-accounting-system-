@@ -106,7 +106,11 @@ test('full repair page keeps dispatched refusal history consistent with readonly
   const open = async id => {
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/__repair-dispatched-page?item=${id}`);
     const drawer = page.locator('.ant-drawer-open');
+    await drawer.getByText('案件資料與實物保管', { exact: true }).click();
     await drawer.getByText('目前實物保管', { exact: true }).waitFor();
+    await drawer.getByText('退回原件與原廠作業', { exact: true }).click();
+    await drawer.getByText('交接與處理歷程', { exact: true }).click();
+    await drawer.getByText('查看核對條件與客服進度', { exact: true }).click();
     return drawer;
   };
   for (const plan of ['RETURN', 'REPAIR', 'REPLACE', 'FACTORY']) for (const refusal of [true, false]) {
