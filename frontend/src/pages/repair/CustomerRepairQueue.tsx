@@ -15,7 +15,7 @@ import type { RepairMessage } from './repair-feedback';
 /** Native departmental acceptance; source customer consent and finance remain separate. */
 export default function CustomerRepairQueue({entityId,onDirtyChange}:{entityId:string;onDirtyChange?:(dirty:boolean)=>void}) {
   const {modal,message,contextHolder}=useRepairFeedback();
-  const confirmDiscard=useCallback(()=>new Promise<boolean>(resolve=>modal.confirm({title:'客服回覆尚未保存',content:'離開會放棄目前回覆，請先保存或確認放棄。',okText:'放棄未保存回覆',cancelText:'保留回覆',maskClosable:false,onOk:()=>{resolve(true);},onCancel:()=>{resolve(false);}})),[modal]);
+  const confirmDiscard=useCallback(()=>new Promise<boolean>(resolve=>modal.confirm({title:'回覆尚未儲存',content:'要放棄修改並離開嗎？',okText:'放棄修改',cancelText:'繼續編輯',maskClosable:false,onOk:()=>{resolve(true);},onCancel:()=>{resolve(false);}})),[modal]);
   const {user}=useAuth();
   const permitted=hasPermission(user,'mailroom:review')&&mailroomEnabled();
   const [rows,setRows]=useState<RepairItem[]>([]);const [total,setTotal]=useState(0);
@@ -55,16 +55,15 @@ export default function CustomerRepairQueue({entityId,onDirtyChange}:{entityId:s
   async function select(id?:string){if(dirty.current){if(!await confirmDiscard())return;setDirty(false);}setSelected(id);}
   if(!permitted||!entityId)return null;
   const item=detail?.entityId===entityId?detail.item:undefined;
-  return <Card title="維修轉客服交辦" extra={<Button icon={<ReloadOutlined />} loading={busy} onClick={()=>void load()}>更新交辦</Button>} style={{marginBottom:20}}>
+  return <Card title="維修交辦" extra={<Button icon={<ReloadOutlined />} loading={busy} onClick={()=>void load()}>更新</Button>} style={{marginBottom:20}}>
     {contextHolder}
-    <Typography.Paragraph type="secondary">由本人接手後，核對維修師已提交的方案版次，記錄同意方案或拒修結果。對客報價、顧客同意及款項入帳仍依下方售後主單處理。</Typography.Paragraph>
     <Input.Search allowClear maxLength={200} placeholder="案件號／品名／SN" aria-label="搜尋維修轉客服交辦" onSearch={value=>{setPage(1);setSearch(value);}} style={{maxWidth:350,marginBottom:16}} />
     {failure&&<Alert type="error" showIcon message={failure} style={{marginBottom:12}} />}
     <Table<RepairItem> rowKey="id" dataSource={rows} loading={busy} scroll={{x:650}} pagination={{current:page,total,pageSize:30,showSizeChanger:false,onChange:setPage}} locale={{emptyText:<Empty description="目前沒有待客服處理的維修交辦" />}} columns={[
       {title:'案件／產品',key:'case',render:(_,value)=><><Button type="link" onClick={()=>void select(value.id)}>{value.receipt.sourceNumber || value.label}</Button><div>{value.productName} · {value.serialNumber || '未提供 SN'}</div></>},
       {title:'交辦',key:'csr',render:(_,value)=><Space direction="vertical" size={2}><Tag>{value.repairWorkflow?.csr?CSR_STATUS[value.repairWorkflow.csr.status]:'等待接手'}</Tag><Typography.Text type="secondary">檢修 v{value.repairInspection?.revision || '—'}</Typography.Text></Space>},
       {title:'實物保管',key:'custody',render:(_,item)=>{const custody=currentItemCustody(item);return <>{custody.holder}{custody.notice&&<div>{custody.notice}</div>}</>;}},
-      {title:'',key:'open',render:(_,value)=><Button onClick={()=>void select(value.id)}>檢視與接手</Button>},
+      {title:'',key:'open',render:(_,value)=><Button onClick={()=>void select(value.id)}>查看</Button>},
     ]} />
     <Drawer rootClassName="repair-workbench-drawer" title="客服維修交辦" width={940} open={!!selected} onClose={()=>void select()} destroyOnHidden>
       <Spin spinning={detailBusy}>{item?<>
@@ -80,6 +79,7 @@ function CustomerReview({item,entityId,userId,onDirty,onSaved,feedback}:{item:Re
   const running=useRef(false);const operation=useRef<{body:string;requestId:string}|null>(null);
   const custody=currentItemCustody(item);
   const csr=item.repairWorkflow?.csr;
+  const quoteRevision=item.release?.releaseInfo?.quoteRevision;
   const canClaim=item.allowedWorkflowActions?.includes('claim_customer')===true;
   const canResolve=item.allowedWorkflowActions?.includes('resolve_customer')===true && csr?.status==='ACCEPTED' && csr.ownerId===userId;
   async function act(action:'claim_customer'|'resolve_customer',values?:{decision:'APPROVE'|'DECLINE';note:string}) {
@@ -88,7 +88,7 @@ function CustomerReview({item,entityId,userId,onDirty,onSaved,feedback}:{item:Re
     try{
       const payload:Omit<RepairWorkflowCommand,'requestId'>={entityId,expectedVersion:item.version,action,...(values?{inspectionRevision:item.repairInspection?.revision,decision:values.decision,note:values.note.trim()}: {})};
       const body=JSON.stringify(payload);if(operation.current?.body!==body)operation.current={body,requestId:crypto.randomUUID()};
-      await repairService.workflow(item.id,{...payload,requestId:operation.current.requestId});saved=true;onDirty(false);await onSaved();message.success(action==='claim_customer'?'已由本人接手交辦':'已保存本版方案回覆；來源顧客同意與款項仍需另外核對');
+      await repairService.workflow(item.id,{...payload,requestId:operation.current.requestId});saved=true;onDirty(false);await onSaved();message.success(action==='claim_customer'?'已接手交辦':'已儲存方案回覆');
     }catch(error){setFailure(saved?'回覆已保存，但重新載入失敗。請重新開啟案件核對。':errorText(error));}finally{running.current=false;setBusy(false);}
   }
   return <Space direction="vertical" size={16} style={{width:'100%'}}>
@@ -99,14 +99,13 @@ function CustomerReview({item,entityId,userId,onDirty,onSaved,feedback}:{item:Re
       {key:'custody',label:'目前實物保管',children:`${custody.holder} / ${custody.location}`},
       ...(custody.transferred?[{key:'linked',label:'換機出庫',children:[custody.notice,custody.reference,custody.status].filter(Boolean).join(' · ')}]:[]),
     ]} />
-    <Alert showIcon type="info" message="方案確認、顧客同意及款項入帳分開記錄" description="此處接手及回覆維修師方案，不代替對客報價、顧客確認或會計收款。拒修結果回到維修師，按未修原件退回。" />
     {failure&&<Alert type="error" showIcon message={failure} />}
-    {canClaim&&<Button type="primary" loading={busy} onClick={()=>void act('claim_customer')}>本人接手此交辦</Button>}
-    {canResolve&&!sourceQuoteConsentCurrent(item.release?.releaseInfo)&&<Alert type="warning" showIcon message="來源尚未確認顧客同意目前報價版" description="請先在售後主單完成正式報價及顧客確認，再重新載入交辦。免費也須確認；此處不代填顧客同意。拒修結果可另外記錄。" />}
+    {canClaim&&<Button type="primary" loading={busy} onClick={()=>void act('claim_customer')}>接手交辦</Button>}
+    {canResolve&&!sourceQuoteConsentCurrent(item.release?.releaseInfo)&&<Alert type="warning" showIcon message={quoteRevision==null?'尚未建立報價':`報價 v${quoteRevision} 尚未取得顧客同意`} />}
     {canResolve&&<Form name={`customer-repair-review-${item.id}`} form={form} layout="vertical" onValuesChange={()=>onDirty(true)} onFinish={values=>void act('resolve_customer',values)} disabled={busy}>
-      <Form.Item name="decision" label={`檢修 v${item.repairInspection?.revision} 方案結果`} rules={[{required:true,message:'請選擇此版方案結果'}]}><Radio.Group options={[{value:'APPROVE',label:'確認本版處理方案（來源已確認顧客同意）',disabled:!sourceQuoteConsentCurrent(item.release?.releaseInfo)},{value:'DECLINE',label:'拒修／不進行維修'}]} /></Form.Item>
-      <Form.Item name="note" label="審核原因、聯繫方式與結果依據" rules={[{required:true,whitespace:true,message:'請記錄方案審核與確認依據'}]}><Input.TextArea rows={3} maxLength={2000} showCount /></Form.Item>
-      <Button type="primary" htmlType="submit" loading={busy}>保存本版方案回覆</Button>
+      <Form.Item name="decision" label={`檢修 v${item.repairInspection?.revision} 方案結果`} rules={[{required:true,message:'請選擇此版方案結果'}]}><Radio.Group options={[{value:'APPROVE',label:'同意方案',disabled:!sourceQuoteConsentCurrent(item.release?.releaseInfo)},{value:'DECLINE',label:'拒修'}]} /></Form.Item>
+      <Form.Item name="note" label="回覆依據" rules={[{required:true,whitespace:true,message:'請記錄方案審核與確認依據'}]}><Input.TextArea rows={3} maxLength={2000} showCount /></Form.Item>
+      <Button type="primary" htmlType="submit" loading={busy}>儲存回覆</Button>
     </Form>}
     <RepairDocuments feedback={message} item={item} entityId={entityId} onSaved={()=>void onSaved()} />
   </Space>;

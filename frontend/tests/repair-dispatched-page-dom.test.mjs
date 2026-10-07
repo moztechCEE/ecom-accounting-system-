@@ -34,8 +34,11 @@ const base={id:'synthetic-item',label:'SYNTHETIC',productName:'合成測試品',
       checks:[{name:'合成檢測',result:'PASS',observation:'合成觀察'}],diagnosis:'合成診斷',causeStatus:'UNKNOWN',plan:'RETURN',
       planNote:'合成原件退回',feeSuggestion:'FREE',estimateNote:''}},
   repairReport:null,repairWorkflow:{release:{purpose:'RETURN_UNREPAIRED',note:'合成拒修原件品況及配件'}},
-  history:[],deliverySummary:[{target:'AFTER_SALES',status:'DELIVERED',count:1},
-    {target:'AI_CUSTOMER_SERVICE',status:'DELIVERED',count:1}]};
+  history:[{id:'synthetic-history',action:'dispatch',actorName:'合成收發員',createdAt:'2026-10-08T03:00:00Z',
+    toStatus:'DISPATCHED',version:12,note:'合成實際寄出紀錄；承運商 SYN-CARRIER／單號 SYN-OUT-001'}],
+  deliverySummary:[{target:'AFTER_SALES',status:'DELIVERED',count:1},
+    {target:'AI_CUSTOMER_SERVICE',status:'DELIVERED',count:1},
+    {target:'AFTER_SALES',status:'PENDING',count:2},{target:'AI_CUSTOMER_SERVICE',status:'FAILED',count:3}]};
 const rows={};
 for(const plan of ['RETURN','REPAIR','REPLACE','FACTORY']) for(const refusal of [true,false]) {
   const id=plan+'-'+(refusal?'refusal':'completed');
@@ -48,7 +51,7 @@ for(const plan of ['RETURN','REPAIR','REPLACE','FACTORY']) for(const refusal of 
   rows[id]=item;
 }
 for(const [id,status] of [['waiting','WAITING_RETURN_ACCEPTANCE'],['ready','READY_FOR_DISPATCH']]) {
-  rows[id]=structuredClone(base);rows[id].id=id;rows[id].status=status;rows[id].physicalCustody='MAILROOM';
+  rows[id]=structuredClone(base);rows[id].id=id;rows[id].status=status;rows[id].statusLabel=status==='READY_FOR_DISPATCH'?'待寄回':'待收發簽收';rows[id].physicalCustody='MAILROOM';
 }
 window.__repairPageFixture={rows,posts:[],queries:[]};
 export const API_URL='/offline-api';
@@ -96,21 +99,35 @@ test('full repair page keeps dispatched refusal history consistent with readonly
   const browser = await chromium.launch({ executablePath, headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
-  const errors = [], external = [];
+  const errors = [], external = [], networkWrites = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/*', route => {
-    const host = new URL(route.request().url()).hostname;
+    const request=route.request();
+    const host = new URL(request.url()).hostname;
+    if(!['GET','HEAD'].includes(request.method())){networkWrites.push(request.method()+' '+request.url());return route.abort();}
     if (host === '127.0.0.1') return route.continue();
     external.push(host); return route.abort();
   });
+  const assertCleanCopy = async drawer => {
+    const text=await drawer.innerText();
+    for(const note of ['以下「系統已接收」是既有進度的回執','不代表本次寄出已同步，也不代表已通知顧客',
+      '以上依目前保存資料與本人作業條件顯示','同步成功表示對方系統已收到事件',
+      '客服接手及方案回覆各有獨立紀錄','工作單、版本與估價說明'])
+      assert(!text.includes(note),'static instruction must be removed even after disclosure: '+note);
+    assert.equal(await page.locator('.mailroom-heading .ant-typography-secondary').count(),0);
+    assert.equal(await drawer.locator('.repair-readiness-compact .ant-alert-info').count(),0,'terminal records have no routine informational banner');
+  };
   const open = async id => {
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/__repair-dispatched-page?item=${id}`);
     const drawer = page.locator('.ant-drawer-open');
     await drawer.getByText('案件資料與實物保管', { exact: true }).click();
     await drawer.getByText('目前實物保管', { exact: true }).waitFor();
-    await drawer.getByText('退回原件與原廠作業', { exact: true }).click();
+    await drawer.getByText('原件與原廠作業', { exact: true }).click();
     await drawer.getByText('交接與處理歷程', { exact: true }).click();
-    await drawer.getByText('查看核對條件與客服進度', { exact: true }).click();
+    await drawer.locator('.repair-readiness-compact .ant-collapse-header').filter({hasText:'客服與放行'}).click();
+    assert.match(await drawer.locator('.repair-detail-identity').innerText(),/SYNTHETIC-CASE/);
+    assert.match(await drawer.locator('.repair-detail-identity').innerText(),/合成測試品/);
+    assert.equal(await drawer.locator('textarea[id$="_complaint"]').inputValue(),'合成故障');
     return drawer;
   };
   for (const plan of ['RETURN', 'REPAIR', 'REPLACE', 'FACTORY']) for (const refusal of [true, false]) {
@@ -120,34 +137,48 @@ test('full repair page keeps dispatched refusal history consistent with readonly
     assert(!text.includes('後續由收發室本人簽收並安排原件寄回'));
     assert(!text.includes('等待指定收發室人員本人簽收'));
     assert(!text.includes('收發室已本人簽收，待安排原件寄回'));
-    assert.match(text, /既有進度同步與交接歷程/);
-    assert.match(text, /不代表本次寄出已同步，也不代表已通知顧客/);
-    assert.match(text, /售後系統 · 系統已接收 \(1\)/);
-    assert.match(text, /AI 客服系統 · 系統已接收 \(1\)/);
+    assert.match(text, /同步紀錄/);
+    assert.match(text, /售後系統 · 歷史系統已接收 \(1\)/);
+    assert.match(text, /AI 客服系統 · 歷史系統已接收 \(1\)/);
+    assert.match(text, /售後系統 · 歷史待發送 \(2\)/);
+    assert.match(text, /AI 客服系統 · 歷史發送失敗 \(3\)/);
+    assert.match(text, /合成實際寄出紀錄；承運商 SYN-CARRIER／單號 SYN-OUT-001/);
+    assert(!text.includes('顧客已收件'));assert(!text.includes('案件已結案'));
+    await assertCleanCopy(drawer);
     const query = await page.evaluate(() => window.__repairPageFixture.queries[0]);
     assert.equal(query.entityId, 'synthetic-company');
     assert.equal(query.view, 'repair');
     assert.equal(query.repairScope, 'records');
     if (refusal) {
-      assert.match(text, /原件已交物流寄回；依收發室寄出紀錄核對/);
-      assert.match(text, /不標成已修理或已替換/);
+      assert.match(text, /未修原件 · 已交物流寄回/);
+      assert.match(text, /已保存處置\s*未記錄/);
       assert.equal(await page.evaluate(id => window.__repairPageFixture.rows[id].repairReport, `${plan}-refusal`), null);
     } else {
       await drawer.getByRole('tab', { name: '維修單', exact: true }).click();
-      await drawer.getByText('合成已保存處置', { exact: true }).waitFor();
+      await drawer.locator('textarea[id$="_workPerformed"]').waitFor();
+      assert.equal(await drawer.locator('textarea[id$="_workPerformed"]').inputValue(),'合成已保存處置');
       assert.match(await drawer.innerText(), /原機實際維修/);
       assert.equal(await page.evaluate(id => window.__repairPageFixture.rows[id].repairReport.data.workPerformed,
         `${plan}-completed`), '合成已保存處置');
     }
-    for (const name of ['認領此案件','本人確認實物簽收','開始檢測','開始維修','開始替換處理','提交客服確認',
-      '複驗完成，交回收發室','收發室簽收處理完成品','原件未修退回收發室','儲存草稿','提交檢修單','提交維修單']) {
+    for (const name of ['認領案件','簽收實物','開始檢測','開始維修','開始換機','送客服確認',
+      '交回收發室','退回原件','登記送廠','登記原廠收件','登記原廠寄回','取消原廠處理','簽收返還件',
+      '認領此案件','本人確認實物簽收','開始替換處理','提交客服確認','複驗完成，交回收發室',
+      '收發室簽收處理完成品','原件未修退回收發室','儲存草稿','保存草稿','提交檢修單','提交維修單']) {
       assert.equal(await drawer.getByRole('button', { name, exact: true }).count(), 0, `${plan}: ${name}`);
     }
+    assert.equal(await drawer.locator('.repair-document-actions button').count(),0,'terminal documents expose no save or submit authority');
+    assert.equal(await drawer.locator('textarea[id$="_complaint"]').isDisabled(),true);
+    await assertCleanCopy(drawer);
     assert.equal(await page.evaluate(() => window.__repairPageFixture.posts.length), 0);
   }
   const ready = await open('ready');
-  assert.match(await ready.innerText(), /收發室已本人簽收，待安排原件寄回；尚未交運/);
+  assert.match(await ready.innerText(), /未修原件 · 待收發寄回/);
+  assert(!((await ready.innerText()).includes('未修原件 · 已交物流寄回')));
+  await assertCleanCopy(ready);
   const waiting = await open('waiting');
-  assert.match(await waiting.innerText(), /等待指定收發室人員本人簽收；實物保管仍以目前登錄持有人為準/);
-  assert.deepEqual(errors, []); assert.deepEqual(external, []);
+  assert.match(await waiting.innerText(), /未修原件 · 待收發簽收/);
+  assert(!((await waiting.innerText()).includes('未修原件 · 已交物流寄回')));
+  await assertCleanCopy(waiting);
+  assert.deepEqual(errors, []); assert.deepEqual(external, []);assert.deepEqual(networkWrites,[]);
 });

@@ -116,17 +116,26 @@ test('actual repair document forms preserve their save, print, validation and pe
     await inspection.getByRole('button', { name: /提交檢修單/ }).click();
     await inspection.getByText('付費建議需正數估價；金額最多 10,000,000', { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => window.__documentsProbe.posts.length), 0);
+    await inspection.getByLabel('客訴／故障描述', { exact: true }).fill('');
+    await inspection.getByRole('button', { name: /提交檢修單/ }).click();
+    await inspection.getByText('請填寫此項；未測或沒有配件也請明確註記', { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.__documentsProbe.posts.length), 0);
     await inspection.getByLabel('客訴／故障描述', { exact: true }).fill('UNSAVED new complaint');
     assert.equal(await page.evaluate(() => window.__documentsProbe.dirty), true);
-    await page.getByRole('button', { name: /列印內部檢修單/ }).click();
+    await page.getByRole('button', { name: /列印/ }).click();
     assert.equal(await page.evaluate(() => window.__documentsProbe.printed), 1);
-    assert.match(await page.evaluate(() => window.__documentsProbe.html), /SAVED complaint/);
-    assert.doesNotMatch(await page.evaluate(() => window.__documentsProbe.html), /UNSAVED new complaint/);
+    const inspectionPrint = await page.evaluate(() => window.__documentsProbe.html);
+    assert.match(inspectionPrint, /<h1>內部檢修單<\/h1>/);
+    assert.match(inspectionPrint, /SYNTHETIC-INS · v2 · 已提交/);
+    assert.match(inspectionPrint, /SAVED complaint/);
+    assert.doesNotMatch(inspectionPrint, /UNSAVED new complaint/);
+    assert.doesNotMatch(inspectionPrint, /僅供內部作業；本單為已保存版本/);
+    assert.doesNotMatch(inspectionPrint, /此單不是對客維修報告/);
     await inspection.getByLabel('內部估價金額', { exact: true }).fill('125.5');
     await inspection.getByRole('button', { name: /提交檢修單/ }).click();
     await page.waitForFunction(() => window.__documentsProbe.posts.length === 1);
-    assert.equal(await inspection.getByRole('button', { name: '保存草稿', exact: true }).isDisabled(), true);
-    assert.equal(await page.getByRole('button', { name: /列印內部檢修單/ }).isDisabled(), true);
+    assert.equal(await inspection.getByRole('button', { name: '儲存草稿', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: /列印/ }).isDisabled(), true);
     const post = await page.evaluate(() => window.__documentsProbe.posts[0]);
     assert.equal(post.path, '/repair-workbench/items/synthetic/inspection');
     assert.equal(post.body.expectedVersion, 7);
@@ -137,6 +146,7 @@ test('actual repair document forms preserve their save, print, validation and pe
     assert.match(post.body.requestId, /^[a-f0-9-]{36}$/);
     await page.evaluate(() => window.__documentsProbe.release());
     await page.waitForFunction(() => window.__documentsProbe.saved === 1 && window.__documentsProbe.dirty === false);
+    await page.getByText('檢修單已提交', { exact: true }).waitFor();
   });
 
   await t.test('repair preserves visible revision warning and actual outcome, parts and reinspection payload', async () => {
@@ -148,7 +158,16 @@ test('actual repair document forms preserve their save, print, validation and pe
       assert.equal(await repair.getByRole('heading', { name: title, exact: true }).count(), 1);
     }
     await repair.getByLabel('實際施工／替換內容', { exact: true }).fill('UNSAVED actual work');
-    await repair.getByRole('button', { name: '保存草稿', exact: true }).click();
+    await page.getByRole('button', { name: /列印/ }).click();
+    const repairPrint = await page.evaluate(() => window.__documentsProbe.html);
+    assert.match(repairPrint, /<h1>內部維修單<\/h1>/);
+    assert.match(repairPrint, /SYNTHETIC-REP · v1 · 已提交/);
+    assert.match(repairPrint, /SAVED work/);
+    assert.match(repairPrint, /SYNTHETIC-PART/);
+    assert.doesNotMatch(repairPrint, /UNSAVED actual work/);
+    assert.doesNotMatch(repairPrint, /僅供內部作業；本單為已保存版本/);
+    assert.doesNotMatch(repairPrint, /此單不是對客維修報告/);
+    await repair.getByRole('button', { name: '儲存草稿', exact: true }).click();
     await page.waitForFunction(() => window.__documentsProbe.posts.length === 2);
     const post = await page.evaluate(() => window.__documentsProbe.posts[1]);
     assert.equal(post.path, '/repair-workbench/items/synthetic/repair-report');
@@ -161,22 +180,24 @@ test('actual repair document forms preserve their save, print, validation and pe
     assert.equal(post.body.data.qcResult, 'PASS');
     await page.evaluate(() => window.__documentsProbe.release());
     await page.waitForFunction(() => window.__documentsProbe.saved === 2 && window.__documentsProbe.dirty === false);
+    await page.getByText('草稿已儲存', { exact: true }).waitFor();
   });
 
   await t.test('readonly warning remains visible and disables the form without granting ownership', async () => {
     await page.goto(url + '?readonly=1');
-    await page.getByText('目前為唯讀；認領不等於本人已簽收。工作單由有編輯權且已簽收、保管此物件的維修師填寫。', { exact: true }).waitFor();
+    await page.getByText('唯讀：需本人簽收與編輯權限。', { exact: true }).waitFor();
     assert.equal(await page.getByLabel('客訴／故障描述', { exact: true }).isDisabled(), true);
     assert.equal(await page.evaluate(() => window.__documentsProbe.posts.length), 0);
   });
 
-  await t.test('save failure remains visible outside folded guidance and retains the unsaved draft', async () => {
+  await t.test('save failure remains visible and retains the unsaved draft', async () => {
     await page.goto(url);
     await page.getByLabel('內部估價金額', { exact: true }).fill('125.5');
     await page.evaluate(() => window.__documentsProbe.fail = true);
     await page.getByRole('button', { name: /提交檢修單/ }).click();
     await page.getByText('暫時無法完成，請稍後重試。', { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => window.__documentsProbe.dirty), true);
+    assert.equal(Number(await page.getByLabel('內部估價金額', { exact: true }).inputValue()), 125.5);
     assert.equal(await page.getByRole('button', { name: /提交檢修單/ }).isDisabled(), false);
   });
 

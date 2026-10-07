@@ -116,8 +116,7 @@
 .repair-detail-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; overflow-wrap: anywhere; }
 .repair-detail-summary .ant-tag { margin: 0; max-width: 100%; white-space: normal; }
 .repair-detail-summary .ant-typography { font-size: 12px; min-width: 0; }
-.repair-readiness-compact .ant-card-body { padding: 12px; }
-.repair-readiness-compact .ant-collapse-header { padding-bottom: 0 !important; font-size: 12px; }
+.repair-readiness-compact .ant-collapse-header { font-size: 12px; }
 .repair-documents-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; align-items: start; }
 .repair-editor-main, .repair-editor-sidebar { min-width: 0; }
 .repair-editor-main { padding: 24px; background: white; border: 1px solid #e7ebf0; border-radius: 12px; }
