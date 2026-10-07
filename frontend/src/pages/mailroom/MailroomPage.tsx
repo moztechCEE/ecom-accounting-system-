@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -54,6 +54,9 @@ import { MAILROOM_QUEUES, mailroomNextStep, needsInspectionPhoto, matchesMailroo
 import SourceCasePicker from "./SourceCasePicker";
 import RepairDocuments from "../repair/RepairDocuments";
 import { useRepairFeedback } from "../repair/repair-feedback";
+import { createRepairNavigationGate, useRepairNavigationGuard } from "../repair/repair-navigation";
+import { createMailroomDiscardConfirmation, mailroomDraftFingerprint, type MailroomDraftState } from "./mailroom-draft";
+import { loadPendingDispatch, savePendingDispatch, clearPendingDispatch, type PendingDispatch } from "./mailroom-dispatch-pending";
 import type { RepairMessage } from "../repair/repair-feedback";
 import type { RepairItem } from "../repair/repair-model";
 import { currentItemCustody } from "./item-custody";
@@ -108,7 +111,7 @@ export default function MailroomPage({
 }: {
   mode?: "mailroom" | "repair" | "mine";
 }) {
-  const { message, contextHolder } = useRepairFeedback();
+  const { modal, message, contextHolder } = useRepairFeedback();
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const entityId =
@@ -129,6 +132,45 @@ export default function MailroomPage({
     [createCategory, setCreateCategory] = useState("REPAIR"),
     [arrivalRevision, setArrivalRevision] = useState(0);
   const selectedId = params.get("itemId");
+  const drafts = useRef({ receipt: { dirty: false, busy: false } as MailroomDraftState, detail: { dirty: false, busy: false } as MailroomDraftState });
+  const dirty = useRef(false);
+  const updateDraft = useCallback((scope: "receipt" | "detail", state: MailroomDraftState) => {
+    drafts.current[scope] = state;
+    dirty.current = Object.values(drafts.current).some(value => value.dirty || value.busy);
+  }, []);
+  const updateReceiptDraft = useCallback((state: MailroomDraftState) => updateDraft("receipt", state), [updateDraft]);
+  const updateDetailDraft = useCallback((state: MailroomDraftState) => updateDraft("detail", state), [updateDraft]);
+  const confirmDiscard = useMemo(() => createMailroomDiscardConfirmation(
+    () => ({ dirty: dirty.current, busy: Object.values(drafts.current).some(value => value.busy) }),
+    () => new Promise<boolean>(resolve => modal.confirm({
+      title: "目前收發工作有未保存的修改",
+      content: Object.values(drafts.current).some(value => value.persistedDispatch)
+        ? "送出結果尚未確認。取消會保留內容、照片與原操作識別碼；寄出請求已獨立保留，離開後回來須先核對回執或沿原請求重試，勿重登寄出。"
+        : Object.values(drafts.current).some(value => value.uncertain)
+          ? "送出結果尚未確認。取消會保留本頁內容與原操作識別碼；離開後請先查核原操作，不要重新登記同一物件。"
+          : "離開或切換會放棄未保存的欄位及照片。請先保存，或確認放棄本次草稿。",
+      okText: "放棄未保存修改並繼續", cancelText: "取消，保留草稿", maskClosable: false,
+      onOk: () => { resolve(true); }, onCancel: () => { resolve(false); },
+    })),
+    () => message.info("正在保存或讀取照片，請等待完成後再切換。"),
+  ), [modal, message]);
+  useRepairNavigationGuard(dirty, confirmDiscard);
+  const navigationGate = useMemo(() => createRepairNavigationGate(dirty, confirmDiscard), [confirmDiscard]);
+  const guardChange = useCallback((change: () => void) => {
+    if (Object.values(drafts.current).some(value => value.busy)) { void confirmDiscard(); return; }
+    navigationGate(() => {
+      drafts.current = { receipt: { dirty: false, busy: false }, detail: { dirty: false, busy: false } };
+      dirty.current = false;
+      change();
+    });
+  }, [navigationGate, confirmDiscard]);
+  function startReceipt(category: string, source?: Source) {
+    guardChange(() => {
+      const next = new URLSearchParams(params); next.delete("itemId"); setParams(next);
+      setCreateSource(source); setCreateCategory(category); setCreate(true);
+    });
+  }
+  useEffect(() => { if (selectedId) setCreate(false); }, [selectedId]);
   const enabled = mailroomEnabled();
   const canMail = hasPermission(user, "mailroom:update"),
     canRepair = hasPermission(user, "repair_workbench:update"),
@@ -241,10 +283,14 @@ export default function MailroomPage({
     };
   }, [entityId, enabled, user]);
   function openItem(id?: string) {
-    const next = new URLSearchParams(params);
-    if (id) next.set("itemId", id);
-    else next.delete("itemId");
-    setParams(next);
+    if (id === (selectedId || undefined) && !create) return;
+    guardChange(() => {
+      setCreate(false);
+      const next = new URLSearchParams(params);
+      if (id) next.set("itemId", id);
+      else next.delete("itemId");
+      setParams(next);
+    });
   }
   if (!enabled)
     return (
@@ -304,16 +350,12 @@ export default function MailroomPage({
           </Button>
           {mode === "mailroom" && hasPermission(user, "mailroom:create") ? (
             <Space wrap>
-            <Button onClick={() => { setCreateSource(undefined); setCreateCategory("LETTER"); setCreate(true); }}>登記信件／包裹</Button>
+            <Button onClick={() => startReceipt("LETTER")}>登記信件／包裹</Button>
             <Button
               type="primary"
               size="large"
               icon={<PlusOutlined />}
-              onClick={() => {
-                setCreateSource(undefined);
-                setCreateCategory("REPAIR");
-                setCreate(true);
-              }}
+              onClick={() => startReceipt("REPAIR")}
             >
               登記售後收件
             </Button>
@@ -358,8 +400,7 @@ export default function MailroomPage({
           revision={arrivalRevision}
           canCreate={hasPermission(user, "mailroom:create")}
           onReceive={(source) => {
-            setCreateSource(source);
-            setCreate(true);
+            startReceipt(source.type, source);
           }}
         />
       ) : null}
@@ -526,6 +567,8 @@ export default function MailroomPage({
           {detail ? (
             <ItemDetail
               feedback={message}
+              guardChange={guardChange}
+              onDraftChange={updateDetailDraft}
               key={detail.id + ":" + detail.version}
               item={detail}
               userId={user?.id || ""}
@@ -545,7 +588,10 @@ export default function MailroomPage({
         </Spin>
       </Drawer>
       <ReceiptDrawer
+        key={entityId + ":" + mode}
         feedback={message}
+        guardChange={guardChange}
+        onDraftChange={updateReceiptDraft}
         initialSource={createSource}
         initialCategory={createCategory}
         open={create}
@@ -811,6 +857,8 @@ function AwaitingCases({
 }
 function ItemDetail({
   feedback,
+  guardChange,
+  onDraftChange,
   item,
   userId,
   entityId,
@@ -822,6 +870,8 @@ function ItemDetail({
   onSaved,
 }: {
   feedback: RepairMessage;
+  guardChange: (change: () => void) => void;
+  onDraftChange: (state: MailroomDraftState) => void;
   item: Item;
   userId: string;
   entityId: string;
@@ -840,6 +890,57 @@ function ItemDetail({
   const [tablet, setTablet] = useState(false);
   const [form] = Form.useForm();
   const operation = useRef<{ body: string; id: string } | undefined>(undefined);
+  const baseline = useRef("");
+  const mounted = useRef(true);
+  const draftAction = useRef<string | undefined>(undefined);
+  const photoDraft = useRef<string[]>([]);
+  const working = useRef(false);
+  const unknown = useRef(false);
+  const persistedDispatch = useRef(false);
+  const [uncertain, setUncertain] = useState(false);
+  const [pendingConflict, setPendingConflict] = useState(false);
+  const scope = { entityId, userId, itemId: item.id };
+  function publishDraft() {
+    onDraftChange({ dirty: unknown.current || photoDraft.current.length > 0 || (!!draftAction.current && baseline.current !== mailroomDraftFingerprint(form.getFieldsValue(true))), busy: working.current, uncertain: unknown.current, persistedDispatch: persistedDispatch.current });
+  }
+  function setWorking(value: boolean) { working.current = value; if (mounted.current) { setBusy(value); publishDraft(); } }
+  function clearDraft() {
+    operation.current = undefined; unknown.current = false; draftAction.current = undefined; persistedDispatch.current = false; setUncertain(false); setPendingConflict(false);
+    photoDraft.current = []; setPhotos([]);
+    baseline.current = mailroomDraftFingerprint(form.getFieldsValue(true));
+    onDraftChange({ dirty: false, busy: working.current });
+  }
+  function clearDispatchReceipt() {
+    try { clearPendingDispatch(sessionStorage, scope); }
+    catch { message.warning("寄出回執已核對，但本機待核對紀錄清理失敗；回來時仍須核對此原回執。"); }
+  }
+  function restoreDispatch() {
+    if (item.receipt.category !== "REPAIR") return false;
+    try {
+      const pending = loadPendingDispatch(sessionStorage, scope);
+      if (!pending) return false;
+      if (matchesDispatchReceipt(item, pending, userId)) { clearDispatchReceipt(); return false; }
+      const { requestId: id, ...body } = pending;
+      operation.current = { body: JSON.stringify(body), id };
+      unknown.current = true; persistedDispatch.current = true; draftAction.current = "dispatch"; setUncertain(true); setAction("dispatch");
+      form.setFieldsValue(body);
+      baseline.current = mailroomDraftFingerprint(form.getFieldsValue(true));
+      setPendingConflict(item.version !== pending.expectedVersion || !canDispatch(item, userId, canMail));
+      onDraftChange({ dirty: true, busy: false, uncertain: true, persistedDispatch: true });
+      return true;
+    } catch {
+      setFailure("無法讀取本機待核對寄出紀錄；請人工核對原操作，暫停新的寄出。");
+      setPendingConflict(true); unknown.current = true; draftAction.current = "dispatch"; setUncertain(true); setAction("dispatch");
+      onDraftChange({ dirty: true, busy: false, uncertain: true });
+      return true;
+    }
+  }
+  const restoreAtMount = useRef(restoreDispatch);
+  useEffect(() => {
+    mounted.current = true;
+    restoreAtMount.current();
+    return () => { mounted.current = false; onDraftChange({ dirty: false, busy: false }); };
+  }, [onDraftChange]);
   const mine = item.nextUserId === userId,
     ownRepair =
       canRepair && item.repairOwnerId === userId && item.custodianId === userId;
@@ -964,7 +1065,12 @@ function ItemDetail({
         ? p.mailroom
         : p.repair,
   );
-  function choose(value: string) {
+  function choose(value?: string) {
+    if (value === action) return;
+    guardChange(() => {
+    clearDraft();
+    if (value === "dispatch" && restoreDispatch()) return;
+    draftAction.current = value;
     setAction(value);
     setFailure("");
     setPhotos([]);
@@ -986,8 +1092,12 @@ function ItemDetail({
           }
         : {}),
     });
+    baseline.current = mailroomDraftFingerprint(form.getFieldsValue(true));
+    });
   }
   async function save() {
+    if (working.current || (action === "dispatch" && pendingConflict)) return;
+    setWorking(true);
     try {
       const values = await form.validateFields();
       if (needsInspectionPhoto(action, item.evidence, photos)) {
@@ -1001,15 +1111,32 @@ function ItemDetail({
         expectedVersion: item.version,
         ...(photos.length ? { evidence: photos } : {}),
       });
-      if (operation.current?.body !== body)
+      if (!unknown.current && operation.current?.body !== body)
         operation.current = { body, id: requestId() };
-      setBusy(true);
       setFailure("");
+      if (action === "dispatch") {
+        try {
+          savePendingDispatch(sessionStorage, scope, { ...JSON.parse(operation.current!.body), requestId: operation.current!.id } as PendingDispatch);
+          persistedDispatch.current = true;
+        } catch {
+          unknown.current = true; setUncertain(true); publishDraft();
+          setFailure("無法安全保存本次寄出操作識別碼，尚未送出。請保留操作識別碼：" + operation.current!.id);
+          return;
+        }
+      }
       await api.post("/mailroom/items/" + item.id + "/actions", {
-        ...JSON.parse(body),
-        requestId: operation.current.id,
+        ...JSON.parse(operation.current!.body),
+        requestId: operation.current!.id,
       });
+      if (action === "dispatch") {
+        const latest = await api.get<Item>("/mailroom/items/" + encodeURIComponent(item.id), { params: { entityId } });
+        const request = { ...JSON.parse(operation.current!.body), requestId: operation.current!.id };
+        if (!matchesDispatchReceipt(latest.data, request, userId))
+          throw new Error("伺服器回應後仍未取得本次精確寄出回執，請核對原操作");
+        clearDispatchReceipt();
+      }
       message.success(action === "dispatch" ? "已保存寄出紀錄；售後／AI 寄出同步待串接" : "已更新進度並建立交接紀錄");
+      clearDraft(); setWorking(false);
       setAction(undefined);
       await onSaved();
     } catch (e) {
@@ -1018,21 +1145,43 @@ function ItemDetail({
           const latest = await api.get<Item>("/mailroom/items/" + encodeURIComponent(item.id), { params: { entityId } });
           const request = { ...JSON.parse(operation.current.body), requestId: operation.current.id };
           if (matchesDispatchReceipt(latest.data, request, userId)) {
+            clearDispatchReceipt(); clearDraft(); setWorking(false);
             setAction(undefined);
             message.success("已從本次寄出回執核對操作成功；售後／AI 寄出同步待串接");
             await onSaved();
             return;
           }
+          setPendingConflict(latest.data.version !== request.expectedVersion || !canDispatch(latest.data, userId, canMail));
         } catch { /* Preserve the exact request ID for explicit safe retry. */ }
       }
       if (action === "send_intake" && operation.current && !(e as { errorFields?: unknown }).errorFields) {
-        try { const latest = await mailroomIntake.item(entityId, item.id); const request = { ...JSON.parse(operation.current.body), requestId: operation.current.id }; if (matchesIntakeReceipt(latest, request, userId)) { setAction(undefined); message.success("已從本次交辦回執核對操作成功"); await onSaved(); return; } } catch { /* Keep the same command/request for explicit reconciliation or exact retry. */ }
+        try { const latest = await mailroomIntake.item(entityId, item.id); const request = { ...JSON.parse(operation.current.body), requestId: operation.current.id }; if (matchesIntakeReceipt(latest, request, userId)) { clearDraft(); setWorking(false); setAction(undefined); message.success("已從本次交辦回執核對操作成功"); await onSaved(); return; } } catch { /* Keep the same command/request for explicit reconciliation or exact retry. */ }
       }
-      if (!(e as { errorFields?: unknown }).errorFields)
-        setFailure(errorText(e));
+      if (!(e as { errorFields?: unknown }).errorFields) {
+        const rejected = (e as { response?: { status?: number } }).response?.status;
+        if (operation.current && (action === "dispatch" || !rejected || rejected >= 500)) { unknown.current = true; setUncertain(true); publishDraft(); }
+        setFailure(action === "dispatch" && rejected && rejected < 500 ? "伺服器拒絕本次寄出：" + errorText(e) + "。原操作已保留，請核對回執或處理阻擋原因。" : errorText(e));
+      }
     } finally {
-      setBusy(false);
+      setWorking(false);
     }
+  }
+  async function reconcileDispatch() {
+    if (!operation.current || working.current) return;
+    setWorking(true);
+    try {
+      const latest = await api.get<Item>("/mailroom/items/" + encodeURIComponent(item.id), { params: { entityId } });
+      const request = { ...JSON.parse(operation.current.body), requestId: operation.current.id };
+      if (!matchesDispatchReceipt(latest.data, request, userId)) {
+        setPendingConflict(latest.data.version !== request.expectedVersion || !canDispatch(latest.data, userId, canMail));
+        setFailure("尚未找到本次寄出回執；版本或保管不符時請人工核對，勿建立新的寄出。");
+        return;
+      }
+      clearDispatchReceipt(); clearDraft(); setWorking(false); setAction(undefined);
+      message.success("已核對原寄出回執；售後／AI 寄出同步待串接");
+      await onSaved();
+    } catch (error) { setFailure(errorText(error)); }
+    finally { setWorking(false); }
   }
   const custody = currentItemCustody(item);
   const canTablet =
@@ -1207,10 +1356,10 @@ function ItemDetail({
               type="primary"
               size="large"
               disabled={busy}
-              onClick={() => {
-                setAction(undefined);
-                setTablet(true);
-              }}
+              onClick={() => guardChange(() => {
+                clearDraft(); setAction(undefined); setTablet(true);
+                onDraftChange({ dirty: false, busy: true });
+              })}
             >
               平板交接簽收
             </Button>
@@ -1241,14 +1390,15 @@ function ItemDetail({
         open={tablet}
         item={item}
         entityId={entityId}
-        onClose={() => setTablet(false)}
+        onClose={() => { setTablet(false); onDraftChange({ dirty: false, busy: false }); }}
         onSaved={onSaved}
       />
       {action ? (
         <Card size="small" title={ACTIONS[action]} className="mailroom-action">
           <Form
             form={form}
-            disabled={busy}
+            disabled={busy || uncertain}
+            onValuesChange={publishDraft}
             layout="vertical"
             preserve={false}
             initialValues={{
@@ -1259,6 +1409,7 @@ function ItemDetail({
             }}
           >
             {action === "dispatch" && <>
+              {uncertain && <Alert type="warning" showIcon message={pendingConflict ? "原寄出請求需人工核對，不能重新送出" : "已保留原寄出請求；只可核對回執或以原請求重試"} description={"操作識別碼：" + (operation.current?.id || "本機紀錄待核對")} action={<Button disabled={busy} onClick={() => void reconcileDispatch()}>核對本次寄出回執</Button>} />}
               <Alert type="info" showIcon message="確認已實際交給物流，才登記寄出" description="這裡填寄回顧客的物流資料。入件單號另外保存；寄出不代表顧客已收到。若是換機，請點清實際替換品與 SN。" />
               <div className="mailroom-form-grid">
                 {field("寄出物流公司", "carrier", true)}
@@ -1447,7 +1598,7 @@ function ItemDetail({
                 }
                 rules={[{ required: true, message: "請指定接收人" }, { validator: (_, value) => !value || targetPeople.some(person => person.id === value) ? Promise.resolve() : Promise.reject(new Error("請重新選擇目前可指派的同仁")) }]}
               >
-                <RecipientPicker key={action} people={targetPeople} label={identifyGeneral ? "收件同仁" : "接收人"} />
+                <RecipientPicker disabled={busy || uncertain} key={action} people={targetPeople} label={identifyGeneral ? "收件同仁" : "接收人"} />
               </Form.Item>
             ) : null}
             {["accept", "accept_return", "move"].includes(action)
@@ -1533,6 +1684,7 @@ function ItemDetail({
                   accept="image/png,image/jpeg,image/webp"
                   capture="environment"
                   showUploadList={false}
+                  disabled={busy || uncertain}
                   beforeUpload={async (file) => {
                     if (photos.length >= 4 || file.size > 1024 * 1024) {
                       message.error("最多 4 張，每張 1 MB 以下");
@@ -1546,13 +1698,17 @@ function ItemDetail({
                       message.error("請選擇 PNG、JPEG 或 WebP 實物照片");
                       return false;
                     }
+                    if (working.current) return false;
+                    setWorking(true);
                     try {
                       const bitmap = await createImageBitmap(file);
                       bitmap.close();
                     } catch {
                       message.error("照片無法讀取，請重新拍攝或選擇有效照片");
+                      setWorking(false);
                       return false;
                     }
+                    try {
                     const result = await new Promise<string>(
                       (resolve, reject) => {
                         const reader = new FileReader();
@@ -1561,7 +1717,10 @@ function ItemDetail({
                         reader.readAsDataURL(file);
                       },
                     );
-                    setPhotos((old) => [...old, result].slice(0, 4));
+                    photoDraft.current = [...photoDraft.current, result].slice(0, 4);
+                    setPhotos(photoDraft.current); publishDraft();
+                    } catch { message.error("照片讀取失敗，請重新選擇。"); }
+                    finally { setWorking(false); }
                     return false;
                   }}
                 >
@@ -1573,9 +1732,11 @@ function ItemDetail({
                       <Image width={72} src={src} alt={`待上傳照片 ${i + 1}`} />
                       <Button
                         size="small"
-                        onClick={() =>
-                          setPhotos((old) => old.filter((_, j) => i !== j))
-                        }
+                        disabled={busy || uncertain}
+                        onClick={() => {
+                          photoDraft.current = photoDraft.current.filter((_, j) => i !== j);
+                          setPhotos(photoDraft.current); publishDraft();
+                        }}
                       >
                         移除
                       </Button>
@@ -1589,10 +1750,10 @@ function ItemDetail({
             ) : null}
             <Paragraph type="secondary" style={{ marginTop: 16 }}>{action === "dispatch" ? "保存實際交運紀錄；後續顧客收件與售後結案另行追蹤。" : "儲存會記錄本次核對或交辦；接收人仍須本人確認實物，通知不代表已簽收。"}</Paragraph>
             <Space style={{ marginTop: 20 }}>
-              <Button type="primary" loading={busy} onClick={() => void save()}>
+              <Button type="primary" loading={busy} disabled={action === "dispatch" && pendingConflict} onClick={() => void save()}>
                 確認儲存
               </Button>
-              <Button disabled={busy} onClick={() => setAction(undefined)}>
+              <Button disabled={busy} onClick={() => choose(undefined)}>
                 取消
               </Button>
             </Space>
@@ -1676,6 +1837,8 @@ function sourcePhysicalRows(source: Source) {
 }
 function ReceiptDrawer({
   feedback,
+  guardChange,
+  onDraftChange,
   initialSource,
   initialCategory,
   open,
@@ -1685,6 +1848,8 @@ function ReceiptDrawer({
   onCreated,
 }: {
   feedback: RepairMessage;
+  guardChange: (change: () => void) => void;
+  onDraftChange: (state: MailroomDraftState) => void;
   initialSource?: Source;
   initialCategory: string;
   open: boolean;
@@ -1700,6 +1865,15 @@ function ReceiptDrawer({
     [error, setError] = useState("");
   const category = Form.useWatch("category", form);
   const operation = useRef<{ body: string; id: string } | undefined>(undefined);
+  const baseline = useRef("");
+  const working = useRef(false);
+  const unknown = useRef(false);
+  const [uncertain, setUncertain] = useState(false);
+  function publishDraft() { onDraftChange({ dirty: open && (unknown.current || baseline.current !== mailroomDraftFingerprint(form.getFieldsValue(true))), busy: working.current, uncertain: unknown.current }); }
+  function setWorking(value: boolean) { working.current = value; setBusy(value); publishDraft(); }
+  const clearDraft = useCallback(() => { operation.current = undefined; unknown.current = false; setUncertain(false); baseline.current = mailroomDraftFingerprint(form.getFieldsValue(true)); onDraftChange({ dirty: false, busy: false }); }, [form, onDraftChange]);
+  function close() { guardChange(() => { clearDraft(); onClose(); }); }
+  useEffect(() => () => onDraftChange({ dirty: false, busy: false }), [onDraftChange]);
   const isCase = ["REPAIR", "RETURN"].includes(category);
   const isCorrespondence = ["LETTER", "PARCEL"].includes(category);
   useEffect(() => {
@@ -1716,10 +1890,14 @@ function ReceiptDrawer({
       );
       setError("");
       setSource(initialSource);
-      operation.current = undefined;
+      clearDraft();
+    } else {
+      clearDraft();
     }
-  }, [open, form, initialSource, initialCategory]);
+  }, [open, form, initialSource, initialCategory, clearDraft]);
   async function submit() {
+    if (working.current) return;
+    setWorking(true);
     try {
       const values = await form.validateFields();
       const caseCategory = ["REPAIR", "RETURN"].includes(values.category);
@@ -1750,20 +1928,24 @@ function ReceiptDrawer({
           }),
         ),
       });
-      if (operation.current?.body !== body)
+      if (!unknown.current && operation.current?.body !== body)
         operation.current = { body, id: requestId() };
-      setBusy(true);
       setError("");
       const result = await api.post("/mailroom/receipts", {
-        ...JSON.parse(body),
-        requestId: operation.current.id,
+        ...JSON.parse(operation.current!.body),
+        requestId: operation.current!.id,
       });
       message.success("已登記收件");
+      clearDraft(); setWorking(false);
       onCreated(result.data.itemIds[0]);
     } catch (e) {
-      if (!(e as { errorFields?: unknown }).errorFields) setError(errorText(e));
+      if (!(e as { errorFields?: unknown }).errorFields) {
+        const rejected = (e as { response?: { status?: number } }).response?.status;
+        if (operation.current && (!rejected || rejected >= 500)) { unknown.current = true; setUncertain(true); publishDraft(); }
+        setError(errorText(e));
+      }
     } finally {
-      setBusy(false);
+      setWorking(false);
     }
   }
   return (
@@ -1771,9 +1953,7 @@ function ReceiptDrawer({
       title="登記收件"
       width="min(700px, 100vw)"
       open={open}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      onClose={close}
       forceRender
       footer={
         <Space>
@@ -1785,7 +1965,7 @@ function ReceiptDrawer({
           >
             登記並建立待辦
           </Button>
-          <Button disabled={busy} onClick={onClose}>
+          <Button disabled={busy} onClick={close}>
             取消
           </Button>
         </Space>
@@ -1794,6 +1974,8 @@ function ReceiptDrawer({
       <Form
         form={form}
         layout="vertical"
+        disabled={busy || uncertain}
+        onValuesChange={publishDraft}
         preserve
         initialValues={
           initialSource
@@ -1842,6 +2024,7 @@ function ReceiptDrawer({
                     category: selected.type,
                     items: sourcePhysicalRows(selected),
                   });
+                  publishDraft();
                 }}
               />
             </Form.Item>
@@ -1855,7 +2038,7 @@ function ReceiptDrawer({
             label="收件部門／同仁"
             rules={[{ required: true, message: "請選擇收件人" }, { validator: (_, value) => !value || people.some(person => person.id === value) ? Promise.resolve() : Promise.reject(new Error("請重新選擇目前可指派的同仁")) }]}
           >
-            <RecipientPicker key={category} people={people} label="收件同仁" />
+            <RecipientPicker disabled={busy || uncertain} key={category} people={people} label="收件同仁" />
           </Form.Item>
         ) : (
           <Alert
@@ -1905,6 +2088,7 @@ function ReceiptDrawer({
                       <Button
                         type="text"
                         danger
+                        disabled={busy || uncertain}
                         onClick={() => remove(item.name)}
                       >
                         移除
@@ -1956,7 +2140,7 @@ function ReceiptDrawer({
                 type="dashed"
                 block
                 icon={<PlusOutlined />}
-                disabled={fields.length >= 50 || category === "UNMATCHED"}
+                disabled={busy || uncertain || fields.length >= 50 || category === "UNMATCHED"}
                 onClick={() => add({ productName: "" })}
               >
                 增加一件實物

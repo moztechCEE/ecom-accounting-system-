@@ -4,11 +4,26 @@
 import {
   ConflictException,
   ForbiddenException,
+  type INestApplication,
   ValidationPipe,
 } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
 import { MailroomService } from './mailroom.service';
 import { MailroomCommandDto } from './mailroom.dto';
 import { type Actor } from './mailroom.contract';
+import { MailroomController } from './mailroom.controller';
+import { MailroomIntakeService } from './mailroom-intake.service';
+
+// Match all production ValidationPipe options in main.ts, including conversion.
+function mainValidationPipe() {
+  return new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+    transformOptions: { enableImplicitConversion: true },
+  });
+}
 
 function fixture(replaced = false) {
   const actor: Actor = {
@@ -449,11 +464,7 @@ describe('native mailroom dispatch transaction', () => {
   });
   it('HTTP DTO accepts dispatch logistics but rejects forged timestamp and overlength tracking', async () => {
     const { input } = fixture();
-    const pipe = new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    });
+    const pipe = mainValidationPipe();
     const metadata = { type: 'body' as const, metatype: MailroomCommandDto };
     await expect(pipe.transform(input, metadata)).resolves.toMatchObject({
       action: 'dispatch',
@@ -466,4 +477,141 @@ describe('native mailroom dispatch transaction', () => {
       pipe.transform({ ...input, trackingNumber: 'x'.repeat(101) }, metadata),
     ).rejects.toThrow();
   });
+});
+
+describe('production-pipe HTTP physical confirmation', () => {
+  const originalEnabled = process.env.MAILROOM_ENABLED;
+  let current: ReturnType<typeof fixture>;
+  let app: INestApplication;
+  let command: jest.SpyInstance;
+  beforeEach(async () => {
+    process.env.MAILROOM_ENABLED = 'true';
+    current = fixture();
+    current.sync.deliverPending.mockResolvedValue(undefined);
+    command = jest.spyOn(current.service, 'command');
+    const module = await Test.createTestingModule({
+      controllers: [MailroomController],
+      providers: [
+        { provide: MailroomService, useValue: current.service },
+        { provide: MailroomIntakeService, useValue: {} },
+      ],
+    }).compile();
+    app = module.createNestApplication();
+    // Authentication is synthetic; the real controller, DTO, pipe and service run.
+    app.use(
+      (req: { user?: { id: string } }, _res: unknown, next: () => void) => {
+        req.user = { id: 'clerk' };
+        next();
+      },
+    );
+    app.setGlobalPrefix('api/v1');
+    app.useGlobalPipes(mainValidationPipe());
+    await app.init();
+  });
+  afterEach(async () => {
+    await app?.close();
+    if (originalEnabled === undefined) delete process.env.MAILROOM_ENABLED;
+    else process.env.MAILROOM_ENABLED = originalEnabled;
+  });
+
+  it.each([
+    ['boolean true', true],
+    ['boolean false', false],
+    ['string false', 'false'],
+    ['string true', 'true'],
+    ['number zero', 0],
+    ['number one', 1],
+    ['null', null],
+    ['omitted', undefined],
+    ['array', [true]],
+    ['object', { confirmed: true }],
+  ])('dispatch accepts only explicit true: %s', async (_label, value) => {
+    const body: Record<string, unknown> = {
+      ...current.input,
+      expectedVersion: '7',
+    };
+    delete body.confirmedItems;
+    if (value !== undefined) body.confirmedItems = value;
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/mailroom/items/piece/actions')
+      .send(body);
+
+    if (value === true) {
+      expect(response.status).toBe(201);
+      expect(current.row.status).toBe('DISPATCHED');
+      expect(current.actions).toHaveLength(1);
+      expect(command).toHaveBeenCalledWith(
+        'clerk',
+        'piece',
+        expect.objectContaining({ confirmedItems: true, expectedVersion: 7 }),
+      );
+    } else {
+      expect(response.status).toBe(400);
+      expect(current.row.status).toBe('READY_FOR_DISPATCH');
+      expect(current.row.version).toBe(7);
+      expect(current.actions).toHaveLength(0);
+      expect(current.prisma.mailroomItem.update).not.toHaveBeenCalled();
+      expect(current.prisma.mailroomAction.create).not.toHaveBeenCalled();
+      expect(current.prisma.mailroomDelivery.createMany).not.toHaveBeenCalled();
+      if (typeof value !== 'boolean' && value != null) {
+        expect(command).not.toHaveBeenCalled();
+        expect(response.body.message).toContain(
+          'confirmedItems must be a boolean value',
+        );
+      } else {
+        expect(command).toHaveBeenCalledWith(
+          'clerk',
+          'piece',
+          expect.objectContaining({ expectedVersion: 7 }),
+        );
+        expect(command.mock.calls[0][2].confirmedItems).toBe(value);
+      }
+    }
+    expect(current.gateway.sendToUser).not.toHaveBeenCalled();
+    expect(current.sync.cases).not.toHaveBeenCalled();
+    expect(current.sync.deliverPending).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['accept', true, 'COLLECTED'],
+    ['accept', false, 'WAITING_PICKUP'],
+    ['accept_return', true, 'READY_FOR_DISPATCH'],
+    ['accept_return', false, 'WAITING_RETURN_ACCEPTANCE'],
+  ] as const)(
+    '%s keeps valid boolean %s unchanged',
+    async (action, confirmedItems, expectedStatus) => {
+      current.row.status =
+        action === 'accept' ? 'WAITING_PICKUP' : 'WAITING_RETURN_ACCEPTANCE';
+      current.row.nextUserId = 'clerk';
+      if (action === 'accept') {
+        current.row.recipientId = 'clerk';
+        current.row.receipt.category = 'PARCEL';
+        current.row.receipt.sourceCaseId = null;
+      }
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/mailroom/items/piece/actions')
+        .send({
+          entityId: 'company',
+          requestId: 'acceptance-001',
+          expectedVersion: '7',
+          action,
+          confirmedItems,
+          location: '本人核對位置',
+        });
+      expect(response.status).toBe(confirmedItems ? 201 : 400);
+      expect(current.row.status).toBe(expectedStatus);
+      expect(command).toHaveBeenCalledWith(
+        'clerk',
+        'piece',
+        expect.objectContaining({ confirmedItems, expectedVersion: 7 }),
+      );
+      expect(current.prisma.mailroomItem.update).toHaveBeenCalledTimes(
+        confirmedItems ? 1 : 0,
+      );
+      if (confirmedItems) {
+        expect(current.row.location).toBe('本人核對位置');
+        expect(current.row.custodianId).toBe('clerk');
+      }
+    },
+  );
 });

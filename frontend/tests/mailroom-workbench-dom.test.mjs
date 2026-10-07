@@ -23,7 +23,8 @@ import {createMemoryRouter,RouterProvider} from 'react-router-dom';
 import MailroomPage from '/src/pages/mailroom/MailroomPage.tsx';
 window.__APP_CONFIG__={mailroomEnabled:true};
 const initial=new URL(location.href).searchParams.get('item');
-const router=createMemoryRouter([{path:'/operations/mailroom',element:React.createElement(MailroomPage)}],{initialEntries:['/operations/mailroom?entityId=company'+(initial?'&itemId='+initial:'')]});
+const router=createMemoryRouter([{path:'/operations/mailroom',element:React.createElement(MailroomPage)},{path:'/other',element:React.createElement('h2',null,'其他工作台')}],{initialEntries:['/operations/mailroom?entityId=company'+(initial?'&itemId='+initial:'')]});
+window.mailroomRouter=router;
 createRoot(document.getElementById('root')).render(React.createElement(RouterProvider,{router}));
 `;
 const mockApi = `
@@ -31,7 +32,7 @@ export const API_URL='/offline-api';
 const clone=v=>JSON.parse(JSON.stringify(v));
 const receipt={number:'RECEIPT-1',category:'REPAIR',sourceCaseId:'source',sourceNumber:'DEV-R-1',trackingNumber:'IN-KEEP',carrier:'入件物流',senderLabel:'測試寄件人',receivedAt:'2026-10-08T01:00:00Z'};
 const common={id:'repair',label:'ITEM-1',productName:'合成測試品',sku:'SKU-1',serialNumber:'SN-1',status:'RECEIVED',statusLabel:'已收件，待核對',version:7,matchResult:'PENDING',grade:null,disposition:null,conditionNote:null,location:'收發櫃A',custodianId:'clerk',custodianName:'收發人員',nextUserId:null,nextUserName:null,recipientId:null,repairOwnerId:null,mine:false,evidenceCount:0,evidence:[],physicalCustody:'MAILROOM',declared:{name:'來源測試品',sku:'SKU-1',serialNumber:'SN-1'},receipt,history:[],deliverySummary:[]};
-const state={items:{repair:common,ready:{...clone(common),id:'ready',status:'READY_FOR_DISPATCH',statusLabel:'待安排寄回'},letter:{...clone(common),id:'letter',status:'WAITING_PICKUP',statusLabel:'待同仁簽領',nextUserId:'colleague',nextUserName:'收件同仁',recipientId:'colleague',recipientName:'收件同仁',receipt:{...receipt,category:'LETTER',sourceCaseId:null,sourceNumber:null}},returned:{...clone(common),id:'returned',status:'WAITING_RETURN_ACCEPTANCE',statusLabel:'待收發室簽收',nextUserId:'clerk',nextUserName:'收發人員',custodianId:'tech',custodianName:'技师本人',repairOwnerId:'tech',physicalCustody:'TECHNICIAN'}},calls:[],posts:[],failNext:false,commitThenLose:false};
+const state={items:{repair:common,ready:{...clone(common),id:'ready',status:'READY_FOR_DISPATCH',statusLabel:'待安排寄回'},letter:{...clone(common),id:'letter',status:'WAITING_PICKUP',statusLabel:'待同仁簽領',nextUserId:'colleague',nextUserName:'收件同仁',recipientId:'colleague',recipientName:'收件同仁',receipt:{...receipt,category:'LETTER',sourceCaseId:null,sourceNumber:null}},returned:{...clone(common),id:'returned',status:'WAITING_RETURN_ACCEPTANCE',statusLabel:'待收發室簽收',nextUserId:'clerk',nextUserName:'收發人員',custodianId:'tech',custodianName:'技师本人',repairOwnerId:'tech',physicalCustody:'TECHNICIAN'}},calls:[],posts:[],failNext:false,commitThenLose:false,holdNext:false,rejectNext:false};
 window.mailroomFixture=state;
 const people=[{id:'clerk',name:'收發人員',employeeNo:'M1',department:'行政部',mailroom:true,repair:false},{id:'tech',name:'維修人員',employeeNo:'R1',department:'維修部',mailroom:false,repair:true},{id:'colleague',name:'收件同仁',employeeNo:'C1',department:'客服部',mailroom:false,repair:false}];
 export default {
@@ -39,11 +40,13 @@ export default {
   if(path==='/mailroom/people')return {data:clone(people)};
   if(path==='/mailroom/items')return {data:{items:Object.values(state.items).filter(x=>!config.params?.status||x.status===config.params.status).map(clone),total:config.params?.status?Object.values(state.items).filter(x=>x.status===config.params.status).length:4}};
   if(path.startsWith('/mailroom/items/'))return {data:clone(state.items[path.split('/')[3]])};
-  if(path==='/mailroom/source-cases')return {data:{items:[],nextCursor:null}};
+  if(path==='/mailroom/source-cases')return {data:{items:[{id:'source',number:'DEV-R-1',type:'REPAIR',status:'OPEN',customerLabel:'合成顧客',version:'2026-10-08T01:00:00Z',items:[{id:'source-line',name:'合成來源產品',sku:'SOURCE-SKU',serialNumber:'SOURCE-SN',quantity:1}],expectedQuantity:1,receivedQuantity:0}],nextCursor:null}};
   if(path==='/mailroom/tasks')return {data:[]};
   throw Error('Unexpected mock GET '+path);
  },
  async post(path,body){state.posts.push({path,body:clone(body)});
+  if(state.holdNext){state.holdNext=false;await new Promise(resolve=>state.releasePost=resolve);}
+  if(state.rejectNext){state.rejectNext=false;throw {response:{status:400,data:{message:'合成伺服器拒絕寄出'}}};}
   if(state.failNext){state.failNext=false;throw {response:{data:{message:'合成回應未知，請重試'}}};}
   if(path==='/mailroom/receipts'){const item={...clone(common),id:'created',status:'WAITING_PICKUP',statusLabel:'待同仁簽領',recipientId:body.recipientId,recipientName:'收件同仁',nextUserId:body.recipientId,nextUserName:'收件同仁',productName:body.items[0].productName,receipt:{...receipt,...body,sourceCaseId:null,sourceNumber:null}};state.items.created=item;return {data:{itemIds:['created']}};}
   const item=state.items[path.split('/')[3]];
@@ -57,7 +60,7 @@ export default {
 
 test(
   "real receiving workbench keeps correspondence, photo inspection, physical return and dispatch receipts distinct",
-  { skip: !executablePath && "No preinstalled browser", timeout: 90000 },
+  { skip: !executablePath && "No preinstalled browser", timeout: 150000 },
   async (t) => {
     const virtual = "\0mailroom-workbench-fixture";
     const cacheDir = mkdtempSync(join(tmpdir(), "corely-mailroom-fixture-"));
@@ -151,7 +154,33 @@ test(
         .locator(".ant-select-dropdown:visible")
         .waitFor({ state: "hidden" });
     };
+    const discard = async (keep = true) => {
+      const modal = page.getByRole("dialog").filter({ hasText: "目前收發工作有未保存的修改" });
+      await modal.getByRole("button", { name: keep ? "取消，保留草稿" : "放棄未保存修改並繼續", exact: true }).click();
+      await modal.waitFor({ state: "hidden" });
+    };
+    const closeDrawer = () => drawer().getByRole("button", { name: "Close", exact: true }).click();
+    const changeRoute = () => page.evaluate(() => { void window.mailroomRouter.navigate('/other'); });
+    const pending = () => page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith('corely.mailroom.dispatch.v1:')).map(key => JSON.parse(sessionStorage.getItem(key))));
+
     await go();
+    // Opening defaults is clean; department search without selecting a person remains clean.
+    await page.getByRole("button", { name: "登記信件／包裹", exact: true }).click();
+    await closeDrawer();
+    assert.equal(await page.getByRole("dialog").filter({ hasText: "目前收發工作有未保存的修改" }).count(), 0);
+    await page.waitForFunction(() => !document.querySelector(".ant-drawer-open"));
+    await page.getByRole("button", { name: /登記售後收件$/ }).click();
+    await choose(drawer().getByRole("combobox", { name: "搜尋售後案件", exact: true }), "DEV-R-1");
+    await closeDrawer(); await discard();
+    assert.equal(await drawer().locator('#items_0_productName').inputValue(), "合成來源產品");
+    assert.equal(await drawer().locator('#items_0_sku').inputValue(), "SOURCE-SKU");
+    await changeRoute(); await discard();
+    assert.equal(await drawer().locator('#items_0_serialNumber').inputValue(), "SOURCE-SN");
+    await closeDrawer(); await discard(false);
+    await page.getByRole("button", { name: "登記信件／包裹", exact: true }).click();
+    await choose(drawer().getByRole("combobox", { name: "收件同仁部門", exact: true }), "客服部");
+    await closeDrawer();
+    assert.equal(await page.getByRole("dialog").filter({ hasText: "目前收發工作有未保存的修改" }).count(), 0);
     await page
       .getByRole("button", { name: "待收發室點收", exact: true })
       .click();
@@ -180,10 +209,24 @@ test(
     await drawer().locator('input[id="senderLabel"]').fill("測試公司");
     await drawer().locator('input[id="location"]').fill("信件櫃");
     await drawer().locator('input[id="items_0_productName"]').fill("合成信件");
+    await closeDrawer(); await discard();
+    assert.equal(await drawer().locator('#items_0_productName').inputValue(), "合成信件");
+    assert.equal(await drawer().locator('#senderLabel').inputValue(), "測試公司");
+    assert.equal(await drawer().locator(".mailroom-recipient-person").innerText(), "客服部 · 收件同仁 · C1");
+    await page.evaluate(() => { window.mailroomFixture.holdNext = true; });
     await drawer()
       .getByRole("button", { name: "登記並建立待辦", exact: true })
       .click();
     await page.waitForFunction(() => window.mailroomFixture.posts.length === 1);
+    assert.equal(await drawer().getByRole("combobox", { name: "收件同仁", exact: true }).isDisabled(), true);
+    assert.equal(await drawer().getByRole("combobox", { name: "收件同仁部門", exact: true }).isDisabled(), true);
+    await closeDrawer();
+    await changeRoute();
+    await page.getByText("正在保存或讀取照片，請等待完成後再切換。", { exact: true }).first().waitFor();
+    assert.equal(await page.getByRole("dialog").filter({ hasText: "目前收發工作有未保存的修改" }).count(), 0);
+    assert.equal(await drawer().locator('#items_0_productName').inputValue(), "合成信件");
+    await page.evaluate(() => window.mailroomFixture.releasePost());
+    await page.waitForFunction(() => window.mailroomFixture.items.created);
     const letter = await page.evaluate(
       () => window.mailroomFixture.posts[0].body,
     );
@@ -192,6 +235,8 @@ test(
     assert.equal("sku" in letter.items[0], false);
     assert.equal("serialNumber" in letter.items[0], false);
     assert.equal("department" in letter, false);
+    await changeRoute(); await page.getByRole("heading", { name: "其他工作台", exact: true }).waitFor();
+    assert.equal(await page.getByRole("dialog").filter({ hasText: "目前收發工作有未保存的修改" }).count(), 0);
     await go("repair");
     await drawer()
       .getByRole("button", { name: "核對實收品項", exact: true })
@@ -227,6 +272,14 @@ test(
         mimeType: "image/png",
         buffer: Buffer.from(photo, "base64"),
       });
+    await drawer().getByAltText("待上傳照片 1").waitFor();
+    await closeDrawer(); await discard();
+    await drawer().getByRole("button", { name: "更新存放位置", exact: true }).click(); await discard();
+    assert.equal(await drawer().locator('#note').inputValue(), "實收與來源不符");
+    await drawer().getByAltText("待上傳照片 1").waitFor();
+    await page.evaluate(() => { void window.mailroomRouter.navigate('/operations/mailroom?entityId=company&itemId=ready'); }); await discard();
+    await changeRoute(); await discard();
+    assert.equal(await drawer().locator('#note').inputValue(), "實收與來源不符");
     await drawer().getByAltText("待上傳照片 1").waitFor();
     await drawer()
       .getByRole("button", { name: /確認儲存$/ })
@@ -275,6 +328,7 @@ test(
       .first()
       .waitFor();
     await go("ready");
+    await page.evaluate(() => { void window.mailroomRouter.navigate('/operations/mailroom?entityId=company&itemId=ready&probe=1'); });
     await drawer()
       .getByRole("button", { name: "登記實際寄出", exact: true })
       .first()
@@ -297,23 +351,46 @@ test(
         exact: true,
       })
       .check();
+    await closeDrawer(); await discard();
+    await page.evaluate(() => { void window.mailroomRouter.navigate(-1); }); await discard();
+    await changeRoute(); await discard();
+    assert.equal(await drawer().locator('#trackingNumber').inputValue(), "OUT-NEW");
     await page.evaluate(() => (window.mailroomFixture.failNext = true));
     await drawer()
       .getByRole("button", { name: /確認儲存$/ })
       .click();
     await drawer().getByText("合成回應未知，請重試", { exact: true }).waitFor();
+    const originalUnknown = await page.evaluate(() => window.mailroomFixture.posts[0].body);
+    assert.equal((await pending())[0].command.requestId, originalUnknown.requestId);
+    await closeDrawer(); await discard();
+    await drawer().getByRole("button", { name: "更新存放位置", exact: true }).click(); await discard();
+    await page.evaluate(() => { void window.mailroomRouter.navigate('/operations/mailroom?entityId=company&itemId=repair'); }); await discard();
+    await changeRoute(); await discard();
+    assert.equal(await drawer().locator('#trackingNumber').inputValue(), "OUT-NEW");
+    assert.equal(await drawer().locator('#trackingNumber').isDisabled(), true);
+    await changeRoute(); await discard(false);
+    await page.getByRole("heading", { name: "其他工作台", exact: true }).waitFor();
+    await page.evaluate(() => { void window.mailroomRouter.navigate('/operations/mailroom?entityId=company&itemId=ready'); });
+    await drawer().getByText("已保留原寄出請求；只可核對回執或以原請求重試", { exact: true }).waitFor();
+    assert.equal(await drawer().locator('#trackingNumber').inputValue(), "OUT-NEW");
+    // A real reload drops all React refs and resets the fixture backend, but keeps session pending.
+    page.once('dialog', dialog => dialog.accept());
+    await page.reload();
+    await drawer().getByText("已保留原寄出請求；只可核對回執或以原請求重試", { exact: true }).waitFor();
+    assert.equal((await pending())[0].command.requestId, originalUnknown.requestId);
     await page.evaluate(() => (window.mailroomFixture.commitThenLose = true));
     await drawer()
       .getByRole("button", { name: /確認儲存$/ })
       .click();
     await drawer().getByText("寄出紀錄（實際交運）", { exact: true }).waitFor();
     const posts = await page.evaluate(() => window.mailroomFixture.posts);
-    assert.equal(posts.length, 2);
-    assert.equal(posts[0].body.requestId, posts[1].body.requestId);
-    assert.equal(posts[1].body.expectedVersion, 7);
-    assert.equal(posts[1].body.carrier, "寄出物流");
-    assert.equal("productName" in posts[1].body, false);
-    assert.equal("location" in posts[1].body, false);
+    assert.equal(posts.length, 1);
+    assert.deepEqual(posts[0].body, originalUnknown);
+    assert.equal(posts[0].body.expectedVersion, 7);
+    assert.equal(posts[0].body.carrier, "寄出物流");
+    assert.equal("productName" in posts[0].body, false);
+    assert.equal("location" in posts[0].body, false);
+    assert.deepEqual(await pending(), []);
     await drawer().getByText("入件物流 · IN-KEEP", { exact: true }).waitFor();
     await drawer()
       .getByText("寄出物流 · OUT-NEW", { exact: true })
@@ -366,6 +443,33 @@ test(
       path: "/tmp/corely-mailroom-workbench-20261008-mobile.png",
       fullPage: true,
     });
+    await closeDrawer();
+    await page.waitForFunction(() => !document.querySelector(".ant-drawer-open"));
+    assert.equal(await page.getByRole("dialog").filter({ hasText: "目前收發工作有未保存的修改" }).count(), 0);
+
+    // Stale pending requests survive leaving, and never turn into a new key or automatic send.
+    await go("ready");
+    await page.evaluate(command => {
+      sessionStorage.setItem('corely.mailroom.dispatch.v1:company:clerk:ready', JSON.stringify({ schema: 1, entityId: 'company', userId: 'clerk', itemId: 'ready', command }));
+      window.mailroomFixture.items.ready.version = 8;
+      void window.mailroomRouter.navigate('/other');
+    }, originalUnknown);
+    await page.getByRole("heading", { name: "其他工作台", exact: true }).waitFor();
+    await page.evaluate(() => { void window.mailroomRouter.navigate('/operations/mailroom?entityId=company&itemId=ready'); });
+    await drawer().getByText("原寄出請求需人工核對，不能重新送出", { exact: true }).waitFor();
+    assert.equal(await drawer().getByRole("button", { name: /確認儲存$/ }).isDisabled(), true);
+    assert.equal(await drawer().locator('#trackingNumber').inputValue(), "OUT-NEW");
+    assert.equal((await pending())[0].command.requestId, originalUnknown.requestId);
+    assert.equal(await page.evaluate(() => window.mailroomFixture.posts.length), 0);
+    await drawer().getByRole("button", { name: "核對本次寄出回執", exact: true }).click();
+    await drawer().getByText("尚未找到本次寄出回執；版本或保管不符時請人工核對，勿建立新的寄出。", { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.mailroomFixture.posts.length), 0);
+    assert.equal((await pending())[0].command.requestId, originalUnknown.requestId);
+    await changeRoute(); await discard(false);
+    await page.getByRole("heading", { name: "其他工作台", exact: true }).waitFor();
+    await page.evaluate(() => { void window.mailroomRouter.navigate('/operations/mailroom?entityId=company&itemId=ready'); });
+    await drawer().getByText("原寄出請求需人工核對，不能重新送出", { exact: true }).waitFor();
+    assert.equal((await pending())[0].command.requestId, originalUnknown.requestId);
     assert.deepEqual(errors, []);
   },
 );

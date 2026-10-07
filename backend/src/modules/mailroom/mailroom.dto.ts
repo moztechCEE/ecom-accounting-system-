@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -103,7 +103,13 @@ export class MailroomCommandDto {
   @IsIn(['DEFECT_REPLACEMENT', 'WELFARE_SALE'])
   disposition?: string;
   @IsOptional() @IsString() @MaxLength(128) nextUserId?: string;
-  @IsOptional() @IsBoolean() confirmedItems?: boolean;
+  // Validate the original JSON value despite global implicit Boolean conversion.
+  @IsOptional()
+  @Transform(({ obj, key }) => (obj as Record<string, unknown>)[key], {
+    toClassOnly: true,
+  })
+  @IsBoolean()
+  confirmedItems?: boolean;
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(4)
