@@ -13,36 +13,6 @@
 .mailroom-heading h2 {
   margin: 6px 0 9px;
 }
-.mailroom-eyebrow {
-  color: #176a70;
-  letter-spacing: 0.08em;
-  font-size: 12px;
-  font-weight: 600;
-}
-.mailroom-process {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px 28px;
-  background: rgba(20, 113, 116, 0.055);
-  border: 1px solid rgba(20, 113, 116, 0.14);
-  border-radius: 12px;
-  padding: 17px 22px;
-}
-.mailroom-process span {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 13px;
-}
-.mailroom-process b {
-  border: 1px solid rgba(20, 113, 116, 0.3);
-  border-radius: 50%;
-  width: 25px;
-  height: 25px;
-  display: grid;
-  place-items: center;
-  color: #176a70;
-}
 .mailroom-filters {
   display: flex;
   flex-wrap: wrap;
@@ -84,12 +54,6 @@
   gap: 8px;
   margin-bottom: 20px;
 }
-.mailroom-next-step {
-  margin: 16px 0;
-}
-.mailroom-next-step .ant-alert-action {
-  flex-shrink: 0;
-}
 .mailroom-recipient-controls {
   display: grid;
   grid-template-columns: minmax(140px, 1fr) minmax(180px, 2fr);
@@ -98,11 +62,6 @@
 .mailroom-recipient-controls .ant-select {
   min-width: 0;
   width: 100%;
-}
-.mailroom-recipient-hint {
-  display: block;
-  margin-top: 8px;
-  font-size: 12px;
 }
 .mailroom-recipient-empty {
   color: #925400;
@@ -116,16 +75,6 @@
   .mailroom-form-grid {
     grid-template-columns: 1fr;
     gap: 0;
-  }
-  .mailroom-process {
-    gap: 12px;
-    padding: 14px;
-  }
-  .mailroom-next-step .ant-alert-action {
-    margin: 12px 0 0;
-  }
-  .mailroom-next-step {
-    flex-wrap: wrap;
   }
   .mailroom-recipient-controls {
     grid-template-columns: 1fr;
@@ -153,12 +102,6 @@
 }
 .mailroom-source-recent {
   flex-shrink: 0;
-}
-.mailroom-source-hint {
-  display: block;
-  margin-top: 8px;
-  font-size: 12px;
-  line-height: 1.6;
 }
 .mailroom-source-option > div {
   display: flex;

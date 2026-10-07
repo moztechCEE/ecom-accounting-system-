@@ -49,7 +49,6 @@ import {
 } from "./model";
 import TabletAcceptance from "./TabletAcceptance";
 import RecipientPicker from "./RecipientPicker";
-import MailroomNextStep from "./MailroomNextStep";
 import { MAILROOM_QUEUES, mailroomNextStep, needsInspectionPhoto, matchesMailroomSearch, canDispatch, matchesDispatchReceipt } from "./mailroom-workflow";
 import SourceCasePicker from "./SourceCasePicker";
 import RepairDocuments from "../repair/RepairDocuments";
@@ -145,14 +144,14 @@ export default function MailroomPage({
     () => new Promise<boolean>(resolve => modal.confirm({
       title: "目前收發工作有未保存的修改",
       content: Object.values(drafts.current).some(value => value.persistedDispatch)
-        ? "送出結果尚未確認。取消會保留內容、照片與原操作識別碼；寄出請求已獨立保留，離開後回來須先核對回執或沿原請求重試，勿重登寄出。"
+        ? "寄出結果尚未確認，原請求已保留。離開後請先核對結果，勿重複寄出。"
         : Object.values(drafts.current).some(value => value.uncertain)
-          ? "送出結果尚未確認。取消會保留本頁內容與原操作識別碼；離開後請先查核原操作，不要重新登記同一物件。"
-          : "離開或切換會放棄未保存的欄位及照片。請先保存，或確認放棄本次草稿。",
-      okText: "放棄未保存修改並繼續", cancelText: "取消，保留草稿", maskClosable: false,
+          ? "送出結果尚未確認。離開後請先核對原操作，勿重複登記。"
+          : "未保存的欄位及照片將被放棄。",
+      okText: "放棄草稿", cancelText: "繼續編輯", maskClosable: false,
       onOk: () => { resolve(true); }, onCancel: () => { resolve(false); },
     })),
-    () => message.info("正在保存或讀取照片，請等待完成後再切換。"),
+    () => message.info("正在保存或讀取照片，請稍候。"),
   ), [modal, message]);
   useRepairNavigationGuard(dirty, confirmDiscard);
   const navigationGate = useMemo(() => createRepairNavigationGate(dirty, confirmDiscard), [confirmDiscard]);
@@ -299,7 +298,6 @@ export default function MailroomPage({
         <Alert
           type="info"
           message="收發室工作台尚未啟用"
-          description="完成測試與帳號設定後即可開放。"
         />
       </>
     );
@@ -316,13 +314,6 @@ export default function MailroomPage({
       {contextHolder}
       <div className="mailroom-heading">
         <div>
-          <Text className="mailroom-eyebrow">
-            {mode === "mailroom"
-              ? "行政部 · 收件與交接"
-              : mode === "repair"
-                ? "維修部 · 檢測與處理"
-                : "個人工作 · 待辦與簽領"}
-          </Text>
           <Title level={2}>
             {mode === "mailroom"
               ? "收發室工作台"
@@ -330,13 +321,6 @@ export default function MailroomPage({
                 ? "維修工作台"
                 : "我的待辦與收件"}
           </Title>
-          <Paragraph type="secondary">
-            {mode === "mailroom"
-              ? "售後案件自動列入待到貨；收到實物後核對，再交給下一位同仁簽收。"
-              : mode === "repair"
-                ? "先確認實物並簽收，再逐步記錄檢測、維修與整新結果。"
-                : "查看交辦給你的物件。通知已讀後，待辦仍保留至完成簽收或處理。"}
-          </Paragraph>
         </div>
         <Space wrap>
           <Button
@@ -362,17 +346,6 @@ export default function MailroomPage({
             </Space>
           ) : null}
         </Space>
-      </div>
-      <div className="mailroom-process">
-        {(mode === "repair"
-          ? ["本人簽收", "檢測／整新", "客服確認", "維修處理", "交回收發室"]
-          : ["分類登記", "拍照核對", "指定接收人", "本人簽收", "寄回／後續處理"]
-        ).map((label, index) => (
-          <span key={label}>
-            <b>{index + 1}</b>
-            {label}
-          </span>
-        ))}
       </div>
       {error ? (
         <Alert
@@ -728,9 +701,6 @@ function AwaitingCases({
         </Space>
       }
     >
-      <Paragraph type="secondary">
-        自動顯示尚有產品未到貨的維修與退貨案件。登記收件只計入這次實際收到的物件。
-      </Paragraph>
       <Input.Search
         aria-label="搜尋待到貨案件"
         placeholder="搜尋售後案件單號"
@@ -1101,7 +1071,7 @@ function ItemDetail({
     try {
       const values = await form.validateFields();
       if (needsInspectionPhoto(action, item.evidence, photos)) {
-        setFailure("產品核對／退貨檢查至少需留存一張有效實物照片，請拍照留底後再儲存。");
+        setFailure("請附上至少一張實物照片。");
         return;
       }
       const body = JSON.stringify({
@@ -1135,7 +1105,7 @@ function ItemDetail({
           throw new Error("伺服器回應後仍未取得本次精確寄出回執，請核對原操作");
         clearDispatchReceipt();
       }
-      message.success(action === "dispatch" ? "已保存寄出紀錄；售後／AI 寄出同步待串接" : "已更新進度並建立交接紀錄");
+      message.success(action === "dispatch" ? "已登記寄出" : "已更新進度");
       clearDraft(); setWorking(false);
       setAction(undefined);
       await onSaved();
@@ -1147,7 +1117,7 @@ function ItemDetail({
           if (matchesDispatchReceipt(latest.data, request, userId)) {
             clearDispatchReceipt(); clearDraft(); setWorking(false);
             setAction(undefined);
-            message.success("已從本次寄出回執核對操作成功；售後／AI 寄出同步待串接");
+            message.success("已核對寄出紀錄");
             await onSaved();
             return;
           }
@@ -1178,7 +1148,7 @@ function ItemDetail({
         return;
       }
       clearDispatchReceipt(); clearDraft(); setWorking(false); setAction(undefined);
-      message.success("已核對原寄出回執；售後／AI 寄出同步待串接");
+      message.success("已核對寄出紀錄");
       await onSaved();
     } catch (error) { setFailure(errorText(error)); }
     finally { setWorking(false); }
@@ -1206,7 +1176,6 @@ function ItemDetail({
           onSaved={onSaved}
         />
       ) : null}
-      <MailroomNextStep item={item} actions={actions} onAction={choose} disabled={busy} />
       <Space wrap>
         <Tag>{CATEGORIES[item.receipt.category]}</Tag>
         <Tag color={statusColor(item.status)}>{item.statusLabel || STATUS[item.status]}</Tag>
@@ -1234,8 +1203,8 @@ function ItemDetail({
             children: item.receipt.senderLabel || "未提供",
           },
           { key: "incoming", label: "入件物流／單號", children: [item.receipt.carrier, item.receipt.trackingNumber].filter(Boolean).join(" · ") || "未提供" },
-          { key: "actual-name", label: item.receipt.category === "LETTER" || item.receipt.category === "PARCEL" ? "信件／包裹內容" : "實收名稱", children: item.productName },
           ...(item.receipt.category === "LETTER" || item.receipt.category === "PARCEL" ? [
+            { key: "actual-name", label: "信件／包裹內容", children: item.productName },
             { key: "recipient", label: "指定收件同仁", children: item.recipientName || item.nextUserName || "待指定" },
           ] : [{
             key: "declared",
@@ -1251,7 +1220,7 @@ function ItemDetail({
           { key: "owner", label: "目前保管", children: custody.holder },
           ...(custody.transferred ? [
             { key: "linked", label: "換機出庫", children: [custody.notice, custody.reference, custody.status].filter(Boolean).join(" · ") },
-            { key: "in-history", label: "原退貨入庫紀錄", children: `${item.custodianName} / ${item.location}（歷史接收，不代表目前持有）` },
+            { key: "in-history", label: "原退貨入庫紀錄", children: `${item.custodianName} / ${item.location}` },
           ] : []),
           {
             key: "next",
@@ -1267,21 +1236,25 @@ function ItemDetail({
           },
         ]}
       />
-      {item.outboundShipment && <Card className="mailroom-dispatch-record" size="small" title="寄出紀錄（實際交運）" style={{ marginTop: 16 }}>
+      {item.outboundShipment && <Card className="mailroom-dispatch-record" size="small" title="寄出紀錄" style={{ marginTop: 16 }}>
         <Descriptions column={1} size="small" items={[
           { key: "carrier", label: "寄出物流／單號", children: `${item.outboundShipment.carrier} · ${item.outboundShipment.trackingNumber}` },
           { key: "time", label: "交運時間／人員", children: `${date(item.outboundShipment.dispatchedAt)} · ${item.outboundShipment.dispatchedByName}` },
           { key: "actual", label: item.outboundShipment.physicalItem.kind === "REPLACEMENT" ? "實際寄出的替換品" : "實際寄出的原件", children: `${item.outboundShipment.physicalItem.productName} · SKU ${item.outboundShipment.physicalItem.sku || "未提供"} · SN ${item.outboundShipment.physicalItem.serialNumber || "未提供"}` },
+          { key: "sync", label: "寄出同步", children: <Tag>待串接</Tag> },
         ]} />
-        <Alert type="warning" showIcon message="已保存寄出；售後／AI 寄出同步待串接" description="寄出紀錄已由本系統保存。售後及 AI 客服的寄出事件接口尚待接通，不需重複登記寄出；此紀錄不表示顧客已收到或案件已結束。" />
       </Card>}
-      {item.caseIntake && <Alert showIcon type="info" style={{ marginTop: 16 }} message={`客服補建交辦：${INTAKE_STATUS[item.caseIntake.status]}`} description={`指定／受理客服：${item.caseIntake.ownerName || item.caseIntake.sentToUserName}。此交辦不移轉實物，實物仍依目前保管與位置紀錄。${item.caseIntake.sourceNumber ? `已綁定來源 ${item.caseIntake.sourceNumber}。` : "建立來源案件後，需由受理客服回此原收件完成綁定。"}`} />}
+      {item.caseIntake && <Descriptions size="small" column={1} style={{ marginTop: 16 }} items={[
+        { key: "intake-status", label: "客服補建", children: INTAKE_STATUS[item.caseIntake.status] },
+        { key: "intake-owner", label: "接手客服", children: item.caseIntake.ownerName || item.caseIntake.sentToUserName },
+        ...(item.caseIntake.sourceNumber ? [{ key: "intake-source", label: "綁定案件", children: item.caseIntake.sourceNumber }] : []),
+      ]} />}
       {missingCustomerService ? (
         <Alert
           type="warning"
           showIcon
           message="尚未對應承辦客服"
-          description="請指定售後承辦客服，以便異常與退貨檢查結果交接給正確同仁。"
+          description="請指定承辦客服。"
           style={{ marginTop: 16 }}
         />
       ) : null}
@@ -1348,7 +1321,7 @@ function ItemDetail({
           </Space>
         </Image.PreviewGroup>
       ) : null}
-      <Divider orientation="left">更新進度</Divider>
+      {(actions.length || canTablet) ? <Divider orientation="left">更新進度</Divider> : null}
       {actions.length || canTablet ? (
         <Space wrap>
           {canTablet ? (
@@ -1379,13 +1352,7 @@ function ItemDetail({
             </Button>
           ))}
         </Space>
-      ) : (
-        <Text type="secondary">
-          {item.status === "COLLECTED"
-            ? "此物件已由本人簽領，可查看下方紀錄。"
-            : "目前等待下一個流程；可從下方查看完整紀錄。"}
-        </Text>
-      )}
+      ) : null}
       <TabletAcceptance
         open={tablet}
         item={item}
@@ -1410,7 +1377,6 @@ function ItemDetail({
           >
             {action === "dispatch" && <>
               {uncertain && <Alert type="warning" showIcon message={pendingConflict ? "原寄出請求需人工核對，不能重新送出" : "已保留原寄出請求；只可核對回執或以原請求重試"} description={"操作識別碼：" + (operation.current?.id || "本機紀錄待核對")} action={<Button disabled={busy} onClick={() => void reconcileDispatch()}>核對本次寄出回執</Button>} />}
-              <Alert type="info" showIcon message="確認已實際交給物流，才登記寄出" description="這裡填寄回顧客的物流資料。入件單號另外保存；寄出不代表顧客已收到。若是換機，請點清實際替換品與 SN。" />
               <div className="mailroom-form-grid">
                 {field("寄出物流公司", "carrier", true)}
                 {field("寄出物流單號", "trackingNumber", true)}
@@ -1420,7 +1386,6 @@ function ItemDetail({
               </Form.Item>
             </>}
             {action === "send_intake" && <>
-              <Alert type="info" showIcon message="指定客服補建案件，實物仍由目前收發人員保管" description="客服本人接手後，使用原售後表單建案並綁回此原收件；不重新登記收件。接手前可改交另一位具補建與受理權限的同仁。" />
               <Form.Item name="csrUserId" label="指定補建客服" rules={[{ required: true, message: "請指定具補建與受理權限的客服" }]}><Select showSearch optionFilterProp="label" options={people.filter(person => person.intakeCustomerService === true).map(person => ({ value: person.id, label: `${person.department} · ${person.name}` }))} notFoundContent="目前沒有本公司具補建與受理權限的同仁" /></Form.Item>
             </>}
             {action === "identify" ? (
@@ -1515,13 +1480,6 @@ function ItemDetail({
             ) : null}
             {action === "grade" ? (
               <>
-                <Alert type="info" showIcon message="先核對實收品項，再填寫退貨檢查"
-                  description="實收名稱、SKU 或 SN 需要更正時，先使用「更正實收資料」保存，再重新進行此檢查；分級本身不更改產品資料。" />
-                <Alert
-                  type="info"
-                  message="AA：重新入庫；A：瑕疵補寄／福利品；B、C：整理後福利品"
-                  description="記錄包裝、產品外觀與配件狀況，實際庫存處理由後續入庫流程完成。"
-                />
                 <Form.Item
                   name={["returnInspection", "packaging"]}
                   label="包裝完整性"
@@ -1620,12 +1578,6 @@ function ItemDetail({
                 <Checkbox>我已逐件確認物件，並由本人接收保管</Checkbox>
               </Form.Item>
             ) : null}
-            {action === "start_repair" ? (
-              <Alert
-                type="info"
-                message="開始前會再次確認售後案件的顧客同意與必要款項。"
-              />
-            ) : null}
             <Form.Item
               name="note"
               label={
@@ -1671,15 +1623,7 @@ function ItemDetail({
               "complete_refurbish",
             ].includes(action) ? (
               <div>
-                {["inspect", "grade"].includes(action) ? (
-                  <Paragraph>
-                    產品核對與退貨檢查須留存至少 1
-                    張照片。請拍攝外包裝、產品與配件；有瑕疵時補拍清楚特寫。
-                    {item.evidence?.length
-                      ? `已留存 ${item.evidence.length} 張；未新增照片時沿用目前照片。`
-                      : ""}
-                  </Paragraph>
-                ) : null}
+                <Divider orientation="left">實物照片</Divider>
                 <Upload
                   accept="image/png,image/jpeg,image/webp"
                   capture="environment"
@@ -1748,7 +1692,6 @@ function ItemDetail({
             {failure ? (
               <Alert type="error" message={failure} style={{ marginTop: 16 }} />
             ) : null}
-            <Paragraph type="secondary" style={{ marginTop: 16 }}>{action === "dispatch" ? "保存實際交運紀錄；後續顧客收件與售後結案另行追蹤。" : "儲存會記錄本次核對或交辦；接收人仍須本人確認實物，通知不代表已簽收。"}</Paragraph>
             <Space style={{ marginTop: 20 }}>
               <Button type="primary" loading={busy} disabled={action === "dispatch" && pendingConflict} onClick={() => void save()}>
                 確認儲存
@@ -1762,8 +1705,7 @@ function ItemDetail({
       ) : null}
       {item.receipt.sourceCaseId ? (
         <>
-          <Divider orientation="left">售後／AI 系統同步</Divider>
-          <Paragraph type="secondary">以下是既有進度事件的系統同步回執；本次寄出另以上方寄出紀錄為準。同仁接手、實物簽收及顧客通知另依各自紀錄。</Paragraph>
+          <Divider orientation="left">既有進度同步</Divider>
           <Space wrap>
             {["AFTER_SALES", "AI_CUSTOMER_SERVICE"].map((target) => {
               const deliveries = (
@@ -1963,7 +1905,7 @@ function ReceiptDrawer({
             loading={busy}
             onClick={() => void submit()}
           >
-            登記並建立待辦
+            登記收件
           </Button>
           <Button disabled={busy} onClick={close}>
             取消
@@ -2028,9 +1970,6 @@ function ReceiptDrawer({
                 }}
               />
             </Form.Item>
-            <Text type="secondary">
-              每一列代表一件實物；預填尚未到貨數量，請移除這次未收到的物件。
-            </Text>
           </>
         ) : ["LETTER", "PARCEL"].includes(category) ? (
           <Form.Item
@@ -2040,18 +1979,13 @@ function ReceiptDrawer({
           >
             <RecipientPicker disabled={busy || uncertain} key={category} people={people} label="收件同仁" />
           </Form.Item>
-        ) : (
-          <Alert
-            type="info"
-            message="先保存待辨識收件，確認來源後再由收發室補登歸屬。"
-          />
-        )}
+        ) : null}
         {source ? (
           <Paragraph type="secondary">
             案件 {source.number} · 已收到 {source.receivedQuantity ?? 0}／
             {source.expectedQuantity ??
               source.items.reduce((sum, item) => sum + item.quantity, 0)}{" "}
-            件；本次收件仍須核對實物。登記後請在物件詳情拍照並確認品項。
+            件
           </Paragraph>
         ) : null}
         <div className="mailroom-form-grid">

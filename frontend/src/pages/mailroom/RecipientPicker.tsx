@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Empty, Select, Typography } from "antd";
+import { Empty, Select } from "antd";
 import type { Person } from "./model";
 import {
   ALL_RECIPIENT_DEPARTMENTS,
@@ -95,9 +95,9 @@ export default function RecipientPicker({
           id={id}
           className="mailroom-recipient-person"
           aria-label={label}
-          aria-describedby={hintId}
+          aria-describedby={people.length === 0 || unavailable ? hintId : undefined}
           disabled={disabled || people.length === 0}
-          placeholder={`選擇${label}，可搜尋姓名或員工編號`}
+          placeholder="搜尋姓名或員工編號"
           value={value}
           status={unavailable ? "warning" : undefined}
           showSearch
@@ -130,22 +130,15 @@ export default function RecipientPicker({
         />
       </div>
       {people.length === 0 && (
-        <div role="status" className="mailroom-recipient-empty">
-          目前沒有可指派的{label}，請確認符合條件的同仁名單。
+        <div id={hintId} role="status" className="mailroom-recipient-empty">
+          目前沒有可指派的{label}
         </div>
       )}
-      {unavailable && (
-        <div role="status" className="mailroom-recipient-empty">
-          原指定同仁目前不在可指派名單，請重新選擇同仁。
+      {unavailable && people.length > 0 && (
+        <div id={hintId} role="status" className="mailroom-recipient-empty">
+          原接收人不在名單，請重新選擇。
         </div>
       )}
-      <Typography.Text
-        id={hintId}
-        type="secondary"
-        className="mailroom-recipient-hint"
-      >
-        先依部門篩選，再指定同仁；指定後仍待本人簽收，通知送達不代表完成簽收。
-      </Typography.Text>
     </div>
   );
 }
