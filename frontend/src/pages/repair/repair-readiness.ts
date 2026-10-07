@@ -141,7 +141,10 @@ export function repairReadiness(item: RepairItem, context: RepairReadinessContex
     && completionReleaseChecks.every(value => value.ready) && (factoryPlan || !!context.handoffNote?.trim());
   const showStart = customerRepair && !nativeOriginalReturn && !factoryPlan && plan !== 'RETURN'
     && ['REPAIR_RECEIVED', 'INSPECTING', 'WAITING_CUSTOMER'].includes(item.status);
-  const showCompletion = !nativeOriginalReturn && (supportedCompletion || unsupportedInternal) && (completionStage || !!report || item.status === 'REFURBISHING')
+  // A returned factory item can need renewed CSR review even when the server withholds completion authority.
+  const factoryReturned = factoryPlan && item.status === 'INSPECTING'
+    && item.repairWorkflow?.factory?.stage === 'RETURNED' && currentPhysicalCustody(item) === 'TECHNICIAN';
+  const showCompletion = !nativeOriginalReturn && (supportedCompletion || unsupportedInternal) && (completionStage || factoryReturned || item.status === 'REFURBISHING')
     && !['WAITING_RETURN_ACCEPTANCE', 'READY_FOR_DISPATCH', 'STOCKED', 'PENDING_WELFARE_STOCK'].includes(item.status);
   const csrEvidence = csr
     ? `${CSR_STATUS[csr.status] || csr.status}；接手客服：${csr.ownerName || csr.ownerId || '尚未提供本人接手紀錄'}；交辦檢修 ${revision(csr.inspectionRevision)}／估價 ${revision(csr.estimateRevision)}／報價 ${revision(csr.quoteRevision)}；本人接手時間：${date(csr.acceptedAt)}；回覆時間：${date(csr.resolvedAt)}。`
