@@ -8,7 +8,7 @@ import PerformanceReviewsPage from './pages/PerformanceReviewsPage'
 import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { loginDestination } from './utils/login-destination'
-import { repairOnlyUser, warehouseOnlyUser } from './config/workspaces'
+import { afterSalesOnlyUser, repairOnlyUser, warehouseOnlyUser } from './config/workspaces'
 import WarehouseReportsPage from './pages/WarehouseReportsPage'
 import WarehousePortalPage from './pages/WarehousePortalPage'
 import WarehouseWorkspacePage from './pages/WarehouseWorkspacePage'
@@ -71,7 +71,7 @@ import WmsHandoverReconciliationPage from './pages/WmsHandoverReconciliationPage
 function HomeEntry({ dashboard = false }: { dashboard?: boolean }) {
   const { user, loading } = useAuth()
   if (loading) return null
-  if (dashboard && !warehouseOnlyUser(user) && !repairOnlyUser(user)) return <DashboardPage />
+  if (dashboard && !warehouseOnlyUser(user) && !repairOnlyUser(user) && !afterSalesOnlyUser(user)) return <DashboardPage />
   return <Navigate to={loginDestination(user)} replace />
 }
 const AppRoutes: React.FC = () => {

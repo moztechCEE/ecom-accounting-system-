@@ -33,9 +33,10 @@
         ],
         "boundaries": [
           "儀表板數字與 AI 摘要不能替代原單據；載入失敗或沒有資料不表示金額為零。",
-          "儲運專用角色會進入儲運工作區；工作台啟用時，只有維修與個人權限的維修師進入 DOA 售後維修工作區，營運總覽入口會隱藏。兼任其他作業的人員仍依合併權限使用營運總覽。",
+          "儲運、維修及售後專用人員登入對應工作台；依權限保留個人費用、請假與薪資等入口。兼任人員可切換目前獲授權的工作區；工作台不取代各模組的授權。",
           "成本、毛利、淨利，以及可反推出費用的廣告費、平台費、淨入帳等指標，依專用讀取權限顯示；無權限時不可把缺少的指標解讀為零。完整高階財務總覽需成本、毛利及淨利三項讀取授權。",
-          "收發室／維修權限已開通且工作台啟用時，一般同仁登入會進入對應工作台；右上角「我的待辦」保留未完成交接。"
+          "收發室／維修權限已開通且工作台啟用時，一般同仁登入會進入對應工作台；右上角「我的待辦」保留未完成交接。",
+          "可依目前權限切換售後、收發、維修、儲運或營運管理工作區。「設為登入預設」只記錄此帳號及公司在目前瀏覽器的選擇；不同步其他裝置、不變更角色或授予權限。失效偏好回到有效入口。具有產品、匯入、來源帳號、操作紀錄、設定、庫存或儲運管理權限的人員，仍可由「營運管理」使用獲授權功能。切台保留網址明確指定的公司。"
         ],
         "related": [
           "reports",
@@ -59,9 +60,10 @@
             ],
             "boundaries": [
               "Metrics and AI summaries do not replace source documents; failed or missing data is not a zero balance.",
-              "Warehouse-only users enter their warehouse workspace. With the workbench enabled, technicians holding only repair and personal permissions enter the DOA after-sales repair workspace, with the dashboard destination hidden. Mixed-duty staff keep dashboard access according to their combined grants.",
+              "Warehouse-only, repair-only and after-sales-only staff enter the corresponding workbench, retaining authorized personal expense, leave and payroll entries. Mixed-duty staff can switch among currently authorized workspaces; each module still enforces access.",
               "Cost, margin and net-profit figures, and advertising spend, platform fees or net payout that could reveal expenses, depend on separate read grants; a missing metric is not zero. The full executive financial overview requires all three grants.",
-              "When enabled, mailroom and repair staff land on their workbench. My inbox keeps handoffs pending until the assigned work is completed."
+              "When enabled, mailroom and repair staff land on their workbench. My inbox keeps handoffs pending until the assigned work is completed.",
+              "Switch among available after-sales, mailroom, repair, warehouse and operations workspaces according to current grants. Set as login default stores a preference for this account and company in this browser only; it does not sync devices, change roles or grant access. Invalid preferences fall back to an authorized entry. Management grants retain their features in Operations Management. Workspace switching retains an explicitly selected company in the URL."
             ],
             "related": [
               "reports",
@@ -78,7 +80,8 @@
         "frontend/src/utils/login-destination.ts",
         "frontend/src/config/workspaces.ts",
         "backend/src/modules/reports/reports.controller.ts",
-        "backend/src/modules/ai/ai-copilot-access.service.ts"
+        "backend/src/modules/ai/ai-copilot-access.service.ts",
+        "frontend/src/components/DashboardLayout.tsx"
       ]
     },
     {
@@ -1918,7 +1921,7 @@
       "group": "service",
       "sections": {
         "steps": [
-          "售後來源模組啟用時，由「售後管理中心」進原生案件中心，以六類案件篩選並保留原建案、詳情、附件、報價及各節點控制項。未啟用時沿用此舊 ERP 入口。",
+          "售後來源模組啟用時，由「售後工作台」首頁六類服務或案件總覽進原來源表單與流程；未啟用時沿用此舊 ERP 入口。",
           "新版工作台啟用時，維修、漏寄補寄、來回件、退款派車、私下購買與客戶問題共用此入口；需要報價時依已提供動作建立草稿。"
         ],
         "boundaries": [
@@ -1944,7 +1947,7 @@
           ],
           "sections": {
             "steps": [
-              "When the source module is enabled, open the native case center in After-sales Management and filter the six case types with the original creation, details, attachments, quoting and workflow controls. Otherwise retain this legacy ERP entry.",
+              "When the source module is enabled, use the six service entries or Cases overview on the After-sales Workbench to open the original forms and workflow. Otherwise use this legacy ERP entry.",
               "When the staged workspace is enabled, repair, reshipment, exchange/return, refund pickup, private purchase and customer issues share this entry. Use the provided action to prepare a quote draft."
             ],
             "boundaries": [
@@ -1967,7 +1970,10 @@
         "frontend/src/pages/AfterSalesWorkbenchPage.tsx",
         "frontend/src/pages/AfterSalesCasesPage.tsx",
         "backend/src/modules/integration/after-sales/after-sales.controller.ts",
-        "frontend/src/config/release.ts"
+        "frontend/src/config/release.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
+        "frontend/src/pages/after-sales/workbench-model.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css"
       ],
       "permissions": [
         "after_sales_cases:read",
@@ -4644,7 +4650,7 @@
     },
     {
       "id": "repair-workbench",
-      "title": "維修師工作台",
+      "title": "維修工作台",
       "summary": "本人認領與簽收 DOA、一般送修及公司整新；依本版檢修、客服接手、顧客報價同意及必要款項處理維修、替換、拒修原件退回或送原廠返還。",
       "keywords": [
         "DOA",
@@ -4695,7 +4701,7 @@
       },
       "translations": {
         "en": {
-          "title": "Repair technician workbench",
+          "title": "Repair Workbench",
           "summary": "Personally claim and accept DOA, ordinary customer repair and company-refurbishment items. Follow inspection revisions, customer-service acceptance, quote consent and required funds for repair, replacement, unrepaired return or factory service.",
           "category": "Receiving and repair",
           "keywords": [
@@ -4783,7 +4789,9 @@
         "frontend/src/pages/mailroom/item-custody.ts",
         "frontend/src/pages/mailroom/model.ts",
         "backend/src/modules/mailroom/repair-stock-custody.contract.ts",
-        "frontend/src/pages/repair/repair-feedback.tsx"
+        "frontend/src/pages/repair/repair-feedback.tsx",
+        "frontend/src/components/DashboardLayout.tsx",
+        "frontend/src/utils/login-destination.ts"
       ],
       "permissions": [
         "repair_workbench:read"
@@ -4924,8 +4932,8 @@
     },
     {
       "id": "after-sales-customer-workbench",
-      "title": "DOA／售後處理台",
-      "summary": "客服由工作台查看共同主單及原有待辦，並由原生維修交辦卡片本人接手維修師送來的案件。",
+      "title": "售後工作台",
+      "summary": "以六類服務入口建立及追蹤原售後案件，分頁處理維修與收發交辦，依權限使用報價、顧客、收款退款與發票。",
       "keywords": [
         "DOA／售後處理台",
         "售後",
@@ -4945,7 +4953,8 @@
       "availability": "after-sales-module",
       "sections": {
         "steps": [
-          "客服由工作台查看共同主單及原有待辦，並由原生維修交辦卡片本人接手維修師送來的案件。",
+          "首頁以「補寄服務、商品與配件訂購、檢測與維修、換貨服務、退貨退款、產品問題回報」開啟原售後流程；案件總覽保留原新增、進行中、已結束、刪除清單、附件及各節點按鈕。",
+          "客服在「維修交辦」與「收發交辦」分頁處理本人獲指派的任務；切分頁保留未保存內容，需要時再查看案件概況。收起原概況表單或離頁前须先儲存或明確放棄。新的收發通知連結在確認離開後定位該筆原收件。",
           "接手後核對目前檢修、估價與處理方案版次，記錄同意方案或拒修結果；改版須重新確認。部門 SENT、ACCEPTED、RESOLVED 與通知送達各自追蹤。",
           "正式對客報價、顧客對本報價版的同意與足額款項另依原來源流程。付費案件尚未入帳時維修師不能開工；免費案件仍須本報價版顧客同意。",
           "收發補建交辦與維修覆核分開：只有指定客服本人可將未辨識實收件的 SENT 受理為 ACCEPTED。受理後由案件中心原 /cases 入口點「新增案件」，進入 /cases/new 建立一次主單，或核對既有案件，返回選目前申報品項及來源版次綁回同一 NativeID；成功後為 RESOLVED。"
@@ -4967,7 +4976,9 @@
           "原建案結果未知須先查標記與結果，不能再建第二張案件；綁回結果未知保留原請求內容與 requestId，核對歷程後只重試同一請求。原建案成功不等於已綁回，既有多物件收件單交主管核對而不自動拆分或重登。",
           "綁回結果查核應核對唯讀交辦摘要的 lastAction 與 lastRequestId 是否就是首次 bind_intake 請求；只看到已綁案件不能證明本次請求成功。此摘要不包含自由文字、顧客金融或技術文件，亦不授予額外權限。",
           "站內通知在可見的售後、收發、維修、我的待辦及售後庫存頁每 15 秒查一次清單，其他可見頁每 60 秒；分頁隱藏時不輪詢，回到可見或取得焦點會重新查，請求重疊與失敗另受控。WebSocket 與已讀操作維持原語意；清單刷新不覆蓋正在開啟的詳情或表單草稿。輪詢或推送不等於人員本人接手，也不保證隱藏分頁或整日待機送達。",
-          "「指定補建客服」使用獨立的補建資格名單；原有維修、退貨及品項不符的客服覆核資格維持原流程，不因補建功能被收窄或變成建案授權。"
+          "「指定補建客服」使用獨立的補建資格名單；原有維修、退貨及品項不符的客服覆核資格維持原流程，不因補建功能被收窄或變成建案授權。",
+          "可依目前權限切換售後、收發、維修、儲運或營運管理工作區。「設為登入預設」只記錄此帳號及公司在目前瀏覽器的選擇；不同步其他裝置、不變更角色或授予權限。失效偏好回到有效入口。具有產品、匯入、來源帳號、操作紀錄、設定、庫存或儲運管理權限的人員，仍可由「營運管理」使用獲授權功能。切台保留網址明確指定的公司。",
+          "報價、顧客、收款退款與發票沿用同一來源主單及原紀錄，不建立第二本帳。產品、LINE、發票及操作紀錄不另做一套；相關管理能力保留既有授權入口。原 FAQ／知識庫排除於本 DOA 工作台。"
         ],
         "related": [
           "repair-workbench",
@@ -4977,8 +4988,8 @@
       },
       "translations": {
         "en": {
-          "title": "DOA and after-sales customer-service workbench",
-          "summary": "Customer service reviews shared source cases and existing tasks, and personally accepts technician handoffs through the native repair queue.",
+          "title": "After-sales Workbench",
+          "summary": "Create and track original after-sales cases through six service entries, handle repair and mailroom handoffs in tabs, and open quoting, customers, payments/refunds and invoices according to grants.",
           "category": "After-sales",
           "keywords": [
             "DOA and after-sales customer-service workbench",
@@ -4990,7 +5001,8 @@
           ],
           "sections": {
             "steps": [
-              "Customer service reviews shared source cases and existing tasks, and personally accepts technician handoffs through the native repair queue.",
+              "Use Reshipment Service, Product and Accessory Orders, Inspection and Repair, Exchange Service, Returns and Refunds, and Product Issue Reports to open the original workflows. Cases overview retains creation, active/closed/deleted lists, attachments and workflow controls.",
+              "Handle personally assigned tasks in Repair Handoffs and Mailroom Handoffs. Switching tabs retains unsaved work; open the original case overview when needed. Save or explicitly discard before hiding that form or leaving. A new mailroom deep link locates the requested original receipt after departure is confirmed.",
               "Review the current inspection, estimate and technical plan revision, then record approval or decline. Changes require a fresh review. Department SENT, ACCEPTED and RESOLVED states are separate from notification delivery.",
               "Formal customer quoting, consent to that quote revision and confirmed sufficient funds remain in the original source workflow. Unpaid chargeable work cannot start; free work still requires customer consent to the current quote.",
               "Mailroom case intake is separate from technical review. Only the assigned CSR accepts a received unidentified item from SENT to ACCEPTED. From the original /cases entry in the case center, choose New case and create once through its /cases/new form, or verify an existing case, then return to select its current declared line and source version and bind the same NativeID. Successful binding sets RESOLVED."
@@ -5012,7 +5024,9 @@
               "For an unknown original creation result, inspect its marker and outcome before proceeding; do not create a second case. For an unknown binding result, keep the first body and requestId, inspect history and retry only that request. Case creation alone is not binding. Ask a supervisor to reconcile legacy multi-item receipts rather than splitting or receiving them again.",
               "For bind reconciliation, match the read-only intake summary lastAction and lastRequestId to the first bind_intake request. Seeing an already linked case does not prove that this request succeeded. The summary exposes no free text, customer finance or technical records and grants no additional authority.",
               "Internal notifications refresh their list every 15 seconds on visible after-sales, mailroom, repair, My inbox and after-sales stock pages, and every 60 seconds on other visible pages. Hidden tabs do not poll; visibility or focus triggers a fresh read, with overlapping requests and failures controlled. Existing WebSocket and read-marking semantics remain. List refresh does not overwrite an open detail or form draft. Polling or pushing is not personal task acceptance and proves no hidden-tab or all-day idle delivery.",
-              "The Assigned intake CSR picker uses separate intake eligibility. Existing repair, return and mismatch reviewer eligibility keeps its original workflow; intake neither narrows that list nor turns review permission into case-creation authority."
+              "The Assigned intake CSR picker uses separate intake eligibility. Existing repair, return and mismatch reviewer eligibility keeps its original workflow; intake neither narrows that list nor turns review permission into case-creation authority.",
+              "Switch among available after-sales, mailroom, repair, warehouse and operations workspaces according to current grants. Set as login default stores a preference for this account and company in this browser only; it does not sync devices, change roles or grant access. Invalid preferences fall back to an authorized entry. Management grants retain their features in Operations Management. Workspace switching retains an explicitly selected company in the URL.",
+              "Quotes, customers, payments, refunds and invoices retain the same source case and original records; no second financial ledger or duplicate product, LINE, invoice or audit module is created. Existing management grants keep their entry points. This DOA workbench excludes the legacy FAQ/knowledge base."
             ],
             "related": [
               "repair-workbench",
@@ -5064,7 +5078,13 @@
         "frontend/src/pages/mailroom/intake-actions.ts",
         "frontend/src/services/mailroom-intake.ts",
         "frontend/src/services/notification-refresh.ts",
-        "frontend/src/components/NotificationCenter.tsx"
+        "frontend/src/components/NotificationCenter.tsx",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
+        "frontend/src/pages/after-sales/workbench-model.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css",
+        "frontend/src/components/DashboardLayout.tsx",
+        "frontend/src/config/workspaces.ts",
+        "frontend/src/utils/login-destination.ts"
       ]
     },
     {
@@ -5109,7 +5129,8 @@
           "補建綁回目前支援原生收件分類 REPAIR／RETURN，需指定客服本人已 ACCEPTED 及目前來源版次／可收數量。原建案結果未知先查標記，不建立第二張案件；綁回未知保留同一內容與 requestId 查核。綁回完成為 RESOLVED，但不改實物保管、位置、下一位接收人或 RECEIVED，也不代替付款、退款與庫存程序。",
           "綁回結果查核應核對唯讀交辦摘要的 lastAction 與 lastRequestId 是否就是首次 bind_intake 請求；只看到已綁案件不能證明本次請求成功。此摘要不包含自由文字、顧客金融或技術文件，亦不授予額外權限。",
           "站內通知在可見的售後、收發、維修、我的待辦及售後庫存頁每 15 秒查一次清單，其他可見頁每 60 秒；分頁隱藏時不輪詢，回到可見或取得焦點會重新查，請求重疊與失敗另受控。WebSocket 與已讀操作維持原語意；清單刷新不覆蓋正在開啟的詳情或表單草稿。輪詢或推送不等於人員本人接手，也不保證隱藏分頁或整日待機送達。",
-          "「指定補建客服」使用獨立的補建資格名單；原有維修、退貨及品項不符的客服覆核資格維持原流程，不因補建功能被收窄或變成建案授權。"
+          "「指定補建客服」使用獨立的補建資格名單；原有維修、退貨及品項不符的客服覆核資格維持原流程，不因補建功能被收窄或變成建案授權。",
+          "首頁展示名稱依序對應 RESHIPMENT、PRIVATE_PURCHASE、REPAIR、EXCHANGE_RETURN、REFUND_PICKUP、CUSTOMER_ISSUE；只改展示，不更改案件 enum、狀態及原有子流程。商品與配件訂購仍含一般商品、區域、海外地址、幣別與發票分支。"
         ],
         "related": [
           "after-sales-customer-workbench",
@@ -5151,7 +5172,8 @@
               "Intake binding currently supports native REPAIR and RETURN receipt categories, requires personal ACCEPTED ownership, the current source version and remaining receipt capacity. If creation is unknown, inspect its marker instead of creating a second case; if binding is unknown, retain the same body and requestId for reconciliation. RESOLVED changes no custodian, location, next recipient or RECEIVED state and does not replace payment, refund or inventory workflows.",
               "For bind reconciliation, match the read-only intake summary lastAction and lastRequestId to the first bind_intake request. Seeing an already linked case does not prove that this request succeeded. The summary exposes no free text, customer finance or technical records and grants no additional authority.",
               "Internal notifications refresh their list every 15 seconds on visible after-sales, mailroom, repair, My inbox and after-sales stock pages, and every 60 seconds on other visible pages. Hidden tabs do not poll; visibility or focus triggers a fresh read, with overlapping requests and failures controlled. Existing WebSocket and read-marking semantics remain. List refresh does not overwrite an open detail or form draft. Polling or pushing is not personal task acceptance and proves no hidden-tab or all-day idle delivery.",
-              "The Assigned intake CSR picker uses separate intake eligibility. Existing repair, return and mismatch reviewer eligibility keeps its original workflow; intake neither narrows that list nor turns review permission into case-creation authority."
+              "The Assigned intake CSR picker uses separate intake eligibility. Existing repair, return and mismatch reviewer eligibility keeps its original workflow; intake neither narrows that list nor turns review permission into case-creation authority.",
+              "The six home labels map to RESHIPMENT, PRIVATE_PURCHASE, REPAIR, EXCHANGE_RETURN, REFUND_PICKUP and CUSTOMER_ISSUE. Labels do not change enums, states or existing branches. Product and Accessory Orders still supports general products, regions, overseas addresses, currencies and invoice branches."
             ],
             "related": [
               "after-sales-customer-workbench",
@@ -5196,7 +5218,10 @@
         "frontend/src/pages/mailroom/intake-actions.ts",
         "frontend/src/services/mailroom-intake.ts",
         "frontend/src/services/notification-refresh.ts",
-        "frontend/src/components/NotificationCenter.tsx"
+        "frontend/src/components/NotificationCenter.tsx",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
+        "frontend/src/pages/after-sales/workbench-model.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css"
       ],
       "aliases": [
         "/operations/after-sales/repairs",
@@ -5294,7 +5319,10 @@
         "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts",
-        "frontend/src/pages/repair/repair-feedback.tsx"
+        "frontend/src/pages/repair/repair-feedback.tsx",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
+        "frontend/src/pages/after-sales/workbench-model.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css"
       ]
     },
     {
@@ -5382,7 +5410,10 @@
         "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts",
-        "frontend/src/pages/repair/repair-feedback.tsx"
+        "frontend/src/pages/repair/repair-feedback.tsx",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
+        "frontend/src/pages/after-sales/workbench-model.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css"
       ]
     },
     {
@@ -5470,7 +5501,10 @@
         "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts",
-        "frontend/src/pages/repair/repair-feedback.tsx"
+        "frontend/src/pages/repair/repair-feedback.tsx",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
+        "frontend/src/pages/after-sales/workbench-model.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css"
       ]
     },
     {
@@ -5558,13 +5592,16 @@
         "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts",
-        "frontend/src/pages/repair/repair-feedback.tsx"
+        "frontend/src/pages/repair/repair-feedback.tsx",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
+        "frontend/src/pages/after-sales/workbench-model.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css"
       ]
     },
     {
       "id": "after-sales-native-faqs",
-      "title": "售後 FAQ",
-      "summary": "維護原 FAQ 問答、類別與適用來源，依原功能建立、修改、刪除與查詢。",
+      "title": "原 FAQ 相容路徑（工作台排除）",
+      "summary": "本 DOA 售後工作台不提供 FAQ／知識庫；原來源路徑保留相容紀錄。",
       "keywords": [
         "售後 FAQ",
         "售後",
@@ -5581,19 +5618,11 @@
       "availability": "after-sales-module",
       "sections": {
         "steps": [
-          "維護原 FAQ 問答、類別與適用來源，依原功能建立、修改、刪除與查詢。",
-          "客服使用問答時仍核對個別主單與實際處理結果；知識內容不會自動傳送給顧客。"
+          "本 DOA 工作台不提供 FAQ／知識庫入口，也不以直接網址開啟原頁。"
         ],
         "boundaries": [
-          "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
-          "非 ERP 管理員只有明確取得全部 19 項售後整合授權（九組 read／update 與稽核 read），作業公司為 ENTITY 範圍，且既有來源帳號仍有效並為 admin，才以來源 admin 角色使用完整售後頁面。這不授予 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍；模組與每次寫入仍依明確授權及目前來源權限取交集。缺任一項時保留原作業角色，不因來源 admin 帳號擴權。",
-          "同一售後主單保留原頁面表單、按鈕、附件、錯誤與流程；開啟入口或成功登入不代表實際操作已完成。尚未保存的表單應先保存或確認放棄再離開。",
-          "讀取權限不授予寫入；每次提交仍按來源角色、ERP 專用寫入權限與目前狀態重新核對。這份指南不新增 AI 執行工具，也不證明對外訊息、付款、退款、物流或庫存已完成。",
-          "每次開啟使用獨立 iframe，切換公司或入口後忽略舊回應。首次就緒須核對本輪視窗、同源掛載與所選路徑；45 秒未就緒或回傳載入錯誤時顯示原因與重新開啟，不將錯誤或舊頁面當作整合成功。",
-          "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
-          "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
-          "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
+          "原來源契約仍保留 FAQ 路徑；這只是相容記錄，不代表目前工作台可開啟或操作，也不表示已刪除原資料。",
+          "Corely Claw 的操作指南與原 FAQ 不同；排除原 FAQ 不移除工作台的使用說明。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5602,8 +5631,8 @@
       },
       "translations": {
         "en": {
-          "title": "After-sales FAQ",
-          "summary": "Maintain original FAQ questions, answers, categories and source applicability using the existing create, edit, delete and search controls.",
+          "title": "Legacy FAQ compatibility route (excluded from workbench)",
+          "summary": "This DOA workbench excludes the FAQ/knowledge base; the source route remains documented for compatibility.",
           "category": "After-sales",
           "keywords": [
             "After-sales FAQ",
@@ -5612,19 +5641,11 @@
           ],
           "sections": {
             "steps": [
-              "Maintain original FAQ questions, answers, categories and source applicability using the existing create, edit, delete and search controls.",
-              "Check each case and its actual outcome when using an answer. Knowledge content does not itself send a customer message."
+              "The DOA workbench provides no FAQ/knowledge-base entry and does not open it through a direct URL."
             ],
             "boundaries": [
-              "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
-              "A non-administrator ERP actor uses the source admin role only with all 19 explicit after-sales integration grants (nine read/update pairs plus audit read), ENTITY company scope and an existing active source admin account. This grants no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority. Modules and each write still intersect explicit grants with current source permissions. Missing any grant retains the operational role; an existing source admin account cannot widen it.",
-              "The same after-sales case retains the original forms, controls, attachments, errors and workflow. Opening a page or authenticating does not prove a business operation is complete. Save unsaved forms or explicitly discard them before leaving.",
-              "Read access does not grant writes. Submissions recheck source role, dedicated ERP write permission and current state. This guide adds no AI execution tool and proves no external message, payment, refund, logistics or stock operation.",
-              "Each launch uses its own iframe; responses from an earlier company or entry are ignored. Initial readiness checks the current frame, same-origin mount and requested path. A load error or missing readiness after 45 seconds exposes an error and retry; neither an old page nor an error response proves successful integration.",
-              "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
-              "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
-              "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
+              "The legacy source contract retains the FAQ route for compatibility only. It grants no current workbench operation and does not mean legacy data was deleted.",
+              "Corely Claw operating guides are separate from the legacy FAQ. Excluding FAQ does not remove workbench help."
             ],
             "related": [
               "after-sales-native-cases",
@@ -5646,7 +5667,10 @@
         "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts",
-        "frontend/src/pages/repair/repair-feedback.tsx"
+        "frontend/src/pages/repair/repair-feedback.tsx",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
+        "frontend/src/pages/after-sales/workbench-model.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css"
       ]
     },
     {
@@ -5734,7 +5758,10 @@
         "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts",
-        "frontend/src/pages/repair/repair-feedback.tsx"
+        "frontend/src/pages/repair/repair-feedback.tsx",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
+        "frontend/src/pages/after-sales/workbench-model.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css"
       ]
     },
     {
@@ -5822,7 +5849,10 @@
         "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts",
-        "frontend/src/pages/repair/repair-feedback.tsx"
+        "frontend/src/pages/repair/repair-feedback.tsx",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
+        "frontend/src/pages/after-sales/workbench-model.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css"
       ]
     },
     {
@@ -5910,7 +5940,10 @@
         "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts",
-        "frontend/src/pages/repair/repair-feedback.tsx"
+        "frontend/src/pages/repair/repair-feedback.tsx",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
+        "frontend/src/pages/after-sales/workbench-model.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css"
       ]
     },
     {
@@ -5998,7 +6031,10 @@
         "frontend/index.html",
         "frontend/src/contexts/AuthContext.tsx",
         "frontend/src/services/after-sales-logout.ts",
-        "frontend/src/pages/repair/repair-feedback.tsx"
+        "frontend/src/pages/repair/repair-feedback.tsx",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
+        "frontend/src/pages/after-sales/workbench-model.ts",
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css"
       ]
     },
     {
@@ -6118,7 +6154,8 @@
     }
   ],
   "legacyContentOverrideReasons": {
-    "dashboard": "DashboardPage now shows operational and finance metrics by period, not an AI yesterday briefing.",
-    "reimbursement-items": "Use the actual starter-library label and configured fields instead of claiming an AI question library."
+    "dashboard": "DashboardPage now shows operational and finance metrics by period, not an AI yesterday briefing. Reviewed 2026-10-08 dedicated workspaces and browser-scoped login preferences; permissions remain separate.",
+    "reimbursement-items": "Use the actual starter-library label and configured fields instead of claiming an AI question library.",
+    "after-sales": "Reviewed 2026-10-08 source-enabled clean workbench entry and six service labels; legacy fallback and original workflows remain."
   }
 }

@@ -7,8 +7,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
 import { PRODUCT } from '../config/product'
 import { activeNavigation, navigationParent, workspaceNavigation, type NavigationItem } from '../config/navigation'
-import { PERSONAL_PATHS, repairOnlyUser, warehouseOnlyUser, operationsWorkspace, hasWarehouseManagementAccess, warehouseAreas, type OperationsWorkspace } from '../config/workspaces'
-import { stagedOperationsEnabled } from '../config/release'
+import { REPAIR_PERSONAL_PATHS, operationsWorkspace, availableOperationsWorkspaces, savePreferredOperationsWorkspace, operationsWorkspaceDestination, workspaceCompanyId, WORKSPACE_LABELS, type OperationsWorkspace } from '../config/workspaces'
 import CommandPalette from './CommandPalette'
 import NotificationCenter from './NotificationCenter'
 import SettingsDrawer from './SettingsDrawer'
@@ -43,22 +42,26 @@ export default function DashboardLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [menuSearch, setMenuSearch] = useState('')
-  const [workspace, setWorkspace] = useState<OperationsWorkspace>(() => operationsWorkspace(user, location.pathname))
-  const activeWorkspace = repairOnlyUser(user) ? 'repair' : warehouseOnlyUser(user) ? 'warehouse' : workspace === 'repair' ? 'all' : workspace
+  const [workPath, setWorkPath] = useState(location.pathname)
+  if (!REPAIR_PERSONAL_PATHS.includes(location.pathname) && workPath !== location.pathname) setWorkPath(location.pathname)
+  const [workspaceFeedback, setWorkspaceFeedback] = useState('')
+  const workspaces = availableOperationsWorkspaces(user)
+  const workspace = operationsWorkspace(user, REPAIR_PERSONAL_PATHS.includes(location.pathname) ? workPath : location.pathname)
+  const activeWorkspace = workspaces.includes(workspace) ? workspace : workspaces[0] || 'all'
   const items = workspaceNavigation(user, activeWorkspace)
   const active = activeNavigation(items, location.pathname, location.search)
   const parent = navigationParent(items, active?.key || '')
 
   useEffect(() => { document.title = PRODUCT.title }, [])
   useEffect(() => {
-    if (!PERSONAL_PATHS.includes(location.pathname)) setWorkspace(operationsWorkspace(user, location.pathname))
-  }, [location.pathname, user])
-  useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences)) } catch { /* Storage may be unavailable. */ }
   }, [preferences])
-  useEffect(() => {
-    if (parent) setPreferences((current) => ({ ...current, closed: current.closed.filter((key) => key !== parent) }))
-  }, [parent, location.pathname, location.search])
+  const navigationPath = location.pathname + location.search
+  const [lastNavigationPath, setLastNavigationPath] = useState(navigationPath)
+  if (lastNavigationPath !== navigationPath) {
+    setLastNavigationPath(navigationPath)
+    if (parent) setPreferences(current => ({ ...current, closed: current.closed.filter(key => key !== parent) }))
+  }
 
   const filter = (entries: NavigationItem[]): NavigationItem[] => entries.flatMap((item) => {
     if (!menuSearch.trim() || item.label.includes(menuSearch.trim())) return [item]
@@ -83,15 +86,20 @@ export default function DashboardLayout() {
       <img src={collapsed ? PRODUCT.mark : PRODUCT.logo} alt={PRODUCT.brand} />
       {!collapsed && <span>{PRODUCT.name}</span>}
     </div>
-    {!collapsed && stagedOperationsEnabled() && warehouseAreas(user).length>0 && <div className="operations-nav-search">
+    {!collapsed && workspaces.length>1 && <div className="operations-nav-search">
       <Select<OperationsWorkspace> aria-label="工作區" value={activeWorkspace} style={{ width: '100%' }}
-        options={[{value:'warehouse',label:'儲運作業'}, ...(!warehouseOnlyUser(user) ? [{value:'all',label:'營運管理'}] : [])]}
+        options={workspaces.map(value => ({ value, label: WORKSPACE_LABELS[value] }))}
         onChange={value => {
-          setWorkspace(value)
           setMenuSearch('')
-          if (value === 'warehouse') navigate(hasWarehouseManagementAccess(user) ? '/warehouse/workstation' : '/warehouse')
-          else if (location.pathname === '/warehouse/workstation' && hasWarehouseManagementAccess(user)) navigate('/warehouse')
+          setWorkspaceFeedback('')
+          navigate(operationsWorkspaceDestination(value, location.search))
         }} />
+      <Button type="link" size="small" onClick={() => {
+        const entityId = workspaceCompanyId(location.search)
+        setWorkspaceFeedback(savePreferredOperationsWorkspace(user, entityId, activeWorkspace)
+          ? '已設為這個帳號與公司在此瀏覽器的登入入口' : '目前無法儲存登入入口')
+      }}>設為登入預設</Button>
+      {workspaceFeedback && <span role="status" style={{ display: 'block', fontSize: 12 }}>{workspaceFeedback}</span>}
     </div>}
     {!collapsed && <div className="operations-nav-search"><Input prefix={<SearchOutlined />} placeholder="搜尋功能" aria-label="搜尋功能"
       value={menuSearch} allowClear onChange={(event) => setMenuSearch(event.target.value)} /></div>}

@@ -1,7 +1,7 @@
 import { mailroomEnabled } from '../pages/mailroom/model'
 import type { User } from '../types'
 import { hasAnyPermission, isAdminUser } from '../utils/access'
-import { PERSONAL_PATHS, REPAIR_PERSONAL_PATHS, repairOnlyUser, warehouseOnlyUser, hasWarehouseManagementAccess, WAREHOUSE_REPORTS, type OperationsWorkspace } from './workspaces'
+import { PERSONAL_PATHS, REPAIR_PERSONAL_PATHS, repairOnlyUser, warehouseOnlyUser, afterSalesOnlyUser, hasWarehouseManagementAccess, WAREHOUSE_REPORTS, type OperationsWorkspace } from './workspaces'
 import { stagedOperationsEnabled } from './release'
 import { wmsPortalLinks, wmsPortalOrigin } from './wms-portal'
 
@@ -9,9 +9,9 @@ export type NavigationItem = { key: string; label: string; externalUrl?: string;
 export const NAVIGATION: NavigationItem[] = [
   { key: '/my/inbox', label: '我的待辦與收件' },
   { key: 'workbenches', label: '工作台', children: [
-    { key: '/operations/after-sales/workbench', label: 'DOA／售後處理台', permissions: ['after_sales_cases:read'] },
+    { key: '/operations/after-sales/workbench', label: '售後工作台', permissions: ['after_sales_cases:read'] },
     { key: '/operations/mailroom', label: '收發室工作台', permissions: ['mailroom:read'] },
-    { key: '/operations/repair', label: '維修師工作台', permissions: ['repair_workbench:read'] },
+    { key: '/operations/repair', label: '維修工作台', permissions: ['repair_workbench:read'] },
   ] },
   { key: '/dashboard', label: '營運總覽' },
   { key: 'sales', label: '訂單銷售', children: [
@@ -25,8 +25,7 @@ export const NAVIGATION: NavigationItem[] = [
     { key: '/operations/after-sales/cases', label: '售後案件中心', permissions: ['after_sales_cases:read'] },
     { key: '/operations/after-sales/quotes', label: '報價與顧客確認', permissions: ['after_sales_cases:read'] },
     { key: '/operations/after-sales/shipping', label: '寄回與補寄物流', permissions: ['after_sales_shipping:read'] },
-    { key: '/operations/after-sales/customer-issues', label: '客訴案件', permissions: ['after_sales_cases:read'] },
-    { key: '/operations/after-sales/faqs', label: '售後 FAQ', permissions: ['after_sales_faqs:read'] },
+    { key: '/operations/after-sales/customer-issues', label: '產品問題回報', permissions: ['after_sales_cases:read'] },
     { key: '/operations/after-sales/imports', label: '售後資料匯入', permissions: ['after_sales_imports:read'] },
   ] },
   { key: 'warehouse', label: '儲運管理中心', permissions: ['wms_tasks:read'], children: [
@@ -119,7 +118,7 @@ export function visibleNavigation(user: User | null | undefined, items = NAVIGAT
         {key:'/sales/after-sales?type=CUSTOMER_ISSUE',label:'客戶問題',permissions:['after_sales_cases:read']},
       ]:[{key:'/sales/after-sales',label:'來回件',permissions:['after_sales_cases:read','sales_orders:read']}]} : original
     if (item.key === '/warehouse/workstation' && !hasWarehouseManagementAccess(user)) return []
-    if (item.key === '/dashboard' && (warehouseOnlyUser(user) || repairOnlyUser(user))) return []
+    if (item.key === '/dashboard' && (warehouseOnlyUser(user) || repairOnlyUser(user) || afterSalesOnlyUser(user))) return []
     if (item.superAdminOnly && !user?.roles?.includes('SUPER_ADMIN')) return []
     if (item.adminOnly && !isAdminUser(user) && !hasAnyPermission(user, item.permissions || [])) return []
     if (item.permissions?.length && !hasAnyPermission(user, item.permissions)) return []
@@ -130,6 +129,22 @@ export function visibleNavigation(user: User | null | undefined, items = NAVIGAT
 }
 export function workspaceNavigation(user: User | null | undefined, workspace: OperationsWorkspace): NavigationItem[] {
   const items = visibleNavigation(user)
+  if (workspace === 'after-sales' || (workspace === 'all' && afterSalesOnlyUser(user))) {
+    const leaves = navigationLeaves(items)
+    const work = leaves.filter(item => ['/operations/after-sales/workbench', '/operations/after-sales/cases',
+      '/operations/after-sales/quotes', '/operations/after-sales/shipping', '/operations/after-sales/customers'].includes(item.key))
+    const personal = leaves.filter(item => REPAIR_PERSONAL_PATHS.includes(item.key)).map(item =>
+      item.key === '/payroll/runs' ? { ...item, label: hasAnyPermission(user, ['payroll_admin:read']) ? '薪資管理' : '我的薪資' } : item)
+    return [...(work.length ? [{ key: 'service', label: '售後工作台', children: work }] : []),
+      ...(personal.length ? [{ key: 'personal', label: '我的資訊', children: personal }] : [])]
+  }
+  if (workspace === 'mailroom') {
+    const leaves = navigationLeaves(items)
+    const work = leaves.filter(item => item.key === '/operations/mailroom')
+    const personal = leaves.filter(item => REPAIR_PERSONAL_PATHS.includes(item.key))
+    return [...(work.length ? [{ key: 'workbenches', label: '收發室工作台', children: work }] : []),
+      ...(personal.length ? [{ key: 'personal', label: '我的資訊', children: personal }] : [])]
+  }
   if (workspace === 'repair' || repairOnlyUser(user)) {
     const personal = navigationLeaves(items).filter(item => REPAIR_PERSONAL_PATHS.includes(item.key))
     const repair = items.filter(item => item.key === 'workbenches').map(item => ({ ...item, children: item.children?.filter(child => child.key === '/operations/repair') }))

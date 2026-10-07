@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Spin } from 'antd'
+import { Alert, Button, Spin, Tabs } from 'antd'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import CustomerIntakeQueue from './mailroom/CustomerIntakeQueue'
@@ -12,6 +12,9 @@ import { useRepairNavigationGuard } from './repair/repair-navigation'
 import { useRepairFeedback } from './repair/repair-feedback'
 import { AFTER_SALES_READY_TIMEOUT_MS, afterSalesFrameFailure, createAfterSalesLaunchSession } from './repair/after-sales-launch'
 import type { AfterSalesAttempt } from './repair/after-sales-launch'
+import AfterSalesWorkbenchHub from './after-sales/AfterSalesWorkbenchHub'
+import { canOpenAfterSalesSection } from './after-sales/workbench-model'
+import { hasPermission } from '../utils/access'
 
 type FrameLaunch = { attempt: AfterSalesAttempt; ticket: string; name: string }
 export default function AfterSalesModulePage() {
@@ -21,12 +24,14 @@ export default function AfterSalesModulePage() {
   const [params] = useSearchParams()
   const entityId = params.get('entityId') || localStorage.getItem('entityId') || ''
   const intakeItemId=params.get('intakeItemId') || ''
+  const canOpenSection = canOpenAfterSalesSection(user, section)
   const [intakeContext,setIntakeContext]=useState<{entityId:string;itemId:string;item:Item}>()
   const frame = useRef<HTMLIFrameElement>(null)
   const session = useRef(createAfterSalesLaunchSession()), deadline = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [frameLaunch, setFrameLaunch] = useState<FrameLaunch>()
   const [error, setError] = useState(''), [loading, setLoading] = useState(true)
   const [height, setHeight] = useState(950)
+  const [showOverview, setShowOverview] = useState(false)
   const dirty = useRef(false)
   const iframeDirty = useRef(false), customerDirty = useRef(false), intakeDirty = useRef(false)
   useRepairNavigationGuard(dirty, () => new Promise<boolean>(resolve => modal.confirm({ title: '售後表單有未儲存修改',
@@ -41,7 +46,10 @@ export default function AfterSalesModulePage() {
     clearDeadline(); session.current.invalidate(); setFrameLaunch(undefined)
     iframeDirty.current = false; dirty.current = customerDirty.current || intakeDirty.current
     setHeight(950); setLoading(true); setError('')
+    if (window.__APP_CONFIG__?.afterSalesModuleEnabled !== true) { setError('售後工作台尚未開通'); setLoading(false); return }
     if (!entityId) { setError('請先選擇有售後來源權限的公司'); setLoading(false); return }
+    if (!canOpenSection) { setError('此帳號沒有目前售後功能或公司範圍的權限'); setLoading(false); return }
+    if (section === 'workbench' && !showOverview) { setLoading(false); return }
     let attempt: AfterSalesAttempt
     try { attempt = session.current.begin(section, entityId) }
     catch { setError('售後功能入口不存在'); setLoading(false); return }
@@ -57,12 +65,12 @@ export default function AfterSalesModulePage() {
     } catch (cause) {
       if (session.current.isCurrent(attempt)) showFailure(attempt, cause instanceof Error ? cause.message : '無法開啟售後工作台')
     }
-  }, [entityId, section, clearDeadline, showFailure])
+  }, [entityId, section, canOpenSection, showOverview, clearDeadline, showFailure])
   useEffect(() => {
-    iframeDirty.current = false; customerDirty.current = false; intakeDirty.current=false; dirty.current = false; void launch()
+    iframeDirty.current = false; dirty.current = customerDirty.current || intakeDirty.current; void launch()
     const currentSession = session.current
     return () => { currentSession.invalidate(); clearDeadline() }
-  }, [launch, clearDeadline])
+  }, [launch, clearDeadline, intakeItemId])
   const visibleLaunch = frameLaunch?.attempt.section === section && frameLaunch.attempt.entityId === entityId ? frameLaunch : undefined
   const attachFrame = useCallback((node: HTMLIFrameElement | null) => {
     frame.current = node
@@ -107,8 +115,22 @@ export default function AfterSalesModulePage() {
   }
   return <div>
     {contextHolder}
-    {section === 'workbench' && entityId && <CustomerRepairQueue entityId={entityId} onDirtyChange={value => { customerDirty.current = value; dirty.current = value || iframeDirty.current || intakeDirty.current }} />}
-    {section==='workbench' && entityId && <CustomerIntakeQueue key={entityId} entityId={entityId} initialItemId={intakeItemId} onDirtyChange={value=>{intakeDirty.current=value;dirty.current=value||iframeDirty.current||customerDirty.current;}} onOpenSource={itemId=>navigate(intakeSourceEntry(entityId,itemId))} />}
+    {window.__APP_CONFIG__?.afterSalesModuleEnabled === true && <AfterSalesWorkbenchHub user={user} section={section} onOpen={destination => {
+      const query = new URLSearchParams()
+      if (entityId) query.set('entityId', entityId)
+      if (intakeItemId && ['workbench', 'cases'].includes(destination)) query.set('intakeItemId', intakeItemId)
+      navigate(`/operations/after-sales/${destination}${query.size ? '?' + query.toString() : ''}`)
+    }} />}
+    {section === 'workbench' && entityId && hasPermission(user, 'mailroom:review') && <Tabs key={`${entityId}:${intakeItemId}`}
+      defaultActiveKey={intakeItemId ? 'intake' : 'repair'}
+      items={[
+        { key: 'repair', label: '維修交辦', forceRender: true, children: <CustomerRepairQueue key={entityId} entityId={entityId} onDirtyChange={value => { customerDirty.current = value; dirty.current = value || iframeDirty.current || intakeDirty.current }} /> },
+        { key: 'intake', label: '收發交辦', forceRender: true, children: <CustomerIntakeQueue key={entityId} entityId={entityId} initialItemId={intakeItemId} onDirtyChange={value=>{intakeDirty.current=value;dirty.current=value||iframeDirty.current||customerDirty.current;}} onOpenSource={itemId=>navigate(intakeSourceEntry(entityId,itemId))} /> },
+      ]} />}
+    {section === 'workbench' && entityId && window.__APP_CONFIG__?.afterSalesModuleEnabled === true && canOpenAfterSalesSection(user, 'workbench') && <Button style={{ marginBottom: 16 }} onClick={() => void (async () => {
+      if (showOverview && iframeDirty.current && !await new Promise<boolean>(resolve => modal.confirm({ title: '案件概況有未儲存修改', content: '請先儲存，或確認放棄修改後再收起。', okText: '收起', cancelText: '保留', onOk: () => resolve(true), onCancel: () => resolve(false) }))) return
+      setShowOverview(value => !value)
+    })()}>{showOverview ? '收起案件概況' : '查看案件概況'}</Button>}
     {section==='cases' && visibleIntake && <Alert showIcon type="info" style={{marginBottom:16}} message={`原收件 ${visibleIntake.label}：${visibleIntake.caseIntake?.status==='RESOLVED'?'已綁定來源案件':'客服本人補建中'}`} description="請沿用下方原售後『新增案件』表單。案件建立成功後，返回同一原收件選擇來源品項與版次完成綁定；此提示不表示案件已建立或實物已交接。" action={<Button onClick={()=>navigate(intakeReturnEntry(entityId,visibleIntake.id))}>返回原收件綁案</Button>} />}
     {error && <Alert type="error" showIcon message="售後工作台未能開啟" description={error} action={<Button onClick={() => void (async () => {
       if (iframeDirty.current && !await new Promise<boolean>(resolve => modal.confirm({ title: '售後表單尚未儲存', content: '重新開啟會放棄原售後表單修改；維修轉客服回覆仍保留。', okText: '重新開啟', cancelText: '保留表單', onOk: () => resolve(true), onCancel: () => resolve(false) }))) return

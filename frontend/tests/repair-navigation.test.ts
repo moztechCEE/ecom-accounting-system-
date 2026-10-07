@@ -10,9 +10,10 @@ test('source financial and master data modules require dedicated grants, not oth
   assert.deepEqual(nativeLeaves(['accounts:read','inventory:read','sales_orders:read','access_control:read']),[]);
   for(const [permission,path] of [
     ['after_sales_shipping:read','shipping'],['after_sales_accounting:read','accounting'],['after_sales_invoices:read','invoices'],
-    ['after_sales_products:read','products'],['after_sales_faqs:read','faqs'],['after_sales_imports:read','imports'],
+    ['after_sales_products:read','products'],['after_sales_imports:read','imports'],
     ['after_sales_users:read','users'],['after_sales_audit:read','audit-logs'],['after_sales_settings:read','settings'],
   ])assert.deepEqual(nativeLeaves([permission]),[`/operations/after-sales/${path}`]);
+  assert.deepEqual(nativeLeaves(['after_sales_faqs:read']),[]);
   assert(!navigationLeaves(visibleNavigation(user(['after_sales_audit:read']))).some(i=>i.key==='/admin/access-control'));
 });
 test('repair-only staff retain their native task and personal entries without source customer or accounting modules',()=>{

@@ -14,7 +14,7 @@ The bilingual entries cover navigation groups and route or filter entry points, 
 | --- | --- |
 | Overview / 營運總覽 | Company, period, data freshness and source metrics / 公司、期間、資料狀態與來源指標 |
 | Sales / 訂單銷售 | Orders, quotations, customers and B2B procurement / 訂單、報價、客戶與 B2B 採購 |
-| After-sales / 售後 | Native source case center, six types, quotes, customers, logistics, FAQ and imports; legacy fallback / 原售後案件中心、六類案件、報價、客戶、物流、FAQ、匯入及舊入口備援 |
+| After-sales / 售後 | Focused workbench, original six case types, quotes, customers and logistics; authorized management/imports and legacy fallback; FAQ excluded / 精簡工作台、原六類案件、報價、客戶與物流；授權管理/匯入及舊入口備援；原FAQ排除 |
 | Warehouse / 儲運 | ERP workspace and permission-controlled WMS destinations / ERP 工作區與依權限開放的 WMS 入口 |
 | Purchasing and inventory / 採購庫存 | Vendors, landed cost, receiving, products, SN, assembly and handover reconciliation / 供應商、到岸成本、收貨、產品、序號、組裝與交運核銷 |
 | Finance / 財務會計 | Expenses, approvals, payments, AR, banking, journals, accounts, periods, reconciliation and reports / 費用、審批、付款、應收、銀行、分錄、科目、期間、對帳與報表 |
@@ -24,6 +24,10 @@ The bilingual entries cover navigation groups and route or filter entry points, 
 | Workbenches, mailroom and repair / 工作台、收發與維修 | Customer service, mailroom and technician entries; revision-bound handoffs, factory transit, qualified replacements and saved documents / 客服、收發與維修師分工入口；版次交辦、原廠往返、合格替換品與已保存工作單 |
 
 ## Feature boundaries / 功能界線
+
+- Dedicated workspaces can be switched according to current grants. Browser-only login preferences are scoped by account and company, preserve explicitly selected URL company context, and never grant access. Management capabilities remain reachable in Operations Management. / 各工作台依目前權限切換；登入偏好僅限此瀏覽器並依帳號與公司隔離，切台保留網址明確公司，不授予權限；管理能力仍可於營運管理使用。
+- The six home service labels preserve original case enums and all original branches. Repair and mailroom handoff tabs keep unsaved drafts; original case overview opens on demand. Quotes, payment/refund and invoice records retain their source authority without a second ledger. / 六類展示名稱保留原enum及子流程；維修／收發交辦分頁保留草稿，原案件概況按需展開；報價、收款退款及發票沿用來源紀錄，不新增第二本帳。
+- Legacy FAQ is excluded from the DOA sidebar and frontend launch. Its guide records a compatibility route still present in the source contract, not an available workbench operation. Corely Claw help remains. / 原FAQ排除於DOA側欄及前端開啟；指南只記錄來源契約仍有的相容路徑，不宣稱可操作；Claw使用說明保留。
 
 - `after-sales-module` availability opens reviewed original source pages at `/operations/after-sales/:section` through the same-origin module. It requires enablement, a bound company, an active existing source account, company-wide ERP scope and dedicated module grants intersected with the source role. Read and write remain separate. When disabled, the legacy staged/fallback entry remains. / `after-sales-module` 入口以同源模組保留原售後頁面，須啟用、綁定公司、既有有效來源帳號、ERP 公司範圍及專用模組授權，並與來源角色取交集；讀寫分開。未啟用時保留舊 staged／備援入口。
 - A non-administrator ERP actor uses source admin only with all 19 explicit after-sales integration permissions (nine read/update pairs and audit read), ENTITY company scope and an existing active source admin binding. Module grants still use explicit permissions; no native ERP ADMIN/SUPER_ADMIN, wildcard or cross-company authority is added. / 非 ERP 管理員須具備全部 19 項明確售後整合權限（九組 read／update 與稽核 read）、ENTITY 公司範圍及既有有效來源 admin 綁定，才使用來源 admin 角色。模組仍按明確權限取交集，不新增原生 ERP ADMIN／SUPER_ADMIN、萬用權限或跨公司範圍。
@@ -73,7 +77,7 @@ node scripts/dev/generate-copilot-knowledge.cjs --check
 
 The generator hashes only the explicitly curated `sourcePaths`, the catalog and the original snapshot. It does not crawl the repository, ingest secrets or build a vector index. `sourceVersion` is a deterministic content hash, not a claim that all repository code was reviewed. `reviewedBaseCommit` records the starting revision; exact per-source hashes identify the files used at generation. Source-manifest coverage is documentation coverage, not operational acceptance or executor coverage.
 
-The curated list includes native workbenches, draft guards, source-module authorization, stock controllers/services, DTOs, contracts and explicitly reviewed SQL migrations. Source sections are expanded from the fixed module contract, and six repair queues from the shared model; neither can disappear merely because the sidebar is consolidated. Migration access is limited to listed timestamped `backend/prisma/migrations/*/migration.sql` sources; the reviewed Prisma schema is allowed by exact path, while seed scripts and fixtures remain excluded. / 明列來源包含原生工作台、草稿保護、來源模組授權、庫存 controller／service、DTO、契約與已審閱 SQL migration。來源頁面依固定契約展開，六維修隊列依共用模型展開，不會因側欄整併漏掉文件覆蓋。migration 僅限明列時間戳目錄，Prisma schema 僅精確路徑可納入模型來源，仍不納入 seed 或 fixture。
+The curated list includes native workbenches, draft guards, source-module authorization, stock controllers/services, DTOs, contracts and explicitly reviewed SQL migrations. Source sections are expanded from the fixed module contract, and six repair queues from the shared model; neither can disappear merely because the sidebar is consolidated. Migration access is limited to listed timestamped `backend/prisma/migrations/*/migration.sql` sources; the reviewed Prisma schema is allowed by exact path, while seed scripts and fixtures remain excluded. / 明列來源包含原生工作台、草稿保護、來源模組授權、庫存 controller／service、DTO、契約與已審閱 SQL migration。來源頁面依固定契約展開，含僅相容記錄的FAQ；新首頁、展示model、樣式與DashboardLayout亦明列來源。六維修隊列依共用模型展開，不會因側欄整併漏掉文件覆蓋。migration 僅限明列時間戳目錄，Prisma schema 僅精確路徑可納入模型來源，仍不納入 seed 或 fixture。
 
 來源版本只涵蓋明確列入 `sourcePaths` 的已審閱檔案及語料，不代表審閱整個 repo。manifest 的 coverage 是操作文件覆蓋，不等於所有功能已通過現場驗收或已接入 AI 執行工具。
 
