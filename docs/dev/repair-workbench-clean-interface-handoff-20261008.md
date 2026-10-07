@@ -27,7 +27,9 @@
 
 原正式回執 [repair-ui-28b5f06c-doa-review-20261008.md](reviews/repair-ui-28b5f06c-doa-review-20261008.md) 原文 SHA256 `5f10cc9d0b75adcf7e576eb02a464b98e987a4bc0d877c5634668ae80b19ce31`；在實際 Page 中重現「送出原廠作業 → pending 時收合 → API reject → failure DOM 隱藏」。前次批次保持 FAIL/HELD 歷史。
 
-新增 UI-only optional props `RepairWorkflowPanel.onFailure(string)`、`onBusyChange(boolean)`。父 Page 在送出期間禁止收合；拒絕或保存成功但 reload 失敗的回饋放在外層，收合後仍可見；當前 context toast 即時提示，獨立元件仍保留本地 Alert。`forceRender` 保留同表單 DOM 和草稿。沒有新增後端接口、command、權限或業務狀態。
+新增 UI-only optional props `RepairWorkflowPanel.onFailure(string)`、`onBusyChange(boolean)`。父 Page 在送出期間禁止收合；command 拒絕的回饋放在外層，收合後仍可見；當前 context toast 即時提示，獨立元件仍保留本地 Alert。`forceRender` 保留同表單 DOM 和草稿。沒有新增後端接口、command、權限或業務狀態。
+
+實跑的負向是 POST reject，沒有驗證 command 已成功後 GET reload reject。子元件保留 saved/reload failure catch，但 actual Page 的 loadDetail/refresh 自行 catch（沿用2643），不將例外拋回 child；因此不能將整個保存成功後 reload 失敗的父頁路徑列為外層回饋已驗收。CustomerRepairQueue 也只有 native AST/guard 審查，沒有本批独立 queue DOM。
 
 ## 本機驗證
 
@@ -72,3 +74,11 @@ English proposal:
 > Identify the physical item by product name, case number and SN/SKU, then open it through the product link or Open case. Use the inspection or repair form in the main area; save draft, submit and print are distinct, and printing uses the saved version. Case actions appear beside the form on desktop and after it on mobile. After Send to customer service, wait for the current inspection/estimate/quote review, customer consent and required payment release. Expand Customer service and release to inspect actual evidence. Original-item/factory operations, physical handoffs and synchronization history expand on demand without deleting work or versions. Reservations persist independently; discarding a document draft does not cancel them. Cancel unused reservations explicitly. Record a factory return only from actual logistics; cancellation is not physical return. Operation failures remain visible outside collapsed details. Dispatched items label prior delivery acknowledgements as history; they do not prove this dispatch synchronization or customer notification. Presentation does not replace backend ownership/company permissions, current consent/payment, stock or QC gates.
 
 待 DOA/收發在 fetch 並核對新完整 SHA 後獨立接收，中央雙語指南/knowledge check、最後整合 SHA 及 DEV 候選/流量驗收仍分開記錄。錄影、發票新 gate、顧客報告及真正封存仍是另批共同契約工作，不在此 UI 提交冒稱完成。
+
+## 固定 215991e 接收與文件收尾
+
+程式與全系統 AGENTS 固定批 `215991e18e5c33c5045921b1668482142dc2f70d` 已收到 DOA 與收發兩台独立 **SCOPE_PASS**，各自在指定 SHA 的新 detached tree 測五個 actual DOM 18/18、可選 baseline 11/11；沒有新 P1/P2。兩份原回執保存於 `docs/dev/reviews/repair-ui-215991e1-doa-review-20261008.md`、`mailroom-review-repair-ui-215991e-20261008.md`，保留各自方法、counts 與未驗項；這不是最後整合/DEV/真 API 或外部業務驗收。
+
+同時完成 DOA 固定 `6ad7dbd12f136f5a35dce97e38e701e9cef7e7a1` 窄 UI 接收：Module 8/8、company/LayoutHub 7/7，API/公司/權限/dirty/mount 靜態核對 PASS_SCOPE。正式 `repair-review-doa-ui-6ad7dbd1-20261008.md` 保留真 queue/Source/help/backend/外部鏈路未驗項及 base264已知GET/false-empty和中央knowledge整批HOLD。收發9cc另份正式回執記錄原Recipient定位器失敗及private契約probe，不將原suite假稱PASS。
+
+本次文件收尾只保存上述回執並澄清測試範圍，AGENTS、frontend sources/tests、backend、services 及指南與2159固定批 byte相同。新完整HEAD/push/remote核對列repair-status；既有2159程式接收結果對應相同程式 bytes，最後整合與中央指南/DEV仍由DOA另驗。
