@@ -82,7 +82,7 @@ Guide ID：`repair-workbench`；建議中文 title 同步頁內標題改為「�
 | sourcePath | SHA256 |
 | --- | --- |
 | `frontend/src/pages/repair/RepairWorkbenchPage.tsx` | `f01537d363d57a5663e61e8825383df6b31fa1acbe32bb88ccd99d11573f1dab` |
-| `frontend/src/pages/repair/repair-readiness.ts` | `235ca26f382e5cd109537cd445b894efdb93f60e34f5a40e5e7c9267dd428234` |
+| `frontend/src/pages/repair/repair-readiness.ts` | `4108c5bfe4615dd1b335ac5a3ac8cf88af1d469d4d340d85747df4b71d586968` |
 | `frontend/src/pages/repair/RepairReadinessPanel.tsx` | `3c93901a5b3078b1024313f5825960bc7428248c8c2305d1e79c7868c45731f5` |
 
 
@@ -95,3 +95,19 @@ Guide ID：`repair-workbench`；建議中文 title 同步頁內標題改為「�
 - 新增 REPAIR／REPLACE × DRAFT／SUBMITTED 開工指引與來源未齊測例；原廠返還後改檢修／失CSR測例。真React DOM同時核對既有文件仍可見、開工指引不被蓋及原廠失效原因。
 - 修訂只改 helper、2個專用tests及此文件；原actions/predicates、API、模型、schema、shared导航与dispatch均未變更。新提交SHA由交付訊息及repair-status記錄。
 - 修後測試59/59、完整frontend build、此3個改動程式／測試檔lint與diff檢查通過；新固定SHA仍須收發與DOA重審，不能自動沿用587的舊審查。Claw集中更新與最終整合DEV仍待DOA。
+
+## 收發 dispatch 整合前的維修唯讀提示適配
+
+固定審查 DOA `ad406d84679bb7b1a54f08bc4df35aa73fc765c3`、收發 `dd0b5b4453eb0cf348fd7b3a4b4b39c2ea73d91d` 後，跨固定模組 probe 發現既有3e helper在 DISPATCHED＋原RETURN方案仍顯舊拒修交回指引。收發單批的原生維修頁已排除再次簽收／施工，本修订只補維修owned唯讀面板，沒有修改收發dispatch、shared模型、API或任何來源／庫存狀態。
+
+- DISPATCHED 優先顯示「已交物流寄回，待顧客收件」，不沿用舊處置方案的退回指引；明示交運、顧客收件與結案不同。
+- 已寄出即不顯本人可作業條件，即使輸入殘留舊editable／custodian／return_original旗標；實際action權限與原生後端仍維持原契約。
+- 保留所有檢修、維修及實際處置；不要求在本修訂基底新增 CUSTOMER_CARRIER 型別或 outboundschema，正式保管／物流投影由收發固定批帶入。
+- 本次 delta 實跑 readiness20/20（含4方案及殘留旗標）、真React panel DOM1/1、完整frontend build、3改動程式／測試檔lint與diff檢查 PASS。先前59項為3e驗證歷史，不假裝全部已於此新HEAD重跑。Claw因helper改動待DOA在最後整合集中生成，不能只更新hash而略過下列雙語語意。
+
+Claw repair-workbench steps增補（整合收發dispatch後採用）：
+
+- ZH：已交物流寄回的物件只查看既有檢修、維修與寄出紀錄；核對承運商、單號及實際原件／替換品。已交運不表示顧客已收件或案件已結案，後續由收發室與客服依實際結果處理。
+- EN: Dispatched items retain inspection, repair and outbound records for review. Verify the carrier, tracking number and actual original or replacement item. Carrier handover does not prove customer receipt or case closure; mailroom and customer service follow the actual outcome.
+
+邊界：本修訂不新增dispatch能力或 Source／AI消費端，不把 PENDING_COMPATIBILITY 轉成功。DISPATCHED目前仍不在repair records隊列、all可查；若要擴充records須由DOA協調共同查詢契約。兩批獨立審查回執保存於本產品docs/dev/reviews；最終共同整合SHA與DEV仍需重驗。

@@ -42,7 +42,7 @@ export function repairReadiness(item: RepairItem, context: RepairReadinessContex
   const customerRepair = item.receipt.category === 'REPAIR';
   const nativeOriginalReturn = customerRepair && item.allowedWorkflowActions?.includes('return_original') === true;
   const waitingAcceptance = ['WAITING_REPAIR_ACCEPTANCE', 'PENDING_REFURBISH'].includes(item.status);
-  const ownSigned = context.canUpdate && !!context.viewerId && item.repairOwnerId === context.viewerId
+  const ownSigned = item.status !== 'DISPATCHED' && context.canUpdate && !!context.viewerId && item.repairOwnerId === context.viewerId
     && item.custodianId === context.viewerId && item.editable === true;
   const ownership = check('own_signed', '本人簽收與編輯', ownSigned, ownSigned
     ? '目前登錄的維修負責人、實物保管人與登入本人一致，且此件可編輯。'
@@ -166,6 +166,9 @@ export function repairReadiness(item: RepairItem, context: RepairReadinessContex
   } else if (item.status === 'READY_FOR_DISPATCH') {
     title = '交回後續由收發室安排寄回';
     nextStep = '依收發室目前實物與物流紀錄安排寄回；待安排寄回不等於已交運或顧客收到。';
+  } else if (item.status === 'DISPATCHED') {
+    title = '已交物流寄回，待顧客收件';
+    nextStep = '原件或替換品已交物流；依收發室保存的寄出紀錄核對承運商、單號及實物。已交運不代表顧客已收件或案件已結案；後續由收發室與客服依實際結果處理，此處保留檢修與維修紀錄供查閱。';
   } else if (['FACTORY_OUTBOUND', 'FACTORY_RECEIVED', 'FACTORY_RETURNING'].includes(item.status)) {
     title = '原廠處理與實物返還各自核對';
     nextStep = item.repairWorkflow?.factory?.cancelled && item.status !== 'FACTORY_RETURNING'

@@ -44,6 +44,10 @@ function Harness() {
       data:{outcome:'FACTORY_REPAIRED',factoryReference:'SYNTHETIC-FACTORY',qcResult:'PASS',checks:[{name:'合成功能',result:'PASS',observation:'合成通過'}]}};
   }
   if(scenario==='waiting-mailroom'){item.status='WAITING_RETURN_ACCEPTANCE';item.repairWorkflow.release={purpose:'RETURN_UNREPAIRED'};}
+  if(scenario==='dispatched-refusal'){
+    item.status='DISPATCHED';item.statusLabel='已交物流寄回，待顧客收件';item.editable=false;
+    item.custodianId='fixture-clerk';item.repairInspection.data.plan='RETURN';item.allowedWorkflowActions=[];
+  }
   if(scenario==='unclaimed'){item.status='WAITING_REPAIR_ACCEPTANCE';item.repairOwnerId=null;item.editable=false;}
   if(scenario==='refusal'){item.repairInspection.data.plan='RETURN';item.repairWorkflow.csr.decision='DECLINE';}
   if(scenario==='declined-original-plan'){
@@ -60,7 +64,7 @@ function Harness() {
   }
   return e(React.Fragment,null,
     e('select',{id:'scenario',value:scenario,onChange:event=>setScenario(event.target.value)},
-      ['ready','free-pending','paid-pending','new-quote','csr-accepted','unknown-amount','inspection-draft','inspection-submitted','factory-reinspection','waiting-mailroom','unclaimed','refusal','declined-original-plan','failed-qc','completed-new-quote'].map(value=>e('option',{key:value,value},value))),
+      ['ready','free-pending','paid-pending','new-quote','csr-accepted','unknown-amount','inspection-draft','inspection-submitted','factory-reinspection','waiting-mailroom','dispatched-refusal','unclaimed','refusal','declined-original-plan','failed-qc','completed-new-quote'].map(value=>e('option',{key:value,value},value))),
     e('div',{id:'panel'},e(RepairReadinessPanel,{item,canUpdate:true,viewerId:'fixture-tech',handoffNote:'合成交回說明'})));
 }
 createRoot(document.getElementById('root')).render(e(Harness));
@@ -130,6 +134,12 @@ test('actual React panel keeps pending consent, payment, CSR and QC distinct fro
   await page.locator('#scenario').selectOption('waiting-mailroom');
   await panel.getByText('未修原件已交辦收發室，待本人接收', { exact: true }).waitFor();
   assert.match(await panel.innerText(), /不等於收發已接收、已出貨或已入庫/);
+  await page.locator('#scenario').selectOption('dispatched-refusal');
+  await panel.getByText('已交物流寄回，待顧客收件', { exact: true }).waitFor();
+  assert.match(await panel.innerText(), /已交運不代表顧客已收件或案件已結案/);
+  assert.equal(await panel.getByText('保留未修原件，依拒修／退回流程交接', { exact: true }).count(), 0);
+  assert.equal(await panel.getByRole('region', { name: '開始維修／替換核對' }).count(), 0);
+  assert.equal(await panel.getByRole('region', { name: '複驗與完成件交回核對' }).count(), 0);
   await page.locator('#scenario').selectOption('unclaimed');
   await panel.getByText('待認領／本人實物簽收', { exact: true }).waitFor();
   assert.match(await panel.innerText(), /可先認領此件，再依交接安排本人收到/);
