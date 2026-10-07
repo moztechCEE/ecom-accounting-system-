@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, Space, Spin, Table, Tabs, Tag, Timeline, Typography } from 'antd';
+import { Alert, Button, Card, Checkbox, Collapse, Descriptions, Drawer, Empty, Input, Pagination, Space, Spin, Table, Tabs, Tag, Timeline, Typography } from 'antd';
 import { ReloadOutlined, ToolOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -108,22 +108,37 @@ export default function RepairWorkbenchPage() {
   if (!entityId) return <>{contextHolder}<Alert type="warning" message="請先選擇作業公司" /></>;
   return <div className="mailroom-page repair-workbench-page">
     {contextHolder}
-    <div className="mailroom-heading"><div><Title level={2}><ToolOutlined /> 維修工作台</Title><Paragraph type="secondary">DOA、一般送修與公司退貨整新共用檢修、替換及原廠返還流程；每一步保留本人簽收與工作單。</Paragraph></div><Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading}>重新整理</Button></div>
+    <div className="mailroom-heading"><div><Title level={2}><ToolOutlined /> 維修工作台</Title><Paragraph type="secondary">選擇產品與案件，完成檢測、維修及複驗紀錄。</Paragraph></div><Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading}>重新整理</Button></div>
     <Tabs activeKey={queue} onChange={key => {void (async()=>{if (detailDirty.current) {if (!await confirmDiscard()) return;detailDirty.current=false;}const next = new URLSearchParams(params);if (key==='all') next.delete('queue');else next.set('queue', key);next.delete('itemId');setPagination({queue:key as RepairQueue,page:1});setParams(next);})();}} items={Object.entries(QUEUES).map(([key,label])=>({key,label}))} />
-    {(queue === 'all' || queue === 'acceptance') && <ArrivalPreview entityId={entityId} />}
+    {(queue === 'all' || queue === 'acceptance') && <Collapse className="repair-arrival-preview" items={[{key:'arrival',label:'待到貨／在途案件',forceRender:true,children:<ArrivalPreview entityId={entityId} />}]} />}
     {queue === 'waiting' && <Alert showIcon type="info" style={{marginBottom:16}} message="客服方案確認與售後放行分開核對" description="所有方案（含免費處理）都需客服確認目前已提交的檢修版次；顧客同意與必要款項仍由售後來源確認。此處顯示同步進度，不代替會計確認收款。" />}
     {failure && <Alert type="error" showIcon message={failure} style={{marginBottom:16}} />}
     <Card className="repair-workbench-list" title={QUEUES[queue]} extra={<Input.Search className="repair-workbench-search" placeholder="案件號／品名／SKU／SN" allowClear onSearch={value=>{setPagination({queue,page:1});setSearch(value);}} />}>
-      <Table<RepairItem> rowKey="id" loading={loading} dataSource={rows} scroll={{x:1000}} locale={{emptyText:<Empty description="此分類目前沒有案件" />}} pagination={{current:page,total,pageSize:50,onChange:value=>setPagination({queue,page:value}),showSizeChanger:false}} columns={[
-        {title:'案件與產品',key:'product',render:(_,item)=><><Button type="link" style={{padding:0}} onClick={()=>void open(item.id)}>{item.receipt.sourceNumber || item.label}</Button><div>{item.productName}</div><Text type="secondary">{item.sku || '未提供 SKU'} · {item.serialNumber || '未提供 SN'}</Text></>},
-        {title:'作業狀態',dataIndex:'status',render:(value:string,item)=><Tag color={value==='WAITING_CUSTOMER'?'orange':'blue'}>{item.statusLabel || REPAIR_STATUS[value] || STATUS[value] || value}</Tag>},
-        {title:'實物保管／位置',key:'custody',render:(_,item)=>{const custody=currentItemCustody(item);return <>{custody.holder}<div><Text type="secondary">{custody.location}</Text></div>{custody.notice&&<Text type="secondary">{custody.notice}</Text>}</>;}},
-        {title:'目前交辦／接收',key:'next',render:(_,item)=>item.status==='WAITING_CUSTOMER'?'承辦客服處理中':item.nextUserName || (['WAITING_REPAIR_ACCEPTANCE','PENDING_REFURBISH'].includes(item.status)?'待維修師認領':'—')},
-        {title:'工作單',key:'documents',render:(_,item)=><Space direction="vertical" size={2}><Text>{item.repairInspection ? `檢修單 v${item.repairInspection.revision} · ${item.repairInspection.status==='SUBMITTED'?'已提交':'草稿'}` : '尚無檢修單'}</Text><Text type="secondary">{item.repairReport ? `維修單 v${item.repairReport.revision} · ${item.repairReport.status==='SUBMITTED'?'已提交':'草稿'}` : '尚無維修單'}</Text></Space>},
-        {title:'',key:'open',render:(_,item)=><Button onClick={()=>void open(item.id)}>開啟案件</Button>},
-      ]} />
+      <Spin spinning={loading}>
+        {rows.length ? <ul className="repair-case-list">{rows.map(item => {
+          const custody=currentItemCustody(item);
+          return <li key={item.id} className="repair-case-row">
+            <div className="repair-case-product">
+              <Button type="link" className="repair-product-title" onClick={()=>void open(item.id)}>{item.productName}</Button>
+              <Text className="repair-case-number">{item.receipt.sourceNumber || item.label}</Text>
+              <Text type="secondary" className="repair-case-serial">SN：{item.serialNumber || '未提供'} · SKU：{item.sku || '未提供'}</Text>
+              <Text type="secondary" className="repair-case-custody">{custody.holder} · {custody.location}{custody.notice ? ` · ${custody.notice}` : ''}</Text>
+            </div>
+            <div className="repair-case-progress">
+              <Tag color={item.status==='WAITING_CUSTOMER'?'orange':'blue'}>{item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag>
+              <Text type="secondary">{item.status==='WAITING_CUSTOMER'?'承辦客服處理中':item.nextUserName || (['WAITING_REPAIR_ACCEPTANCE','PENDING_REFURBISH'].includes(item.status)?'待維修師認領':'')}</Text>
+              <div className="repair-case-documents">
+                <span>{item.repairInspection ? `檢修單 v${item.repairInspection.revision} · ${item.repairInspection.status==='SUBMITTED'?'已提交':'草稿'}` : '尚無檢修單'}</span>
+                <span>{item.repairReport ? `維修單 v${item.repairReport.revision} · ${item.repairReport.status==='SUBMITTED'?'已提交':'草稿'}` : '尚無維修單'}</span>
+              </div>
+            </div>
+            <Button className="repair-case-open" onClick={()=>void open(item.id)} aria-label={`開啟案件：${item.productName} · ${item.receipt.sourceNumber || item.label}`}>開啟案件</Button>
+          </li>;
+        })}</ul> : <Empty description="此分類目前沒有案件" />}
+      </Spin>
+      <Pagination className="repair-case-pagination" current={page} total={total} pageSize={50} onChange={value=>setPagination({queue,page:value})} showSizeChanger={false} hideOnSinglePage />
     </Card>
-    <Drawer rootClassName="repair-workbench-drawer" width={980} open={!!selectedId} title="維修案件" onClose={()=>void open()} destroyOnHidden>
+    <Drawer rootClassName="repair-workbench-drawer" width="min(1180px, 100vw)" open={!!selectedId} title={<div className="repair-detail-identity"><Text type="secondary">{detail?.receipt.sourceNumber || detail?.label || '維修案件'}</Text><Title level={3}>{detail?.productName || '載入案件…'}</Title></div>} onClose={()=>void open()} destroyOnHidden>
       <Spin spinning={detailBusy}>{detail ? <>
         {changed && <Alert type="info" showIcon message="案件有新進度" description="請先保存目前草稿，再重新載入案件。" action={<Button onClick={()=>void loadDetail(true)}>重新載入</Button>} style={{marginBottom:16}} />}
         <RepairDetail confirmDiscard={confirmDiscard} feedback={message} key={`${detail.id}:${detail.version}`} item={detail} entityId={entityId} onDirtyChange={dirty=>{detailDirty.current=dirty;}} onSaved={async()=>{detailDirty.current=false;await loadDetail();await refresh(true);}} />
@@ -202,9 +217,27 @@ function RepairDetail({item,entityId,onSaved,onDirtyChange,feedback,confirmDisca
   if(own&&['REPAIR_RECEIVED','INSPECTING','REPAIRING'].includes(item.status))actions.push({name:'await_customer',label:'提交客服確認',disabled:!documentReady(item)||!note.trim()||!item.receipt.customerServiceUserId});
   if(own&&item.status==='INSPECTING'&&['REPAIR','REPLACE'].includes(plan || ''))actions.push({name:'start_repair',label:plan==='REPLACE'?'開始替換處理':'開始維修',disabled:!repairStartReady(item)});
   if(own&&['REPAIRING','REFURBISHING'].includes(item.status))actions.push({name:item.status==='REFURBISHING'?'complete_refurbish':'complete_repair',label:'複驗完成，交回收發室',disabled:!repairReportReady(item)||!note.trim()});
-  return <Space direction="vertical" size={20} style={{width:'100%'}}>
-    <div><Title level={3}>{item.productName}</Title><Space wrap><Tag color="blue">{item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag><Text>{item.receipt.sourceNumber || item.label}</Text>{item.receipt.category==='RETURN'&&<Tag>退貨整新</Tag>}</Space></div>
-    <Descriptions bordered size="small" column={{xs:1,sm:2}} items={[
+  return <div className="repair-detail">
+    <div className="repair-detail-summary"><Tag color="blue">{item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag>{item.receipt.category==='RETURN'&&<Tag>退貨整新</Tag>}<Text type="secondary">SN：{item.serialNumber || '未提供'} · SKU：{item.sku || '未提供'}</Text></div>
+    <RepairReadinessPanel compact item={item} canUpdate={canUpdate} viewerId={user?.id} handoffNote={note} />
+    <div className="repair-documents-layout">
+      <div className="repair-editor-main">    <RepairDocuments feedback={message} item={item} entityId={entityId} onSaved={onSaved} onBeforeSave={async()=>!(workflowDirty.current || actionDirty.current) || await confirmDiscard()} onDirtyChange={dirty=>{documentsDirty.current=dirty;publishDirty();}} />
+</div>
+      <aside className="repair-editor-sidebar" aria-label="案件操作">
+    {!item.receipt.customerServiceUserId&&item.receipt.sourceCaseId&&<Alert type="warning" message="來源案件尚未對應承辦客服" description="請先完成客服帳號對應，再交付客服確認。" />}
+    {failure&&<Alert type="error" message={failure} showIcon />}
+    {actions.length>0&&<Card size="small" title="下一步作業">
+      {waiting&&item.nextUserId===user?.id&&<Space direction="vertical" style={{width:'100%',marginBottom:14}}><Text>登入身分：{user?.name}。逐件核對品名、SKU、SN、配件後再簽收。</Text><Input value={location} maxLength={160} onChange={event=>{setLocation(event.target.value);actionDirty.current=true;publishDirty();}} placeholder="簽收後存放位置" /><Checkbox checked={confirmed} onChange={event=>{setConfirmed(event.target.checked);actionDirty.current=true;publishDirty();}}>我已收到並核對此件實物</Checkbox></Space>}
+      {own&&<Input.TextArea value={note} maxLength={2000} rows={2} onChange={event=>{setNote(event.target.value);actionDirty.current=true;publishDirty();}} placeholder="交辦說明：診斷與估價原因，或交回品況及配件" style={{marginBottom:12}} />}
+      <Space wrap>{actions.map(action=><Button key={action.name} type="primary" loading={busy} disabled={action.disabled || busy} onClick={()=>void act(action.name)}>{action.label}</Button>)}</Space>
+      {own&&!documentReady(item)&&<Paragraph type="secondary" style={{marginTop:12,marginBottom:0}}>請先提交完整檢修單，才可交客服確認或開始處理。</Paragraph>}
+    </Card>}
+        <Collapse items={[{key:'workflow',label:'退回原件與原廠作業',forceRender:true,children:<>    <RepairWorkflowPanel feedback={message} item={item} entityId={entityId} canUpdate={canUpdate && item.repairOwnerId===user?.id} onSaved={onSaved} onDirtyChange={dirty=>{workflowDirty.current=dirty;publishDirty();}} onBeforeAction={async()=>!(documentsDirty.current || actionDirty.current) || await confirmDiscard()} />
+</>}]} />
+      </aside>
+    </div>
+    <Collapse className="repair-case-details" items={[
+      {key:'details',label:'案件資料與實物保管',forceRender:true,children:<>    <Descriptions bordered size="small" column={{xs:1,sm:2}} items={[
       {key:'sku',label:'SKU',children:item.sku || '未提供'}, {key:'sn',label:'原件 SN',children:item.serialNumber || '未提供'},
       {key:'custodian',label:'目前實物保管',children:custody.holder},{key:'location',label:'目前實物位置',children:custody.location},
       ...(custody.transferred?[{key:'linked',label:'換機出庫',children:[custody.notice,custody.reference,custody.status].filter(Boolean).join(' · ')},{key:'in-history',label:'原退貨入庫紀錄',children:`${item.custodianName} / ${item.location}（歷史接收，不代表目前持有）`}]:[]),
@@ -220,21 +253,13 @@ function RepairDetail({item,entityId,onSaved,onDirtyChange,feedback,confirmDisca
       {key:'amount',label:'本報價金額',children:item.release.releaseInfo.amount==null?'尚未提供':`${item.release.releaseInfo.currency} ${item.release.releaseInfo.amount}`},
       {key:'paymentRevision',label:'款項確認',children:item.release.releaseInfo.amount===0?'免費方案，無需款項':item.release.releaseInfo.confirmedPaymentQuoteRevision===item.release.releaseInfo.quoteRevision?'來源確認本版必要款項':'尚未確認目前報價版必要款項'},
     ]} />}
-    <RepairReadinessPanel item={item} canUpdate={canUpdate} viewerId={user?.id} handoffNote={note} />
-    {!item.receipt.customerServiceUserId&&item.receipt.sourceCaseId&&<Alert type="warning" message="來源案件尚未對應承辦客服" description="請先完成客服帳號對應，再交付客服確認。" />}
-    {failure&&<Alert type="error" message={failure} showIcon />}
-    {actions.length>0&&<Card size="small" title="下一步作業">
-      {waiting&&item.nextUserId===user?.id&&<Space direction="vertical" style={{width:'100%',marginBottom:14}}><Text>登入身分：{user?.name}。逐件核對品名、SKU、SN、配件後再簽收。</Text><Input value={location} maxLength={160} onChange={event=>{setLocation(event.target.value);actionDirty.current=true;publishDirty();}} placeholder="簽收後存放位置" /><Checkbox checked={confirmed} onChange={event=>{setConfirmed(event.target.checked);actionDirty.current=true;publishDirty();}}>我已收到並核對此件實物</Checkbox></Space>}
-      {own&&<Input.TextArea value={note} maxLength={2000} rows={2} onChange={event=>{setNote(event.target.value);actionDirty.current=true;publishDirty();}} placeholder="交辦說明：診斷與估價原因，或交回品況及配件" style={{marginBottom:12}} />}
-      <Space wrap>{actions.map(action=><Button key={action.name} type="primary" loading={busy} disabled={action.disabled || busy} onClick={()=>void act(action.name)}>{action.label}</Button>)}</Space>
-      {own&&!documentReady(item)&&<Paragraph type="secondary" style={{marginTop:12,marginBottom:0}}>請先提交完整檢修單，才可交客服確認或開始處理。</Paragraph>}
-    </Card>}
-    <RepairWorkflowPanel feedback={message} item={item} entityId={entityId} canUpdate={canUpdate && item.repairOwnerId===user?.id} onSaved={onSaved} onDirtyChange={dirty=>{workflowDirty.current=dirty;publishDirty();}} onBeforeAction={async()=>!(documentsDirty.current || actionDirty.current) || await confirmDiscard()} />
-    <RepairDocuments feedback={message} item={item} entityId={entityId} onSaved={onSaved} onBeforeSave={async()=>!(workflowDirty.current || actionDirty.current) || await confirmDiscard()} onDirtyChange={dirty=>{documentsDirty.current=dirty;publishDirty();}} />
-    <Card size="small" title={item.status==='DISPATCHED'?'既有進度同步與交接歷程':'跨部門同步與交接'}>
+</>},
+      {key:'history',label:'交接與處理歷程',forceRender:true,children:<>    <Card size="small" title={item.status==='DISPATCHED'?'既有進度同步與交接歷程':'跨部門同步與交接'}>
       <Paragraph type="secondary">{item.status==='DISPATCHED'?'以下「系統已接收」是既有進度的回執，不代表本次寄出已同步，也不代表已通知顧客；寄出事實以收發室寄出紀錄核對。':'同步成功表示對方系統已收到事件；實物仍須由下一位同仁本人簽收。'}</Paragraph>
       <Space wrap style={{marginBottom:16}}>{(item.deliverySummary||[]).map(value=><Tag key={`${value.target}:${value.status}`} color={value.status==='DELIVERED'?'green':value.status==='PENDING'?'orange':'default'}>{value.target==='AFTER_SALES'?'售後系統':value.target==='AI_CUSTOMER_SERVICE'?'AI 客服系統':value.target} · {value.status==='DELIVERED'?'系統已接收':value.status==='PENDING'?'待發送':value.status==='FAILED'?'發送失敗':value.status} ({value.count})</Tag>)}</Space>
       <Timeline items={(item.history||[]).map(history=>({children:<><Text>{ACTIONS[history.action] || (WORKFLOW_ACTIONS as Record<string,string>)[history.action] || ({claim:'認領案件',save_repair_inspection:'儲存檢修草稿',submit_repair_inspection:'提交檢修單',save_repair_repair:'儲存維修草稿',submit_repair_repair:'提交維修單'} as Record<string,string>)[history.action] || history.action}</Text><div><Text type="secondary">{history.actorName} · {time(history.createdAt)} · {REPAIR_STATUS[history.toStatus] || STATUS[history.toStatus] || history.toStatus} · 實物紀錄 v{history.version}</Text></div>{history.note&&<Paragraph style={{whiteSpace:'pre-wrap',marginTop:4,marginBottom:0}}>{historyNote(history.action,history.note)}</Paragraph>}</>}))} />
     </Card>
-  </Space>;
+</>},
+    ]} />
+  </div>;
 }

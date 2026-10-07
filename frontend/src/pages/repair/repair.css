@@ -60,7 +60,108 @@
   overflow-wrap: anywhere;
 }
 
+.repair-case-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.repair-case-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px 104px;
+  align-items: center;
+  gap: 24px;
+  padding: 24px 0;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.repair-case-row:first-child { padding-top: 8px; }
+.repair-case-row:last-child { border-bottom: 0; padding-bottom: 8px; }
+.repair-case-product, .repair-case-progress { min-width: 0; }
+
+.repair-product-title.ant-btn {
+  display: block;
+  padding: 0;
+  height: auto;
+  max-width: 100%;
+  text-align: left;
+  white-space: normal;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.repair-product-title > span { overflow-wrap: anywhere; }
+.repair-case-number { display: block; margin-top: 5px; overflow-wrap: anywhere; }
+.repair-case-serial, .repair-case-custody {
+  display: block;
+  font-size: 12px;
+  line-height: 1.65;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.repair-case-progress { display: grid; gap: 8px; align-content: center; }
+.repair-case-progress .ant-tag { margin: 0; width: fit-content; max-width: 100%; white-space: normal; }
+.repair-case-progress > .ant-typography { font-size: 12px; }
+.repair-case-documents { display: grid; gap: 3px; color: #677384; font-size: 12px; line-height: 1.6; }
+.repair-case-open { min-height: 38px; }
+.repair-case-pagination { margin-top: 24px; justify-content: flex-end; }
+.repair-arrival-preview .ant-card { border: 0; }
+
+.repair-detail-identity { min-width: 0; padding: 2px 0; }
+.repair-detail-identity > .ant-typography { display: block; overflow-wrap: anywhere; }
+.repair-detail-identity h3.ant-typography { font-size: 20px; margin: 4px 0 0; }
+.repair-detail { display: grid; gap: 20px; min-width: 0; }
+.repair-detail-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.repair-detail-summary .ant-tag { margin: 0; max-width: 100%; white-space: normal; }
+.repair-detail-summary .ant-typography { font-size: 12px; min-width: 0; }
+.repair-readiness-compact .ant-card-body { padding: 12px; }
+.repair-readiness-compact .ant-collapse-header { padding-bottom: 0 !important; font-size: 12px; }
+.repair-documents-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; align-items: start; }
+.repair-editor-main, .repair-editor-sidebar { min-width: 0; }
+.repair-editor-main { padding: 24px; background: white; border: 1px solid #e7ebf0; border-radius: 12px; }
+.repair-editor-sidebar { display: grid; gap: 16px; }
+.repair-editor-sidebar .ant-space-item { min-width: 0; max-width: 100%; }
+.repair-editor-sidebar .ant-btn { max-width: 100%; height: auto; min-height: 32px; white-space: normal; }
+.repair-case-details .ant-descriptions { margin-bottom: 16px; }
+.repair-case-details .ant-descriptions-item-content { overflow-wrap: anywhere; }
+.repair-case-details .ant-card { border: 0; }
+
+.repair-documents-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.repair-document-heading { margin-bottom: 16px; }
+.repair-document-identity, .repair-document-meta, .repair-document-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.repair-document-meta { margin-top: 6px; font-size: 12px; }
+.repair-document-tools { margin-bottom: 16px; justify-content: space-between; font-size: 12px; }
+.repair-document-section { border-top: 1px solid #edf0f4; margin-top: 24px; padding-top: 20px; }
+.repair-document-section:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+.repair-document-section-heading { margin-bottom: 16px; }
+.repair-document-section-heading h5.ant-typography { font-size: 16px; margin: 0 0 6px; }
+.repair-document-section-heading .ant-typography-secondary { font-size: 12px; }
+.repair-document-guidance { margin: 10px 0 16px; color: #677384; font-size: 12px; }
+.repair-document-guidance .ant-collapse-header { font-size: 12px; }
+.repair-document-guidance .ant-typography { margin: 8px 0 0; font-size: 12px; }
+.repair-document-actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 20px; border-top: 1px solid #edf0f4; }
+.repair-document-check, .repair-document-part { background: #f9fafc; }
+.repair-documents .ant-form-item-label > label { height: auto; }
+
+@media (max-width: 1080px) {
+  .repair-case-row { grid-template-columns: minmax(0, 1fr) 200px 100px; gap: 16px; }
+}
+
+@media (max-width: 850px) {
+  .repair-documents-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
 @media (max-width: 600px) {
+  .repair-case-row { grid-template-columns: minmax(0, 1fr) auto; gap: 16px 12px; padding: 20px 0; }
+  .repair-case-product { grid-column: 1 / -1; }
+  .repair-case-progress { grid-column: 1; }
+  .repair-case-open { grid-column: 2; align-self: end; }
+  .repair-workbench-drawer .ant-drawer-body { padding: 16px; }
+  .repair-editor-main { padding: 16px; }
+  .repair-detail-identity h3.ant-typography { font-size: 18px; }
+  .repair-document-tools { align-items: flex-start; }
   .repair-workbench-list .ant-card-head-wrapper {
     align-items: stretch;
   }
