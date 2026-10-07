@@ -16,9 +16,10 @@ const executablePath = [chromium.executablePath(),
   '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'].find(existsSync)
 const root = fileURLToPath(new URL('../', import.meta.url))
 
-// Dashboard, Layout, CommandPalette, company hook, router, permissions and all
-// service methods are real. Only auth, unrelated widgets and the API adapter
-// are controlled. Synthetic API POSTs never become network requests.
+// Dashboard, Layout, workbench pages, help button, route permissions, company
+// hook, router and service methods are real. Auth, unrelated widgets, WebSocket
+// subscriptions and the API adapter are controlled. No business write reaches
+// the network; workbench assertions use only GET controls.
 const auth = `
 import React,{createContext,useContext} from 'react';
 const Context=createContext({user:null,logout:async()=>true});
@@ -40,6 +41,8 @@ const integrationPaths = [
 const writePaths = [...integrationPaths, '/sales/orders/invoice-status-sync']
 const api = `
 const readPaths=${JSON.stringify(readPaths)},writePaths=${JSON.stringify(writePaths)};
+export const API_URL='http://127.0.0.1:0';
+const workbenchReadPaths=['/mailroom/items','/mailroom/source-cases','/mailroom/people'];
 function unexpected(message) { window.__boundaryErrors.push(message); throw new Error(message); }
 function data(path,entityId) {
   const n={'company-A':111000,'company-B':222000,'company-C':333000}[entityId];
@@ -72,6 +75,11 @@ export default {
   async get(raw,config={}) {
     const url=new URL(raw,'https://fixture.invalid');
     const entityId=config.params?.entityId || url.searchParams.get('entityId');
+    if(workbenchReadPaths.includes(url.pathname)) {
+      if(!['company-A','company-B','company-C'].includes(entityId)) return unexpected('Missing workbench company');
+      window.__calls.push({method:'GET',path:url.pathname,entityId,params:structuredClone(config.params)});
+      return {data:url.pathname==='/mailroom/people'?[]:{items:[],total:0,nextCursor:null}};
+    }
     if(!readPaths.includes(url.pathname)) return unexpected('Unexpected API read: '+raw);
     window.__calls.push({method:'GET',path:url.pathname,entityId});
     const behavior=window.__behaviors[entityId] || {};
@@ -93,13 +101,18 @@ import {createMemoryRouter,RouterProvider,useLocation} from 'react-router-dom';
 import DashboardPage from '/src/pages/DashboardPage.tsx';
 import DashboardLayout from '/src/components/DashboardLayout.tsx';
 import AfterSalesWorkbenchHub from '/src/pages/after-sales/AfterSalesWorkbenchHub.tsx';
+import MailroomPage from '/src/pages/mailroom/MailroomPage.tsx';
+import RepairWorkbenchPage from '/src/pages/repair/RepairWorkbenchPage.tsx';
+import PermissionRoute from '/src/components/PermissionRoute.tsx';
+import {CLAW_HELP_EVENT} from '/src/components/claw/state.ts';
 import {useEntityContext} from '/src/hooks/useEntityContext.ts';
 import {FixtureAuth} from 'virtual:workspace-company-auth';
 const e=React.createElement,q=new URLSearchParams(window.location.search);
-const mode=q.get('mode') || 'dashboard',start=q.get('company') || 'company-B';
-localStorage.clear();localStorage.setItem('entityId','company-A');
-window.__APP_CONFIG__={stagedOperationsEnabled:true,afterSalesModuleEnabled:true,mailroomEnabled:true,wmsPortalUrl:''};
-window.__calls=[];window.__boundaryErrors=[];window.__behaviors={};window.__pending=[];
+const mode=q.get('mode') || 'dashboard',start=q.has('missing-company')?'':q.get('company') || 'company-B';
+localStorage.clear();if(!q.has('missing-company')) localStorage.setItem('entityId','company-A');
+window.__APP_CONFIG__={stagedOperationsEnabled:true,afterSalesModuleEnabled:true,mailroomEnabled:!q.has('disabled'),wmsPortalUrl:''};
+window.__calls=[];window.__boundaryErrors=[];window.__behaviors={};window.__pending=[];window.__helpEvents=0;
+window.addEventListener(CLAW_HELP_EVENT,()=>window.__helpEvents++);
 if(q.get('hold')) window.__behaviors[start]={hold:true};
 window.__releaseCompany=(entityId)=>{
   const matches=window.__pending.filter(item=>item.entityId===entityId);
@@ -107,21 +120,24 @@ window.__releaseCompany=(entityId)=>{
   matches.forEach(item=>item.resolve());
 };
 const user={id:'synthetic-manager',name:'Synthetic manager',email:'manager@example.invalid',roles:['WAREHOUSE_SUPERVISOR'],salesDataScope:q.get('scope') || 'ENTITY',
-  permissions:['wms_tasks:read','wms_logs:read','wms_picking:execute','profile_self:read','product_cost:read','financial_margin:read','financial_net_profit:read',...(mode==='doa'?['after_sales_cases:read']:[])]};
+  permissions:['wms_tasks:read','wms_logs:read','wms_picking:execute','profile_self:read','product_cost:read','financial_margin:read','financial_net_profit:read',
+    ...(!q.has('denied')?mode==='doa'?['after_sales_cases:read']:mode==='mailroom'?['mailroom:read']:mode==='repair'?['repair_workbench:read']:[]:[])]};
 function Current() { const l=useLocation();return e('output',{id:'current-route'},l.pathname+l.search); }
 function WarehouseProbe() {const companyId=useEntityContext();return e('output',{id:'warehouse-company'},companyId);}
 function Dashboard() {return e(React.Fragment,null,e(Current),e(DashboardPage));}
 function Layout() {return e(React.Fragment,null,e(Current),e(DashboardLayout));}
 function DoaHub() {return e(AfterSalesWorkbenchHub,{user,section:'workbench',onOpen:section=>router.navigate('/operations/after-sales/'+section+'?entityId='+start)});}
-const router=createMemoryRouter(['layout','doa'].includes(mode) ? [{path:'/',element:e(Layout),children:[
+const router=createMemoryRouter(['layout','doa','mailroom','repair'].includes(mode) ? [{path:'/',element:e(Layout),children:[
   {path:'dashboard',element:e('h2',null,'Synthetic operations home')},
   {path:'warehouse',element:e(WarehouseProbe)},
   {path:'warehouse/workstation',element:e(WarehouseProbe)},
   {path:'profile',element:e('h2',null,'Synthetic personal profile')},
   {path:'operations/after-sales/workbench',element:e(DoaHub)},
+  {path:'operations/mailroom',element:e(PermissionRoute,{anyPermissions:['mailroom:read']},e(MailroomPage))},
+  {path:'operations/repair',element:e(PermissionRoute,{anyPermissions:['repair_workbench:read']},e(RepairWorkbenchPage))},
 ]}] : mode==='hook' ? [{path:'/warehouse',element:e(React.Fragment,null,e(Current),e(WarehouseProbe))}]
   : [{path:'/dashboard',element:e(Dashboard)}],
-  {initialEntries:[(mode==='doa'?'/operations/after-sales/workbench':mode==='hook'?'/warehouse':'/dashboard')+'?entityId='+start]});
+  {initialEntries:[(mode==='doa'?'/operations/after-sales/workbench':['mailroom','repair'].includes(mode)?'/operations/'+mode:mode==='hook'?'/warehouse':'/dashboard')+(start?'?entityId='+start:'')]});
 window.__navigate=path=>router.navigate(path);
 createRoot(document.getElementById('root')).render(e(FixtureAuth,{value:{user,logout:async()=>true}},e(RouterProvider,{router})));
 `
@@ -147,7 +163,7 @@ test('actual React pages isolate company snapshots, requests and workspace navig
     'virtual:workspace-company-auth': auth,
     'virtual:workspace-company-api': api,
     'virtual:workspace-company-widget': 'export default function Widget(){return null;}',
-    'virtual:workspace-company-claw': 'export function ClawHelpButton(){return null;}',
+    'virtual:workspace-company-websocket': 'export const webSocketService={subscribe:()=>()=>{}};',
   }
   const aliases = new Map([
     [resolve(root, 'src/contexts/AuthContext'), 'virtual:workspace-company-auth'],
@@ -155,7 +171,7 @@ test('actual React pages isolate company snapshots, requests and workspace navig
     ...['src/pages/mailroom/InboxShortcut', 'src/components/NotificationCenter',
       'src/components/SettingsDrawer', 'src/components/AICopilotWidget'].map(path =>
       [resolve(root, path), 'virtual:workspace-company-widget']),
-    [resolve(root, 'src/components/claw/ClawHelpButton'), 'virtual:workspace-company-claw'],
+    [resolve(root, 'src/services/websocket.service'), 'virtual:workspace-company-websocket'],
   ])
   const server = await createServer({ root, configFile: false, cacheDir: join(cache, 'vite'),
     server: { host: '127.0.0.1', port: await ephemeralPort(), strictPort: true },
@@ -351,6 +367,64 @@ test('actual React pages isolate company snapshots, requests and workspace navig
       assert.equal(await denied.page.getByRole('heading', { name: '售後工作台', exact: true }).count(), 0)
       assert.equal(await denied.page.locator('.operations-header-title').innerText(), '售後工作台', 'A blocked Hub keeps the shell page name')
       await healthy(denied)
+    })
+
+    await t.test('real mailroom and repair pages keep one title, company GET controls, help and mobile navigation', async () => {
+      for (const mode of ['mailroom', 'repair']) {
+        const title = mode === 'mailroom' ? '收發室工作台' : '維修工作台'
+        const result = await open('?mode=' + mode), { page } = result
+        const heading = page.getByRole('heading', { name: new RegExp(title + '$') })
+        await heading.waitFor()
+        assert.equal(await heading.count(), 1)
+        assert.equal(await page.locator('.operations-header-title').innerText(), '', 'The shell does not repeat the actual workbench heading')
+        await page.getByRole('button', { name: /這頁怎麼用$/ }).click()
+        assert.equal(await page.evaluate(() => window.__helpEvents), 1, 'The real help control still dispatches its event')
+        await page.getByRole('button', { name: '帳號選單', exact: true }).click()
+        await page.locator('.ant-dropdown').getByRole('menuitem', { name: /個人資料$/ }).waitFor()
+        await page.getByRole('button', { name: '帳號選單', exact: true }).click()
+        await page.getByRole('button', { name: /重新整理$/ }).click()
+        if (mode === 'mailroom') {
+          await page.getByRole('tab', { name: '售後待到貨案件', exact: true }).click()
+          await page.waitForFunction(() => window.__calls.some(call => call.path === '/mailroom/source-cases'))
+        } else {
+          await page.getByRole('tab', { name: '我的檢修', exact: true }).click()
+          await page.waitForFunction(() => window.__calls.some(call => call.params?.repairScope === 'mine'))
+          assert.match(await page.locator('#current-route').innerText(), /entityId=company-B/)
+        }
+        await page.setViewportSize({ width: 390, height: 844 })
+        await page.getByRole('button', { name: '開啟主選單', exact: true }).click()
+        await page.locator('.operations-mobile-drawer').getByRole('navigation', { name: '主選單', exact: true }).waitFor()
+        assert.equal(await heading.count(), 1)
+        await page.locator('.operations-mobile-drawer .ant-drawer-close').click()
+        await page.getByRole('button', { name: /這頁怎麼用$/ }).click()
+        assert.equal(await page.evaluate(() => window.__helpEvents), 2, 'Help stays operable beside the mobile menu')
+        const requests = await calls(page)
+        assertCompany(requests, 'company-B')
+        assert(requests.every(call => call.method === 'GET'), 'Only read controls were exercised')
+        await healthy(result)
+      }
+    })
+
+    await t.test('unavailable workbench headings never erase the shell title or access feedback', async () => {
+      for (const mode of ['mailroom', 'repair']) {
+        for (const flag of ['denied', 'disabled']) {
+          const result = await open('?mode=' + mode + '&' + flag), { page } = result
+          if (flag === 'denied') await page.getByText('沒有權限', { exact: true }).waitFor()
+          else await page.getByText((mode === 'mailroom' ? '收發室' : '維修') + '工作台尚未啟用', { exact: true }).waitFor()
+          assert.equal(await page.locator('#operations-content h2').count(), 0)
+          assert.notEqual((await page.locator('.operations-header-title').innerText()).trim(), '', 'The existing shell fallback stays visible')
+          await page.getByRole('button', { name: /這頁怎麼用$/ }).click()
+          assert.equal(await page.evaluate(() => window.__helpEvents), 1)
+          assert.deepEqual(await calls(page), [], 'Blocked pages do not read or write workbench business data')
+          await healthy(result)
+        }
+      }
+      const missing = await open('?mode=repair&missing-company'), { page } = missing
+      await page.getByText('請先選擇作業公司', { exact: true }).waitFor()
+      assert.equal(await page.locator('#operations-content h2').count(), 0)
+      assert.equal(await page.locator('.operations-header-title').innerText(), '維修工作台', 'Repair retains its page name until a company is selected')
+      assert.deepEqual(await calls(page), [])
+      await healthy(missing)
     })
   } finally {
     await browser?.close()

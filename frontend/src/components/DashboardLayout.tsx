@@ -51,8 +51,16 @@ export default function DashboardLayout() {
   const items = workspaceNavigation(user, activeWorkspace)
   const active = activeNavigation(items, location.pathname, location.search)
   const parent = navigationParent(items, active?.key || '')
-  const hubProvidesPageTitle = location.pathname === '/operations/after-sales/workbench' &&
+  const workbenchProvidesPageTitle = (
+    location.pathname === '/operations/after-sales/workbench' &&
     workspaces.includes('after-sales') && active?.label === WORKSPACE_LABELS['after-sales']
+  ) || (
+    location.pathname === '/operations/mailroom' &&
+    workspaces.includes('mailroom') && active?.label === WORKSPACE_LABELS.mailroom
+  ) || (
+    location.pathname === '/operations/repair' && workspaceCompanyId(location.search) &&
+    workspaces.includes('repair') && active?.label === WORKSPACE_LABELS.repair
+  )
 
   useEffect(() => { document.title = PRODUCT.title }, [])
   useEffect(() => {
@@ -133,7 +141,7 @@ export default function DashboardLayout() {
       <header className="operations-header">
         <div className="operations-header-title">
           {mobile && <Button type="text" icon={<MenuOutlined />} aria-label="開啟主選單" onClick={() => setMobileOpen(true)} />}
-          {!hubProvidesPageTitle && <span>{active?.label || PRODUCT.name}</span>}
+          {!workbenchProvidesPageTitle && <span>{active?.label || PRODUCT.name}</span>}
         </div>
         <div className="operations-header-actions">
           <ClawHelpButton>這頁怎麼用</ClawHelpButton>

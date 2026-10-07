@@ -74,3 +74,21 @@ node --import /private/tmp/corely-doa-release-20261008/doa-cleanup-ts-resolver.m
 ## 交付狀態
 
 本批提交為隔離分支的本機固定版本，完成後完整 SHA 由交接訊息提供。尚未 push、合併或部署；須先由父代理審查本批 diff，與其他工作台清理及中央知識更新整合，再走 DEV 驗收。原 264 交付進度由其部署代理獨立處理。
+
+## 後續提交：三個工作台的單一頁名
+
+此補充提交以已交付的 `6ad7dbd12f136f5a35dce97e38e701e9cef7e7a1` 為基準，保留該提交歷史。父代理已另行推送與整合 6ad；本代理不改父工作樹，也不改收發室或維修頁面。本補充只變更 `DashboardLayout.tsx`、既有 `workspace-company-dom.test.mjs` 及本交接文件。
+
+已讀實際元件：`MailroomPage.tsx` 的啟用頁面有「收發室工作台」h2；`RepairWorkbenchPage.tsx` 在正常情況有「維修工作台」h2，未啟用、無讀取權限或未選公司時則先顯示提示。頂部原 span 重複顯示相同頁名。因此共用頂部僅在以下條件隱藏重複文字：
+
+- 售後：保留原 exact `/operations/after-sales/workbench`、工作區可用及 active label 相符判斷。
+- 收發室：exact `/operations/mailroom`、工作區可用及 active label 相符。
+- 維修：exact `/operations/repair`、工作區可用、active label 相符，且 `workspaceCompanyId(search)` 取得非空公司。
+
+工作區可用判斷仍依原功能旗標與讀取權限。其他路徑、未啟用、無權限及維修未選公司均保留原 shell span；active navigation 不存在時仍沿用 `PRODUCT.name`，沒有另外創造頁名或更動導航。各 Page 的 h2、手機主選單、頁面說明按鈕、帳號選單及業務操作均未改。
+
+最終重跑 `node --test tests/workspace-company-dom.test.mjs`：9/9 PASS，skip 0。fixture 使用實際 Layout、Hub、MailroomPage、RepairWorkbenchPage、PermissionRoute 及 ClawHelpButton，僅控制 auth、API、WebSocket subscription 和無關 widgets。兩個工作台在 1440／390 顯示單一內容 h2，手機主選單與說明按鈕可操作；重新整理、收發待到貨分頁、維修「我的檢修」分頁均只讀取 company-B。真 PermissionRoute 拒絕、Page 未啟用及維修缺公司情境保留頂部文字與提示，沒有工作台資料請求。新增測試只驗證說明按鈕發出原事件，沒有宣稱 Claw 回答或外部系統驗收。
+
+本 fixture 為隔離元件 regression，沒有重寫 App 的未啟用維修轉址規則；該規則與 owner 頁面保持原程式。後續整合新版收發室／維修頁面後，父代理仍須在最終固定 SHA 重跑受影響檢查。這次的 scoped ESLint 與 whitespace check 亦 PASS；沒有補跑無變動的其他套件或建置。
+
+本補充尚未由本代理 push、部署或改中央知識；`DashboardLayout.tsx` 所屬 guide source hashes 的漂移一併交父整合處理。
