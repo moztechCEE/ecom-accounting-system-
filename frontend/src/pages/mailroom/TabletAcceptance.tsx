@@ -6,7 +6,6 @@ import {
   Form,
   Input,
   Modal,
-  Typography,
 } from "antd";
 import axios from "axios";
 import { API_URL } from "../../services/api";
@@ -89,7 +88,7 @@ export default function TabletAcceptance({
       width={640}
       onCancel={close}
       onOk={() => void accept()}
-      okText="確認本人身分並簽收"
+      okText="確認簽收"
       cancelText="返回收發室"
       confirmLoading={busy}
       cancelButtonProps={{ disabled: busy }}
@@ -97,9 +96,6 @@ export default function TabletAcceptance({
       maskClosable={!busy}
       destroyOnHidden
     >
-      <Typography.Paragraph type="secondary">
-        請將平板交給指定維修人員，由本人核對實物並確認身分。簽收完成後自動返回收發室畫面。
-      </Typography.Paragraph>
       <Descriptions
         column={1}
         size="small"
@@ -152,7 +148,7 @@ export default function TabletAcceptance({
         </Form.Item>
         <Form.Item
           name="twoFactorToken"
-          label="六位數驗證碼（帳號啟用兩步驟驗證時填寫）"
+          label="兩步驟驗證碼"
           rules={[{ pattern: /^\d{6}$/, message: "請填寫六位數驗證碼" }]}
         >
           <Input autoComplete="off" inputMode="numeric" maxLength={6} />

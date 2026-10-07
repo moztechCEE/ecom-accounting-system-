@@ -156,7 +156,7 @@ test(
     };
     const discard = async (keep = true) => {
       const modal = page.getByRole("dialog").filter({ hasText: "目前收發工作有未保存的修改" });
-      await modal.getByRole("button", { name: keep ? "取消，保留草稿" : "放棄未保存修改並繼續", exact: true }).click();
+      await modal.getByRole("button", { name: keep ? "繼續編輯" : "放棄草稿", exact: true }).click();
       await modal.waitFor({ state: "hidden" });
     };
     const closeDrawer = () => drawer().getByRole("button", { name: "Close", exact: true }).click();
@@ -215,14 +215,14 @@ test(
     assert.equal(await drawer().locator(".mailroom-recipient-person").innerText(), "客服部 · 收件同仁 · C1");
     await page.evaluate(() => { window.mailroomFixture.holdNext = true; });
     await drawer()
-      .getByRole("button", { name: "登記並建立待辦", exact: true })
+      .getByRole("button", { name: "登記收件", exact: true })
       .click();
     await page.waitForFunction(() => window.mailroomFixture.posts.length === 1);
     assert.equal(await drawer().getByRole("combobox", { name: "收件同仁", exact: true }).isDisabled(), true);
     assert.equal(await drawer().getByRole("combobox", { name: "收件同仁部門", exact: true }).isDisabled(), true);
     await closeDrawer();
     await changeRoute();
-    await page.getByText("正在保存或讀取照片，請等待完成後再切換。", { exact: true }).first().waitFor();
+    await page.getByText("正在保存或讀取照片，請稍候。", { exact: true }).first().waitFor();
     assert.equal(await page.getByRole("dialog").filter({ hasText: "目前收發工作有未保存的修改" }).count(), 0);
     assert.equal(await drawer().locator('#items_0_productName').inputValue(), "合成信件");
     await page.evaluate(() => window.mailroomFixture.releasePost());
@@ -252,7 +252,7 @@ test(
       .click();
     await drawer()
       .getByText(
-        "產品核對／退貨檢查至少需留存一張有效實物照片，請拍照留底後再儲存。",
+        "請附上至少一張實物照片。",
         { exact: true },
       )
       .waitFor();
@@ -382,7 +382,7 @@ test(
     await drawer()
       .getByRole("button", { name: /確認儲存$/ })
       .click();
-    await drawer().getByText("寄出紀錄（實際交運）", { exact: true }).waitFor();
+    await drawer().getByText("寄出紀錄", { exact: true }).waitFor();
     const posts = await page.evaluate(() => window.mailroomFixture.posts);
     assert.equal(posts.length, 1);
     assert.deepEqual(posts[0].body, originalUnknown);
@@ -400,7 +400,7 @@ test(
       .getByText("承運商持有（寄回顧客途中）", { exact: true })
       .waitFor();
     await drawer()
-      .getByText("已保存寄出；售後／AI 寄出同步待串接", { exact: true })
+      .locator(".mailroom-dispatch-record").getByText("待串接", { exact: true })
       .waitFor();
     assert.equal(
       await drawer()
@@ -415,11 +415,11 @@ test(
       0,
     );
     await page.screenshot({
-      path: "/tmp/corely-mailroom-workbench-20261008-dispatch.png",
+      path: "/tmp/corely-mailroom-ui-cleanup-20261008-dispatch.png",
       fullPage: true,
     });
     await page.setViewportSize({ width: 390, height: 844 });
-    await drawer().getByText("寄出紀錄（實際交運）", { exact: true }).waitFor();
+    await drawer().getByText("寄出紀錄", { exact: true }).waitFor();
     await page.waitForFunction(() =>
       [
         ...document.querySelectorAll(
@@ -440,7 +440,7 @@ test(
     assert(bounds.left >= -1 && bounds.right <= 391, JSON.stringify(bounds));
     assert(bounds.scroll <= bounds.client + 1, JSON.stringify(bounds));
     await page.screenshot({
-      path: "/tmp/corely-mailroom-workbench-20261008-mobile.png",
+      path: "/tmp/corely-mailroom-ui-cleanup-20261008-mobile.png",
       fullPage: true,
     });
     await closeDrawer();

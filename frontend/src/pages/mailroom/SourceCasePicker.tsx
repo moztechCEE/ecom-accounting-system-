@@ -110,7 +110,7 @@ export default function SourceCasePicker({
           id={id}
           className="mailroom-source-select"
           aria-label="搜尋售後案件"
-          placeholder="輸入案件編號搜尋，例如 T"
+          placeholder="搜尋售後案件編號"
           showSearch
           filterOption={false}
           searchValue={query}
@@ -201,9 +201,6 @@ export default function SourceCasePicker({
           最近案件
         </Button>
       </div>
-      <Typography.Text type="secondary" className="mailroom-source-hint">
-        輸入即搜尋，最近更新優先；選案後自動帶入維修或退貨類別。
-      </Typography.Text>
       {failure && (
         <Alert
           type="warning"
