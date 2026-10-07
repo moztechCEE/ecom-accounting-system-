@@ -238,6 +238,48 @@ test('actual awaiting queue separates failed reads from empty results and scopes
     await enqueue(paginationPage, refreshedFirst); await enqueue(paginationPage, refreshedSecond);
     await paginationPage.getByRole('button', { name: /重新整理$/ }).click();
     await success(paginationPage, refreshedSecond, ['FRESH-1', 'FRESH-2']); await close(paginationPage);
+
+    // Alert retry owns the new refresh and releases an obsolete pagination request.
+    const busyInitial = plan('busy-initial', '', [row('BUSY-INITIAL')], { nextCursor: 'synthetic-busy-next' });
+    const busyPage = await open(busyInitial); await success(busyPage, busyInitial, ['BUSY-INITIAL']);
+    const busyFailure = plan('busy-full-refresh-failure', '', [], { failure: 'Synthetic busy refresh GET failure' });
+    await refresh(busyPage, busyFailure); await failed(busyPage, busyFailure); await loaded(busyPage, ['BUSY-INITIAL'], true);
+    const footer = card(busyPage).locator('.mailroom-load-more');
+    const oldMore = plan('busy-obsolete-more', '', [row('LATE-OLD-MORE')], {
+      cursor: 'synthetic-busy-next', nextCursor: 'synthetic-stale-cursor', hold: true,
+    });
+    await enqueue(busyPage, oldMore); await footer.click(); await held(busyPage, oldMore.key);
+    assert.equal(await footer.evaluate(button => button.classList.contains('ant-btn-loading')), true,
+      'A pending pagination GET must show its busy state');
+    const retryRefresh = plan('busy-retry-refresh', '', [row('RETRY-FRESH-1')], {
+      nextCursor: 'synthetic-current-next', hold: true,
+    });
+    await retry(busyPage, retryRefresh); await held(busyPage, retryRefresh.key);
+    assert.equal(await footer.isDisabled(), true, 'A pending full refresh must prevent reverse pagination overlap');
+    await release(busyPage, retryRefresh.key); await success(busyPage, retryRefresh, ['RETRY-FRESH-1']);
+    assert.equal(await footer.evaluate(button => button.classList.contains('ant-btn-loading')), false,
+      'Alert retry must release superseded pagination busy state');
+    assert.equal(await footer.isEnabled(), true);
+    const currentMore = plan('busy-current-more', '', [row('CURRENT-PAGE-2')], {
+      cursor: 'synthetic-current-next', nextCursor: 'synthetic-current-next-2', hold: true,
+    });
+    await enqueue(busyPage, currentMore); await footer.click(); await held(busyPage, currentMore.key);
+    assert.equal(await footer.evaluate(button => button.classList.contains('ant-btn-loading')), true);
+    await release(busyPage, oldMore.key); await loaded(busyPage, ['RETRY-FRESH-1']);
+    assert.doesNotMatch(await card(busyPage).innerText(), /LATE-OLD-MORE/);
+    assert.equal(await footer.evaluate(button => button.classList.contains('ant-btn-loading')), true,
+      'An obsolete pagination finally must not clear the current pagination busy state');
+    await release(busyPage, currentMore.key);
+    await success(busyPage, currentMore, ['RETRY-FRESH-1', 'CURRENT-PAGE-2']);
+    const pollFirst = plan('busy-poll-first', '', [row('POLL-FRESH-1')], { nextCursor: 'synthetic-poll-next' });
+    const pollSecond = plan('busy-poll-second', '', [row('POLL-FRESH-2')], {
+      cursor: 'synthetic-poll-next', nextCursor: 'synthetic-poll-remaining',
+    });
+    await enqueue(busyPage, pollFirst); await enqueue(busyPage, pollSecond);
+    await busyPage.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await success(busyPage, pollSecond, ['POLL-FRESH-1', 'POLL-FRESH-2']);
+    assert.equal(await footer.evaluate(button => button.classList.contains('ant-btn-loading')), false);
+    assert.equal(await footer.isEnabled(), true); await close(busyPage);
   } catch (error) {
     for (const browserContext of browser?.contexts() || []) {
       for (const page of browserContext.pages()) {

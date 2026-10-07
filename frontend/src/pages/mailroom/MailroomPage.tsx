@@ -621,6 +621,7 @@ function AwaitingCases({
     async (quiet = false) => {
       if (!entityId) return;
       const id = ++generation.current;
+      setMoreBusy(false);
       if (!quiet) setLoading(true);
       try {
         let next: string | null = null;
