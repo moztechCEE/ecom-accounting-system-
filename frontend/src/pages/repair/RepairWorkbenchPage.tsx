@@ -12,6 +12,7 @@ import { ACTIONS, STATUS, errorText, mailroomEnabled, type Source } from '../mai
 import { QUEUES, PLANS, REPAIR_STATUS, WORKFLOW_ACTIONS, sourceQuoteConsentCurrent, inspectionReviewCurrent, repairStartReady, repairReportReady, type RepairQueue, type RepairItem } from './repair-model';
 import RepairDocuments from './RepairDocuments';
 import RepairWorkflowPanel from './RepairWorkflowPanel';
+import RepairReadinessPanel from './RepairReadinessPanel';
 import { useRepairNavigationGuard } from './repair-navigation';
 import { useRepairFeedback } from './repair-feedback';
 import type { RepairMessage } from './repair-feedback';
@@ -21,6 +22,14 @@ import { currentItemCustody } from '../mailroom/item-custody';
 const { Title, Text, Paragraph } = Typography;
 const time = (value: string) => dayjs(value).format('MM/DD HH:mm');
 const documentReady = (item: RepairItem) => item.repairInspection?.status === 'SUBMITTED';
+function historyNote(action: string, note: string): string {
+  if (!['save_repair_inspection','submit_repair_inspection','save_repair_repair','submit_repair_repair'].includes(action)) return note;
+  try {
+    const document = JSON.parse(note);
+    if (typeof document.documentNumber !== 'string' || !Number.isInteger(document.revision) || document.revision < 1 || !['DRAFT','SUBMITTED'].includes(document.status)) return note;
+    return `${action.endsWith('inspection') ? '檢修單' : '維修單'} ${document.documentNumber} · v${document.revision} · ${document.status === 'SUBMITTED' ? '已提交' : '草稿'}`;
+  } catch { return note; }
+}
 
 export default function RepairWorkbenchPage() {
   const { modal, message, contextHolder } = useRepairFeedback();
@@ -94,12 +103,12 @@ export default function RepairWorkbenchPage() {
     if (id) next.set('itemId', id);else next.delete('itemId');
     setParams(next);
   }
-  if (!enabled) return <>{contextHolder}<Alert type="info" message="維修師工作台尚未啟用" description="完成測試與帳號設定後即可開放。" /></>;
-  if (!canRead) return <>{contextHolder}<Alert type="warning" message="沒有 維修師工作台讀取權限" /></>;
+  if (!enabled) return <>{contextHolder}<Alert type="info" message="維修工作台尚未啟用" description="完成測試與帳號設定後即可開放。" /></>;
+  if (!canRead) return <>{contextHolder}<Alert type="warning" message="沒有維修工作台讀取權限" /></>;
   if (!entityId) return <>{contextHolder}<Alert type="warning" message="請先選擇作業公司" /></>;
   return <div className="mailroom-page repair-workbench-page">
     {contextHolder}
-    <div className="mailroom-heading"><div><Title level={2}><ToolOutlined /> 維修師工作台</Title><Paragraph type="secondary">DOA、一般送修與公司退貨整新共用檢修、替換及原廠返還流程；每一步保留本人簽收與工作單。</Paragraph></div><Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading}>重新整理</Button></div>
+    <div className="mailroom-heading"><div><Title level={2}><ToolOutlined /> 維修工作台</Title><Paragraph type="secondary">DOA、一般送修與公司退貨整新共用檢修、替換及原廠返還流程；每一步保留本人簽收與工作單。</Paragraph></div><Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading}>重新整理</Button></div>
     <Tabs activeKey={queue} onChange={key => {void (async()=>{if (detailDirty.current) {if (!await confirmDiscard()) return;detailDirty.current=false;}const next = new URLSearchParams(params);if (key==='all') next.delete('queue');else next.set('queue', key);next.delete('itemId');setPagination({queue:key as RepairQueue,page:1});setParams(next);})();}} items={Object.entries(QUEUES).map(([key,label])=>({key,label}))} />
     {(queue === 'all' || queue === 'acceptance') && <ArrivalPreview entityId={entityId} />}
     {queue === 'waiting' && <Alert showIcon type="info" style={{marginBottom:16}} message="客服方案確認與售後放行分開核對" description="所有方案（含免費處理）都需客服確認目前已提交的檢修版次；顧客同意與必要款項仍由售後來源確認。此處顯示同步進度，不代替會計確認收款。" />}
@@ -211,8 +220,7 @@ function RepairDetail({item,entityId,onSaved,onDirtyChange,feedback,confirmDisca
       {key:'amount',label:'本報價金額',children:item.release.releaseInfo.amount==null?'尚未提供':`${item.release.releaseInfo.currency} ${item.release.releaseInfo.amount}`},
       {key:'paymentRevision',label:'款項確認',children:item.release.releaseInfo.amount===0?'免費方案，無需款項':item.release.releaseInfo.confirmedPaymentQuoteRevision===item.release.releaseInfo.quoteRevision?'來源確認本版必要款項':'尚未確認目前報價版必要款項'},
     ]} />}
-    {item.receipt.category==='REPAIR'&&<Alert showIcon type={item.release?.available&&item.release.repairAllowed?'success':'warning'} message={item.release?.available&&item.release.repairAllowed?'售後已放行：顧客同意及必要款項已確認':'尚未取得售後維修放行'} description={item.release?.message || '此狀態來自售後來源案件。技師估價不等於對客報價或已收款；開始處理時後端會再確認。'} />}
-    {item.receipt.category==='REPAIR'&&documentReady(item)&&!inspectionReviewCurrent(item.repairInspection)&&<Alert showIcon type="warning" message="目前檢修方案尚未由客服確認，請先提交客服" description="免費顧客維修也需確認本版檢修方案。ERP 客服確認不代表顧客已同意或款項已入帳，開工仍須取得售後來源放行。" />}
+    <RepairReadinessPanel item={item} canUpdate={canUpdate} viewerId={user?.id} handoffNote={note} />
     {!item.receipt.customerServiceUserId&&item.receipt.sourceCaseId&&<Alert type="warning" message="來源案件尚未對應承辦客服" description="請先完成客服帳號對應，再交付客服確認。" />}
     {failure&&<Alert type="error" message={failure} showIcon />}
     {actions.length>0&&<Card size="small" title="下一步作業">
@@ -226,7 +234,7 @@ function RepairDetail({item,entityId,onSaved,onDirtyChange,feedback,confirmDisca
     <Card size="small" title="跨部門同步與交接">
       <Paragraph type="secondary">同步成功表示對方系統已收到事件；實物仍須由下一位同仁本人簽收。</Paragraph>
       <Space wrap style={{marginBottom:16}}>{(item.deliverySummary||[]).map(value=><Tag key={`${value.target}:${value.status}`} color={value.status==='DELIVERED'?'green':value.status==='PENDING'?'orange':'default'}>{value.target==='AFTER_SALES'?'售後系統':value.target==='AI_CUSTOMER_SERVICE'?'AI 客服系統':value.target} · {value.status==='DELIVERED'?'系統已接收':value.status==='PENDING'?'待發送':value.status==='FAILED'?'發送失敗':value.status} ({value.count})</Tag>)}</Space>
-      <Timeline items={(item.history||[]).map(history=>({children:<><Text>{ACTIONS[history.action] || (WORKFLOW_ACTIONS as Record<string,string>)[history.action] || ({claim:'認領案件',save_repair_inspection:'儲存檢修草稿',submit_repair_inspection:'提交檢修單',save_repair_repair:'儲存維修草稿',submit_repair_repair:'提交維修單'} as Record<string,string>)[history.action] || history.action}</Text><div><Text type="secondary">{history.actorName} · {time(history.createdAt)} · {REPAIR_STATUS[history.toStatus] || STATUS[history.toStatus] || history.toStatus}</Text></div></>}))} />
+      <Timeline items={(item.history||[]).map(history=>({children:<><Text>{ACTIONS[history.action] || (WORKFLOW_ACTIONS as Record<string,string>)[history.action] || ({claim:'認領案件',save_repair_inspection:'儲存檢修草稿',submit_repair_inspection:'提交檢修單',save_repair_repair:'儲存維修草稿',submit_repair_repair:'提交維修單'} as Record<string,string>)[history.action] || history.action}</Text><div><Text type="secondary">{history.actorName} · {time(history.createdAt)} · {REPAIR_STATUS[history.toStatus] || STATUS[history.toStatus] || history.toStatus} · 實物紀錄 v{history.version}</Text></div>{history.note&&<Paragraph style={{whiteSpace:'pre-wrap',marginTop:4,marginBottom:0}}>{historyNote(history.action,history.note)}</Paragraph>}</>}))} />
     </Card>
   </Space>;
 }
