@@ -111,7 +111,7 @@ Claw repair-workbench steps增補（整合收發dispatch後採用）：
 - ZH：已交物流寄回的物件只查看既有檢修、維修與寄出紀錄；核對承運商、單號及實際原件／替換品。已交運不表示顧客已收件或案件已結案，後續由收發室與客服依實際結果處理。
 - EN: Dispatched items retain inspection, repair and outbound records for review. Verify the carrier, tracking number and actual original or replacement item. Carrier handover does not prove customer receipt or case closure; mailroom and customer service follow the actual outcome.
 
-邊界：本修訂不新增dispatch能力或 Source／AI消費端，不把 PENDING_COMPATIBILITY 轉成功。DISPATCHED目前仍不在repair records隊列、all可查；若要擴充records須由DOA協調共同查詢契約。兩批獨立審查回執保存於本產品docs/dev/reviews；最終共同整合SHA與DEV仍需重驗。
+邊界：本修訂不新增dispatch能力或 Source／AI消費端，不把 PENDING_COMPATIBILITY 轉成功。維修及0c單独舊backend的records未含DISPATCHED，但收發dd／d75已將DISPATCHED加入原生records查詢，合併後可在「檢修與維修紀錄」及「案件總覽」查閱；不要將舊backend限制套用於整合批。兩批獨立審查回執保存於本產品docs/dev/reviews；最終共同整合SHA與DEV仍需重驗。
 
 ## 完整案件頁的寄出提示修訂
 
@@ -125,5 +125,11 @@ Claw repair-workbench steps增補（整合收發dispatch後採用）：
 
 Claw repair-workbench boundaries 另增（不能只更新來源 hash）：
 
-- ZH：已交運的維修頁提供既有紀錄查閱，不新增來源或 AI 客服的寄出消費端。收發寄出契約目前的 PENDING_COMPATIBILITY／DISPATCH_CONSUMER_NOT_CONFIGURED 仍是待相容，不是成功同步；既有「系統已接收」回執不證明本次寄出已同步或已通知顧客。DISPATCHED 目前不在「紀錄」隊列，可從「全部」查閱；擴充隊列須先協調共同查詢契約。
-- EN: The dispatched repair page provides existing records for review and adds no dispatch consumer in the source or AI customer service. PENDING_COMPATIBILITY / DISPATCH_CONSUMER_NOT_CONFIGURED in the current outbound contract remains pending compatibility, not successful synchronization. Existing delivery acknowledgements do not prove that this dispatch was synchronized or the customer notified. DISPATCHED is currently excluded from the Records queue and can be found in All; extending that queue requires coordination of the shared query contract.
+- ZH：已交運的維修頁提供既有紀錄查閱，不新增來源或 AI 客服的寄出消費端。收發寄出契約目前的 PENDING_COMPATIBILITY／DISPATCH_CONSUMER_NOT_CONFIGURED 仍是待相容，不是成功同步；既有「系統已接收」回執不證明本次寄出已同步或已通知顧客。整合收發寄出契約後，DISPATCHED 可在「檢修與維修紀錄」及「案件總覽」查閱；保留本人簽收、實際處置、寄出與顧客收件的分別紀錄。
+- EN: The dispatched repair page provides existing records for review and adds no dispatch consumer in the source or AI customer service. PENDING_COMPATIBILITY / DISPATCH_CONSUMER_NOT_CONFIGURED in the current outbound contract remains pending compatibility, not successful synchronization. Existing delivery acknowledgements do not prove that this dispatch was synchronized or the customer notified. After integrating the mailroom dispatch contract, DISPATCHED is available in Inspection and repair records and Case overview; personal acceptance, actual handling, dispatch and customer receipt remain distinct records.
+
+### records 敘述更正與追加驗證
+
+先前維修 handoff／dd receipt把0c舊backend「records未含DISPATCHED」誤套到收發批；現查收發dd／d75 `mailroom.service.ts:387–390` 已包含，這是審查遺漏，並非本次新增共享查詢。原53ec修訂產品程式不變、來源hash不變。
+
+新實跑 actual d75 `MailroomService.list()` 的records／delivery／all及foreign-company probe 8斷言通過（auth/Prisma/projection皆離線替身），證實records條件含READY_FOR_DISPATCH、DISPATCHED、PENDING_WELFARE_STOCK；不把synthetic Prisma查詢當真DB驗收。完整Page DOM追加從queue=records開啟8個已寄出情境，核對實際client entityId/view/repairScope參數、模擬同契約列表與只讀文件，1/1（原10情境）再跑PASS，新增test lint/diff PASS。DOA與收發已收到更正；原dd P2 FAIL與0c限定PASS歷史不改寫。

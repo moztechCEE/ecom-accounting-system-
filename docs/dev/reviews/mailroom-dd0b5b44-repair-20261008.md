@@ -74,6 +74,8 @@ npm run build
 
 已審本批handoff的雙語mailroom guide提案及6個新sourcePaths；集中知識仍交DOA。root在此固定SHA實跑 `node scripts/dev/generate-copilot-knowledge.cjs --check` 為FAIL，列出8個已審來源hash漂移及generated／manifest差異，未寫檔。不能以build成功掩蓋，knowledge尚非發布PASS。
 
-維修3e面板與此dispatch狀態合併時，RETURN方案會沿用舊未修交回提示；維修另交owned純提示適配，不改shared狀態或dispatch命令。records隊列目前不含DISPATCHED，all仍可查；擴充records查詢須另由DOA協調。
+維修3e面板與此dispatch狀態合併時，RETURN方案會沿用舊未修交回提示；維修另交owned純提示適配，不改shared狀態或dispatch命令。
+
+2026-10-08 更正：本收據先前把維修／0c舊backend的records限制套到dd，該說法不正確。指定dd及d75的 `mailroom.service.ts:387–390` 已將DISPATCHED加入repair records查詢，all亦可查；這項原生列表變更先前審查遺漏，非後續維修新增。另已於d75以actualservice query probe8斷言及實際Page records參數回歸確認，見新版repair handoff。dd的確認值／草稿P2 FAIL歷史保留，不用此更正替代三端最後整合驗證。
 
 未驗證真實PostgreSQL併發、最後整合SHA、DEV、現場商品及Source／AI消費端。outbound sourceSync保持PENDING_COMPATIBILITY，不建立外部delivery、不發通知、不重扣庫存、不写Source或金流。修正新固定SHA、最後整合與DEV仍需各自回執，不能簽整批PASS。

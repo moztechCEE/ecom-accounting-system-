@@ -20,7 +20,7 @@ import RepairWorkbenchPage from '/src/pages/repair/RepairWorkbenchPage.tsx';
 window.__APP_CONFIG__={mailroomEnabled:true};
 const id=new URL(location.href).searchParams.get('item');
 const router=createMemoryRouter([{path:'/operations/repair',element:React.createElement(RepairWorkbenchPage)}],
-  {initialEntries:['/operations/repair?entityId=synthetic-company&itemId='+id]});
+  {initialEntries:['/operations/repair?entityId=synthetic-company&itemId='+id+(id.includes('-')?'&queue=records':'')]});
 createRoot(document.getElementById('root')).render(React.createElement(RouterProvider,{router}));
 `;
 const api = `
@@ -50,11 +50,16 @@ for(const plan of ['RETURN','REPAIR','REPLACE','FACTORY']) for(const refusal of 
 for(const [id,status] of [['waiting','WAITING_RETURN_ACCEPTANCE'],['ready','READY_FOR_DISPATCH']]) {
   rows[id]=structuredClone(base);rows[id].id=id;rows[id].status=status;rows[id].physicalCustody='MAILROOM';
 }
-window.__repairPageFixture={rows,posts:[]};
+window.__repairPageFixture={rows,posts:[],queries:[]};
 export const API_URL='/offline-api';
 export const documents=async(_,id)=>structuredClone(rows[id]);
-export default {get:async(path)=>{
-  if(path==='/mailroom/items')return {data:{items:Object.values(rows),total:Object.keys(rows).length}};
+export default {get:async(path,options)=>{
+  if(path==='/mailroom/items'){
+    window.__repairPageFixture.queries.push(options.params);
+    const items=Object.values(rows).filter(row=>options.params.repairScope!=='records'||
+      ['READY_FOR_DISPATCH','DISPATCHED','PENDING_WELFARE_STOCK'].includes(row.status));
+    return {data:{items,total:items.length}};
+  }
   if(path==='/mailroom/source-cases')return {data:{items:[],nextCursor:null}};
   throw Error('Unexpected synthetic GET '+path);
 },post:async(path,body)=>{window.__repairPageFixture.posts.push({path,body});throw Error('No write in read-only fixture')}};
@@ -115,6 +120,10 @@ test('full repair page keeps dispatched refusal history consistent with readonly
     assert.match(text, /不代表本次寄出已同步，也不代表已通知顧客/);
     assert.match(text, /售後系統 · 系統已接收 \(1\)/);
     assert.match(text, /AI 客服系統 · 系統已接收 \(1\)/);
+    const query = await page.evaluate(() => window.__repairPageFixture.queries[0]);
+    assert.equal(query.entityId, 'synthetic-company');
+    assert.equal(query.view, 'repair');
+    assert.equal(query.repairScope, 'records');
     if (refusal) {
       assert.match(text, /原件已交物流寄回；依收發室寄出紀錄核對/);
       assert.match(text, /不標成已修理或已替換/);
