@@ -12,13 +12,21 @@ export const WORKSPACE_HOME: Record<OperationsWorkspace, string> = {
   'after-sales': '/operations/after-sales/workbench', mailroom: '/operations/mailroom',
 }
 export function workspaceCompanyId(search: string) {
-  const explicit = new URLSearchParams(search).get('entityId')
+  const explicit = new URLSearchParams(search).get('entityId')?.trim()
   if (explicit) return explicit
-  try { return localStorage.getItem('entityId') || '' } catch { return '' }
+  try { return localStorage.getItem('entityId')?.trim() || '' } catch { return '' }
 }
-export function operationsWorkspaceDestination(workspace: OperationsWorkspace, search: string) {
-  const explicit = new URLSearchParams(search).get('entityId')
-  return WORKSPACE_HOME[workspace] + (explicit ? '?' + new URLSearchParams({ entityId: explicit }).toString() : '')
+export function companyNavigationDestination(path: string, search: string) {
+  const explicit = new URLSearchParams(search).get('entityId')?.trim()
+  if (!explicit) return path
+  const destination = new URL(path, 'https://operations.invalid')
+  if (!destination.searchParams.has('entityId')) destination.searchParams.set('entityId', explicit)
+  return destination.pathname + destination.search + destination.hash
+}
+export function operationsWorkspaceDestination(workspace: OperationsWorkspace, search: string, user?: User | null) {
+  const home = workspace === 'warehouse' && hasWarehouseManagementAccess(user)
+    ? '/warehouse/workstation' : WORKSPACE_HOME[workspace]
+  return companyNavigationDestination(home, search)
 }
 export type WarehouseArea = 'dispatch' | 'pick' | 'pack'
 export const WAREHOUSE_AREAS: { key: WarehouseArea; label: string; permission: string }[] = [

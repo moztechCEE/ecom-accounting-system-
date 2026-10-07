@@ -61,3 +61,10 @@ Source 仍要求公司範圍與來源有效帳號、來源角色和委派讀寫�
 DOA UI提交57841c20之後納入維修原587及修訂3e298741（整合cherry-pick 56927f0f／9d73618b），不改維修own內容或shared API。收發修訂固定SHA review PASS，DOA19單元+1真DOM delta PASS；587 P2 FAIL保留。Claw集中使用修後Page/helper/panel並補雙語說明；最後整合SHA及DEV仍須重新審查。收發持久dispatch批次尚未納入，不拿UI整合當出件已完成。
 
 凍結前最後整合驗證：相關前端pure測試87/87、真React/Chromium DOM10/10、knowledge specs17/17；frontend/backend build及維修5檔限定lint、diff通過。知識79篇/103routes/198已審來源，sourceVersion `sha256:d4b56c2b6d3e29fa0725ed3879dad34f01ae5899765f3cd9ac7d1434aad13c45`。受控DOM替身與真Source／DEV實際驗收分開。
+
+
+## ad 跨台 P2 修訂
+
+固定 ad406d84 的三項公司/入口反例由兩端真DOM重現，發布已暫停；該版Cloud Build成功只代表映像建置，不代表部署。本次query優先的共用公司hook與Dashboard keyed snapshot修正全部讀取/同步公司，換公司立即重掛不混前公司數字；側欄/功能搜尋保持query；WMS管理者進/workstation及預設一致。無global公司Storage寫入或新grant。
+
+修訂獨立26項純測試、TypeScript與靜態scopePASS；新增實際React公司情境6/6（受控API13GET及9+2+1sync、partial/coreerror/late回應隔離、Warehouse hook、Layout/sidebar/搜尋），root再次執行。employee7/7與frontbuild/scopedlintPASS，雙語200來源hash check、20knowledge測試PASS。最終整合SHA與真DEV另核，不能用這些替代通知/金流/物流驗收。

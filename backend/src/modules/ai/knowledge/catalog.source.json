@@ -36,7 +36,8 @@
           "儲運、維修及售後專用人員登入對應工作台；依權限保留個人費用、請假與薪資等入口。兼任人員可切換目前獲授權的工作區；工作台不取代各模組的授權。",
           "成本、毛利、淨利，以及可反推出費用的廣告費、平台費、淨入帳等指標，依專用讀取權限顯示；無權限時不可把缺少的指標解讀為零。完整高階財務總覽需成本、毛利及淨利三項讀取授權。",
           "收發室／維修權限已開通且工作台啟用時，一般同仁登入會進入對應工作台；右上角「我的待辦」保留未完成交接。",
-          "可依目前權限切換售後、收發、維修、儲運或營運管理工作區。「設為登入預設」只記錄此帳號及公司在目前瀏覽器的選擇；不同步其他裝置、不變更角色或授予權限。失效偏好回到有效入口。具有產品、匯入、來源帳號、操作紀錄、設定、庫存或儲運管理權限的人員，仍可由「營運管理」使用獲授權功能。切台保留網址明確指定的公司。"
+          "可依目前權限切換售後、收發、維修、儲運或營運管理工作區。「設為登入預設」只記錄此帳號及公司在目前瀏覽器的選擇；不同步其他裝置、不變更角色或授予權限。失效偏好回到有效入口。具有產品、匯入、來源帳號、操作紀錄、設定、庫存或儲運管理權限的人員，仍可由「營運管理」使用獲授權功能。切台保留網址明確指定的公司。",
+          "網址明確指定的公司優先於瀏覽器記錄，總覽讀取與同步使用同一公司。切換公司會重新載入總覽，不沿用前一公司的數字；載入失敗時依提示重試。側欄與功能搜尋保留明確公司。"
         ],
         "related": [
           "reports",
@@ -63,7 +64,8 @@
               "Warehouse-only, repair-only and after-sales-only staff enter the corresponding workbench, retaining authorized personal expense, leave and payroll entries. Mixed-duty staff can switch among currently authorized workspaces; each module still enforces access.",
               "Cost, margin and net-profit figures, and advertising spend, platform fees or net payout that could reveal expenses, depend on separate read grants; a missing metric is not zero. The full executive financial overview requires all three grants.",
               "When enabled, mailroom and repair staff land on their workbench. My inbox keeps handoffs pending until the assigned work is completed.",
-              "Switch among available after-sales, mailroom, repair, warehouse and operations workspaces according to current grants. Set as login default stores a preference for this account and company in this browser only; it does not sync devices, change roles or grant access. Invalid preferences fall back to an authorized entry. Management grants retain their features in Operations Management. Workspace switching retains an explicitly selected company in the URL."
+              "Switch among available after-sales, mailroom, repair, warehouse and operations workspaces according to current grants. Set as login default stores a preference for this account and company in this browser only; it does not sync devices, change roles or grant access. Invalid preferences fall back to an authorized entry. Management grants retain their features in Operations Management. Workspace switching retains an explicitly selected company in the URL.",
+              "An explicit company in the URL takes precedence over browser storage for dashboard reads and synchronization. Changing company reloads the dashboard without retaining the previous company’s metrics. Follow retry guidance if loading fails. Sidebar and command search retain the explicit company."
             ],
             "related": [
               "reports",
@@ -81,7 +83,9 @@
         "frontend/src/config/workspaces.ts",
         "backend/src/modules/reports/reports.controller.ts",
         "backend/src/modules/ai/ai-copilot-access.service.ts",
-        "frontend/src/components/DashboardLayout.tsx"
+        "frontend/src/components/DashboardLayout.tsx",
+        "frontend/src/hooks/useEntityContext.ts",
+        "frontend/src/components/CommandPalette.tsx"
       ]
     },
     {
@@ -636,7 +640,8 @@
         "frontend/src/App.tsx",
         "frontend/src/pages/SalesPage.tsx",
         "backend/src/modules/sales/sales.controller.ts",
-        "backend/src/modules/sales/sales.service.ts"
+        "backend/src/modules/sales/sales.service.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "sales_orders:read"
@@ -703,7 +708,8 @@
         "frontend/src/config/navigation.ts",
         "frontend/src/App.tsx",
         "frontend/src/pages/CustomersPage.tsx",
-        "backend/src/modules/sales/customer.controller.ts"
+        "backend/src/modules/sales/customer.controller.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "sales_orders:read"
@@ -843,7 +849,8 @@
         "frontend/src/config/navigation.ts",
         "frontend/src/App.tsx",
         "frontend/src/pages/VendorsPage.tsx",
-        "backend/src/modules/vendor/vendor.controller.ts"
+        "backend/src/modules/vendor/vendor.controller.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "purchase_orders:read",
@@ -921,7 +928,8 @@
         "frontend/src/pages/PurchaseOrdersPage.tsx",
         "backend/src/modules/purchase/purchase.controller.ts",
         "backend/src/modules/purchase/purchase.service.ts",
-        "backend/src/modules/product/sensitive-response.interceptor.ts"
+        "backend/src/modules/product/sensitive-response.interceptor.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "purchase_orders:read"
@@ -1372,7 +1380,8 @@
         ],
         "boundaries": [
           "ERP 入口與 WMS 內部權限都需通過。各環境只能進入對應的允許來源。",
-          "裝箱完成不等於實際交運，更不等於 ERP 正式出庫；本目錄不保證 WMS 內部步驟或任務已完成。"
+          "裝箱完成不等於實際交運，更不等於 ERP 正式出庫；本目錄不保證 WMS 內部步驟或任務已完成。",
+          "兼任主管切換到「儲運工作台」會进入作業工作站；原管理總覽及報表仍由營運管理授權入口使用。網址明確公司優先於瀏覽器記錄。"
         ],
         "related": [
           "warehouse-workstation",
@@ -1399,7 +1408,8 @@
             ],
             "boundaries": [
               "Both ERP entry permissions and WMS permissions apply. Each environment only opens its allowlisted source.",
-              "Packing alone is neither actual handover nor final ERP stock posting. This catalog does not certify completion of internal WMS tasks."
+              "Packing alone is neither actual handover nor final ERP stock posting. This catalog does not certify completion of internal WMS tasks.",
+              "Managers switching to Warehouse Workspace enter the workstation; authorized management overview and reports remain available through Operations Management. An explicit URL company takes precedence over browser storage."
             ],
             "related": [
               "warehouse-workstation",
@@ -1417,7 +1427,8 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
         "frontend/src/pages/WarehouseCenterPage.tsx",
-        "frontend/src/pages/WmsHandoverReconciliationPage.tsx"
+        "frontend/src/pages/WmsHandoverReconciliationPage.tsx",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "wms_tasks:read"
@@ -1485,7 +1496,8 @@
         "frontend/src/App.tsx",
         "frontend/src/pages/SnLabelsPage.tsx",
         "backend/src/modules/sn-labels/sn-labels.controller.ts",
-        "backend/src/modules/sn-labels/sn-labels.export.ts"
+        "backend/src/modules/sn-labels/sn-labels.export.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "inventory:read"
@@ -1900,7 +1912,8 @@
         "frontend/src/pages/b2b/B2bWorkbenchPage.tsx",
         "backend/src/modules/sales/sales.controller.ts",
         "backend/src/modules/sales/services/sales-quotation.service.ts",
-        "backend/src/modules/b2b/b2b.service.ts"
+        "backend/src/modules/b2b/b2b.service.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "sales_orders:read",
@@ -2045,7 +2058,8 @@
         "frontend/src/App.tsx",
         "frontend/src/pages/AfterSalesQuotesPage.tsx",
         "backend/src/modules/integration/after-sales/after-sales-preparation.controller.ts",
-        "frontend/src/config/release.ts"
+        "frontend/src/config/release.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "after_sales_cases:read"
@@ -2171,7 +2185,8 @@
         "frontend/src/App.tsx",
         "frontend/src/pages/AfterSalesBrandsPage.tsx",
         "backend/src/modules/integration/after-sales/after-sales-preparation.controller.ts",
-        "frontend/src/config/release.ts"
+        "frontend/src/config/release.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "roles": [
         "ADMIN",
@@ -3407,7 +3422,8 @@
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
         "frontend/src/pages/WarehousePortalPage.tsx",
-        "frontend/src/pages/WarehouseReportsPage.tsx"
+        "frontend/src/pages/WarehouseReportsPage.tsx",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "wms_logs:read"
@@ -3474,7 +3490,8 @@
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
         "frontend/src/pages/WarehousePortalPage.tsx",
-        "frontend/src/pages/WarehouseReportsPage.tsx"
+        "frontend/src/pages/WarehouseReportsPage.tsx",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "wms_exceptions:read"
@@ -3541,7 +3558,8 @@
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
         "frontend/src/pages/WarehousePortalPage.tsx",
-        "frontend/src/pages/WarehouseReportsPage.tsx"
+        "frontend/src/pages/WarehouseReportsPage.tsx",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "wms_scan_errors:read"
@@ -3608,7 +3626,8 @@
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
         "frontend/src/pages/WarehousePortalPage.tsx",
-        "frontend/src/pages/WarehouseReportsPage.tsx"
+        "frontend/src/pages/WarehouseReportsPage.tsx",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "wms_defects:read"
@@ -4021,7 +4040,8 @@
         "frontend/src/pages/b2b/B2bWorkbenchPage.tsx",
         "backend/src/modules/b2b/b2b.controller.ts",
         "backend/src/modules/b2b/b2b.service.ts",
-        "backend/src/modules/b2b/b2b-quote-mail.service.ts"
+        "backend/src/modules/b2b/b2b-quote-mail.service.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ]
     },
     {
@@ -4275,7 +4295,8 @@
         "backend/src/modules/b2b/b2b-pricebook.service.ts",
         "backend/src/modules/b2b/b2b-guest.controller.ts",
         "backend/src/modules/b2b/b2b-guest.service.ts",
-        "backend/src/common/guards/jwt-auth.guard.ts"
+        "backend/src/common/guards/jwt-auth.guard.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "sales_orders:read"
@@ -4350,7 +4371,8 @@
         "frontend/src/services/purchase.service.ts",
         "backend/src/modules/purchase/purchase.controller.ts",
         "backend/src/modules/purchase/purchase-b2b-queue.service.ts",
-        "backend/src/modules/purchase/purchase.service.ts"
+        "backend/src/modules/purchase/purchase.service.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "purchase_orders:create"
@@ -4422,7 +4444,8 @@
         "frontend/src/pages/SupplierAccountsPage.tsx",
         "frontend/src/services/b2b-supplier-admin.service.ts",
         "backend/src/modules/b2b/b2b.controller.ts",
-        "backend/src/modules/b2b/b2b.service.ts"
+        "backend/src/modules/b2b/b2b.service.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "purchase_orders:read"
@@ -4499,7 +4522,8 @@
         "frontend/src/pages/WmsHandoverReconciliationPage.tsx",
         "frontend/src/services/wms-reconciliation.service.ts",
         "backend/src/modules/integration/wms/wms-handover.module.ts",
-        "backend/src/modules/integration/wms/wms-handover.service.ts"
+        "backend/src/modules/integration/wms/wms-handover.service.ts",
+        "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [
         "inventory:read"

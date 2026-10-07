@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { User } from '../src/types/index.ts'
 import { availableOperationsWorkspaces, operationsWorkspace, savePreferredOperationsWorkspace,
-  preferredOperationsWorkspace, workspacePreferenceKey, operationsWorkspaceDestination, workspaceCompanyId } from '../src/config/workspaces.ts'
+  preferredOperationsWorkspace, workspacePreferenceKey, operationsWorkspaceDestination, workspaceCompanyId, companyNavigationDestination } from '../src/config/workspaces.ts'
 import { loginDestination } from '../src/utils/login-destination.ts'
 import { navigationLeaves, workspaceNavigation } from '../src/config/navigation.ts'
 
@@ -95,4 +95,17 @@ test('workbench switches and browser preference keep an explicitly selected comp
     window.__APP_CONFIG__ = { ...config, stagedOperationsEnabled: false }
     assert.deepEqual(availableOperationsWorkspaces({ ...csr, permissions: [...csr.permissions, 'mailroom:read', 'repair_workbench:read'] }), ['after-sales', 'mailroom', 'repair'])
   } finally { window.__APP_CONFIG__ = config }
+})
+
+
+test('warehouse managers select and remember the station workspace while explicit destination company stays intact', () => {
+  memory.clear(); memory.set('entityId', 'company-a')
+  const user = { ...csr, permissions: ['wms_tasks:read', 'wms_overview:read'] }
+  const destination = operationsWorkspaceDestination('warehouse', '?entityId=company-b', user)
+  assert.equal(destination, '/warehouse/workstation?entityId=company-b')
+  assert.equal(operationsWorkspace(user, new URL(destination, 'https://example.invalid').pathname), 'warehouse')
+  assert(savePreferredOperationsWorkspace(user, 'company-a', 'warehouse'))
+  assert.equal(loginDestination(user), '/warehouse/workstation')
+  assert.equal(companyNavigationDestination('/operations/repair?queue=mine', '?entityId=company-b'), '/operations/repair?queue=mine&entityId=company-b')
+  assert.equal(companyNavigationDestination('/operations/repair?entityId=company-c', '?entityId=company-b'), '/operations/repair?entityId=company-c')
 })

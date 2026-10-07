@@ -2,7 +2,8 @@ import WarehouseLink from './WarehouseLink'
 import { useEffect, useState } from 'react'
 import { Input, Modal, Empty } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { companyNavigationDestination } from '../config/workspaces'
 import { useAuth } from '../contexts/AuthContext'
 import { navigationLeaves, visibleNavigation, type NavigationItem } from '../config/navigation'
 
@@ -11,6 +12,7 @@ export default function CommandPalette({ items }: { items?: NavigationItem[] }) 
   const [search, setSearch] = useState('')
   const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const pages = navigationLeaves(items || visibleNavigation(user)).filter((item) => item.label.includes(search.trim()))
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -29,7 +31,7 @@ export default function CommandPalette({ items }: { items?: NavigationItem[] }) 
       value={search} onChange={(event) => setSearch(event.target.value)} allowClear />
     <nav aria-label="功能搜尋結果" className="operations-command-results">
       {pages.map((item) => item.externalUrl ? <WarehouseLink key={item.key} item={item} onOpen={() => setOpen(false)} /> : <button type="button" key={item.key}
-        onClick={() => { navigate(item.key); setOpen(false) }}>{item.label}</button>)}
+        onClick={() => { navigate(companyNavigationDestination(item.key, location.search)); setOpen(false) }}>{item.label}</button>)}
       {!pages.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="沒有符合的功能" />}
     </nav>
   </Modal>

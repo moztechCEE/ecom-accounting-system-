@@ -1,9 +1,17 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
+
+function storedEntityId() {
+  try { return localStorage.getItem("entityId")?.trim() || ""; }
+  catch { return ""; }
+}
+
 export function useEntityContext() {
-  const read = () => localStorage.getItem("entityId")?.trim() || "";
-  const [entityId, setEntityId] = useState(read);
+  const { search } = useLocation();
+  const explicitEntityId = new URLSearchParams(search).get("entityId")?.trim();
+  const [fallbackEntityId, setFallbackEntityId] = useState(storedEntityId);
   useEffect(() => {
-    const sync = () => setEntityId(read());
+    const sync = () => setFallbackEntityId(storedEntityId());
     window.addEventListener("storage", sync);
     window.addEventListener("focus", sync);
     return () => {
@@ -11,5 +19,5 @@ export function useEntityContext() {
       window.removeEventListener("focus", sync);
     };
   }, []);
-  return entityId;
+  return explicitEntityId || fallbackEntityId;
 }

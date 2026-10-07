@@ -7,7 +7,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
 import { PRODUCT } from '../config/product'
 import { activeNavigation, navigationParent, workspaceNavigation, type NavigationItem } from '../config/navigation'
-import { REPAIR_PERSONAL_PATHS, operationsWorkspace, availableOperationsWorkspaces, savePreferredOperationsWorkspace, operationsWorkspaceDestination, workspaceCompanyId, WORKSPACE_LABELS, type OperationsWorkspace } from '../config/workspaces'
+import { REPAIR_PERSONAL_PATHS, operationsWorkspace, availableOperationsWorkspaces, savePreferredOperationsWorkspace, operationsWorkspaceDestination, companyNavigationDestination, workspaceCompanyId, WORKSPACE_LABELS, type OperationsWorkspace } from '../config/workspaces'
 import CommandPalette from './CommandPalette'
 import NotificationCenter from './NotificationCenter'
 import SettingsDrawer from './SettingsDrawer'
@@ -79,7 +79,7 @@ export default function DashboardLayout() {
       openKeys: shown.filter((item) => item.children && (menuSearch || !preferences.closed.includes(item.key))).map((item) => item.key),
       onOpenChange: (keys: string[]) => setPreferences((current) => ({ ...current, closed: items.filter((item) => item.children && !keys.includes(item.key)).map((item) => item.key) })),
     } : {})}
-    items={toMenu(shown)} onClick={({ key }) => { if (!shown.flatMap(item => item.children || [item]).find(item => item.key === key)?.externalUrl) navigate(key); setMobileOpen(false); setMenuSearch('') }}
+    items={toMenu(shown)} onClick={({ key }) => { if (!shown.flatMap(item => item.children || [item]).find(item => item.key === key)?.externalUrl) navigate(companyNavigationDestination(key, location.search)); setMobileOpen(false); setMenuSearch('') }}
   />
   const navContent = (collapsed = false) => <>
     <div className="operations-brand">
@@ -92,7 +92,7 @@ export default function DashboardLayout() {
         onChange={value => {
           setMenuSearch('')
           setWorkspaceFeedback('')
-          navigate(operationsWorkspaceDestination(value, location.search))
+          navigate(operationsWorkspaceDestination(value, location.search, user))
         }} />
       <Button type="link" size="small" onClick={() => {
         const entityId = workspaceCompanyId(location.search)
@@ -138,7 +138,7 @@ export default function DashboardLayout() {
           <InboxShortcut />
           <NotificationCenter />
           <Dropdown trigger={['click']} menu={{ items: [
-            { key: 'profile', label: '個人資料', icon: <UserOutlined />, onClick: () => navigate('/profile') },
+            { key: 'profile', label: '個人資料', icon: <UserOutlined />, onClick: () => navigate(companyNavigationDestination('/profile', location.search)) },
             { key: 'preferences', label: '介面設定', icon: <SettingOutlined />, onClick: () => setSettingsOpen(true) },
             { type: 'divider' },
             { key: 'logout', label: '登出', icon: <LogoutOutlined />, onClick: async () => { if (await logout()) navigate('/login') } },

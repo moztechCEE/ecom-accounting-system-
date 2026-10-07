@@ -31,6 +31,7 @@ import {
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useEntityContext } from "../hooks/useEntityContext";
 import { hasPermission } from "../utils/access";
 import PageSkeleton from "../components/PageSkeleton";
 import { GlassCard } from "../components/ui/GlassCard";
@@ -273,6 +274,12 @@ function getTaskToneMeta(tone: DashboardExecutiveOverview["tasks"][number]["tone
 }
 
 const DashboardPage: React.FC = () => {
+  const entityId = useEntityContext();
+  // A company change remounts the snapshot, so partial/error results cannot reuse another company.
+  return <DashboardCompanyPage key={entityId} companyId={entityId} />;
+};
+
+const DashboardCompanyPage: React.FC<{ companyId: string }> = ({ companyId }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canViewCost = hasPermission(user, "product_cost:read");
@@ -334,7 +341,7 @@ const DashboardPage: React.FC = () => {
       return;
     }
 
-    const storedEntityId = localStorage.getItem("entityId")?.trim();
+    const storedEntityId = companyId;
     const { since, until } = resolveRange(rangeMode, DASHBOARD_TZ, customRange);
     const hadSnapshot = hasSuccessfulSnapshotRef.current;
     let ignore = false;
@@ -575,7 +582,7 @@ const DashboardPage: React.FC = () => {
     return () => {
       ignore = true;
     };
-  }, [rangeMode, customRange, refreshToken, canViewCost, canViewMargin, canViewNetProfit]);
+  }, [companyId, rangeMode, customRange, refreshToken, canViewCost, canViewMargin, canViewNetProfit]);
 
   const handleCustomRangeChange = (value: RangeValue) => {
     if (!value || !value[0] || !value[1]) {
@@ -586,7 +593,7 @@ const DashboardPage: React.FC = () => {
   };
 
   const handleManualSync = async () => {
-    const storedEntityId = localStorage.getItem("entityId")?.trim();
+    const storedEntityId = companyId;
     const { since, until } = resolveRange(rangeMode, DASHBOARD_TZ, customRange);
     setSyncing(true);
     try {
@@ -695,7 +702,7 @@ const DashboardPage: React.FC = () => {
 
   const handleAdSpendSync = async () => {
     if (!canViewNetProfit) return;
-    const storedEntityId = localStorage.getItem("entityId")?.trim();
+    const storedEntityId = companyId;
     const { since, until } = resolveRange(rangeMode, DASHBOARD_TZ, customRange);
     setSyncingAdSpend(true);
     try {
@@ -731,7 +738,7 @@ const DashboardPage: React.FC = () => {
   };
 
   const handleSyncInvoiceStatuses = async () => {
-    const storedEntityId = localStorage.getItem("entityId")?.trim();
+    const storedEntityId = companyId;
     const { since, until } = resolveRange(rangeMode, DASHBOARD_TZ, customRange);
     setSyncingInvoiceStatuses(true);
     try {
