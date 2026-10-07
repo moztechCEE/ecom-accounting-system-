@@ -92,6 +92,7 @@ import {createRoot} from 'react-dom/client';
 import {createMemoryRouter,RouterProvider,useLocation} from 'react-router-dom';
 import DashboardPage from '/src/pages/DashboardPage.tsx';
 import DashboardLayout from '/src/components/DashboardLayout.tsx';
+import AfterSalesWorkbenchHub from '/src/pages/after-sales/AfterSalesWorkbenchHub.tsx';
 import {useEntityContext} from '/src/hooks/useEntityContext.ts';
 import {FixtureAuth} from 'virtual:workspace-company-auth';
 const e=React.createElement,q=new URLSearchParams(window.location.search);
@@ -105,20 +106,22 @@ window.__releaseCompany=(entityId)=>{
   window.__pending=window.__pending.filter(item=>item.entityId!==entityId);
   matches.forEach(item=>item.resolve());
 };
-const user={id:'synthetic-manager',name:'Synthetic manager',email:'manager@example.invalid',roles:['WAREHOUSE_SUPERVISOR'],salesDataScope:'ENTITY',
-  permissions:['wms_tasks:read','wms_logs:read','wms_picking:execute','profile_self:read','product_cost:read','financial_margin:read','financial_net_profit:read']};
+const user={id:'synthetic-manager',name:'Synthetic manager',email:'manager@example.invalid',roles:['WAREHOUSE_SUPERVISOR'],salesDataScope:q.get('scope') || 'ENTITY',
+  permissions:['wms_tasks:read','wms_logs:read','wms_picking:execute','profile_self:read','product_cost:read','financial_margin:read','financial_net_profit:read',...(mode==='doa'?['after_sales_cases:read']:[])]};
 function Current() { const l=useLocation();return e('output',{id:'current-route'},l.pathname+l.search); }
 function WarehouseProbe() {const companyId=useEntityContext();return e('output',{id:'warehouse-company'},companyId);}
 function Dashboard() {return e(React.Fragment,null,e(Current),e(DashboardPage));}
 function Layout() {return e(React.Fragment,null,e(Current),e(DashboardLayout));}
-const router=createMemoryRouter(mode==='layout' ? [{path:'/',element:e(Layout),children:[
+function DoaHub() {return e(AfterSalesWorkbenchHub,{user,section:'workbench',onOpen:section=>router.navigate('/operations/after-sales/'+section+'?entityId='+start)});}
+const router=createMemoryRouter(['layout','doa'].includes(mode) ? [{path:'/',element:e(Layout),children:[
   {path:'dashboard',element:e('h2',null,'Synthetic operations home')},
   {path:'warehouse',element:e(WarehouseProbe)},
   {path:'warehouse/workstation',element:e(WarehouseProbe)},
   {path:'profile',element:e('h2',null,'Synthetic personal profile')},
+  {path:'operations/after-sales/workbench',element:e(DoaHub)},
 ]}] : mode==='hook' ? [{path:'/warehouse',element:e(React.Fragment,null,e(Current),e(WarehouseProbe))}]
   : [{path:'/dashboard',element:e(Dashboard)}],
-  {initialEntries:[(mode==='hook'?'/warehouse':'/dashboard')+'?entityId='+start]});
+  {initialEntries:[(mode==='doa'?'/operations/after-sales/workbench':mode==='hook'?'/warehouse':'/dashboard')+'?entityId='+start]});
 window.__navigate=path=>router.navigate(path);
 createRoot(document.getElementById('root')).render(e(FixtureAuth,{value:{user,logout:async()=>true}},e(RouterProvider,{router})));
 `
@@ -324,6 +327,30 @@ test('actual React pages isolate company snapshots, requests and workspace navig
       assert.equal(await page.evaluate(() => localStorage.getItem('entityId')), 'company-A')
       assert.deepEqual(await calls(page), [])
       await healthy(result)
+    })
+
+    await t.test('DOA home keeps one accessible page title and all six services on desktop and mobile', async () => {
+      const result = await open('?mode=doa'), { page } = result
+      const hub = page.getByRole('region', { name: '售後工作台', exact: true })
+      await hub.waitFor()
+      assert.equal(await hub.getByRole('heading', { name: '售後工作台', exact: true }).count(), 1)
+      assert.equal(await page.locator('.operations-header-title').innerText(), '', 'The shell does not repeat the Hub heading')
+      assert.equal(await hub.getByRole('list', { name: '售後案件服務', exact: true }).getByRole('button').count(), 6)
+      await hub.getByRole('button', { name: /案件總覽$/ }).waitFor()
+      assert.equal(await hub.locator('.after-sales-hub-intro, .after-sales-hub-entry-description').count(), 0, 'Static teaching text does not obscure service controls')
+      await page.setViewportSize({ width: 390, height: 844 })
+      await page.getByRole('button', { name: '開啟主選單', exact: true }).click()
+      await page.locator('.operations-mobile-drawer').getByRole('navigation', { name: '主選單', exact: true }).waitFor()
+      assert.equal(await hub.getByRole('heading', { name: '售後工作台', exact: true }).count(), 1)
+      assert.equal(await page.locator('#operations-content').evaluate(element => element.scrollWidth <= element.clientWidth), true, 'The mobile Hub remains inside the content width')
+      assert.deepEqual(await calls(page), [], 'Hub entry display introduces no API writes or reads')
+      await healthy(result)
+
+      const denied = await open('?mode=doa&scope=SELF')
+      await denied.page.getByText('目前帳號沒有此售後功能權限', { exact: true }).waitFor()
+      assert.equal(await denied.page.getByRole('heading', { name: '售後工作台', exact: true }).count(), 0)
+      assert.equal(await denied.page.locator('.operations-header-title').innerText(), '售後工作台', 'A blocked Hub keeps the shell page name')
+      await healthy(denied)
     })
   } finally {
     await browser?.close()

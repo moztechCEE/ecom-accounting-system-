@@ -10,7 +10,7 @@ import {
 import './AfterSalesWorkbenchHub.css'
 
 type Props = { user: User | null; section: string; onOpen: (section: string) => void }
-const { Title, Paragraph } = Typography
+const { Title } = Typography
 
 export default function AfterSalesWorkbenchHub({ user, section, onOpen }: Props) {
   const details = afterSalesSectionDetails(section)
@@ -28,7 +28,6 @@ export default function AfterSalesWorkbenchHub({ user, section, onOpen }: Props)
     <header className="after-sales-hub-heading">
       <div>
         <Title level={2} id="after-sales-hub-title" className="after-sales-hub-title">{details.title}</Title>
-        {home && <Paragraph className="after-sales-hub-intro">從案件建立、顧客確認到完成服務，集中處理售後案件。</Paragraph>}
       </div>
       {home
         ? <Button type="primary" size="large" icon={<FolderOpenOutlined />} onClick={() => open('cases')}>案件總覽</Button>
@@ -41,7 +40,6 @@ export default function AfterSalesWorkbenchHub({ user, section, onOpen }: Props)
           <button type="button" className="after-sales-hub-entry" onClick={() => open(entry.section)}>
             <span className="after-sales-hub-entry-copy">
               <span className="after-sales-hub-entry-title">{entry.title}</span>
-              <span className="after-sales-hub-entry-description">{entry.description}</span>
             </span>
             <ArrowRightOutlined aria-hidden />
           </button>

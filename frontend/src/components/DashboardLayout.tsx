@@ -51,6 +51,8 @@ export default function DashboardLayout() {
   const items = workspaceNavigation(user, activeWorkspace)
   const active = activeNavigation(items, location.pathname, location.search)
   const parent = navigationParent(items, active?.key || '')
+  const hubProvidesPageTitle = location.pathname === '/operations/after-sales/workbench' &&
+    workspaces.includes('after-sales') && active?.label === WORKSPACE_LABELS['after-sales']
 
   useEffect(() => { document.title = PRODUCT.title }, [])
   useEffect(() => {
@@ -97,7 +99,7 @@ export default function DashboardLayout() {
       <Button type="link" size="small" onClick={() => {
         const entityId = workspaceCompanyId(location.search)
         setWorkspaceFeedback(savePreferredOperationsWorkspace(user, entityId, activeWorkspace)
-          ? '已設為這個帳號與公司在此瀏覽器的登入入口' : '目前無法儲存登入入口')
+          ? '已設為此瀏覽器的登入預設' : '目前無法儲存登入入口')
       }}>設為登入預設</Button>
       {workspaceFeedback && <span role="status" style={{ display: 'block', fontSize: 12 }}>{workspaceFeedback}</span>}
     </div>}
@@ -131,7 +133,7 @@ export default function DashboardLayout() {
       <header className="operations-header">
         <div className="operations-header-title">
           {mobile && <Button type="text" icon={<MenuOutlined />} aria-label="開啟主選單" onClick={() => setMobileOpen(true)} />}
-          <span>{active?.label || PRODUCT.name}</span>
+          {!hubProvidesPageTitle && <span>{active?.label || PRODUCT.name}</span>}
         </div>
         <div className="operations-header-actions">
           <ClawHelpButton>這頁怎麼用</ClawHelpButton>

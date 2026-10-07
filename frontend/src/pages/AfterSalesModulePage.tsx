@@ -47,14 +47,14 @@ export default function AfterSalesModulePage() {
     iframeDirty.current = false; dirty.current = customerDirty.current || intakeDirty.current
     setHeight(950); setLoading(true); setError('')
     if (window.__APP_CONFIG__?.afterSalesModuleEnabled !== true) { setError('售後工作台尚未開通'); setLoading(false); return }
-    if (!entityId) { setError('請先選擇有售後來源權限的公司'); setLoading(false); return }
-    if (!canOpenSection) { setError('此帳號沒有目前售後功能或公司範圍的權限'); setLoading(false); return }
+    if (!entityId) { setError('請先選擇公司'); setLoading(false); return }
+    if (!canOpenSection) { setError('目前帳號無此售後功能權限'); setLoading(false); return }
     if (section === 'workbench' && !showOverview) { setLoading(false); return }
     let attempt: AfterSalesAttempt
     try { attempt = session.current.begin(section, entityId) }
     catch { setError('售後功能入口不存在'); setLoading(false); return }
     deadline.current = setTimeout(() => {
-      if (session.current.timeout(attempt)) showFailure(attempt, '售後頁面未能在限定時間內開啟，請重新開啟；若持續發生，請聯絡管理者')
+      if (session.current.timeout(attempt)) showFailure(attempt, '開啟逾時，請重新開啟')
     }, AFTER_SALES_READY_TIMEOUT_MS)
     try {
       const { data } = await api.post('/after-sales/module/launch', { entityId, section })
@@ -92,7 +92,7 @@ export default function AfterSalesModulePage() {
         let url = ''
         try { url = frame.current?.contentWindow?.location.href || '' } catch { /* Cross-origin or error documents cannot prove readiness. */ }
         const result = session.current.ready(attempt, event.source, event.data.path, url, window.location.origin)
-        if (result === 'mismatch') { showFailure(attempt, '售後頁面與所選入口不一致，請重新開啟並核對公司與功能權限'); return }
+        if (result === 'mismatch') { showFailure(attempt, '頁面與所選功能不符，請重新開啟'); return }
         if (result === 'ready') { clearDeadline(); setLoading(false); setError('') }
       }
       if (attempt.phase !== 'READY') return
@@ -131,9 +131,9 @@ export default function AfterSalesModulePage() {
       if (showOverview && iframeDirty.current && !await new Promise<boolean>(resolve => modal.confirm({ title: '案件概況有未儲存修改', content: '請先儲存，或確認放棄修改後再收起。', okText: '收起', cancelText: '保留', onOk: () => resolve(true), onCancel: () => resolve(false) }))) return
       setShowOverview(value => !value)
     })()}>{showOverview ? '收起案件概況' : '查看案件概況'}</Button>}
-    {section==='cases' && visibleIntake && <Alert showIcon type="info" style={{marginBottom:16}} message={`原收件 ${visibleIntake.label}：${visibleIntake.caseIntake?.status==='RESOLVED'?'已綁定來源案件':'客服本人補建中'}`} description="請沿用下方原售後『新增案件』表單。案件建立成功後，返回同一原收件選擇來源品項與版次完成綁定；此提示不表示案件已建立或實物已交接。" action={<Button onClick={()=>navigate(intakeReturnEntry(entityId,visibleIntake.id))}>返回原收件綁案</Button>} />}
+    {section==='cases' && visibleIntake && <Alert showIcon type="info" style={{marginBottom:16}} message={`收件 ${visibleIntake.label}：${visibleIntake.caseIntake?.status==='RESOLVED'?'已綁定案件':'待綁定案件'}`} description={visibleIntake.caseIntake?.status==='RESOLVED'?undefined:'新增案件後，返回此收件完成綁定。'} action={<Button onClick={()=>navigate(intakeReturnEntry(entityId,visibleIntake.id))}>返回收件綁定</Button>} />}
     {error && <Alert type="error" showIcon message="售後工作台未能開啟" description={error} action={<Button onClick={() => void (async () => {
-      if (iframeDirty.current && !await new Promise<boolean>(resolve => modal.confirm({ title: '售後表單尚未儲存', content: '重新開啟會放棄原售後表單修改；維修轉客服回覆仍保留。', okText: '重新開啟', cancelText: '保留表單', onOk: () => resolve(true), onCancel: () => resolve(false) }))) return
+      if (iframeDirty.current && !await new Promise<boolean>(resolve => modal.confirm({ title: '售後表單尚未儲存', content: '重新開啟會放棄此表單未儲存的修改。', okText: '重新開啟', cancelText: '保留表單', onOk: () => resolve(true), onCancel: () => resolve(false) }))) return
       await launch()
     })()}>重新開啟</Button>} />}
     {loading && <div role="status" style={{ padding: 24 }}><Spin /> 正在開啟售後工作台…</div>}

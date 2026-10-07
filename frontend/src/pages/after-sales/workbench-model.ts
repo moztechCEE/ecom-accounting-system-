@@ -2,12 +2,12 @@ import type { User } from '../../types'
 import { hasPermission } from '../../utils/access'
 
 export const AFTER_SALES_CASE_ENTRIES = [
-  { section: 'reshipments', title: '補寄服務', caseType: 'RESHIPMENT', description: '原漏寄補寄，處理漏寄、缺件與補寄。' },
-  { section: 'private-purchases', title: '商品與配件訂購', caseType: 'PRIVATE_PURCHASE', description: '原私下購買，協助顧客訂購產品或配件。' },
-  { section: 'repairs', title: '檢測與維修', caseType: 'REPAIR', description: '追蹤產品檢測、維修報價與處理進度。' },
-  { section: 'exchange-returns', title: '換貨服務', caseType: 'EXCHANGE_RETURN', description: '原來回件，處理產品換貨與寄回。' },
-  { section: 'refund-pickups', title: '退貨退款', caseType: 'REFUND_PICKUP', description: '原退款派車，處理退貨與退款申請。' },
-  { section: 'customer-issues', title: '產品問題回報', caseType: 'CUSTOMER_ISSUE', description: '原客戶問題，記錄產品問題、照片與影片。' },
+  { section: 'reshipments', title: '補寄服務', caseType: 'RESHIPMENT' },
+  { section: 'private-purchases', title: '商品與配件訂購', caseType: 'PRIVATE_PURCHASE' },
+  { section: 'repairs', title: '檢測與維修', caseType: 'REPAIR' },
+  { section: 'exchange-returns', title: '換貨服務', caseType: 'EXCHANGE_RETURN' },
+  { section: 'refund-pickups', title: '退貨退款', caseType: 'REFUND_PICKUP' },
+  { section: 'customer-issues', title: '產品問題回報', caseType: 'CUSTOMER_ISSUE' },
 ] as const
 
 const CASE_PERMISSION = 'after_sales_cases:read'

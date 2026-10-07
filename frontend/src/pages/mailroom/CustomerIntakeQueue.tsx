@@ -22,7 +22,7 @@ export default function CustomerIntakeQueue({ entityId, initialItemId, onDirtyCh
   useEffect(() => { dirtyCallback.current = onDirtyChange; }, [onDirtyChange]);
   useEffect(() => () => { dirtyCallback.current(false); }, []);
   const setDirty = useCallback((value: boolean) => { dirty.current = value; dirtyCallback.current(value); }, []);
-  const confirmDiscard = useCallback(() => new Promise<boolean>(resolve => modal.confirm({ title: '綁案資料尚未保存', content: '請先完成綁定，或確認放棄目前選案與核對資料。受理中的收件仍留在此交辦佇列。', okText: '放棄未保存資料', cancelText: '保留資料', maskClosable: false, onOk: () => resolve(true), onCancel: () => resolve(false) })), [modal]);
+  const confirmDiscard = useCallback(() => new Promise<boolean>(resolve => modal.confirm({ title: '綁案資料尚未保存', content: '離開會放棄未保存的選案與核對資料。', okText: '放棄未保存資料', cancelText: '保留資料', maskClosable: false, onOk: () => resolve(true), onCancel: () => resolve(false) })), [modal]);
   const load = useCallback(async () => {
     if (!permitted || !entityId || listRunning.current) return;
     listRunning.current=true; const id = ++listGeneration.current; setLoading(true);
@@ -47,14 +47,13 @@ export default function CustomerIntakeQueue({ entityId, initialItemId, onDirtyCh
   const item = detail?.entityId === entityId ? detail.item : undefined;
   return <Card title="收發轉客服補建案件" extra={<Button icon={<ReloadOutlined />} loading={loading} onClick={() => void refresh()}>更新補建交辦</Button>} style={{ marginBottom: 20 }}>
     {contextHolder}
-    <Typography.Paragraph type="secondary">先由指定客服本人接手，再於原售後表單建立案件。建立成功後，回到同一收件選擇案件與申報品項並綁定；實物仍由收發人員保管。</Typography.Paragraph>
     <Input.Search aria-label="搜尋待補建收件" placeholder="收件號／品名／SN" allowClear maxLength={200} onSearch={value => { setPage(1); setSearch(value); }} style={{ maxWidth: 350, marginBottom: 16 }} />
     {failure && <Alert type="error" showIcon message={failure} style={{ marginBottom: 12 }} />}
     <Table<Item> rowKey="id" dataSource={rows} loading={loading} scroll={{ x: 650 }} locale={{ emptyText: <Empty description="目前沒有指定本人補建的收件" /> }} pagination={{ current: page, total, pageSize: list?.entityId === entityId ? list.limit : 30, showSizeChanger: false, onChange: setPage }} columns={[
       { title: '原收件／實物', key: 'item', render: (_, row) => <><Button type="link" onClick={() => void select(row.id)}>{row.label}</Button><div>{row.productName} · {row.serialNumber || '未提供 SN'}</div></> },
       { title: '客服交辦', key: 'intake', render: (_, row) => <><Tag>{INTAKE_STATUS[row.caseIntake?.status || ''] || '待核對'}</Tag><div>{row.caseIntake?.ownerName || row.caseIntake?.sentToUserName}</div></> },
       { title: '實物保管', key: 'custody', render: (_, row) => { const c = currentItemCustody(row); return <>{c.holder}<div>{c.location}</div></>; } },
-      { title: '', key: 'open', render: (_, row) => <Button onClick={() => void select(row.id)}>接手／綁回原收件</Button> },
+      { title: '', key: 'open', render: (_, row) => <Button onClick={() => void select(row.id)}>檢視交辦</Button> },
     ]} />
     <Drawer title="客服補建與原收件綁定" width={800} open={!!selected} onClose={() => void select('')} destroyOnHidden>
       <Spin spinning={detailLoading}>{item ? <IntakeDetail key={`${item.id}:${item.version}`} item={item} entityId={entityId} userId={user?.id || ''} onDirty={setDirty} feedback={message} onSaved={async () => { setDirty(false); await loadDetail(); await load(); }} onOpenSource={() => void (async () => { if (dirty.current && !await confirmDiscard()) return; setDirty(false); onOpenSource(item.id); })()} /> : !detailLoading && <Empty description="請重新開啟指定本人的收件" />}</Spin>
@@ -72,8 +71,8 @@ function IntakeDetail({ item, entityId, userId, onDirty, onSaved, onOpenSource, 
     try {
       const payload = action === 'bind_intake' ? intakeBindPayload(item, source, values?.sourceItemId || '', entityId, userId, values?.note || '') : { action, entityId, expectedVersion: item.version };
       const body = JSON.stringify(payload); if (operation.current?.body !== body) operation.current = { body, requestId: crypto.randomUUID() };
-      await mailroomIntake.command(item.id, { ...payload, requestId: operation.current.requestId }); saved = true; onDirty(false); await onSaved(); feedback.success(action === 'claim_intake' ? '已由本人接手；建立案件後請回來綁定同一收件' : '已綁定原收件與售後申報品項；實物保管仍維持原收發人員');
-    } catch (error) { if(!saved && operation.current){try{const latest=await mailroomIntake.item(entityId,item.id),request={...JSON.parse(operation.current.body),requestId:operation.current.requestId};if(matchesIntakeReceipt(latest,request,userId)){saved=true;onDirty(false);await onSaved();feedback.success('已從本次交辦回執核對操作成功');return;}}catch{/* An unavailable or nonmatching receipt remains unknown; no automatic retry. */}} setFailure(saved ? '操作已保存，但重新載入失敗。請重新開啟同一收件核對；不要重建售後案件。' : errorText(error)); }
+      await mailroomIntake.command(item.id, { ...payload, requestId: operation.current.requestId }); saved = true; onDirty(false); await onSaved(); feedback.success(action === 'claim_intake' ? '已接手交辦' : '收件已綁定售後案件');
+    } catch (error) { if(!saved && operation.current){try{const latest=await mailroomIntake.item(entityId,item.id),request={...JSON.parse(operation.current.body),requestId:operation.current.requestId};if(matchesIntakeReceipt(latest,request,userId)){saved=true;onDirty(false);await onSaved();feedback.success('已核對本次操作成功');return;}}catch{/* An unavailable or nonmatching receipt remains unknown; no automatic retry. */}} setFailure(saved ? '已保存，請重開此收件核對；勿重建案件。' : errorText(error)); }
     finally { running.current = false; setBusy(false); }
   }
   return <Space direction="vertical" size={16} style={{ width: '100%' }}>
@@ -86,19 +85,18 @@ function IntakeDetail({ item, entityId, userId, onDirty, onSaved, onOpenSource, 
       { key: 'custody', label: '實物保管與位置', children: `${custody.holder} / ${custody.location}` },
       ...(item.caseIntake?.sourceCaseId ? [{ key: 'source', label: '已綁定來源', children: item.caseIntake.sourceNumber || item.caseIntake.sourceCaseId }] : []),
     ]} />
-    <Alert type="info" showIcon message="建立案件與綁回原收件是兩個步驟" description="若原售後案件已建立而綁定失敗或尚未完成，交辦仍留在此處。請搜尋剛建立的案件，重新核對本版申報品項；不要重建或重登收件。" />
     {failure && <Alert type="error" showIcon message={failure} />}
     {canClaim && <Button type="primary" loading={busy} onClick={() => void command('claim_intake')}>本人接手補建交辦</Button>}
     {canBind && <>
-      <Button onClick={onOpenSource} disabled={busy}>開啟原售後表單，建立案件後回來綁定</Button>
+      <Button onClick={onOpenSource} disabled={busy}>開啟案件中心</Button>
       <Form form={form} layout="vertical" disabled={busy} onValuesChange={() => onDirty(true)} onFinish={values => void command('bind_intake', values)}>
-        <Form.Item name="sourceCaseId" label="剛建立或既有的售後案件" rules={[{ required: true, message: '請選擇售後來源案件' }]}>
+        <Form.Item name="sourceCaseId" label="售後案件" rules={[{ required: true, message: '請選擇售後來源案件' }]}>
           <SourceCasePicker entityId={entityId} active={canBind} selectedSource={source} onSelectSource={value => { setSource(value); form.setFieldValue('sourceItemId', undefined); onDirty(true); }} />
         </Form.Item>
-        {source && (!['REPAIR', 'RETURN'].includes(source.type) || !source.version) && <Alert type="warning" showIcon message="此案件不支援目前收件綁定，或尚無可核對版次" />}
-        <Form.Item name="sourceItemId" label="與此單件實物對應的來源申報品項" rules={[{ required: true, message: '請核對並選擇來源品項' }]}><Select options={(source?.items || []).map(line => ({ value: line.id, label: `${line.name} · SKU ${line.sku || '未提供'} · SN ${line.serialNumber || '未提供'} · 申報 ${line.quantity}`, disabled: !Number.isInteger(line.quantity) || line.quantity < 1 || line.remainingQuantity === 0 }))} /></Form.Item>
-        <Form.Item name="note" label="實物與案件對應的核對依據" rules={[{ required: true, whitespace: true, message: '請記錄核對依據' }]}><Input.TextArea rows={3} maxLength={2000} showCount /></Form.Item>
-        <Button type="primary" htmlType="submit" loading={busy}>確認綁定此原收件</Button>
+        {source && (!['REPAIR', 'RETURN'].includes(source.type) || !source.version) && <Alert type="warning" showIcon message="此案件無法綁定，請核對類型與版次" />}
+        <Form.Item name="sourceItemId" label="對應申報品項" rules={[{ required: true, message: '請核對並選擇來源品項' }]}><Select options={(source?.items || []).map(line => ({ value: line.id, label: `${line.name} · SKU ${line.sku || '未提供'} · SN ${line.serialNumber || '未提供'} · 申報 ${line.quantity}`, disabled: !Number.isInteger(line.quantity) || line.quantity < 1 || line.remainingQuantity === 0 }))} /></Form.Item>
+        <Form.Item name="note" label="核對依據" rules={[{ required: true, whitespace: true, message: '請記錄核對依據' }]}><Input.TextArea rows={3} maxLength={2000} showCount /></Form.Item>
+        <Button type="primary" htmlType="submit" loading={busy}>確認綁定收件</Button>
       </Form>
     </>}
   </Space>;
