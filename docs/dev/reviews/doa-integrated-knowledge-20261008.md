@@ -9,7 +9,7 @@
 - 後續只讀中央知識覆核 HEAD：`37b069888999d87de14c0b4f04374ea55c81d80b`。
 - 七組實際 React DOM fixtures 全部通過：17 個葉測例；Node TAP 含兩個父測例為 **19／19，fail／skip／cancelled 均 0**。沒有重跑測試。
 - 原指示的 after-sales-workbench DOM 名稱，實際檔案是 `frontend/tests/after-sales-module-dom.test.ts`；其餘為 workspace-company、repair-readiness、repair-dispatched-page、repair-feedback、mailroom-workbench、mailroom-recipient 的 `-dom.test.mjs`。
-- 已提交 ERP 詳細報告：`docs/dev/reviews/doa-integrated-dom-20261008.md`；SHA256 `dc729bfce5c4c86b5d21bdfa51202113d4a06f210f14d8de3c54d48ab93e7030`。依 Root 要求保留其原 bytes。
+- 受檢 `37b069888999d87de14c0b4f04374ea55c81d80b` 的 ERP 詳細報告：`docs/dev/reviews/doa-integrated-dom-20261008.md`；當時 SHA256 為 `dc729bfce5c4c86b5d21bdfa51202113d4a06f210f14d8de3c54d48ab93e7030`。後續 `ba567582051cec29765213b3561566d446f264d8` 僅刪除該報告文末多餘空行，當版 SHA256 為 `b1ef4770ab46f37e811871a407747cf65c3afcfc905ec1e15d777c1eeff9b0de`；報告主體、受測版本、產品與測試 bytes 均未變。本行由 DOA 集中整合校正，原獨立覆核與執行結果保持其上列固定版本。
 
 真實頁面證據包含 Dashboard／Layout／CommandPalette 的公司情境、AfterSalesModulePage／Hub 的六類導向及獨立金融權限、實際 RepairWorkbenchPage 的八種 DISPATCHED 情境與文件、MailroomPage 的取消留稿／busy 接收人／未知寄出 reload 精確核對及 RecipientPicker。售後原頁 iframe 為合成文件；原生客服隊列為受控草稿 harness，API／登入為合成 stub，不能推定真 Source、JWT、Server Action、通知或正式庫存成功。頁面攔截拒絕非本機 fixture 網路；未執行真業務呼叫。
 
