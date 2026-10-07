@@ -4,7 +4,7 @@
 
 ## 固定來源與保留
 
-- 原 checkout `corely-erp-aftersales-20261005` 開始／結束均為 clean `264352c5b863d9928a36ab2a9dbecc697f35a028`。
+- 固定 reviewed base 為 `264352c5b863d9928a36ab2a9dbecc697f35a028`；審查開始前原 checkout `corely-erp-aftersales-20261005` 實讀該 SHA 且 clean。審查期間父代理繼續整合，Root 回報曾到 `1167217b`；收到時間點更正後重新查詢原樹，已為 clean `18638e470db426112bf499cb87eb9f792d69138b`。此主樹後續整合不改寫本批215991e1／264固定比對證據，不能把264冒稱為審查後當前主樹。
 - Origin 為 `https://github.com/moztechCEE/ecom-accounting-system-.git`。Explicit fetch `refs/heads/codex/repair-ui-cleanup-20261008`，remote-tracking ref 精確為 `215991e18e5c33c5045921b1668482142dc2f70d`；merge-base 與264相同。
 - 新 detached worktree `/Users/moztecheason/Documents/ChatGPT/AI ERP 系統/corely-erp-repair-ui-review-215991e1-20261008`，開始／結束 SHA 不變，tracked status clean。
 - 舊 detached `/Users/moztecheason/Documents/ChatGPT/AI ERP 系統/corely-erp-repair-ui-review-20261008` 保持 clean `28b5f06c7889085d9246aab7c33ab7090669c7a6`；舊協調區 FAIL 報告及 private probe／圖片未覆寫，handoff 收入的原文仍明確是舊 FAIL。
@@ -76,4 +76,4 @@ Screenshot preload只轉存圖片路徑，沒有改assertions／API行為，避�
 | RepairWorkflowPanel.tsx | `e812edcc4cb1e91a5f34a5fc6c1dc7fed61bd8eaaa949e9230308cd59e227278` |
 | repair.css | `9b316c77a01fdd02e823a6032d12706456d7d3861c8ad4f2b1a9f8c46b76f616` |
 
-Guide仍由中央Root先審中英文用法再生成。Source／AI DISPATCHED pending compatibility、舊ACK、顧客同意／款項、庫存及實物保管界線沒有因本機UI簡化而取得外部驗收。此輪未cloud讀寫／DB／真API／通知／退款／发票／库存mutation，未改原264或private operator state；主DEV仍f3／原264HOLD是Root提供背景，不是本輪雲端實讀證據。
+Guide仍由中央Root先審中英文用法再生成。Source／AI DISPATCHED pending compatibility、舊ACK、顧客同意／款項、庫存及實物保管界線沒有因本機UI簡化而取得外部驗收。此輪未cloud讀寫／DB／真API／通知／退款／发票／库存mutation，未由本代理修改原產品樹或private operator state；主DEV仍f3／原264HOLD是Root提供背景，不是本輪雲端實讀證據。父代理期間內整合主樹的更新另按上一節實讀SHA記錄。

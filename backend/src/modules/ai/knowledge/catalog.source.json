@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reviewedBaseCommit": "ac9c85a7dc39647f7b1eda9ad8ac9cf3b74de962",
+  "reviewedBaseCommit": "c932d30f2d9ce8453f9910d257920d5465145c4e",
   "locales": [
     "zh-TW",
     "en"
@@ -35,7 +35,7 @@
           "儀表板數字與 AI 摘要不能替代原單據；載入失敗或沒有資料不表示金額為零。",
           "儲運、維修及售後專用人員登入對應工作台；依權限保留個人費用、請假與薪資等入口。兼任人員可切換目前獲授權的工作區；工作台不取代各模組的授權。",
           "成本、毛利、淨利，以及可反推出費用的廣告費、平台費、淨入帳等指標，依專用讀取權限顯示；無權限時不可把缺少的指標解讀為零。完整高階財務總覽需成本、毛利及淨利三項讀取授權。",
-          "收發室／維修權限已開通且工作台啟用時，一般同仁登入會進入對應工作台；右上角「我的待辦」保留未完成交接。",
+          "收發室／維修權限已開通且工作台啟用時，一般同仁登入會進入對應工作台；右上角「我的待辦」保留未完成交接。售後、收發室及已選公司的維修首頁保留單一內容頁名與必要操作，工作步驟由「這頁怎麼用」按需查看；阻擋頁仍保留頁名與具體原因。",
           "可依目前權限切換售後、收發、維修、儲運或營運管理工作區。「設為登入預設」只記錄此帳號及公司在目前瀏覽器的選擇；不同步其他裝置、不變更角色或授予權限。失效偏好回到有效入口。具有產品、匯入、來源帳號、操作紀錄、設定、庫存或儲運管理權限的人員，仍可由「營運管理」使用獲授權功能。切台保留網址明確指定的公司。",
           "網址明確指定的公司優先於瀏覽器記錄，總覽讀取與同步使用同一公司。切換公司會重新載入總覽，不沿用前一公司的數字；載入失敗時依提示重試。側欄與功能搜尋保留明確公司。"
         ],
@@ -63,7 +63,7 @@
               "Metrics and AI summaries do not replace source documents; failed or missing data is not a zero balance.",
               "Warehouse-only, repair-only and after-sales-only staff enter the corresponding workbench, retaining authorized personal expense, leave and payroll entries. Mixed-duty staff can switch among currently authorized workspaces; each module still enforces access.",
               "Cost, margin and net-profit figures, and advertising spend, platform fees or net payout that could reveal expenses, depend on separate read grants; a missing metric is not zero. The full executive financial overview requires all three grants.",
-              "When enabled, mailroom and repair staff land on their workbench. My inbox keeps handoffs pending until the assigned work is completed.",
+              "When enabled, mailroom and repair staff land on their workbench; My inbox retains incomplete handoffs. After-sales, mailroom and company-selected repair homes show one content title with necessary actions. Use How to use this page for detailed guidance on demand; blocked views retain a title and specific reason.",
               "Switch among available after-sales, mailroom, repair, warehouse and operations workspaces according to current grants. Set as login default stores a preference for this account and company in this browser only; it does not sync devices, change roles or grant access. Invalid preferences fall back to an authorized entry. Management grants retain their features in Operations Management. Workspace switching retains an explicitly selected company in the URL.",
               "An explicit company in the URL takes precedence over browser storage for dashboard reads and synchronization. Changing company reloads the dashboard without retaining the previous company’s metrics. Follow retry guidance if loading fails. Sidebar and command search retain the explicit company."
             ],
@@ -4549,7 +4549,7 @@
       "sections": {
         "steps": [
           "收發室預設顯示「收件與交接工作」；依待核對、待同仁簽領、待技師簽收、待收發室點收、待寄回、已交物流或品項不符篩選。尚未收到的售後件在「售後待到貨案件」另行查看。",
-          "待到貨清單自動顯示售後維修與退貨案件及尚未到貨數量；選定案件後，只登記這次實際收到的物件。",
+          "待到貨清單顯示售後維修與退貨案件及尚未到貨數量；選定案件後，只登記這次實際收到的物件。清單尚未讀取成功時顯示未載入，不判定零件數；更新失敗保留同公司與同搜尋的上次資料並標未更新，重試成功後才更新。公司或搜尋切換不沿用其他清單。",
           "登記收件時，在對應售後案件輸入部分編號（例如 T）即可即時搜尋，最近更新優先；可載入較早案件，選案後自動帶入維修或退貨類別與申報品項。",
           "登記售後收件後，在詳情拍照並比對來源品項與實收名稱／SKU／SN；產品核對與退貨檢查至少保留一張實物照片。相符維修件指定有資格的技師，不符保留原因與照片交承辦客服；退貨另記包裝、外觀、配件與分級。",
           "維修人員可在收發室平板輸入本人員編、密碼及已設定的驗證碼，再勾選實物確認簽收；收發室帳號持續登入。",
@@ -4558,13 +4558,13 @@
           "信件／同仁包裹選「登記信件／包裹」，填寄件人、內容、入件物流及位置；先依部門篩選，再以姓名或員編選具體收件同仁。一般信件／包裹不填 SKU／SN。售後件由「登記售後收件」選來源案件，逐件登記本次實收數量。",
           "已收到但尚無售後主單的物件以 UNMATCHED／RECEIVED 保留；目前實物保管的收發人員選定同公司客服，填補建原因並送出客服補建交辦（SENT），不必重新登記收件。",
           "指定客服本人受理後才為 ACCEPTED；客服由案件中心原 /cases 入口點「新增案件」，進入 /cases/new 表單建案一次，或核對既有售後主單，再選目前案件、申報品項及來源版次綁回同一 NativeID，完成後交辦為 RESOLVED。",
-          "查看「下一步／接收人」；部門只是篩選，接收人必須是具體同仁。指派或技師認領後仍須本人核對身份及實物簽收；在完成前原保管人繼續持有。通知送達與通知已讀另行追蹤。",
+          "從案件清單查看下一步與接收同仁，進入物件詳情使用可用動作。部門只是篩選，接收人必須是具體同仁；指派或技師認領後仍須本人核對身分及實物簽收，原保管人持有至簽收完成。通知送達與已讀另行追蹤。",
           "技師交回處理品或未修原件後，由指定收發同仁逐件核對並本人 accept_return；WAITING_RETURN_ACCEPTANCE 期間仍由技師保管。只有成為 READY_FOR_DISPATCH 且本人保管的維修件，才登記寄回顧客的物流、單號並勾選已核對且實際交運。換機須核對實際替換品與 SN。",
-          "寄出後查看獨立的「寄出紀錄（實際交運）」及承運商保管；入件單號保留在原收件單。若送出結果未知，先核對本次 requestId、版本、操作者與物流回執；未確認前以首次相同內容與 requestId 重試，不重登寄出。",
+          "寄出後查看獨立的「寄出紀錄」及承運商保管。「寄出同步：待串接」與「既有進度同步」分開，舊回執不能證明本次寄出已同步。入件單號保留在原收件單。若送出結果未知，先核對本次 requestId、版本、操作者與物流回執；未確認前以首次相同內容與 requestId 重試，不重登寄出。",
           "未保存欄位或照片在關閉、換件、換動作及切換工作台時先確認；取消保留，明確放棄才離開，保存中不可切換。未知寄出結果獨立保留公司／本人／物件的原請求，重新進入或重新載入後先核對或沿原 body／requestId 明確重試。"
         ],
         "boundaries": [
-          "工作台需先啟用，操作仍依公司、權限、逐件指派及目前進度限制；售後建案不代表實物已到貨。",
+          "工作台需先啟用，操作仍依公司、權限、逐件指派及目前進度限制；售後建案不代表實物已到貨。既有收發讀取不要求客服補建資格。在 sourceCases 待到貨來源清單，單獨維修讀取只顯示 REPAIR，合法客服全類讀取仍需完整補建本人與公司資格；原生 RETURN 整新物件讀取維持原資格。兼任者資格不成立時，只可依重新核實的原維修讀取顯示維修件；寫入本人、公司及接手守門保持獨立。",
           "AA 須為全新未使用且配件完整，預定重新入庫；A 瑕疵補寄或福利品；B／C 整理後福利品。本階段只記錄去向，不會自動加庫存、扣退款或發送 LINE 訊息。",
           "品項不符與退貨檢查只交承辦客服；承辦客服須以員工信箱對應同公司、在職且有覆核權限的帳號。未完成映射會提示，不廣播給全部客服。",
           "客服接手檢查結果不等於完成整新或核准退款。「待同步」也不代表售後或 AI 已收到。",
@@ -4579,7 +4579,7 @@
           "綁回結果查核應核對唯讀交辦摘要的 lastAction 與 lastRequestId 是否就是首次 bind_intake 請求；只看到已綁案件不能證明本次請求成功。此摘要不包含自由文字、顧客金融或技術文件，亦不授予額外權限。",
           "站內通知在可見的售後、收發、維修、我的待辦及售後庫存頁每 15 秒查一次清單，其他可見頁每 60 秒；分頁隱藏時不輪詢，回到可見或取得焦點會重新查，請求重疊與失敗另受控。WebSocket 與已讀操作維持原語意；清單刷新不覆蓋正在開啟的詳情或表單草稿。輪詢或推送不等於人員本人接手，也不保證隱藏分頁或整日待機送達。",
           "「指定補建客服」使用獨立的補建資格名單；原有維修、退貨及品項不符的客服覆核資格維持原流程，不因補建功能被收窄或變成建案授權。",
-          "下一步提示、候選人名單與部門篩選不授予新權限；每次寫入仍核對公司、現行權限、資格、指派、版本與實物保管。產品核對新增照片守門位於前端，退貨分級維持原有後端照片驗證；不宣稱新增所有 API 的照片強制規則。",
+          "清單下一步、人員名單與部門篩選不授予新權限；每次寫入仍核對公司、現行權限、資格、指派、版本與實物保管。產品核對新增照片守門位於前端，退貨分級維持原有後端照片驗證；不宣稱新增所有 API 的照片強制規則。",
           "指派／認領、通知、本人簽收、處理完成、物流交運、顧客收件與結案是不同狀態。WAITING_RETURN_ACCEPTANCE 尚待收發室本人點收；PENDING_WELFARE_STOCK 已完成收發室點收，依庫存流程處理。RETURN_UNREPAIRED 是未修原件返還，不是完成維修。",
           "原廠／原廠物流與寄回顧客物流分開。dispatch 僅允許收發室本人保管的 REPAIR／READY_FOR_DISPATCH；不因顯示舊 custodian 或一般收發讀取權限而允許交運。",
           "寄出回執以獨立不可變命名空間保留交運物流、身份、時間、版本與實物快照；不改入件物流、原申報、原件 SN、技術文件或其他 workflow 分支。已交物流物件不能再移位或重寄，修正需要另行授權設計，不覆寫本次回執。",
@@ -4611,7 +4611,7 @@
           "sections": {
             "steps": [
               "Mailroom opens on Receiving and handoff work. Filter items awaiting verification, staff pickup, technician acceptance, mailroom return acceptance, outbound dispatch, handed to carrier, or mismatched items. View unreceived after-sales items in the separate Awaiting after-sales arrival tab.",
-              "The awaiting-arrival queue shows repair and return cases and remaining quantities. Select a case and register only the physical pieces received this time.",
+              "The awaiting-arrival queue shows repair and return cases and remaining quantities. Select a case and register only the physical pieces received this time. An unsuccessful read remains unloaded rather than proving zero cases. A failed refresh retains only the last successful snapshot for the same company and search, marked not updated. A successful retry replaces it; switching company or query does not reuse another list.",
               "When registering receipt, type part of a case number (for example T) to search as you type, with recently updated cases first. Load older matches when needed; selecting a case fills its repair or return category and declared items.",
               "After registering an after-sales receipt, open its detail, retain physical photos and compare the source item with the actual name, SKU and serial number. Product verification and return inspection require at least one physical photo in the workbench. Assign matching repairs to an eligible technician; retain mismatch reasons and photos for responsible customer service. Returns separately record packaging, appearance, accessories and grade.",
               "On the mailroom tablet, the assigned technician enters their employee number, password and configured verification code, then confirms physical receipt. The clerk stays signed in.",
@@ -4620,13 +4620,13 @@
               "Choose Register letter/parcel for correspondence, entering sender, contents, incoming logistics and location. Filter by department, then select a specific person by name or employee number. Letters and staff parcels do not use SKU/serial-number fields. For after-sales items, choose Register after-sales receipt, select the source case and register only pieces received this time.",
               "Keep a received item without a source case as UNMATCHED / RECEIVED. Its current mailroom custodian selects customer service in the same company, records the intake reason and sends the case-intake task (SENT), without registering receipt again.",
               "Only the assigned customer-service person can accept it (ACCEPTED). From the original /cases entry in the case center, they choose New case and create once through its /cases/new form, or verify an existing source case, then bind its current case, declared line and source version to the same NativeID. Binding resolves the intake task (RESOLVED).",
-              "Use Next step/recipient for guidance. A department is a filter; the recipient must be a specific person. Assignment or technician claim still requires personal identity and physical acceptance. Custody stays with the current holder until acceptance. Notification delivery and reading remain separate records.",
+              "Read the next step and recipient in the item list, then use the available actions in item detail. A department is a filter; select a specific person. Assignment or technician claim still requires personal identity and physical acceptance. Custody stays with the current holder until acceptance; notification delivery and reading are tracked separately.",
               "When a technician returns a processed item or an unrepaired original, the assigned mailroom person checks each piece and personally performs accept_return. The technician retains custody during WAITING_RETURN_ACCEPTANCE. Only a REPAIR item in READY_FOR_DISPATCH with the clerk's current custody can record its outbound carrier/tracking and confirmation of actual handover. For replacements, verify the actual replacement product and serial number.",
-              "After dispatch, inspect the separate actual-handover shipment record and carrier custody; incoming tracking stays on the original receipt. If the result is unknown, reconcile this request's ID, versions, actor and logistics receipt first. If still unconfirmed, retry only the original identical body and requestId; do not register a second shipment.",
+              "After dispatch, review the separate Outbound record and carrier custody. Dispatch synchronization: integration pending is separate from Existing progress synchronization; prior acknowledgements do not prove this dispatch was synchronized. Incoming tracking stays on the original receipt. If the submission result is unknown, reconcile the current requestId, version, actor and logistics receipt; retry only the original body and requestId until confirmed, without registering another dispatch.",
               "Confirm leaving when unsaved fields or photos exist, including drawer closure, another item/action, and workspace navigation. Cancellation keeps the draft; only explicit discard leaves, and saving blocks switching. An unknown dispatch result retains the original company/user/item request across remount/reload for explicit receipt reconciliation or an identical body/requestId retry."
             ],
             "boundaries": [
-              "The workbench must be enabled. Company, permissions, assignment and current state remain authoritative; creating a case does not mean physical arrival.",
+              "The workbench must be enabled; operations still depend on company, grants, individual assignment and current progress. Creating a source case does not receive its physical goods. Existing mailroom read is independent of CSR intake eligibility. For the sourceCases awaiting-arrival source list, repair-only read shows REPAIR, while full CSR read still requires intake identity and company eligibility. Native RETURN refurbishment items retain their existing read eligibility. An ineligible combined CSR/repair role may retain only freshly verified repair read. Personal acceptance and write gates remain independent.",
               "AA requires an unused product with complete accessories and is intended for restock; A goes to replacement or welfare sale; B/C is refurbished for welfare sale. This phase records disposition without posting stock, deducting refunds or sending LINE messages.",
               "Mismatches and return inspection go only to the responsible customer-service staff member. Their email must map to an active employee in the same company with review permission. Missing mappings are flagged without broadcasting to all reviewers.",
               "Acknowledging inspection does not complete refurbishment or approve a refund. Pending sync does not mean after-sales or AI received the event.",
@@ -4641,7 +4641,7 @@
               "For bind reconciliation, match the read-only intake summary lastAction and lastRequestId to the first bind_intake request. Seeing an already linked case does not prove that this request succeeded. The summary exposes no free text, customer finance or technical records and grants no additional authority.",
               "Internal notifications refresh their list every 15 seconds on visible after-sales, mailroom, repair, My inbox and after-sales stock pages, and every 60 seconds on other visible pages. Hidden tabs do not poll; visibility or focus triggers a fresh read, with overlapping requests and failures controlled. Existing WebSocket and read-marking semantics remain. List refresh does not overwrite an open detail or form draft. Polling or pushing is not personal task acceptance and proves no hidden-tab or all-day idle delivery.",
               "The Assigned intake CSR picker uses separate intake eligibility. Existing repair, return and mismatch reviewer eligibility keeps its original workflow; intake neither narrows that list nor turns review permission into case-creation authority.",
-              "Guidance, candidate lists and department filters grant no new authority. Each write still checks company, current access, eligibility, assignment, version and physical custody. The added product-photo gate is in the frontend; return grading keeps its existing backend photo validation. Do not describe this as a new mandatory-photo rule for every API.",
+              "Item-list next steps, candidate lists and department filters grant no additional authority. Every write still checks company, current grants, eligibility, assignment, version and physical custody. The added product-verification photo gate is in the frontend; return grading retains its existing backend photo validation. This does not add mandatory photo checks to every API.",
               "Assignment/claim, notification, personal acceptance, completed work, carrier handover, customer receipt and case closure are distinct states. WAITING_RETURN_ACCEPTANCE still awaits the clerk's physical acceptance; PENDING_WELFARE_STOCK already has mailroom acceptance and proceeds through stock workflow. RETURN_UNREPAIRED returns an unrepaired original; it does not mean completed repair.",
               "Factory/factory-carrier custody is separate from customer-return logistics. Dispatch is limited to a REPAIR item in READY_FOR_DISPATCH with the clerk's own current mailroom custody. Historical custodian fields or basic read access do not authorize handover.",
               "The immutable outbound namespace retains logistics, identity, time, versions and a physical snapshot without changing incoming logistics, original claims, original serial numbers, technical documents or other workflow branches. Dispatched pieces cannot be moved or dispatched again. Corrections require a separately authorized design rather than overwriting this receipt.",
@@ -4696,7 +4696,6 @@
         "frontend/src/services/notification-refresh.ts",
         "frontend/src/components/NotificationCenter.tsx",
         "backend/src/modules/mailroom/mailroom-dispatch.contract.ts",
-        "frontend/src/pages/mailroom/MailroomNextStep.tsx",
         "frontend/src/pages/mailroom/RecipientPicker.tsx",
         "frontend/src/pages/mailroom/mailroom-workflow.ts",
         "frontend/src/pages/mailroom/mailroom.css",
@@ -4735,7 +4734,7 @@
       "group": "repair",
       "sections": {
         "steps": [
-          "側邊欄「工作台」提供客服 DOA／售後處理台、收發室及維修師工作台。維修師頁內保留總覽、待認領簽收、我的檢修、客服與款項等待、複驗交回及工作單紀錄六分頁，不把六個隊列塞進側邊欄。",
+          "依權限由側欄開啟售後、收發室或維修工作台。維修頁內保留案件總覽、待認領簽收、我的檢修、客服與款項等待、複驗交回及檢修與維修紀錄六分頁；以產品名稱辨識實物，核對案件號與 SN／SKU 後用品名或「開啟案件」開案。",
           "核對原申報及實收 SKU／SN、配件與位置；由本人認領或接受指派，再本人確認實物簽收。簽收後才開始實物檢測；交接前保管責任仍在原持有人。",
           "維修師本人填寫檢修單：顧客故障描述、測試項目與條件、測試結果、能否重現、原因與依據、保固／收費建議、處理方案及估價。未重現或原因不明要據實保留；檢修單不能當作已完成維修。 檢修單及維修單各自保存草稿、正式送出與版本歷史。 列印內部檢修單時使用已保存版本，不包含未保存修改。",
           "顧客維修案件（REPAIR）無論建議免費或付費，都須將已提交檢修單交客服，針對目前版次覆核並記錄結果；正式對客報價、顧客同意與必要款項入帳另以售後來源為準。開始維修或替換須同時有目前版次覆核及來源 repairAllowed。本地覆核不代表顧客已同意或已入帳。公司退貨庫存整新（RETURN／REFURBISHING）另依本人檢修、維修單及複驗交回，不套用顧客付款或客服維修放行門檻。",
@@ -4744,8 +4743,8 @@
           "替換方案先指定 SKU 與全新品／合格整新品品況，一併交客服確認。維修單選取已合格且正式入庫的實物預留，填入 SKU、品況、實物標籤、真實 SN（有才填）及預留關聯。預留保留可用量，不算正式出庫；本版工作單、複驗及放行通過後，後端在同一交易使用預留並寫入 ERP 出庫流水。離開或放棄草稿不取消獨立預留，不使用時須明確釋放。 整新品出庫時在同一交易鎖定來源退貨實物，重新核對本版已提交工作單、逐項 PASS、處置、SKU、SN 與目前實物狀態；來源檢修改版或狀態改變會阻擋出庫。同一來源實物只可登錄一件替換庫存。",
           "維修師本人填寫維修單，記錄實際維修或一對一替換、零件與工時、修後複驗結果；替換另留原機／替換機 SN、全新品或整新品品況、來源與原機去向。內部料源及成本與對客說明分開；對客內容應符合實際處置。",
           "複驗結果須通過（PASS）後才可交回收發室，收發室本人簽收後才完成實物交接。案件進度、交辦待發送／已發送／已接收／已回覆及通知送達狀態分別核對；等待案件顯示卡住原因與下一位負責人。",
-          "案件詳情逐項核對本人簽收、當版檢修、客服接手與方案結果、顧客同意及必要款項、維修單版次與逐項複驗；未完成時顯示阻擋原因與下一步。歷程保留原生實物紀錄版本、操作人與處理說明，實物紀錄、檢修、維修及正式報價版次分別辨識。檢測中先保存維修單不表示已到完工階段。",
-          "已交物流寄回的物件只查看既有檢修、維修與寄出紀錄；核對承運商、單號及實際原件／替換品。已交運不表示顧客已收件或案件已結案，後續由收發室與客服依實際結果處理。"
+          "案件主區填寫檢修單或維修單；儲存草稿、提交及列印分開，列印採已保存版。桌面案件操作位於側欄，手機位於表單後方。「客服與放行」按需展開實際版次與核對結果，未符合目前動作時顯短阻擋。原件／原廠作業、交接及同步歷史按需查看；原廠作業送出期間不可收合，命令拒絕仍在外層顯示，草稿保留供核對重試。歷程保留實物、檢修、維修及正式報價各自版次。",
+          "已交物流物件保留既有檢修、維修與寄出紀錄供查閱；核對承運商、單號及實際原件／替換品。既有同步回執標示「歷史」，不能當本次寄出同步或顧客通知成功。已交運不表示顧客已收件或案件已結案，後續由收發室與客服依實際結果處理。"
         ],
         "boundaries": [
           "「維修師」職務範本使用 REPAIR_TECHNICIAN，授予 repair_workbench:read 與 repair_workbench:update；它不授予客服審核、會計入帳確認、庫存核銷或跨公司權限。實際操作仍受啟用開關、公司、逐件指派、本人簽收及目前進度限制。",
@@ -4786,7 +4785,7 @@
           ],
           "sections": {
             "steps": [
-              "The Workbenches sidebar contains customer service, mailroom and technician entries. The technician page keeps its six overview, claim/acceptance, my inspection, customer/payment waiting, verification/return and document tabs inside the page.",
+              "Open an authorized after-sales, mailroom or repair workspace from the sidebar. The repair page keeps its overview, claim/acceptance, my inspection, customer/payment waiting, verification/return and inspection/repair record tabs inside the page. Identify an item by product name, case number and SN/SKU, then open it through the product link or Open case.",
               "Compare claimed and actual SKU, serial number, accessories and location. Claim or accept an assignment, then personally confirm the physical item before inspection. Custody stays with the current holder until the next recipient accepts it.",
               "The technician personally completes the inspection sheet: customer symptom, test items and conditions, results, reproducibility, cause and supporting evidence, warranty/fee suggestion, proposed action and estimate. Preserve not-reproduced or undetermined findings. An inspection sheet is not a completed repair record. Inspection and repair records each retain drafts, submitted versions and version history. Printing the internal inspection sheet uses its saved version and excludes unsaved edits.",
               "For customer repair cases (REPAIR), both free and paid proposals require customer-service review against the current submitted inspection revision. Formal customer quoting, consent and any needed accounting receipt remain separate in the after-sales source. Starting repair or replacement requires both current-revision review and source repairAllowed. Local review is neither customer consent nor confirmed funds. Company return refurbishment (RETURN/REFURBISHING) separately follows technician documents, verification and physical return; customer payment and repair-review release gates do not apply.",
@@ -4795,8 +4794,8 @@
               "Replacement proposals specify SKU and new or qualified refurbished condition for customer-service review. Select a qualified, formally received unit to reserve and fill its SKU, condition, unit label, any real serial and reservation reference. Reservation holds availability without final deduction; current documents, verification and release must pass before the backend consumes the reservation and posts the ERP outbound movement in one transaction. Leaving or discarding a draft does not cancel an independent reservation; explicitly release it if unused. Refurbished outbound locks the source return in the same transaction and rechecks current submitted work records, every PASS check, outcome, SKU, serial and physical state. Revised inspection or changed custody/state blocks outbound. A source item can qualify only one replacement unit.",
               "The technician personally completes the repair record: actual repair or one-for-one replacement, parts, labor and post-work verification. Replacement additionally keeps old and replacement serial numbers, new or refurbished condition, source and original-item disposition. Separate internal stock source and costs from customer-facing content, which must reflect actual treatment.",
               "Verification must pass (PASS) before the item can be returned to the mailroom for personal acceptance. Track case progress, pending/sent/received/replied handoffs and notification delivery separately. Waiting items identify the blocker and next responsible person.",
-              "Case details show personal acceptance, current inspection, CSR acceptance and decision, customer consent and required funds, repair-record revision and each verification result. Incomplete checks identify the blocker and next step. History retains the native physical-item version, actor and handling note; item, inspection, repair-record and formal quote revisions remain distinct. Saving a repair record during inspection does not mean completion has started.",
-              "Dispatched items retain inspection, repair and outbound records for review. Verify the carrier, tracking number and actual original or replacement item. Carrier handover does not prove customer receipt or case closure; mailroom and customer service follow the actual outcome."
+              "Use the inspection or repair form in the main area. Save draft, submit and print are distinct; printing uses the saved version. Case actions appear beside the form on desktop and after it on mobile. Expand Customer service and release to inspect actual revisions and evidence; current action blockers remain concise. Original-item/factory operations, handoffs and synchronization history expand on demand. Factory operations cannot collapse while submitting; command rejections remain visible outside the panel, with the draft retained for reconciliation and retry. History keeps physical-item, inspection, repair and formal quote revisions distinct.",
+              "Dispatched items retain inspection, repair and outbound records for review. Verify the carrier, tracking number and actual original or replacement item. Prior synchronization acknowledgements are labeled History; they prove neither this dispatch synchronization nor customer notification. Carrier handover does not prove customer receipt or case closure; mailroom and customer service follow the actual outcome."
             ],
             "boundaries": [
               "The Repair technician job template uses REPAIR_TECHNICIAN with repair_workbench:read and repair_workbench:update. It grants no customer-service review, accounting payment confirmation, inventory posting or cross-company access. Feature enablement, company, item assignment, personal acceptance and current state remain authoritative.",
@@ -5031,7 +5030,7 @@
       "availability": "after-sales-module",
       "sections": {
         "steps": [
-          "首頁以「補寄服務、商品與配件訂購、檢測與維修、換貨服務、退貨退款、產品問題回報」開啟原售後流程；案件總覽保留原新增、進行中、已結束、刪除清單、附件及各節點按鈕。",
+          "首頁以「補寄服務、商品與配件訂購、檢測與維修、換貨服務、退貨退款、產品問題回報」開啟原售後流程；依序對應舊名稱漏寄補寄、私下購買、維修、來回件、退款派車、客戶問題。案件總覽保留原新增、進行中、已結束、刪除清單、附件及各節點按鈕。入口只改顯示名稱；新增時仍須核對原表單的案件類型。",
           "客服在「維修交辦」與「收發交辦」分頁處理本人獲指派的任務；切分頁保留未保存內容，需要時再查看案件概況。收起原概況表單或離頁前须先儲存或明確放棄。新的收發通知連結在確認離開後定位該筆原收件。",
           "接手後核對目前檢修、估價與處理方案版次，記錄同意方案或拒修結果；改版須重新確認。部門 SENT、ACCEPTED、RESOLVED 與通知送達各自追蹤。",
           "正式對客報價、顧客對本報價版的同意與足額款項另依原來源流程。付費案件尚未入帳時維修師不能開工；免費案件仍須本報價版顧客同意。",
@@ -5056,7 +5055,8 @@
           "站內通知在可見的售後、收發、維修、我的待辦及售後庫存頁每 15 秒查一次清單，其他可見頁每 60 秒；分頁隱藏時不輪詢，回到可見或取得焦點會重新查，請求重疊與失敗另受控。WebSocket 與已讀操作維持原語意；清單刷新不覆蓋正在開啟的詳情或表單草稿。輪詢或推送不等於人員本人接手，也不保證隱藏分頁或整日待機送達。",
           "「指定補建客服」使用獨立的補建資格名單；原有維修、退貨及品項不符的客服覆核資格維持原流程，不因補建功能被收窄或變成建案授權。",
           "可依目前權限切換售後、收發、維修、儲運或營運管理工作區。「設為登入預設」只記錄此帳號及公司在目前瀏覽器的選擇；不同步其他裝置、不變更角色或授予權限。失效偏好回到有效入口。具有產品、匯入、來源帳號、操作紀錄、設定、庫存或儲運管理權限的人員，仍可由「營運管理」使用獲授權功能。切台保留網址明確指定的公司。",
-          "報價、顧客、收款退款與發票沿用同一來源主單及原紀錄，不建立第二本帳。產品、LINE、發票及操作紀錄不另做一套；相關管理能力保留既有授權入口。原 FAQ／知識庫排除於本 DOA 工作台。"
+          "報價、顧客、收款退款與發票沿用同一來源主單及原紀錄，不建立第二本帳。產品、LINE、發票及操作紀錄不另做一套；相關管理能力保留既有授權入口。原 FAQ／知識庫排除於本 DOA 工作台。",
+          "品牌與 LINE／AI 客服鏈路的新共同契約仍待整合；現有來源頁能開啟，不證明品牌、官方帳號、顧客 LINE 身分、會話與承辦人已正確綁定。寄出 consumer、品牌發票商戶及虛擬帳號自動對帳也未由本介面批完成；不得以保存成功或舊同步回執宣稱顧客通知或款項完成。"
         ],
         "related": [
           "repair-workbench",
@@ -5079,7 +5079,7 @@
           ],
           "sections": {
             "steps": [
-              "Use Reshipment Service, Product and Accessory Orders, Inspection and Repair, Exchange Service, Returns and Refunds, and Product Issue Reports to open the original workflows. Cases overview retains creation, active/closed/deleted lists, attachments and workflow controls.",
+              "The home entries Reshipment service, Product and accessory orders, Inspection and repair, Exchange service, Returns and refunds, and Product issue reports open the original flows, respectively preserving RESHIPMENT, PRIVATE_PURCHASE, REPAIR, EXCHANGE_RETURN, REFUND_PICKUP and CUSTOMER_ISSUE. The case overview retains original create, in-progress, closed, deleted-list, attachment and node controls. Only entry labels change; verify the original form’s case type when creating.",
               "Handle personally assigned tasks in Repair Handoffs and Mailroom Handoffs. Switching tabs retains unsaved work; open the original case overview when needed. Save or explicitly discard before hiding that form or leaving. A new mailroom deep link locates the requested original receipt after departure is confirmed.",
               "Review the current inspection, estimate and technical plan revision, then record approval or decline. Changes require a fresh review. Department SENT, ACCEPTED and RESOLVED states are separate from notification delivery.",
               "Formal customer quoting, consent to that quote revision and confirmed sufficient funds remain in the original source workflow. Unpaid chargeable work cannot start; free work still requires customer consent to the current quote.",
@@ -5104,7 +5104,8 @@
               "Internal notifications refresh their list every 15 seconds on visible after-sales, mailroom, repair, My inbox and after-sales stock pages, and every 60 seconds on other visible pages. Hidden tabs do not poll; visibility or focus triggers a fresh read, with overlapping requests and failures controlled. Existing WebSocket and read-marking semantics remain. List refresh does not overwrite an open detail or form draft. Polling or pushing is not personal task acceptance and proves no hidden-tab or all-day idle delivery.",
               "The Assigned intake CSR picker uses separate intake eligibility. Existing repair, return and mismatch reviewer eligibility keeps its original workflow; intake neither narrows that list nor turns review permission into case-creation authority.",
               "Switch among available after-sales, mailroom, repair, warehouse and operations workspaces according to current grants. Set as login default stores a preference for this account and company in this browser only; it does not sync devices, change roles or grant access. Invalid preferences fall back to an authorized entry. Management grants retain their features in Operations Management. Workspace switching retains an explicitly selected company in the URL.",
-              "Quotes, customers, payments, refunds and invoices retain the same source case and original records; no second financial ledger or duplicate product, LINE, invoice or audit module is created. Existing management grants keep their entry points. This DOA workbench excludes the legacy FAQ/knowledge base."
+              "Quotes, customers, payments, refunds and invoices retain the same source case and original records; no second financial ledger or duplicate product, LINE, invoice or audit module is created. Existing management grants keep their entry points. This DOA workbench excludes the legacy FAQ/knowledge base.",
+              "New shared brand and LINE/AI customer-service contracts remain pending. Opening the existing source page does not prove correct binding of brand, official account, customer LINE identity, conversation and assigned staff. This UI batch does not complete the dispatch consumer, brand invoice merchants or virtual-account automatic reconciliation; neither save success nor prior acknowledgements prove customer notification or payment."
             ],
             "related": [
               "repair-workbench",
@@ -5168,7 +5169,7 @@
     {
       "id": "after-sales-native-cases",
       "title": "售後案件中心",
-      "summary": "由同一案件中心建立、篩選與追蹤六類主單：維修、漏寄補寄、來回件、退款派車、私下購買與客戶問題；不建立另一份售後案件或第二本帳。",
+      "summary": "由同一案件中心建立、篩選與追蹤補寄、商品配件訂購、檢測維修、換貨、退貨退款及產品問題；沿用原主單與流程。",
       "keywords": [
         "售後案件中心",
         "售後",
@@ -5188,7 +5189,7 @@
       "availability": "after-sales-module",
       "sections": {
         "steps": [
-          "由同一案件中心建立、篩選與追蹤六類主單：維修、漏寄補寄、來回件、退款派車、私下購買與客戶問題；不建立另一份售後案件或第二本帳。",
+          "由同一案件中心建立、篩選與追蹤補寄服務、商品與配件訂購、檢測與維修、換貨服務、退貨退款及產品問題回報六類主單，不建立另一份售後案件或第二本帳。類型頁的新增按鈕沿用原 /cases/new 空白表單；補寄、訂購、維修、換貨與退貨的入口不會自動填入類型，仍須核對表單選項。",
           "使用原類型頁、案件詳情／編輯、產品服務選項、附件與時間軸；私下購買保留地區、海外地址與原幣別相關欄位。客戶資料維持原建立、更新與來源連結。",
           "由維修報價頁使用原報價版本與顧客確認流程。客服、收發、維修、會計與寄回物流都對應同一來源主單，實物及部門交接另有獨立紀錄。",
           "收發先收到的 UNMATCHED／RECEIVED 物件，交指定客服（SENT）並由本人受理（ACCEPTED）後，由案件中心原 /cases 入口點「新增案件」，進入 /cases/new 建案一次，或核對既有主單。建案成功後仍須返回補建卡片，選案件、目前申報品項及來源版次，綁回原 NativeID／收件單；成功才為 RESOLVED。"
@@ -5219,7 +5220,7 @@
       "translations": {
         "en": {
           "title": "Shared after-sales case center",
-          "summary": "Create, filter and track six source case types: repair, reshipment, exchange/return, refund pickup, private purchase and customer issue. No duplicate case aggregate or second accounting ledger is created.",
+          "summary": "Create, filter and track reshipment, product/accessory orders, inspection/repair, exchange, returns/refunds and product issues using the original case and workflow.",
           "category": "After-sales",
           "keywords": [
             "Shared after-sales case center",
@@ -5231,7 +5232,7 @@
           ],
           "sections": {
             "steps": [
-              "Create, filter and track six source case types: repair, reshipment, exchange/return, refund pickup, private purchase and customer issue. No duplicate case aggregate or second accounting ledger is created.",
+              "Create, filter and track six source case types through Reshipment service, Product and accessory orders, Inspection and repair, Exchange service, Returns and refunds, and Product issue reports, without a duplicate case aggregate or second ledger. New case from the category pages retains the original blank /cases/new form; reshipment, purchase, repair, exchange and return entries do not automatically fill its type. Check the form’s type selection.",
               "Use the original type pages, case detail/edit screens, product/service options, attachments and timeline. Private purchase retains region, overseas address and currency fields. Customer records keep their original create, update and source links.",
               "Use original quote revisions and customer confirmation from the repair quote page. Customer service, mailroom, technicians, accounting and outbound logistics share the same source case, while physical and departmental handoffs retain separate evidence.",
               "For an UNMATCHED / RECEIVED item already at the mailroom, the custodian sends the intake task to a specified CSR (SENT), who personally accepts (ACCEPTED) and chooses New case from this center’s original /cases entry and creates once through its /cases/new form, or verifies an existing case. After creation, return to the intake card, select the current source case, declared line and source version, and bind the original NativeID / receipt. Successful binding sets RESOLVED."
@@ -5526,7 +5527,8 @@
           "固定 ERP DEV 同源入口登出時，先清除售後 HttpOnly 登入 cookie 及數字分塊，再完成原 WMS 與 ERP 登出；三秒逾時或清除失敗會保留 ERP 登入並提示重試。新登入也先清除舊 session，失敗不得建立新 JWT；啟動時登入失效先嘗試清除再移除無效 JWT。來源服務不可用或模組停用仍可清除舊 cookie。瀏覽器實際登入、登出與再次開頁須另行驗收。",
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
-          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。"
+          "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。",
+          "原發票頁沿用目前來源設定；本批不遷移帳務、不建立第二本帳，也未完成各品牌獨立發票商戶的新契約。品牌資料或工作台入口不等於供應商商戶已隔離，真開票與品牌核對須另行驗收。"
         ],
         "related": [
           "after-sales-native-cases",
@@ -5557,7 +5559,8 @@
               "Logout on a fixed same-origin ERP DEV entry first clears the after-sales HttpOnly session cookie and numeric chunks, then completes existing WMS and ERP logout. A three-second timeout or clear failure retains ERP login for retry. A new login also clears the old session before authenticating or writing a new JWT; failed startup authentication tries clearing before removing the invalid local JWT. Clearing works while the source is unavailable or the module is disabled. Actual browser login, logout and reopening still require acceptance.",
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
-              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required."
+              "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required.",
+              "The original invoice page retains its existing source configuration. This batch neither migrates accounting nor creates a second ledger, and it does not complete new independent invoice-merchant contracts for each brand. Brand data or a workbench entry does not prove provider merchant isolation; actual issuance and brand matching need separate acceptance."
             ],
             "related": [
               "after-sales-native-cases",

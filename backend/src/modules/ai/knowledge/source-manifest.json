@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:85ac4ab78de250e3c3309929ddab67ec2d57ee86e256a4e37f8c565fff29a759",
-  "reviewedBaseCommit": "ac9c85a7dc39647f7b1eda9ad8ac9cf3b74de962",
+  "sourceVersion": "sha256:581dc117c5ed2bc3b8a63ac2890a44679971b14a30b270f75833d7c4106ffaa3",
+  "reviewedBaseCommit": "c932d30f2d9ce8453f9910d257920d5465145c4e",
   "entryCount": 79,
   "groups": [
     "admin",
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "f958a586d3a4900e804d31fe6b7d6be1bb0135ffef1d20593dac5a8d19e38ea6",
+  "catalogSha256": "16cd0473f643f6ec4c8fa2fdb22703640082ace974bb35e0751d8cfe28335170",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -400,7 +400,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom.service.ts",
-      "sha256": "ae0091115500d8bc3f752dec876f24486adffd10890fa86f89e1e17c2282c613"
+      "sha256": "220b470dd7f3289340aba4c63cebcc463bcda2f3212746f7cf2a3e98fa438b51"
     },
     {
       "path": "backend/src/modules/mailroom/repair-document.contract.ts",
@@ -544,7 +544,7 @@
     },
     {
       "path": "frontend/src/components/DashboardLayout.tsx",
-      "sha256": "b0f03da18164123a8f93d5750c43734c0bca4511ef7171715c668d1467da9736"
+      "sha256": "9f0d919c892e1683380c15eae78bffc91d0f682c6937825566b05f7eed86133d"
     },
     {
       "path": "frontend/src/components/NotificationCenter.tsx",
@@ -600,11 +600,11 @@
     },
     {
       "path": "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
-      "sha256": "69f47360622f11d822876758016e91fc6d72d21c5df59abe858962fa53248a72"
+      "sha256": "0e8362f5d2f506fd767288bdcb7fd113ec1cdc16cedca58b02dc1be323ef5dd0"
     },
     {
       "path": "frontend/src/pages/after-sales/workbench-model.ts",
-      "sha256": "a10f54654eb4d16ef81bcf64f93e1116728fc10bfbec148cc2eca4c1f24d80b2"
+      "sha256": "8c9beaef2a4e085ee1d00d28874eef76a955cf26934800a6199f98e4b1535aab"
     },
     {
       "path": "frontend/src/pages/AfterSalesBrandsPage.tsx",
@@ -616,7 +616,7 @@
     },
     {
       "path": "frontend/src/pages/AfterSalesModulePage.tsx",
-      "sha256": "df9a8581455fd6b4a7027629075e39c4abba4038b0b38699aa02b4b08299504f"
+      "sha256": "8c911cbe6da50b4847b5e71b5b1c3d513c8ecfc3a51740dfee173d634057be4b"
     },
     {
       "path": "frontend/src/pages/AfterSalesQuotesPage.tsx",
@@ -740,7 +740,7 @@
     },
     {
       "path": "frontend/src/pages/mailroom/CustomerIntakeQueue.tsx",
-      "sha256": "b5e7841e2d3d8e8eb4cc7c9ced23ed5beee6499e423614aed7cd4d458f09aea6"
+      "sha256": "3fa526fd63f793c9b6e53a01d70799e4f148ac3363ca98c637492c663297f6ee"
     },
     {
       "path": "frontend/src/pages/mailroom/InboxShortcut.tsx",
@@ -768,15 +768,11 @@
     },
     {
       "path": "frontend/src/pages/mailroom/mailroom.css",
-      "sha256": "ca160ce54aa3a8fd4c24af69b84e89dd2104d8cfa640ca6dae539dade9a89e5e"
-    },
-    {
-      "path": "frontend/src/pages/mailroom/MailroomNextStep.tsx",
-      "sha256": "081f151d3dfbd94333d42a955e9af23caf052b155dfcf09557514d8d55c28855"
+      "sha256": "28636075d1163ca07e2eb3254ffcb6188a1692be6bd2b6e0d68bae7145832f76"
     },
     {
       "path": "frontend/src/pages/mailroom/MailroomPage.tsx",
-      "sha256": "b03c57c4a06ac56c4e52b4000692b651f77e753c1e3628916e8cf1f86a28efa5"
+      "sha256": "1d568fcdc3cdb4f88b276bd804932568542ea2d4a478d835cc9f31d347177e49"
     },
     {
       "path": "frontend/src/pages/mailroom/model.ts",
@@ -788,7 +784,7 @@
     },
     {
       "path": "frontend/src/pages/mailroom/RecipientPicker.tsx",
-      "sha256": "2f1238cc2f55d154404089abcd334c0c2f6605d6eb4ebe90bf0f1c5df13037fe"
+      "sha256": "ec4d7ceb7f831fa0e6b535028ff9f0f8753fe3dacbb04a2dfe5f75eb5ae2cd02"
     },
     {
       "path": "frontend/src/pages/mailroom/source-search.ts",
@@ -796,11 +792,11 @@
     },
     {
       "path": "frontend/src/pages/mailroom/SourceCasePicker.tsx",
-      "sha256": "383319a77d692ea2bc97e21a2617ad884a24b75a9abb77481e57e339bd5f2459"
+      "sha256": "7986be9ec5b50cea0aa7e14b2a40a9d773e9a11aaa0f72866a10af158b77d7fc"
     },
     {
       "path": "frontend/src/pages/mailroom/TabletAcceptance.tsx",
-      "sha256": "dd4be754b188a37de5c6099dce1e0a9305d201d177f513457e36e146e419c355"
+      "sha256": "080da05cb5c1b575f5c86a2f39639436597eba3ee2d3b086958cffe08b42456c"
     },
     {
       "path": "frontend/src/pages/PayrollPage.tsx",
@@ -836,7 +832,7 @@
     },
     {
       "path": "frontend/src/pages/repair/CustomerRepairQueue.tsx",
-      "sha256": "f0c41fc07eb2f9360bc9170c6255541c59cb3628d053cdf15fe02226c9b1135d"
+      "sha256": "c882e9a075024cd80888ddde1418424c6653bd0e61ea23fdb8027e0cebf994b9"
     },
     {
       "path": "frontend/src/pages/repair/repair-feedback.tsx",
@@ -856,27 +852,27 @@
     },
     {
       "path": "frontend/src/pages/repair/repair.css",
-      "sha256": "0787fd9a78db40d7aee5fae086c93b302482713a10b0dfbd33c3eba2b31e2289"
+      "sha256": "9b316c77a01fdd02e823a6032d12706456d7d3861c8ad4f2b1a9f8c46b76f616"
     },
     {
       "path": "frontend/src/pages/repair/RepairDocuments.tsx",
-      "sha256": "858da87e28b3758e017aba98260a916e1760d473e299b55fbdf3ad6f2d4d65dd"
+      "sha256": "7d9e62fc0e3f66b8453cfc6c67ee20de2b6749b0175416d0fd3e3111a9e65323"
     },
     {
       "path": "frontend/src/pages/repair/RepairReadinessPanel.tsx",
-      "sha256": "3c93901a5b3078b1024313f5825960bc7428248c8c2305d1e79c7868c45731f5"
+      "sha256": "d5083d34857961a32ef4c288b5f0be257b2d970c7f334c515cef5c2b99ac88b7"
     },
     {
       "path": "frontend/src/pages/repair/RepairReplacementStock.tsx",
-      "sha256": "64fe36d1395e93895d50dff18e120f52529d2b6e3daf3d4e04f8608e7b90d07f"
+      "sha256": "c907bafd3688ab2913259c9f1bb6024b9fa26c9212c2882e7d37911dbae6ca8e"
     },
     {
       "path": "frontend/src/pages/repair/RepairWorkbenchPage.tsx",
-      "sha256": "d8334e974e1339ab90c063408aaa9c8ab6885fb2010dcbd2b3d8b2286aa2cf59"
+      "sha256": "7a90ca43bd50826ee4ed2508701c13df505d09504d51692c973883677d83685b"
     },
     {
       "path": "frontend/src/pages/repair/RepairWorkflowPanel.tsx",
-      "sha256": "6f6e5299a84edeefcb1d5ba5a322db7c6706ab58e2b823c7c1f5836d756b9b66"
+      "sha256": "e812edcc4cb1e91a5f34a5fc6c1dc7fed61bd8eaaa949e9230308cd59e227278"
     },
     {
       "path": "frontend/src/pages/ReportsPage.tsx",
