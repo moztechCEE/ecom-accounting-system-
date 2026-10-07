@@ -4679,7 +4679,8 @@
           "取消原廠處理只記原因與取消狀態，實物仍由目前承運商或原廠持有。取得實際返還承運商及追蹤號後才登記返還物流；本人收到再核對原件、SN、配件與位置，不把取消當作已寄回。",
           "替換方案先指定 SKU 與全新品／合格整新品品況，一併交客服確認。維修單選取已合格且正式入庫的實物預留，填入 SKU、品況、實物標籤、真實 SN（有才填）及預留關聯。預留保留可用量，不算正式出庫；本版工作單、複驗及放行通過後，後端在同一交易使用預留並寫入 ERP 出庫流水。離開或放棄草稿不取消獨立預留，不使用時須明確釋放。 整新品出庫時在同一交易鎖定來源退貨實物，重新核對本版已提交工作單、逐項 PASS、處置、SKU、SN 與目前實物狀態；來源檢修改版或狀態改變會阻擋出庫。同一來源實物只可登錄一件替換庫存。",
           "維修師本人填寫維修單，記錄實際維修或一對一替換、零件與工時、修後複驗結果；替換另留原機／替換機 SN、全新品或整新品品況、來源與原機去向。內部料源及成本與對客說明分開；對客內容應符合實際處置。",
-          "複驗結果須通過（PASS）後才可交回收發室，收發室本人簽收後才完成實物交接。案件進度、交辦待發送／已發送／已接收／已回覆及通知送達狀態分別核對；等待案件顯示卡住原因與下一位負責人。"
+          "複驗結果須通過（PASS）後才可交回收發室，收發室本人簽收後才完成實物交接。案件進度、交辦待發送／已發送／已接收／已回覆及通知送達狀態分別核對；等待案件顯示卡住原因與下一位負責人。",
+          "案件詳情逐項核對本人簽收、當版檢修、客服接手與方案結果、顧客同意及必要款項、維修單版次與逐項複驗；未完成時顯示阻擋原因與下一步。歷程保留原生實物紀錄版本、操作人與處理說明，實物紀錄、檢修、維修及正式報價版次分別辨識。檢測中先保存維修單不表示已到完工階段。"
         ],
         "boundaries": [
           "「維修師」職務範本使用 REPAIR_TECHNICIAN，授予 repair_workbench:read 與 repair_workbench:update；它不授予客服審核、會計入帳確認、庫存核銷或跨公司權限。實際操作仍受啟用開關、公司、逐件指派、本人簽收及目前進度限制。",
@@ -4689,7 +4690,8 @@
           "本人填寫的檢修單與維修單分別保留診斷和實際處理證據；維修單綁定檢修單版次，檢修改版後須重新提交維修單。送原廠或原件退回方案不能直接當作已修理或已替換完成。靜態指南不建立新的 AI 執行工具，不代替現場檢驗、安全基準或技術主管訂定的各機種合格值。 原廠處理返還使用 FACTORY_REPAIRED，附原廠委修單號，須本人收到後完成逐項 PASS 複驗才交回；原件未修退回使用 RETURN_UNREPAIRED，不冒充 REPAIRED。",
           "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。",
           "合格退貨作換機正式出庫後，原入庫紀錄保留為歷史。現在實物保管與位置依同公司已核對的換機案件物流投影；出庫關聯不明時顯示待核對，不以歷史入庫人員當作目前持有人。此投影不授予換機案件的技術單或顧客財務資料。",
-          "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。"
+          "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
+          "核對清單與按鈕提示提供目前保存資料的操作指引；實際提交仍由後端即時核對權限、版本、保管、來源放行及庫存證明。歷程說明與系統送達不代替顧客同意、實收款或本人實物簽收。公司 RETURN 整新僅顯示原生已支援的交回條件，不能把不支援的替換或送廠分支改寫為已完成。新的成功開票前置、影片與顧客報告仍待共用契約整合，不以本面板宣稱已完成。"
         ],
         "related": [
           "mailroom-workbench",
@@ -4725,7 +4727,8 @@
               "Cancelling factory processing records the reason and cancellation while the carrier or factory retains custody. Register return transit only with actual carrier and tracking evidence. On receipt, personally confirm the original item, serial, accessories and location; cancellation is not return shipment.",
               "Replacement proposals specify SKU and new or qualified refurbished condition for customer-service review. Select a qualified, formally received unit to reserve and fill its SKU, condition, unit label, any real serial and reservation reference. Reservation holds availability without final deduction; current documents, verification and release must pass before the backend consumes the reservation and posts the ERP outbound movement in one transaction. Leaving or discarding a draft does not cancel an independent reservation; explicitly release it if unused. Refurbished outbound locks the source return in the same transaction and rechecks current submitted work records, every PASS check, outcome, SKU, serial and physical state. Revised inspection or changed custody/state blocks outbound. A source item can qualify only one replacement unit.",
               "The technician personally completes the repair record: actual repair or one-for-one replacement, parts, labor and post-work verification. Replacement additionally keeps old and replacement serial numbers, new or refurbished condition, source and original-item disposition. Separate internal stock source and costs from customer-facing content, which must reflect actual treatment.",
-              "Verification must pass (PASS) before the item can be returned to the mailroom for personal acceptance. Track case progress, pending/sent/received/replied handoffs and notification delivery separately. Waiting items identify the blocker and next responsible person."
+              "Verification must pass (PASS) before the item can be returned to the mailroom for personal acceptance. Track case progress, pending/sent/received/replied handoffs and notification delivery separately. Waiting items identify the blocker and next responsible person.",
+              "Case details show personal acceptance, current inspection, CSR acceptance and decision, customer consent and required funds, repair-record revision and each verification result. Incomplete checks identify the blocker and next step. History retains the native physical-item version, actor and handling note; item, inspection, repair-record and formal quote revisions remain distinct. Saving a repair record during inspection does not mean completion has started."
             ],
             "boundaries": [
               "The Repair technician job template uses REPAIR_TECHNICIAN with repair_workbench:read and repair_workbench:update. It grants no customer-service review, accounting payment confirmation, inventory posting or cross-company access. Feature enablement, company, item assignment, personal acceptance and current state remain authoritative.",
@@ -4735,7 +4738,8 @@
               "Inspection and repair records retain the technician’s diagnosis and actual work evidence separately. A repair record binds to the inspection revision and must be resubmitted after inspection changes. Factory service and original-item return plans cannot directly be marked repaired or replaced. This static guide adds no AI execution tools and cannot replace physical inspection, safety criteria or model-specific acceptance limits established by the technical lead. Factory returns use FACTORY_REPAIRED with the original factory reference and require personal receipt plus all PASS checks before handback. Unrepaired originals use RETURN_UNREPAIRED rather than pretending to be repaired.",
               "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock.",
               "After formal replacement outbound, the qualified return retains its original inbound history. Current holder and location follow the verified same-company replacement logistics projection. An unknown outbound relation is marked for verification instead of presenting the historical stock recipient as current custody. This projection grants no technical document or customer financial access to the replacement case.",
-              "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance."
+              "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
+              "Checklist and button guidance assist the operator using current saved data; submission remains subject to current backend permission, version, custody, source-release and stock-proof checks. History notes and delivery records do not replace customer consent, received funds or personal physical acceptance. Company RETURN refurbishment displays only supported native completion conditions; unsupported replacement or factory branches cannot be rewritten as completed work. The newly requested issued-invoice gate, video evidence and customer report still require shared-contract integration; this panel does not claim completion."
             ],
             "related": [
               "mailroom-workbench",
@@ -4791,7 +4795,9 @@
         "backend/src/modules/mailroom/repair-stock-custody.contract.ts",
         "frontend/src/pages/repair/repair-feedback.tsx",
         "frontend/src/components/DashboardLayout.tsx",
-        "frontend/src/utils/login-destination.ts"
+        "frontend/src/utils/login-destination.ts",
+        "frontend/src/pages/repair/repair-readiness.ts",
+        "frontend/src/pages/repair/RepairReadinessPanel.tsx"
       ],
       "permissions": [
         "repair_workbench:read"

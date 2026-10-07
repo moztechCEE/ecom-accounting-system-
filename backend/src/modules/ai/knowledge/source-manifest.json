@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:59085a3c0122e09c915165141df7add1e87ca0d43af60093bf13690a748898f4",
+  "sourceVersion": "sha256:d4b56c2b6d3e29fa0725ed3879dad34f01ae5899765f3cd9ac7d1434aad13c45",
   "reviewedBaseCommit": "ac9c85a7dc39647f7b1eda9ad8ac9cf3b74de962",
   "entryCount": 79,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "8ef0b41bccfd4dbb0a9548eb2f55885f127f47637351e69bc264a0b9aa4bdd9f",
+  "catalogSha256": "df20e6b75101a498bb66da14d49d449bdc215da69786a2c40ac37f01337b3097",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -807,6 +807,10 @@
       "sha256": "46d5cec64b064ba9b496bbf0cdfc2068e3b741a0a0b9107700bc87091b348072"
     },
     {
+      "path": "frontend/src/pages/repair/repair-readiness.ts",
+      "sha256": "235ca26f382e5cd109537cd445b894efdb93f60e34f5a40e5e7c9267dd428234"
+    },
+    {
       "path": "frontend/src/pages/repair/repair.css",
       "sha256": "0787fd9a78db40d7aee5fae086c93b302482713a10b0dfbd33c3eba2b31e2289"
     },
@@ -815,12 +819,16 @@
       "sha256": "858da87e28b3758e017aba98260a916e1760d473e299b55fbdf3ad6f2d4d65dd"
     },
     {
+      "path": "frontend/src/pages/repair/RepairReadinessPanel.tsx",
+      "sha256": "3c93901a5b3078b1024313f5825960bc7428248c8c2305d1e79c7868c45731f5"
+    },
+    {
       "path": "frontend/src/pages/repair/RepairReplacementStock.tsx",
       "sha256": "64fe36d1395e93895d50dff18e120f52529d2b6e3daf3d4e04f8608e7b90d07f"
     },
     {
       "path": "frontend/src/pages/repair/RepairWorkbenchPage.tsx",
-      "sha256": "6ce00a3a10a5f9d2ff86a5089d60044ab06e1c6b26d17c7c73d447dad2b27384"
+      "sha256": "f01537d363d57a5663e61e8825383df6b31fa1acbe32bb88ccd99d11573f1dab"
     },
     {
       "path": "frontend/src/pages/repair/RepairWorkflowPanel.tsx",
