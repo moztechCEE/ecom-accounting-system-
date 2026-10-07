@@ -24,6 +24,11 @@ export default function RepairWorkflowPanel({item,entityId,canUpdate,onSaved,onD
   const handoff=workflow?.csr;
   const confirmPhysical=action==='return_original'||action==='send_factory'||action==='receive_factory';
   const tracking=action==='send_factory'||action==='request_factory_return';
+  const originalReturnDescription='此件按未修原件交回，不標成已修理或已替換，也不以維修完成複驗冒充處理結果。'+
+    (item.status==='DISPATCHED'?'原件已交物流寄回；依收發室寄出紀錄核對。已交運不代表顧客已收件或案件已結案。':
+      item.status==='READY_FOR_DISPATCH'?'收發室已本人簽收，待安排原件寄回；尚未交運。':
+        item.status==='WAITING_RETURN_ACCEPTANCE'?'等待指定收發室人員本人簽收；實物保管仍以目前登錄持有人為準。':
+          '原件交接與寄回進度以目前保存的實物及物流紀錄核對。');
   async function submit(values:Fields) {
     if(!action||!available.includes(action)||running.current)return;
     running.current=true;setBusy(true);setFailure('');
@@ -66,7 +71,7 @@ export default function RepairWorkflowPanel({item,entityId,canUpdate,onSaved,onD
       ]} />
       <Typography.Paragraph type="secondary" style={{margin:'12px 0 0'}}>送達原廠、原廠接收、返還在途及維修師本人簽收分別留存。收到返還件後再依原廠處理單記錄實際結果與複驗。</Typography.Paragraph>
     </Card>}
-    {workflow?.release?.purpose==='RETURN_UNREPAIRED'&&<Alert showIcon type="info" message="原件未維修退回" description="此件按未修原件交回，不標成已修理或已替換，也不以維修完成複驗冒充處理結果。後續由收發室本人簽收並安排原件寄回。" />}
+    {workflow?.release?.purpose==='RETURN_UNREPAIRED'&&<Alert showIcon type="info" message="原件未維修退回" description={originalReturnDescription} />}
     {!!available.length&&<Card size="small" title="原件退回／原廠作業">
       <Space wrap>{available.map(value=><Button key={value} disabled={busy || value==='complete_factory'&&!repairReportReady(item)} onClick={()=>setAction(value)}>{WORKFLOW_ACTIONS[value]}</Button>)}</Space>
       {action&&available.includes(action)&&<Form form={form} name={`repair-workflow-${item.id}`} layout="vertical" initialValues={{location:item.location}} onValuesChange={()=>onDirtyChange(true)} onFinish={values=>void submit(values)} disabled={busy} style={{marginTop:16}}>
