@@ -105,4 +105,3 @@ git status --short
 ```
 
 追加 raw log / private isolation wrapper：`/var/folders/b2/yl3zcrj945983rzqthtk07fc0000gn/T/corely-mailroom-review-repair-2ade393a-lzj90m9h/dom.log`、`isolated-vite.mjs`。同一 ignored Vite dependency 實體只借用 library，產品 source 由新 2ade tree 的 root/cwd 載入；cache 使用新的 2ade runtime，HMR false。**結論：2ade 產品同 53ec，docs/test 修訂 PASS_SCOPE；最終共同整合、集中 knowledge、DEV與現場驗收仍 PENDING。**
-
