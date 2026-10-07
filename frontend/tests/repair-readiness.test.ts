@@ -24,6 +24,26 @@ const fixture = (): RepairItem => ({
 } as RepairItem);
 const gate = (item: RepairItem, key: string) => repairReadiness(item, context).startChecks.find(value => value.key === key)!;
 
+test('a saved repair draft or submission during inspection preserves start guidance and actual records', () => {
+  for (const plan of ['REPAIR', 'REPLACE'] as const) {
+    for (const status of ['DRAFT', 'SUBMITTED'] as const) {
+      const item = fixture(); item.repairInspection!.data.plan = plan; item.repairReport!.status = status;
+      const before = structuredClone(item), result = repairReadiness(item, context);
+      assert(result.startReady); assert(result.showStart); assert(!result.showCompletion);
+      assert.match(result.title, /具備送出開工核對/);
+      assert.match(result.nextStep, /開始維修／替換/);
+      assert.match(result.actualOutcome, /原機實際維修/);
+      assert.deepEqual(item, before, 'Guidance cannot remove or rewrite the existing repair record');
+      item.release!.releaseInfo!.customerApprovedAt = null;
+      const pending = repairReadiness(item, context);
+      assert(!pending.startReady); assert(pending.showStart); assert(!pending.showCompletion);
+      assert.match(pending.title, /維修開工仍有待核對條件/);
+      item.status = 'REPAIRING';
+      assert(repairReadiness(item, context).showCompletion, 'After work starts, current completion evidence is shown');
+    }
+  }
+});
+
 test('source green flags cannot substitute for current consent, and free service still requires consent', () => {
   const item = fixture();
   assert(repairReadiness(item, context).startReady);
@@ -35,6 +55,20 @@ test('source green flags cannot substitute for current consent, and free service
   assert.match(gate(item, 'customer_consent').detail, /免費方案也須/);
   assert.match(result.title, /待核對/);
   assert.equal(result.startReady, repairStartReady(item));
+});
+
+test('returned factory reinspection still shows invalid review and repair revision without granting completion', () => {
+  const item = fixture(); item.repairInspection!.data.plan = 'FACTORY'; item.repairInspection!.revision = 4;
+  item.repairInspection!.review = undefined; item.repairWorkflow!.csr = undefined; item.allowedWorkflowActions = [];
+  item.repairWorkflow!.factory = { stage: 'RETURNED', physicalCustody: 'TECHNICIAN', reference: 'SYNTHETIC-FACTORY' };
+  Object.assign(item.repairReport!.data, { outcome: 'FACTORY_REPAIRED', factoryReference: 'SYNTHETIC-FACTORY' });
+  const before = structuredClone(item), result = repairReadiness(item, context);
+  assert(result.showCompletion); assert(!result.showStart); assert(!result.completionReady);
+  assert.match(result.title, /完成件交回仍有待核對/);
+  assert(!result.completionChecks.find(value => value.key === 'csr_decision')!.ready);
+  assert(!result.completionChecks.find(value => value.key === 'report_revision')!.ready);
+  assert.match(result.actualOutcome, /原廠處理返還/);
+  assert.deepEqual(item, before, 'Showing missing evidence cannot grant the withheld complete_factory action');
 });
 
 test('a refreshed quote invalidates previous CSR approval even if new consent and payment arrive', () => {

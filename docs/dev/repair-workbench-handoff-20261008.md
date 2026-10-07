@@ -24,7 +24,7 @@
 
 ## 本機驗證
 
-本 worktree 測試共 57/57 通過：既有維修／保管／stock return／navigation 26/26、來源入口12/12、實際React19草稿／確認取消／保存回饋 DOM 1/1；新 readiness 17/17、真React面板DOM 1/1。新測試包含來源改報價／撤款／查詢失敗、免費未同意、CSR失效、本人／權限、報告改版、FAIL／未測、拒修與原廠、RETURN不支援方案及收發已接收待入庫。
+本 worktree 測試共 59/59 通過：既有維修／保管／stock return／navigation 26/26、來源入口12/12、實際React19草稿／確認取消／保存回饋 DOM 1/1；新 readiness 19/19、真React面板DOM 1/1。新測試包含來源改報價／撤款／查詢失敗、免費未同意、CSR失效、本人／權限、報告改版、FAIL／未測、拒修與原廠、RETURN不支援方案及收發已接收待入庫。
 
 完整前端 build（TypeScript + Vite）、五個改動程式／測試檔 lint 與 git diff --check 通過。既有 browser-data 過期／bundle 大小提示仍存在，未為此批更新依賴。桌面1280px與手機390px真React面板無橫向溢出；只用隔離合成資料，未將畫面可見當作DEV操作成功。
 
@@ -82,5 +82,16 @@ Guide ID：`repair-workbench`；建議中文 title 同步頁內標題改為「�
 | sourcePath | SHA256 |
 | --- | --- |
 | `frontend/src/pages/repair/RepairWorkbenchPage.tsx` | `f01537d363d57a5663e61e8825383df6b31fa1acbe32bb88ccd99d11573f1dab` |
-| `frontend/src/pages/repair/repair-readiness.ts` | `e179834793e37f1d0bd4061ae045d991cdea2e706c2bff882221b9f2549f29d2` |
+| `frontend/src/pages/repair/repair-readiness.ts` | `235ca26f382e5cd109537cd445b894efdb93f60e34f5a40e5e7c9267dd428234` |
 | `frontend/src/pages/repair/RepairReadinessPanel.tsx` | `3c93901a5b3078b1024313f5825960bc7428248c8c2305d1e79c7868c45731f5` |
+
+
+## 收發端 587 審查修正回執
+
+- 被審版本：`587b077a59982a436726c02e0c286391e5432ebf`；審查視窗 `01a0f1ea-bd9e-70f0-9a41-72e5c4eccc31`，2026-10-08。
+- 收發端實跑相關單元39/39與真React DOM1/1，另指出 P2：INSPECTING 可合法存維修草稿／提交單，原 helper 因存在 report 優先顯示完工提示，蓋住開工指引。此項按收發回覆 FAIL，既有測試通過不能覆蓋未測的提示缺口。
+- 本修訂將完成件清單依原生作業階段顯示，保留 RETURN／REFURBISHING 不支援分支提示；檢測中既有維修單及實際 outcome 不刪除、不改寫。
+- 原廠已本人收回後檢修改版會使CSR失效；即使伺服器不提供 complete_factory，仍顯示返還後交回缺口。這是唯讀證據展示，不新增完成權限。
+- 新增 REPAIR／REPLACE × DRAFT／SUBMITTED 開工指引與來源未齊測例；原廠返還後改檢修／失CSR測例。真React DOM同時核對既有文件仍可見、開工指引不被蓋及原廠失效原因。
+- 修訂只改 helper、2個專用tests及此文件；原actions/predicates、API、模型、schema、shared导航与dispatch均未變更。新提交SHA由交付訊息及repair-status記錄。
+- 修後測試59/59、完整frontend build、此3個改動程式／測試檔lint與diff檢查通過；新固定SHA仍須收發與DOA重審，不能自動沿用587的舊審查。Claw集中更新與最終整合DEV仍待DOA。

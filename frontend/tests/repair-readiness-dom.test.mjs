@@ -32,6 +32,17 @@ function Harness() {
   if(scenario==='new-quote'){item.release.releaseInfo.quoteRevision=5;item.release.releaseInfo.customerApprovedQuoteRevision=5;}
   if(scenario==='csr-accepted')item.repairWorkflow.csr.status='ACCEPTED';
   if(scenario==='unknown-amount')item.release.releaseInfo.amount=null;
+  if(scenario==='inspection-draft'||scenario==='inspection-submitted'){
+    item.repairReport={number:'SYNTHETIC-REP',revision:1,status:scenario==='inspection-draft'?'DRAFT':'SUBMITTED',inspectionRevision:3,
+      data:{outcome:'REPAIRED',qcResult:'PASS',checks:[{name:'合成功能',result:'PASS',observation:'合成通過'}]}};
+  }
+  if(scenario==='factory-reinspection'){
+    item.repairInspection.data.plan='FACTORY';item.repairInspection.revision=4;item.repairInspection.review=null;
+    item.repairWorkflow.csr=null;item.allowedWorkflowActions=[];
+    item.repairWorkflow.factory={stage:'RETURNED',physicalCustody:'TECHNICIAN',reference:'SYNTHETIC-FACTORY'};
+    item.repairReport={number:'SYNTHETIC-REP',revision:1,status:'SUBMITTED',inspectionRevision:3,
+      data:{outcome:'FACTORY_REPAIRED',factoryReference:'SYNTHETIC-FACTORY',qcResult:'PASS',checks:[{name:'合成功能',result:'PASS',observation:'合成通過'}]}};
+  }
   if(scenario==='waiting-mailroom'){item.status='WAITING_RETURN_ACCEPTANCE';item.repairWorkflow.release={purpose:'RETURN_UNREPAIRED'};}
   if(scenario==='unclaimed'){item.status='WAITING_REPAIR_ACCEPTANCE';item.repairOwnerId=null;item.editable=false;}
   if(scenario==='refusal'){item.repairInspection.data.plan='RETURN';item.repairWorkflow.csr.decision='DECLINE';}
@@ -49,7 +60,7 @@ function Harness() {
   }
   return e(React.Fragment,null,
     e('select',{id:'scenario',value:scenario,onChange:event=>setScenario(event.target.value)},
-      ['ready','free-pending','paid-pending','new-quote','csr-accepted','unknown-amount','waiting-mailroom','unclaimed','refusal','declined-original-plan','failed-qc','completed-new-quote'].map(value=>e('option',{key:value,value},value))),
+      ['ready','free-pending','paid-pending','new-quote','csr-accepted','unknown-amount','inspection-draft','inspection-submitted','factory-reinspection','waiting-mailroom','unclaimed','refusal','declined-original-plan','failed-qc','completed-new-quote'].map(value=>e('option',{key:value,value},value))),
     e('div',{id:'panel'},e(RepairReadinessPanel,{item,canUpdate:true,viewerId:'fixture-tech',handoffNote:'合成交回說明'})));
 }
 createRoot(document.getElementById('root')).render(e(Harness));
@@ -91,6 +102,20 @@ test('actual React panel keeps pending consent, payment, CSR and QC distinct fro
   await page.screenshot({ path: '/tmp/corely-repair-readiness-20261008-desktop.png', fullPage: true });
   assert.match(await panel.innerText(), /合成來源回覆 <script>不執行<\/script>/);
   assert.equal(await panel.locator('script').count(), 0, 'Source feedback is rendered as escaped text');
+  for (const scenario of ['inspection-draft', 'inspection-submitted']) {
+    await page.locator('#scenario').selectOption(scenario);
+    await panel.getByText('目前具備送出開工核對的條件', { exact: true }).waitFor();
+    assert.match(await panel.innerText(), /原機實際維修/);
+    assert.match(await panel.innerText(), /開始維修／替換/);
+    assert.equal(await panel.getByRole('region', { name: '複驗與完成件交回核對' }).count(), 0);
+    assert.equal(await panel.getByText('完成件交回仍有待核對條件', { exact: true }).count(), 0);
+  }
+  await page.locator('#scenario').selectOption('factory-reinspection');
+  await panel.getByText('完成件交回仍有待核對條件', { exact: true }).waitFor();
+  assert.match(await panel.innerText(), /尚無原生客服交辦結果/);
+  assert.match(await panel.innerText(), /目前檢修 v4；維修單依據檢修 v3/);
+  assert.match(await panel.innerText(), /原廠處理返還/);
+  assert.equal(await panel.getByText('目前具備送出交回核對的條件', { exact: true }).count(), 0);
   for (const [scenario, expected] of [
     ['free-pending', '免費方案也須有本報價版顧客同意'], ['paid-pending', '尚未確認本版必要款項'],
     ['new-quote', '來源目前報價 v5；客服確認報價 v4'], ['csr-accepted', '客服已本人接手'],
