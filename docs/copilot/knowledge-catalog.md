@@ -86,3 +86,5 @@ Formal replacement outbound keeps the donor RETURN inbound history while current
 The repaired-readiness panel uses current saved versions for personal receipt, CSR handoff, quote consent, funds, repair records and verification. Saving a record during inspection does not switch the case to completion. Guidance does not replace backend commands or prove the newly requested invoice-before-repair, video or customer report integrations. / 維修條件面板逐項核對本人、客服、當版報價同意／款項、維修單及複驗；檢測中存單不切換成完工。提示不代替後端命令，也不證明新開票前置、影片及顧客報告已整合。
 
 Dashboard reads and synchronization share the explicit URL company; a company change remounts its snapshot and never mixes prior-company metrics into partial/error results. Sidebar and command search retain the company. Warehouse managers switching to the dedicated workspace enter the workstation, with management reports still available separately. / 總覽讀取與同步依網址公司，換公司重新載入且不混入前公司資料；側欄與功能搜尋保留公司。儲運主管切至專用工作台會進作業工作站，原管理報表仍保留。
+
+Dispatched repair items retain actual disposition and records, with read-only guidance distinct from customer receipt or case closure. / 已交物流物件保留實際處置及單據，唯讀指引區分交運、顧客收件與結案。

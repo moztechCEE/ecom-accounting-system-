@@ -68,3 +68,5 @@ DOA UI提交57841c20之後納入維修原587及修訂3e298741（整合cherry-pic
 固定 ad406d84 的三項公司/入口反例由兩端真DOM重現，發布已暫停；該版Cloud Build成功只代表映像建置，不代表部署。本次query優先的共用公司hook與Dashboard keyed snapshot修正全部讀取/同步公司，換公司立即重掛不混前公司數字；側欄/功能搜尋保持query；WMS管理者進/workstation及預設一致。無global公司Storage寫入或新grant。
 
 修訂獨立26項純測試、TypeScript與靜態scopePASS；新增實際React公司情境6/6（受控API13GET及9+2+1sync、partial/coreerror/late回應隔離、Warehouse hook、Layout/sidebar/搜尋），root再次執行。employee7/7與frontbuild/scopedlintPASS，雙語200來源hash check、20knowledge測試PASS。最終整合SHA與真DEV另核，不能用這些替代通知/金流/物流驗收。
+
+維修新版 a78741cf delta 已獨立20unit＋1DOM＋型別/build/lint複核，cherry-pick為2136a673；DISPATCHED只查看紀錄，四方案不再顯示退回舊指引，已交運不等於顧客收件／結案。Source/AI待相容與records隊列缺口仍保留，不改成成功。
