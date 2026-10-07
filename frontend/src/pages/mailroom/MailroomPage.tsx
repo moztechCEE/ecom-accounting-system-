@@ -48,6 +48,9 @@ import {
   type Task,
 } from "./model";
 import TabletAcceptance from "./TabletAcceptance";
+import RecipientPicker from "./RecipientPicker";
+import MailroomNextStep from "./MailroomNextStep";
+import { MAILROOM_QUEUES, mailroomNextStep, needsInspectionPhoto, matchesMailroomSearch, canDispatch, matchesDispatchReceipt } from "./mailroom-workflow";
 import SourceCasePicker from "./SourceCasePicker";
 import RepairDocuments from "../repair/RepairDocuments";
 import { useRepairFeedback } from "../repair/repair-feedback";
@@ -97,7 +100,7 @@ const field = (label: string, name: string, required = false) => (
         : []
     }
   >
-    <Input maxLength={name === "location" ? 160 : 200} />
+    <Input maxLength={["location", "senderLabel"].includes(name) ? 160 : ["carrier", "trackingNumber", "sku", "serialNumber"].includes(name) ? 100 : 200} />
   </Form.Item>
 );
 export default function MailroomPage({
@@ -122,7 +125,8 @@ export default function MailroomPage({
     [detailLoading, setDetailLoading] = useState(false),
     [create, setCreate] = useState(false);
   const [createSource, setCreateSource] = useState<Source>(),
-    [listTab, setListTab] = useState("awaiting"),
+    [listTab, setListTab] = useState("received"),
+    [createCategory, setCreateCategory] = useState("REPAIR"),
     [arrivalRevision, setArrivalRevision] = useState(0);
   const selectedId = params.get("itemId");
   const enabled = mailroomEnabled();
@@ -258,10 +262,7 @@ export default function MailroomPage({
       ? rows.filter(
           (x) =>
             (!status || x.status === status) &&
-            (!search ||
-              [x.productName, x.label, x.receipt.sourceNumber].some((v) =>
-                v?.includes(search),
-              )),
+            matchesMailroomSearch(x, search),
         )
       : rows;
   return (
@@ -291,7 +292,7 @@ export default function MailroomPage({
                 : "查看交辦給你的物件。通知已讀後，待辦仍保留至完成簽收或處理。"}
           </Paragraph>
         </div>
-        <Space>
+        <Space wrap>
           <Button
             icon={<ReloadOutlined />}
             onClick={() => {
@@ -302,24 +303,28 @@ export default function MailroomPage({
             重新整理
           </Button>
           {mode === "mailroom" && hasPermission(user, "mailroom:create") ? (
+            <Space wrap>
+            <Button onClick={() => { setCreateSource(undefined); setCreateCategory("LETTER"); setCreate(true); }}>登記信件／包裹</Button>
             <Button
               type="primary"
               size="large"
               icon={<PlusOutlined />}
               onClick={() => {
                 setCreateSource(undefined);
+                setCreateCategory("REPAIR");
                 setCreate(true);
               }}
             >
-              登記收件
+              登記售後收件
             </Button>
+            </Space>
           ) : null}
         </Space>
       </div>
       <div className="mailroom-process">
         {(mode === "repair"
           ? ["本人簽收", "檢測／整新", "客服確認", "維修處理", "交回收發室"]
-          : ["登記到件", "核對／檢查", "通知交接", "對方簽收", "追蹤後續"]
+          : ["分類登記", "拍照核對", "指定接收人", "本人簽收", "寄回／後續處理"]
         ).map((label, index) => (
           <span key={label}>
             <b>{index + 1}</b>
@@ -341,8 +346,8 @@ export default function MailroomPage({
           activeKey={listTab}
           onChange={setListTab}
           items={[
-            { key: "awaiting", label: "待到貨案件" },
-            { key: "received", label: "已收件物件" },
+            { key: "received", label: "收件與交接工作" },
+            { key: "awaiting", label: "售後待到貨案件" },
           ]}
         />
       ) : null}
@@ -369,6 +374,10 @@ export default function MailroomPage({
             </Space>
           }
         >
+          {mode === "mailroom" && <div className="mailroom-queues" aria-label="收發工作佇列">
+            {MAILROOM_QUEUES.map(queue => <Button key={queue.status || "all"} type={status === queue.status ? "primary" : "default"}
+              onClick={() => { setStatus(queue.status); setPage(1); }}>{queue.label}</Button>)}
+          </div>}
           <div className="mailroom-filters">
             <Input.Search
               aria-label="搜尋物件"
@@ -445,7 +454,7 @@ export default function MailroomPage({
                           "一般收件"}
                       </Text>
                     </div>
-                    <Text className="mailroom-meta">{item.label}</Text>
+                    <Text className="mailroom-meta">{item.label} · 照片 {item.evidenceCount} 張</Text>
                   </div>
                 ),
               },
@@ -478,10 +487,13 @@ export default function MailroomPage({
                 },
               },
               {
-                title: "下一位同仁",
-                width: 160,
-                dataIndex: "nextUserName",
-                render: (value: string) => value || "待後續安排",
+                title: "下一步／接收人",
+                width: 230,
+                key: "next",
+                render: (_, item) => <>
+                  <div>{mailroomNextStep(item).title}</div>
+                  <Text type="secondary">{item.nextUserName || item.recipientName || "待後續安排"}</Text>
+                </>,
               },
               {
                 title: "收件時間",
@@ -505,7 +517,7 @@ export default function MailroomPage({
       ) : null}
       <Drawer
         title="物件進度與交接"
-        width={720}
+        width="min(720px, 100vw)"
         open={!!selectedId}
         onClose={() => openItem()}
         destroyOnHidden
@@ -535,6 +547,7 @@ export default function MailroomPage({
       <ReceiptDrawer
         feedback={message}
         initialSource={createSource}
+        initialCategory={createCategory}
         open={create}
         entityId={entityId}
         people={people}
@@ -913,8 +926,9 @@ function ItemDetail({
     ].includes(item.status)
   )
     actions.push("correct");
-  if (canMail && item.custodianId === userId && item.status !== "COLLECTED")
+  if (canMail && item.custodianId === userId && !["COLLECTED", "DISPATCHED"].includes(item.status))
     actions.push("move");
+  if (canDispatch(item, userId, canMail)) actions.unshift("dispatch");
   const match = Form.useWatch("matchResult", form),
     grade = Form.useWatch("grade", form);
   const targetCategory = Form.useWatch("targetCategory", form),
@@ -976,12 +990,12 @@ function ItemDetail({
   async function save() {
     try {
       const values = await form.validateFields();
-      if (action === "grade" && !photos.length && !item.evidence?.length) {
-        setFailure("退貨檢查至少需留存一張有效實物照片，請拍照留底後再儲存。");
+      if (needsInspectionPhoto(action, item.evidence, photos)) {
+        setFailure("產品核對／退貨檢查至少需留存一張有效實物照片，請拍照留底後再儲存。");
         return;
       }
       const body = JSON.stringify({
-        ...(action === "send_intake" ? { csrUserId: values.csrUserId, note: values.note } : values),
+        ...(action === "send_intake" ? { csrUserId: values.csrUserId, note: values.note } : action === "dispatch" ? { carrier: values.carrier.trim(), trackingNumber: values.trackingNumber.trim(), confirmedItems: values.confirmedItems, note: values.note?.trim() } : values),
         entityId,
         action,
         expectedVersion: item.version,
@@ -995,10 +1009,22 @@ function ItemDetail({
         ...JSON.parse(body),
         requestId: operation.current.id,
       });
-      message.success("已更新進度並建立交接紀錄");
+      message.success(action === "dispatch" ? "已保存寄出紀錄；售後／AI 寄出同步待串接" : "已更新進度並建立交接紀錄");
       setAction(undefined);
       await onSaved();
     } catch (e) {
+      if (action === "dispatch" && operation.current && !(e as { errorFields?: unknown }).errorFields) {
+        try {
+          const latest = await api.get<Item>("/mailroom/items/" + encodeURIComponent(item.id), { params: { entityId } });
+          const request = { ...JSON.parse(operation.current.body), requestId: operation.current.id };
+          if (matchesDispatchReceipt(latest.data, request, userId)) {
+            setAction(undefined);
+            message.success("已從本次寄出回執核對操作成功；售後／AI 寄出同步待串接");
+            await onSaved();
+            return;
+          }
+        } catch { /* Preserve the exact request ID for explicit safe retry. */ }
+      }
       if (action === "send_intake" && operation.current && !(e as { errorFields?: unknown }).errorFields) {
         try { const latest = await mailroomIntake.item(entityId, item.id); const request = { ...JSON.parse(operation.current.body), requestId: operation.current.id }; if (matchesIntakeReceipt(latest, request, userId)) { setAction(undefined); message.success("已從本次交辦回執核對操作成功"); await onSaved(); return; } } catch { /* Keep the same command/request for explicit reconciliation or exact retry. */ }
       }
@@ -1031,6 +1057,7 @@ function ItemDetail({
           onSaved={onSaved}
         />
       ) : null}
+      <MailroomNextStep item={item} actions={actions} onAction={choose} disabled={busy} />
       <Space wrap>
         <Tag>{CATEGORIES[item.receipt.category]}</Tag>
         <Tag color={statusColor(item.status)}>{item.statusLabel || STATUS[item.status]}</Tag>
@@ -1053,15 +1080,24 @@ function ItemDetail({
             children: date(item.receipt.receivedAt),
           },
           {
+            key: "sender",
+            label: "寄件人／公司",
+            children: item.receipt.senderLabel || "未提供",
+          },
+          { key: "incoming", label: "入件物流／單號", children: [item.receipt.carrier, item.receipt.trackingNumber].filter(Boolean).join(" · ") || "未提供" },
+          { key: "actual-name", label: item.receipt.category === "LETTER" || item.receipt.category === "PARCEL" ? "信件／包裹內容" : "實收名稱", children: item.productName },
+          ...(item.receipt.category === "LETTER" || item.receipt.category === "PARCEL" ? [
+            { key: "recipient", label: "指定收件同仁", children: item.recipientName || item.nextUserName || "待指定" },
+          ] : [{
             key: "declared",
-            label: "原申報",
+            label: "售後來源品項",
             children: item.declared
               ? `${item.declared.name} · SKU ${item.declared.sku || "未提供"} · SN ${item.declared.serialNumber || "未提供"}`
               : "無售後申報",
           },
           { key: "actual", label: "實收品項", children: item.productName },
-          { key: "sku", label: "SKU", children: item.sku || "未提供" },
-          { key: "sn", label: "SN", children: item.serialNumber || "未提供" },
+          { key: "sku", label: "實收 SKU", children: item.sku || "未提供" },
+          { key: "sn", label: "實收 SN", children: item.serialNumber || "未提供" }]),
           { key: "location", label: "目前實物位置", children: custody.location },
           { key: "owner", label: "目前保管", children: custody.holder },
           ...(custody.transferred ? [
@@ -1082,6 +1118,14 @@ function ItemDetail({
           },
         ]}
       />
+      {item.outboundShipment && <Card className="mailroom-dispatch-record" size="small" title="寄出紀錄（實際交運）" style={{ marginTop: 16 }}>
+        <Descriptions column={1} size="small" items={[
+          { key: "carrier", label: "寄出物流／單號", children: `${item.outboundShipment.carrier} · ${item.outboundShipment.trackingNumber}` },
+          { key: "time", label: "交運時間／人員", children: `${date(item.outboundShipment.dispatchedAt)} · ${item.outboundShipment.dispatchedByName}` },
+          { key: "actual", label: item.outboundShipment.physicalItem.kind === "REPLACEMENT" ? "實際寄出的替換品" : "實際寄出的原件", children: `${item.outboundShipment.physicalItem.productName} · SKU ${item.outboundShipment.physicalItem.sku || "未提供"} · SN ${item.outboundShipment.physicalItem.serialNumber || "未提供"}` },
+        ]} />
+        <Alert type="warning" showIcon message="已保存寄出；售後／AI 寄出同步待串接" description="寄出紀錄已由本系統保存。售後及 AI 客服的寄出事件接口尚待接通，不需重複登記寄出；此紀錄不表示顧客已收到或案件已結束。" />
+      </Card>}
       {item.caseIntake && <Alert showIcon type="info" style={{ marginTop: 16 }} message={`客服補建交辦：${INTAKE_STATUS[item.caseIntake.status]}`} description={`指定／受理客服：${item.caseIntake.ownerName || item.caseIntake.sentToUserName}。此交辦不移轉實物，實物仍依目前保管與位置紀錄。${item.caseIntake.sourceNumber ? `已綁定來源 ${item.caseIntake.sourceNumber}。` : "建立來源案件後，需由受理客服回此原收件完成綁定。"}`} />}
       {missingCustomerService ? (
         <Alert
@@ -1162,6 +1206,7 @@ function ItemDetail({
             <Button
               type="primary"
               size="large"
+              disabled={busy}
               onClick={() => {
                 setAction(undefined);
                 setTablet(true);
@@ -1173,6 +1218,7 @@ function ItemDetail({
           {actions.map((value, index) => (
             <Button
               key={value}
+              disabled={busy}
               type={
                 action === value || (!action && index === 0)
                   ? "primary"
@@ -1202,6 +1248,7 @@ function ItemDetail({
         <Card size="small" title={ACTIONS[action]} className="mailroom-action">
           <Form
             form={form}
+            disabled={busy}
             layout="vertical"
             preserve={false}
             initialValues={{
@@ -1211,6 +1258,16 @@ function ItemDetail({
               location: item.location,
             }}
           >
+            {action === "dispatch" && <>
+              <Alert type="info" showIcon message="確認已實際交給物流，才登記寄出" description="這裡填寄回顧客的物流資料。入件單號另外保存；寄出不代表顧客已收到。若是換機，請點清實際替換品與 SN。" />
+              <div className="mailroom-form-grid">
+                {field("寄出物流公司", "carrier", true)}
+                {field("寄出物流單號", "trackingNumber", true)}
+              </div>
+              <Form.Item name="confirmedItems" valuePropName="checked" rules={[{ validator: (_, value) => value ? Promise.resolve() : Promise.reject(new Error("請逐件核對並確認實物已交給物流")) }]}>
+                <Checkbox>我已核對實際寄出的產品與 SN，並將實物交給物流</Checkbox>
+              </Form.Item>
+            </>}
             {action === "send_intake" && <>
               <Alert type="info" showIcon message="指定客服補建案件，實物仍由目前收發人員保管" description="客服本人接手後，使用原售後表單建案並綁回此原收件；不重新登記收件。接手前可改交另一位具補建與受理權限的同仁。" />
               <Form.Item name="csrUserId" label="指定補建客服" rules={[{ required: true, message: "請指定具補建與受理權限的客服" }]}><Select showSearch optionFilterProp="label" options={people.filter(person => person.intakeCustomerService === true).map(person => ({ value: person.id, label: `${person.department} · ${person.name}` }))} notFoundContent="目前沒有本公司具補建與受理權限的同仁" /></Form.Item>
@@ -1288,7 +1345,7 @@ function ItemDetail({
             {["inspect", "grade"].includes(action) ? (
               <Form.Item
                 name="matchResult"
-                label="與顧客申報是否一致"
+                label="與售後來源品項是否一致"
                 rules={[{ required: true, message: "請核對後選擇" }]}
               >
                 <Select
@@ -1307,6 +1364,8 @@ function ItemDetail({
             ) : null}
             {action === "grade" ? (
               <>
+                <Alert type="info" showIcon message="先核對實收品項，再填寫退貨檢查"
+                  description="實收名稱、SKU 或 SN 需要更正時，先使用「更正實收資料」保存，再重新進行此檢查；分級本身不更改產品資料。" />
                 <Alert
                   type="info"
                   message="AA：重新入庫；A：瑕疵補寄／福利品；B、C：整理後福利品"
@@ -1386,17 +1445,9 @@ function ItemDetail({
                       ? "新接收人"
                       : "維修／整新人員"
                 }
-                rules={[{ required: true, message: "請指定接收人" }]}
+                rules={[{ required: true, message: "請指定接收人" }, { validator: (_, value) => !value || targetPeople.some(person => person.id === value) ? Promise.resolve() : Promise.reject(new Error("請重新選擇目前可指派的同仁")) }]}
               >
-                <Select
-                  showSearch
-                  optionFilterProp="label"
-                  options={targetPeople.map((p) => ({
-                    value: p.id,
-                    label: `${p.department} · ${p.name}`,
-                  }))}
-                  notFoundContent="尚無具備權限的在職同仁"
-                />
+                <RecipientPicker key={action} people={targetPeople} label={identifyGeneral ? "收件同仁" : "接收人"} />
               </Form.Item>
             ) : null}
             {["accept", "accept_return", "move"].includes(action)
@@ -1469,9 +1520,9 @@ function ItemDetail({
               "complete_refurbish",
             ].includes(action) ? (
               <div>
-                {action === "grade" ? (
+                {["inspect", "grade"].includes(action) ? (
                   <Paragraph>
-                    退貨檢查須留存至少 1
+                    產品核對與退貨檢查須留存至少 1
                     張照片。請拍攝外包裝、產品與配件；有瑕疵時補拍清楚特寫。
                     {item.evidence?.length
                       ? `已留存 ${item.evidence.length} 張；未新增照片時沿用目前照片。`
@@ -1536,6 +1587,7 @@ function ItemDetail({
             {failure ? (
               <Alert type="error" message={failure} style={{ marginTop: 16 }} />
             ) : null}
+            <Paragraph type="secondary" style={{ marginTop: 16 }}>{action === "dispatch" ? "保存實際交運紀錄；後續顧客收件與售後結案另行追蹤。" : "儲存會記錄本次核對或交辦；接收人仍須本人確認實物，通知不代表已簽收。"}</Paragraph>
             <Space style={{ marginTop: 20 }}>
               <Button type="primary" loading={busy} onClick={() => void save()}>
                 確認儲存
@@ -1549,7 +1601,8 @@ function ItemDetail({
       ) : null}
       {item.receipt.sourceCaseId ? (
         <>
-          <Divider orientation="left">客服同步</Divider>
+          <Divider orientation="left">售後／AI 系統同步</Divider>
+          <Paragraph type="secondary">以下是既有進度事件的系統同步回執；本次寄出另以上方寄出紀錄為準。同仁接手、實物簽收及顧客通知另依各自紀錄。</Paragraph>
           <Space wrap>
             {["AFTER_SALES", "AI_CUSTOMER_SERVICE"].map((target) => {
               const deliveries = (
@@ -1559,7 +1612,7 @@ function ItemDetail({
               ).filter((x) => x.target === target);
               const pending = deliveries.some((x) => x.status !== "DELIVERED");
               return (
-                <Tag key={target} color={pending ? "orange" : "green"}>
+                <Tag key={target} color={pending ? "orange" : deliveries.length ? "green" : undefined}>
                   {target === "AFTER_SALES" ? "售後系統" : "AI 客服"}：
                   {pending
                     ? "待同步"
@@ -1579,7 +1632,7 @@ function ItemDetail({
             <div>
               <strong>{ACTIONS[event.action] || event.action}</strong>
               <div>
-                {STATUS[event.toStatus]} · {event.actorName}
+                {STATUS[event.toStatus] || event.toStatus} · {event.actorName}
               </div>
               {event.note ? <Paragraph>{event.note}</Paragraph> : null}
               {event.snapshot?.evidence?.length ? (
@@ -1624,6 +1677,7 @@ function sourcePhysicalRows(source: Source) {
 function ReceiptDrawer({
   feedback,
   initialSource,
+  initialCategory,
   open,
   entityId,
   people,
@@ -1632,6 +1686,7 @@ function ReceiptDrawer({
 }: {
   feedback: RepairMessage;
   initialSource?: Source;
+  initialCategory: string;
   open: boolean;
   entityId: string;
   people: Person[];
@@ -1657,13 +1712,13 @@ function ReceiptDrawer({
               sourceCaseId: initialSource.id,
               items: sourcePhysicalRows(initialSource),
             }
-          : { category: "REPAIR", items: [{ productName: "" }] },
+          : { category: initialCategory, items: [{ productName: "" }] },
       );
       setError("");
       setSource(initialSource);
       operation.current = undefined;
     }
-  }, [open, form, initialSource]);
+  }, [open, form, initialSource, initialCategory]);
   async function submit() {
     try {
       const values = await form.validateFields();
@@ -1714,7 +1769,7 @@ function ReceiptDrawer({
   return (
     <Drawer
       title="登記收件"
-      width={700}
+      width="min(700px, 100vw)"
       open={open}
       onClose={() => {
         if (!busy) onClose();
@@ -1747,7 +1802,7 @@ function ReceiptDrawer({
                 sourceCaseId: initialSource.id,
                 items: sourcePhysicalRows(initialSource),
               }
-            : { category: "REPAIR", items: [{ productName: "" }] }
+            : { category: initialCategory, items: [{ productName: "" }] }
         }
       >
         <Form.Item
@@ -1798,16 +1853,9 @@ function ReceiptDrawer({
           <Form.Item
             name="recipientId"
             label="收件部門／同仁"
-            rules={[{ required: true, message: "請選擇收件人" }]}
+            rules={[{ required: true, message: "請選擇收件人" }, { validator: (_, value) => !value || people.some(person => person.id === value) ? Promise.resolve() : Promise.reject(new Error("請重新選擇目前可指派的同仁")) }]}
           >
-            <Select
-              showSearch
-              optionFilterProp="label"
-              options={people.map((p) => ({
-                value: p.id,
-                label: `${p.department} · ${p.name}（${p.employeeNo}）`,
-              }))}
-            />
+            <RecipientPicker key={category} people={people} label="收件同仁" />
           </Form.Item>
         ) : (
           <Alert
@@ -1820,12 +1868,12 @@ function ReceiptDrawer({
             案件 {source.number} · 已收到 {source.receivedQuantity ?? 0}／
             {source.expectedQuantity ??
               source.items.reduce((sum, item) => sum + item.quantity, 0)}{" "}
-            件；本次收件仍須核對實物。
+            件；本次收件仍須核對實物。登記後請在物件詳情拍照並確認品項。
           </Paragraph>
         ) : null}
         <div className="mailroom-form-grid">
-          {field("物流公司", "carrier")}
-          {field("物流單號", "trackingNumber")}
+          {field("入件物流公司", "carrier")}
+          {field("入件物流單號", "trackingNumber")}
         </div>
         {field(
           isCorrespondence ? "對方公司名稱／寄件人姓名" : "寄件人／單位",

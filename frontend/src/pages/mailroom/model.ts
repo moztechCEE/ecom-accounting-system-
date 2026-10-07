@@ -16,6 +16,7 @@ export const STATUS: Record<string, string> = {
   REPAIRING: "維修中",
   WAITING_RETURN_ACCEPTANCE: "處理完成，待收發室簽收",
   READY_FOR_DISPATCH: "待安排寄回",
+  DISPATCHED: "已交物流寄回，待顧客收件",
   PENDING_RESTOCK: "AA 待重新入庫",
   PENDING_DISPOSITION: "A 待瑕疵補寄／福利品處理",
   PENDING_REFURBISH: "B／C 待整新簽收",
@@ -43,6 +44,7 @@ export const ACTIONS: Record<string, string> = {
   complete_repair: "維修完成，交回收發室",
   complete_refurbish: "整新完成，交回收發室",
   accept_return: "收發室簽收處理完成品",
+  dispatch: "登記實際寄出",
 };
 export const DISPOSITIONS: Record<string, string> = {
   RESTOCK: "重新入庫",
@@ -123,6 +125,9 @@ export type Item = {
   nextUserId: string | null;
   nextUserName: string | null;
   recipientId: string | null;
+  recipientName?: string | null;
+  releasePurpose?: string | null;
+  outboundShipment?: OutboundShipment | null;
   repairOwnerId: string | null;
   mine: boolean;
   evidenceCount: number;
@@ -160,6 +165,7 @@ export type Item = {
 };
 export type PhysicalCustody =
   | "TECHNICIAN" | "MAILROOM" | "FACTORY_CARRIER" | "FACTORY"
+  | "CUSTOMER_CARRIER"
   | "INVENTORY" | "LINKED_CASE" | "UNKNOWN";
 /** A read projection of the replacement item's current logistics, not its technical or financial record. */
 export type LinkedReplacementCustody = {
@@ -174,8 +180,23 @@ export type LinkedReplacementCustody = {
   custodianId: string;
   custodianName: string;
   location: string;
-  physicalCustody: "TECHNICIAN" | "MAILROOM" | "FACTORY_CARRIER" | "FACTORY";
+  physicalCustody: "TECHNICIAN" | "MAILROOM" | "FACTORY_CARRIER" | "FACTORY" | "CUSTOMER_CARRIER";
   targetVersion: number;
+};
+export type OutboundShipment = {
+  schema: 1;
+  status: 'HANDED_TO_CARRIER';
+  entityId: string; itemId: string; sourceCaseId: string; requestId: string;
+  fromVersion: number; version: number;
+  carrier: string; trackingNumber: string;
+  dispatchedAt: string; dispatchedById: string; dispatchedByName: string;
+  dispatchedByEmployeeId: string; note: string | null;
+  physicalItem: {
+    kind: 'ORIGINAL' | 'REPLACEMENT'; productName: string;
+    sku: string | null; serialNumber: string | null; quantity: 1;
+    stock?: { reservationId: string; postingId: string; unitId: string; unitLabel: string; productId: string; warehouseId: string; condition: 'NEW' | 'REFURBISHED'; externalStatus: string };
+  };
+  sourceSync: { status: 'PENDING_COMPATIBILITY'; reason: 'DISPATCH_CONSUMER_NOT_CONFIGURED' };
 };
 export type Task = { id: string; kind: string; createdAt: string; item: Item };
 export function mailroomEnabled() {

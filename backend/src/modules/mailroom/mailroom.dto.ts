@@ -94,6 +94,8 @@ export class MailroomCommandDto {
   @IsOptional() @IsString() @MaxLength(100) sku?: string;
   @IsOptional() @IsString() @MaxLength(100) serialNumber?: string;
   @IsOptional() @IsString() @MaxLength(160) location?: string;
+  @IsOptional() @IsString() @MaxLength(100) carrier?: string;
+  @IsOptional() @IsString() @MaxLength(100) trackingNumber?: string;
   @IsOptional() @IsString() @MaxLength(2000) note?: string;
   @IsOptional() @IsIn(['MATCH', 'MISMATCH']) matchResult?: 'MATCH' | 'MISMATCH';
   @IsOptional() @IsIn(GRADES) grade?: (typeof GRADES)[number];

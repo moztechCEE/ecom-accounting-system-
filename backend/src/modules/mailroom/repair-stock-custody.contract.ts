@@ -1,5 +1,6 @@
 /** A native RETURN keeps its immutable IN handoff. Once that unit has a proven
  * replacement OUT, current custody belongs to the linked REPAIR item. */
+import { dispatchedLocation } from './mailroom-dispatch.contract';
 export type LinkedReplacementCustody = {
   unitId: string;
   reservationId: string;
@@ -12,7 +13,12 @@ export type LinkedReplacementCustody = {
   custodianId: string;
   custodianName: string;
   location: string;
-  physicalCustody: 'TECHNICIAN' | 'MAILROOM' | 'FACTORY_CARRIER' | 'FACTORY';
+  physicalCustody:
+    | 'TECHNICIAN'
+    | 'MAILROOM'
+    | 'FACTORY_CARRIER'
+    | 'FACTORY'
+    | 'CUSTOMER_CARRIER';
   targetVersion: number;
 };
 export type StockCustodyProjection = {
@@ -112,16 +118,23 @@ export function consumedReturnCustody(
     Number(target.version) < 1
   )
     return uncertain();
+  const factoryCustody = object(
+    object(target.repairWorkflow).factory,
+  ).physicalCustody;
   const physicalCustody =
-    target.status === 'FACTORY_RECEIVED'
+    target.status === 'FACTORY_RECEIVED' || factoryCustody === 'FACTORY'
       ? 'FACTORY'
       : ['FACTORY_OUTBOUND', 'FACTORY_RETURNING'].includes(
             String(target.status),
-          )
+          ) || factoryCustody === 'FACTORY_CARRIER'
         ? 'FACTORY_CARRIER'
-        : target.custodianId === target.repairOwnerId
-          ? 'TECHNICIAN'
-          : 'MAILROOM';
+        : target.status === 'DISPATCHED'
+          ? 'CUSTOMER_CARRIER'
+          : target.status === 'READY_FOR_DISPATCH'
+            ? 'MAILROOM'
+            : target.custodianId === target.repairOwnerId
+              ? 'TECHNICIAN'
+              : 'MAILROOM';
   return {
     physicalCustody: 'LINKED_CASE',
     statusLabel: '已作換機出庫，實物保管依換機案件',
@@ -143,7 +156,11 @@ export function consumedReturnCustody(
       statusLabel: target.status,
       custodianId: target.custodianId,
       custodianName: '未綁定',
-      location: target.location,
+      location: dispatchedLocation({
+        status: target.status,
+        location: target.location,
+        repairWorkflow: target.repairWorkflow,
+      }),
       physicalCustody,
       targetVersion: Number(target.version),
     },

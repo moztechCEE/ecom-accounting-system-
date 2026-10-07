@@ -4,6 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { dispatchTransition } from './mailroom-dispatch.contract';
 
 export const CATEGORIES = [
   'REPAIR',
@@ -27,6 +28,7 @@ export const STATUS_LABELS: Record<string, string> = {
   FACTORY_RETURNING: '原廠返還途中',
   WAITING_RETURN_ACCEPTANCE: '處理完成，待收發室簽收',
   READY_FOR_DISPATCH: '待安排寄回',
+  DISPATCHED: '已交物流寄回，待顧客收件',
   PENDING_RESTOCK: 'AA 待重新入庫',
   PENDING_DISPOSITION: 'A 待瑕疵補寄／福利品處理',
   PENDING_REFURBISH: 'B／C 待整新簽收',
@@ -56,6 +58,7 @@ export const ACTIONS = [
   'start_refurbish',
   'complete_refurbish',
   'accept_return',
+  'dispatch',
   'acknowledge_inspection',
 ] as const;
 export type ActionName = (typeof ACTIONS)[number];
@@ -86,6 +89,8 @@ export type Command = {
   sku?: string;
   serialNumber?: string;
   location?: string;
+  carrier?: string;
+  trackingNumber?: string;
   note?: string;
   matchResult?: 'MATCH' | 'MISMATCH';
   grade?: (typeof GRADES)[number];
@@ -151,8 +156,10 @@ export type ItemState = {
   repairWorkflow?: unknown;
   receipt: {
     category: string;
+    entityId?: string;
     receivedById: string;
     sourceCaseId: string | null;
+    sourceSnapshot?: unknown;
     customerServiceUserId?: string | null;
   };
 };
@@ -310,9 +317,15 @@ export function transition(
       throw new ForbiddenException('只能處理本人已簽收的物件');
   };
   if (
-    ['inspect', 'grade', 'correct', 'move', 'assign', 'accept_return'].includes(
-      command.action,
-    )
+    [
+      'inspect',
+      'grade',
+      'correct',
+      'move',
+      'assign',
+      'accept_return',
+      'dispatch',
+    ].includes(command.action)
   )
     requirePermission(actor, 'mailroom:update');
   switch (command.action) {
@@ -530,8 +543,8 @@ export function transition(
       });
       break;
     case 'move':
-      if (item.status === 'COLLECTED')
-        throw new ConflictException('已領取物件不可修改位置');
+      if (['COLLECTED', 'DISPATCHED'].includes(item.status))
+        throw new ConflictException('已領取或交物流物件不可修改位置');
       if (item.custodianId !== actor.id)
         throw new ForbiddenException('只有目前保管人可登記移位');
       if (!command.location?.trim())
@@ -641,6 +654,9 @@ export function transition(
             : 'READY_FOR_DISPATCH',
         nextUserId: null,
       });
+      break;
+    case 'dispatch':
+      Object.assign(changes, dispatchTransition(item, command, actor));
       break;
     default:
       throw new BadRequestException('不支援的進度操作');

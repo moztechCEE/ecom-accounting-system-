@@ -27,6 +27,13 @@ import { AfterSalesStockService } from '../integration/after-sales/after-sales-s
 import { consumedReturnCustody } from './repair-stock-custody.contract';
 import { sourceSyncSummary } from './mailroom-source.contract';
 import {
+  dispatchText,
+  dispatchedLocation,
+  dispatchedPhysicalItem,
+  outboundShipment,
+  type OutboundShipment,
+} from './mailroom-dispatch.contract';
+import {
   can,
   fingerprint,
   isRepairWorkbenchItem,
@@ -377,7 +384,9 @@ export class MailroomService {
           break;
         case 'records':
           and.push({
-            status: { in: ['READY_FOR_DISPATCH', 'PENDING_WELFARE_STOCK'] },
+            status: {
+              in: ['READY_FOR_DISPATCH', 'DISPATCHED', 'PENDING_WELFARE_STOCK'],
+            },
           });
           break;
       }
@@ -480,6 +489,7 @@ export class MailroomService {
                     version: true,
                     custodianId: true,
                     repairOwnerId: true,
+                    repairWorkflow: true,
                     location: true,
                     receipt: {
                       select: {
@@ -542,6 +552,7 @@ export class MailroomService {
       );
     return items.map(({ evidence, receipt, ...item }) => ({
       ...(canViewRepairDocuments(actor) ? item : withoutRepairDocuments(item)),
+      location: dispatchedLocation(item),
       statusLabel:
         custody.get(item.id)?.statusLabel ||
         repairStatusLabel({ ...item, receipt }),
@@ -557,6 +568,7 @@ export class MailroomService {
           ? physicalCustody({ ...item, receipt })
           : undefined),
       caseIntake: caseIntakeSummary(item.repairWorkflow),
+      outboundShipment: outboundShipment(item.repairWorkflow),
       allowedIntakeActions: allowedIntakeActions(
         { ...item, receipt },
         actor,
@@ -702,12 +714,13 @@ export class MailroomService {
       matchResult: item.matchResult,
       grade: item.grade,
       disposition: item.disposition,
-      location: item.location,
+      location: dispatchedLocation(item),
       custodianId: item.custodianId,
       nextUserId: item.nextUserId,
       quantity: 1,
       evidenceCount: Array.isArray(item.evidence) ? item.evidence.length : 0,
       returnInspection: item.returnInspection,
+      outboundShipment: outboundShipment(item.repairWorkflow),
       releasePurpose:
         repairWorkflow(item.repairWorkflow).release?.purpose || null,
       physicalCustody: isRepairWorkbenchItem(item)
@@ -882,7 +895,14 @@ export class MailroomService {
         );
       }
     }
-    if (item.receipt.sourceCaseId) {
+    // Source/AI consumers do not yet accept DISPATCHED or the outbound schema.
+    // The immutable native action and shipment retain the pending operation;
+    // do not enqueue an unsupported event or claim a successful external sync.
+    if (
+      item.receipt.sourceCaseId &&
+      action !== 'dispatch' &&
+      item.status !== 'DISPATCHED'
+    ) {
       const payload = {
         schema: 'corely.mailroom.v1',
         eventId: entry.id,
@@ -1283,6 +1303,10 @@ export class MailroomService {
       }
     }
     const result = await this.prisma.$transaction(async (tx) => {
+      if (input.action === 'dispatch')
+        await tx.$executeRaw(
+          Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${input.entityId + ':mailroom-dispatch-action:' + userId + ':' + input.requestId}))`,
+        );
       await tx.$queryRaw(
         Prisma.sql`SELECT id FROM mailroom_items WHERE id=${id} FOR UPDATE`,
       );
@@ -1297,6 +1321,20 @@ export class MailroomService {
       });
       const freshActor = await this.actor(userId, tx);
       requireEntity(freshActor, input.entityId);
+      let dispatchEmployeeId: string | undefined;
+      if (input.action === 'dispatch') {
+        // Replays still require current permissions and a current company employee.
+        requirePermission(freshActor, 'mailroom:update');
+        const employee = await tx.employee.findFirst({
+          where: { userId, entityId: input.entityId, isActive: true },
+          select: { id: true },
+        });
+        if (!employee)
+          throw new ForbiddenException(
+            '寄出人必須是此公司已綁定帳號的在職員工',
+          );
+        dispatchEmployeeId = employee.id;
+      }
       if (input.action === 'claim') {
         requirePermission(freshActor, 'repair_workbench:update');
         const employee = await tx.employee.findFirst({
@@ -1511,6 +1549,77 @@ export class MailroomService {
         freshActor,
         repairAllowed,
       );
+      if (input.action === 'dispatch') {
+        let reservation: unknown;
+        let product: unknown;
+        const release = workflow.release;
+        const replacement =
+          release?.purpose === 'REPLACED' ||
+          (item.repairReport as { data?: { outcome?: string } } | null)?.data
+            ?.outcome === 'REPLACED';
+        if (replacement && release?.stock?.reservationId) {
+          // Read the same formal OUT referenced by repair completion; no new stock posting.
+          await tx.$queryRaw(
+            Prisma.sql`SELECT id FROM after_sales_stock_reservations WHERE id=${release.stock.reservationId} AND entity_id=${item.entityId} FOR SHARE`,
+          );
+          const posted = await tx.afterSalesStockReservation.findFirst({
+            where: {
+              id: release.stock.reservationId,
+              entityId: item.entityId,
+              itemId: item.id,
+              status: 'POSTED',
+            },
+            include: {
+              unit: true,
+              outTransaction: {
+                select: {
+                  id: true,
+                  entityId: true,
+                  productId: true,
+                  warehouseId: true,
+                  direction: true,
+                  quantity: true,
+                  referenceType: true,
+                  referenceId: true,
+                },
+              },
+            },
+          });
+          reservation = posted;
+          if (posted)
+            product = await tx.product.findFirst({
+              where: { id: posted.unit.productId, entityId: item.entityId },
+              select: { id: true, entityId: true, name: true, sku: true },
+            });
+        }
+        const physicalItem = dispatchedPhysicalItem(item, reservation, product);
+        const shipment: OutboundShipment = {
+          schema: 1,
+          status: 'HANDED_TO_CARRIER',
+          entityId: item.entityId,
+          itemId: item.id,
+          sourceCaseId: item.receipt.sourceCaseId!,
+          requestId: input.requestId,
+          fromVersion: item.version,
+          version: item.version + 1,
+          carrier: dispatchText(input.carrier, '寄回物流公司'),
+          trackingNumber: dispatchText(input.trackingNumber, '寄回物流單號'),
+          dispatchedAt: new Date().toISOString(),
+          dispatchedById: freshActor.id,
+          dispatchedByName: freshActor.name,
+          dispatchedByEmployeeId: dispatchEmployeeId!,
+          note: input.note?.trim() || null,
+          physicalItem,
+          sourceSync: {
+            status: 'PENDING_COMPATIBILITY',
+            reason: 'DISPATCH_CONSUMER_NOT_CONFIGURED',
+          },
+        };
+        changes.repairWorkflow = json({
+          ...workflow,
+          outboundShipment: shipment,
+        });
+      }
       if (input.action === 'await_customer') {
         changes.repairWorkflow = json(
           sentCustomerWorkflow(
@@ -1668,7 +1777,8 @@ export class MailroomService {
       );
       return { duplicate: false, notifications };
     });
-    this.publish(result.notifications);
+    // Dispatch is persisted locally while external consumers remain unsupported.
+    if (input.action !== 'dispatch') this.publish(result.notifications);
     return { id, duplicate: result.duplicate };
   }
   async caseProgress(entityId: string, sourceCaseId: string) {
@@ -1689,6 +1799,7 @@ export class MailroomService {
         statusLabel: repairStatusLabel(item),
         releasePurpose:
           repairWorkflow(item.repairWorkflow).release?.purpose || null,
+        outboundShipment: outboundShipment(item.repairWorkflow),
         physicalCustody: isRepairWorkbenchItem(item)
           ? physicalCustody(item)
           : undefined,
@@ -1696,6 +1807,7 @@ export class MailroomService {
         productName: item.productName,
         sku: item.sku,
         serialNumber: item.serialNumber,
+        location: dispatchedLocation(item),
         matchResult: item.matchResult,
         grade: item.grade,
         disposition: item.disposition,

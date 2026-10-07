@@ -78,6 +78,36 @@
 .mailroom-detail .ant-descriptions-item-content {
   overflow-wrap: anywhere;
 }
+.mailroom-queues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.mailroom-next-step {
+  margin: 16px 0;
+}
+.mailroom-next-step .ant-alert-action {
+  flex-shrink: 0;
+}
+.mailroom-recipient-controls {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(180px, 2fr);
+  gap: 12px;
+}
+.mailroom-recipient-controls .ant-select {
+  min-width: 0;
+  width: 100%;
+}
+.mailroom-recipient-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.mailroom-recipient-empty {
+  color: #925400;
+  margin-top: 8px;
+}
 @media (max-width: 760px) {
   .mailroom-heading {
     align-items: flex-start;
@@ -90,6 +120,15 @@
   .mailroom-process {
     gap: 12px;
     padding: 14px;
+  }
+  .mailroom-next-step .ant-alert-action {
+    margin: 12px 0 0;
+  }
+  .mailroom-next-step {
+    flex-wrap: wrap;
+  }
+  .mailroom-recipient-controls {
+    grid-template-columns: 1fr;
   }
 }
 

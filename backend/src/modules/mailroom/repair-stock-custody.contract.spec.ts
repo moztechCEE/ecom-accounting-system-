@@ -122,6 +122,33 @@ describe('consumed native RETURN current-custody projection', () => {
     });
     expect(donor).toEqual(original);
   });
+  it('follows a dispatched replacement to the customer carrier while preserving donor IN custody evidence', () => {
+    const { donor, unit, target } = fixture();
+    const original = structuredClone(donor);
+    Object.assign(target, {
+      status: 'DISPATCHED',
+      custodianId: 'clerk',
+      location: 'historical dispatch area',
+      version: 10,
+      repairWorkflow: {
+        schema: 1,
+        outboundShipment: {
+          carrier: 'customer carrier',
+          trackingNumber: 'OUT-001',
+        },
+      },
+    });
+    expect(consumedReturnCustody(donor, [unit])).toMatchObject({
+      physicalCustody: 'LINKED_CASE',
+      linkedReplacementCustody: {
+        itemId: 'repair',
+        physicalCustody: 'CUSTOMER_CARRIER',
+        targetVersion: 10,
+        location: 'customer carrier · OUT-001',
+      },
+    });
+    expect(donor).toEqual(original);
+  });
   it('tracks actual claim, signoff, completion and clerk return receipt rather than assuming technician custody from status', () => {
     const tech = {
       ...actor,
