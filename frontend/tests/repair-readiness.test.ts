@@ -24,6 +24,26 @@ const fixture = (): RepairItem => ({
 } as RepairItem);
 const gate = (item: RepairItem, key: string) => repairReadiness(item, context).startChecks.find(value => value.key === key)!;
 
+test('dispatched items retain actual records and show carrier handoff instead of earlier repair or refusal guidance', () => {
+  for (const plan of ['REPAIR', 'REPLACE', 'FACTORY', 'RETURN'] as const) {
+    const item = fixture(); item.status = 'DISPATCHED'; item.statusLabel = '已交物流寄回，待顧客收件';
+    item.repairInspection!.data.plan = plan; item.custodianId = 'fixture-clerk'; item.editable = false;
+    item.allowedWorkflowActions = [];
+    const before = structuredClone(item), result = repairReadiness(item, context);
+    assert.equal(result.title, '已交物流寄回，待顧客收件');
+    assert.match(result.nextStep, /已交運不代表顧客已收件或案件已結案/);
+    assert(!result.ownSigned && !result.startReady && !result.completionReady);
+    assert(!result.showStart && !result.showCompletion);
+    assert.match(result.actualOutcome, /原機實際維修/);
+    assert.deepEqual(item, before);
+    // A stale identity/editability flag or old refusal action cannot revive an earlier stage.
+    item.custodianId = context.viewerId; item.editable = true; item.allowedWorkflowActions = ['return_original'];
+    const stale = repairReadiness(item, context);
+    assert.equal(stale.title, result.title);
+    assert(!stale.ownSigned && !stale.startReady && !stale.completionReady && !stale.showStart && !stale.showCompletion);
+  }
+});
+
 test('a saved repair draft or submission during inspection preserves start guidance and actual records', () => {
   for (const plan of ['REPAIR', 'REPLACE'] as const) {
     for (const status of ['DRAFT', 'SUBMITTED'] as const) {
