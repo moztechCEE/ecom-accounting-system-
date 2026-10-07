@@ -595,14 +595,28 @@ function AwaitingCases({
   canCreate: boolean;
   onReceive: (source: Source) => void;
 }) {
-  const [cases, setCases] = useState<Source[]>([]),
-    [search, setSearch] = useState(""),
-    [cursor, setCursor] = useState<string | null>(null),
+  const [snapshot, setSnapshot] = useState<{
+    scope: string;
+    items: Source[];
+    cursor: string | null;
+  }>();
+  const [requestFailure, setRequestFailure] = useState<{
+    scope: string;
+    kind: "refresh" | "more";
+    message: string;
+  }>();
+  const [search, setSearch] = useState(""),
     [loading, setLoading] = useState(false),
-    [moreBusy, setMoreBusy] = useState(false),
-    [failure, setFailure] = useState("");
+    [moreBusy, setMoreBusy] = useState(false);
+  const scope = JSON.stringify([entityId, search]);
+  const currentSnapshot = snapshot?.scope === scope ? snapshot : undefined;
+  const hasLoaded = !!currentSnapshot;
+  const cases = currentSnapshot?.items || [];
+  const cursor = currentSnapshot?.cursor || null;
+  const failure = requestFailure?.scope === scope ? requestFailure.message : "";
   const pages = useRef(1),
-    generation = useRef(0);
+    generation = useRef(0),
+    requestedScope = useRef<string | undefined>(undefined);
   const refresh = useCallback(
     async (quiet = false) => {
       if (!entityId) return;
@@ -630,27 +644,33 @@ function AwaitingCases({
           if (!next) break;
         }
         if (generation.current === id) {
-          setCases([...new Map(items.map((item) => [item.id, item])).values()]);
-          setCursor(next);
-          setFailure("");
+          setSnapshot({
+            scope,
+            items: [...new Map(items.map((item) => [item.id, item])).values()],
+            cursor: next,
+          });
+          setRequestFailure(undefined);
         }
       } catch (error) {
-        if (generation.current === id) setFailure(errorText(error));
+        if (generation.current === id)
+          setRequestFailure({ scope, kind: "refresh", message: errorText(error) });
       } finally {
         if (generation.current === id) setLoading(false);
       }
     },
-    [entityId, search],
+    [entityId, search, scope],
   );
   useEffect(() => {
-    pages.current = 1;
-    setCases([]);
-    setCursor(null);
+    if (requestedScope.current !== scope) {
+      requestedScope.current = scope;
+      pages.current = 1;
+    }
+    setMoreBusy(false);
     void refresh();
     return () => {
       generation.current++;
     };
-  }, [refresh, revision]);
+  }, [refresh, revision, scope]);
   useEffect(() => {
     const poll = () => {
       if (!paused && document.visibilityState === "visible" && !moreBusy)
@@ -676,18 +696,24 @@ function AwaitingCases({
       });
       if (generation.current === id) {
         pages.current++;
-        setCases((old) => [
-          ...new Map(
-            [...old, ...result.data.items].map((item) => [item.id, item]),
-          ).values(),
-        ]);
-        setCursor(result.data.nextCursor || null);
-        setFailure("");
+        setSnapshot((old) => old?.scope === scope ? {
+          scope,
+          items: [...new Map(
+            [...old.items, ...result.data.items].map((item) => [item.id, item]),
+          ).values()],
+          cursor: result.data.nextCursor || null,
+        } : old);
+        setRequestFailure((old) => old?.scope === scope && old.kind === "more" ? undefined : old);
       }
     } catch (error) {
-      if (generation.current === id) setFailure(errorText(error));
+      if (generation.current === id)
+        setRequestFailure((old) => ({
+          scope,
+          kind: old?.scope === scope && old.kind === "refresh" ? "refresh" : "more",
+          message: errorText(error),
+        }));
     } finally {
-      setMoreBusy(false);
+      if (generation.current === id) setMoreBusy(false);
     }
   }
   return (
@@ -697,7 +723,8 @@ function AwaitingCases({
         <Space>
           <InboxOutlined />
           <span>售後待到貨</span>
-          <Tag>{cases.length} 筆已載入</Tag>
+          <Tag>{hasLoaded ? `${cases.length} 筆已載入` : "清單未載入"}</Tag>
+          {hasLoaded && failure ? <Tag color="warning">未更新</Tag> : null}
         </Space>
       }
     >
@@ -712,7 +739,7 @@ function AwaitingCases({
         <Alert
           type="warning"
           showIcon
-          message="待到貨清單暫時無法更新"
+          message={hasLoaded ? "待到貨清單暫時無法更新" : "待到貨清單未能載入"}
           description={failure}
           action={<Button onClick={() => void refresh()}>重試</Button>}
           style={{ marginBottom: 16 }}
@@ -728,9 +755,13 @@ function AwaitingCases({
           emptyText: (
             <Empty
               description={
-                cursor
-                  ? "這批案件均已收齊，可繼續載入較早案件"
-                  : "目前沒有待到貨案件"
+                !hasLoaded
+                  ? "待到貨清單尚未載入"
+                  : failure
+                    ? "上次查詢沒有待到貨案件"
+                    : cursor
+                      ? "這批案件均已收齊，可繼續載入較早案件"
+                      : "目前沒有待到貨案件"
               }
             />
           ),

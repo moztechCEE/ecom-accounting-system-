@@ -289,12 +289,26 @@ export class MailroomService {
     requireEntity(actor, entityId);
     let intakeCsr = false;
     if (
+      !can(actor, 'mailroom:read') &&
       can(actor, 'mailroom:review') &&
       can(actor, 'after_sales_cases:read') &&
       can(actor, 'after_sales_cases:update')
     ) {
-      await this.intakeCustomerService(userId, entityId);
-      intakeCsr = true;
+      try {
+        await this.intakeCustomerService(userId, entityId);
+        intakeCsr = true;
+      } catch (error) {
+        if (
+          !(error instanceof ForbiddenException) ||
+          !can(actor, 'repair_workbench:read')
+        )
+          throw error;
+        // CSR qualification cannot cancel an independent repair read. Recheck
+        // current account, company and read grants after the asynchronous gate.
+        const repairActor = await this.actor(userId);
+        requireEntity(repairActor, entityId);
+        requirePermission(repairActor, 'repair_workbench:read');
+      }
     }
     if (
       !can(actor, 'mailroom:read') &&
