@@ -81,9 +81,10 @@ Guide ID：`repair-workbench`；建議中文 title 同步頁內標題改為「�
 
 | sourcePath | SHA256 |
 | --- | --- |
-| `frontend/src/pages/repair/RepairWorkbenchPage.tsx` | `f01537d363d57a5663e61e8825383df6b31fa1acbe32bb88ccd99d11573f1dab` |
+| `frontend/src/pages/repair/RepairWorkbenchPage.tsx` | `d8334e974e1339ab90c063408aaa9c8ab6885fb2010dcbd2b3d8b2286aa2cf59` |
 | `frontend/src/pages/repair/repair-readiness.ts` | `4108c5bfe4615dd1b335ac5a3ac8cf88af1d469d4d340d85747df4b71d586968` |
 | `frontend/src/pages/repair/RepairReadinessPanel.tsx` | `3c93901a5b3078b1024313f5825960bc7428248c8c2305d1e79c7868c45731f5` |
+| `frontend/src/pages/repair/RepairWorkflowPanel.tsx` | `6f6e5299a84edeefcb1d5ba5a322db7c6706ab58e2b823c7c1f5836d756b9b66` |
 
 
 ## 收發端 587 審查修正回執
@@ -111,3 +112,18 @@ Claw repair-workbench steps增補（整合收發dispatch後採用）：
 - EN: Dispatched items retain inspection, repair and outbound records for review. Verify the carrier, tracking number and actual original or replacement item. Carrier handover does not prove customer receipt or case closure; mailroom and customer service follow the actual outcome.
 
 邊界：本修訂不新增dispatch能力或 Source／AI消費端，不把 PENDING_COMPATIBILITY 轉成功。DISPATCHED目前仍不在repair records隊列、all可查；若要擴充records須由DOA協調共同查詢契約。兩批獨立審查回執保存於本產品docs/dev/reviews；最終共同整合SHA與DEV仍需重驗。
+
+## 完整案件頁的寄出提示修訂
+
+收發端另以實際完整 RepairWorkbenchPage 審查 a787，指出 readiness 面板修正後，原 RepairWorkflowPanel 的拒修說明仍無條件顯示「後續由收發室本人簽收並安排原件寄回」。此 P2 保留為 a787 完整頁面 FAIL；先前 helper/panel 的局部 PASS 不涵蓋此舊區塊。
+
+- RETURN_UNREPAIRED 說明按 DISPATCHED／READY_FOR_DISPATCH／WAITING_RETURN_ACCEPTANCE 分別呈現已交運、收發已簽收待寄及待本人簽收。其他階段僅提示核對保存的實物／物流紀錄，不臆測完成。
+- DISPATCHED 的同步區塊明示既有 DELIVERED 回執不證明本次寄出已同步或通知顧客；原 tags、timeline、已保存檢修／維修／實際處置、列印與所有 command/permission/payload 均保留。
+- 新 `repair-dispatched-page-dom.test.mjs` 載入實際 Page、WorkflowPanel、Documents、ReadinessPanel、React/Router/Ant Design，只替換 auth/API/websocket。涵蓋 4 個保存方案 × 拒修／有實際維修紀錄共 8 個 DISPATCHED，以及待收發簽收／已簽收待寄 2 個情境；檢查整頁沒有矛盾提示、沒有可施工／保存動作、拒修不造 report、有 report 時切開維修單可查看實際工作、舊 DELIVERED tags 仍保存、POST 和外網請求皆 0、無 pageerror。
+- 本批實跑上述完整頁面測試 1/1（10情境）及既有真 React readiness DOM 1/1；首次新測試因未切開維修單 tab 就讀文字而失敗，修正測試的可見性假設後重跑通過，未以刪除實際處置驗證掩蓋問題。完整 frontend build、2個改動 source + 新 test 的 lint、diff check 通過。helper 未變更，不把舊 20 單元或 59 項寫成本批重新執行。
+- 修訂完整 SHA 隨交付訊息與 repair-status 記錄；本文件上表為新的 Page／WorkflowPanel hash。共享 knowledge 仍由 DOA 依下列雙語語意審查後集中生成，本視窗不直接寫 catalog/hash。
+
+Claw repair-workbench boundaries 另增（不能只更新來源 hash）：
+
+- ZH：已交運的維修頁提供既有紀錄查閱，不新增來源或 AI 客服的寄出消費端。收發寄出契約目前的 PENDING_COMPATIBILITY／DISPATCH_CONSUMER_NOT_CONFIGURED 仍是待相容，不是成功同步；既有「系統已接收」回執不證明本次寄出已同步或已通知顧客。DISPATCHED 目前不在「紀錄」隊列，可從「全部」查閱；擴充隊列須先協調共同查詢契約。
+- EN: The dispatched repair page provides existing records for review and adds no dispatch consumer in the source or AI customer service. PENDING_COMPATIBILITY / DISPATCH_CONSUMER_NOT_CONFIGURED in the current outbound contract remains pending compatibility, not successful synchronization. Existing delivery acknowledgements do not prove that this dispatch was synchronized or the customer notified. DISPATCHED is currently excluded from the Records queue and can be found in All; extending that queue requires coordination of the shared query contract.
