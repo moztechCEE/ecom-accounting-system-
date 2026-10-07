@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsIn,
@@ -24,7 +24,13 @@ export class RepairWorkflowDto {
   @IsOptional() @IsString() @MaxLength(2000) note?: string;
   @IsOptional() @IsInt() @Min(1) @Max(2147483646) inspectionRevision?: number;
   @IsOptional() @IsIn(['APPROVE', 'DECLINE']) decision?: 'APPROVE' | 'DECLINE';
-  @IsOptional() @IsBoolean() confirmedItems?: boolean;
+  // Validate the original JSON value despite global implicit Boolean conversion.
+  @IsOptional()
+  @Transform(({ obj, key }) => (obj as Record<string, unknown>)[key], {
+    toClassOnly: true,
+  })
+  @IsBoolean()
+  confirmedItems?: boolean;
   @IsOptional() @IsString() @MaxLength(200) location?: string;
   @IsOptional() @IsString() @MaxLength(160) factoryName?: string;
   @IsOptional() @IsString() @MaxLength(200) reference?: string;

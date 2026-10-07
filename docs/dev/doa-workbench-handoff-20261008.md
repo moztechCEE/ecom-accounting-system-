@@ -2,7 +2,7 @@
 
 ## 版本與範圍
 
-ERP 基底 `f3f14c4104906cc6ca23bd1d38ba4589563b6801`，分支 `codex/aftersales-workflow-20261005`。Source 固定 `20f583b6284e93e5516a533733b3833120aaae0d`，本批不修改 Source、schema、migration、金融、物流或庫存的 command。交付固定 SHA 以本文件所在提交及協作回執核對，不用動態分支名當版本證據。
+ERP 基底 `f3f14c4104906cc6ca23bd1d38ba4589563b6801`，分支 `codex/aftersales-workflow-20261005`。Source 固定 `20f583b6284e93e5516a533733b3833120aaae0d`。本批整合收發室既有 action API 的實際寄出與三個實物確認 DTO 的原始型別守門，不修改 Source、schema、migration 或金融 command，不新增庫存過帳。交付固定 SHA 以本文件所在提交及協作回執核對，不用動態分支名當版本證據。
 
 本批為入口及佈局整理。六類服務回到原頁面、表單與按鈕，沿用所有案件子流程、附件、顧客確認、收款退款、發票、物流及操作紀錄。Source 不變可證原碼仍保留，不能因此宣稱所有原按鈕與外部副作用都已實際驗收。原 FAQ／知識庫依使用者要求排除；Claw 操作說明保留。
 
@@ -45,7 +45,7 @@ Source 仍要求公司範圍與來源有效帳號、來源角色和委派讀寫�
 - LINE／AI：驗證品牌身份與官方帳號，禁止預設品牌／未驗證舊ID回退。AI已有品牌 conversation／人員指派，尚缺 ERP case binding、領域receiver及持久ACK，不能用既有outbox推定已串通。
 - 發票：Source目前單一商戶環境配置；需按品牌選正確商戶，ISSUED不能直接推定是當版真正provider開票成功。款項成功、發票成功、通知成功各自保存、各自重試。
 - 維修影片及顧客報告：問題登記的圖／影片保留，不等於ERP檢測項目的影片與顧客摘要已串好。封存不等於刪除財務／追溯；媒體宜外部物件儲存，保留策略另定。
-- 出件：收發視窗正在實作獨立outboundShipment及carrier custody，未列入本批接口。Source舊contract未支援時需持久PENDING_COMPATIBILITY，不能標成已通知或顧客已收到。
+- 出件：本批已整合獨立 outboundShipment 及 carrier custody；Source 舊 contract 尚未支援，持久 PENDING_COMPATIBILITY 保留，不能標成已通知、顧客已收到或已結案。
 
 ## 測試、審查與發布
 
@@ -69,4 +69,16 @@ DOA UI提交57841c20之後納入維修原587及修訂3e298741（整合cherry-pic
 
 修訂獨立26項純測試、TypeScript與靜態scopePASS；新增實際React公司情境6/6（受控API13GET及9+2+1sync、partial/coreerror/late回應隔離、Warehouse hook、Layout/sidebar/搜尋），root再次執行。employee7/7與frontbuild/scopedlintPASS，雙語200來源hash check、20knowledge測試PASS。最終整合SHA與真DEV另核，不能用這些替代通知/金流/物流驗收。
 
-維修新版 a78741cf delta 已獨立20unit＋1DOM＋型別/build/lint複核，cherry-pick為2136a673；DISPATCHED只查看紀錄，四方案不再顯示退回舊指引，已交運不等於顧客收件／結案。Source/AI待相容與records隊列缺口仍保留，不改成成功。
+維修新版 a78741cf delta 已獨立20unit＋1DOM＋型別/build/lint複核，cherry-pick為2136a673；DISPATCHED只查看紀錄，四方案不再顯示退回舊指引，已交運不等於顧客收件／結案。此為階段結果；其後全頁舊提示另由53ec修正，收發dd／d75整合後records及all皆含DISPATCHED，先前隊列缺口不適用於整合批。
+
+## 收發與維修最終整合
+
+本次納入固定收發 `d75ce4359df2f2170b65b1acf984aa9f8439cd34`（包含dd），維修 `53ec928fa4306d64c320d9ad86de77d474c2ff98` 及其 `2ade393a69eefca13899085a9874e489ba9c21aa` 文件／測試更正。收發取消離開保留草稿，保存中鎖定接收人；未知寄出在目前tab以公司／本人／物件保留原body與requestId，reload不自動送出，版本不符需人工核對。一般草稿及照片不保證跨reload保存。
+
+寄出僅處理本人保管、已完成收發點收的REPAIR／READY_FOR_DISPATCH，保存獨立不可變回執並核對換機正式OUT，不再次扣庫存；原IN與入件物流保留。Source／AI尚無dispatch consumer，待相容明示，舊DELIVERED不是本次寄出ACK。維修整頁依當前stage呈現下一步，已交物流保留實際處置、檢修／維修單與物流紀錄，不再提示待收發本人點收。
+
+獨立實際main ValidationPipe核對另發現三個既存DTO會將字串false轉true：平板簽收、原件交回、退貨正式入庫。本整合補原始JSON型別守門，只有boolean true可執行必須實物確認的動作；非確認動作與合法數字版次轉換保持原契約。修正測試與固定版本回執另保存，不把d75限定dispatch PASS當全部入口已通過。
+
+三台固定版本正式收件審查與舊FAIL均在 `docs/dev/reviews` 保存；最後整合的知識、共同DOM、實際pipe及DEV候選驗收為獨立結果。原Source六類新建表單仍為原頁面；其New case連結未必帶入目前列表類型，原預設類型保留，需人工核對，未宣稱六個捷徑皆自動填對案件類型。
+
+本整合重新執行16組前端pure共117/117；7組實際React DOM fixtures共17葉測例，TAP含父測例為19/19。三DTO新增實際main pipe／既有service測試89/89，四個受影響service suites84/84；build型別與4檔lint通過。雙語79指南／103routes／209已審來源，sourceVersion `sha256:85ac4ab78de250e3c3309929ddab67ec2d57ee86e256a4e37f8c565fff29a759`，20個generator/intake規格及51個knowledge ACL tests通過。都是本機合成測試，不能代替正常帳戶DEV、真外部通知或實物驗收。

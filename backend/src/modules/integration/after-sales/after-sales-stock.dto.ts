@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   Equals,
   IsBoolean,
@@ -18,7 +19,13 @@ export class ReceiveReturnStockDto {
   @IsUUID() requestId!: string;
   @IsInt() @Min(1) expectedVersion!: number;
   @IsInt() @Equals(1) quantity!: number;
-  @IsBoolean() @Equals(true) confirmedItems!: boolean;
+  // Validate the original JSON value despite global implicit Boolean conversion.
+  @Transform(({ obj, key }) => (obj as Record<string, unknown>)[key], {
+    toClassOnly: true,
+  })
+  @IsBoolean()
+  @Equals(true)
+  confirmedItems!: boolean;
   @IsString() @IsNotEmpty() @MaxLength(160) sourceLocation!: string;
   @IsString() @IsNotEmpty() @MaxLength(160) location!: string;
   @IsString() @IsNotEmpty() @MaxLength(100) unitLabel!: string;

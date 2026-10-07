@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   Equals,
   IsBoolean,
@@ -20,6 +21,12 @@ export class MailroomTabletAcceptDto {
   @IsString() @IsNotEmpty() @MaxLength(128) employeeNo!: string;
   @IsString() @MinLength(8) @MaxLength(256) password!: string;
   @IsOptional() @IsString() @Matches(/^\d{6}$/) twoFactorToken?: string;
-  @IsBoolean() @Equals(true) confirmedItems!: true;
+  // Validate the original JSON value despite global implicit Boolean conversion.
+  @Transform(({ obj, key }) => (obj as Record<string, unknown>)[key], {
+    toClassOnly: true,
+  })
+  @IsBoolean()
+  @Equals(true)
+  confirmedItems!: true;
   @IsString() @IsNotEmpty() @MaxLength(160) location!: string;
 }
