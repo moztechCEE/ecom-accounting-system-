@@ -281,7 +281,7 @@ test('actual DOA hub and module preserve routing, least privilege and native dra
   await t.test('ungranted, SELF, DEPARTMENT and ADMIN SELF direct links never call module launch', async () => {
     for (const profile of ['no-grants', 'self', 'department', 'admin-self', 'anonymous']) {
       const result = await open('?section=cases&profile=' + profile), { page } = result
-      await page.getByText('此帳號沒有目前售後功能或公司範圍的權限', { exact: true }).waitFor()
+      await page.getByText('目前帳號無此售後功能權限', { exact: true }).waitFor()
       assert.deepEqual((await globals(page)).calls, [])
       assert.equal(await page.locator('iframe').count(), 0)
       assert.equal(await page.getByRole('button', { name: '案件總覽', exact: true }).count(), 0)
@@ -292,7 +292,7 @@ test('actual DOA hub and module preserve routing, least privilege and native dra
     }
     for (const [profile, section] of [['csr', 'invoices'], ['invoices', 'accounting'], ['accounting', 'invoices']]) {
       const result = await open('?section=' + section + '&profile=' + profile)
-      await result.page.getByText('此帳號沒有目前售後功能或公司範圍的權限', { exact: true }).waitFor()
+      await result.page.getByText('目前帳號無此售後功能權限', { exact: true }).waitFor()
       assert.deepEqual((await globals(result.page)).calls, [])
       await healthy(result)
     }
