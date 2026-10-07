@@ -1,4 +1,5 @@
 import { type CaseIntakeState } from './mailroom-intake.contract';
+import { type OutboundShipment } from './mailroom-dispatch.contract';
 import {
   BadRequestException,
   ConflictException,
@@ -32,6 +33,7 @@ export type PhysicalCustody =
   | 'TECHNICIAN'
   | 'MAILROOM'
   | 'FACTORY_CARRIER'
+  | 'CUSTOMER_CARRIER'
   | 'FACTORY'
   | 'INVENTORY'
   | 'LINKED_CASE'
@@ -40,6 +42,7 @@ export type RepairWorkflow = {
   schema: 1;
   intake?: CaseIntakeState;
   inventoryReceipt?: Record<string, unknown>;
+  outboundShipment?: OutboundShipment;
   csr?: {
     status: 'SENT' | 'ACCEPTED' | 'RESOLVED';
     inspectionRevision: number;
@@ -130,6 +133,8 @@ export function physicalCustody(item: WorkflowItem): PhysicalCustody {
     return 'FACTORY_CARRIER';
   const external = repairWorkflow(item.repairWorkflow).factory?.physicalCustody;
   if (external === 'FACTORY' || external === 'FACTORY_CARRIER') return external;
+  if (item.status === 'DISPATCHED') return 'CUSTOMER_CARRIER';
+  if (item.status === 'READY_FOR_DISPATCH') return 'MAILROOM';
   if (!item.custodianId) return 'UNKNOWN';
   return item.repairOwnerId && item.custodianId === item.repairOwnerId
     ? 'TECHNICIAN'

@@ -5,6 +5,7 @@ export const CUSTODY: Record<PhysicalCustody, string> = {
   MAILROOM: '收發人員本人持有',
   FACTORY_CARRIER: '承運商持有（原廠交運）',
   FACTORY: '原廠持有',
+  CUSTOMER_CARRIER: '承運商持有（寄回顧客途中）',
   INVENTORY: '庫存負責人本人持有',
   LINKED_CASE: '實物已轉入換機案件',
   UNKNOWN: '出庫關聯待核對',
@@ -12,6 +13,7 @@ export const CUSTODY: Record<PhysicalCustody, string> = {
 
 type CustodyItem = Pick<Item, 'custodianName' | 'location' | 'physicalCustody' | 'linkedReplacementCustody'> & {
   status?: string;
+  outboundShipment?: Item['outboundShipment'];
   repairWorkflow?: { factory?: { physicalCustody: PhysicalCustody } } | null;
 };
 export type CurrentItemCustody = {
@@ -32,7 +34,7 @@ export function currentItemCustody(item: CustodyItem): CurrentItemCustody {
     const linked = item.linkedReplacementCustody;
     if (linked) return {
       transferred: true,
-      holder: ['FACTORY', 'FACTORY_CARRIER'].includes(linked.physicalCustody)
+      holder: ['FACTORY', 'FACTORY_CARRIER', 'CUSTOMER_CARRIER'].includes(linked.physicalCustody)
         ? CUSTODY[linked.physicalCustody]
         : linked.custodianName || '換機案件目前保管待核對',
       location: linked.location || '換機案件目前位置待核對',
@@ -53,7 +55,9 @@ export function currentItemCustody(item: CustodyItem): CurrentItemCustody {
   const physical = currentPhysicalCustody(item);
   return {
     transferred: false,
-    holder: physical === 'FACTORY' || physical === 'FACTORY_CARRIER' ? CUSTODY[physical] : item.custodianName,
-    location: item.location,
+    holder: physical === 'FACTORY' || physical === 'FACTORY_CARRIER' || physical === 'CUSTOMER_CARRIER' ? CUSTODY[physical] : item.custodianName,
+    location: physical === 'CUSTOMER_CARRIER'
+      ? item.outboundShipment ? `${item.outboundShipment.carrier} · ${item.outboundShipment.trackingNumber}` : '寄回顧客途中；物流紀錄待核對'
+      : item.location,
   };
 }
