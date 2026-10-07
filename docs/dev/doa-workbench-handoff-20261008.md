@@ -82,3 +82,5 @@ DOA UI提交57841c20之後納入維修原587及修訂3e298741（整合cherry-pic
 三台固定版本正式收件審查與舊FAIL均在 `docs/dev/reviews` 保存；最後整合的知識、共同DOM、實際pipe及DEV候選驗收為獨立結果。原Source六類新建表單仍為原頁面；其New case連結未必帶入目前列表類型，原預設類型保留，需人工核對，未宣稱六個捷徑皆自動填對案件類型。
 
 本整合重新執行16組前端pure共117/117；7組實際React DOM fixtures共17葉測例，TAP含父測例為19/19。三DTO新增實際main pipe／既有service測試89/89，四個受影響service suites84/84；build型別與4檔lint通過。雙語79指南／103routes／209已審來源，sourceVersion `sha256:85ac4ab78de250e3c3309929ddab67ec2d57ee86e256a4e37f8c565fff29a759`，20個generator/intake規格及51個knowledge ACL tests通過。都是本機合成測試，不能代替正常帳戶DEV、真外部通知或實物驗收。
+
+最後實物確認獨立回執固定37b069888999d87de14c0b4f04374ea55c81d80b：112個HTTP矩陣（unique96、原件重複16）、4 targeted suites163及tsc PASS。中央雙語独立覆核209來源hash一致、52前端受測來源不變；兩收據隨產品保存。此後收據整合與三份文件文末空行規整僅文件變更，產品／測試／guide版本不變。最後DEV發布與三台共同版本複核仍為後續獨立證據。

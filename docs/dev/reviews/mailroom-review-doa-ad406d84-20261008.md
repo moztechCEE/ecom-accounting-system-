@@ -161,4 +161,3 @@ Root 的新 dispatch／outboundShipment／CUSTOMER_CARRIER batch **不包含在 
 - 真 DEV 的登录／SSO ticket、员工公司／部门范围、真实 Source 新案后绑定同一收件、本人签收与通知、源端 dirty form 事件、实物交接／技术人员／库存／支付／退款／客户物流端到端验收均未进行。
 - Native intake/repair 完整业务 form 的实际保存不在 mock queue DOM 范围内；本轮仅对应 helpers 单元、真正 Module/Hub/router/tabs/modal 的 DOM。
 - 未部署、未改迁移、未操作真数据；没有以本地 PASS 代替 DEV/production/physical acceptance。
-

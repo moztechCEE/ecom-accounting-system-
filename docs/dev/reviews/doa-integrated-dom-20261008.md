@@ -114,4 +114,3 @@
 | `frontend/tests/repair-feedback-dom.test.mjs` | `e3623f8d108f84876c98765ce0551abf05e9752e3f0e519252642d0accddf53a` |
 | `frontend/tests/mailroom-workbench-dom.test.mjs` | `912e500ad000eb7790818a931cfe86f343b8b7250d89574dad80ef808fbe0605` |
 | `frontend/tests/mailroom-recipient-dom.test.mjs` | `90e45f9de475fa39e3c5bd314b814dbea041dfda173b38747b334996479ca822` |
-
