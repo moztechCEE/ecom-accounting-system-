@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Card, Checkbox, Collapse, Descriptions, Drawer, Empty, Input, Pagination, Space, Spin, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
+import { Alert, Badge, Button, Card, Checkbox, Collapse, Descriptions, Drawer, Empty, Input, Pagination, Space, Spin, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
 import { ReloadOutlined, ToolOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -11,6 +11,8 @@ import { webSocketService } from '../../services/websocket.service';
 import { ACTIONS, STATUS, errorText, mailroomEnabled, type Source } from '../mailroom/model';
 import { QUEUES, PLANS, REPAIR_STATUS, WORKFLOW_ACTIONS, sourceQuoteConsentCurrent, inspectionReviewCurrent, repairStartReady, repairReportReady, type RepairQueue, type RepairItem } from './repair-model';
 import RepairDocuments from './RepairDocuments';
+import RepairCaseList from './RepairCaseList';
+import { repairQueueCount, type RepairListResponse, type RepairQueueCounts } from './repair-list-model';
 import RepairWorkflowPanel from './RepairWorkflowPanel';
 import RepairReadinessPanel from './RepairReadinessPanel';
 import { useRepairNavigationGuard } from './repair-navigation';
@@ -22,21 +24,6 @@ import { currentItemCustody } from '../mailroom/item-custody';
 const { Title, Text, Paragraph } = Typography;
 const time = (value: string) => dayjs(value).format('MM/DD HH:mm');
 const documentReady = (item: RepairItem) => item.repairInspection?.status === 'SUBMITTED';
-function waitingFor(item: RepairItem): string {
-  const csr=item.repairWorkflow?.csr;
-  const info=item.release?.releaseInfo;
-  const quoteRevision=info?.quoteRevision;
-  if(!csr || csr.status==='SENT')return '待客服接手';
-  if(csr.status==='ACCEPTED')return '待方案回覆';
-  if(!inspectionReviewCurrent(item.repairInspection) || csr.status!=='RESOLVED' || csr.inspectionRevision!==item.repairInspection?.revision || csr.estimateRevision!==item.repairInspection?.revision || csr.quoteRevision!==item.repairInspection.review?.quoteRevision || csr.planHash!==item.repairInspection.review?.planHash || csr.decision!==item.repairInspection.review?.decision)return '待客服重新確認';
-  if(csr.decision==='DECLINE')return item.allowedWorkflowActions?.includes('return_original')?'待原件退回':'客服已拒修';
-  if(csr.decision!=='APPROVE' || !Number.isInteger(csr.quoteRevision) || Number(csr.quoteRevision)<=0)return '待客服重新確認';
-  if(info?.quoteRevision!==item.repairInspection.review?.quoteRevision)return '待客服重新確認';
-  if(!sourceQuoteConsentCurrent(info))return `待顧客確認${quoteRevision ? `報價 v${quoteRevision}` : '報價'}`;
-  if(!info || !Number.isFinite(info.amount) || Number(info.amount)<0)return '待確認報價金額';
-  if(Number(info.amount)>0 && info.confirmedPaymentQuoteRevision!==info.quoteRevision)return `待報價 v${info.quoteRevision} 款項確認`;
-  return item.release?.available===true && item.release.repairAllowed===true ? item.repairInspection.data.plan==='RETURN'?'待原件退回':['REPAIR','REPLACE'].includes(item.repairInspection.data.plan)?'待維修接手':'待維修處理' : '待維修放行';
-}
 function historyNote(action: string, note: string): string {
   if (!['save_repair_inspection','submit_repair_inspection','save_repair_repair','submit_repair_repair'].includes(action)) return note;
   try {
@@ -62,13 +49,13 @@ export default function RepairWorkbenchPage() {
   const entityId = params.get('entityId') || localStorage.getItem('entityId') || '';
   const selectedId = params.get('itemId');
   const enabled = mailroomEnabled();
-  const [rows, setRows] = useState<RepairItem[]>([]);
-  const [total, setTotal] = useState(0);
+  const [list, setList] = useState<{scope: string; data: RepairListResponse}>();
+  const [counts, setCounts] = useState<{entityId: string; data: RepairQueueCounts}>();
   const [pagination, setPagination] = useState({queue, page: 1});
   const page = pagination.queue === queue ? pagination.page : 1;
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
-  const [failure, setFailure] = useState('');
+  const [listFailure, setListFailure] = useState<{scope: string; text: string}>();
   const [detail, setDetail] = useState<RepairItem>();
   const [detailBusy, setDetailBusy] = useState(false);
   const [changed, setChanged] = useState(false);
@@ -76,18 +63,32 @@ export default function RepairWorkbenchPage() {
   const detailGeneration = useRef(0);
   const detailDirty = useRef(false);
   useRepairNavigationGuard(detailDirty, confirmDiscard);
-  const listEntity = useRef(entityId);
+  const listScope = JSON.stringify([entityId, queue, page, search]);
+  const currentList = list?.scope === listScope ? list.data : undefined;
+  const rows = currentList?.items || [];
+  const total = currentList?.total || 0;
+  const failure = listFailure?.scope === listScope ? listFailure.text : '';
+  const queueCounts = counts?.entityId === entityId ? counts.data : undefined;
   const refresh = useCallback(async (quiet = false) => {
     if (!enabled || !entityId || !canRead) return;
-    if (listEntity.current !== entityId) {listEntity.current = entityId;setRows([]);setTotal(0);}
     const request = ++generation.current;
     if (!quiet) setLoading(true);
     try {
-      const result = await api.get<{items: RepairItem[]; total: number}>('/mailroom/items', {params: {entityId, view: 'repair', repairScope: queue, page, search}});
-      if (request === generation.current) {setRows(result.data.items);setTotal(result.data.total);setFailure('');}
-    } catch (error) {if (request === generation.current) setFailure(errorText(error));}
+      const result = await api.get<RepairListResponse>('/mailroom/items', {params: {entityId, view: 'repair', repairScope: queue, page, search}});
+      if (request === generation.current) {
+        setList({scope: listScope, data: result.data});
+        setCounts(result.data.queueCounts ? {entityId, data: result.data.queueCounts} : undefined);
+        setListFailure(undefined);
+      }
+    } catch (error) {
+      if (request === generation.current) {
+        setListFailure({scope: listScope, text: errorText(error)});setCounts(undefined);
+        const status = (error as {response?: {status?: number}} | null)?.response?.status;
+        if (status === 401 || status === 403) setList(undefined);
+      }
+    }
     finally {if (request === generation.current) setLoading(false);}
-  }, [enabled, entityId, canRead, queue, page, search]);
+  }, [enabled, entityId, canRead, queue, page, search, listScope]);
   const loadDetail = useCallback(async (checkDraft = false) => {
     if (checkDraft && detailDirty.current && !await confirmDiscard()) return;
     const request = ++detailGeneration.current;
@@ -124,31 +125,13 @@ export default function RepairWorkbenchPage() {
   return <div className="mailroom-page repair-workbench-page">
     {contextHolder}
     <div className="mailroom-heading"><div><Title level={2}><ToolOutlined /> 維修工作台</Title></div><Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading}>重新整理</Button></div>
-    <Tabs activeKey={queue} onChange={key => {void (async()=>{if (detailDirty.current) {if (!await confirmDiscard()) return;detailDirty.current=false;}const next = new URLSearchParams(params);if (key==='all') next.delete('queue');else next.set('queue', key);next.delete('itemId');setPagination({queue:key as RepairQueue,page:1});setParams(next);})();}} items={Object.entries(QUEUES).map(([key,label])=>({key,label}))} />
+    <Tabs activeKey={queue} onChange={key => {void (async()=>{if (detailDirty.current) {if (!await confirmDiscard()) return;detailDirty.current=false;}const next = new URLSearchParams(params);if (key==='all') next.delete('queue');else next.set('queue', key);next.delete('itemId');setPagination({queue:key as RepairQueue,page:1});setParams(next);})();}} items={Object.entries(QUEUES).map(([key,label])=>{const count=repairQueueCount(queueCounts,key as RepairQueue);return {key,label:<span className="repair-tab-label"><span>{label}</span>{count !== undefined && count > 0 && <Badge count={count} overflowCount={Infinity} title={`${count} 件`} aria-label={`${count} 件`} />}</span>};})} />
     {(queue === 'all' || queue === 'acceptance') && <Collapse className="repair-arrival-preview" items={[{key:'arrival',label:'待到貨／在途案件',forceRender:true,children:<ArrivalPreview entityId={entityId} />}]} />}
     {failure && <Alert type="error" showIcon message={failure} style={{marginBottom:16}} />}
-    <Card className="repair-workbench-list" title={QUEUES[queue]} extra={<Input.Search className="repair-workbench-search" placeholder="案件號／品名／SKU／SN" allowClear onSearch={value=>{setPagination({queue,page:1});setSearch(value);}} />}>
+    <Card className="repair-workbench-list" title={QUEUES[queue]} extra={<Input.Search className="repair-workbench-search" placeholder="搜尋案件" allowClear onSearch={value=>{setPagination({queue,page:1});setSearch(value);}} />}>
       <Spin spinning={loading}>
-        {rows.length ? <ul className="repair-case-list">{rows.map(item => {
-          const custody=currentItemCustody(item);
-          return <li key={item.id} className="repair-case-row">
-            <div className="repair-case-product">
-              <Button type="link" className="repair-product-title" onClick={()=>void open(item.id)}>{item.productName}</Button>
-              <Text className="repair-case-number">{item.receipt.sourceNumber || item.label}</Text>
-              <Text type="secondary" className="repair-case-serial">SN：{item.serialNumber || '未提供'} · SKU：{item.sku || '未提供'}</Text>
-              <Text type="secondary" className="repair-case-custody">{custody.holder} · {custody.location}{custody.notice ? ` · ${custody.notice}` : ''}</Text>
-            </div>
-            <div className="repair-case-progress">
-              <Tag color={item.status==='WAITING_CUSTOMER'?'orange':'blue'}>{item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag>
-              <Text type="secondary">{item.status==='WAITING_CUSTOMER'?waitingFor(item):item.nextUserName || (['WAITING_REPAIR_ACCEPTANCE','PENDING_REFURBISH'].includes(item.status)?'待維修師認領':'')}</Text>
-              <div className="repair-case-documents">
-                <span>{item.repairInspection ? `檢修單 v${item.repairInspection.revision} · ${item.repairInspection.status==='SUBMITTED'?'已提交':'草稿'}` : '尚無檢修單'}</span>
-                <span>{item.repairReport ? `維修單 v${item.repairReport.revision} · ${item.repairReport.status==='SUBMITTED'?'已提交':'草稿'}` : '尚無維修單'}</span>
-              </div>
-            </div>
-            <Button className="repair-case-open" onClick={()=>void open(item.id)} aria-label={`開啟案件：${item.productName} · ${item.receipt.sourceNumber || item.label}`}>開啟案件</Button>
-          </li>;
-        })}</ul> : <Empty description="此分類目前沒有案件" />}
+        {rows.length ? <RepairCaseList items={rows} entityId={entityId} onOpen={id => void open(id)} /> :
+          currentList && !failure ? <Empty description="此分類目前沒有案件" /> : !failure && <div className="repair-list-loading">載入案件…</div>}
       </Spin>
       <Pagination className="repair-case-pagination" current={page} total={total} pageSize={50} onChange={value=>setPagination({queue,page:value})} showSizeChanger={false} hideOnSinglePage />
     </Card>

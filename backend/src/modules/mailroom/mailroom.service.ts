@@ -37,7 +37,6 @@ import {
   can,
   fingerprint,
   isRepairWorkbenchItem,
-  REPAIR_RETURN_STATUSES,
   requireEntity,
   requirePermission,
   transition,
@@ -63,6 +62,13 @@ import {
   requireSourceConsent,
   repairStatusLabel,
 } from './repair-workflow.contract';
+import {
+  REPAIR_LIST_SCOPES,
+  repairConditions,
+  repairOverview,
+  repairPhoto as nativeRepairPhoto,
+  type RepairListScope,
+} from './repair-list.contract';
 
 const actorSelect = {
   id: true,
@@ -370,52 +376,8 @@ export class MailroomService {
       ...(mode === 'mine' ? { recipientId: userId } : {}),
     };
     const and: Prisma.MailroomItemWhereInput[] = [];
-    if (mode === 'repair') {
-      and.push({
-        OR: [
-          { receipt: { category: 'REPAIR' } },
-          {
-            receipt: { category: 'RETURN' },
-            OR: [
-              { status: { in: [...REPAIR_RETURN_STATUSES] } },
-              { repairOwnerId: { not: null } },
-            ],
-          },
-        ],
-      });
-      switch (query.repairScope || 'all') {
-        case 'mine':
-          and.push({ OR: [{ nextUserId: userId }, { repairOwnerId: userId }] });
-          break;
-        case 'acceptance':
-          and.push({
-            status: { in: ['WAITING_REPAIR_ACCEPTANCE', 'PENDING_REFURBISH'] },
-          });
-          break;
-        case 'waiting':
-          and.push({
-            status: {
-              in: [
-                'WAITING_CUSTOMER',
-                'FACTORY_OUTBOUND',
-                'FACTORY_RECEIVED',
-                'FACTORY_RETURNING',
-              ],
-            },
-          });
-          break;
-        case 'delivery':
-          and.push({ status: 'WAITING_RETURN_ACCEPTANCE' });
-          break;
-        case 'records':
-          and.push({
-            status: {
-              in: ['READY_FOR_DISPATCH', 'DISPATCHED', 'PENDING_WELFARE_STOCK'],
-            },
-          });
-          break;
-      }
-    }
+    if (mode === 'repair')
+      and.push(...repairConditions(query.repairScope || 'all', userId));
     if (query.status) and.push({ status: query.status });
     if (query.search?.trim())
       and.push({
@@ -443,7 +405,7 @@ export class MailroomService {
           ] as any),
       });
     if (and.length) where.AND = and;
-    const [total, rows] = await Promise.all([
+    const [total, rows, queueCounts] = await Promise.all([
       this.prisma.mailroomItem.count({ where }),
       this.prisma.mailroomItem.findMany({
         where,
@@ -452,14 +414,37 @@ export class MailroomService {
         take: 50,
         skip: ((query.page || 1) - 1) * 50,
       }),
+      mode === 'repair'
+        ? Promise.all(
+            REPAIR_LIST_SCOPES.map(
+              async (scope): Promise<[RepairListScope, number]> => [
+                scope,
+                await this.prisma.mailroomItem.count({
+                  where: {
+                    entityId: query.entityId,
+                    AND: repairConditions(scope, userId),
+                  },
+                }),
+              ],
+            ),
+          ).then((entries) => Object.fromEntries<number>(entries))
+        : undefined,
     ]);
     return {
       total,
-      items: await this.views(rows, userId, actor),
+      items: await this.views(rows, userId, actor, {
+        repairOverview: mode === 'repair',
+      }),
       page: query.page || 1,
+      ...(queueCounts ? { queueCounts } : {}),
     };
   }
-  async views(items: Item[], userId: string, actor: Actor) {
+  async views(
+    items: Item[],
+    userId: string,
+    actor: Actor,
+    options: { repairOverview?: boolean } = {},
+  ) {
     const donors = items.filter(
       (item) => item.status === 'STOCKED' && item.receipt.category === 'RETURN',
     );
@@ -577,6 +562,11 @@ export class MailroomService {
       );
     return items.map(({ evidence, receipt, ...item }) => ({
       ...(canViewRepairDocuments(actor) ? item : withoutRepairDocuments(item)),
+      ...(options.repairOverview &&
+      can(actor, 'repair_workbench:read') &&
+      isRepairWorkbenchItem({ ...item, receipt })
+        ? { repairOverview: repairOverview({ ...item, evidence, receipt }) }
+        : {}),
       location: dispatchedLocation(item),
       statusLabel:
         custody.get(item.id)?.statusLabel ||
@@ -631,6 +621,26 @@ export class MailroomService {
         sourceSync: sourceSyncSummary(receipt.sourceSnapshot),
       },
     }));
+  }
+  async repairPhoto(userId: string, entityId: string, id: string) {
+    this.enabled();
+    const actor = await this.actor(userId);
+    requireEntity(actor, entityId);
+    requirePermission(actor, 'repair_workbench:read');
+    const item = await this.prisma.mailroomItem.findUnique({
+      where: { id },
+      include: withReceipt,
+    });
+    if (
+      !item ||
+      item.entityId !== entityId ||
+      item.receipt.entityId !== entityId ||
+      !isRepairWorkbenchItem(item)
+    )
+      throw new NotFoundException('找不到案件照片');
+    const photo = nativeRepairPhoto(item.evidence);
+    if (!photo) throw new NotFoundException('找不到案件照片');
+    return photo;
   }
   async detail(userId: string, entityId: string, id: string) {
     this.enabled();
