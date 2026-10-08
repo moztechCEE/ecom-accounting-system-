@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { deflateSync } from "node:zlib";
 import test from "node:test";
 import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
@@ -17,6 +18,23 @@ const executablePath = [
   "/usr/bin/chromium",
 ].find(existsSync);
 const root = fileURLToPath(new URL("../", import.meta.url));
+function uniformPng(width, height) {
+  function chunk(type, data) {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    let crc = 0xffffffff;
+    for (const byte of body) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+    const header = Buffer.alloc(4), checksum = Buffer.alloc(4);
+    header.writeUInt32BE(data.length); checksum.writeUInt32BE((crc ^ 0xffffffff) >>> 0);
+    return Buffer.concat([header, body, checksum]);
+  }
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width); header.writeUInt32BE(height, 4); header[8] = 8;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", header),
+    chunk("IDAT", deflateSync(Buffer.alloc((width + 1) * height))), chunk("IEND", Buffer.alloc(0))]);
+}
 const fixture = `
 import React from 'react';
 import {createRoot} from 'react-dom/client';
@@ -807,6 +825,52 @@ test(
           ) <=
             3 * 1024 * 1024,
         );
+      },
+    );
+
+    await scene(
+      "small decoded photos reject 25MP, resize a long side and preserve an ordinary PNG with bitmap cleanup",
+      async ({ page, drawer, category, next, posts, selectProduct, selectBin, tinyPhoto, upload }) => {
+        await category("找不到售後案件"); await selectProduct(); await selectBin(); await next();
+        await page.evaluate(() => {
+          const decode = window.createImageBitmap;
+          window.photoBoundary = { decoded: [], closed: 0 };
+          window.createImageBitmap = async (...args) => {
+            const bitmap = await decode(...args), close = bitmap.close.bind(bitmap);
+            window.photoBoundary.decoded.push({ bytes: args[0].size, width: bitmap.width, height: bitmap.height });
+            bitmap.close = () => { window.photoBoundary.closed++; close(); };
+            return bitmap;
+          };
+        });
+        const tooManyPixels = uniformPng(5000, 5000);
+        assert.equal(tooManyPixels.length, 24372);
+        await drawer.locator('input[type="file"]').setInputFiles({ name: "synthetic-small-25mp.png", mimeType: "image/png", buffer: tooManyPixels });
+        await drawer.getByText("照片尺寸過大，請使用 2,000 萬像素以下照片", { exact: true }).waitFor();
+        assert.equal(await drawer.getByAltText(/^實收照片/).count(), 0);
+        assert.equal(await drawer.getByRole("button", { name: "下一步", exact: true }).isDisabled(), false);
+        assert.deepEqual(await posts(), []);
+        const longSide = uniformPng(2000, 1000); assert.ok(longSide.length < 1024 * 1024);
+        await upload(0, longSide, 1);
+        const preview = drawer.getByAltText("實收照片 1", { exact: true });
+        await page.waitForFunction(() => {
+          const image = document.querySelector('img[alt="實收照片 1"]');
+          return image?.complete && image.naturalWidth > 0;
+        });
+        const resized = await preview.getAttribute("src");
+        assert.match(resized, /^data:image\/jpeg;base64,/);
+        assert.ok(Buffer.from(resized.split(",")[1], "base64").length <= 1024 * 1024);
+        assert.deepEqual(await preview.evaluate(image => ({ width: image.naturalWidth, height: image.naturalHeight })), { width: 1600, height: 800 });
+        const ordinary = await tinyPhoto(); await upload(0, ordinary, 2);
+        const unchanged = "data:image/png;base64," + ordinary.toString("base64");
+        assert.equal(await drawer.getByAltText("實收照片 2", { exact: true }).getAttribute("src"), unchanged);
+        const decoded = await page.evaluate(() => window.photoBoundary);
+        assert.deepEqual(decoded.decoded.map(value => [value.width, value.height]), [[5000, 5000], [2000, 1000], [2, 2]]);
+        assert.equal(decoded.closed, 3, "Rejected, resized and retained photos all release their decoded bitmap");
+        await next();
+        await drawer.getByRole("button", { name: "確認並登記收件", exact: true }).click();
+        await page.waitForFunction(() => window.receiptFixture.created === 1);
+        const requests = await posts(); assert.equal(requests.length, 1);
+        assert.deepEqual(requests[0].body.items[0].evidence, [resized, unchanged]);
       },
     );
 
