@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Badge, Button, Card, Checkbox, Collapse, Descriptions, Drawer, Empty, Input, Pagination, Space, Spin, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
-import { ReloadOutlined, ToolOutlined } from '@ant-design/icons';
+import { Alert, Badge, Button, Card, Checkbox, Collapse, Descriptions, Drawer, Empty, Input, Pagination, Select, Space, Spin, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
+import { FilterOutlined, ReloadOutlined, ToolOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,10 +9,10 @@ import api from '../../services/api';
 import { repairService } from '../../services/repair';
 import { webSocketService } from '../../services/websocket.service';
 import { ACTIONS, STATUS, errorText, mailroomEnabled, type Source } from '../mailroom/model';
-import { QUEUES, PLANS, REPAIR_STATUS, WORKFLOW_ACTIONS, sourceQuoteConsentCurrent, inspectionReviewCurrent, repairStartReady, repairReportReady, type RepairQueue, type RepairItem } from './repair-model';
+import { PLANS, REPAIR_STATUS, WORKFLOW_ACTIONS, sourceQuoteConsentCurrent, inspectionReviewCurrent, repairStartReady, repairReportReady, type RepairItem } from './repair-model';
 import RepairDocuments from './RepairDocuments';
 import RepairCaseList from './RepairCaseList';
-import { repairQueueCount, type RepairListResponse, type RepairQueueCounts } from './repair-list-model';
+import { REPAIR_WORKBENCH_TABS, REPAIR_QUERY_FILTERS, repairListScope, repairWorkbenchTab, repairQueueCount, repairCaseProgress, type RepairListScope, type RepairWorkbenchTab, type RepairListResponse, type RepairQueueCounts } from './repair-list-model';
 import RepairWorkflowPanel from './RepairWorkflowPanel';
 import RepairReadinessPanel from './RepairReadinessPanel';
 import { useRepairNavigationGuard } from './repair-navigation';
@@ -44,13 +44,15 @@ export default function RepairWorkbenchPage() {
   const { user } = useAuth();
   const canRead = hasPermission(user, 'repair_workbench:read');
   const [params, setParams] = useSearchParams();
-  const candidate = params.get('queue') || 'all';
-  const queue: RepairQueue = Object.hasOwn(QUEUES, candidate) ? candidate as RepairQueue : 'all';
+  const queue = repairListScope(params.get('queue'));
+  const tab = repairWorkbenchTab(queue);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const entityId = params.get('entityId') || localStorage.getItem('entityId') || '';
   const selectedId = params.get('itemId');
   const enabled = mailroomEnabled();
   const [list, setList] = useState<{scope: string; data: RepairListResponse}>();
   const [counts, setCounts] = useState<{entityId: string; data: RepairQueueCounts}>();
+  const [todoStatus, setTodoStatus] = useState<{entityId: string; message: string}>();
   const [pagination, setPagination] = useState({queue, page: 1});
   const page = pagination.queue === queue ? pagination.page : 1;
   const [search, setSearch] = useState('');
@@ -69,20 +71,34 @@ export default function RepairWorkbenchPage() {
   const total = currentList?.total || 0;
   const failure = listFailure?.scope === listScope ? listFailure.text : '';
   const queueCounts = counts?.entityId === entityId ? counts.data : undefined;
+  const todoMessage = todoStatus?.entityId === entityId ? todoStatus.message : '';
   const refresh = useCallback(async (quiet = false) => {
     if (!enabled || !entityId || !canRead) return;
     const request = ++generation.current;
     if (!quiet) setLoading(true);
     try {
-      const result = await api.get<RepairListResponse>('/mailroom/items', {params: {entityId, view: 'repair', repairScope: queue, page, search}});
-      if (request === generation.current) {
-        setList({scope: listScope, data: result.data});
-        setCounts(result.data.queueCounts ? {entityId, data: result.data.queueCounts} : undefined);
-        setListFailure(undefined);
-      }
+      const todoParams = {entityId, ...(queue === 'todo' ? {page, search} : {summary:'true'})};
+      const listRequest = queue === 'todo' ? api.get<RepairListResponse>('/repair-workbench/todo', {params:todoParams}) : api.get<RepairListResponse>('/mailroom/items', {params: {entityId, view:'repair', repairScope:queue, page, search}});
+      let todoError: unknown;
+      const todoRequest = queue === 'todo' ? Promise.resolve(undefined) : api.get<RepairListResponse>('/repair-workbench/todo', {params:todoParams}).catch(error=>{todoError=error;return undefined;});
+      const result = await listRequest;
+      if (request !== generation.current) return;
+      const nextCounts: RepairQueueCounts = {...result.data.queueCounts};
+      delete nextCounts.todo;
+      setList({scope:listScope, data:result.data});
+      setCounts({entityId, data:{...nextCounts}});
+      setListFailure(undefined);setTodoStatus(undefined);setLoading(false);
+      const todo = queue === 'todo' ? result : await todoRequest;
+      if (request !== generation.current) return;
+      const todoHttpStatus = (todoError as {response?: {status?: number}} | undefined)?.response?.status;
+      if (todoHttpStatus === 401 || todoHttpStatus === 403) throw todoError;
+      if (todo?.data.countExact === true && repairQueueCount(todo.data.queueCounts, 'todo') !== undefined) nextCounts.todo = todo.data.queueCounts?.todo;
+      setCounts({entityId, data:{...nextCounts}});
+      const unknown = todo?.data.unknownCount;
+      setTodoStatus({entityId, message:!todo ? '待辦進度暫無法取得' : todo.data.countExact !== true ? Number.isSafeInteger(unknown) && Number(unknown) > 0 ? `有 ${unknown} 件案件的放行狀態尚未確認` : '待辦進度尚未確認' : ''});
     } catch (error) {
       if (request === generation.current) {
-        setListFailure({scope: listScope, text: errorText(error)});setCounts(undefined);
+        setListFailure({scope: listScope, text: errorText(error)});setCounts(undefined);setTodoStatus(undefined);
         const status = (error as {response?: {status?: number}} | null)?.response?.status;
         if (status === 401 || status === 403) setList(undefined);
       }
@@ -119,19 +135,36 @@ export default function RepairWorkbenchPage() {
     if (id) next.set('itemId', id);else next.delete('itemId');
     setParams(next);
   }
+  async function changeQueue(nextQueue: RepairListScope) {
+    if (detailDirty.current) {if (!await confirmDiscard()) return;detailDirty.current=false;}
+    const next = new URLSearchParams(params);
+    if (nextQueue === 'todo') next.delete('queue');else next.set('queue', nextQueue);
+    next.delete('itemId');
+    setPagination({queue:nextQueue,page:1});
+    setParams(next);
+  }
   if (!enabled) return <>{contextHolder}<Alert type="info" message="維修工作台尚未啟用" /></>;
   if (!canRead) return <>{contextHolder}<Alert type="warning" message="沒有維修工作台讀取權限" /></>;
   if (!entityId) return <>{contextHolder}<Alert type="warning" message="請先選擇作業公司" /></>;
   return <div className="mailroom-page repair-workbench-page">
     {contextHolder}
     <div className="mailroom-heading"><div><Title level={2}><ToolOutlined /> 維修工作台</Title></div><Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading}>重新整理</Button></div>
-    <Tabs activeKey={queue} onChange={key => {void (async()=>{if (detailDirty.current) {if (!await confirmDiscard()) return;detailDirty.current=false;}const next = new URLSearchParams(params);if (key==='all') next.delete('queue');else next.set('queue', key);next.delete('itemId');setPagination({queue:key as RepairQueue,page:1});setParams(next);})();}} items={Object.entries(QUEUES).map(([key,label])=>{const count=repairQueueCount(queueCounts,key as RepairQueue);return {key,label:<span className="repair-tab-label"><span>{label}</span>{count !== undefined && count > 0 && <Badge count={count} overflowCount={Infinity} title={`${count} 件`} aria-label={`${count} 件`} />}</span>};})} />
-    {(queue === 'all' || queue === 'acceptance') && <Collapse className="repair-arrival-preview" items={[{key:'arrival',label:'待到貨／在途案件',forceRender:true,children:<ArrivalPreview entityId={entityId} />}]} />}
+    <Tabs activeKey={tab} onChange={key => void changeQueue(key as RepairWorkbenchTab)} items={Object.entries(REPAIR_WORKBENCH_TABS).map(([key,label])=>{
+      const count=key === 'all' ? undefined : repairQueueCount(queueCounts,key as RepairWorkbenchTab);
+      return {key,label:<span className="repair-tab-label"><span>{label}</span>{count !== undefined && count > 0 && <Badge count={count} overflowCount={Infinity} title={`${count} 件`} aria-label={`${count} 件`} />}</span>};
+    })} />
+    {tab === 'acceptance' && <Collapse className="repair-arrival-preview" items={[{key:'arrival',label:'待到貨／在途案件',forceRender:true,children:<ArrivalPreview entityId={entityId} />}]} />}
+    {todoMessage && !failure && <Alert type="warning" showIcon message={todoMessage} style={{marginBottom:16}} />}
     {failure && <Alert type="error" showIcon message={failure} style={{marginBottom:16}} />}
-    <Card className="repair-workbench-list" title={QUEUES[queue]} extra={<Input.Search className="repair-workbench-search" placeholder="搜尋案件" allowClear onSearch={value=>{setPagination({queue,page:1});setSearch(value);}} />}>
+    <Card className="repair-workbench-list" title={REPAIR_WORKBENCH_TABS[tab]} extra={<Space className="repair-query-tools">
+      <Input.Search className="repair-workbench-search" placeholder="搜尋案件" allowClear onSearch={value=>{setPagination({queue,page:1});setSearch(value);}} />
+      {tab === 'all' && <Button aria-label="篩選" icon={<FilterOutlined />} aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(value=>!value)}>篩選</Button>}
+    </Space>}>
+      {tab === 'all' && filtersOpen && <Select className="repair-query-filter" aria-label="案件分類" value={queue} options={Object.entries(REPAIR_QUERY_FILTERS).map(([value,label])=>({value,label}))} onChange={value=>void changeQueue(value as RepairListScope)} />}
+      {tab === 'all' && queue !== 'all' && <div className="repair-applied-filter"><Tag closable onClose={event=>{event.preventDefault();void changeQueue('all');}}>{REPAIR_QUERY_FILTERS[queue as keyof typeof REPAIR_QUERY_FILTERS]}</Tag></div>}
       <Spin spinning={loading}>
         {rows.length ? <RepairCaseList items={rows} entityId={entityId} onOpen={id => void open(id)} /> :
-          currentList && !failure ? <Empty description="此分類目前沒有案件" /> : !failure && <div className="repair-list-loading">載入案件…</div>}
+          currentList && !failure && !(queue === 'todo' && todoMessage) ? <Empty description={tab === 'todo' ? '目前沒有待辦' : '此分類目前沒有案件'} /> : !failure && !(queue === 'todo' && todoMessage) && <div className="repair-list-loading">載入案件…</div>}
       </Spin>
       <Pagination className="repair-case-pagination" current={page} total={total} pageSize={50} onChange={value=>setPagination({queue,page:value})} showSizeChanger={false} hideOnSinglePage />
     </Card>
@@ -219,7 +252,7 @@ function RepairDetail({item,entityId,onSaved,onDirtyChange,feedback,confirmDisca
   if(own&&['REPAIRING','REFURBISHING'].includes(item.status))actions.push({name:item.status==='REFURBISHING'?'complete_refurbish':'complete_repair',label:'交回收發室',disabled:!repairReportReady(item)||!note.trim(),reason:!repairReportReady(item)?reportReason:'請填交回品況與配件'});
   const primaryAction=actions.find(action=>!action.disabled && ['start_repair','complete_repair','complete_refurbish'].includes(action.name)) || actions.find(action=>!action.disabled) || actions[0];
   return <div className="repair-detail">
-    <div className="repair-detail-summary"><Tag color="blue">{item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag>{item.receipt.category==='RETURN'&&<Tag>退貨整新</Tag>}<Text type="secondary">SN：{item.serialNumber || '未提供'} · SKU：{item.sku || '未提供'}</Text></div>
+    <div className="repair-detail-summary"><Tag color="blue">{repairCaseProgress(item) || item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag>{item.receipt.category==='RETURN'&&<Tag>退貨整新</Tag>}<Text type="secondary">SN：{item.serialNumber || '未提供'} · SKU：{item.sku || '未提供'}</Text></div>
     <RepairReadinessPanel compact item={item} canUpdate={canUpdate} viewerId={user?.id} handoffNote={note} />
     {workflowFailure&&<Alert type="error" showIcon message={workflowFailure} />}
     <div className="repair-documents-layout">

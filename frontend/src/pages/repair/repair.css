@@ -180,3 +180,11 @@
     width: 100%;
   }
 }
+
+.repair-query-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.repair-query-filter { width: 200px; max-width: 100%; margin-bottom: 16px; }
+.repair-applied-filter { margin-bottom: 16px; }
+@media (max-width: 600px) {
+  .repair-query-tools { width: 100%; }
+  .repair-query-tools .ant-space-item:first-child { flex: 1 1 180px; min-width: 0; }
+}

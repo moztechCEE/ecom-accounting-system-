@@ -3,7 +3,7 @@ import { Button, Tag, Typography } from 'antd';
 import { PictureOutlined } from '@ant-design/icons';
 import { STATUS } from '../mailroom/model';
 import { REPAIR_STATUS } from './repair-model';
-import type { RepairListItem } from './repair-list-model';
+import { repairTodoLabel, type RepairListItem } from './repair-list-model';
 import api from '../../services/api';
 
 const { Text } = Typography;
@@ -58,7 +58,7 @@ export default function RepairCaseList({ items, entityId, onOpen }: { items: Rep
         </div>
       </div>
       <div className="repair-case-progress">
-        <Tag color={item.status === 'WAITING_CUSTOMER' ? 'orange' : 'blue'}>{item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag>
+        <Tag color={item.status === 'WAITING_CUSTOMER' ? 'orange' : 'blue'}>{repairTodoLabel(item) || item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag>
       </div>
       <Button className="repair-case-open" onClick={() => onOpen(item.id)} aria-label={`開啟案件：${item.productName} · ${number}`}>開啟案件</Button>
     </li>;

@@ -12,6 +12,7 @@ import { MailroomTabletController } from './mailroom-tablet.controller';
 import { MailroomTabletService } from './mailroom-tablet.service';
 import { RepairWorkbenchController } from './repair-workbench.controller';
 import { RepairWorkbenchService } from './repair-workbench.service';
+import { RepairTodoService } from './repair-todo.service';
 @Module({
   imports: [
     NotificationModule,
@@ -31,6 +32,7 @@ import { RepairWorkbenchService } from './repair-workbench.service';
     MailroomSourceSyncService,
     MailroomTabletService,
     RepairWorkbenchService,
+    RepairTodoService,
   ],
 })
 export class MailroomModule {}

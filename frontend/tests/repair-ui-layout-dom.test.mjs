@@ -79,6 +79,7 @@ export const API_URL='/offline-layout-api';
 export default {
   async get(path,options={}){
     state.gets.push({path,params:clone(options.params||{})});
+    if(path==='/repair-workbench/todo')return {data:{items:[],total:0,page:1,queueCounts:{todo:2,acceptance:0},countExact:true,unknownCount:0}};
     if(path==='/mailroom/items'){
       const items=options.params?.repairScope==='waiting'?state.waitingRows:Object.values(state.rows);
       return {data:{items:items.map(clone),total:items.length}};
@@ -214,7 +215,9 @@ test('actual repair UI keeps product/case legible in constrained layouts and pre
   await page.setViewportSize({width:1537,height:972});
   await page.goto(url);
   await page.getByRole('button',{name:productName,exact:true}).waitFor();
-  await page.getByRole('tab',{name:'客服與付款進度',exact:true}).click();
+  await page.getByRole('button',{name:'篩選',exact:true}).click();
+  await page.locator('.repair-query-filter .ant-select-selector').click();
+  await page.getByTitle('等待中',{exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('.repair-case-row').length===4);
   const waitingCurrentRow=page.locator('.repair-case-row').filter({hasText:'DEV-REPAIR-WAITING-CURRENT'});
   assert.equal((await waitingCurrentRow.locator('.repair-case-progress').innerText()).trim(),'客服與顧客確認中');
@@ -224,7 +227,7 @@ test('actual repair UI keeps product/case legible in constrained layouts and pre
   }
   assert.equal(await page.evaluate(()=>window.repairLayoutFixture.posts.length),0,'changing lists cannot release or submit a case');
   await assertCleanCopy(page.locator('body'));
-  await page.getByRole('tab',{name:'案件總覽',exact:true}).click();
+  await page.getByRole('tab',{name:/^待認領與簽收/}).click();
   const arrival=page.locator('.repair-arrival-preview');
   const arrivalHeader=arrival.locator('.ant-collapse-header');
   await arrivalHeader.waitFor();
