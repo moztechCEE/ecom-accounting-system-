@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:c832fe2faf92b84e49ff8710a0a011231168e402112caa9be5d6bc21e70cfb2f",
+  "sourceVersion": "sha256:52838855437b4077ac4383711e5d7d47102ce8c24b77eeeaa6071731c4a618b8",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 79,
   "groups": [
@@ -196,7 +196,7 @@
     },
     {
       "path": "backend/prisma/schema.prisma",
-      "sha256": "ecc12137ad0c866d21cb1513fba5932713ce045ed3a378bedf1f179284229fa2"
+      "sha256": "fc37c7a405edcedc0d7d97eb1e3c53ff5d7cae61a4f6d309392230840493e523"
     },
     {
       "path": "backend/src/common/department-access/attendance-selection.ts",

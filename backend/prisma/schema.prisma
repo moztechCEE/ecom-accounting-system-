@@ -1194,6 +1194,8 @@ model ApInvoice {
 // 費用申請單
 model ExpenseRequest {
   id                  String  @id @default(uuid())
+  submissionKey       String? @unique @map("submission_key")
+  submissionPayloadHash String? @map("submission_payload_hash")
   entityId            String  @map("entity_id")
   payeeType           String? @map("payee_type") // employee, vendor
   vendorId            String? @map("vendor_id")
