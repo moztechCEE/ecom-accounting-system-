@@ -171,7 +171,7 @@ test('actual repair UI keeps product/case legible in constrained layouts and pre
     assert.equal(await page.locator('.repair-case-open').count(),2);
     const list = page.locator('.repair-workbench-list');
     assert.match(await list.innerText(), new RegExp(caseNumber));
-    assert((await list.innerText()).includes(sku));assert((await list.innerText()).includes(serial));
+    assert(!(await list.innerText()).includes(sku));assert(!(await list.innerText()).includes(serial));
     await page.screenshot({path:`/tmp/corely-repair-clean-copy-20261008-${viewport.name}-list.png`,fullPage:true});
     if(viewport.name==='compact-desktop')await page.locator('.repair-case-open').first().click();
     else await product.click();
@@ -193,8 +193,8 @@ test('actual repair UI keeps product/case legible in constrained layouts and pre
       assert.equal(await drawer.getByRole('button',{name,exact:true}).count(),0,'action labels remain concise: '+name);
     assert(await drawer.getByRole('heading',{name:'故障與檢測',exact:true}).isVisible());
     assert(await drawer.getByRole('heading',{name:'診斷與估價',exact:true}).isVisible());
-    const serialBox = await page.locator('.repair-case-row').first().locator('.repair-case-serial').boundingBox();
-    assert(serialBox && serialBox.width > 200,viewport.name + ': long identifiers must retain a readable column');
+    const summary = drawer.locator('.repair-detail-summary');
+    assert((await summary.innerText()).includes(sku));assert((await summary.innerText()).includes(serial));
     assert.equal(await page.evaluate(() => new URLSearchParams(window.repairLayoutRouter.state.location.search).get('itemId')),'layout-primary');
     await assertDrawerWidth(drawer);
     await drawer.getByRole('tab',{name:'維修單',exact:true}).click();
@@ -217,13 +217,12 @@ test('actual repair UI keeps product/case legible in constrained layouts and pre
   await page.getByRole('tab',{name:'客服與付款進度',exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('.repair-case-row').length===4);
   const waitingCurrentRow=page.locator('.repair-case-row').filter({hasText:'DEV-REPAIR-WAITING-CURRENT'});
-  assert.match(await waitingCurrentRow.locator('.repair-case-progress').innerText(),/待維修接手/,'current CSR, quote and source approval can await technician');
+  assert.equal((await waitingCurrentRow.locator('.repair-case-progress').innerText()).trim(),'客服與顧客確認中');
   for(const suffix of ['ESTIMATE','QUOTE','DECISION']){
     const row=page.locator('.repair-case-row').filter({hasText:'DEV-REPAIR-WAITING-'+suffix});
-    const progress=await row.locator('.repair-case-progress').innerText();
-    assert(progress.includes('待客服重新確認'),suffix+' mismatch must not imply technician release');
-    assert(!progress.includes('待維修接手'),suffix+' mismatch preserves the actual blocker');
+    assert.equal((await row.locator('.repair-case-progress').innerText()).trim(),'客服與顧客確認中');
   }
+  assert.equal(await page.evaluate(()=>window.repairLayoutFixture.posts.length),0,'changing lists cannot release or submit a case');
   await assertCleanCopy(page.locator('body'));
   await page.getByRole('tab',{name:'案件總覽',exact:true}).click();
   const arrival=page.locator('.repair-arrival-preview');

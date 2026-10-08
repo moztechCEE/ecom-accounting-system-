@@ -1,6 +1,16 @@
 import { MailroomIntakeService } from './mailroom-intake.service';
 import { INTAKE_ACTIONS } from './mailroom-intake.contract';
-import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Param,
+  Post,
+  Query,
+  Req,
+  StreamableFile,
+} from '@nestjs/common';
 import { MailroomService } from './mailroom.service';
 import {
   CreateReceiptDto,
@@ -41,6 +51,19 @@ export class MailroomController {
   }
   @Get('items') list(@Req() req: MailroomRequest, @Query() q: MailroomQuery) {
     return this.service.list(req.user.id, q);
+  }
+  @Get('items/:id/repair-photo')
+  @Header('Cache-Control', 'private, no-store')
+  async repairPhoto(
+    @Req() req: MailroomRequest,
+    @Query() q: MailroomQuery,
+    @Param('id') id: string,
+  ) {
+    const photo = await this.service.repairPhoto(req.user.id, q.entityId, id);
+    return new StreamableFile(photo.buffer, {
+      type: photo.type,
+      length: photo.buffer.length,
+    });
   }
   @Get('items/:id') detail(
     @Req() req: MailroomRequest,
