@@ -57,6 +57,7 @@ window.__repairPageFixture={rows,posts:[],queries:[]};
 export const API_URL='/offline-api';
 export const documents=async(_,id)=>structuredClone(rows[id]);
 export default {get:async(path,options)=>{
+  if(path==='/repair-workbench/todo')return {data:{items:[],total:0,page:1,queueCounts:{todo:0,acceptance:0},countExact:true,unknownCount:0}};
   if(path==='/mailroom/items'){
     window.__repairPageFixture.queries.push(options.params);
     const items=Object.values(rows).filter(row=>options.params.repairScope!=='records'||

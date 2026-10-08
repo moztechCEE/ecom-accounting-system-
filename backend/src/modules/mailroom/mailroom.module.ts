@@ -18,6 +18,7 @@ import { MailroomCatalogController } from './mailroom-catalog.controller';
 import { MailroomCatalogService } from './mailroom-catalog.service';
 import { MailroomSourceMediaController } from './mailroom-source-media.controller';
 import { MailroomSourceMediaService } from './mailroom-source-media.service';
+import { RepairTodoService } from './repair-todo.service';
 @Module({
   imports: [
     NotificationModule,
@@ -43,6 +44,7 @@ import { MailroomSourceMediaService } from './mailroom-source-media.service';
     MailroomStorageService,
     MailroomCatalogService,
     MailroomSourceMediaService,
+    RepairTodoService,
   ],
 })
 export class MailroomModule {}

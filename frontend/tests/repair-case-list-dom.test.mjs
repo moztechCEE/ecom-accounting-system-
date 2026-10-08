@@ -18,8 +18,8 @@ const caseNumber = 'DEV-LIST-20261008-PRIMARY';
 const customerName = '合成顧客甲';
 const customerPhone = '0900-000-001';
 const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
-const queueLabels = { all: '案件總覽', acceptance: '待認領與簽收', mine: '我的檢修', waiting: '客服與付款進度', delivery: '複驗與交回', records: '檢修與維修紀錄' };
-const counts = { all: 137, acceptance: 7, mine: 62, waiting: 0, delivery: 12, records: 61 };
+const queueLabels = { todo: '我的待辦', acceptance: '待認領與簽收', all: '案件查詢' };
+const counts = { todo: 73, all: 137, acceptance: 7, mine: 62, waiting: 0, delivery: 12, records: 61 };
 const fixture = `
 import React from 'react';import {createRoot} from 'react-dom/client';
 import {createMemoryRouter,RouterProvider} from 'react-router-dom';
@@ -69,19 +69,19 @@ const state={gets:[],posts:[],plans:[],held:{},photoGets:[],photoHeld:{},scenari
   fail(name,message='合成讀取失敗'){const pending=this.held[name];if(!pending)throw Error('No held request '+name);delete this.held[name];pending.reject(readError(message));},
   result(params={}){
     const entity=params.entityId||'company-a';
-    if(entity==='company-b')return {items:[clone(second)],total:9,queueCounts:{all:9,acceptance:0,mine:9,waiting:0,delivery:3,records:0}};
-    const scope=params.repairScope||'all';
+    if(entity==='company-b')return {items:params.summary==='true'?[]:[clone(second)],total:9,queueCounts:{todo:9,all:9,acceptance:0,mine:9,waiting:0,delivery:3,records:0},countExact:true,unknownCount:0};
+    const scope=params.repairScope||'todo';
     const items=params.page===2?[pageTwo]:params.search?[primary]:[primary,missing,broken,unsafe];
-    const result={items:items.map(clone),total:params.search?1:queueCounts[scope],queueCounts:clone(queueCounts)};
+    const result={items:params.summary==='true'?[]:items.map(clone),total:params.search?1:queueCounts[scope],queueCounts:clone(queueCounts),countExact:true,unknownCount:0};
     if(scenario==='missing-counts')delete result.queueCounts;
-    if(scenario==='partial-counts')result.queueCounts={all:137,waiting:0,delivery:12};
+    if(scenario==='partial-counts')result.queueCounts={todo:73,all:137,waiting:0,delivery:12};
     return result;
   }};
 window.repairListFixture=state;
 export const API_URL='/offline-repair-list-api';
 export default {
   async get(path,options={}){
-    const params=clone(options.params||{});state.gets.push({path,params});
+    const params=clone(options.params||{});if(path==='/repair-workbench/todo')params.repairScope='todo';state.gets.push({path,params,requestParams:clone(options.params||{})});
     const photo=path.match(/^\\/mailroom\\/items\\/([^/]+)\\/repair-photo$/);
     if(photo){
       const request={path,params,responseType:options.responseType,aborted:options.signal?.aborted===true};state.photoGets.push(request);
@@ -92,7 +92,7 @@ export default {
     if(path==='/mailroom/source-cases')return {data:{items:[],nextCursor:null}};
     const detail=path.match(/^\\/repair-workbench\\/items\\/([^/]+)\\/documents$/);
     if(detail&&documents[detail[1]])return {data:clone(documents[detail[1]])};
-    if(path!=='/mailroom/items')throw Error('Unexpected offline GET '+path);
+    if(path!=='/mailroom/items'&&path!=='/repair-workbench/todo')throw Error('Unexpected offline GET '+path);
     if(scenario==='initial-failure')throw readError('合成首次讀取失敗');
     const planned=state.plans.findIndex(plan=>Object.entries(plan.match).every(([key,value])=>params[key]===value));
     if(planned>=0){
@@ -158,7 +158,10 @@ test('actual repair list uses concise case identity and server queue totals acro
   };
   const tabLabel = (page, queue) => page.locator('.repair-tab-label').filter({ hasText: queueLabels[queue] });
   const assertCounts = async (page, expected = counts) => {
-    for (const [queue, count] of Object.entries(expected)) {
+    assert.equal(await page.locator('.repair-tab-label').count(), 3, 'only the three workbench tabs remain');
+    assert.equal(await tabLabel(page, 'all').locator('.ant-badge-count').count(), 0, 'case query is not an urgent notification badge');
+    for (const queue of ['todo', 'acceptance']) {
+      const count = expected[queue];
       const label = tabLabel(page, queue);
       assert.equal(await label.count(), 1, queue + ': one tab label');
       if (count > 0) assert.equal(await label.locator(`[aria-label="${count} 件"]`).count(), 1, queue + ': server count must be visible and accessible');
@@ -169,7 +172,7 @@ test('actual repair list uses concise case identity and server queue totals acro
     const list = page.locator('.repair-workbench-list');
     const text = await list.innerText();
     for (const value of [productName, caseNumber, customerName, customerPhone]) assert(!text.includes(value), 'previous company identity must disappear: ' + value);
-    assert.equal(await page.locator('.repair-tab-label [aria-label="137 件"]').count(), 0, 'previous company counts must disappear');
+    assert.equal(await page.locator('.repair-tab-label [aria-label="73 件"]').count(), 0, 'previous company counts must disappear');
   };
 
   await t.test('six requested fields stay legible, photos fall back, and native details open at three widths', async () => {
@@ -224,7 +227,7 @@ test('actual repair list uses concise case identity and server queue totals acro
     }
   });
 
-  await t.test('page and search totals do not replace six global queue counts', async () => {
+  await t.test('page and search totals do not replace the global actionable queue counts', async () => {
     const page = await createPage();
     try {
       await page.getByRole('button', { name: productName, exact: true }).waitFor();
@@ -238,8 +241,8 @@ test('actual repair list uses concise case identity and server queue totals acro
       await page.waitForFunction(() => window.repairListFixture.gets.some(value => value.params.search === '合成顧客' && value.params.page === 1));
       assert.equal(await page.locator('.repair-case-row').count(), 1);
       await assertCounts(page);
-      await tabLabel(page, 'delivery').click();
-      await page.waitForFunction(() => window.repairListFixture.gets.some(value => value.params.repairScope === 'delivery'));
+      await tabLabel(page, 'acceptance').click();
+      await page.waitForFunction(() => window.repairListFixture.gets.some(value => value.params.repairScope === 'acceptance'));
       await assertCounts(page);
       assert.equal(await page.evaluate(() => window.repairListFixture.posts.length), 0);
     } finally { await page.close(); }
@@ -252,8 +255,8 @@ test('actual repair list uses concise case identity and server queue totals acro
         await page.getByRole('button', { name: productName, exact: true }).waitFor();
         if (scenario === 'missing-counts') assert.equal(await page.locator('.repair-tab-label .ant-badge-count').count(), 0);
         else {
-          await assertCounts(page, { all: 137, waiting: 0, delivery: 12 });
-          for (const queue of ['acceptance', 'mine', 'records']) assert.equal(await tabLabel(page, queue).locator('.ant-badge-count').count(), 0, 'unknown ' + queue + ' has no invented badge');
+          await assertCounts(page, { todo: 73 });
+          assert.equal(await tabLabel(page, 'acceptance').locator('.ant-badge-count').count(), 0, 'unknown acceptance has no invented badge');
         }
         assert.equal(await page.locator('.repair-tab-label [aria-label="4 件"]').count(), 0, 'loaded row count is not a queue count');
       } finally { await page.close(); }
@@ -282,7 +285,7 @@ test('actual repair list uses concise case identity and server queue totals acro
       await assertNoPriorCompany(page);
       await page.locator('.mailroom-heading button').click();
       await page.getByRole('button', { name: '公司乙合成產品', exact: true }).waitFor();
-      await assertCounts(page, { all: 9, acceptance: 0, mine: 9, waiting: 0, delivery: 3, records: 0 });
+      await assertCounts(page, { todo: 9, acceptance: 0 });
       const text = await page.locator('.repair-workbench-list').innerText();
       assert(text.includes('公司乙合成顧客')); assert(text.includes('0900-000-099'));
       await assertNoPriorCompany(page);
@@ -294,15 +297,15 @@ test('actual repair list uses concise case identity and server queue totals acro
     const page = await createPage();
     try {
       await page.getByRole('button', { name: productName, exact: true }).waitFor();
-      await page.evaluate(() => window.repairListFixture.plan('old-search', { entityId: 'company-a', repairScope: 'all', search: '舊搜尋' }));
+      await page.evaluate(() => window.repairListFixture.plan('old-search', { entityId: 'company-a', repairScope: 'todo', search: '舊搜尋' }));
       const search = page.locator('.repair-workbench-search input');
       await search.fill('舊搜尋'); await search.press('Enter');
       await page.waitForFunction(() => !!window.repairListFixture.held['old-search']);
-      await tabLabel(page, 'delivery').click();
-      await page.waitForFunction(() => window.repairListFixture.gets.some(value => value.params.repairScope === 'delivery'));
+      await tabLabel(page, 'all').click();
+      await page.waitForFunction(() => window.repairListFixture.gets.some(value => value.params.repairScope === 'all'));
       await assertCounts(page);
       await page.evaluate(() => window.repairListFixture.settle('old-search', {
-        items: [], total: 0, queueCounts: { all: 999, acceptance: 999, mine: 999, waiting: 999, delivery: 999, records: 999 },
+        items: [], total: 0, queueCounts: { todo: 999, all: 999, acceptance: 999, mine: 999, waiting: 999, delivery: 999, records: 999 },
       }));
       await assertCounts(page);
       assert.equal(await page.locator('.repair-tab-label [aria-label="999 件"]').count(), 0);
