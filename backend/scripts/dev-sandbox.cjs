@@ -95,6 +95,7 @@ function approvedMailroomFetch(url, options) {
       !options || options.redirect !== 'error') return false;
   const read = options.method === 'GET' && options.body === undefined &&
     (/^\/api\/integration\/mailroom\/cases(?:\/[A-Za-z0-9_-]{1,128})?$/.test(url.pathname) ||
+     (!url.search && url.pathname === '/api/integration/mailroom/summary' && url.href === mailroomOrigin + url.pathname) ||
      (!url.search && /^\/api\/integration\/mailroom\/cases\/[A-Za-z0-9_-]{1,128}\/attachments(?:\/[A-Za-z0-9_-]{1,128}\/media)?$/.test(url.pathname)));
   const changes = mailroomEnabled && options.method === 'GET' && options.body === undefined && url.pathname === '/api/integration/mailroom/changes';
   const event = mailroomEventsEnabled && options.method === 'POST' && !url.search &&

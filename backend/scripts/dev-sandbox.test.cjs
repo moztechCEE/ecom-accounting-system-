@@ -377,7 +377,7 @@ test('DEV mailroom case photos reject invalid identities, queries, traversal and
       metadata.replace('dev-case-1','bad.id'),media.replace('photo_1','bad.id'),
       '/api/integration/mailroom/cases/../attachments',metadata+'/../private',
       media.replace('photo_1','%2e%2e'),metadata+'/photo_1',media+'/extra',metadata+'/',
-      '/api/integration/mailroom/attachments','/api/integration/mailroom/summary',
+      '/api/integration/mailroom/attachments',
       '/api/integration/mailroom/events','/api/integration/mailroom/cases/dev-case-1/delete',
     ];
     for(const route of invalid) await assert.rejects(fetch(origin+route,signed(route)),check);
@@ -444,6 +444,69 @@ test('DEV mailroom case photos remain closed without exact opt-in and a matching
       for(const route of ['/api/integration/mailroom/cases/dev-case-1/attachments',
         '/api/integration/mailroom/cases/dev-case-1/attachments/photo_1/media'])
         await assert.rejects(fetch(origin+route,signed(route)),check);
+      assert.equal(calls.fetch.length,0);assert.equal(calls.socket.length,0);
+    `,patch);
+  }
+});
+
+test('DEV mailroom signed top-level source summary forwards its actual path and signature',()=>{
+  isolatedMailroomCase(`
+    const route='/api/integration/mailroom/summary';
+    await fetch(origin+route,{...signed(route),dispatcher:{unsafe:true}});
+    assert.equal(calls.fetch.length,1);assert.equal(calls.socket.length,1);
+    const call=calls.fetch[0];
+    assert.equal(call.url,origin+'/api/integration/mailroom/summary');
+    assert.equal(call.options.method,'GET');assert.equal(call.options.body,undefined);
+    assert.equal(call.options.redirect,'error');assert.equal(call.options.dispatcher,undefined);
+    assert.deepEqual(Object.keys(call.options.headers).sort(),
+      ['content-type','x-mailroom-entity','x-mailroom-key','x-mailroom-signature','x-mailroom-time']);
+    const headers=call.options.headers;
+    const signature=crypto.createHmac('sha256',${JSON.stringify(mailroomDevSecret)}).update([
+      'mailroom.v1','GET',route,headers['x-mailroom-time'],'doa-dev-qa-20261002',crypto.createHash('sha256').update('').digest('hex')
+    ].join('\\n')).digest('hex');
+    assert.equal(headers['x-mailroom-signature'],signature);
+    assert.notEqual(headers['x-mailroom-signature'],crypto.createHmac('sha256',${JSON.stringify(mailroomDevSecret)}).update([
+      'mailroom.v1','GET','/api/integration/mailroom/cases/summary',headers['x-mailroom-time'],
+      'doa-dev-qa-20261002',crypto.createHash('sha256').update('').digest('hex')
+    ].join('\\n')).digest('hex'));
+    assert.throws(()=>new net.Socket().connect({host:new URL(origin).hostname,port:443}),check);
+    assert.equal(calls.socket.length,1);
+  `);
+});
+
+test('DEV mailroom source summary rejects queries, suffixes, writes and invalid signed scope before transport',()=>{
+  isolatedMailroomCase(`
+    const route='/api/integration/mailroom/summary';
+    for(const suffix of ['?','?&&','?search=x','?cursor=1','?limit=100','/','/extra','-extra'])
+      await assert.rejects(fetch(origin+route+suffix,signed(route+suffix)),check);
+    for(const url of [origin.replace('-dev','')+route,origin.replace('https:','http:')+route,
+      origin+'.evil.invalid'+route,origin+':8443'+route,origin+route+'#fragment',
+      origin.replace('https://','https://user:pass@')+route])
+      await assert.rejects(fetch(url,signed(route)),check);
+    for(const method of ['POST','PUT','DELETE','HEAD','get'])
+      await assert.rejects(fetch(origin+route,signed(route,{method})),check);
+    for(const body of ['', '{}']) await assert.rejects(fetch(origin+route,signed(route,{body})),check);
+    for(const redirect of ['follow','manual',undefined])
+      await assert.rejects(fetch(origin+route,{...signed(route),redirect}),check);
+    for(const patch of [{entity:'tw-entity-001'},{secret:'incorrect-synthetic-test-secret-32'},
+      {time:String(Math.floor(Date.now()/1000)-120)},{time:String(Math.floor(Date.now()/1000)+120)}])
+      await assert.rejects(fetch(origin+route,signed(route,patch)),check);
+    for(const key of ['Host','accept','x-extra'])
+      await assert.rejects(fetch(origin+route,{...signed(route),headers:{...signed(route).headers,[key]:'elsewhere'}}),check);
+    await assert.rejects(fetch(origin+route,{...signed(route),headers:{...signed(route).headers,'x-mailroom-signature':'0'.repeat(64)}}),check);
+    await assert.rejects(fetch(origin+route,signed('/api/integration/mailroom/cases/summary')),check);
+    await assert.rejects(fetch(new Request(origin+route,signed(route))),check);
+    assert.equal(calls.fetch.length,0);assert.equal(calls.socket.length,0);
+  `);
+});
+
+test('DEV mailroom source summary requires exact enabled origin and matching connection',()=>{
+  for(const patch of [{ERP_DEV_MAILROOM_SOURCE_ENABLED:'false'},{MAILROOM_ENABLED:'false'},
+    {ERP_DEV_MAILROOM_SOURCE_URL:''},{ERP_DEV_MAILROOM_SOURCE_URL:mailroomDevOrigin.replace('-dev','')},
+    {MAILROOM_CONNECTIONS:'[]'},{MAILROOM_CONNECTIONS:'not-json'}]) {
+    isolatedMailroomCase(`
+      const route='/api/integration/mailroom/summary';
+      await assert.rejects(fetch(origin+route,signed(route)),check);
       assert.equal(calls.fetch.length,0);assert.equal(calls.socket.length,0);
     `,patch);
   }
