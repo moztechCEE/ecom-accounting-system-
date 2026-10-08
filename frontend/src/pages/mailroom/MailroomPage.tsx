@@ -50,7 +50,9 @@ import {
 import TabletAcceptance from "./TabletAcceptance";
 import RecipientPicker from "./RecipientPicker";
 import { MAILROOM_QUEUES, mailroomNextStep, needsInspectionPhoto, matchesMailroomSearch, canDispatch, matchesDispatchReceipt } from "./mailroom-workflow";
-import SourceCasePicker from "./SourceCasePicker";
+import ReceiptDrawer from "./ReceiptDrawer";
+import StorageWorkbench from "./StorageWorkbench";
+import ArrivalSummary from "./ArrivalSummary";
 import RepairDocuments from "../repair/RepairDocuments";
 import { useRepairFeedback } from "../repair/repair-feedback";
 import { createRepairNavigationGate, useRepairNavigationGuard } from "../repair/repair-navigation";
@@ -128,18 +130,22 @@ export default function MailroomPage({
     [create, setCreate] = useState(false);
   const [createSource, setCreateSource] = useState<Source>(),
     [listTab, setListTab] = useState("received"),
-    [createCategory, setCreateCategory] = useState("REPAIR"),
+    [storageVisited, setStorageVisited] = useState(false),
+    [storageReset, setStorageReset] = useState(0),
+    [storageRefreshRevision, setStorageRefreshRevision] = useState(0),
+    [createCategory, setCreateCategory] = useState(""),
     [arrivalRevision, setArrivalRevision] = useState(0);
   const selectedId = params.get("itemId");
-  const drafts = useRef({ receipt: { dirty: false, busy: false } as MailroomDraftState, detail: { dirty: false, busy: false } as MailroomDraftState });
+  const drafts = useRef({ receipt: { dirty: false, busy: false } as MailroomDraftState, detail: { dirty: false, busy: false } as MailroomDraftState, storage: { dirty: false, busy: false } as MailroomDraftState });
   const dirty = useRef(false);
-  const updateDraft = useCallback((scope: "receipt" | "detail", state: MailroomDraftState) => {
+  const updateDraft = useCallback((scope: "receipt" | "detail" | "storage", state: MailroomDraftState) => {
     drafts.current[scope] = state;
     dirty.current = Object.values(drafts.current).some(value => value.dirty || value.busy);
   }, []);
   const updateReceiptDraft = useCallback((state: MailroomDraftState) => updateDraft("receipt", state), [updateDraft]);
+  const updateStorageDraft = useCallback((state: MailroomDraftState) => updateDraft("storage", state), [updateDraft]);
   const updateDetailDraft = useCallback((state: MailroomDraftState) => updateDraft("detail", state), [updateDraft]);
-  const confirmDiscard = useMemo(() => createMailroomDiscardConfirmation(
+  const discardConfirmation = useMemo(() => createMailroomDiscardConfirmation(
     () => ({ dirty: dirty.current, busy: Object.values(drafts.current).some(value => value.busy) }),
     () => new Promise<boolean>(resolve => modal.confirm({
       title: "目前收發工作有未保存的修改",
@@ -153,13 +159,18 @@ export default function MailroomPage({
     })),
     () => message.info("正在保存或讀取照片，請稍候。"),
   ), [modal, message]);
+  const confirmDiscard = useCallback(async () => {
+    if (drafts.current.storage.uncertain || drafts.current.receipt.uncertain) { message.info("請先重試原操作，確認保存結果後再離開。"); return false; }
+    return discardConfirmation();
+  }, [discardConfirmation, message]);
   useRepairNavigationGuard(dirty, confirmDiscard);
   const navigationGate = useMemo(() => createRepairNavigationGate(dirty, confirmDiscard), [confirmDiscard]);
   const guardChange = useCallback((change: () => void) => {
     if (Object.values(drafts.current).some(value => value.busy)) { void confirmDiscard(); return; }
     navigationGate(() => {
-      drafts.current = { receipt: { dirty: false, busy: false }, detail: { dirty: false, busy: false } };
+      drafts.current = { receipt: { dirty: false, busy: false }, detail: { dirty: false, busy: false }, storage: { dirty: false, busy: false } };
       dirty.current = false;
+      setStorageReset(value => value + 1);
       change();
     });
   }, [navigationGate, confirmDiscard]);
@@ -328,22 +339,13 @@ export default function MailroomPage({
             onClick={() => {
               void refresh();
               setArrivalRevision((value) => value + 1);
+              setStorageRefreshRevision(value => value + 1);
             }}
           >
             重新整理
           </Button>
           {mode === "mailroom" && hasPermission(user, "mailroom:create") ? (
-            <Space wrap>
-            <Button onClick={() => startReceipt("LETTER")}>登記信件／包裹</Button>
-            <Button
-              type="primary"
-              size="large"
-              icon={<PlusOutlined />}
-              onClick={() => startReceipt("REPAIR")}
-            >
-              登記售後收件
-            </Button>
-            </Space>
+            <Button type="primary" size="large" aria-label="登記收件" icon={<PlusOutlined aria-hidden />} onClick={() => startReceipt("")}>登記收件</Button>
           ) : null}
         </Space>
       </div>
@@ -359,15 +361,17 @@ export default function MailroomPage({
       {mode === "mailroom" ? (
         <Tabs
           activeKey={listTab}
-          onChange={setListTab}
+          onChange={(key) => guardChange(() => { setListTab(key); if (key === "storage") { setStorageVisited(true); setStorageRefreshRevision(value => value + 1); } setStatus(key === "outbound" ? "READY_FOR_DISPATCH" : undefined); setPage(1); setSearch(""); })}
           items={[
-            { key: "received", label: "收件與交接工作" },
-            { key: "awaiting", label: "售後待到貨案件" },
+            { key: "received", label: "收件與交接" },
+            { key: "outbound", label: "寄件" },
+            { key: "awaiting", label: "售後待到貨" },
+            { key: "storage", label: "儲位管理" },
           ]}
         />
       ) : null}
       {mode === "mailroom" && listTab === "awaiting" ? (
-        <AwaitingCases
+        <div><ArrivalSummary entityId={entityId} paused={create || !!selectedId} revision={arrivalRevision} /><AwaitingCases
           entityId={entityId}
           paused={create || !!selectedId}
           revision={arrivalRevision}
@@ -375,21 +379,22 @@ export default function MailroomPage({
           onReceive={(source) => {
             startReceipt(source.type, source);
           }}
-        />
+        /></div>
       ) : null}
-      {mode !== "mailroom" || listTab === "received" ? (
+      {mode === "mailroom" && storageVisited && <div hidden={listTab !== "storage"}><StorageWorkbench key={entityId} entityId={entityId} onOpenItem={openItem} onDraftChange={updateStorageDraft} resetDraftRevision={storageReset} refreshRevision={storageRefreshRevision} /></div>}
+      {mode !== "mailroom" || ["received", "outbound"].includes(listTab) ? (
         <Card
           className="mailroom-list"
           title={
             <Space>
               {mode === "repair" ? <ToolOutlined /> : <InboxOutlined />}
-              <span>{mode === "mine" ? "交辦與收件紀錄" : "物件與進度"}</span>
+              <span>{mode === "mine" ? "交辦與收件紀錄" : listTab === "outbound" ? "寄回顧客" : "物件與進度"}</span>
               <Tag>{total} 件</Tag>
             </Space>
           }
         >
           {mode === "mailroom" && <div className="mailroom-queues" aria-label="收發工作佇列">
-            {MAILROOM_QUEUES.map(queue => <Button key={queue.status || "all"} type={status === queue.status ? "primary" : "default"}
+            {(listTab === "outbound" ? [{ label: "待寄回", status: "READY_FOR_DISPATCH" }, { label: "已交物流", status: "DISPATCHED" }] : MAILROOM_QUEUES.filter(queue => !["READY_FOR_DISPATCH", "DISPATCHED"].includes(queue.status || ""))).map(queue => <Button key={queue.status || "all"} type={status === queue.status ? "primary" : "default"}
               onClick={() => { setStatus(queue.status); setPage(1); }}>{queue.label}</Button>)}
           </div>}
           <div className="mailroom-filters">
@@ -407,9 +412,9 @@ export default function MailroomPage({
               aria-label="篩選進度"
               placeholder="全部進度"
               value={status}
-              allowClear
+              allowClear={listTab !== "outbound"}
               style={{ minWidth: 235 }}
-              options={Object.entries(STATUS).map(([value, label]) => ({
+              options={Object.entries(STATUS).filter(([value]) => listTab !== "outbound" || ["READY_FOR_DISPATCH", "DISPATCHED"].includes(value)).map(([value, label]) => ({
                 value,
                 label,
               }))}
@@ -454,6 +459,7 @@ export default function MailroomPage({
                 render: (_, item) => (
                   <div>
                     <Button
+                      title={item.productName}
                       type="link"
                       className="mailroom-item-link"
                       onClick={() => openItem(item.id)}
@@ -553,6 +559,7 @@ export default function MailroomPage({
               canAdmin={isAdminUser(user)}
               onSaved={async () => {
                 await Promise.all([loadDetail(), refresh()]);
+                setStorageRefreshRevision(value => value + 1);
               }}
             />
           ) : !detailLoading ? (
@@ -574,6 +581,7 @@ export default function MailroomPage({
         onCreated={(id) => {
           setCreate(false);
           void refresh();
+          setStorageRefreshRevision(value => value + 1);
           setArrivalRevision((value) => value + 1);
           setListTab("received");
           openItem(id);
@@ -731,7 +739,7 @@ function AwaitingCases({
     >
       <Input.Search
         aria-label="搜尋待到貨案件"
-        placeholder="搜尋售後案件單號"
+        placeholder="案件、入件單號、電話、姓名或產品"
         allowClear
         onSearch={setSearch}
         style={{ maxWidth: 420, marginBottom: 20 }}
@@ -786,6 +794,12 @@ function AwaitingCases({
                 </Text>
               </div>
             ),
+          },
+          {
+            title: "入件物流",
+            width: 200,
+            key: "incoming",
+            render: (_, source) => <div>{source.inTransit ? <Tag color="blue">已確認在途</Tag> : <Tag>待到貨</Tag>}{source.reverseShipments?.filter(shipment => shipment.trackingNumber).map(shipment => <div key={shipment.id}><Text type="secondary">{shipment.carrier || "物流"} · {shipment.trackingNumber}</Text></div>)}</div>,
           },
           {
             title: "售後進度",
@@ -1792,333 +1806,5 @@ function ItemDetail({
         }))}
       />
     </div>
-  );
-}
-function sourcePhysicalRows(source: Source) {
-  return source.items
-    .flatMap((item) =>
-      Array.from(
-        { length: Math.min(item.remainingQuantity ?? item.quantity, 50) },
-        () => ({
-          productName: item.name,
-          sku: item.sku || "",
-          serialNumber: item.serialNumber || "",
-          sourceItemId: item.id,
-        }),
-      ),
-    )
-    .slice(0, 50);
-}
-function ReceiptDrawer({
-  feedback,
-  guardChange,
-  onDraftChange,
-  initialSource,
-  initialCategory,
-  open,
-  entityId,
-  people,
-  onClose,
-  onCreated,
-}: {
-  feedback: RepairMessage;
-  guardChange: (change: () => void) => void;
-  onDraftChange: (state: MailroomDraftState) => void;
-  initialSource?: Source;
-  initialCategory: string;
-  open: boolean;
-  entityId: string;
-  people: Person[];
-  onClose: () => void;
-  onCreated: (id: string) => void;
-}) {
-  const message = feedback;
-  const [form] = Form.useForm(),
-    [busy, setBusy] = useState(false),
-    [source, setSource] = useState<Source>(),
-    [error, setError] = useState("");
-  const category = Form.useWatch("category", form);
-  const operation = useRef<{ body: string; id: string } | undefined>(undefined);
-  const baseline = useRef("");
-  const working = useRef(false);
-  const unknown = useRef(false);
-  const [uncertain, setUncertain] = useState(false);
-  function publishDraft() { onDraftChange({ dirty: open && (unknown.current || baseline.current !== mailroomDraftFingerprint(form.getFieldsValue(true))), busy: working.current, uncertain: unknown.current }); }
-  function setWorking(value: boolean) { working.current = value; setBusy(value); publishDraft(); }
-  const clearDraft = useCallback(() => { operation.current = undefined; unknown.current = false; setUncertain(false); baseline.current = mailroomDraftFingerprint(form.getFieldsValue(true)); onDraftChange({ dirty: false, busy: false }); }, [form, onDraftChange]);
-  function close() { guardChange(() => { clearDraft(); onClose(); }); }
-  useEffect(() => () => onDraftChange({ dirty: false, busy: false }), [onDraftChange]);
-  const isCase = ["REPAIR", "RETURN"].includes(category);
-  const isCorrespondence = ["LETTER", "PARCEL"].includes(category);
-  useEffect(() => {
-    if (open) {
-      form.resetFields();
-      form.setFieldsValue(
-        initialSource
-          ? {
-              category: initialSource.type,
-              sourceCaseId: initialSource.id,
-              items: sourcePhysicalRows(initialSource),
-            }
-          : { category: initialCategory, items: [{ productName: "" }] },
-      );
-      setError("");
-      setSource(initialSource);
-      clearDraft();
-    } else {
-      clearDraft();
-    }
-  }, [open, form, initialSource, initialCategory, clearDraft]);
-  async function submit() {
-    if (working.current) return;
-    setWorking(true);
-    try {
-      const values = await form.validateFields();
-      const caseCategory = ["REPAIR", "RETURN"].includes(values.category);
-      const correspondence = ["LETTER", "PARCEL"].includes(values.category);
-      const body = JSON.stringify({
-        entityId,
-        category: values.category,
-        ...(caseCategory ? { sourceCaseId: values.sourceCaseId } : {}),
-        ...(["LETTER", "PARCEL"].includes(values.category)
-          ? { recipientId: values.recipientId }
-          : {}),
-        carrier: values.carrier,
-        trackingNumber: values.trackingNumber,
-        senderLabel: values.senderLabel,
-        location: values.location,
-        items: values.items.map(
-          (row: {
-            productName: string;
-            sku?: string;
-            serialNumber?: string;
-            sourceItemId?: string;
-          }) => ({
-            productName: row.productName,
-            ...(!correspondence
-              ? { sku: row.sku, serialNumber: row.serialNumber }
-              : {}),
-            ...(caseCategory ? { sourceItemId: row.sourceItemId } : {}),
-          }),
-        ),
-      });
-      if (!unknown.current && operation.current?.body !== body)
-        operation.current = { body, id: requestId() };
-      setError("");
-      const result = await api.post("/mailroom/receipts", {
-        ...JSON.parse(operation.current!.body),
-        requestId: operation.current!.id,
-      });
-      message.success("已登記收件");
-      clearDraft(); setWorking(false);
-      onCreated(result.data.itemIds[0]);
-    } catch (e) {
-      if (!(e as { errorFields?: unknown }).errorFields) {
-        const rejected = (e as { response?: { status?: number } }).response?.status;
-        if (operation.current && (!rejected || rejected >= 500)) { unknown.current = true; setUncertain(true); publishDraft(); }
-        setError(errorText(e));
-      }
-    } finally {
-      setWorking(false);
-    }
-  }
-  return (
-    <Drawer
-      title="登記收件"
-      width="min(700px, 100vw)"
-      open={open}
-      onClose={close}
-      forceRender
-      footer={
-        <Space>
-          <Button
-            type="primary"
-            size="large"
-            loading={busy}
-            onClick={() => void submit()}
-          >
-            登記收件
-          </Button>
-          <Button disabled={busy} onClick={close}>
-            取消
-          </Button>
-        </Space>
-      }
-    >
-      <Form
-        form={form}
-        layout="vertical"
-        disabled={busy || uncertain}
-        onValuesChange={publishDraft}
-        preserve
-        initialValues={
-          initialSource
-            ? {
-                category: initialSource.type,
-                sourceCaseId: initialSource.id,
-                items: sourcePhysicalRows(initialSource),
-              }
-            : { category: initialCategory, items: [{ productName: "" }] }
-        }
-      >
-        <Form.Item
-          name="category"
-          label="所屬類別"
-          rules={[{ required: true }]}
-        >
-          <Select
-            options={Object.entries(CATEGORIES).map(([value, label]) => ({
-              value,
-              label,
-            }))}
-            onChange={() => {
-              setSource(undefined);
-              form.setFieldsValue({
-                sourceCaseId: undefined,
-                recipientId: undefined,
-                items: [{ productName: "" }],
-              });
-            }}
-          />
-        </Form.Item>
-        {isCase ? (
-          <>
-            <Form.Item
-              name="sourceCaseId"
-              label="對應售後案件"
-              rules={[{ required: true, message: "請輸入並選擇售後案件" }]}
-            >
-              <SourceCasePicker
-                entityId={entityId}
-                active={open && isCase}
-                selectedSource={source}
-                onSelectSource={(selected) => {
-                  setSource(selected);
-                  form.setFieldsValue({
-                    category: selected.type,
-                    items: sourcePhysicalRows(selected),
-                  });
-                  publishDraft();
-                }}
-              />
-            </Form.Item>
-          </>
-        ) : ["LETTER", "PARCEL"].includes(category) ? (
-          <Form.Item
-            name="recipientId"
-            label="收件部門／同仁"
-            rules={[{ required: true, message: "請選擇收件人" }, { validator: (_, value) => !value || people.some(person => person.id === value) ? Promise.resolve() : Promise.reject(new Error("請重新選擇目前可指派的同仁")) }]}
-          >
-            <RecipientPicker disabled={busy || uncertain} key={category} people={people} label="收件同仁" />
-          </Form.Item>
-        ) : null}
-        {source ? (
-          <Paragraph type="secondary">
-            案件 {source.number} · 已收到 {source.receivedQuantity ?? 0}／
-            {source.expectedQuantity ??
-              source.items.reduce((sum, item) => sum + item.quantity, 0)}{" "}
-            件
-          </Paragraph>
-        ) : null}
-        <div className="mailroom-form-grid">
-          {field("入件物流公司", "carrier")}
-          {field("入件物流單號", "trackingNumber")}
-        </div>
-        {field(
-          isCorrespondence ? "對方公司名稱／寄件人姓名" : "寄件人／單位",
-          "senderLabel",
-          isCorrespondence,
-        )}
-        {field("收件存放位置", "location", true)}
-        <Divider orientation="left">實際收到的物件</Divider>
-        <Form.List
-          name="items"
-          rules={[
-            {
-              validator: (_, items) =>
-                items?.length
-                  ? Promise.resolve()
-                  : Promise.reject(new Error("至少登記一件物件")),
-            },
-          ]}
-        >
-          {(fields, { add, remove }, { errors }) => (
-            <>
-              {fields.map((item, index) => (
-                <Card
-                  key={item.key}
-                  size="small"
-                  title={`第 ${index + 1} 件`}
-                  extra={
-                    fields.length > 1 ? (
-                      <Button
-                        type="text"
-                        danger
-                        disabled={busy || uncertain}
-                        onClick={() => remove(item.name)}
-                      >
-                        移除
-                      </Button>
-                    ) : null
-                  }
-                  style={{ marginBottom: 12 }}
-                >
-                  {isCase ? (
-                    <Form.Item
-                      name={[item.name, "sourceItemId"]}
-                      label="對照申報品項"
-                      rules={[{ required: true }]}
-                    >
-                      <Select
-                        options={(source?.items || []).map((x) => ({
-                          value: x.id,
-                          label: x.name,
-                        }))}
-                      />
-                    </Form.Item>
-                  ) : null}
-                  <Form.Item
-                    name={[item.name, "productName"]}
-                    label={
-                      category === "LETTER"
-                        ? "信件名稱／內容"
-                        : category === "PARCEL"
-                          ? "包裹內容／名稱"
-                          : "實收品項／信件名稱"
-                    }
-                    rules={[{ required: true, whitespace: true }]}
-                  >
-                    <Input maxLength={200} />
-                  </Form.Item>
-                  {!isCorrespondence && (
-                    <div className="mailroom-form-grid">
-                      <Form.Item name={[item.name, "sku"]} label="SKU">
-                        <Input maxLength={100} />
-                      </Form.Item>
-                      <Form.Item name={[item.name, "serialNumber"]} label="SN">
-                        <Input maxLength={100} />
-                      </Form.Item>
-                    </div>
-                  )}
-                </Card>
-              ))}
-              <Button
-                type="dashed"
-                block
-                icon={<PlusOutlined />}
-                disabled={busy || uncertain || fields.length >= 50 || category === "UNMATCHED"}
-                onClick={() => add({ productName: "" })}
-              >
-                增加一件實物
-              </Button>
-              <Form.ErrorList errors={errors} />
-            </>
-          )}
-        </Form.List>
-        {error ? (
-          <Alert style={{ marginTop: 16 }} type="error" message={error} />
-        ) : null}
-      </Form>
-    </Drawer>
   );
 }

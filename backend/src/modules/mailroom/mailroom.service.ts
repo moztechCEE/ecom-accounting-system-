@@ -63,6 +63,13 @@ import {
   requireSourceConsent,
   repairStatusLabel,
 } from './repair-workflow.contract';
+import {
+  receiptLinkChanges,
+  requireReceiptSourceVersion,
+  resolveReceiptLocation,
+  validateReceiptPayload,
+  validateReceiptProduct,
+} from './mailroom-receipt.contract';
 
 const actorSelect = {
   id: true,
@@ -722,13 +729,16 @@ export class MailroomService {
     return {
       label: item.label,
       productName: item.productName,
+      productId: item.productId,
       sku: item.sku,
+      barcode: item.barcode,
       serialNumber: item.serialNumber,
       status: item.status,
       matchResult: item.matchResult,
       grade: item.grade,
       disposition: item.disposition,
       location: dispatchedLocation(item),
+      storageLocationId: item.storageLocationId,
       custodianId: item.custodianId,
       nextUserId: item.nextUserId,
       quantity: 1,
@@ -1029,11 +1039,7 @@ export class MailroomService {
     const actor = await this.actor(userId);
     requirePermission(actor, 'mailroom:create');
     requireEntity(actor, input.entityId);
-    if (
-      !input.location.trim() ||
-      input.items.some((x) => !x.productName.trim())
-    )
-      throw new BadRequestException('請填寫物件與存放位置');
+    validateReceiptPayload(input);
     if (input.category === 'UNMATCHED' && input.items.length !== 1)
       throw new BadRequestException('待辨識物件請逐件登記，以便補登不同歸屬');
     const hash = fingerprint(input);
@@ -1071,6 +1077,7 @@ export class MailroomService {
         ['CANCELLED', 'CLOSED', 'COMPLETED'].includes(source.status)
       )
         throw new BadRequestException('售後案件類別不符');
+      requireReceiptSourceVersion(source, input.sourceVersion);
     } else if (input.sourceCaseId)
       throw new BadRequestException('信件、員工包裹及待辨識件不可掛售後案件');
     if (['LETTER', 'PARCEL'].includes(input.category) && !input.recipientId)
@@ -1117,6 +1124,13 @@ export class MailroomService {
           source,
           input.items.map((item) => item.sourceItemId),
         );
+      if (source) requireReceiptSourceVersion(source, input.sourceVersion);
+      const storage = await resolveReceiptLocation(tx, input);
+      // Lock each selected product in a stable order across multi-item receipts.
+      for (const row of [...input.items].sort((left, right) =>
+        (left.productId || '').localeCompare(right.productId || ''),
+      ))
+        await validateReceiptProduct(tx, input.entityId, row);
       const number =
         'MR-' +
         new Date().toISOString().slice(0, 10).replace(/-/g, '') +
@@ -1156,11 +1170,14 @@ export class MailroomService {
             entityId: input.entityId,
             label: number + '-' + (i + 1),
             productName: row.productName.trim(),
+            productId: row.productId || null,
             sku: row.sku?.trim() || null,
+            barcode: row.barcode?.trim() || null,
             serialNumber: row.serialNumber?.trim() || null,
+            evidence: row.evidence?.length ? json(row.evidence) : undefined,
             declared: declared ? json(declared) : undefined,
             status: input.recipientId ? 'WAITING_PICKUP' : 'RECEIVED',
-            location: input.location.trim(),
+            ...storage,
             custodianId: userId,
             recipientId: input.recipientId,
             nextUserId: input.recipientId,
@@ -1179,6 +1196,7 @@ export class MailroomService {
             null,
             undefined,
             true,
+            Boolean(row.evidence?.length),
           )),
         );
       }
@@ -1766,6 +1784,7 @@ export class MailroomService {
         where: { id },
         data: {
           ...changes,
+          ...receiptLinkChanges(item, changes, input.action),
           version: { increment: 1 },
         } as Prisma.MailroomItemUpdateInput,
         include: withReceipt,

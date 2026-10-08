@@ -57,17 +57,31 @@ export class ReturnInspectionDto {
 }
 export class ReceiptItemDto {
   @IsString() @IsNotEmpty() @MaxLength(200) productName!: string;
+  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(128) productId?: string;
   @IsOptional() @IsString() @MaxLength(128) sourceItemId?: string;
   @IsOptional() @IsString() @MaxLength(100) sku?: string;
+  @IsOptional() @IsString() @MaxLength(100) barcode?: string;
   @IsOptional() @IsString() @MaxLength(100) serialNumber?: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(4)
+  @IsString({ each: true })
+  @MaxLength(1400000, { each: true })
+  evidence?: string[];
 }
 export class CreateReceiptDto {
   @IsString() @IsNotEmpty() @MaxLength(128) entityId!: string;
   @IsString() @Matches(/^[A-Za-z0-9_-]{8,80}$/) requestId!: string;
   @IsIn(CATEGORIES) category!: (typeof CATEGORIES)[number];
   @IsOptional() @IsString() @MaxLength(128) sourceCaseId?: string;
+  @IsOptional() @IsString() @MaxLength(80) sourceVersion?: string;
   @IsOptional() @IsString() @MaxLength(128) recipientId?: string;
-  @IsString() @IsNotEmpty() @MaxLength(160) location!: string;
+  @IsOptional() @IsString() @MaxLength(160) location?: string;
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(128)
+  storageLocationId?: string;
   @IsOptional() @IsString() @MaxLength(100) carrier?: string;
   @IsOptional() @IsString() @MaxLength(100) trackingNumber?: string;
   @IsOptional() @IsString() @MaxLength(160) senderLabel?: string;

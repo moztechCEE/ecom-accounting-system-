@@ -212,6 +212,44 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
           typeof x.type !== 'string' ||
           !['REPAIR', 'RETURN'].includes(x.type) ||
           typeof x.version !== 'string' ||
+          (x.customerPhone !== undefined &&
+            x.customerPhone !== null &&
+            (typeof x.customerPhone !== 'string' ||
+              x.customerPhone.length > 100)) ||
+          (x.inTransit !== undefined && typeof x.inTransit !== 'boolean') ||
+          (x.reverseShipments !== undefined &&
+            (!Array.isArray(x.reverseShipments) ||
+              x.reverseShipments.length > 100 ||
+              x.reverseShipments.some((shipment: unknown) => {
+                if (
+                  !shipment ||
+                  typeof shipment !== 'object' ||
+                  Array.isArray(shipment)
+                )
+                  return true;
+                const s = shipment as Record<string, unknown>;
+                return (
+                  typeof s.id !== 'string' ||
+                  !/^[A-Za-z0-9_-]{1,128}$/.test(s.id) ||
+                  typeof s.carrier !== 'string' ||
+                  s.carrier.length > 200 ||
+                  (s.trackingNumber !== null &&
+                    (typeof s.trackingNumber !== 'string' ||
+                      s.trackingNumber.length > 200)) ||
+                  typeof s.status !== 'string' ||
+                  ![
+                    'PENDING',
+                    'PICKUP_SCHEDULED',
+                    'IN_TRANSIT',
+                    'RECEIVED',
+                    'CANCELLED',
+                  ].includes(s.status) ||
+                  (s.receivedAt !== null &&
+                    (typeof s.receivedAt !== 'string' ||
+                      !Number.isFinite(Date.parse(s.receivedAt)))) ||
+                  s.shippedAt !== null
+                );
+              }))) ||
           !Array.isArray(x.items) ||
           x.items.some((value: unknown) => {
             if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -253,6 +291,180 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
       await this.request(entry, 'GET', path),
       cursor,
     );
+  }
+  async sourceSummary(entityId: string) {
+    const value = await this.request(
+      this.connection(entityId, 'AFTER_SALES'),
+      'GET',
+      '/api/integration/mailroom/summary',
+    );
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      throw new BadGatewayException('售後數量資料格式不符');
+    const result = value as Record<string, unknown>;
+    if (result.complete === false && result.counts === null)
+      return { complete: false as const, counts: null };
+    const counts = result.counts as Record<string, unknown> | null;
+    if (
+      result.complete !== true ||
+      !counts ||
+      ['awaitingCases', 'awaitingItems', 'inTransitCases'].some(
+        (key) =>
+          !Number.isSafeInteger(counts[key]) || (counts[key] as number) < 0,
+      ) ||
+      (counts.inTransitCases as number) > (counts.awaitingCases as number)
+    )
+      throw new BadGatewayException('售後數量資料格式不符');
+    return {
+      complete: true as const,
+      counts: {
+        awaitingCases: counts.awaitingCases as number,
+        awaitingItems: counts.awaitingItems as number,
+        inTransitCases: counts.inTransitCases as number,
+      },
+    };
+  }
+  async caseAttachments(entityId: string, caseId: string) {
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(caseId))
+      throw new BadGatewayException('案件識別碼格式不符');
+    const value = await this.request(
+      this.connection(entityId, 'AFTER_SALES'),
+      'GET',
+      '/api/integration/mailroom/cases/' +
+        encodeURIComponent(caseId) +
+        '/attachments',
+    );
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      throw new BadGatewayException('案件照片資料格式不符');
+    const result = value as Record<string, unknown>;
+    if (
+      result.caseId !== caseId ||
+      result.scope !== 'CASE' ||
+      !Array.isArray(result.items) ||
+      result.items.length > 12 ||
+      result.items.some((value: unknown) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value))
+          return true;
+        const image = value as Record<string, unknown>;
+        return (
+          typeof image.id !== 'string' ||
+          !/^[A-Za-z0-9_-]{1,128}$/.test(image.id) ||
+          typeof image.fileName !== 'string' ||
+          image.fileName.length > 200 ||
+          !['image/jpeg', 'image/png', 'image/webp'].includes(
+            String(image.contentType),
+          ) ||
+          !Number.isInteger(image.sizeBytes) ||
+          (image.sizeBytes as number) <= 0 ||
+          (image.sizeBytes as number) > 30 * 1024 * 1024 ||
+          typeof image.createdAt !== 'string' ||
+          !Number.isFinite(Date.parse(image.createdAt)) ||
+          image.scope !== 'CASE'
+        );
+      })
+    )
+      throw new BadGatewayException('案件照片資料格式不符');
+    return {
+      caseId,
+      scope: 'CASE' as const,
+      items: result.items.map((value: unknown) => {
+        const image = value as Record<string, unknown>;
+        return {
+          id: image.id as string,
+          fileName: image.fileName as string,
+          contentType: image.contentType as string,
+          sizeBytes: image.sizeBytes as number,
+          createdAt: image.createdAt as string,
+          scope: 'CASE' as const,
+        };
+      }),
+      hasMore: result.hasMore === true,
+    };
+  }
+  async caseAttachmentMedia(
+    entityId: string,
+    caseId: string,
+    attachmentId: string,
+  ) {
+    if (
+      ![caseId, attachmentId].every((id) => /^[A-Za-z0-9_-]{1,128}$/.test(id))
+    )
+      throw new BadGatewayException('案件照片識別碼格式不符');
+    const entry = this.connection(entityId, 'AFTER_SALES');
+    const path =
+      '/api/integration/mailroom/cases/' +
+      encodeURIComponent(caseId) +
+      '/attachments/' +
+      encodeURIComponent(attachmentId) +
+      '/media';
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const response = await fetch(new URL(path, entry.baseUrl), {
+      method: 'GET',
+      redirect: 'error',
+      signal: AbortSignal.timeout(8000),
+      headers: {
+        'x-mailroom-key': entry.keyId,
+        'x-mailroom-entity': entry.entityId,
+        'x-mailroom-time': timestamp,
+        'x-mailroom-signature': signRequest(
+          entry.secret,
+          'GET',
+          path,
+          timestamp,
+          '',
+          entry.entityId,
+        ),
+      },
+    });
+    if (!response.ok)
+      throw new BadGatewayException({
+        message: '案件照片暫時無法讀取',
+        upstreamStatus: response.status,
+      });
+    const contentType =
+      response.headers.get('content-type')?.split(';')[0].trim() || '';
+    const max = 1024 * 1024;
+    if (
+      !['image/jpeg', 'image/png', 'image/webp'].includes(contentType) ||
+      Number(response.headers.get('content-length') || 0) > max ||
+      !response.body
+    ) {
+      await response.body?.cancel();
+      throw new BadGatewayException('案件照片格式或大小不符');
+    }
+    const reader = response.body.getReader();
+    const chunks: Buffer[] = [];
+    let length = 0;
+    try {
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        length += part.value.length;
+        if (length > max) throw new BadGatewayException('案件照片過大');
+        chunks.push(Buffer.from(part.value));
+      }
+    } catch (error) {
+      await reader.cancel();
+      throw error;
+    } finally {
+      reader.releaseLock();
+    }
+    const contents = Buffer.concat(chunks, length);
+    const valid =
+      contentType === 'image/jpeg'
+        ? contents.length >= 3 &&
+          contents[0] === 0xff &&
+          contents[1] === 0xd8 &&
+          contents[2] === 0xff
+        : contentType === 'image/png'
+          ? contents.length >= 8 &&
+            contents
+              .subarray(0, 8)
+              .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+          : contents.length >= 12 &&
+            contents.subarray(0, 4).toString('ascii') === 'RIFF' &&
+            contents.subarray(8, 12).toString('ascii') === 'WEBP';
+    if (!valid) throw new BadGatewayException('案件照片格式不符');
+    return { contents, contentType };
   }
   @Interval(15000)
   async deliverPending() {

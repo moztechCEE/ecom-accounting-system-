@@ -2,6 +2,7 @@
 import { MailroomService } from './mailroom.service';
 import { type Actor, type SourceCase } from './mailroom.contract';
 import { CreateReceiptDto, MailroomCommandDto } from './mailroom.dto';
+const PHOTO = 'data:image/png;base64,iVBORw0KGgo=';
 
 describe('one physical native row per external source line capacity', () => {
   let service: MailroomService, db: any, sync: any, source: SourceCase;
@@ -21,6 +22,7 @@ describe('one physical native row per external source line capacity', () => {
     entityId: 'company',
     category: 'RETURN',
     sourceCaseId: 'source-case',
+    sourceVersion: '1',
     requestId: id,
     location: 'SYNTHETIC CLERK AREA',
     items: lines.map((sourceItemId, index) => ({
@@ -28,6 +30,7 @@ describe('one physical native row per external source line capacity', () => {
       productName: 'SYNTHETIC RETURN',
       sku: 'SYNTHETIC-SKU',
       serialNumber: 'SYNTHETIC-SN-' + index,
+      evidence: [PHOTO],
     })),
   });
   beforeEach(() => {
@@ -309,7 +312,8 @@ describe('one physical native row per external source line capacity', () => {
       ...request('unknown'),
       category: 'UNMATCHED',
       sourceCaseId: undefined,
-      items: [{ productName: 'SYNTHETIC UNKNOWN' }],
+      sourceVersion: undefined,
+      items: [{ productName: 'SYNTHETIC UNKNOWN', evidence: [PHOTO] }],
     });
     const command: MailroomCommandDto = {
       entityId: 'company',
@@ -340,7 +344,8 @@ describe('one physical native row per external source line capacity', () => {
       ...request('unknown'),
       category: 'UNMATCHED',
       sourceCaseId: undefined,
-      items: [{ productName: 'SYNTHETIC UNKNOWN' }],
+      sourceVersion: undefined,
+      items: [{ productName: 'SYNTHETIC UNKNOWN', evidence: [PHOTO] }],
     });
     await expect(
       service.command('clerk', unknown.itemIds[0], {

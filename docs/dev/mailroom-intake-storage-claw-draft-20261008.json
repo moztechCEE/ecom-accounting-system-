@@ -1,0 +1,66 @@
+{
+  "status": "DRAFT_FOR_DOA_CENTRAL_REVIEW_NOT_GENERATED",
+  "base": "745b8843d42e3955e740594f471b1283dc28d553",
+  "entryId": "mailroom-workbench",
+  "mergeInstruction": "Merge these reviewed changes into the newest intake-read guide; do not replace DOA permission corrections with the older base entry. Remove obsolete two-entry instructions, original claim auto-fill instructions, no-schema assertions and current source case-number-only search limitation. Preserve all unaffected handoff, dispatch, finance, custody and SourceAI limitations. Regenerate central knowledge after final integrated SHA.",
+  "locales": {
+    "zh": {
+      "steps": [
+        "收發室使用同一個「登記收件」入口，再選維修品、退貨品、公司信件、同仁包裹或找不到售後案件。工作區分收件與交接、寄件、售後待到貨、儲位管理。",
+        "售後收件依選擇、拍照、核對資料三步操作。以案件、入件物流單號、電話、姓名或產品搜尋來源案件；精確案件編號優先，其餘最近更新優先。申報品項獨立顯示，實收名稱、SKU及SN不自動當作已收到。",
+        "選擇既有產品可帶入實收名稱、SKU及產品條碼；找不到時可手動登記。SN只能掃描或輸入實物序號，選產品不產生新SN。一般信件與包裹填公司或寄件人姓名、內容及具體收件同仁，不填SKU或SN。",
+        "維修、退貨及找不到案件的實收物件，每件至少留一張照片；一般信件及包裹可選填。核對最後摘要後點確認並登記收件。售後實物仍進已收件待核對，依詳情完成品項核對或退貨分級後才交接；照片來源及實收照片分開。",
+        "儲位管理可新增貨架及格位、命名、設定收件或待寄區、調整平面位置與啟停。立體貨架及平面區域可切換，點A1等格位查看物品、案件、目前保管人及位置；搜尋產品、案件或SN可標示格位。",
+        "登記時選啟用儲位，或記錄臨時位置。舊文字位置不自動猜配成格位；未配儲位可由目前本人保管的收發人員確認搬入。移動儲位只記位置、版本及歷程，不變更狀態、交接、通知或库存。",
+        "寄件工作區查看待寄回及已交物流的維修品。處理完成品仍先由收發室本人點收；產品/包裝/實際替換品確認後，登記寄回物流與單號。入件物流另行保留。",
+        "售後待到貨統計與清單載入筆數分開。只有來源物流明確記IN_TRANSIT且物品未收齊，才列已確認在途；無寄出證據不當作已寄。統計不完整或失敗不能顯示0件或完整總數。"
+      ],
+      "boundaries": [
+        "相機原始照片可在裝置上縮圖後保存，原檔最多30MB、2,000萬像素。每件最多4張照片，保存單張1MB、每件3MB，本次合計12MB；後端檢查圖片格式與容量。原申報與客服來源快照保留，登記不是正式核對、簽收、入庫或退款。",
+        "照片入口顯示案件級附件，不宣稱某張照片對應特定產品。依公司及案件權限取唯讀縮圖，不公開原始檔、GCS路徑或憑證。未提供照片如實顯示未提供。",
+        "貨架編碼與格位編碼為固定識別；名稱可修改。配置調整不搬移實物，有物件的貨架或格位不得停用，縮小貨架不得截掉現存格位。技師、物流或已入庫保管的物品不仍算原收發格位占用。",
+        "案件來源版次、產品主檔與啟用儲位於登記時重查；更新或停用時拒絕舊資料。結果未知保留原請求與照片，先沿相同內容及requestId重試，不另登第二筆；忙碌或結果未知時不能離開。"
+      ]
+    },
+    "en": {
+      "steps": [
+        "Use one Register receipt entry, then choose repair, return, company letter, staff parcel, or an unmatched after-sales item. The work areas are Receiving and handoff, Dispatch, Awaiting arrival, and Storage.",
+        "After-sales receipt has three steps: Select, Photograph, and Review data. Search by case, inbound tracking, phone, customer name, or product. Exact case references rank first, followed by recent updates. Declared items remain separate; their name, SKU, and serial number do not prove what physically arrived.",
+        "Select an existing product to fill its actual name, SKU, and product barcode, or record an unknown product manually. Scan or enter the physical serial number; choosing a product never creates a serial. Letters and staff parcels use sender company/name, contents, and a specific employee recipient, without SKU or serial fields.",
+        "Repair, return, and unmatched items require at least one physical photo each. Correspondence photos are optional. Review the summary and confirm registration. After-sales items remain Received, awaiting verification; finish item verification or return grading in the detail before handoff. Source-case photos and actual evidence stay separate.",
+        "Create racks and bins, name them, select receiving or outbound zones, edit floor coordinates, and enable or disable empty storage. Switch between rack and floor views. Select a bin such as A1 to inspect goods, cases, current custody, and location, or search to highlight a matching bin.",
+        "Select an active bin when receiving, or record a temporary position. Legacy text is not guessed into a structured bin. The current mailroom custodian may confirm a move. Moving storage changes only location, version, and history; it does not change workflow status, custody, notifications, or stock.",
+        "Dispatch shows repair goods awaiting return to the customer and already handed to the carrier. The designated clerk must first personally accept completed goods, verify the physical original or replacement, then record outbound carrier and tracking. Incoming tracking is retained separately.",
+        "Global awaiting-arrival statistics are separate from loaded rows. Count confirmed transit only when the source shipment explicitly says IN_TRANSIT and goods remain outstanding. A case without dispatch proof is awaiting arrival. Failed or incomplete statistics do not prove zero or a complete total."
+      ],
+      "boundaries": [
+        "Camera photos may be resized locally before saving, with a 30 MB and 20 megapixel input limit. Each item allows up to four saved photos: 1 MB each, 3 MB per item, and 12 MB for the whole receipt. The server validates image type and size. Declared and source snapshots remain unchanged; registration does not complete formal verification, acceptance, stock posting, or refund.",
+        "Photo previews represent case-level attachments, without claiming a particular product match. Read thumbnails under company and case authorization; never expose original files, GCS paths, or credentials. Missing photos remain explicitly unavailable.",
+        "Rack and bin codes are stable identities while display names are editable. Layout changes do not move goods. Occupied racks or bins cannot be disabled, and shrinking a rack cannot cut off existing bins. Technician, carrier, or stock custody is not counted as occupancy in an old mailroom bin.",
+        "Registration rechecks source version, current product master data, and active storage. Updated or disabled references reject stale submissions. Preserve the original request and evidence on an uncertain result, retry identical content and requestId, and do not create a second receipt. Busy or uncertain operations prevent leaving."
+      ]
+    }
+  },
+  "sourcePathsAdd": [
+    "frontend/src/pages/mailroom/ReceiptDrawer.tsx",
+    "frontend/src/pages/mailroom/ReceivedProductPicker.tsx",
+    "frontend/src/pages/mailroom/ReceiptPhotoInput.tsx",
+    "frontend/src/pages/mailroom/receipt-photos.ts",
+    "frontend/src/pages/mailroom/ReceiptLocationPicker.tsx",
+    "frontend/src/pages/mailroom/StorageWorkbench.tsx",
+    "frontend/src/pages/mailroom/storage-model.ts",
+    "frontend/src/pages/mailroom/storage.css",
+    "frontend/src/pages/mailroom/SourceCasePhotos.tsx",
+    "frontend/src/pages/mailroom/ArrivalSummary.tsx",
+    "backend/src/modules/mailroom/mailroom-storage.controller.ts",
+    "backend/src/modules/mailroom/mailroom-storage.dto.ts",
+    "backend/src/modules/mailroom/mailroom-storage.service.ts",
+    "backend/src/modules/mailroom/mailroom-catalog.controller.ts",
+    "backend/src/modules/mailroom/mailroom-catalog.service.ts",
+    "backend/src/modules/mailroom/mailroom-receipt.contract.ts",
+    "backend/src/modules/mailroom/mailroom-source-media.controller.ts",
+    "backend/src/modules/mailroom/mailroom-source-media.service.ts",
+    "backend/prisma/migrations/20261008090000_mailroom_storage/migration.sql",
+    "backend/prisma/migrations/20261008091000_mailroom_actual_product/migration.sql"
+  ]
+}

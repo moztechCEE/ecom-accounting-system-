@@ -531,6 +531,7 @@ model Product {
   variants Product[] @relation("ProductVariants")
 
   serialNumbers InventorySerialNumber[]
+  mailroomActualItems MailroomItem[] @relation("MailroomActualProduct")
 
   @@unique([entityId, sku])
   @@unique([id, entityId])
@@ -2347,7 +2348,10 @@ model MailroomItem {
   label               String
   declared            Json?
   productName         String   @map("product_name")
+  productId           String?  @map("product_id")
+  actualProduct       Product? @relation("MailroomActualProduct", fields: [productId, entityId], references: [id, entityId], onDelete: Restrict)
   sku                 String?
+  barcode             String?
   serialNumber        String?  @map("serial_number")
   status              String
   matchResult         String   @default("PENDING") @map("match_result")
@@ -2360,6 +2364,8 @@ model MailroomItem {
   repairWorkflow      Json?    @map("repair_workflow")
   evidence            Json?
   location            String
+  storageLocationId   String?  @map("storage_location_id")
+  storageLocation     MailroomStorageLocation? @relation(fields: [storageLocationId, entityId], references: [id, entityId], onDelete: Restrict)
   custodianId         String   @map("custodian_id")
   recipientId         String?  @map("recipient_id")
   nextUserId          String?  @map("next_user_id")
@@ -2373,7 +2379,57 @@ model MailroomItem {
   @@index([entityId, status, createdAt])
   @@index([recipientId, status])
   @@index([nextUserId, status])
+  @@index([entityId, storageLocationId])
+  @@index([entityId, productId])
   @@map("mailroom_items")
+}
+
+model MailroomStorageRack {
+  id          String   @id @default(uuid())
+  entityId    String   @map("entity_id")
+  code        String
+  name        String
+  zone        String
+  rows        Int
+  columns     Int
+  layoutX     Int      @default(0) @map("layout_x")
+  layoutY     Int      @default(0) @map("layout_y")
+  version     Int      @default(1)
+  isActive    Boolean  @default(true) @map("is_active")
+  commandKeys String[] @default([]) @map("command_keys")
+  commands    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  locations   MailroomStorageLocation[]
+
+  @@unique([id, entityId])
+  @@unique([entityId, code])
+  @@index([entityId, isActive])
+  @@map("mailroom_storage_racks")
+}
+
+model MailroomStorageLocation {
+  id          String   @id @default(uuid())
+  entityId    String   @map("entity_id")
+  rackId      String   @map("rack_id")
+  rack        MailroomStorageRack @relation(fields: [rackId, entityId], references: [id, entityId], onDelete: Restrict)
+  code        String
+  name        String
+  level       Int
+  slot        Int
+  version     Int      @default(1)
+  isActive    Boolean  @default(true) @map("is_active")
+  commandKeys String[] @default([]) @map("command_keys")
+  commands    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  items       MailroomItem[]
+
+  @@unique([id, entityId])
+  @@unique([entityId, code])
+  @@unique([rackId, level, slot])
+  @@index([entityId, rackId])
+  @@map("mailroom_storage_locations")
 }
 
 model AfterSalesStockUnit {
