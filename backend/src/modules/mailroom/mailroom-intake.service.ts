@@ -36,7 +36,7 @@ export class MailroomIntakeService {
 
   async queue(userId: string, query: MailroomQuery) {
     this.mailroom.enabled();
-    const actor = await this.mailroom.intakeCustomerService(
+    const { actor, scope } = await this.mailroom.intakeQueueReader(
       userId,
       query.entityId,
     );
@@ -55,28 +55,36 @@ export class MailroomIntakeService {
           OR: [
             {
               repairWorkflow: { path: ['intake', 'status'], equals: 'SENT' },
-              AND: [
-                {
-                  repairWorkflow: {
-                    path: ['intake', 'sentToUserId'],
-                    equals: userId,
-                  },
-                },
-              ],
+              ...(scope === 'mine'
+                ? {
+                    AND: [
+                      {
+                        repairWorkflow: {
+                          path: ['intake', 'sentToUserId'],
+                          equals: userId,
+                        },
+                      },
+                    ],
+                  }
+                : {}),
             },
             {
               repairWorkflow: {
                 path: ['intake', 'status'],
                 equals: 'ACCEPTED',
               },
-              AND: [
-                {
-                  repairWorkflow: {
-                    path: ['intake', 'ownerId'],
-                    equals: userId,
-                  },
-                },
-              ],
+              ...(scope === 'mine'
+                ? {
+                    AND: [
+                      {
+                        repairWorkflow: {
+                          path: ['intake', 'ownerId'],
+                          equals: userId,
+                        },
+                      },
+                    ],
+                  }
+                : {}),
             },
           ],
         },
@@ -104,6 +112,7 @@ export class MailroomIntakeService {
       total,
       page,
       limit,
+      scope,
     };
   }
 

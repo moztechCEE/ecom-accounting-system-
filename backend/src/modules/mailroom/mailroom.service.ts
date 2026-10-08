@@ -181,6 +181,17 @@ export class MailroomService {
     if (permission) requirePermission(actor, permission);
     return actor;
   }
+  /** Viewing an intake does not grant employee acceptance or Source case-write rights. */
+  async intakeQueueReader(userId: string, entityId: string) {
+    const actor = await this.actor(userId);
+    requireEntity(actor, entityId);
+    requirePermission(actor, 'mailroom:review');
+    return {
+      actor,
+      scope:
+        actor.entityIds === null ? ('company' as const) : ('mine' as const),
+    };
+  }
   /** The same Source module actor gate used by SSO, intersected with native CSR acceptance rights. */
   async intakeCustomerService(
     userId: string,
@@ -636,7 +647,7 @@ export class MailroomService {
       !isRepairWorkbenchItem(item) &&
       isIntakeReader(actor, item.repairWorkflow)
     )
-      await this.intakeCustomerService(userId, entityId);
+      await this.intakeQueueReader(userId, entityId);
     const [history, deliveries, deliverySummary] = await Promise.all([
       this.prisma.mailroomAction.findMany({
         where: { itemId: id },
@@ -705,7 +716,7 @@ export class MailroomService {
       try {
         this.canRead(actor, task.item);
         if (task.kind.startsWith('INTAKE_') && !can(actor, 'mailroom:read'))
-          await this.intakeCustomerService(userId, entityId);
+          await this.intakeQueueReader(userId, entityId);
       } catch {
         continue;
       }
