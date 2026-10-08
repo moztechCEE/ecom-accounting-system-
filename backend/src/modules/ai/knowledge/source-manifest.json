@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:581dc117c5ed2bc3b8a63ac2890a44679971b14a30b270f75833d7c4106ffaa3",
+  "sourceVersion": "sha256:178ab003b44ac12e9cba66f9b549c8f165f7d07c0c3c47f0295d7b51a6ea3591",
   "reviewedBaseCommit": "c932d30f2d9ce8453f9910d257920d5465145c4e",
   "entryCount": 79,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "16cd0473f643f6ec4c8fa2fdb22703640082ace974bb35e0751d8cfe28335170",
+  "catalogSha256": "e16e2053b805859b6443fe21b0451c787be2a195373fd2acf448d55644f60a75",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -356,7 +356,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-intake.service.ts",
-      "sha256": "b3a233231ea8c0b7259f67b33696d9a510aec52f2e115a9bd3ceaa1d8cd77c1c"
+      "sha256": "dabdf0d90f052950a4b87ba3d2c91c15fcba243869edcec8af95822d6fccae16"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-source-sync.service.ts",
@@ -400,7 +400,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom.service.ts",
-      "sha256": "220b470dd7f3289340aba4c63cebcc463bcda2f3212746f7cf2a3e98fa438b51"
+      "sha256": "c2ffa0e803d996c96d4aa4b71a39f6585cb377af65b70c8c2fb47c5e34030865"
     },
     {
       "path": "backend/src/modules/mailroom/repair-document.contract.ts",
@@ -740,7 +740,7 @@
     },
     {
       "path": "frontend/src/pages/mailroom/CustomerIntakeQueue.tsx",
-      "sha256": "3fa526fd63f793c9b6e53a01d70799e4f148ac3363ca98c637492c663297f6ee"
+      "sha256": "a757f5dd151d3aac5cb486cead70b14e2270799c339e527f28ede68d6e2dd6ef"
     },
     {
       "path": "frontend/src/pages/mailroom/InboxShortcut.tsx",
@@ -956,7 +956,7 @@
     },
     {
       "path": "frontend/src/services/mailroom-intake.ts",
-      "sha256": "3fcce153290c3f6f1e2d8f754932f35d60e212d2f70fe4263034811f5794ef45"
+      "sha256": "4bcea76dd636251122debfba4eef5a8d065a085b7f2337ab1e68bc99fb413dbb"
     },
     {
       "path": "frontend/src/services/notification-refresh.ts",

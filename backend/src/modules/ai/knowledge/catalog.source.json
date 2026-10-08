@@ -4588,7 +4588,8 @@
           "結果未知時只有精確符合本次 requestId、版本、身份、公司／物件與物流的回執可證明成功；只看到 DISPATCHED 不夠。保留首次內容與 key，禁止另建主單、重收或重寄同一件。",
           "本批無新 schema／migration、新增 controller endpoint 或 AI write tool；既有 action API 新增 dispatch，並擴充唯讀出件投影。雙語 guide／source hash 由 DOA 集中更新後須通過 knowledge coverage／drift check；本機測試不代表 SourceAI、DEV、正式通知或實物驗收已通過。",
           "忙碌或結果未知時接收人與表單不可修改；寄出首包在POST前窄存sessionStorage，儲存失敗不送出、版本不符停人工核對。只有精確回執可清除待核對寄出，不持久化照片／密碼；其他未保存草稿僅當頁保留。",
-          "實物確認只接受原始 JSON boolean true；字串「true／false」、數字或其他真值不當作簽收。平板本人簽收、維修原件交回與售後退貨入庫維持同一型別守門；本人資格、當版文件、保管及庫存條件仍另核對。"
+          "實物確認只接受原始 JSON boolean true；字串「true／false」、數字或其他真值不當作簽收。平板本人簽收、維修原件交回與售後退貨入庫維持同一型別守門；本人資格、當版文件、保管及庫存條件仍另核對。",
+          "收發補建清單、詳情及本人待辦的讀取以目前有效帳號、mailroom:review 與公司範圍核對，不要求先符合客服接手或來源建案資格。售後工作台的收發交辦中，SUPER_ADMIN 可查看所選公司的 SENT／ACCEPTED 補建交辦；其他人只看指定或已由本人受理的交辦。公司檢視不授予代理接手或綁案，實際操作仍須指定本人、同公司在職與目前來源寫入資格。載入失敗顯示錯誤，不視為沒有交辦。"
         ],
         "related": [
           "repair-workbench",
@@ -4650,7 +4651,8 @@
               "Unknown results require a receipt matching this request ID, versions, actor, company/item and logistics. DISPATCHED alone is insufficient. Retain the original body/key; do not recreate the source case, receive the item again or register another shipment.",
               "This batch adds no schema/migration, controller endpoint or AI write tool; the existing action API gains dispatch and read projections gain outbound logistics. DOA must centrally update both guide languages/source hashes and pass knowledge coverage/drift checks. Local tests do not establish SourceAI integration, DEV deployment, real notification or physical acceptance.",
               "Recipient and form controls are disabled while busy or awaiting an unknown result. Persist the narrow first dispatch request in sessionStorage before POST; storage failure prevents sending and version conflicts require manual verification. Clear pending dispatch only after an exact receipt match. Photos/passwords are never persisted; other unsaved drafts remain in the current page only.",
-              "Physical confirmation requires raw JSON boolean true; string true/false, numbers or other truthy values do not establish acceptance. Tablet personal acceptance, repair original-item handback and after-sales return receipt keep the same type gate; personal eligibility, current records, custody and stock requirements are still checked separately."
+              "Physical confirmation requires raw JSON boolean true; string true/false, numbers or other truthy values do not establish acceptance. Tablet personal acceptance, repair original-item handback and after-sales return receipt keep the same type gate; personal eligibility, current records, custody and stock requirements are still checked separately.",
+              "Reading the intake queue, item detail and personal tasks checks the current active account, mailroom:review and company scope without requiring CSR acceptance or source case-creation eligibility. In the after-sales mailroom-handoff tab, SUPER_ADMIN can view SENT/ACCEPTED intake handoffs in the selected company; everyone else sees only handoffs addressed to or accepted by themselves. Company viewing does not authorize accepting or binding on someone else’s behalf. Commands still require the assigned person, active employment in that company and current source write eligibility. A load failure remains an error, not an empty queue."
             ],
             "related": [
               "repair-workbench",
@@ -4914,12 +4916,13 @@
           "來源變更同步另需啟用公司串接與事件游標消費；排程可重試，依來源站點／公司及事件 ID 去重後保存最新投影，核對即時權限並寫入持久站內通知。初次回補僅建事件、游標與投影，不通知；同頁同案採最後事件。變更提示與最新來源快照不代替實物簽收，不自動改保管、退款、付款或庫存狀態。",
           "合格退貨作換機正式出庫後，原入庫紀錄保留為歷史。現在實物保管與位置依同公司已核對的換機案件物流投影；出庫關聯不明時顯示待核對，不以歷史入庫人員當作目前持有人。此投影不授予換機案件的技術單或顧客財務資料。",
           "收件、進度與照片格式回饋使用父頁的 React hooks 訊息 API，詳情重載不自行取消回饋。只有後端成功才顯示已登記或已更新；訊息回饋不改原簽收、案件、權限及實物流程。",
-          "客服補建待辦另需 mailroom:review、after_sales_cases:read／update、sales ENTITY、同公司在職與有效來源模組資格；我的待辦不代替來源權限。受理或綁回不移轉實物，原保管人、位置、下一位接收人及收件紀錄保留；通知已讀不是客服受理。",
+          "本人受理與綁回另需 mailroom:review、after_sales_cases:read／update、sales ENTITY、同公司在職與有效來源模組資格；我的待辦不代替來源權限。受理或綁回不移轉實物，原保管人、位置、下一位接收人及收件紀錄保留；通知已讀不是客服受理。",
           "建案結果未知先查原主單，不再次建案；綁回結果未知保留原 requestId／內容並查歷程。多物件舊收件單交主管核對，不重新登記或自動拆單。",
           "綁回結果查核應核對唯讀交辦摘要的 lastAction 與 lastRequestId 是否就是首次 bind_intake 請求；只看到已綁案件不能證明本次請求成功。此摘要不包含自由文字、顧客金融或技術文件，亦不授予額外權限。",
           "補建限尚未綁主單的 UNMATCHED／RECEIVED；核對目前來源案件、申報品項與版次後，綁回 REPAIR／RETURN。原 RECEIVED 實收狀態與實物保管保持不變。",
           "站內通知在可見的售後、收發、維修、我的待辦及售後庫存頁每 15 秒查一次清單，其他可見頁每 60 秒；分頁隱藏時不輪詢，回到可見或取得焦點會重新查，請求重疊與失敗另受控。WebSocket 與已讀操作維持原語意；清單刷新不覆蓋正在開啟的詳情或表單草稿。輪詢或推送不等於人員本人接手，也不保證隱藏分頁或整日待機送達。",
-          "「指定補建客服」使用獨立的補建資格名單；原有維修、退貨及品項不符的客服覆核資格維持原流程，不因補建功能被收窄或變成建案授權。"
+          "「指定補建客服」使用獨立的補建資格名單；原有維修、退貨及品項不符的客服覆核資格維持原流程，不因補建功能被收窄或變成建案授權。",
+          "收發補建清單、詳情及本人待辦的讀取以目前有效帳號、mailroom:review 與公司範圍核對，不要求先符合客服接手或來源建案資格。售後工作台的收發交辦中，SUPER_ADMIN 可查看所選公司的 SENT／ACCEPTED 補建交辦；其他人只看指定或已由本人受理的交辦。公司檢視不授予代理接手或綁案，實際操作仍須指定本人、同公司在職與目前來源寫入資格。載入失敗顯示錯誤，不視為沒有交辦。"
         ],
         "related": [
           "mailroom-workbench",
@@ -4955,12 +4958,13 @@
               "Source-change sync requires enabled company connection and cursor consumption. Retryable scheduling deduplicates source-instance/company event IDs, retains the latest projection and rechecks current access before durable internal notification. Initial backfill stores events, cursor and projections without notifications; the last event for a case within a page wins. Change notices and fresh snapshots do not accept physical items or automatically change custody, refunds, payments or stock.",
               "After formal replacement outbound, the qualified return retains its original inbound history. Current holder and location follow the verified same-company replacement logistics projection. An unknown outbound relation is marked for verification instead of presenting the historical stock recipient as current custody. This projection grants no technical document or customer financial access to the replacement case.",
               "Receipt, progress and photo-format feedback use the parent page React hook message API and survive detail reloads. Receipt/progress success requires backend success; feedback changes no acceptance, case, permission or physical workflow.",
-              "Intake tasks additionally require mailroom:review, after_sales_cases:read/update, sales ENTITY scope, active same-company employment and valid source-module eligibility. My inbox does not replace source authorization. Acceptance or binding transfers no physical custody: retain the original custodian, location, next recipient and receipt. Reading a notification is not personal acceptance.",
+              "Personal intake acceptance and binding additionally require mailroom:review, after_sales_cases:read/update, sales ENTITY scope, active same-company employment and valid source-module eligibility. My inbox does not replace source authorization. Acceptance or binding transfers no physical custody: retain the original custodian, location, next recipient and receipt. Reading a notification is not personal acceptance.",
               "For an unknown creation result, inspect the original case instead of creating again. For an unknown bind, retain the original requestId and body and inspect history. A legacy multi-item receipt requires supervisor reconciliation, not duplicate receipt or automatic splitting.",
               "For bind reconciliation, match the read-only intake summary lastAction and lastRequestId to the first bind_intake request. Seeing an already linked case does not prove that this request succeeded. The summary exposes no free text, customer finance or technical records and grants no additional authority.",
               "Intake is limited to an unlinked UNMATCHED / RECEIVED item. Verify the current source case, declared line and version before binding REPAIR / RETURN. Preserve its original RECEIVED state and physical custody.",
               "Internal notifications refresh their list every 15 seconds on visible after-sales, mailroom, repair, My inbox and after-sales stock pages, and every 60 seconds on other visible pages. Hidden tabs do not poll; visibility or focus triggers a fresh read, with overlapping requests and failures controlled. Existing WebSocket and read-marking semantics remain. List refresh does not overwrite an open detail or form draft. Polling or pushing is not personal task acceptance and proves no hidden-tab or all-day idle delivery.",
-              "The Assigned intake CSR picker uses separate intake eligibility. Existing repair, return and mismatch reviewer eligibility keeps its original workflow; intake neither narrows that list nor turns review permission into case-creation authority."
+              "The Assigned intake CSR picker uses separate intake eligibility. Existing repair, return and mismatch reviewer eligibility keeps its original workflow; intake neither narrows that list nor turns review permission into case-creation authority.",
+              "Reading the intake queue, item detail and personal tasks checks the current active account, mailroom:review and company scope without requiring CSR acceptance or source case-creation eligibility. In the after-sales mailroom-handoff tab, SUPER_ADMIN can view SENT/ACCEPTED intake handoffs in the selected company; everyone else sees only handoffs addressed to or accepted by themselves. Company viewing does not authorize accepting or binding on someone else’s behalf. Commands still require the assigned person, active employment in that company and current source write eligibility. A load failure remains an error, not an empty queue."
             ],
             "related": [
               "mailroom-workbench",
@@ -5031,7 +5035,7 @@
       "sections": {
         "steps": [
           "首頁以「補寄服務、商品與配件訂購、檢測與維修、換貨服務、退貨退款、產品問題回報」開啟原售後流程；依序對應舊名稱漏寄補寄、私下購買、維修、來回件、退款派車、客戶問題。案件總覽保留原新增、進行中、已結束、刪除清單、附件及各節點按鈕。入口只改顯示名稱；新增時仍須核對原表單的案件類型。",
-          "客服在「維修交辦」與「收發交辦」分頁處理本人獲指派的任務；切分頁保留未保存內容，需要時再查看案件概況。收起原概況表單或離頁前须先儲存或明確放棄。新的收發通知連結在確認離開後定位該筆原收件。",
+          "客服在「維修交辦」與「收發交辦」分頁查看及處理交辦；SUPER_ADMIN 的收發交辦顯示所選公司清單，其他人顯示本人清單；切分頁保留未保存內容，需要時再查看案件概況。收起原概況表單或離頁前须先儲存或明確放棄。新的收發通知連結在確認離開後定位該筆原收件。",
           "接手後核對目前檢修、估價與處理方案版次，記錄同意方案或拒修結果；改版須重新確認。部門 SENT、ACCEPTED、RESOLVED 與通知送達各自追蹤。",
           "正式對客報價、顧客對本報價版的同意與足額款項另依原來源流程。付費案件尚未入帳時維修師不能開工；免費案件仍須本報價版顧客同意。",
           "收發補建交辦與維修覆核分開：只有指定客服本人可將未辨識實收件的 SENT 受理為 ACCEPTED。受理後由案件中心原 /cases 入口點「新增案件」，進入 /cases/new 建立一次主單，或核對既有案件，返回選目前申報品項及來源版次綁回同一 NativeID；成功後為 RESOLVED。"
@@ -5048,7 +5052,7 @@
           "原 React Server Action 表單即使 DOM method 為 GET，仍按來源動作識別為業務草稿；明確 POST 與來源表單標記亦受保護。普通 GET 搜尋與篩選不算業務草稿，送出、失敗或預覽不自行清除未保存狀態；確認放棄前應保留原表單。實際瀏覽器返回、取消與失敗重試另依候選驗收。",
           "確認視窗及保存回饋使用目前頁面的 React context；取消離開須保留表單，明確確認放棄才切換。保存訊息不能替代後端成功結果，亦不表示通知、入帳或實物交接完成。",
           "維修入口只接受原精確轉址 /cases?type=REPAIR&queue=technician；補寄、換貨退回、退款收回及私下購買只接受對應單一 type 的原案件清單轉址。首次就緒須符合本輪請求功能、精確參數數量與值、本輪視窗、公司、同源掛載及回報路徑；重複、額外、hash 或跨功能轉址皆拒絕，仍須權限與寫入核對。",
-          "收發補建卡片須 mailroom:review、after_sales_cases:read／update、sales ENTITY、同公司在職與有效售後模組資格，並且逐件指派本人。候選客服只反映 Native 作業資格；既有來源帳號有效、來源角色及原寫入規則仍需模組與每次操作核對。",
+          "本人受理與綁回須 mailroom:review、after_sales_cases:read／update、sales ENTITY、同公司在職與有效售後模組資格，並且逐件指派本人。候選客服只反映 Native 作業資格；既有來源帳號有效、來源角色及原寫入規則仍需模組與每次操作核對。",
           "補建只關聯原生收件分類 REPAIR／RETURN 對應的來源主單與目前來源申報品項；原收件單、NativeID、目前保管人、位置、下一位接收人與 RECEIVED 不變，不把任務受理當實物簽收。通知、任務、財務、技術工作單與實物交接分開。",
           "原建案結果未知須先查標記與結果，不能再建第二張案件；綁回結果未知保留原請求內容與 requestId，核對歷程後只重試同一請求。原建案成功不等於已綁回，既有多物件收件單交主管核對而不自動拆分或重登。",
           "綁回結果查核應核對唯讀交辦摘要的 lastAction 與 lastRequestId 是否就是首次 bind_intake 請求；只看到已綁案件不能證明本次請求成功。此摘要不包含自由文字、顧客金融或技術文件，亦不授予額外權限。",
@@ -5056,7 +5060,8 @@
           "「指定補建客服」使用獨立的補建資格名單；原有維修、退貨及品項不符的客服覆核資格維持原流程，不因補建功能被收窄或變成建案授權。",
           "可依目前權限切換售後、收發、維修、儲運或營運管理工作區。「設為登入預設」只記錄此帳號及公司在目前瀏覽器的選擇；不同步其他裝置、不變更角色或授予權限。失效偏好回到有效入口。具有產品、匯入、來源帳號、操作紀錄、設定、庫存或儲運管理權限的人員，仍可由「營運管理」使用獲授權功能。切台保留網址明確指定的公司。",
           "報價、顧客、收款退款與發票沿用同一來源主單及原紀錄，不建立第二本帳。產品、LINE、發票及操作紀錄不另做一套；相關管理能力保留既有授權入口。原 FAQ／知識庫排除於本 DOA 工作台。",
-          "品牌與 LINE／AI 客服鏈路的新共同契約仍待整合；現有來源頁能開啟，不證明品牌、官方帳號、顧客 LINE 身分、會話與承辦人已正確綁定。寄出 consumer、品牌發票商戶及虛擬帳號自動對帳也未由本介面批完成；不得以保存成功或舊同步回執宣稱顧客通知或款項完成。"
+          "品牌與 LINE／AI 客服鏈路的新共同契約仍待整合；現有來源頁能開啟，不證明品牌、官方帳號、顧客 LINE 身分、會話與承辦人已正確綁定。寄出 consumer、品牌發票商戶及虛擬帳號自動對帳也未由本介面批完成；不得以保存成功或舊同步回執宣稱顧客通知或款項完成。",
+          "收發補建清單、詳情及本人待辦的讀取以目前有效帳號、mailroom:review 與公司範圍核對，不要求先符合客服接手或來源建案資格。售後工作台的收發交辦中，SUPER_ADMIN 可查看所選公司的 SENT／ACCEPTED 補建交辦；其他人只看指定或已由本人受理的交辦。公司檢視不授予代理接手或綁案，實際操作仍須指定本人、同公司在職與目前來源寫入資格。載入失敗顯示錯誤，不視為沒有交辦。"
         ],
         "related": [
           "repair-workbench",
@@ -5080,7 +5085,7 @@
           "sections": {
             "steps": [
               "The home entries Reshipment service, Product and accessory orders, Inspection and repair, Exchange service, Returns and refunds, and Product issue reports open the original flows, respectively preserving RESHIPMENT, PRIVATE_PURCHASE, REPAIR, EXCHANGE_RETURN, REFUND_PICKUP and CUSTOMER_ISSUE. The case overview retains original create, in-progress, closed, deleted-list, attachment and node controls. Only entry labels change; verify the original form’s case type when creating.",
-              "Handle personally assigned tasks in Repair Handoffs and Mailroom Handoffs. Switching tabs retains unsaved work; open the original case overview when needed. Save or explicitly discard before hiding that form or leaving. A new mailroom deep link locates the requested original receipt after departure is confirmed.",
+              "Handle personally assigned tasks in Repair Handoffs and Mailroom Handoffs. Switching tabs retains unsaved work; open the original case overview when needed. Save or explicitly discard before hiding that form or leaving. A new mailroom deep link locates the requested original receipt after departure is confirmed. The mailroom-handoff list shows the selected company for SUPER_ADMIN and personal assignments for other accounts.",
               "Review the current inspection, estimate and technical plan revision, then record approval or decline. Changes require a fresh review. Department SENT, ACCEPTED and RESOLVED states are separate from notification delivery.",
               "Formal customer quoting, consent to that quote revision and confirmed sufficient funds remain in the original source workflow. Unpaid chargeable work cannot start; free work still requires customer consent to the current quote.",
               "Mailroom case intake is separate from technical review. Only the assigned CSR accepts a received unidentified item from SENT to ACCEPTED. From the original /cases entry in the case center, choose New case and create once through its /cases/new form, or verify an existing case, then return to select its current declared line and source version and bind the same NativeID. Successful binding sets RESOLVED."
@@ -5097,7 +5102,7 @@
               "Original React Server Action forms remain business drafts even when their DOM method reports GET; explicit POST and source action markers are also protected. Ordinary GET search/filter forms are not business drafts. Submission, failure or preview alone does not clear unsaved state; preserve the form until explicit discard. Actual browser back, cancellation and failed submission require candidate acceptance.",
               "Confirmation dialogs and save feedback use the current page React context. Cancelling departure preserves the form; switch only after explicit discard. Save feedback does not replace a successful backend result or prove notification, payment or physical acceptance.",
               "Original repair entry accepts only /cases?type=REPAIR&queue=technician. Reshipments, exchange returns, refund pickups and private purchases each accept only their corresponding /cases?type=RESHIPMENT, EXCHANGE_RETURN, REFUND_PICKUP or PRIVATE_PURCHASE redirect. Initial readiness requires the current requested section, exact parameter count and values, current frame, company, same-origin mount and reported path; duplicate, extra, hash or cross-section aliases are rejected. Role and write checks remain required.",
-              "The intake card requires mailroom:review, after_sales_cases:read/update, sales ENTITY scope, active same-company employment, valid source-module eligibility and item-specific assignment. Native CSR candidates reflect operating eligibility only; the module and each source action still check the existing active source account, role and original write rules.",
+              "Personal intake acceptance and binding require mailroom:review, after_sales_cases:read/update, sales ENTITY scope, active same-company employment, valid source-module eligibility and item-specific assignment. Native CSR candidates reflect operating eligibility only; the module and each source action still check the existing active source account, role and original write rules.",
               "Intake links only a source case mapped to the native REPAIR or RETURN category and its current declared source line. Preserve the original receipt, NativeID, custodian, location, next recipient and RECEIVED state. Task acceptance is not physical receipt; notification, task, finance, technical documents and physical handoffs remain separate.",
               "For an unknown original creation result, inspect its marker and outcome before proceeding; do not create a second case. For an unknown binding result, keep the first body and requestId, inspect history and retry only that request. Case creation alone is not binding. Ask a supervisor to reconcile legacy multi-item receipts rather than splitting or receiving them again.",
               "For bind reconciliation, match the read-only intake summary lastAction and lastRequestId to the first bind_intake request. Seeing an already linked case does not prove that this request succeeded. The summary exposes no free text, customer finance or technical records and grants no additional authority.",
@@ -5105,7 +5110,8 @@
               "The Assigned intake CSR picker uses separate intake eligibility. Existing repair, return and mismatch reviewer eligibility keeps its original workflow; intake neither narrows that list nor turns review permission into case-creation authority.",
               "Switch among available after-sales, mailroom, repair, warehouse and operations workspaces according to current grants. Set as login default stores a preference for this account and company in this browser only; it does not sync devices, change roles or grant access. Invalid preferences fall back to an authorized entry. Management grants retain their features in Operations Management. Workspace switching retains an explicitly selected company in the URL.",
               "Quotes, customers, payments, refunds and invoices retain the same source case and original records; no second financial ledger or duplicate product, LINE, invoice or audit module is created. Existing management grants keep their entry points. This DOA workbench excludes the legacy FAQ/knowledge base.",
-              "New shared brand and LINE/AI customer-service contracts remain pending. Opening the existing source page does not prove correct binding of brand, official account, customer LINE identity, conversation and assigned staff. This UI batch does not complete the dispatch consumer, brand invoice merchants or virtual-account automatic reconciliation; neither save success nor prior acknowledgements prove customer notification or payment."
+              "New shared brand and LINE/AI customer-service contracts remain pending. Opening the existing source page does not prove correct binding of brand, official account, customer LINE identity, conversation and assigned staff. This UI batch does not complete the dispatch consumer, brand invoice merchants or virtual-account automatic reconciliation; neither save success nor prior acknowledgements prove customer notification or payment.",
+              "Reading the intake queue, item detail and personal tasks checks the current active account, mailroom:review and company scope without requiring CSR acceptance or source case-creation eligibility. In the after-sales mailroom-handoff tab, SUPER_ADMIN can view SENT/ACCEPTED intake handoffs in the selected company; everyone else sees only handoffs addressed to or accepted by themselves. Company viewing does not authorize accepting or binding on someone else’s behalf. Commands still require the assigned person, active employment in that company and current source write eligibility. A load failure remains an error, not an empty queue."
             ],
             "related": [
               "repair-workbench",
@@ -5209,7 +5215,8 @@
           "綁回結果查核應核對唯讀交辦摘要的 lastAction 與 lastRequestId 是否就是首次 bind_intake 請求；只看到已綁案件不能證明本次請求成功。此摘要不包含自由文字、顧客金融或技術文件，亦不授予額外權限。",
           "站內通知在可見的售後、收發、維修、我的待辦及售後庫存頁每 15 秒查一次清單，其他可見頁每 60 秒；分頁隱藏時不輪詢，回到可見或取得焦點會重新查，請求重疊與失敗另受控。WebSocket 與已讀操作維持原語意；清單刷新不覆蓋正在開啟的詳情或表單草稿。輪詢或推送不等於人員本人接手，也不保證隱藏分頁或整日待機送達。",
           "「指定補建客服」使用獨立的補建資格名單；原有維修、退貨及品項不符的客服覆核資格維持原流程，不因補建功能被收窄或變成建案授權。",
-          "首頁展示名稱依序對應 RESHIPMENT、PRIVATE_PURCHASE、REPAIR、EXCHANGE_RETURN、REFUND_PICKUP、CUSTOMER_ISSUE；只改展示，不更改案件 enum、狀態及原有子流程。商品與配件訂購仍含一般商品、區域、海外地址、幣別與發票分支。"
+          "首頁展示名稱依序對應 RESHIPMENT、PRIVATE_PURCHASE、REPAIR、EXCHANGE_RETURN、REFUND_PICKUP、CUSTOMER_ISSUE；只改展示，不更改案件 enum、狀態及原有子流程。商品與配件訂購仍含一般商品、區域、海外地址、幣別與發票分支。",
+          "收發補建清單、詳情及本人待辦的讀取以目前有效帳號、mailroom:review 與公司範圍核對，不要求先符合客服接手或來源建案資格。售後工作台的收發交辦中，SUPER_ADMIN 可查看所選公司的 SENT／ACCEPTED 補建交辦；其他人只看指定或已由本人受理的交辦。公司檢視不授予代理接手或綁案，實際操作仍須指定本人、同公司在職與目前來源寫入資格。載入失敗顯示錯誤，不視為沒有交辦。"
         ],
         "related": [
           "after-sales-customer-workbench",
@@ -5252,7 +5259,8 @@
               "For bind reconciliation, match the read-only intake summary lastAction and lastRequestId to the first bind_intake request. Seeing an already linked case does not prove that this request succeeded. The summary exposes no free text, customer finance or technical records and grants no additional authority.",
               "Internal notifications refresh their list every 15 seconds on visible after-sales, mailroom, repair, My inbox and after-sales stock pages, and every 60 seconds on other visible pages. Hidden tabs do not poll; visibility or focus triggers a fresh read, with overlapping requests and failures controlled. Existing WebSocket and read-marking semantics remain. List refresh does not overwrite an open detail or form draft. Polling or pushing is not personal task acceptance and proves no hidden-tab or all-day idle delivery.",
               "The Assigned intake CSR picker uses separate intake eligibility. Existing repair, return and mismatch reviewer eligibility keeps its original workflow; intake neither narrows that list nor turns review permission into case-creation authority.",
-              "The six home labels map to RESHIPMENT, PRIVATE_PURCHASE, REPAIR, EXCHANGE_RETURN, REFUND_PICKUP and CUSTOMER_ISSUE. Labels do not change enums, states or existing branches. Product and Accessory Orders still supports general products, regions, overseas addresses, currencies and invoice branches."
+              "The six home labels map to RESHIPMENT, PRIVATE_PURCHASE, REPAIR, EXCHANGE_RETURN, REFUND_PICKUP and CUSTOMER_ISSUE. Labels do not change enums, states or existing branches. Product and Accessory Orders still supports general products, regions, overseas addresses, currencies and invoice branches.",
+              "Reading the intake queue, item detail and personal tasks checks the current active account, mailroom:review and company scope without requiring CSR acceptance or source case-creation eligibility. In the after-sales mailroom-handoff tab, SUPER_ADMIN can view SENT/ACCEPTED intake handoffs in the selected company; everyone else sees only handoffs addressed to or accepted by themselves. Company viewing does not authorize accepting or binding on someone else’s behalf. Commands still require the assigned person, active employment in that company and current source write eligibility. A load failure remains an error, not an empty queue."
             ],
             "related": [
               "after-sales-customer-workbench",

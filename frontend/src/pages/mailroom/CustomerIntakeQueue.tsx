@@ -16,47 +16,49 @@ type Props = { entityId: string; initialItemId?: string; onDirtyChange: (dirty: 
 export default function CustomerIntakeQueue({ entityId, initialItemId, onDirtyChange, onOpenSource }: Props) {
   const { user } = useAuth(), { modal, message, contextHolder } = useRepairFeedback();
   const permitted = hasPermission(user, 'mailroom:review') && mailroomEnabled();
-  const [list, setList] = useState<{entityId:string;rows:Item[];total:number;limit:number}>(), [page, setPage] = useState(1), [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<string>(initialItemId || ''), [detail, setDetail] = useState<{ entityId: string; item: Item }>(), [loading, setLoading] = useState(false), [detailLoading, setDetailLoading] = useState(false), [failure, setFailure] = useState('');
-  const listRunning=useRef(false), listGeneration = useRef(0), detailGeneration = useRef(0), dirty = useRef(false), dirtyCallback = useRef(onDirtyChange);
+  const [list, setList] = useState<{ key: string; rows: Item[]; total: number; limit: number; scope: 'company' | 'mine' }>(), [page, setPage] = useState(1), [search, setSearch] = useState('');
+  const queryKey = JSON.stringify([user?.id, entityId, page, search]);
+  const [selected, setSelected] = useState<string>(initialItemId || ''), [detail, setDetail] = useState<{ entityId: string; userId: string; item: Item }>(), [loadingKey, setLoadingKey] = useState(''), [detailLoading, setDetailLoading] = useState(false), [failure, setFailure] = useState<{ key: string; message: string }>();
+  const listRunning = useRef<{ key: string; id: number } | undefined>(undefined), listGeneration = useRef(0), detailGeneration = useRef(0), dirty = useRef(false), dirtyCallback = useRef(onDirtyChange);
   useEffect(() => { dirtyCallback.current = onDirtyChange; }, [onDirtyChange]);
   useEffect(() => () => { dirtyCallback.current(false); }, []);
   const setDirty = useCallback((value: boolean) => { dirty.current = value; dirtyCallback.current(value); }, []);
   const confirmDiscard = useCallback(() => new Promise<boolean>(resolve => modal.confirm({ title: '綁案資料尚未保存', content: '離開會放棄未保存的選案與核對資料。', okText: '放棄未保存資料', cancelText: '保留資料', maskClosable: false, onOk: () => resolve(true), onCancel: () => resolve(false) })), [modal]);
   const load = useCallback(async () => {
-    if (!permitted || !entityId || listRunning.current) return;
-    listRunning.current=true; const id = ++listGeneration.current; setLoading(true);
-    try { const value = await mailroomIntake.queue(entityId, page, search); if (listGeneration.current === id) { setList({entityId,rows:value.items,total:value.total,limit:value.limit}); setFailure(''); } }
-    catch (error) { if (listGeneration.current === id) setFailure(errorText(error)); }
-    finally { listRunning.current=false;if (listGeneration.current === id) setLoading(false); }
-  }, [permitted, entityId, page, search]);
+    if (!permitted || !entityId || listRunning.current?.key === queryKey) return;
+    const id = ++listGeneration.current; listRunning.current = { key: queryKey, id }; setLoadingKey(queryKey);
+    try { const value = await mailroomIntake.queue(entityId, page, search); if (listGeneration.current === id) { setList({ key: queryKey, rows: value.items, total: value.total, limit: value.limit, scope: value.scope }); setFailure(undefined); } }
+    catch (error) { if (listGeneration.current === id) { setList(undefined); setFailure({ key: queryKey, message: errorText(error) }); } }
+    finally { if (listRunning.current?.id === id) listRunning.current = undefined; if (listGeneration.current === id) setLoadingKey(''); }
+  }, [permitted, entityId, page, search, queryKey]);
   const loadDetail = useCallback(async () => {
     const id = ++detailGeneration.current; setDetail(undefined);
     if (!selected || !permitted || !entityId) { setDetailLoading(false); return; }
     setDetailLoading(true);
-    try { const item = await mailroomIntake.item(entityId, selected); if (detailGeneration.current === id) setDetail({ entityId, item }); }
+    try { const item = await mailroomIntake.item(entityId, selected); if (detailGeneration.current === id) setDetail({ entityId, userId: user?.id || '', item }); }
     catch (error) { if (detailGeneration.current === id) message.error(errorText(error)); }
     finally { if (detailGeneration.current === id) setDetailLoading(false); }
-  }, [entityId, selected, permitted, message]);
-  useEffect(() => { const requests=listGeneration;void load();const tick=()=>{if(document.visibilityState==='visible')void load();};const timer=setInterval(tick,15000);window.addEventListener('focus',tick);return()=>{requests.current++;clearInterval(timer);window.removeEventListener('focus',tick);}; }, [load]);
+  }, [entityId, selected, permitted, message, user?.id]);
+  useEffect(() => { void load();const tick=()=>{if(document.visibilityState==='visible')void load();};const timer=setInterval(tick,15000);window.addEventListener('focus',tick);return()=>{listGeneration.current++;listRunning.current=undefined;clearInterval(timer);window.removeEventListener('focus',tick);}; }, [load]);
   useEffect(() => { const requests=detailGeneration;void loadDetail(); return () => { requests.current++; }; }, [loadDetail]);
   async function select(id: string) { if (dirty.current && !await confirmDiscard()) return; setDirty(false); setSelected(id); }
   async function refresh() { if (dirty.current && !await confirmDiscard()) return; setDirty(false); await loadDetail(); await load(); }
   if (!permitted || !entityId) return null;
-  const rows=list?.entityId===entityId?list.rows:[], total=list?.entityId===entityId?list.total:0;
-  const item = detail?.entityId === entityId ? detail.item : undefined;
-  return <Card title="收發轉客服補建案件" extra={<Button icon={<ReloadOutlined />} loading={loading} onClick={() => void refresh()}>更新補建交辦</Button>} style={{ marginBottom: 20 }}>
+  const currentList = list?.key === queryKey ? list : undefined, currentFailure = failure?.key === queryKey ? failure.message : '';
+  const loading = loadingKey === queryKey || (!currentList && !currentFailure);
+  const item = detail?.entityId === entityId && detail.userId === (user?.id || '') ? detail.item : undefined;
+  return <Card title={<Space>收發補建交辦{currentList && <Tag>{currentList.scope === 'company' ? '公司交辦' : '我的交辦'}</Tag>}</Space>} extra={<Button icon={<ReloadOutlined />} loading={loading} onClick={() => void refresh()}>更新</Button>} style={{ marginBottom: 20 }}>
     {contextHolder}
     <Input.Search aria-label="搜尋待補建收件" placeholder="收件號／品名／SN" allowClear maxLength={200} onSearch={value => { setPage(1); setSearch(value); }} style={{ maxWidth: 350, marginBottom: 16 }} />
-    {failure && <Alert type="error" showIcon message={failure} style={{ marginBottom: 12 }} />}
-    <Table<Item> rowKey="id" dataSource={rows} loading={loading} scroll={{ x: 650 }} locale={{ emptyText: <Empty description="目前沒有指定本人補建的收件" /> }} pagination={{ current: page, total, pageSize: list?.entityId === entityId ? list.limit : 30, showSizeChanger: false, onChange: setPage }} columns={[
+    {currentFailure && <Alert type="error" showIcon message={currentFailure} style={{ marginBottom: 12 }} />}
+    {!currentFailure && <Table<Item> rowKey="id" dataSource={currentList?.rows || []} loading={loading} scroll={{ x: 650 }} locale={{ emptyText: currentList ? <Empty description={search ? '沒有符合條件的交辦' : currentList.scope === 'company' ? '目前沒有待補建的公司交辦' : '目前沒有指定本人補建的收件'} /> : '載入中…' }} pagination={{ current: page, total: currentList?.total || 0, pageSize: currentList?.limit || 30, showSizeChanger: false, onChange: setPage }} columns={[
       { title: '原收件／實物', key: 'item', render: (_, row) => <><Button type="link" onClick={() => void select(row.id)}>{row.label}</Button><div>{row.productName} · {row.serialNumber || '未提供 SN'}</div></> },
       { title: '客服交辦', key: 'intake', render: (_, row) => <><Tag>{INTAKE_STATUS[row.caseIntake?.status || ''] || '待核對'}</Tag><div>{row.caseIntake?.ownerName || row.caseIntake?.sentToUserName}</div></> },
       { title: '實物保管', key: 'custody', render: (_, row) => { const c = currentItemCustody(row); return <>{c.holder}<div>{c.location}</div></>; } },
       { title: '', key: 'open', render: (_, row) => <Button onClick={() => void select(row.id)}>檢視交辦</Button> },
-    ]} />
+    ]} />}
     <Drawer title="客服補建與原收件綁定" width={800} open={!!selected} onClose={() => void select('')} destroyOnHidden>
-      <Spin spinning={detailLoading}>{item ? <IntakeDetail key={`${item.id}:${item.version}`} item={item} entityId={entityId} userId={user?.id || ''} onDirty={setDirty} feedback={message} onSaved={async () => { setDirty(false); await loadDetail(); await load(); }} onOpenSource={() => void (async () => { if (dirty.current && !await confirmDiscard()) return; setDirty(false); onOpenSource(item.id); })()} /> : !detailLoading && <Empty description="請重新開啟指定本人的收件" />}</Spin>
+      <Spin spinning={detailLoading}>{item ? <IntakeDetail key={`${item.id}:${item.version}`} item={item} entityId={entityId} userId={user?.id || ''} onDirty={setDirty} feedback={message} onSaved={async () => { setDirty(false); await loadDetail(); await load(); }} onOpenSource={() => void (async () => { if (dirty.current && !await confirmDiscard()) return; setDirty(false); onOpenSource(item.id); })()} /> : !detailLoading && <Empty description="請重新開啟收件" />}</Spin>
     </Drawer>
   </Card>;
 }

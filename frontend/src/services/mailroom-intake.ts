@@ -1,6 +1,6 @@
 import api from './api';
 import type { Item } from '../pages/mailroom/model';
-export type IntakePage = { items: Item[]; total: number; page: number; limit: number };
+export type IntakePage = { items: Item[]; total: number; page: number; limit: number; scope: 'company' | 'mine' };
 export const mailroomIntake = {
   async queue(entityId: string, page: number, search: string) {
     return (await api.get<IntakePage>('/mailroom/intake-queue', { params: { entityId, page, search } })).data;
