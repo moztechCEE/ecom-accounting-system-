@@ -94,7 +94,8 @@ function approvedMailroomFetch(url, options) {
   if (!mailroomEnabled || url.origin !== mailroomOrigin || url.username || url.password || url.hash ||
       !options || options.redirect !== 'error') return false;
   const read = options.method === 'GET' && options.body === undefined &&
-    /^\/api\/integration\/mailroom\/cases(?:\/[A-Za-z0-9_-]{1,128})?$/.test(url.pathname);
+    (/^\/api\/integration\/mailroom\/cases(?:\/[A-Za-z0-9_-]{1,128})?$/.test(url.pathname) ||
+     (!url.search && /^\/api\/integration\/mailroom\/cases\/[A-Za-z0-9_-]{1,128}\/attachments(?:\/[A-Za-z0-9_-]{1,128}\/media)?$/.test(url.pathname)));
   const changes = mailroomEnabled && options.method === 'GET' && options.body === undefined && url.pathname === '/api/integration/mailroom/changes';
   const event = mailroomEventsEnabled && options.method === 'POST' && !url.search &&
     url.pathname === '/api/integration/mailroom/events' && typeof options.body === 'string' &&

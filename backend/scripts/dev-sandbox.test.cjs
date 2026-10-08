@@ -297,13 +297,15 @@ function isolatedMailroomCase(source, patch = {}) {
   const setup = `
     const crypto = require('node:crypto');
     const origin = ${JSON.stringify(mailroomDevOrigin)};
-    function signed(path) {
-      const timestamp=String(Math.floor(Date.now()/1000));
-      const signature=crypto.createHmac('sha256',${JSON.stringify(mailroomDevSecret)}).update([
-        'mailroom.v1','GET',path,timestamp,'doa-dev-qa-20261002',crypto.createHash('sha256').update('').digest('hex')
+    function signed(path, patch = {}) {
+      const timestamp=patch.time || String(Math.floor(Date.now()/1000));
+      const method=patch.method || 'GET', entity=patch.entity || 'doa-dev-qa-20261002';
+      const signature=crypto.createHmac('sha256',patch.secret || ${JSON.stringify(mailroomDevSecret)}).update([
+        'mailroom.v1',method,path,timestamp,entity,crypto.createHash('sha256').update(patch.body || '').digest('hex')
       ].join('\\n')).digest('hex');
-      return { method:'GET',redirect:'error',headers:{'content-type':'application/json','x-mailroom-key':'dev-mailroom',
-        'x-mailroom-entity':'doa-dev-qa-20261002','x-mailroom-time':timestamp,'x-mailroom-signature':signature} };
+      return { method,redirect:'error',...(patch.body === undefined ? {} : {body:patch.body}),
+        headers:{'content-type':'application/json','x-mailroom-key':'dev-mailroom',
+        'x-mailroom-entity':entity,'x-mailroom-time':timestamp,'x-mailroom-signature':signature} };
     }
     const path='/api/integration/mailroom/cases?search=&awaiting=true';
   `;
@@ -341,4 +343,108 @@ test('DEV mailroom rejects production, writes, unsigned requests, other companie
   for(const patch of [{ERP_DEV_MAILROOM_SOURCE_ENABLED:'false'},{MAILROOM_ENABLED:'false'},
     {ERP_DEV_MAILROOM_SOURCE_URL:'https://moztech-after-sales-sp5g377smq-de.a.run.app'},
     {MAILROOM_CONNECTIONS:'[]'}]) isolatedMailroomCase(`await assert.rejects(fetch(origin+path,signed(path)),check);assert.equal(calls.fetch.length,0);`,patch);
+});
+
+test('DEV mailroom signed case photo metadata and media forward only exact approved reads',()=>{
+  isolatedMailroomCase(`
+    const paths=[path,'/api/integration/mailroom/cases/dev-case-1','/api/integration/mailroom/cases/summary',
+      '/api/integration/mailroom/cases/a/attachments',
+      '/api/integration/mailroom/cases/'+ 'C'.repeat(128) +'/attachments/'+ 'A'.repeat(128) +'/media'];
+    for(const route of paths) await fetch(origin+route,{...signed(route),dispatcher:{unsafe:true}});
+    assert.deepEqual(calls.fetch.map(call=>call.url),paths.map(route=>origin+route));
+    assert.equal(calls.socket.length,paths.length);
+    for(const call of calls.fetch) {
+      assert.equal(call.options.method,'GET');assert.equal(call.options.redirect,'error');
+      assert.equal(call.options.body,undefined);assert.equal(call.options.dispatcher,undefined);
+      assert.deepEqual(Object.keys(call.options.headers).sort(),
+        ['content-type','x-mailroom-entity','x-mailroom-key','x-mailroom-signature','x-mailroom-time']);
+    }
+    assert.throws(()=>new net.Socket().connect({host:new URL(origin).hostname,port:443}),check);
+    assert.throws(()=>require('node:https').get(origin+paths[3]),check);
+    assert.equal(calls.socket.length,paths.length);
+  `);
+});
+
+test('DEV mailroom case photos reject invalid identities, queries, traversal and unrelated paths before forwarding',()=>{
+  isolatedMailroomCase(`
+    const metadata='/api/integration/mailroom/cases/dev-case-1/attachments';
+    const media=metadata+'/photo_1/media';
+    const invalid=[
+      '/api/integration/mailroom/cases/'+ 'c'.repeat(129) +'/attachments',
+      metadata+'/'+ 'p'.repeat(129) +'/media',
+      '/api/integration/mailroom/cases//attachments',metadata+'//media',
+      metadata.replace('dev-case-1','bad%20id'),media.replace('photo_1','bad%2Fid'),
+      metadata.replace('dev-case-1','bad.id'),media.replace('photo_1','bad.id'),
+      '/api/integration/mailroom/cases/../attachments',metadata+'/../private',
+      media.replace('photo_1','%2e%2e'),metadata+'/photo_1',media+'/extra',metadata+'/',
+      '/api/integration/mailroom/attachments','/api/integration/mailroom/summary',
+      '/api/integration/mailroom/events','/api/integration/mailroom/cases/dev-case-1/delete',
+    ];
+    for(const route of invalid) await assert.rejects(fetch(origin+route,signed(route)),check);
+    for(const route of [metadata,media]) {
+      for(const query of ['?search=x','?cursor=1','?awaiting=true','?extra=1','?&&'])
+        await assert.rejects(fetch(origin+route+query,signed(route+query)),check);
+      for(const url of [origin.replace('-dev','')+route,origin.replace('https:','http:')+route,
+        origin+'.evil.invalid'+route,origin+':8443'+route,origin+route+'#fragment',
+        origin.replace('https://','https://user:pass@')+route,
+        'https://storage.googleapis.com/synthetic-bucket/photo'])
+        await assert.rejects(fetch(url,signed(route)),check);
+    }
+    assert.equal(calls.fetch.length,0);assert.equal(calls.socket.length,0);
+  `);
+});
+
+test('DEV mailroom case photos reject writes, bodies, redirects and header overrides with valid signed fixtures',()=>{
+  isolatedMailroomCase(`
+    for(const route of ['/api/integration/mailroom/cases/dev-case-1/attachments',
+      '/api/integration/mailroom/cases/dev-case-1/attachments/photo_1/media']) {
+      for(const method of ['POST','PUT','DELETE','HEAD','get'])
+        await assert.rejects(fetch(origin+route,signed(route,{method})),check);
+      for(const body of ['', '{}']) await assert.rejects(fetch(origin+route,signed(route,{body})),check);
+      for(const redirect of ['follow','manual',undefined])
+        await assert.rejects(fetch(origin+route,{...signed(route),redirect}),check);
+      for(const key of ['Host','accept','x-forwarded-host','x-extra'])
+        await assert.rejects(fetch(origin+route,{...signed(route),headers:{...signed(route).headers,[key]:'elsewhere'}}),check);
+      await assert.rejects(fetch(origin+route,{...signed(route),headers:{...signed(route).headers,'content-type':'image/webp'}}),check);
+      await assert.rejects(fetch(new Request(origin+route,signed(route))),check);
+    }
+    assert.equal(calls.fetch.length,0);assert.equal(calls.socket.length,0);
+  `);
+});
+
+test('DEV mailroom case photos require a fresh authentic signature for the dedicated synthetic company',()=>{
+  isolatedMailroomCase(`
+    for(const route of ['/api/integration/mailroom/cases/dev-case-1/attachments',
+      '/api/integration/mailroom/cases/dev-case-1/attachments/photo_1/media']) {
+      for(const patch of [{time:String(Math.floor(Date.now()/1000)-120)},
+        {time:String(Math.floor(Date.now()/1000)+120)}, {entity:'tw-entity-001'},
+        {secret:'incorrect-synthetic-test-secret-32'}])
+        await assert.rejects(fetch(origin+route,signed(route,patch)),check);
+      for(const value of ['', '0'.repeat(64), 'A'.repeat(64),'short'])
+        await assert.rejects(fetch(origin+route,{...signed(route),headers:{...signed(route).headers,'x-mailroom-signature':value}}),check);
+      const unsigned=signed(route);delete unsigned.headers['x-mailroom-signature'];
+      await assert.rejects(fetch(origin+route,unsigned),check);
+      await assert.rejects(fetch(origin+route,{...signed(route),headers:{...signed(route).headers,'x-mailroom-key':'unknown'}}),check);
+    }
+    assert.equal(calls.fetch.length,0);assert.equal(calls.socket.length,0);
+  `);
+});
+
+test('DEV mailroom case photos remain closed without exact opt-in and a matching reviewed connection',()=>{
+  const connection={entityId:'doa-dev-qa-20261002',target:'AFTER_SALES',baseUrl:mailroomDevOrigin,
+    keyId:'dev-mailroom',secret:mailroomDevSecret};
+  for(const patch of [{ERP_DEV_MAILROOM_SOURCE_ENABLED:'false'},{ERP_DEV_MAILROOM_SOURCE_ENABLED:'TRUE'},
+    {MAILROOM_ENABLED:'false'}, {ERP_DEV_MAILROOM_SOURCE_URL:''},
+    {ERP_DEV_MAILROOM_SOURCE_URL:mailroomDevOrigin.replace('-dev','')},
+    {ERP_DEV_MAILROOM_SOURCE_URL:mailroomDevOrigin+'/path'}, {MAILROOM_CONNECTIONS:'[]'},
+    {MAILROOM_CONNECTIONS:'not-json'},
+    ...[{entityId:'tw-entity-001'},{target:'OTHER'},{baseUrl:'https://external.invalid'},
+      {keyId:'other-key'},{secret:'short'}].map(value=>({MAILROOM_CONNECTIONS:JSON.stringify([{...connection,...value}])}))]) {
+    isolatedMailroomCase(`
+      for(const route of ['/api/integration/mailroom/cases/dev-case-1/attachments',
+        '/api/integration/mailroom/cases/dev-case-1/attachments/photo_1/media'])
+        await assert.rejects(fetch(origin+route,signed(route)),check);
+      assert.equal(calls.fetch.length,0);assert.equal(calls.socket.length,0);
+    `,patch);
+  }
 });
