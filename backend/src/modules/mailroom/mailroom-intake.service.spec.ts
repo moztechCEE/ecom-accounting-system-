@@ -735,10 +735,13 @@ describe('unmatched receipt → CSR acceptance → real source binding, without 
       detail.caseIntake,
     );
   });
-  test('CSR queue and detail are assigned-only/company-bound, while revoked Source grants lose queue/task access', async () => {
+  test('CSR reads remain assigned-only/company-bound when case-write grants are revoked; command rights are independently withheld', async () => {
     await send();
     const q = { entityId: 'company', page: 1 };
-    expect((await intake.queue('csr', q)).total).toBe(1);
+    expect(await intake.queue('csr', q)).toMatchObject({
+      total: 1,
+      scope: 'mine',
+    });
     expect(
       (await intake.queue('csr', q)).items[0].allowedIntakeActions,
     ).toEqual(['claim_intake']);
@@ -750,9 +753,77 @@ describe('unmatched receipt → CSR acceptance → real source binding, without 
     await expect(intake.queue('csr', q)).rejects.toThrow();
     users.csr.actor.entityIds = ['company'];
     users.csr.actor.permissions.delete('after_sales_cases:update');
+    const readOnly = await intake.queue('csr', q);
+    expect(readOnly).toMatchObject({ total: 1, scope: 'mine' });
+    expect(readOnly.items[0].allowedIntakeActions).toEqual([]);
+    expect(
+      (await mailroom.detail('csr', 'company', 'piece')).allowedIntakeActions,
+    ).toEqual([]);
+    const tasks = await mailroom.tasks('csr', 'company');
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].item).toMatchObject({ allowedIntakeActions: [] });
+    const before = clone(data);
+    await expect(accept()).rejects.toThrow();
+    expect(data).toEqual(before);
+    users.csr.actor.permissions.delete('mailroom:review');
     await expect(intake.queue('csr', q)).rejects.toThrow();
     await expect(mailroom.detail('csr', 'company', 'piece')).rejects.toThrow();
     expect(await mailroom.tasks('csr', 'company')).toHaveLength(0);
+  });
+  test('assigned CSR can read without Source eligibility or an active employee association but cannot claim or bind', async () => {
+    await send();
+    users.csr.sourceAllowed = false;
+    users.csr.activeEmployee = false;
+    const before = clone(data);
+    const queue = await intake.queue('csr', { entityId: 'company' });
+    expect(queue).toMatchObject({ total: 1, scope: 'mine' });
+    expect(queue.items[0].allowedIntakeActions).toEqual([]);
+    expect(
+      (await mailroom.detail('csr', 'company', 'piece')).allowedIntakeActions,
+    ).toEqual([]);
+    expect(await mailroom.tasks('csr', 'company')).toHaveLength(1);
+    await expect(accept()).rejects.toThrow('SOURCE DENIED');
+    await expect(bind('piece', { expectedVersion: 2 })).rejects.toThrow(
+      'SOURCE DENIED',
+    );
+    users.csr.sourceAllowed = true;
+    await expect(accept()).rejects.toThrow('在職員工');
+    expect(data).toEqual(before);
+    expect(sync.cases).not.toHaveBeenCalled();
+  });
+  test('a company supervisor with valid command eligibility cannot take another CSR intake through overview reads', async () => {
+    await send();
+    users.supervisor = person('supervisor', ['*']);
+    users.supervisor.actor.entityIds = null;
+    db.employee.findFirst.mockResolvedValue({
+      id: 'synthetic-supervisor-employee',
+    });
+    expect(
+      await intake.queue('supervisor', { entityId: 'company' }),
+    ).toMatchObject({
+      scope: 'company',
+      total: 1,
+    });
+    const before = clone(data);
+    await expect(
+      intake.command('supervisor', 'piece', input('claim_intake')),
+    ).rejects.toThrow('未指派');
+    await expect(
+      intake.command(
+        'supervisor',
+        'piece',
+        input('bind_intake', { expectedVersion: 2 }),
+      ),
+    ).rejects.toThrow('未指派');
+    expect(data).toEqual(before);
+    expect(sync.cases).not.toHaveBeenCalled();
+    await accept();
+    const accepted = clone(data);
+    await expect(
+      intake.command('supervisor', 'piece', input('bind_intake')),
+    ).rejects.toThrow('未指派');
+    expect(data).toEqual(accepted);
+    expect(sync.cases).not.toHaveBeenCalled();
   });
   test('old direct clerk identify cannot bypass an already sent CSR intake', async () => {
     await send();
