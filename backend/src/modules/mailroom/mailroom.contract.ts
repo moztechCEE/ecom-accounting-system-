@@ -118,6 +118,16 @@ export type SourceCase = {
   } | null;
   statusLabel?: string;
   customerLabel: string;
+  customerPhone?: string | null;
+  reverseShipments?: {
+    id: string;
+    carrier: string;
+    trackingNumber: string | null;
+    status: string;
+    receivedAt: string | null;
+    shippedAt: string | null;
+  }[];
+  inTransit?: boolean;
   assigneeId?: string | null;
   assigneeEmail?: string | null;
   assigneeName?: string | null;

@@ -1,0 +1,28 @@
+{
+  "fixedHead": "9b6e9ec3d4872726934cd006ea53679577573dcd",
+  "scope": "contract-only synthetic; no merged service/schema/DB/runtime",
+  "intakeContractSha256": "cb826f36f78007746910abfe481b1143d2e8cc8706debe89600990f5e3bb8e87",
+  "results": [
+    {
+      "type": "png",
+      "receiptValidation": true,
+      "nativeRepairRead": true,
+      "legacyPhoneNull": true,
+      "actualSerialUnchanged": true
+    },
+    {
+      "type": "jpeg",
+      "receiptValidation": true,
+      "nativeRepairRead": true,
+      "legacyPhoneNull": true,
+      "actualSerialUnchanged": true
+    },
+    {
+      "type": "webp",
+      "receiptValidation": true,
+      "nativeRepairRead": true,
+      "legacyPhoneNull": true,
+      "actualSerialUnchanged": true
+    }
+  ]
+}

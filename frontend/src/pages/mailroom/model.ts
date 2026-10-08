@@ -79,6 +79,9 @@ export type Source = {
   status: string;
   statusLabel?: string;
   customerLabel: string;
+  customerPhone?: string | null;
+  inTransit?: boolean;
+  reverseShipments?: { id: string; carrier: string | null; trackingNumber: string | null; status: string; receivedAt: string | null; shippedAt: null }[];
   assigneeId?: string | null;
   assigneeName?: string | null;
   assigneeEmail?: string | null;
@@ -101,6 +104,9 @@ export type Item = {
   allowedIntakeActions?: string[];
   label: string;
   productName: string;
+  productId?: string | null;
+  barcode?: string | null;
+  storageLocationId?: string | null;
   sku: string | null;
   serialNumber: string | null;
   status: string;

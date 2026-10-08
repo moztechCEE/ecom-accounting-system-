@@ -32,6 +32,7 @@ state.release=key=>{const resume=state.pending[key];if(!resume)return unexpected
 export const API_URL='/offline-api';
 export default {
   async get(path,options={}){
+    if(path==='/mailroom/source-summary')return {data:{complete:false,counts:null}};
     if(path==='/mailroom/items')return {data:{items:[],total:0}};
     if(path==='/mailroom/people'||path==='/mailroom/tasks')return {data:[]};
     if(path!=='/mailroom/source-cases')return unexpected('Unexpected synthetic GET '+path);
@@ -153,7 +154,7 @@ test('actual awaiting queue separates failed reads from empty results and scopes
       await page.goto(origin + '/__mailroom-awaiting');
       await page.getByRole('heading', { name: '收發室工作台', exact: true }).waitFor();
       await enqueue(page, first);
-      await page.getByRole('tab', { name: '售後待到貨案件', exact: true }).click();
+      await page.getByRole('tab', { name: '售後待到貨', exact: true }).click();
       return page;
     };
     const close = async page => {

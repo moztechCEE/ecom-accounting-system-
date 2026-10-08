@@ -12,6 +12,12 @@ import { MailroomTabletController } from './mailroom-tablet.controller';
 import { MailroomTabletService } from './mailroom-tablet.service';
 import { RepairWorkbenchController } from './repair-workbench.controller';
 import { RepairWorkbenchService } from './repair-workbench.service';
+import { MailroomStorageController } from './mailroom-storage.controller';
+import { MailroomStorageService } from './mailroom-storage.service';
+import { MailroomCatalogController } from './mailroom-catalog.controller';
+import { MailroomCatalogService } from './mailroom-catalog.service';
+import { MailroomSourceMediaController } from './mailroom-source-media.controller';
+import { MailroomSourceMediaService } from './mailroom-source-media.service';
 @Module({
   imports: [
     NotificationModule,
@@ -23,6 +29,9 @@ import { RepairWorkbenchService } from './repair-workbench.service';
     MailroomController,
     MailroomTabletController,
     RepairWorkbenchController,
+    MailroomStorageController,
+    MailroomCatalogController,
+    MailroomSourceMediaController,
   ],
   providers: [
     MailroomService,
@@ -31,6 +40,9 @@ import { RepairWorkbenchService } from './repair-workbench.service';
     MailroomSourceSyncService,
     MailroomTabletService,
     RepairWorkbenchService,
+    MailroomStorageService,
+    MailroomCatalogService,
+    MailroomSourceMediaService,
   ],
 })
 export class MailroomModule {}

@@ -41,6 +41,8 @@ export default {
   if(path==='/mailroom/items')return {data:{items:Object.values(state.items).filter(x=>!config.params?.status||x.status===config.params.status).map(clone),total:config.params?.status?Object.values(state.items).filter(x=>x.status===config.params.status).length:4}};
   if(path.startsWith('/mailroom/items/'))return {data:clone(state.items[path.split('/')[3]])};
   if(path==='/mailroom/source-cases')return {data:{items:[{id:'source',number:'DEV-R-1',type:'REPAIR',status:'OPEN',customerLabel:'合成顧客',version:'2026-10-08T01:00:00Z',items:[{id:'source-line',name:'合成來源產品',sku:'SOURCE-SKU',serialNumber:'SOURCE-SN',quantity:1}],expectedQuantity:1,receivedQuantity:0}],nextCursor:null}};
+  if(path==='/mailroom/storage')return {data:{racks:[],locations:[],unassigned:[],counts:{stored:0,unassigned:0},canManage:true}};
+  if(path==='/mailroom/product-options')return {data:{items:[]}};
   if(path==='/mailroom/tasks')return {data:[]};
   throw Error('Unexpected mock GET '+path);
  },
@@ -165,22 +167,23 @@ test(
 
     await go();
     // Opening defaults is clean; department search without selecting a person remains clean.
-    await page.getByRole("button", { name: "登記信件／包裹", exact: true }).click();
+    await page.getByRole("button", { name: "登記收件", exact: true }).click();
     await closeDrawer();
     assert.equal(await page.getByRole("dialog").filter({ hasText: "目前收發工作有未保存的修改" }).count(), 0);
     await page.waitForFunction(() => !document.querySelector(".ant-drawer-open"));
-    await page.getByRole("button", { name: /登記售後收件$/ }).click();
+    await page.getByRole("button", { name: "登記收件" }).click();
+    await drawer().locator(".mailroom-category-options label").filter({ hasText: "維修品" }).click();
     await choose(drawer().getByRole("combobox", { name: "搜尋售後案件", exact: true }), "DEV-R-1");
     await closeDrawer(); await discard();
-    assert.equal(await drawer().locator('#items_0_productName').inputValue(), "合成來源產品");
-    assert.equal(await drawer().locator('#items_0_sku').inputValue(), "SOURCE-SKU");
+    assert.equal(await drawer().locator('#items_0_productName').inputValue(), "");
+    assert.equal(await drawer().locator('#items_0_sku').inputValue(), "");
     await changeRoute(); await discard();
-    assert.equal(await drawer().locator('#items_0_serialNumber').inputValue(), "SOURCE-SN");
+    assert.equal(await drawer().locator('#items_0_serialNumber').inputValue(), "");
     await closeDrawer(); await discard(false);
-    await page.getByRole("button", { name: "登記信件／包裹", exact: true }).click();
+    await page.getByRole("button", { name: "登記收件", exact: true }).click();
+    await drawer().locator(".mailroom-category-options label").filter({ hasText: "公司信件" }).click();
     await choose(drawer().getByRole("combobox", { name: "收件同仁部門", exact: true }), "客服部");
-    await closeDrawer();
-    assert.equal(await page.getByRole("dialog").filter({ hasText: "目前收發工作有未保存的修改" }).count(), 0);
+    await closeDrawer(); await discard(false);
     await page
       .getByRole("button", { name: "待收發室點收", exact: true })
       .click();
@@ -190,8 +193,9 @@ test(
       ),
     );
     await page
-      .getByRole("button", { name: "登記信件／包裹", exact: true })
+      .getByRole("button", { name: "登記收件", exact: true })
       .click();
+    await drawer().locator(".mailroom-category-options label").filter({ hasText: "公司信件" }).click();
     await drawer()
       .getByText("對方公司名稱／寄件人姓名", { exact: true })
       .waitFor();
@@ -207,19 +211,22 @@ test(
     );
 
     await drawer().locator('input[id="senderLabel"]').fill("測試公司");
+    await drawer().getByRole("checkbox", { name: "使用臨時存放位置", exact: true }).check();
     await drawer().locator('input[id="location"]').fill("信件櫃");
     await drawer().locator('input[id="items_0_productName"]').fill("合成信件");
     await closeDrawer(); await discard();
     assert.equal(await drawer().locator('#items_0_productName').inputValue(), "合成信件");
     assert.equal(await drawer().locator('#senderLabel').inputValue(), "測試公司");
     assert.equal(await drawer().locator(".mailroom-recipient-person").innerText(), "客服部 · 收件同仁 · C1");
+    await drawer().getByRole("button", { name: "下一步", exact: true }).click();
+    await drawer().getByRole("button", { name: "下一步", exact: true }).click();
     await page.evaluate(() => { window.mailroomFixture.holdNext = true; });
     await drawer()
-      .getByRole("button", { name: "登記收件", exact: true })
+      .getByRole("button", { name: "確認並登記收件", exact: true })
       .click();
     await page.waitForFunction(() => window.mailroomFixture.posts.length === 1);
-    assert.equal(await drawer().getByRole("combobox", { name: "收件同仁", exact: true }).isDisabled(), true);
-    assert.equal(await drawer().getByRole("combobox", { name: "收件同仁部門", exact: true }).isDisabled(), true);
+    assert.equal(await drawer().locator(".mailroom-recipient-person input").isDisabled(), true);
+    assert.equal(await drawer().locator(".mailroom-recipient-department input").isDisabled(), true);
     await closeDrawer();
     await changeRoute();
     await page.getByText("正在保存或讀取照片，請稍候。", { exact: true }).first().waitFor();

@@ -1,0 +1,17 @@
+{
+  "base": "20f583b6284e93e5516a533733b3833120aaae0d",
+  "branch": "codex/mailroom-intake-20261008",
+  "files": {
+    "app/api/integration/mailroom/cases/[id]/attachments/[attachmentId]/media/route.ts": "b2969e2a43ecb98993d4a99447bffdbccaade0d9764635dd91eb9f4a39fcab03",
+    "app/api/integration/mailroom/cases/[id]/attachments/route.ts": "d608f6a7c9def7cd7865a8498a46a230928f45840e9167d5a5fe57f2e1db2f27",
+    "app/api/integration/mailroom/summary/route.ts": "8bd6a69cc3923a43e8ff8c90e041f0fe677cb01256d1c065215145b1cf95462e",
+    "package-lock.json": "cd8b2b739d77bd3038ac9cba7858e15c19f6d1fc4365b89a948db5975b5a0ea4",
+    "package.json": "0bee961a48a3cb1a218b756863b8bef2e073190106c35f22925730259ca5d279",
+    "services/mailroom/attachments.ts": "72ca17659ce94a236f8a50954a0368d2818cb0f9e36d1d4ddc3aa6cdf4273bc7",
+    "services/mailroom/service.ts": "4ef6bf14836c9b867904a20350b42ad5b39aac0a58fb76bc2406298ab0f3b414",
+    "tests/aftersales-workflow-binding.test.ts": "341ca9eb8f2c70a8b7a2e55953d7b0e7cf575f0b4ceaa18e6d3f26fccf3302b9",
+    "tests/mailroom-contract.test.ts": "cad40c568c0c6c0c98e3cf317bdf997a5986f436886d738bb86dc1ae41c81b82",
+    "tests/mailroom-intake-read.test.ts": "c249bd99946c492d1806fef06257bd2a1b905f52bd1d828a5174a99eb42848df",
+    "tests/mailroom-source-queue.test.ts": "a5fa1c6ef96dc6b675f7c17ec66203896c6228bcb50615a885a20b746d765a32"
+  }
+}

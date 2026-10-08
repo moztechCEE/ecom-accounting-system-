@@ -1,0 +1,39 @@
+{
+  "head": "9b6e9ec3d4872726934cd006ea53679577573dcd",
+  "base": "bb08e190768442e2549eddd78f5df161fdc9ffb3",
+  "backend": {
+    "changed": [
+      "list",
+      "views"
+    ],
+    "unchanged": [
+      "enabled",
+      "actor",
+      "canRead",
+      "target",
+      "intakeQueueReader",
+      "intakeCustomerService",
+      "people",
+      "sourceCases",
+      "customerService",
+      "detail",
+      "tasks",
+      "itemSnapshot",
+      "record",
+      "publish",
+      "reserveSourceCapacity",
+      "create",
+      "command",
+      "caseProgress"
+    ],
+    "missing": [],
+    "added": [
+      "repairPhoto"
+    ],
+    "countUnchanged": 18
+  },
+  "frontend": {
+    "RepairDetailUnchanged": true,
+    "loadDetailUnchanged": true
+  }
+}

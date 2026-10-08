@@ -1,0 +1,147 @@
+{
+  "base": "745b8843d42e3955e740594f471b1283dc28d553",
+  "unchangedMethods": [
+    {
+      "name": "enabled",
+      "same": true,
+      "sha256": "9cdbbab6b988427df5247c1dc5c5f4f8de435017b1e300a62237639ee03c7ebc"
+    },
+    {
+      "name": "actor",
+      "same": true,
+      "sha256": "6e859ebdb3db87b3eb2e4e6e735284c10a028a0742e4d70aaa51c01fb341e7ad"
+    },
+    {
+      "name": "canRead",
+      "same": true,
+      "sha256": "23ee5dc2b2fdcec26e0f845c16afd9cf43d83964b056d8450086ea67aaba82ee"
+    },
+    {
+      "name": "target",
+      "same": true,
+      "sha256": "c13844e677ef0d1f75d7a2715f119060a2e8d3bb9c32dfff780a4cacff3b430b"
+    },
+    {
+      "name": "intakeCustomerService",
+      "same": true,
+      "sha256": "8f0cd56c22b57285ea5d33ea2e1b671a3296028ec970bbe424769d77ee10cc5e"
+    },
+    {
+      "name": "people",
+      "same": true,
+      "sha256": "f4a89c85374e83c1a727bcf71d54dd5a263978b3937fa1ebf5e0f3a191aaf2d6"
+    },
+    {
+      "name": "sourceCases",
+      "same": true,
+      "sha256": "b52eddb0bfdd0fd710363cf74d8f26bdaac8295416e48d2481d39f93da016018"
+    },
+    {
+      "name": "customerService",
+      "same": true,
+      "sha256": "b2b2603c5c068aa5532f21fedc85df6e193a41cf2b64c5eb20640c6afa0a7950"
+    },
+    {
+      "name": "list",
+      "same": true,
+      "sha256": "81beb5583fb6d57d24277420348a08020b5721d7463cea5faac051ca63c4e58d"
+    },
+    {
+      "name": "views",
+      "same": true,
+      "sha256": "7ca05672833482437bad90debbbfad545c6c8001c60ac524f259a4a07aa913d7"
+    },
+    {
+      "name": "detail",
+      "same": true,
+      "sha256": "6ea95c8aee3cf7118d8aad5cf694206acfdd637701327a970fa055200d6e4fcc"
+    },
+    {
+      "name": "tasks",
+      "same": true,
+      "sha256": "b5b6378108c637597513bf7c7c77e38d276bda6baf10ead19c8d4ced97b14f71"
+    },
+    {
+      "name": "record",
+      "same": true,
+      "sha256": "168dd46ac0e779bd75ed809964c7304c09cd677f6b3e6e759ca5d8bba87a3608"
+    },
+    {
+      "name": "publish",
+      "same": true,
+      "sha256": "9802800af3b9aa5918c87d8c6d576ad08cdb16018f64afa386bd6698f3c50eef"
+    },
+    {
+      "name": "reserveSourceCapacity",
+      "same": true,
+      "sha256": "96efa0da31f67c327a46380bd737001d9b0acb7f933aaa8cdbd24aad942f6917"
+    },
+    {
+      "name": "caseProgress",
+      "same": true,
+      "sha256": "c49379d5e81853f42aa837f85a3febffc68fbf64a83665ee4e3ab32fc6984859"
+    }
+  ],
+  "files": [
+    {
+      "path": "backend/prisma/schema.prisma",
+      "sha256": "ecc12137ad0c866d21cb1513fba5932713ce045ed3a378bedf1f179284229fa2"
+    },
+    {
+      "path": "backend/prisma/migrations/20261008091000_mailroom_actual_product/migration.sql",
+      "sha256": "73703a92297c0b3effbd070082476b390c9a36f5b3f8849c4bb3f1837f1750b8"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-catalog.controller.ts",
+      "sha256": "87555670fe8ce63ddbd64e082bc651f3874ed1a4f7c2a31bde52341fc8a45ec8"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-catalog.service.ts",
+      "sha256": "c046e5214d10df61cbe8e4fbf73438d1e087ad3d6fc981c0962ca1c011ccc600"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-catalog.service.spec.ts",
+      "sha256": "a5f5f19db8e08bcb5c23ff97a8950bbf17049e72488c71775b9d516a452a0ebd"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-receipt.contract.ts",
+      "sha256": "cb826f36f78007746910abfe481b1143d2e8cc8706debe89600990f5e3bb8e87"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-receipt.contract.spec.ts",
+      "sha256": "19a65decb7d789a0cae6645b6488592362fcd28ed9679c3e172768fa58a74682"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-receipt-security.service.spec.ts",
+      "sha256": "01c17f7fa5c3c1deaba211906884ccb955247e76d0b43bc56710e8d7e85bf368"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom.dto.ts",
+      "sha256": "2ed9071a97c60294aac5749d990a37aa93eb77a9a487dbd04d12cd601b585fab"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom.service.ts",
+      "sha256": "27fd5560c3ce02cb4b4ecbfbdbbfa3c359ef6e06b856cf2e6aa33dc8d3bc984d"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-receipt-capacity.service.spec.ts",
+      "sha256": "832398b2668428cdd22a2f1cc879c0b189dea0ad69c39910b6a750fa138be108"
+    }
+  ],
+  "checks": {
+    "jest": {
+      "suites": 6,
+      "tests": 105,
+      "passed": 105,
+      "seconds": 1.506
+    },
+    "buildConfigNoEmit": "PASS",
+    "lint": {
+      "errors": 0,
+      "existingWarnings": 2
+    },
+    "diffCheck": "PASS",
+    "prismaGenerate": "PASS; private physical node_modules; dummy database URL; no database"
+  },
+  "boundary": "no commit; no DB or migration applied; no deploy; no real external effect"
+}

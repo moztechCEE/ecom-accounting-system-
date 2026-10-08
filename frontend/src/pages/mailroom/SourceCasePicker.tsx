@@ -110,7 +110,7 @@ export default function SourceCasePicker({
           id={id}
           className="mailroom-source-select"
           aria-label="搜尋售後案件"
-          placeholder="搜尋售後案件編號"
+          placeholder="案件、入件單號、電話、姓名或產品"
           showSearch
           filterOption={false}
           searchValue={query}
@@ -149,7 +149,7 @@ export default function SourceCasePicker({
                 <Tag>{CATEGORIES[data.source.type]}</Tag>
               </div>
               <Typography.Text type="secondary">
-                {data.source.customerLabel}
+                {data.source.customerLabel}{data.source.customerPhone ? ` · ${data.source.customerPhone}` : ""}
               </Typography.Text>
               {data.source.version && (
                 <Typography.Text
