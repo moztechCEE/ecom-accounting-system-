@@ -1,8 +1,11 @@
 import {
   Body,
+  BadRequestException,
   Controller,
+  ForbiddenException,
   Get,
   Header,
+  Headers,
   Param,
   Post,
   Query,
@@ -50,7 +53,17 @@ export class AfterSalesTasksController {
   register(
     @Req() req: { user: { id: string } },
     @Body() body: RegisterAfterSalesCaseDto,
+    @Headers('x-doa-actor') expectedActorId: string | undefined,
   ) {
+    if (
+      typeof expectedActorId !== 'string' ||
+      !/^[A-Za-z0-9_-]{1,128}$/.test(expectedActorId)
+    ) {
+      throw new BadRequestException('售後建單需要有效的操作人員識別');
+    }
+    if (expectedActorId !== req.user.id) {
+      throw new ForbiddenException('登入帳號已變更，請重新確認售後案件');
+    }
     return this.service.register(req.user.id, body);
   }
 }

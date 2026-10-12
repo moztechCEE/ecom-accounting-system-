@@ -46,7 +46,7 @@ async function bootstrap() {
     origin: corsOrigins,
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: 'Content-Type, Accept, Authorization',
+    allowedHeaders: 'Content-Type, Accept, Authorization, X-DOA-Actor',
   });
 
   // Some hosting/CDN setups may send Reporting API (Report-To / NEL) beacons to

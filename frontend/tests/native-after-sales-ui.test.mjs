@@ -11,6 +11,8 @@ await mkdir(output, { recursive: true })
 const dist = fileURLToPath(new URL('../dist', import.meta.url))
 const origin = 'https://doa-ui-fixture.invalid'
 const contractVersion = 'corely.doa.tasks.v1'
+const fixtureToken = actor => `${Buffer.from('{}').toString('base64url')}.${Buffer.from(JSON.stringify({ sub: actor })).toString('base64url')}.fictional-signature`
+const qaToken = fixtureToken('qa-user'), otherToken = fixtureToken('other-user')
 const options = {
   contractVersion, canReadAll: true, createTypes: ['RESHIPMENT', 'PRIVATE_PURCHASE', 'REPAIR', 'EXCHANGE_RETURN', 'REFUND_PICKUP', 'CUSTOMER_ISSUE'],
   brands: [{ value: 'MOZTECH', label: 'MOZTECH' }, { value: 'BONSON', label: 'BONSON' }], customerKinds: [{ value: 'TO_C', label: '一般顧客' }, { value: 'TO_B', label: '代理商／經銷商' }], sourceChannels: [{ value: 'LINE', label: 'LINE' }],
@@ -25,7 +27,7 @@ const intake = { id: 'intake-a', entityId: 'fixture-company', label: 'MOCK-INTAK
 const pageErrors = [], checks = []
 const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true })
 const context = await browser.newContext({ viewport: { width: 1366, height: 1000 } })
-await context.addInitScript(() => { if (window.top !== window) return; localStorage.setItem('access_token', 'fictional-qa-token'); localStorage.setItem('entityId', 'fixture-company') })
+await context.addInitScript(token => { if (window.top !== window) return; localStorage.setItem('access_token', token); localStorage.setItem('entityId', 'fixture-company') }, qaToken)
 const routeHandler = async route => {
   const request = route.request(), url = new URL(request.url()), path = url.pathname
   requested.push({ method: request.method(), path })
@@ -48,6 +50,8 @@ const routeHandler = async route => {
     return json({ contractVersion, page: 1, pageSize: 25, total: items.length, items, counts: { mine: 2, all: 3 }, capabilities: { createTypes: options.createTypes }, facets: { types: [], stages: [] } })
   }
   if (path === '/api/v1/after-sales/tasks/cases' && request.method() === 'POST') {
+    assert.equal(request.headers()['x-doa-actor'], actorId)
+    assert.equal(request.headers().authorization, `Bearer ${fixtureToken(actorId)}`)
     createBody = request.postDataJSON(); created = row('created-case', createBody.payload.type, createBody.brand, true)
     createBodies.push(createBody)
     if (createBodies.length === 1) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: '案件結果待確認' }) })
@@ -69,6 +73,48 @@ const routeHandler = async route => {
 await context.route('**/*', routeHandler)
 const page = await context.newPage(); page.on('pageerror', error => pageErrors.push(error.message)); page.on('dialog', dialog => dialog.type() === 'beforeunload' ? dialog.accept() : dialog.dismiss())
 async function check(label, callback) { await callback(); checks.push(label) }
+async function fillInternalIssue(target) {
+  const form = target.locator('.native-after-sales')
+  await form.getByRole('button', { name: '新增案件', exact: true }).click()
+  await form.locator('.native-after-sales-type-choice').filter({ hasText: '產品問題回報' }).click()
+  for (const [id, label] of [['brand', 'MOZTECH'], ['sourceChannel', 'LINE']]) { await form.locator(`#${id}`).locator('xpath=ancestor::div[contains(@class,"ant-select-selector")][1]').click(); await target.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option').filter({ hasText: new RegExp(`^${label}$`) }).click(); await target.waitForTimeout(200) }
+  await form.locator('#reason').fill('示意內部問題')
+  await form.getByRole('combobox', { name: '品項 1 產品', exact: true }).focus(); await form.getByRole('combobox', { name: '品項 1 產品', exact: true }).press('ArrowDown'); await target.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option').filter({ hasText: /^示意產品 · MOCK-P1$/ }).click()
+  return form
+}
+async function heldLockScenario(mode) {
+  actorId = 'qa-user'
+  const heldContext = await browser.newContext({ viewport: { width: 1366, height: 1000 } })
+  await heldContext.addInitScript(token => { if (window.top !== window) return; if (!localStorage.getItem('access_token')) localStorage.setItem('access_token', token); localStorage.setItem('entityId', 'fixture-company') }, qaToken)
+  await heldContext.route('**/*', routeHandler)
+  const holder = await heldContext.newPage(), target = await heldContext.newPage()
+  for (const p of [holder, target]) { p.on('pageerror', error => pageErrors.push(error.message)); p.on('dialog', dialog => dialog.type() === 'beforeunload' ? dialog.accept() : dialog.dismiss()) }
+  try {
+    await holder.goto(origin + '/operations/after-sales/workbench?entityId=fixture-company')
+    await holder.evaluate(key => { navigator.locks.request(key, async () => { window.qaLockHeld = true; await new Promise(resolve => { window.qaReleaseLock = resolve }) }) }, pendingKey)
+    await holder.waitForFunction(() => window.qaLockHeld === true)
+    await target.goto(origin + '/operations/after-sales/workbench?entityId=fixture-company')
+    const form = await fillInternalIssue(target), before = createBodies.length
+    await form.getByRole('button', { name: '建立案件', exact: true }).click()
+    await target.waitForFunction(() => document.querySelector('.native-after-sales-create #contactName')?.disabled === true)
+    assert.equal(createBodies.length, before)
+    assert.equal(await target.evaluate(key => localStorage.getItem(key), pendingKey), null)
+    if (mode === 'logout') {
+      await target.getByRole('menuitem', { name: '售後客戶資料', exact: true }).click()
+      await target.getByText('案件建立結果尚未確認，請先重試確認', { exact: true }).waitFor()
+      assert.match(target.url(), /\/workbench/)
+      await target.getByRole('button', { name: '帳號選單', exact: true }).click(); await target.getByRole('menuitem', { name: /登出/ }).click(); await target.waitForURL(/\/login/)
+      actorId = 'other-user'
+      await target.evaluate(token => localStorage.setItem('access_token', token), otherToken)
+      await target.goto(origin + '/operations/after-sales/workbench?entityId=fixture-company')
+      await form.getByRole('button', { name: '新增案件', exact: true }).waitFor()
+    }
+    if (mode === 'cross-tab') await holder.evaluate(token => localStorage.setItem('access_token', token), otherToken)
+    await holder.evaluate(() => window.qaReleaseLock())
+    if (mode === 'normal') { await form.getByRole('heading', { name: 'created-case', exact: true }).waitFor(); assert.equal(createBodies.length, before + 1) }
+    else { if (mode === 'cross-tab') await form.getByText('登入狀態已變更，請重新登入後確認建單', { exact: true }).waitFor(); await target.waitForTimeout(150); assert.equal(createBodies.length, before); assert.equal(await target.evaluate(key => localStorage.getItem(key), pendingKey), null) }
+  } finally { actorId = 'qa-user'; await heldContext.close() }
+}
 try {
   await page.goto(origin + '/operations/after-sales/workbench?entityId=fixture-company')
   const app = page.locator('.native-after-sales')
@@ -167,11 +213,11 @@ try {
   })
   await check('failed durable journal write prevents any native case POST', async () => {
     const failedStorageContext = await browser.newContext({ viewport: { width: 1366, height: 1000 } })
-    await failedStorageContext.addInitScript(() => {
-      localStorage.setItem('access_token', 'fictional-qa-token'); localStorage.setItem('entityId', 'fixture-company')
+    await failedStorageContext.addInitScript(token => {
+      localStorage.setItem('access_token', token); localStorage.setItem('entityId', 'fixture-company')
       const original = Storage.prototype.setItem
       Storage.prototype.setItem = function (key, value) { if (key.startsWith('corely.doa.pending-registration.v1:')) throw new DOMException('fictional storage unavailable', 'QuotaExceededError'); return original.call(this, key, value) }
-    })
+    }, qaToken)
     await failedStorageContext.route('**/*', routeHandler)
     const storagePage = await failedStorageContext.newPage()
     storagePage.on('pageerror', error => pageErrors.push(error.message))
@@ -191,6 +237,9 @@ try {
       assert.equal(await form.getByRole('button', { name: '返回案件清單', exact: true }).isDisabled(), false)
     } finally { await failedStorageContext.close() }
   })
+  await check('queued lock releases normally for the same actor and sends one pinned-auth registration', () => heldLockScenario('normal'))
+  await check('queued lock is cancelled by logout and cannot send with the next actor token', () => heldLockScenario('logout'))
+  await check('another tab token change cannot dispatch a queued stale-actor registration', () => heldLockScenario('cross-tab'))
   assert.deepEqual(pageErrors, [])
   await writeFile(join(output, 'receipt.json'), JSON.stringify({ scope: 'offline fictional browser fixtures only; no DEV authentication or business effects', pass: true, checks, pageErrors, requests: requested }, null, 2))
   console.log(JSON.stringify({ pass: true, checks: checks.length, evidence: output }))

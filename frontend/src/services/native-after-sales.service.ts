@@ -1,4 +1,5 @@
 import api from './api'
+import { CanceledError, getAdapter } from 'axios'
 import type { NativeCaseType, NativeFilters } from '../pages/after-sales/native-workbench-model'
 import { afterSalesFieldValue } from '../utils/after-sales-display'
 
@@ -76,8 +77,15 @@ export const nativeAfterSales = {
     const value = (await api.get<WireDetail>(path + '/cases/' + encodeURIComponent(id), { params: { entityId }, signal })).data
     return projectNativeDetail(value)
   },
-  async create(entityId: string, data: { requestId: string; brand: string; customerKind: string; payload: NativeCaseInput }): Promise<{ id: string }> {
-    const value = (await api.post<{ item: WireRow }>(path + '/cases', { entityId, ...data })).data
+  async create(entityId: string, data: { requestId: string; brand: string; customerKind: string; payload: NativeCaseInput }, auth: { signal: AbortSignal; token: string; expectedActorId: string }): Promise<{ id: string }> {
+    const value = (await api.post<{ item: WireRow }>(path + '/cases', { entityId, ...data }, {
+      signal: auth.signal, headers: { Authorization: `Bearer ${auth.token}`, 'x-doa-actor': auth.expectedActorId },
+      // Runs after shared auth interceptors, immediately before the transport.
+      adapter: config => {
+        if (auth.signal.aborted || !auth.token || localStorage.getItem('access_token') !== auth.token || config.headers.get('Authorization') !== `Bearer ${auth.token}`) throw new CanceledError('登入狀態已變更，建單未送出')
+        return getAdapter(api.defaults.adapter)(config)
+      },
+    })).data
     return { id: value.item.id }
   },
 }

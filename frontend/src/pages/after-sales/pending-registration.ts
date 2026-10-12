@@ -9,6 +9,16 @@ export type PendingRegistration = RegistrationScope & {
 }
 export type PendingStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
+/** Client identity consistency only; authorization is still checked by the server. */
+export function registrationTokenMatchesActor(token: string, actorId: string) {
+  try {
+    const encoded = token.split('.')[1]?.replace(/-/g, '+').replace(/_/g, '/')
+    if (!encoded) return false
+    const bytes = Uint8Array.from(atob(encoded), char => char.charCodeAt(0))
+    return JSON.parse(new TextDecoder().decode(bytes)).sub === actorId
+  } catch { return false }
+}
+
 export class PendingRegistrationError extends Error {
   code: 'STORAGE' | 'INVALID' | 'CONFLICT' | 'LOCK'
   pending?: PendingRegistration
@@ -65,8 +75,8 @@ export function clearPendingRegistration(storage: PendingStorage, scope: Registr
   if (readPendingRegistration(storage, scope)) throw new PendingRegistrationError('STORAGE', '案件結果已確認，待確認紀錄未能清除，請重試確認')
 }
 /** The browser-wide lock keeps another tab from replacing an outstanding request. */
-export async function withPendingRegistrationLock<T>(scope: RegistrationScope, action: () => Promise<T>): Promise<T> {
+export async function withPendingRegistrationLock<T>(scope: RegistrationScope, action: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
   if (!locks) throw new PendingRegistrationError('LOCK', '目前瀏覽器無法安全確認建單，請換用支援的瀏覽器')
-  return locks.request(pendingRegistrationKey(scope), { mode: 'exclusive' }, action)
+  return locks.request(pendingRegistrationKey(scope), { mode: 'exclusive', ...(signal ? { signal } : {}) }, action)
 }

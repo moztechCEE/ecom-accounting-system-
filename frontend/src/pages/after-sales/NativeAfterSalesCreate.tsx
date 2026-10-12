@@ -5,7 +5,7 @@ import { nativeAfterSales } from '../../services/native-after-sales.service'
 import type { NativeOptions, NativeProduct } from '../../services/native-after-sales.service'
 import type { NativeCaseType, NativeCreateValues } from './native-workbench-model'
 import { nativeCreateInput, NATIVE_CASE_TYPES } from './native-workbench-model'
-import { clearPendingRegistration, PendingRegistrationError, readPendingRegistration, savePendingRegistration, withPendingRegistrationLock } from './pending-registration'
+import { clearPendingRegistration, PendingRegistrationError, readPendingRegistration, registrationTokenMatchesActor, savePendingRegistration, withPendingRegistrationLock } from './pending-registration'
 import type { PendingRegistration, RegistrationScope } from './pending-registration'
 
 type Props = {
@@ -30,10 +30,13 @@ export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttemp
   const [unknownResult, setUnknownResult] = useState(Boolean(resumeAttempt))
   const operation = useRef<PendingRegistration | undefined>(resumeAttempt)
   const running = useRef(false)
-  const currentEntity = useRef(entityId)
+  const currentScope = useRef({ actorId, entityId })
+  currentScope.current = { actorId, entityId }
+  const mounted = useRef(false), controller = useRef<AbortController | undefined>(undefined)
+  const sessionToken = useRef(localStorage.getItem('access_token') || '')
   const type = NATIVE_CASE_TYPES.find(entry => entry.value === selectedType)
   const brand = Form.useWatch('brand', form)
-  useEffect(() => { currentEntity.current = entityId; return () => { currentEntity.current = '' } }, [entityId])
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; controller.current?.abort() } }, [actorId, entityId])
   function restore(pending: PendingRegistration) {
     operation.current = pending; setSelectedType(pending.request.payload.type); setUnknownResult(true)
     onPendingChange(true); onDirtyChange(true)
@@ -43,37 +46,43 @@ export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttemp
   useEffect(() => { if (resumeAttempt) restore(resumeAttempt) }, [resumeAttempt?.requestId])
   async function create(values: Values) {
     if (!selectedType || !unknownResult && !options?.createTypes.includes(selectedType) || running.current || !entityId || !actorId) return
-    running.current = true; setBusy(true); setFailure('')
-    const requestEntity = entityId
+    running.current = true; setBusy(true); setFailure(''); onPendingChange(true); onDirtyChange(true)
     const scope: RegistrationScope = { actorId, entityId }
+    const abort = new AbortController(); controller.current = abort
+    const token = sessionToken.current
+    const activeScope = () => mounted.current && currentScope.current.actorId === actorId && currentScope.current.entityId === entityId
+    const assertCurrent = () => { if (abort.signal.aborted || !activeScope() || !registrationTokenMatchesActor(token, actorId) || localStorage.getItem('access_token') !== token) throw new DOMException('登入狀態已變更，請重新登入後確認建單', 'AbortError') }
     let sent = false, priorUnknown = unknownResult
     try {
+      assertCurrent()
       await withPendingRegistrationLock(scope, async () => {
+        assertCurrent()
         const storage = window.localStorage, prior = readPendingRegistration(storage, scope)
         if (prior && (!operation.current || prior.requestId !== operation.current.requestId)) throw new PendingRegistrationError('CONFLICT', '已有待確認案件，請先重試確認', prior)
         const attempt = unknownResult && operation.current ? operation.current : { schema: 'corely.doa.pending-registration.v1' as const, ...scope, requestId: crypto.randomUUID(), createdAt: new Date().toISOString(), request: { brand: values.brand, customerKind: values.customerKind, payload: nativeCreateInput(selectedType, values) } }
         savePendingRegistration(storage, scope, attempt)
         operation.current = attempt; onPendingChange(true); onDirtyChange(true)
+        assertCurrent()
         sent = true
-        const result = await nativeAfterSales.create(attempt.entityId, { requestId: attempt.requestId, ...attempt.request })
+        const result = await nativeAfterSales.create(attempt.entityId, { requestId: attempt.requestId, ...attempt.request }, { signal: abort.signal, token, expectedActorId: actorId })
+        assertCurrent()
         clearPendingRegistration(storage, scope, attempt.requestId)
-        if (currentEntity.current !== requestEntity) return
         onPendingChange(false); onDirtyChange(false); onSaved(result.id)
-      })
+      }, abort.signal)
     } catch (error) {
-      if (currentEntity.current === requestEntity) {
+      if (activeScope()) {
         if (error instanceof PendingRegistrationError && error.pending) { restore(error.pending); setFailure(error.message); return }
         const status = (error as { response?: { status?: number } })?.response?.status
         const uncertain = priorUnknown || sent && (status == null || status >= 500)
         if (!uncertain && sent && operation.current) {
-          try { await withPendingRegistrationLock(scope, async () => clearPendingRegistration(window.localStorage, scope, operation.current!.requestId)) } catch { setUnknownResult(true); onPendingChange(true); setFailure('待確認建單紀錄未能清除，請重試確認'); return }
+          try { await withPendingRegistrationLock(scope, async () => { assertCurrent(); clearPendingRegistration(window.localStorage, scope, operation.current!.requestId) }, abort.signal) } catch { setUnknownResult(true); onPendingChange(true); setFailure('待確認建單紀錄未能清除，請重試確認'); return }
           operation.current = undefined
         }
         setUnknownResult(uncertain)
         onPendingChange(uncertain)
-        setFailure(uncertain ? '案件建立結果尚未確認，請重試確認' : error instanceof PendingRegistrationError ? error.message : errorText(error))
+        setFailure(uncertain ? '案件建立結果尚未確認，請重試確認' : error instanceof PendingRegistrationError || error instanceof DOMException ? error.message : errorText(error))
       }
-    } finally { running.current = false; if (currentEntity.current === requestEntity) setBusy(false) }
+    } finally { running.current = false; if (activeScope()) setBusy(false) }
   }
   const required = (message: string) => [{ required: true, whitespace: true, message }]
   const contactRequired = (message: string) => selectedType === 'CUSTOMER_ISSUE' ? [] : required(message)

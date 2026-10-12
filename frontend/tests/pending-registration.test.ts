@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { clearPendingRegistration, pendingRegistrationKey, PendingRegistrationError, readPendingRegistration, savePendingRegistration, validatePendingRegistration } from '../src/pages/after-sales/pending-registration.ts'
+import { clearPendingRegistration, pendingRegistrationKey, PendingRegistrationError, readPendingRegistration, registrationTokenMatchesActor, savePendingRegistration, validatePendingRegistration } from '../src/pages/after-sales/pending-registration.ts'
 import type { PendingRegistration, PendingStorage } from '../src/pages/after-sales/pending-registration.ts'
 
 const scope = { actorId: 'actor-a', entityId: 'entity-a' }
+test('registration JWT subject must match the captured actor without granting authorization', () => {
+  const token = `e30.${Buffer.from(JSON.stringify({ sub: 'actor-a' })).toString('base64url')}.fictional`
+  assert.equal(registrationTokenMatchesActor(token, 'actor-a'), true)
+  assert.equal(registrationTokenMatchesActor(token, 'actor-b'), false)
+  assert.equal(registrationTokenMatchesActor('invalid-token', 'actor-a'), false)
+})
 const attempt: PendingRegistration = {
   schema: 'corely.doa.pending-registration.v1', ...scope,
   requestId: '55555555-5555-4555-8555-555555555555', createdAt: '2016-01-01T00:00:00Z',
