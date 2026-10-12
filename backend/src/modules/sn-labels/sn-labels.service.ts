@@ -9,7 +9,13 @@ import { createHash, randomUUID } from 'crypto';
 import { isDeepStrictEqual } from 'util';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
+  buildCartonManifest,
+  CartonManifestBox,
+  CartonManifestRequest,
+} from './sn-labels.manifest';
+import {
   allocationRule,
+  SnData,
   cartonId,
   isNoSerial,
   serial,
@@ -96,23 +102,52 @@ export class SnLabelsService {
     const product = await tx.product.findFirst({
       where: { id: d.productId, entityId: entity, isActive: true },
     });
-    if (!product || product.barcode !== d.barcode || product.sku !== d.sku)
+    if (
+      !product ||
+      (product.barcode || '') !== d.barcode ||
+      product.sku !== d.sku ||
+      product.name !== d.productName
+    )
       throw new ConflictException('產品資料已異動或停用，請重新選取產品');
-    const [counter] = r.noSerial
-      ? []
-      : await tx.$queryRaw`SELECT * FROM sn_label_counters WHERE prefix=${r.prefix}`;
+    const [counter] =
+      r.noSerial || r.existingSerials
+        ? []
+        : await tx.$queryRaw`SELECT * FROM sn_label_counters WHERE prefix=${r.prefix}`;
     if (counter && counter.scope !== r.scope)
       throw new ConflictException(
         '這組代碼與既有 SN 前綴相同，請使用不會重複的代碼',
       );
-    const first = r.noSerial ? null : (counter?.last_value || 0) + 1;
+    const first = r.noSerial
+      ? null
+      : r.existingSerials
+        ? 1
+        : (counter?.last_value || 0) + 1;
     const last = r.noSerial ? null : first + d.quantity - 1;
-    if (!r.noSerial) serial(r.prefix, last);
+    if (!r.noSerial && !r.existingSerials) serial(r.prefix, last);
+    const serials = r.noSerial
+      ? []
+      : r.existingSerials
+        ? d.actualSN!
+        : Array.from({ length: d.quantity }, (_, i) =>
+            serial(r.prefix, first! + i),
+          );
+    if (serials.length) {
+      const duplicate =
+        await tx.$queryRaw`SELECT sn FROM sn_label_serials WHERE sn IN (SELECT jsonb_array_elements_text(${JSON.stringify(serials)}::jsonb)) LIMIT 1`;
+      if (duplicate.length)
+        throw new ConflictException('清單中的 SN 已登記在其他箱，請核對原箱號');
+    }
     const [batch] =
       await tx.$queryRaw`SELECT * FROM sn_label_batches WHERE merge_key=${r.mergeKey}`;
     if (
       batch &&
       (batch.data.capacity !== d.capacity ||
+        batch.data.sku !== d.sku ||
+        (batch.data.barcode || '') !== d.barcode ||
+        (batch.data.wmsItemCode ?? batch.data.sku) !== d.wmsItemCode ||
+        (batch.data.internalScanCode ??
+          (batch.data.barcode ? '' : `ITM-${batch.data.sku}`)) !==
+          d.internalScanCode ||
         batch.data.manufactureDate !== d.manufactureDate ||
         !isDeepStrictEqual(batch.data.label, d.label) ||
         batch.data.cartonWidth !== d.cartonWidth ||
@@ -141,7 +176,7 @@ export class SnLabelsService {
         ]),
       )
       .digest('hex');
-    return { r, first, last, batch, cartonStart, ordinalStart, token };
+    return { r, first, last, batch, cartonStart, ordinalStart, token, serials };
   }
   async preview(entity: string, input: any, page = 1) {
     const d = validateDraft({ ...input, name: input?.name || '裝箱預覽' });
@@ -161,11 +196,10 @@ export class SnLabelsService {
             d.capacity!,
             d.quantity - index * d.capacity!,
           );
-          const serials = p.r.noSerial
-            ? []
-            : Array.from({ length: quantity }, (_, i) =>
-                serial(p.r.prefix, p.first! + index * d.capacity! + i),
-              );
+          const serials = p.serials.slice(
+            index * d.capacity!,
+            index * d.capacity! + quantity,
+          );
           rows.push({
             id: cartonId(d, p.cartonStart + index),
             ordinal: p.ordinalStart + index,
@@ -177,6 +211,7 @@ export class SnLabelsService {
           first: p.first,
           last: p.last,
           noSerial: p.r.noSerial,
+          serialSource: d.serialSource,
           token: p.token,
           total,
           rows,
@@ -201,7 +236,7 @@ export class SnLabelsService {
     SELECT id,'draft' AS status,revision,data,updated_at FROM sn_label_drafts WHERE entity_id=${entity} AND batch_id IS NULL
     UNION ALL SELECT id,'active' AS status,0 AS revision,data || jsonb_build_object('quantity',quantity),updated_at FROM sn_label_batches WHERE entity_id=${entity}
    ) entries WHERE (${status}='' OR status=${status})
-    AND (${term}='' OR strpos(lower(data->>'name'),lower(${term}))>0 OR strpos(lower(data->>'productName'),lower(${term}))>0 OR strpos(data->>'barcode',${term})>0 OR strpos(lower(data->>'model'),lower(${term}))>0)
+    AND (${term}='' OR strpos(lower(data->>'name'),lower(${term}))>0 OR strpos(lower(data->>'productName'),lower(${term}))>0 OR strpos(data->>'barcode',${term})>0 OR strpos(lower(data->>'sku'),lower(${term}))>0 OR strpos(lower(data->>'wmsItemCode'),lower(${term}))>0 OR strpos(lower(data->>'model'),lower(${term}))>0)
     AND (${start}='' OR data->>'orderDate'>=${start}) AND (${end}='' OR data->>'orderDate'<=${end})
     AND (${manufactureStart}='' OR data->>'manufactureDate'>=${manufactureStart}) AND (${manufactureEnd}='' OR data->>'manufactureDate'<=${manufactureEnd})
    ORDER BY CASE WHEN ${q.sort === 'asc'} THEN data->>'orderDate' END ASC,
@@ -238,7 +273,7 @@ export class SnLabelsService {
             '可配號碼或裝箱內容已變更，請重新查看裝箱規劃後再確認',
           );
         // Validate printability before reserving any numbers.
-        if (!r.noSerial)
+        if (!r.noSerial && !r.existingSerials)
           await this.exporter.pdf(
             'labels',
             d,
@@ -256,12 +291,7 @@ export class SnLabelsService {
                 cartonStart + Math.ceil(d.quantity / d.capacity!) - 1,
               ),
               quantity: Math.min(d.quantity, d.capacity!),
-              serials: r.noSerial
-                ? []
-                : Array.from(
-                    { length: Math.min(d.quantity, d.capacity!) },
-                    (_, i) => serial(r.prefix, first! + i),
-                  ),
+              serials: plan.serials.slice(0, d.capacity!),
             },
           ],
         );
@@ -285,7 +315,7 @@ export class SnLabelsService {
           });
           for (let i = 0; !r.noSerial && i < quantity; i++)
             items.push({
-              sn: serial(r.prefix, first! + offset + i),
+              sn: plan.serials[offset + i],
               batch_id: batch.id,
               source_id: id,
               carton_id: box,
@@ -295,7 +325,7 @@ export class SnLabelsService {
         }
         await tx.$executeRaw`INSERT INTO sn_label_cartons SELECT * FROM jsonb_to_recordset(${JSON.stringify(boxes)}::jsonb) AS x(id text,batch_id text,source_id text,ordinal int,quantity int)`;
         await tx.$executeRaw`INSERT INTO sn_label_serials SELECT * FROM jsonb_to_recordset(${JSON.stringify(items)}::jsonb) AS x(sn text,batch_id text,source_id text,carton_id text,sequence int,position int)`;
-        if (!r.noSerial)
+        if (!r.noSerial && !r.existingSerials)
           await tx.$executeRaw`INSERT INTO sn_label_counters(scope,prefix,last_value) VALUES(${r.scope},${r.prefix},${last}) ON CONFLICT(scope) DO UPDATE SET last_value=EXCLUDED.last_value`;
         await tx.$executeRaw`UPDATE sn_label_carton_counters SET last_value=last_value+${boxes.length} WHERE scope=${r.cartonScope}`;
         await tx.$executeRaw`UPDATE sn_label_batches SET quantity=quantity+${d.quantity},updated_at=now() WHERE id=${batch.id}`;
@@ -304,10 +334,11 @@ export class SnLabelsService {
           tx,
           entity,
           actor,
-          'ALLOCATE',
+          r.existingSerials ? 'REGISTER_EXISTING' : 'ALLOCATE',
           {
             draftId: id,
             revision,
+            serialSource: d.serialSource,
             first,
             last,
             quantity: d.quantity,
@@ -341,6 +372,61 @@ export class SnLabelsService {
       boxes,
       events,
     };
+  }
+  async manifest(
+    entity: string,
+    actor: string,
+    id: string,
+    body: CartonManifestRequest,
+  ) {
+    if (
+      !Number.isSafeInteger(body?.from) ||
+      !Number.isSafeInteger(body?.to) ||
+      body.from < 1 ||
+      body.to < body.from ||
+      body.to - body.from >= 100
+    )
+      throw new BadRequestException('請選擇箱序範圍，每次最多 100 箱');
+    return this.db.$transaction(
+      async (tx) => {
+        const [batch] = await tx.$queryRaw<
+          { id: string; data: SnData }[]
+        >`SELECT * FROM sn_label_batches WHERE id=${id} AND entity_id=${entity} FOR SHARE`;
+        if (!batch) throw new NotFoundException('找不到已啟用批次');
+        const boxes = await tx.$queryRaw<
+          CartonManifestBox[]
+        >`SELECT c.*, COALESCE((SELECT jsonb_agg(s.sn ORDER BY s.position) FROM sn_label_serials s WHERE s.carton_id=c.id),'[]'::jsonb) AS serials FROM sn_label_cartons c WHERE c.batch_id=${id} AND c.ordinal>=${body.from} AND c.ordinal<=${body.to} ORDER BY c.ordinal`;
+        if (boxes.length !== body.to - body.from + 1)
+          throw new BadRequestException('所選箱序不完整，請重新讀取批次');
+        const manifest = buildCartonManifest(
+          id,
+          batch.data,
+          boxes,
+          body.mapping,
+        );
+        const line = manifest.cartons[0].lines[0];
+        await this.event(
+          tx,
+          entity,
+          actor,
+          'EXPORT',
+          {
+            kind: 'manifest',
+            from: body.from,
+            to: body.to,
+            mapping: {
+              itemCode: line.itemCode,
+              internalScanCode: line.internalScanCode,
+              confirmed: true,
+            },
+            cartons: boxes.map((b) => b.id),
+          },
+          id,
+        );
+        return manifest;
+      },
+      { isolationLevel: 'RepeatableRead' },
+    );
   }
   async exportData(
     entity: string,
