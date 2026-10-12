@@ -71,8 +71,10 @@ export default function CartonPreview({
           error ||
           (value
             ? value.noSerial
-              ? "NSI 無 SN 產品：只建立箱號與數量，不配發單品序號。"
-              : `目前可接續流水號 ${value.first}～${value.last}，未占用號碼。啟用前會再次核對。`
+              ? `${value.total} 箱，無 SN`
+              : value.serialSource === "existing"
+                ? `${draft.quantity} 個既有 SN，${value.total} 箱`
+                : `流水號 ${value.first}～${value.last}`
             : "正在讀取目前可配號碼…")
         }
       />

@@ -21,6 +21,7 @@ import { resolveCompanyRead } from '../../common/entity-access/resolve-company-r
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { SnLabelsService } from './sn-labels.service';
 import { EXPORT_KINDS, SnLabelsExport } from './sn-labels.export';
+import type { CartonManifestRequest } from './sn-labels.manifest';
 @Controller('sn-labels')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SnLabelsController {
@@ -105,6 +106,29 @@ export class SnLabelsController {
       id,
       Number(page) || 1,
     );
+  }
+  @Post('batches/:id/manifest')
+  @RequirePermissions({ resource: 'inventory', action: 'update' })
+  async manifest(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() body: CartonManifestRequest,
+    @Res() res: Response,
+    @Query('entityId') e?: string,
+  ) {
+    const manifest = await this.service.manifest(
+      await this.company(req, e),
+      req.user.id,
+      id,
+      body,
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="cartons-${id}.json"`,
+    );
+    res.send(JSON.stringify(manifest, null, 2));
   }
   @Post('batches/:id/export')
   @RequirePermissions({ resource: 'inventory', action: 'update' })

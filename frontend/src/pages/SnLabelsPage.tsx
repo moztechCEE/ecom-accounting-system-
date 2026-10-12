@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
+  Checkbox,
   DatePicker,
   Form,
   Input,
@@ -29,11 +30,15 @@ import {
   isNoSerial,
   parseDrafts,
   sampleSerial,
+  splitExistingSerials,
+  validateExistingSerials,
+  defaultInternalScanCode,
 } from "../features/sn-labels/model";
 import type { SnDraft } from "../features/sn-labels/model";
 import { errorText, productDefaults, snApi } from "../features/sn-labels/api";
 import type { Detail, Entry } from "../features/sn-labels/api";
 import "./SnLabelsPage.css";
+import { readExistingSerialWorkbook } from "../features/sn-labels/existing-serials-file";
 
 export default function SnLabelsPage() {
   const { user } = useAuth(),
@@ -66,10 +71,15 @@ function Workspace({
     [revision, setRevision] = useState(0),
     [dirty, setDirty] = useState(false);
   const noSerial = isNoSerial(draft);
+  const existingSerials = draft.serialSource === "existing";
+  const [snText, setSnText] = useState("");
+  const [manifestOpen, setManifestOpen] = useState(false),
+    [manifestForm] = Form.useForm();
   const [active, setActive] = useState<Detail | null>(null),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("batch"),
     [products, setProducts] = useState<Product[]>([]);
+  const busyRef = useRef(false);
   const [entries, setEntries] = useState<Entry[]>([]),
     [total, setTotal] = useState(0),
     [page, setPage] = useState(1),
@@ -170,13 +180,15 @@ function Workspace({
     setDirty(true);
   };
   const run = async (fn: () => Promise<void>) => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     try {
       await fn();
     } catch (e) {
       msg.error(errorText(e));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -191,6 +203,7 @@ function Workspace({
     const v = await api.detail(id);
     setActive(v);
     setDraft({ ...v.data, id, version: 2, updatedAt: "" });
+    setSnText((v.data.actualSN || []).join("\n"));
     setDirty(false);
     setCartonPage(1);
     setFrom(isNoSerial(v.data) ? 1 : v.first!);
@@ -224,6 +237,7 @@ function Workspace({
             updatedAt: e.updated_at,
           });
           setRevision(e.revision);
+          setSnText((e.data.actualSN || []).join("\n"));
           setDirty(false);
           setTab("batch");
         }
@@ -232,6 +246,7 @@ function Workspace({
   const create = () =>
     replace(() => {
       setDraft(newDraft(crypto.randomUUID()));
+      setSnText("");
       setRevision(0);
       setActive(null);
       setDirty(false);
@@ -261,11 +276,17 @@ function Workspace({
       if (!draft.name.trim()) throw new Error("請填寫批次名稱");
       const preview = await api.preview(draft);
       modal.confirm({
-        title: noSerial ? "確認啟用無 SN 裝箱？" : "確認啟用並配發 SN？",
-        content: noSerial
-          ? `本次 ${draft.quantity} 件，共 ${preview.total} 箱；不產生單品 SN。`
-          : `本次 ${draft.quantity} 個 SN，接續流水號 ${preview.first}～${preview.last}，共 ${preview.total} 箱。啟用後箱內 SN 固定。`,
-        okText: noSerial ? "確認裝箱" : "確認配號",
+        title: existingSerials
+          ? "確認登記既有 SN 箱號？"
+          : noSerial
+            ? "確認啟用無 SN 裝箱？"
+            : "確認啟用並配發 SN？",
+        content: existingSerials
+          ? `本次 ${draft.quantity} 個既有 SN，共 ${preview.total} 箱；沿用原序號，不重新配號。`
+          : noSerial
+            ? `本次 ${draft.quantity} 件，共 ${preview.total} 箱；不產生單品 SN。`
+            : `本次 ${draft.quantity} 個 SN，接續流水號 ${preview.first}～${preview.last}，共 ${preview.total} 箱。啟用後箱內 SN 固定。`,
+        okText: existingSerials || noSerial ? "確認建立箱號" : "確認配號",
         cancelText: "取消",
         onOk: () =>
           run(async () => {
@@ -273,7 +294,7 @@ function Workspace({
             try {
               const v = await api.activate(draft.id, r, preview.token);
               await showActive(v.batchId);
-              msg.success("已啟用並完成裝箱");
+              msg.success("已建立箱號");
             } finally {
               setRefresh((n) => n + 1);
             }
@@ -288,12 +309,18 @@ function Workspace({
       version: 2,
       updatedAt: "",
       quantity: 1,
+      ...(active.data.serialSource === "existing"
+        ? { actualSN: [], quantity: 0 }
+        : {}),
     });
+    setSnText("");
     setRevision(0);
     setActive(null);
     setDirty(true);
     setTab("batch");
-    msg.info("請輸入本次追加數量；啟用後併入同日批次");
+    msg.info(
+      existingSerials ? "請輸入另一份既有 SN 清單" : "請輸入本次追加數量",
+    );
   };
   const output = (kind: string) =>
     void run(async () => {
@@ -332,8 +359,61 @@ function Workspace({
       setMasterOpen(false);
       msg.success("產品 SN 建檔資料已儲存");
     });
+  const importSerialFile = (file: File) =>
+    void run(async () => {
+      if (file.size > 2 * 1024 * 1024) throw new Error("SN 檔案不可超過 2 MB");
+      if (!/\.(txt|csv|xlsx)$/i.test(file.name))
+        throw new Error("請使用 TXT、CSV 或 XLSX 的 SN 清單");
+      let serials: string[];
+      if (/\.txt$/i.test(file.name))
+        serials = splitExistingSerials(await file.text());
+      else serials = readExistingSerialWorkbook(await file.arrayBuffer());
+      serials = validateExistingSerials(serials);
+      setSnText(serials.join("\n"));
+      update({ actualSN: serials, quantity: serials.length });
+      msg.success(`已載入 ${serials.length} 個 SN`);
+    });
+  const openManifest = () => {
+    if (!active) return;
+    manifestForm.setFieldsValue({
+      from: 1,
+      to: Math.min(active.cartons, 100),
+      itemCode: active.data.wmsItemCode || active.data.sku,
+      internalScanCode:
+        active.data.internalScanCode ??
+        (active.data.barcode ? "" : defaultInternalScanCode(active.data.sku)),
+      confirmed: false,
+    });
+    setManifestOpen(true);
+  };
+  const exportManifest = async () => {
+    if (!active || busyRef.current) return;
+    let values;
+    try {
+      values = await manifestForm.validateFields();
+    } catch {
+      return;
+    }
+    await run(async () => {
+      await api.manifest(active.id, {
+        from: values.from,
+        to: values.to,
+        mapping: {
+          itemCode: values.itemCode,
+          internalScanCode: values.internalScanCode || "",
+          confirmed: values.confirmed,
+        },
+      });
+      setActive(await api.detail(active.id, cartonPage));
+      setManifestOpen(false);
+      msg.success("已匯出箱號清單");
+    });
+  };
   const dateField = (key: "orderDate" | "manufactureDate", label: string) => (
-    <Form.Item label={label} required>
+    <Form.Item
+      label={label}
+      required={key === "orderDate" || (!existingSerials && !noSerial)}
+    >
       <DatePicker
         aria-label={label}
         value={draft[key] ? dayjs(draft[key]) : null}
@@ -400,7 +480,7 @@ function Workspace({
           </Button>
           {active ? (
             <Button onClick={append} disabled={!canWrite || busy}>
-              追加數量
+              {existingSerials ? "新增同產品草稿" : "追加數量"}
             </Button>
           ) : (
             <>
@@ -417,11 +497,14 @@ function Workspace({
               </Button>
               <Button
                 type="primary"
+                aria-label={
+                  existingSerials || noSerial ? "建立箱號" : "啟用配號"
+                }
                 onClick={activate}
                 loading={busy}
                 disabled={!canWrite}
               >
-                {noSerial ? "啟用裝箱" : "啟用配號"}
+                {existingSerials || noSerial ? "建立箱號" : "啟用配號"}
               </Button>
             </>
           )}
@@ -438,9 +521,11 @@ function Workspace({
           type="success"
           showIcon
           message={
-            noSerial
-              ? `已建立 ${active.data.quantity} 件／${active.cartons} 箱，無單品 SN。`
-              : `已配發 ${active.data.quantity} 個 SN／${active.cartons} 箱。漏印與破損補印沿用原 SN。`
+            existingSerials
+              ? `已登記 ${active.data.quantity} 個既有 SN／${active.cartons} 箱。`
+              : noSerial
+                ? `已建立 ${active.data.quantity} 件／${active.cartons} 箱，無單品 SN。`
+                : `已配發 ${active.data.quantity} 個 SN／${active.cartons} 箱。漏印與破損補印沿用原 SN。`
           }
         />
       )}
@@ -487,6 +572,52 @@ function Workspace({
                       }
                     />
                   </Form.Item>
+                  <Form.Item label="序號來源">
+                    <Select
+                      aria-label="序號來源"
+                      value={draft.serialSource || "generated"}
+                      options={[
+                        { value: "generated", label: "生產配號／無 SN" },
+                        { value: "existing", label: "既有 SN" },
+                      ]}
+                      onChange={(serialSource: "generated" | "existing") => {
+                        setSnText("");
+                        update({
+                          serialSource,
+                          actualSN: [],
+                          quantity: serialSource === "existing" ? 0 : 100,
+                        });
+                      }}
+                    />
+                  </Form.Item>
+                  {existingSerials && (
+                    <Form.Item label="既有 SN 清單" required>
+                      <Input.TextArea
+                        aria-label="既有 SN 清單"
+                        value={snText}
+                        rows={6}
+                        onChange={(e) => {
+                          setSnText(e.target.value);
+                          const actualSN = splitExistingSerials(e.target.value);
+                          update({ actualSN, quantity: actualSN.length });
+                        }}
+                      />
+                      <label>
+                        <span>匯入 SN 檔案</span>
+                        <input
+                          aria-label="匯入 SN 檔案"
+                          type="file"
+                          accept=".txt,.csv,.xlsx"
+                          disabled={!!active || busy || !canWrite}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (file) importSerialFile(file);
+                          }}
+                        />
+                      </label>
+                    </Form.Item>
+                  )}
                   {productError && (
                     <Alert
                       type="error"
@@ -514,6 +645,29 @@ function Workspace({
                       產品 SN 建檔
                     </Button>
                   </Space>
+                  <Form.Item label="WMS／ECOUNT 品號">
+                    <Input
+                      aria-label="WMS／ECOUNT 品號"
+                      value={draft.wmsItemCode ?? draft.sku}
+                      maxLength={100}
+                      onChange={(e) => update({ wmsItemCode: e.target.value })}
+                    />
+                  </Form.Item>
+                  <Form.Item label="內部掃描碼">
+                    <Input
+                      aria-label="內部掃描碼"
+                      value={
+                        draft.internalScanCode ??
+                        (draft.barcode
+                          ? ""
+                          : defaultInternalScanCode(draft.sku))
+                      }
+                      maxLength={100}
+                      onChange={(e) =>
+                        update({ internalScanCode: e.target.value })
+                      }
+                    />
+                  </Form.Item>
                   {texts(["model", "style", "color"], ["型號", "款式", "顏色"])}
                   <div className="sn-field-pair">
                     {dateField("orderDate", "下單日期")}
@@ -529,6 +683,9 @@ function Workspace({
                         min={1}
                         max={10000}
                         value={draft.quantity}
+                        disabled={
+                          existingSerials || !!active || busy || !canWrite
+                        }
                         onChange={(v) => v !== null && update({ quantity: v })}
                       />
                     </Form.Item>
@@ -558,13 +715,16 @@ function Workspace({
                   layout="vertical"
                   disabled={!!active || busy || !canWrite}
                 >
-                  {texts(
-                    ["modelCode", "styleCode", "colorCode"],
-                    ["型號代碼", "款式代碼（選填）", "顏色代碼"],
-                  )}
+                  {!existingSerials &&
+                    texts(
+                      ["modelCode", "styleCode", "colorCode"],
+                      ["型號代碼", "款式代碼（選填）", "顏色代碼"],
+                    )}
                 </Form>
                 <output className="sn-code-preview">
-                  {sample || sampleError}
+                  {existingSerials
+                    ? draft.actualSN?.[0] || "—"
+                    : sample || sampleError}
                 </output>
                 <p className="sn-muted">
                   上方為格式樣張。實際起號由伺服器交易決定。
@@ -689,6 +849,12 @@ function Workspace({
                           : "每次最多輸出 10,000 個既有 SN；外箱 PDF 保留所選序號涉及之整箱內容。"}
                       </p>
                       <Space wrap>
+                        <Button
+                          disabled={!canWrite || busy}
+                          onClick={openManifest}
+                        >
+                          匯出 WMS 箱號
+                        </Button>
                         {[
                           ["labels", "產品／彩盒 PDF"],
                           ["cartons", "規格箱 PDF"],
@@ -700,7 +866,11 @@ function Workspace({
                           .map(([k, label]) => (
                             <Button
                               key={k}
-                              disabled={!canWrite || busy}
+                              disabled={
+                                !canWrite ||
+                                busy ||
+                                (k === "warranty" && !active.data.barcode)
+                              }
                               onClick={() => output(k)}
                             >
                               {label}
@@ -798,17 +968,26 @@ function Workspace({
                           {
                             title: "操作",
                             dataIndex: "action",
-                            render: (v) => (v === "ALLOCATE" ? "配號" : "輸出"),
+                            render: (v) =>
+                              v === "ALLOCATE"
+                                ? "配號"
+                                : v === "REGISTER_EXISTING"
+                                  ? "登記既有 SN"
+                                  : "輸出",
                           },
                           {
                             title: "明細",
                             dataIndex: "data",
                             render: (v) =>
-                              v.kind
-                                ? `${({ labels: "產品標籤", cartons: "規格箱標籤", "cartons-no-sn": "規格箱（無 SN）", warranty: "保固匯入", warehouse: "倉儲明細" } as Record<string, string>)[String(v.kind)] || v.kind} · ${v.from}～${v.to} · ${v.reason === "missed" ? "漏印補印" : v.reason === "damaged" ? "破損重印" : v.reason === "copy" ? "副本" : "首次輸出"}`
-                                : v.first === null
-                                  ? `無 SN 裝箱，共 ${v.quantity} 件`
-                                  : `${v.first}～${v.last}，共 ${v.quantity} 個`,
+                              v.kind === "manifest"
+                                ? `箱序 ${v.from}～${v.to} · ${v.mapping?.itemCode || ""}`
+                                : v.kind
+                                  ? `${({ labels: "產品標籤", cartons: "規格箱標籤", "cartons-no-sn": "規格箱（無 SN）", warranty: "保固匯入", warehouse: "倉儲明細" } as Record<string, string>)[String(v.kind)] || v.kind} · ${v.from}～${v.to} · ${v.reason === "missed" ? "漏印補印" : v.reason === "damaged" ? "破損重印" : v.reason === "copy" ? "副本" : "首次輸出"}`
+                                  : v.serialSource === "existing"
+                                    ? `既有 SN，共 ${v.quantity} 個`
+                                    : v.first === null
+                                      ? `無 SN 裝箱，共 ${v.quantity} 件`
+                                      : `${v.first}～${v.last}，共 ${v.quantity} 個`,
                           },
                         ]}
                       />
@@ -940,10 +1119,7 @@ function Workspace({
           <Form.Item
             name="barcode"
             label="國際條碼"
-            rules={[
-              { required: true, message: "請填寫國際條碼" },
-              { pattern: /^\d{8,14}$/, message: "請填寫 8～14 碼數字" },
-            ]}
+            rules={[{ pattern: /^\d{8,14}$/, message: "請填寫 8～14 碼數字" }]}
           >
             <Input maxLength={14} />
           </Form.Item>
@@ -966,6 +1142,87 @@ function Workspace({
           ))}
         </Form>
         <p>儲存在產品資料，之後選取產品會自動帶入。</p>
+      </Modal>
+      <Modal
+        title="匯出 WMS 箱號"
+        open={manifestOpen}
+        onCancel={() => {
+          if (!busyRef.current) setManifestOpen(false);
+        }}
+        maskClosable={!busy}
+        keyboard={!busy}
+        closable={!busy}
+        onOk={exportManifest}
+        confirmLoading={busy}
+        okText="下載清單"
+      >
+        <Form
+          name="carton-manifest"
+          form={manifestForm}
+          layout="vertical"
+          disabled={busy}
+        >
+          <Space>
+            <Form.Item
+              name="from"
+              label="起始箱序"
+              rules={[{ required: true }]}
+            >
+              <InputNumber
+                aria-label="匯出起始箱序"
+                min={1}
+                max={active?.cartons}
+              />
+            </Form.Item>
+            <Form.Item name="to" label="結束箱序" rules={[{ required: true }]}>
+              <InputNumber
+                aria-label="匯出結束箱序"
+                min={1}
+                max={active?.cartons}
+              />
+            </Form.Item>
+          </Space>
+          <Form.Item
+            name="itemCode"
+            label="WMS／ECOUNT 品號"
+            rules={[
+              { required: true, whitespace: true, message: "請填寫對應品號" },
+            ]}
+          >
+            <Input aria-label="WMS／ECOUNT 品號" maxLength={100} />
+          </Form.Item>
+          <Form.Item
+            name="internalScanCode"
+            label="內部掃描碼"
+            rules={[
+              {
+                required: !active?.data.barcode,
+                whitespace: true,
+                message: "沒有國條時請填寫內部掃描碼",
+              },
+              {
+                pattern: /^ITM-[A-Za-z0-9._-]{1,96}$/,
+                message: "請填寫 ITM- 開頭的有效內碼",
+              },
+            ]}
+          >
+            <Input aria-label="內部掃描碼" maxLength={100} />
+          </Form.Item>
+          <Form.Item
+            name="confirmed"
+            valuePropName="checked"
+            rules={[
+              {
+                validator: (_, value) =>
+                  value === true
+                    ? Promise.resolve()
+                    : Promise.reject(new Error("請先核對品號與掃描碼")),
+              },
+            ]}
+          >
+            <Checkbox>品號與掃描碼已核對</Checkbox>
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );

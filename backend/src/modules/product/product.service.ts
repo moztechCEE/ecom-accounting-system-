@@ -87,8 +87,10 @@ export class ProductService {
       profile[key] = key.endsWith('Code') ? body[key].trim().toUpperCase() : body[key].trim();
       if (key.endsWith('Code') && !/^[A-Z0-9]*$/.test(profile[key])) throw new BadRequestException('代碼限英數字');
     }
-    if (body.barcode !== undefined && (typeof body.barcode !== 'string' || !/^\d{8,14}$/.test(body.barcode.trim()))) throw new BadRequestException('國際條碼需為 8～14 碼數字');
-    const updated = await this.prisma.$executeRaw`UPDATE products SET barcode=COALESCE(${body.barcode?.trim() ?? null},barcode), has_serial_numbers=CASE WHEN ${profile.modelCode === 'NSI'} THEN false ELSE has_serial_numbers END, attributes=jsonb_set(CASE WHEN jsonb_typeof(attributes)='object' THEN attributes ELSE '{}'::jsonb END,'{snLabels}',${JSON.stringify(profile)}::jsonb), model_number=${body.modelNumber.trim()}, updated_at=now() WHERE id=${id} AND entity_id=${entityId}`;
+    const barcodeProvided = body.barcode !== undefined;
+    if (barcodeProvided && body.barcode !== null && (typeof body.barcode !== 'string' || (body.barcode.trim() && !/^\d{8,14}$/.test(body.barcode.trim())))) throw new BadRequestException('國際條碼需為 8～14 碼數字；沒有國條請留空');
+    const barcode = typeof body.barcode === 'string' ? body.barcode.trim() || null : null;
+    const updated = await this.prisma.$executeRaw`UPDATE products SET barcode=CASE WHEN ${barcodeProvided} THEN ${barcode} ELSE barcode END, has_serial_numbers=CASE WHEN ${profile.modelCode === 'NSI'} THEN false ELSE has_serial_numbers END, attributes=jsonb_set(CASE WHEN jsonb_typeof(attributes)='object' THEN attributes ELSE '{}'::jsonb END,'{snLabels}',${JSON.stringify(profile)}::jsonb), model_number=${body.modelNumber.trim()}, updated_at=now() WHERE id=${id} AND entity_id=${entityId}`;
     if (!updated) throw new NotFoundException('Product not found');
     return this.findOne(entityId,id);
   }
