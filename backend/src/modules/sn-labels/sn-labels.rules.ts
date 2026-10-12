@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { createHash } from 'crypto';
 export type SnData = {
   name: string;
   productId: string;
@@ -29,6 +30,10 @@ export type SnData = {
   };
   cartonWidth?: number;
   cartonHeight?: number;
+  serialSource?: 'generated' | 'existing';
+  actualSN?: string[];
+  wmsItemCode?: string;
+  internalScanCode?: string;
 };
 export function dateYear(value: string) {
   if (
@@ -78,6 +83,30 @@ export function validateDraft(input: any): SnData {
     throw new BadRequestException('每箱容量需為 1～100（確保整箱 QR 可編碼）');
   data.quantity = input.quantity;
   data.capacity = input.capacity;
+  if (
+    input.serialSource !== undefined &&
+    !['generated', 'existing'].includes(input.serialSource)
+  )
+    throw new BadRequestException('請選擇序號來源');
+  data.serialSource = input.serialSource || 'generated';
+  data.actualSN =
+    data.serialSource === 'existing'
+      ? validateActualSN(input.actualSN, data.quantity)
+      : [];
+  if (data.serialSource !== 'existing' && input.actualSN?.length)
+    throw new BadRequestException('既有 SN 請使用既有序號裝箱');
+  data.wmsItemCode = identifier(
+    input.wmsItemCode ?? data.sku,
+    'WMS／ECOUNT 品號',
+    true,
+  );
+  data.internalScanCode = internalScanCode(
+    input.internalScanCode ??
+      (!data.barcode && /^[A-Za-z0-9._-]{1,96}$/.test(data.sku)
+        ? `ITM-${data.sku}`
+        : ''),
+    true,
+  );
   const l = input.label;
   if (
     !l ||
@@ -138,14 +167,67 @@ export function validateDraft(input: any): SnData {
     throw new BadRequestException('規格箱標籤請依 60 × 75 mm 等比縮放');
   return data;
 }
-export const isNoSerial = (d: Pick<SnData, 'modelCode'>) =>
-  d.modelCode === 'NSI';
+export const hasControlCharacters = (value: string) =>
+  [...value].some(
+    (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127,
+  );
+export function identifier(value: unknown, label: string, optional = false) {
+  if (
+    typeof value !== 'string' ||
+    value.length > 255 ||
+    hasControlCharacters(value) ||
+    (!optional && !value.trim())
+  )
+    throw new BadRequestException(`${label}需為 1～255 字有效文字`);
+  const result = value.trim();
+  if (/^(?:CARTON:|CTN-)/i.test(result))
+    throw new BadRequestException(`${label}不可使用箱號`);
+  return result;
+}
+export function internalScanCode(value: unknown, optional = false) {
+  const code = identifier(value, '內部掃描碼', optional);
+  if (code && !/^ITM-[A-Za-z0-9._-]{1,96}$/.test(code))
+    throw new BadRequestException(
+      '內部掃描碼需為 ITM- 加 1～96 字英數字、點、底線或連字號',
+    );
+  return code;
+}
+export function validateActualSN(value: unknown, quantity: number): string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length !== quantity ||
+    value.length > 10000
+  )
+    throw new BadRequestException('既有 SN 筆數必須與產品數量一致');
+  const seen = new Set<string>();
+  for (const sn of value) {
+    if (
+      typeof sn !== 'string' ||
+      !/^[\x21-\x2b\x2d-\x7e]{1,100}$/.test(sn) ||
+      /^(?:CARTON:|CTN-|DRAFT:)/i.test(sn)
+    )
+      throw new BadRequestException(
+        'SN 需為 1～100 字英數符號，不可含空白、逗號或箱號',
+      );
+    if (seen.has(sn))
+      throw new BadRequestException(`SN ${sn} 重複，請核對原始清單`);
+    seen.add(sn);
+  }
+  return [...value];
+}
+export const isNoSerial = (d: Pick<SnData, 'modelCode' | 'serialSource'>) =>
+  d.serialSource !== 'existing' && d.modelCode === 'NSI';
 export function allocationRule(entity: string, d: SnData) {
-  const year = dateYear(d.manufactureDate);
+  const year = d.manufactureDate
+    ? dateYear(d.manufactureDate)
+    : d.serialSource === 'existing' || isNoSerial(d)
+      ? null
+      : dateYear(d.manufactureDate);
   dateYear(d.orderDate);
   if (!d.productId || !d.model || !/^[A-Za-z0-9_-]{1,40}$/.test(d.model))
     throw new BadRequestException('箱號型號需為 1～40 碼英數字、- 或 _');
   if (
+    d.serialSource !== 'existing' &&
     !isNoSerial(d) &&
     (!/^[A-Z0-9]+$/.test(d.modelCode) ||
       !/^[A-Z0-9]*$/.test(d.styleCode) ||
@@ -155,10 +237,8 @@ export function allocationRule(entity: string, d: SnData) {
     throw new BadRequestException(
       '型號與顏色代碼必填；款式選填，合计 4～6 碼大寫英數字',
     );
-  if (!/^\d{8,14}$/.test(d.barcode))
-    throw new BadRequestException(
-      '請先在產品建檔填寫國際條碼，不得使用 ERP SKU 代替',
-    );
+  if (d.barcode && !/^\d{8,14}$/.test(d.barcode))
+    throw new BadRequestException('國際條碼需為 8～14 碼數字；沒有國條請留空');
   if (!d.capacity) throw new BadRequestException('請填寫每箱容量');
   const prefix =
     d.modelCode +
@@ -174,9 +254,21 @@ export function allocationRule(entity: string, d: SnData) {
   ]);
   return {
     noSerial: isNoSerial(d),
+    existingSerials: d.serialSource === 'existing',
     prefix,
     scope,
-    mergeKey: JSON.stringify([entity, d.productId, scope, d.orderDate]),
+    mergeKey:
+      d.serialSource === 'existing'
+        ? JSON.stringify([
+            entity,
+            d.productId,
+            'existing',
+            d.orderDate,
+            createHash('sha256')
+              .update(JSON.stringify(d.actualSN))
+              .digest('hex'),
+          ])
+        : JSON.stringify([entity, d.productId, scope, d.orderDate]),
     cartonScope: d.orderDate + '|' + d.model,
   };
 }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:dcca32a428b444dbcdb7dff0641481c004e810d917187fbee07406c87d91f3ec",
+  "sourceVersion": "sha256:9d4b56e593118ba0b76c3cc38d730ef22d246cf4b411042c64768bf1852918e0",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 79,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "585aab256f8741dcab24c7ad8283702a904749921014d327b8667ca55f8fa690",
+  "catalogSha256": "c2b857e9c0e5fcd34ba194cdd7f75c8a02551e41cf7d9ba9e8209def789fee6f",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -523,6 +523,10 @@
       "sha256": "e5a17fe02187984c7ae9e833f2ed85ed75d6f378cdea6de4d211a27490a7a4ac"
     },
     {
+      "path": "backend/src/modules/product/product.service.ts",
+      "sha256": "5eda919336d38fefdb8087c4219b4cdc5c9c10f215f932dd0711f92e23ffd64e"
+    },
+    {
       "path": "backend/src/modules/product/sensitive-response.interceptor.ts",
       "sha256": "5155b1351b0409b876c734d3d44408bbbd15192797b03a665e16d467ee865e67"
     },
@@ -576,11 +580,23 @@
     },
     {
       "path": "backend/src/modules/sn-labels/sn-labels.controller.ts",
-      "sha256": "9135b6f0b462cc61f1d8301069fc9924bf0747acc9603bf275032a6a99126887"
+      "sha256": "189c8b8e219c195b0f3a3e4c38d6d6c1cfd189ade5d5922431826184fb178836"
     },
     {
       "path": "backend/src/modules/sn-labels/sn-labels.export.ts",
-      "sha256": "3bad67b1b5af0f6a62364dc873afa07023276dc0d1b2a6b2b2c906a6ea1b5292"
+      "sha256": "4c6304cec34c03a4f87532a5b36604933e6bf6d856d1ff13aeb7bf130dbe198e"
+    },
+    {
+      "path": "backend/src/modules/sn-labels/sn-labels.manifest.ts",
+      "sha256": "a91b6246d8af82eb267371514397a48676914cd8a7f32c27a52cca56bdeb8994"
+    },
+    {
+      "path": "backend/src/modules/sn-labels/sn-labels.rules.ts",
+      "sha256": "3b3a52b96481886ee83d2e03fc5d38341a8f7a095ab918d156292be505910477"
+    },
+    {
+      "path": "backend/src/modules/sn-labels/sn-labels.service.ts",
+      "sha256": "58a5c74825a8d05fce614bdfbc678d41efaa060da955ecc9154c70d6479842c8"
     },
     {
       "path": "backend/src/modules/users/users.controller.ts",
@@ -637,6 +653,22 @@
     {
       "path": "frontend/src/contexts/AuthContext.tsx",
       "sha256": "ada0c17f2b474129d29451af3681103ecb36861e8078ee18b061358cace21f04"
+    },
+    {
+      "path": "frontend/src/features/sn-labels/api.ts",
+      "sha256": "0e396beff0a76b80752b5a815d0937cde480c7c8a72c75a025928f9540e38b5b"
+    },
+    {
+      "path": "frontend/src/features/sn-labels/CartonPreview.tsx",
+      "sha256": "b167e1b214dc7f659985be4de4282b0b93d845a93522375375e2e1370961fa24"
+    },
+    {
+      "path": "frontend/src/features/sn-labels/existing-serials-file.ts",
+      "sha256": "e1bb9cf4f275207dc66c28c1d2564cb0bb69d15e5f97c1527cda60523f979d65"
+    },
+    {
+      "path": "frontend/src/features/sn-labels/model.ts",
+      "sha256": "921fd23fbc9e2e1f8c844488348b63ad0b502f73a34499fd9e34daeb4648ab26"
     },
     {
       "path": "frontend/src/hooks/useEntityContext.ts",
@@ -1028,7 +1060,7 @@
     },
     {
       "path": "frontend/src/pages/SnLabelsPage.tsx",
-      "sha256": "4174d8bf15a7739df444f023d5b3bb88df3b5754e562ab6e5069a47530f9ebf4"
+      "sha256": "969bf8bc6d33278a404f439ccdcff9c10a42b3db426edb6025977bb25cd13cef"
     },
     {
       "path": "frontend/src/pages/SupplierAccountsPage.tsx",

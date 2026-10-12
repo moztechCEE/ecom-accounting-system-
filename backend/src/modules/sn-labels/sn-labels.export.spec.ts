@@ -25,6 +25,18 @@ describe('carton label PDF scan contents', () => {
   } as SnData;
 
   afterEach(() => jest.restoreAllMocks());
+  it('keeps full long manufacturer serial text while the QR remains a short carton identity', async () => {
+    const long = 'W'.repeat(100),
+      text = jest.spyOn(PDFDocument.prototype, 'text');
+    const pdf = await new SnLabelsExport().pdf(
+      'cartons',
+      data,
+      [],
+      [{ ...carton, serials: [long], quantity: 1 }],
+    );
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(text.mock.calls.map(([value]) => String(value))).toContain(long);
+  });
 
   it.each([
     ['cartons', true],
@@ -36,6 +48,8 @@ describe('carton label PDF scan contents', () => {
       const code128 = jest.spyOn(BWIP, 'raw');
       const qr = jest.spyOn(QR, 'create');
       const text = jest.spyOn(PDFDocument.prototype, 'text');
+      const pages = jest.spyOn(PDFDocument.prototype, 'addPage');
+      const rectangles = jest.spyOn(PDFDocument.prototype, 'rect');
 
       const pdf = await new SnLabelsExport().pdf(kind, data, [], [box]);
       const printedText = text.mock.calls.map(([value]) => String(value));
@@ -50,17 +64,31 @@ describe('carton label PDF scan contents', () => {
       expect(printedText.some((value) => value.includes(data.barcode))).toBe(
         false,
       );
+      const mm = 72 / 25.4,
+        height = hasSerials ? 75 : 45;
+      expect(pages.mock.calls[0][0]?.size).toEqual([60 * mm, height * mm]);
+      for (const [x, y, w, h] of rectangles.mock.calls) {
+        expect(x).toBeGreaterThanOrEqual(0);
+        expect(y).toBeGreaterThanOrEqual(0);
+        expect(x + w).toBeLessThanOrEqual(60 * mm + 0.001);
+        expect(y + h).toBeLessThanOrEqual(height * mm + 0.001);
+      }
+      expect(rectangles).toHaveBeenCalledWith(
+        (hasSerials ? 3 : 37) * mm,
+        (hasSerials ? 41 : 8) * mm,
+        (hasSerials ? 31 : 20) * mm,
+        (hasSerials ? 31 : 20) * mm,
+      );
 
+      expect(qr).toHaveBeenCalledTimes(1);
+      expect(qr).toHaveBeenCalledWith(`CARTON:${carton.id}`, {
+        errorCorrectionLevel: 'M',
+      });
       if (hasSerials) {
-        expect(qr).toHaveBeenCalledTimes(1);
-        expect(qr).toHaveBeenCalledWith(serials.join(','), {
-          errorCorrectionLevel: 'M',
-        });
         expect(printedText).toContain('箱內序號');
         expect(printedText).toContain(serials[0]);
         expect(printedText).toContain(serials[serials.length - 1]);
       } else {
-        expect(qr).not.toHaveBeenCalled();
         expect(printedText).not.toContain('箱內序號');
         expect(printedText).not.toContain(serials[0]);
       }

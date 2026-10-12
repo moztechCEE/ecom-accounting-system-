@@ -1437,7 +1437,7 @@
     {
       "id": "sn-labels",
       "title": "SN 序號與箱標",
-      "summary": "在 SN 標籤頁建立序號批次、配對外箱並下載標籤。序號、箱號與產品必須可追溯；下載 PDF 不代表已完成工廠印刷或掃碼驗收。",
+      "summary": "建立生產配號、既有 SN 或無 SN 箱號，下載標籤與 WMS 箱號清單。箱號、品號、國條與 SN 分開保存；建立箱號不代表實物已封箱或庫存已入帳。",
       "keywords": [
         "SN",
         "序號",
@@ -1452,13 +1452,15 @@
       "group": "inventory",
       "sections": {
         "steps": [
-          "選擇產品並填入批次資料，先檢查序號規則與標籤預覽。",
-          "有庫存修改權限者將草稿儲存成正式批次，再依批次進行箱號配對與標籤下載。",
-          "規格箱貼紙用箱號條碼掃描箱號；有 SN 版本的 QR Code 以半形逗號分隔箱內序號。核對匯出的箱號、序號與箱內順序，再進行實際列印與掃描驗收。"
+          "選擇產品與序號來源。生產配號沿用編碼規則；NSI 只建立箱號與數量。既有 SN 可逐列貼上或匯入 TXT、CSV、XLSX；表格限一欄文字 SN、無表頭，不接受數值或公式。",
+          "填入下單日期、每箱容量並核對完整箱內 SN；生產配號須填製造日期，既有 SN 或無 SN 可保留未知製造日期。既有 SN 保留原樣大小寫、順序及前導零，筆數須等於數量且不得重複；儲存草稿後確認建立箱號，已啟用內容固定。",
+          "兩種規格箱 QR 都使用 CARTON:箱號；原箱號 Code128 與箱內 SN 文字仍保留。產品國條可空，沒有國條時使用獨立 ITM- 內部掃描碼，不能假造國條。",
+          "在匯出視窗核對 WMS／ECOUNT 品號、內部掃描碼及箱序，確認後下載 corely-cartons-v1 JSON，每次最多 100 箱。品號預填 ERP SKU 只供核對，不代表已建立 ECOUNT 對照；同批可分段匯入 WMS 草稿，再由倉庫核實內容並封箱。"
         ],
         "boundaries": [
-          "瀏覽器草稿與伺服器批次分開；看到預覽不表示已建立正式序號。",
-          "規格箱貼紙不印產品國際條碼，但產品資料與匯出明細仍保留該欄位。請保留 SKU、序號、箱號來源關係；目前指南不代表支援任意倉庫 Excel 匯入。"
+          "配號與既有 SN 登記只寫標籤資料，不新增 InventorySerialNumber、實物庫存或 ECOUNT 入庫；既有 SN 不重新配號。已在其他箱登記的 SN 會被阻擋。",
+          "箱號建立、PDF 下載、WMS 清單匯入與倉庫實物封箱是不同步驟。QR 須在已匯入箱資料的 WMS 中解析，不將箱号或分組序號當作商品 SN；ECOUNT 銷貨扣帳仍由原流程核對一次。",
+          "SN 限 1～100 字可列印英數符號，不可含空白、逗號、箱號或 DRAFT: 前綴。新內碼限 ITM- 加 1～96 字英數字、點、底線或連字號；無法從 SKU 產生時須人工設定，對照品號限 100 字。保固 XLSX 的 SKU 使用國條，沒有國條時不能輸出保固匯入檔；WMS JSON 可使用內部碼。"
         ],
         "related": [
           "products",
@@ -1468,7 +1470,7 @@
       "translations": {
         "en": {
           "title": "Serial numbers and carton labels",
-          "summary": "Create serial batches, pair cartons and download labels with product and carton traceability. PDF export is not factory printing or scanner acceptance.",
+          "summary": "Create generated-serial, existing-serial or non-serialized cartons and export labels and WMS carton manifests. Keep item codes, EANs, serials and carton IDs separate; registering labels does not seal physical cartons or post inventory.",
           "category": "Purchasing and inventory",
           "keywords": [
             "Serial numbers and carton labels",
@@ -1476,13 +1478,15 @@
           ],
           "sections": {
             "steps": [
-              "Choose the product, fill in batch data and check serial rules and label preview.",
-              "With inventory-update access, save the draft as a persisted batch, then pair cartons and download labels.",
-              "Use the carton barcode to scan the carton ID. The QR Code on the SN carton label joins the serials with ASCII commas. Check exported carton IDs, serials and their order before physical printing and scanner acceptance."
+              "Choose a product and serial source. Generated serials follow the existing rules; NSI records carton quantities only. Paste existing serials or import TXT, CSV or XLSX with one text column and no header, numeric cells or formulas.",
+              "Set the order date and capacity, then review every serial. Generated serials require a manufacturing date; existing-serial and non-serialized cartons can leave an unknown manufacturing date empty. Existing serials retain case, order and leading zeros; their count must equal quantity and duplicates are rejected. Save the draft and confirm registration; active carton contents remain fixed.",
+              "Both carton QR variants encode CARTON: followed by the carton ID. Keep the existing Code128 and serial text. EAN may be empty; use a separate ITM- internal scan code instead of fabricating an EAN.",
+              "Review the WMS/ECOUNT item code, internal scan code and ordinal range in the export dialog, then download corely-cartons-v1 JSON, up to 100 cartons per file. The ERP SKU prefill requires review and is not a confirmed ECOUNT mapping. Import each range into WMS drafts; warehouse staff verify contents and seal the physical cartons."
             ],
             "boundaries": [
-              "Browser drafts and persisted batches are distinct; a preview is not a registered serial batch.",
-              "The carton label omits the product barcode, while product data and detailed exports still retain it. Preserve SKU, serial and carton links. This guide does not imply arbitrary warehouse Excel import support."
+              "Allocation and existing-serial registration write label records only, without creating InventorySerialNumber, physical inventory or ECOUNT receipts. Existing serials are not regenerated and serials already registered in another carton are blocked.",
+              "Registration, PDF export, WMS import and physical sealing are separate stages. Resolve carton QR codes in WMS after importing the manifest. Carton IDs and sales grouping numbers are not product serials; reconcile the existing ECOUNT sales deduction once.",
+              "Serials allow 1 to 100 printable ASCII characters, excluding whitespace, commas, carton and DRAFT: prefixes. New internal codes use ITM- plus 1 to 96 letters, digits, dots, underscores or hyphens; enter a reviewed code when the SKU cannot supply one. Cross-system item codes are limited to 100 characters. Warranty XLSX uses EAN as SKU and is unavailable without EAN; WMS JSON supports internal codes."
             ],
             "related": [
               "products",
@@ -1497,6 +1501,14 @@
         "frontend/src/pages/SnLabelsPage.tsx",
         "backend/src/modules/sn-labels/sn-labels.controller.ts",
         "backend/src/modules/sn-labels/sn-labels.export.ts",
+        "backend/src/modules/sn-labels/sn-labels.service.ts",
+        "backend/src/modules/sn-labels/sn-labels.rules.ts",
+        "backend/src/modules/sn-labels/sn-labels.manifest.ts",
+        "backend/src/modules/product/product.service.ts",
+        "frontend/src/features/sn-labels/model.ts",
+        "frontend/src/features/sn-labels/api.ts",
+        "frontend/src/features/sn-labels/existing-serials-file.ts",
+        "frontend/src/features/sn-labels/CartonPreview.tsx",
         "frontend/src/hooks/useEntityContext.ts"
       ],
       "permissions": [

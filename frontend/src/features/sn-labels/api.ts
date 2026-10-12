@@ -1,4 +1,5 @@
 import api from "../../services/api";
+import { defaultInternalScanCode } from "./model";
 import type { SnDraft } from "./model";
 export type Entry = {
   id: string;
@@ -11,6 +12,7 @@ export type AllocationPreview = {
   first: number | null;
   last: number | null;
   noSerial: boolean;
+  serialSource?: "generated" | "existing";
   token: string;
   total: number;
   checkedAt: string;
@@ -74,6 +76,21 @@ export const snApi = (entityId: string) => ({
         params: { entityId, page },
       })
     ).data,
+  manifest: async (id: string, body: Record<string, unknown>) => {
+    const res = await api.post(`/sn-labels/batches/${id}/manifest`, body, {
+      params: { entityId },
+    });
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(res.data, null, 2)], {
+        type: "application/json",
+      }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cartons-${id}-${body.from}-${body.to}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  },
   export: async (id: string, body: Record<string, unknown>) => {
     try {
       const res = await api.post(`/sn-labels/batches/${id}/export`, body, {
@@ -123,6 +140,8 @@ export function productDefaults(p: {
     productName: p.name,
     sku: p.sku,
     barcode: p.barcode || "",
+    wmsItemCode: p.sku,
+    internalScanCode: p.barcode ? "" : defaultInternalScanCode(p.sku),
     model: p.modelNumber || "",
     style: str("style"),
     color: str("color"),
