@@ -19,7 +19,7 @@ import NativeAfterSalesWorkbench from './after-sales/NativeAfterSalesWorkbench'
 
 type FrameLaunch = { attempt: AfterSalesAttempt; ticket: string; name: string }
 export default function AfterSalesModulePage() {
-  const { modal, contextHolder } = useRepairFeedback()
+  const { modal, message, contextHolder } = useRepairFeedback()
   const { section = 'cases' } = useParams()
   const navigate = useNavigate(), {user} = useAuth()
   const [params] = useSearchParams()
@@ -28,22 +28,26 @@ export default function AfterSalesModulePage() {
   const sourceCaseId = params.get('sourceCaseId') || ''
   const sourceIntent = params.get('intent') === 'edit' ? 'edit' : 'detail'
   const canOpenSection = canOpenAfterSalesSection(user, section)
-  const [intakeContext,setIntakeContext]=useState<{entityId:string;itemId:string;item:Item}>()
+  const canReviewIntake = hasPermission(user, 'mailroom:review')
+  const [intakeContext,setIntakeContext]=useState<{entityId:string;itemId:string;userId:string;item:Item}>()
   const frame = useRef<HTMLIFrameElement>(null)
   const session = useRef(createAfterSalesLaunchSession()), deadline = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [frameLaunch, setFrameLaunch] = useState<FrameLaunch>()
   const [error, setError] = useState(''), [loading, setLoading] = useState(true)
   const [height, setHeight] = useState(950)
-  const [handoffsOpen, setHandoffsOpen] = useState(Boolean(intakeItemId))
-  const [handoffTab, setHandoffTab] = useState(intakeItemId ? 'intake' : 'repair')
+  const [handoffsOpen, setHandoffsOpen] = useState(false)
+  const [handoffTab, setHandoffTab] = useState('repair')
   const [repairItemId, setRepairItemId] = useState('')
-  const [selectedIntakeId, setSelectedIntakeId] = useState(intakeItemId)
+  const [selectedIntakeId, setSelectedIntakeId] = useState('')
   const handoffRef = useRef<HTMLDivElement>(null)
   const dirty = useRef(false)
   const iframeDirty = useRef(false), customerDirty = useRef(false), intakeDirty = useRef(false), nativeDirty = useRef(false)
-  useRepairNavigationGuard(dirty, () => new Promise<boolean>(resolve => modal.confirm({ title: '售後表單有未儲存修改',
-    content: '請先儲存，或確認放棄修改後再離開。', okText: '放棄修改', cancelText: '保留表單',
-    onOk: () => resolve(true), onCancel: () => resolve(false) })))
+  const nativePending = useRef(false)
+  const confirmDiscard = useCallback(() => {
+    if (nativePending.current) { message.warning('案件建立結果尚未確認，請先重試確認'); return Promise.resolve(false) }
+    return new Promise<boolean>(resolve => modal.confirm({ title: '售後表單有未儲存修改', content: '要放棄修改並離開嗎？', okText: '放棄修改', cancelText: '保留表單', onOk: () => resolve(true), onCancel: () => resolve(false) }))
+  }, [modal, message])
+  useRepairNavigationGuard(dirty, confirmDiscard)
   const clearDeadline = useCallback(() => { if (deadline.current !== undefined) clearTimeout(deadline.current); deadline.current = undefined }, [])
   const showFailure = useCallback((attempt: AfterSalesAttempt, message: string) => {
     if (session.current.current() !== attempt) return
@@ -109,8 +113,21 @@ export default function AfterSalesModulePage() {
     window.addEventListener('message', receive)
     return () => window.removeEventListener('message', receive)
   }, [clearDeadline, showFailure])
-  useEffect(()=>{let current=true;if(section!=='cases' || !entityId || !intakeItemId || !/^[A-Za-z0-9_-]{1,160}$/.test(intakeItemId))return;void mailroomIntake.item(entityId,intakeItemId).then(item=>{if(current && item.caseIntake && item.caseIntake.ownerId===user?.id && ['ACCEPTED','RESOLVED'].includes(item.caseIntake.status))setIntakeContext({entityId,itemId:intakeItemId,item});}).catch(()=>{/* Original source form remains independent; invalid intake context gives no bind capability. */});return()=>{current=false;};},[section,entityId,intakeItemId,user?.id])
-  const visibleIntake=intakeContext?.entityId===entityId && intakeContext.itemId===intakeItemId ? intakeContext.item:undefined
+  useEffect(() => {
+    let current = true
+    if (!['cases', 'workbench'].includes(section) || !entityId || !user?.id || !canReviewIntake || !/^[A-Za-z0-9_-]{1,160}$/.test(intakeItemId)) return
+    const actorId = user.id
+    void mailroomIntake.item(entityId, intakeItemId).then(async item => {
+      if (!current || item.id !== intakeItemId || (item as Item & { entityId?: string }).entityId && (item as Item & { entityId?: string }).entityId !== entityId || !item.caseIntake || item.caseIntake.ownerId !== actorId || !['ACCEPTED', 'RESOLVED'].includes(item.caseIntake.status)) return
+      setIntakeContext({ entityId, itemId: intakeItemId, userId: actorId, item })
+      if (section !== 'workbench') return
+      if ((customerDirty.current || intakeDirty.current || nativeDirty.current || nativePending.current) && !await confirmDiscard()) return
+      if (!current) return
+      setSelectedIntakeId(intakeItemId); setHandoffTab('intake'); setHandoffsOpen(true)
+    }).catch(() => { /* Invalid or unavailable URL context does not grant an intake action. */ })
+    return () => { current = false }
+  }, [section, entityId, intakeItemId, user?.id, canReviewIntake, confirmDiscard])
+  const visibleIntake=canReviewIntake && intakeContext?.entityId===entityId && intakeContext.itemId===intakeItemId && intakeContext.userId===user?.id ? intakeContext.item:undefined
   const checkFrame = () => {
     const attempt = session.current.current()
     if (!attempt || frame.current?.contentWindow !== attempt.frame || attempt.phase === 'ERROR') return
@@ -120,8 +137,8 @@ export default function AfterSalesModulePage() {
       if (failure) showFailure(attempt, failure)
     } catch { showFailure(attempt, '售後頁面無法驗證來源，請重新開啟') }
   }
-  const onNativeDirty = useCallback((value: boolean) => { nativeDirty.current = value; dirty.current = value || iframeDirty.current || customerDirty.current || intakeDirty.current }, [])
-  const confirmDiscard = useCallback(() => new Promise<boolean>(resolve => modal.confirm({ title: '售後表單有未儲存修改', content: '要放棄修改並離開嗎？', okText: '放棄修改', cancelText: '保留表單', onOk: () => resolve(true), onCancel: () => resolve(false) })), [modal])
+  const onNativeDirty = useCallback((value: boolean) => { nativeDirty.current = value; dirty.current = value || nativePending.current || iframeDirty.current || customerDirty.current || intakeDirty.current }, [])
+  const onNativePending = useCallback((value: boolean) => { nativePending.current = value; dirty.current = value || nativeDirty.current || iframeDirty.current || customerDirty.current || intakeDirty.current }, [])
   const openSource = (destination: string, caseId?: string) => {
     if (!canOpenAfterSalesSection(user, destination)) return
     const query = new URLSearchParams()
@@ -140,7 +157,7 @@ export default function AfterSalesModulePage() {
   return <div>
     {contextHolder}
     {window.__APP_CONFIG__?.afterSalesModuleEnabled === true && section !== 'workbench' && <AfterSalesWorkbenchHub user={user} section={section} onOpen={destination => openSource(destination)} />}
-    {window.__APP_CONFIG__?.afterSalesModuleEnabled === true && section === 'workbench' && canOpenSection && <NativeAfterSalesWorkbench entityId={entityId} onOpenSource={openSource} onOpenTask={openTask} onDirtyChange={onNativeDirty} confirmDiscard={confirmDiscard} />}
+    {window.__APP_CONFIG__?.afterSalesModuleEnabled === true && section === 'workbench' && canOpenSection && <NativeAfterSalesWorkbench entityId={entityId} onOpenSource={openSource} onOpenTask={openTask} onDirtyChange={onNativeDirty} onPendingChange={onNativePending} confirmDiscard={confirmDiscard} />}
     {section === 'workbench' && entityId && hasPermission(user, 'mailroom:review') && <div className="native-after-sales-handoffs" ref={handoffRef}><Collapse ghost activeKey={handoffsOpen ? ['handoffs'] : []} onChange={keys => void (async () => {
       const open = keys.includes('handoffs')
       if (!open && (customerDirty.current || intakeDirty.current) && !await confirmDiscard()) return

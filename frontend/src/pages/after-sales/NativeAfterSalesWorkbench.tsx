@@ -12,6 +12,8 @@ import { canOpenAfterSalesSection } from './workbench-model'
 import { STATUS } from '../mailroom/model'
 import { CSR_STATUS } from '../repair/repair-model'
 import { afterSalesFieldValue } from '../../utils/after-sales-display'
+import { readPendingRegistration } from './pending-registration'
+import type { PendingRegistration } from './pending-registration'
 import './NativeAfterSalesWorkbench.css'
 
 type Props = {
@@ -19,6 +21,7 @@ type Props = {
   onOpenSource: (section: string, caseId?: string) => void
   onOpenTask: (kind: 'repair' | 'intake', itemId: string) => void
   onDirtyChange: (dirty: boolean) => void
+  onPendingChange: (pending: boolean) => void
   confirmDiscard: () => Promise<boolean>
 }
 
@@ -35,19 +38,22 @@ export function nativeWorkbenchError(error: unknown): string {
 
 const updatedDate = (value: string | null) => value && dayjs(value).isValid() ? dayjs(value).format('MM/DD HH:mm') : '—'
 
-export default function NativeAfterSalesWorkbench({ entityId, onOpenSource, onOpenTask, onDirtyChange, confirmDiscard }: Props) {
+export default function NativeAfterSalesWorkbench({ entityId, onOpenSource, onOpenTask, onDirtyChange, onPendingChange, confirmDiscard }: Props) {
   const { user } = useAuth()
   const [params, setParams] = useSearchParams()
   const filters = nativeFilters(params)
   const selectedId = params.get('case') || ''
   const [more, setMore] = useState(Boolean(filters.brand || filters.lifecycle !== 'active'))
   const [creating, setCreating] = useState(false)
+  const [resumeAttempt, setResumeAttempt] = useState<PendingRegistration>()
+  const [journalError, setJournalError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [query, setQuery] = useState(filters.search || '')
   const [listResult, setListResult] = useState<{ key: string; data?: NativeCaseList; error?: string }>()
   const [detailResult, setDetailResult] = useState<{ key: string; data?: NativeCaseDetail; error?: string }>()
   const [optionsResult, setOptionsResult] = useState<{ key: string; data?: NativeOptions; error?: string }>()
   const dirty = useRef(false)
+  const pending = useRef(false)
   const scopeKey = JSON.stringify([entityId, user?.id])
   const listKey = JSON.stringify([scopeKey, filters, refresh])
   const detailKey = JSON.stringify([scopeKey, selectedId, refresh])
@@ -60,10 +66,19 @@ export default function NativeAfterSalesWorkbench({ entityId, onOpenSource, onOp
   const detailLoading = Boolean(entityId && selectedId) && detailResult?.key !== detailKey
   const options = optionsResult?.key === optionsKey ? optionsResult.data : undefined
   const optionsError = optionsResult?.key === optionsKey ? optionsResult.error : undefined
-  const canCreate = Boolean(options?.createTypes.length)
+  const canCreate = !journalError && Boolean(options?.createTypes.length)
 
   useEffect(() => { setQuery(filters.search || '') }, [filters.search])
-  useEffect(() => { setCreating(false); dirty.current = false; onDirtyChange(false); return () => onDirtyChange(false) }, [scopeKey, onDirtyChange])
+  useEffect(() => {
+    setCreating(false); setResumeAttempt(undefined); setJournalError(''); dirty.current = false; pending.current = false; onPendingChange(false); onDirtyChange(false)
+    if (user?.id && entityId) {
+      try {
+        const saved = readPendingRegistration(window.localStorage, { actorId: user.id, entityId })
+        if (saved) { setResumeAttempt(saved); setCreating(true); pending.current = true; dirty.current = true; onPendingChange(true); onDirtyChange(true) }
+      } catch (error) { setJournalError(error instanceof Error ? error.message : '待確認建單資料無法讀取'); pending.current = true; dirty.current = true; onPendingChange(true); onDirtyChange(true) }
+    }
+    return () => { onPendingChange(false); onDirtyChange(false) }
+  }, [scopeKey, onDirtyChange, onPendingChange])
   useEffect(() => {
     const abort = new AbortController()
     if (!entityId) return () => abort.abort()
@@ -90,7 +105,9 @@ export default function NativeAfterSalesWorkbench({ entityId, onOpenSource, onOp
   }, [entityId, optionsKey])
 
   const markDirty = useCallback((value: boolean) => { dirty.current = value; onDirtyChange(value) }, [onDirtyChange])
+  const markPending = useCallback((value: boolean) => { pending.current = value; onPendingChange(value) }, [onPendingChange])
   async function leaveForm() {
+    if (pending.current) { await confirmDiscard(); return false }
     if (dirty.current && !await confirmDiscard()) return false
     markDirty(false)
     return true
@@ -124,7 +141,9 @@ export default function NativeAfterSalesWorkbench({ entityId, onOpenSource, onOp
       </div>
     </header>
 
-    {creating ? <NativeAfterSalesCreate key={scopeKey} entityId={entityId} options={options} optionsError={optionsError} onDirtyChange={markDirty} onChangeType={leaveForm} onCancel={() => void openCase()} onSaved={id => { markDirty(false); setRefresh(value => value + 1); void openCase(id) }} onOpenSource={onOpenSource} /> : selectedId ? <>
+    {journalError && <Alert type="error" showIcon message={journalError} style={{ marginBottom: 16 }} />}
+
+    {creating ? <NativeAfterSalesCreate key={scopeKey} actorId={user?.id || ''} entityId={entityId} resumeAttempt={resumeAttempt} options={options} optionsError={optionsError} onPendingChange={markPending} onDirtyChange={markDirty} onChangeType={leaveForm} onCancel={() => void openCase()} onSaved={id => { setResumeAttempt(undefined); markPending(false); markDirty(false); setRefresh(value => value + 1); void openCase(id) }} onOpenSource={onOpenSource} /> : selectedId ? <>
       <Button className="native-after-sales-back" aria-label="返回案件清單" icon={<ArrowLeftOutlined />} onClick={() => void openCase()}>返回案件清單</Button>
       {detailLoading && <div role="status"><Spin /> 載入案件…</div>}
       {detailError && <Alert showIcon type="error" message={detailError} action={<Button onClick={() => setRefresh(value => value + 1)}>重試</Button>} />}

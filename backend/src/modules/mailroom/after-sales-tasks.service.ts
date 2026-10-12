@@ -22,7 +22,8 @@ import {
 } from './after-sales-tasks.dto';
 
 const CONTRACT = 'corely.doa.tasks.v1';
-const DEV_SOURCE = 'https://corely-aftersales-module-dev-sp5g377smq-de.a.run.app/after-sales-app';
+const DEV_SOURCE =
+  'https://corely-aftersales-module-dev-sp5g377smq-de.a.run.app/after-sales-app';
 const SOURCE_PATH = '/api/integration/erp/workbench';
 type SourceItem = {
   id: string;
@@ -35,6 +36,14 @@ type SourceResponse = {
   items?: SourceItem[];
   item?: SourceItem;
   [key: string]: unknown;
+};
+const sameCaseIds = (left: string[], right: string[]) => {
+  const expected = new Set(left);
+  const current = new Set(right);
+  return (
+    expected.size === current.size &&
+    [...expected].every((id) => current.has(id))
+  );
 };
 
 @Injectable()
@@ -162,9 +171,13 @@ export class AfterSalesTasksService {
       throw new BadGatewayException('售後案件接口版本不符');
     // A permission change during the upstream read must not return stale authorization.
     let current: Awaited<ReturnType<ErpAfterSalesModuleService['actor']>>;
-    try { current = await this.module.actor(userId, entityId); }
-    catch (error) {
-      if (method === 'POST') throw new ServiceUnavailableException('案件結果待確認，請使用原操作重試');
+    try {
+      current = await this.module.actor(userId, entityId);
+    } catch (error) {
+      if (method === 'POST')
+        throw new ServiceUnavailableException(
+          '案件結果待確認，請使用原操作重試',
+        );
       throw error;
     }
     if (
@@ -198,14 +211,14 @@ export class AfterSalesTasksService {
     const rows = await this.db.mailroomItem.findMany({
       where: {
         entityId,
-          receipt: {
-            entityId,
-            sourceCaseId: caseIds ? { in: caseIds } : { not: null },
-          },
-          OR: [
-            { receipt: { category: 'REPAIR' } },
-            { receipt: { category: 'RETURN' }, repairOwnerId: { not: null } },
-          ],
+        receipt: {
+          entityId,
+          sourceCaseId: caseIds ? { in: caseIds } : { not: null },
+        },
+        OR: [
+          { receipt: { category: 'REPAIR' } },
+          { receipt: { category: 'RETURN' }, repairOwnerId: { not: null } },
+        ],
         ...(caseIds ? {} : { status: 'WAITING_CUSTOMER' }),
       },
       include: { receipt: true },
@@ -233,18 +246,25 @@ export class AfterSalesTasksService {
           status: row.status,
           version: row.version,
           actionable,
-            csr: csr
+          csr: csr
             ? {
                 status: csr.status,
                 ownerId: csr.ownerId,
                 sentToUserId: csr.sentToUserId,
               }
-              : null,
-            owner: csr ? {
-              erpUserId: csr.status === 'ACCEPTED' ? csr.ownerId : csr.sentToUserId,
-              name: actionable ? (csr.status === 'SENT' && !csr.sentToUserId ? '待客服認領' : actor.name) : null,
-              status: csr.status,
-            } : null,
+            : null,
+          owner: csr
+            ? {
+                erpUserId:
+                  csr.status === 'ACCEPTED' ? csr.ownerId : csr.sentToUserId,
+                name: actionable
+                  ? csr.status === 'SENT' && !csr.sentToUserId
+                    ? '待客服認領'
+                    : actor.name
+                  : null,
+                status: csr.status,
+              }
+            : null,
         });
     }
     return {
@@ -256,6 +276,7 @@ export class AfterSalesTasksService {
   async list(userId: string, query: AfterSalesTasksQuery) {
     await this.module.actor(userId, query.entityId);
     const context = await this.repairContext(userId, query.entityId);
+    const signedMineIds = [...context.mineIds].sort();
     const search = new URLSearchParams();
     for (const key of [
       'scope',
@@ -269,8 +290,8 @@ export class AfterSalesTasksService {
     ] as const)
       if (query[key] !== undefined && query[key] !== '')
         search.set(key, String(query[key]));
-    if (context.mineIds.length)
-      search.set('erpMineCaseIds', JSON.stringify(context.mineIds));
+    if (signedMineIds.length)
+      search.set('erpMineCaseIds', JSON.stringify(signedMineIds));
     const result = await this.request(
       userId,
       query.entityId,
@@ -287,18 +308,34 @@ export class AfterSalesTasksService {
       )
     )
       throw new BadGatewayException('售後案件清單格式不符');
-    const exact = await this.repairContext(
-      userId,
-      query.entityId,
-      result.items.map((item) => item.id),
+    // Source counts and pagination already include the signed personal union.
+    // A changed handoff invalidates the entire response, not just visible rows.
+    const fresh = await this.repairContext(userId, query.entityId);
+    if (
+      !sameCaseIds(signedMineIds, fresh.mineIds) ||
+      context.overflow !== fresh.overflow
+    )
+      throw new ConflictException('交辦已更新，請重新整理案件清單');
+    const pageIds = new Set(result.items.map((item) => item.id));
+    const exact = await this.repairContext(userId, query.entityId, [
+      ...pageIds,
+    ]);
+    const signed = new Set(signedMineIds);
+    const expectedPageMine = signedMineIds.filter((id) => pageIds.has(id));
+    const exactPageMine = exact.mineIds.filter(
+      (id) => pageIds.has(id) && (!fresh.overflow || signed.has(id)),
     );
+    // Catch another reassignment during the exact task read. In an overflowed
+    // queue only the bounded signed union influenced Source ownership/counts.
+    if (!sameCaseIds(expectedPageMine, exactPageMine))
+      throw new ConflictException('交辦已更新，請重新整理案件清單');
     return {
       ...result,
       items: result.items.map((item) => ({
         ...item,
         tasks: exact.tasks.filter((task) => task.sourceCaseId === item.id),
       })),
-      handoffs: { repairQueueHasMore: context.overflow },
+      handoffs: { repairQueueHasMore: fresh.overflow },
     };
   }
   async options(userId: string, query: AfterSalesOptionsQuery) {
@@ -307,7 +344,8 @@ export class AfterSalesTasksService {
       query.entityId,
       '/options' +
         (query.search
-          ? '?' + new URLSearchParams({ search: query.search.trim() })
+          ? '?' +
+            new URLSearchParams({ search: query.search.trim() }).toString()
           : ''),
     );
     // The existing delegated actor authorizes the pinned company scope. The

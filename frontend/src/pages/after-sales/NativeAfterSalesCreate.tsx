@@ -5,11 +5,14 @@ import { nativeAfterSales } from '../../services/native-after-sales.service'
 import type { NativeOptions, NativeProduct } from '../../services/native-after-sales.service'
 import type { NativeCaseType, NativeCreateValues } from './native-workbench-model'
 import { nativeCreateInput, NATIVE_CASE_TYPES } from './native-workbench-model'
+import { clearPendingRegistration, PendingRegistrationError, readPendingRegistration, savePendingRegistration, withPendingRegistrationLock } from './pending-registration'
+import type { PendingRegistration, RegistrationScope } from './pending-registration'
 
 type Props = {
   entityId: string; options?: NativeOptions; optionsError?: string;
   onDirtyChange: (value: boolean) => void; onCancel: () => void; onSaved: (id: string) => void;
   onChangeType: () => Promise<boolean>;
+  actorId: string; resumeAttempt?: PendingRegistration; onPendingChange: (pending: boolean) => void;
   onOpenSource: (section: string, caseId?: string) => void;
 }
 type Values = NativeCreateValues
@@ -19,38 +22,56 @@ function errorText(error: unknown) {
   return typeof message === 'string' ? message : Array.isArray(message) ? message.join('；') : '案件未能確認建立，請保留資料並重試'
 }
 
-export default function NativeAfterSalesCreate({ entityId, options, optionsError, onDirtyChange, onCancel, onSaved, onOpenSource, onChangeType }: Props) {
-  const [selectedType, setSelectedType] = useState<NativeCaseType>()
+export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttempt, options, optionsError, onDirtyChange, onCancel, onSaved, onOpenSource, onChangeType, onPendingChange }: Props) {
+  const [selectedType, setSelectedType] = useState<NativeCaseType | undefined>(resumeAttempt?.request.payload.type)
   const [form] = Form.useForm<Values>()
   const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState('')
-  const [unknownResult, setUnknownResult] = useState(false)
-  const operation = useRef<{ payload: string; requestId: string; entityId: string; request: { brand: string; customerKind: string; payload: ReturnType<typeof nativeCreateInput> } } | undefined>(undefined)
+  const [failure, setFailure] = useState(resumeAttempt ? '案件建立結果尚未確認，請重試確認' : '')
+  const [unknownResult, setUnknownResult] = useState(Boolean(resumeAttempt))
+  const operation = useRef<PendingRegistration | undefined>(resumeAttempt)
   const running = useRef(false)
   const currentEntity = useRef(entityId)
   const type = NATIVE_CASE_TYPES.find(entry => entry.value === selectedType)
   const brand = Form.useWatch('brand', form)
   useEffect(() => { currentEntity.current = entityId; return () => { currentEntity.current = '' } }, [entityId])
+  function restore(pending: PendingRegistration) {
+    operation.current = pending; setSelectedType(pending.request.payload.type); setUnknownResult(true)
+    onPendingChange(true); onDirtyChange(true)
+    const payload = pending.request.payload, detail = payload.detail
+    form.setFieldsValue({ brand: pending.request.brand, customerKind: pending.request.customerKind, sourceChannel: payload.sourceChannel, contactName: payload.contactName, contactPhone: payload.contactPhone, contactAddress: payload.contactAddress, contactEmail: payload.contactEmail, referenceNumber: payload.referenceNumber, internalNote: payload.internalNote, items: payload.items, serialNumber: String(detail.serialNumber || ''), reshipmentReason: String(detail.reshipmentReason || ''), lossCategory: String(detail.lossCategory || ''), reasonCategory: String(detail.reasonCategory || ''), refundReason: String(detail.refundReason || ''), reason: String(detail.missingContents || detail.faultDescription || detail.reasonNote || detail.issueDescription || payload.internalNote || '') })
+  }
+  useEffect(() => { if (resumeAttempt) restore(resumeAttempt) }, [resumeAttempt?.requestId])
   async function create(values: Values) {
-    if (!selectedType || !options?.createTypes.includes(selectedType) || running.current || !entityId) return
+    if (!selectedType || !unknownResult && !options?.createTypes.includes(selectedType) || running.current || !entityId || !actorId) return
     running.current = true; setBusy(true); setFailure('')
     const requestEntity = entityId
-    const payload = nativeCreateInput(selectedType, values)
-    const intent = { entityId, brand: values.brand, customerKind: values.customerKind, payload }
-    const encoded = JSON.stringify(intent)
-    if (!unknownResult && operation.current?.payload !== encoded) operation.current = { payload: encoded, requestId: crypto.randomUUID(), entityId, request: { brand: values.brand, customerKind: values.customerKind, payload } }
-    const attempt = operation.current
-    if (!attempt) { running.current = false; setBusy(false); return }
+    const scope: RegistrationScope = { actorId, entityId }
+    let sent = false, priorUnknown = unknownResult
     try {
-      const result = await nativeAfterSales.create(attempt.entityId, { requestId: attempt.requestId, ...attempt.request })
-      if (currentEntity.current !== requestEntity) return
-      onDirtyChange(false); onSaved(result.id)
+      await withPendingRegistrationLock(scope, async () => {
+        const storage = window.localStorage, prior = readPendingRegistration(storage, scope)
+        if (prior && (!operation.current || prior.requestId !== operation.current.requestId)) throw new PendingRegistrationError('CONFLICT', '已有待確認案件，請先重試確認', prior)
+        const attempt = unknownResult && operation.current ? operation.current : { schema: 'corely.doa.pending-registration.v1' as const, ...scope, requestId: crypto.randomUUID(), createdAt: new Date().toISOString(), request: { brand: values.brand, customerKind: values.customerKind, payload: nativeCreateInput(selectedType, values) } }
+        savePendingRegistration(storage, scope, attempt)
+        operation.current = attempt; onPendingChange(true); onDirtyChange(true)
+        sent = true
+        const result = await nativeAfterSales.create(attempt.entityId, { requestId: attempt.requestId, ...attempt.request })
+        clearPendingRegistration(storage, scope, attempt.requestId)
+        if (currentEntity.current !== requestEntity) return
+        onPendingChange(false); onDirtyChange(false); onSaved(result.id)
+      })
     } catch (error) {
       if (currentEntity.current === requestEntity) {
+        if (error instanceof PendingRegistrationError && error.pending) { restore(error.pending); setFailure(error.message); return }
         const status = (error as { response?: { status?: number } })?.response?.status
-        const uncertain = unknownResult || status == null || status >= 500
+        const uncertain = priorUnknown || sent && (status == null || status >= 500)
+        if (!uncertain && sent && operation.current) {
+          try { await withPendingRegistrationLock(scope, async () => clearPendingRegistration(window.localStorage, scope, operation.current!.requestId)) } catch { setUnknownResult(true); onPendingChange(true); setFailure('待確認建單紀錄未能清除，請重試確認'); return }
+          operation.current = undefined
+        }
         setUnknownResult(uncertain)
-        setFailure(uncertain ? '案件建立結果尚未確認，請重試確認' : errorText(error))
+        onPendingChange(uncertain)
+        setFailure(uncertain ? '案件建立結果尚未確認，請重試確認' : error instanceof PendingRegistrationError ? error.message : errorText(error))
       }
     } finally { running.current = false; if (currentEntity.current === requestEntity) setBusy(false) }
   }
@@ -58,7 +79,7 @@ export default function NativeAfterSalesCreate({ entityId, options, optionsError
   const contactRequired = (message: string) => selectedType === 'CUSTOMER_ISSUE' ? [] : required(message)
   if (!options && !optionsError) return <div role="status"><Spin /> 載入案件選項…</div>
   return <div className="native-after-sales-create">
-    <Button className="native-after-sales-back" aria-label="返回案件清單" icon={<ArrowLeftOutlined />} onClick={onCancel} disabled={busy}>返回案件清單</Button>
+    <Button className="native-after-sales-back" aria-label="返回案件清單" icon={<ArrowLeftOutlined />} onClick={onCancel} disabled={busy || unknownResult}>返回案件清單</Button>
     {optionsError && <Alert type="error" showIcon message={optionsError} />}
     {!selectedType ? <>
       <Typography.Title level={3}>新增案件</Typography.Title>
@@ -91,7 +112,7 @@ export default function NativeAfterSalesCreate({ entityId, options, optionsError
         {selectedType === 'REFUND_PICKUP' && <Form.Item name="refundReason" label="退貨原因" rules={required('請選擇退貨原因')} style={{ marginTop: 16 }}><Select options={options?.reasonOptions.refundReason || []} /></Form.Item>}
         <Form.Item name="reason" label={selectedType === 'RESHIPMENT' ? '補寄內容' : selectedType === 'EXCHANGE_RETURN' ? '換貨說明' : selectedType === 'REFUND_PICKUP' ? '退貨說明' : type?.reason} rules={required('請填寫案件內容')} style={{ marginTop: 16 }}><Input.TextArea rows={3} maxLength={4000} showCount /></Form.Item>
         <Form.Item name="internalNote" label="內部備註"><Input.TextArea rows={2} maxLength={2000} showCount /></Form.Item>
-        <Space wrap><Button type="primary" aria-label={unknownResult ? '重試確認' : '建立案件'} htmlType={unknownResult ? 'button' : 'submit'} disabled={busy} loading={busy} onClick={unknownResult ? () => void create(form.getFieldsValue(true)) : undefined}>{unknownResult ? '重試確認' : '建立案件'}</Button><Button onClick={onCancel} disabled={busy}>取消</Button><Button type="link" disabled={busy || unknownResult || !brand} onClick={() => onOpenSource('customers')}>顧客資料與 LINE</Button></Space>
+        <Space wrap><Button type="primary" aria-label={unknownResult ? '重試確認' : '建立案件'} htmlType={unknownResult ? 'button' : 'submit'} disabled={busy} loading={busy} onClick={unknownResult ? () => void create(form.getFieldsValue(true)) : undefined}>{unknownResult ? '重試確認' : '建立案件'}</Button><Button onClick={onCancel} disabled={busy || unknownResult}>取消</Button><Button type="link" disabled={busy || unknownResult || !brand} onClick={() => onOpenSource('customers')}>顧客資料與 LINE</Button></Space>
       </Form>
     </>}
   </div>

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:b0ebe048aa12606c67b205cb6acc300acaa6ea6022729ff46e97a08beded7c47",
+  "sourceVersion": "sha256:1524720fa6f25db7f6e98ff68a15f0f2ec3e18dbcd4a34610a01442387ed3c2b",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 79,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "0378387b3d048a00c6d0243e3d8c119b537ca029a489a30ce70d78bc6452eb42",
+  "catalogSha256": "585aab256f8741dcab24c7ad8283702a904749921014d327b8667ca55f8fa690",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -364,7 +364,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/after-sales-tasks.service.ts",
-      "sha256": "7bec6bdf470f3d7f6c8666abfff26cf638fc8ae56f6b15f610048c07eeeb1e7f"
+      "sha256": "e74faa89cfb628a7c69af8bd9d4362d461596c5376bbe4dd292494df0f8a1b9b"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-catalog.controller.ts",
@@ -676,7 +676,7 @@
     },
     {
       "path": "frontend/src/pages/after-sales/NativeAfterSalesCreate.tsx",
-      "sha256": "bbb52136c8cc063ce7648a9a82dff1874543659b5ff36ab7136d5ffd30b0a05a"
+      "sha256": "be6c70b5ce72094063dfee0b06d18d504a9483d5dc1704b6cfe2b278c388b020"
     },
     {
       "path": "frontend/src/pages/after-sales/NativeAfterSalesWorkbench.css",
@@ -684,7 +684,11 @@
     },
     {
       "path": "frontend/src/pages/after-sales/NativeAfterSalesWorkbench.tsx",
-      "sha256": "0e3e1f5867ef5ffd22c4383fc8fc975fed44bc050792f623b9e7acc92fb6a5bd"
+      "sha256": "9ec7210092a20be31978b42d1264086cf77c66363718ceb71f30a6fbd3ef6cfb"
+    },
+    {
+      "path": "frontend/src/pages/after-sales/pending-registration.ts",
+      "sha256": "489035b8d9acab1c7fbc61d886ee3ec7ee76638f788730b313e6b1e567c14f15"
     },
     {
       "path": "frontend/src/pages/after-sales/workbench-model.ts",
@@ -700,7 +704,7 @@
     },
     {
       "path": "frontend/src/pages/AfterSalesModulePage.tsx",
-      "sha256": "0e33b2e14d56e5294f362503b413d730e15a6312b3eb6ade79e06825d94ecbb3"
+      "sha256": "e534e7714d7a6c4a8bc5a2a84cbef6c3e928fbfa4a352f1f0447aa5a4bb3fc8d"
     },
     {
       "path": "frontend/src/pages/AfterSalesQuotesPage.tsx",
