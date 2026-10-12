@@ -140,7 +140,37 @@
 .repair-document-guidance .ant-collapse-header { font-size: 12px; }
 .repair-document-guidance .ant-typography { margin: 8px 0 0; font-size: 12px; }
 .repair-document-actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 20px; border-top: 1px solid #edf0f4; }
-.repair-document-check, .repair-document-part { background: #f9fafc; }
+/* Repeated document groups sit directly on the work area, with one divider. */
+.repair-document-check.ant-card,
+.repair-document-part.ant-card,
+.repair-editor-sidebar .ant-collapse-content-box > .ant-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.repair-document-check > .ant-card-head,
+.repair-document-part > .ant-card-head,
+.repair-editor-sidebar .ant-collapse-content-box > .ant-card > .ant-card-head {
+  min-height: 0;
+  padding: 0 0 12px;
+  border: 0;
+}
+
+.repair-document-check > .ant-card-body,
+.repair-document-part > .ant-card-body,
+.repair-editor-sidebar .ant-collapse-content-box > .ant-card > .ant-card-body {
+  padding: 0;
+}
+
+.repair-document-check + .repair-document-check,
+.repair-document-part + .repair-document-part,
+.repair-editor-sidebar .ant-collapse-content-box > .ant-card + .ant-card {
+  padding-top: 20px;
+  border-top: 1px solid #edf0f4;
+}
+
 .repair-documents .ant-form-item-label > label { height: auto; }
 
 @media (max-width: 1080px) {

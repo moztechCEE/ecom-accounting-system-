@@ -579,8 +579,7 @@ body.dark .ant-table-tbody > tr:hover > td {
 /* Inputs - Light Glass Theme */
 .ant-input, 
 .ant-input-password, 
-.ant-input-affix-wrapper,
-.ant-input-affix-wrapper > input.ant-input {
+.ant-input-affix-wrapper {
   background: rgba(255, 255, 255, 0.6) !important;
   border: 1px solid rgba(0, 0, 0, 0.06) !important;
   color: #1d1d1f !important;
@@ -597,14 +596,6 @@ body.dark .ant-table-tbody > tr:hover > td {
   align-items: center;
 }
 
-.ant-input-affix-wrapper > input.ant-input {
-  background: transparent !important;
-  border: none !important;
-  padding: 0 !important;
-  border-radius: 0 !important;
-  height: auto !important;
-}
-
 .ant-input:hover, .ant-input-affix-wrapper:hover {
   border-color: rgba(0, 0, 0, 0.15) !important;
   background: rgba(255, 255, 255, 0.8) !important;
@@ -619,6 +610,69 @@ body.dark .ant-table-tbody > tr:hover > td {
   border-color: #007aff !important;
   background: #ffffff !important;
   box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.15) !important;
+}
+
+/* Keep Ant's validation and disabled cues on the single control surface. */
+.ant-input-status-error:not(.ant-input-disabled),
+.ant-input-affix-wrapper-status-error:not(.ant-input-affix-wrapper-disabled) {
+  border-color: #ff4d4f !important;
+}
+
+.ant-input-status-warning:not(.ant-input-disabled),
+.ant-input-affix-wrapper-status-warning:not(.ant-input-affix-wrapper-disabled) {
+  border-color: #faad14 !important;
+}
+
+.ant-input-status-error:focus,
+.ant-input-affix-wrapper-status-error:focus-within {
+  box-shadow: 0 0 0 4px rgba(255, 77, 79, 0.15) !important;
+}
+
+.ant-input-status-warning:focus,
+.ant-input-affix-wrapper-status-warning:focus-within {
+  box-shadow: 0 0 0 4px rgba(250, 173, 20, 0.15) !important;
+}
+
+.ant-input[disabled],
+.ant-input-affix-wrapper.ant-input-affix-wrapper-disabled {
+  background: #f5f5f5 !important;
+  border-color: #d9d9d9 !important;
+  color: rgba(0, 0, 0, 0.45) !important;
+  box-shadow: none !important;
+}
+
+/* Affix controls own their border; their input/textarea never draws another. */
+.ant-input-affix-wrapper > input.ant-input,
+.ant-input-affix-wrapper > textarea.ant-input,
+.ant-input-affix-wrapper > input.ant-input:hover,
+.ant-input-affix-wrapper > textarea.ant-input:hover,
+.ant-input-affix-wrapper > input.ant-input:focus,
+.ant-input-affix-wrapper > textarea.ant-input:focus {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: inherit !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
+}
+
+.ant-input-affix-wrapper > input.ant-input {
+  padding: 0 !important;
+  height: auto !important;
+}
+
+.ant-input-affix-wrapper.ant-input-textarea-affix-wrapper {
+  padding: 0 !important;
+  align-items: stretch;
+}
+
+.ant-input-textarea-affix-wrapper > textarea.ant-input {
+  padding: 8px 16px !important;
+}
+
+.ant-input-textarea-allow-clear > textarea.ant-input,
+.ant-input-textarea-has-feedback > textarea.ant-input {
+  padding-inline-end: 32px !important;
 }
 
 .ant-input::placeholder {
