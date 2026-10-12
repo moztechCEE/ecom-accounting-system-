@@ -19,6 +19,8 @@ import { MailroomCatalogService } from './mailroom-catalog.service';
 import { MailroomSourceMediaController } from './mailroom-source-media.controller';
 import { MailroomSourceMediaService } from './mailroom-source-media.service';
 import { RepairTodoService } from './repair-todo.service';
+import { AfterSalesTasksController } from './after-sales-tasks.controller';
+import { AfterSalesTasksService } from './after-sales-tasks.service';
 @Module({
   imports: [
     NotificationModule,
@@ -27,6 +29,7 @@ import { RepairTodoService } from './repair-todo.service';
     AfterSalesIntegrationModule,
   ],
   controllers: [
+    AfterSalesTasksController,
     MailroomController,
     MailroomTabletController,
     RepairWorkbenchController,
@@ -35,6 +38,7 @@ import { RepairTodoService } from './repair-todo.service';
     MailroomSourceMediaController,
   ],
   providers: [
+    AfterSalesTasksService,
     MailroomService,
     MailroomIntakeService,
     MailroomSyncService,

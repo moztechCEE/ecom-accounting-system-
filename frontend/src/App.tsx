@@ -5,7 +5,7 @@ import AfterSalesStockPage from './pages/AfterSalesStockPage'
 import { mailroomEnabled } from './pages/mailroom/model'
 import React from 'react'
 import PerformanceReviewsPage from './pages/PerformanceReviewsPage'
-import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { loginDestination } from './utils/login-destination'
 import { afterSalesOnlyUser, repairOnlyUser, warehouseOnlyUser } from './config/workspaces'
@@ -74,6 +74,10 @@ function HomeEntry({ dashboard = false }: { dashboard?: boolean }) {
   if (dashboard && !warehouseOnlyUser(user) && !repairOnlyUser(user) && !afterSalesOnlyUser(user)) return <DashboardPage />
   return <Navigate to={loginDestination(user)} replace />
 }
+function AfterSalesEntryRedirect() {
+  const { search } = useLocation()
+  return <Navigate to={`/operations/after-sales/workbench${search}`} replace />
+}
 const AppRoutes: React.FC = () => {
   const staged = stagedOperationsEnabled()
   return (
@@ -110,7 +114,7 @@ const AppRoutes: React.FC = () => {
                 <Route path="accounting/periods" element={<PermissionRoute anyPermissions={['accounts:read']}><AccountingPeriodsPage /></PermissionRoute>} />
                 <Route path="sales/orders" element={<PermissionRoute anyPermissions={['sales_orders:read']}><SalesPage /></PermissionRoute>} />
                 <Route path="sales/quotations" element={<PermissionRoute anyPermissions={['sales_orders:read', 'purchase_orders:read']}><SalesQuotationsPage /></PermissionRoute>} />
-                <Route path="sales/after-sales" element={<PermissionRoute anyPermissions={staged?['after_sales_cases:read']:['after_sales_cases:read','sales_orders:read']}>{window.__APP_CONFIG__?.afterSalesModuleEnabled===true?<Navigate to="/operations/after-sales/cases" replace />:staged?<AfterSalesWorkbenchPage />:<AfterSalesCasesPage />}</PermissionRoute>} />
+                <Route path="sales/after-sales" element={<PermissionRoute anyPermissions={staged?['after_sales_cases:read']:['after_sales_cases:read','sales_orders:read']}>{window.__APP_CONFIG__?.afterSalesModuleEnabled===true?<AfterSalesEntryRedirect />:staged?<AfterSalesWorkbenchPage />:<AfterSalesCasesPage />}</PermissionRoute>} />
                 <Route path="sales/after-sales/quotes" element={staged?<PermissionRoute anyPermissions={['after_sales_cases:read']}><AfterSalesQuotesPage /></PermissionRoute>:<Navigate to="/sales/after-sales" replace />} />
                 <Route path="admin/after-sales-brands" element={staged?<PermissionRoute anyRoles={['ADMIN']}><AfterSalesBrandsPage /></PermissionRoute>:<Navigate to="/sales/after-sales" replace />} />
                 <Route path="sales/after-sales/internal" element={<PermissionRoute anyPermissions={['after_sales_cases:read']}><AfterSalesCasesPage /></PermissionRoute>} />

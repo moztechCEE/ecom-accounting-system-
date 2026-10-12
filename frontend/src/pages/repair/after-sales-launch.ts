@@ -14,17 +14,22 @@ const CASE_LIST_REDIRECT_TYPES = {
 } as const
 export type AfterSalesAttempt = {
   id: number; section: string; entityId: string; sourcePath: string
+  caseId?: string; intent?: 'detail' | 'edit'
   phase: 'REQUESTING' | 'LOADING' | 'READY' | 'ERROR'; frame?: object
 }
 /** Each login attempt belongs to its own iframe; old requests cannot submit or clear a newer load. */
 export function createAfterSalesLaunchSession() {
   let counter = 0, current: AfterSalesAttempt | undefined
   return {
-    begin(section: string, entityId: string): AfterSalesAttempt {
+    begin(section: string, entityId: string, caseId?: string, intent: 'detail' | 'edit' = 'detail'): AfterSalesAttempt {
       if (!Object.prototype.hasOwnProperty.call(AFTER_SALES_SOURCE_PATHS, section)) throw new Error('售後功能入口不存在')
-      const sourcePath = AFTER_SALES_SOURCE_PATHS[section as keyof typeof AFTER_SALES_SOURCE_PATHS]
+      let sourcePath: string = AFTER_SALES_SOURCE_PATHS[section as keyof typeof AFTER_SALES_SOURCE_PATHS]
       if (!sourcePath) throw new Error('售後功能入口不存在')
-      current = { id: ++counter, section, entityId, sourcePath, phase: 'REQUESTING' }
+      if (caseId) {
+        if (!['cases', 'repairs', 'reshipments', 'exchange-returns', 'refund-pickups', 'private-purchases', 'customer-issues'].includes(section) || !/^[A-Za-z0-9_-]{1,160}$/.test(caseId) || !['detail', 'edit'].includes(intent)) throw new Error('售後案件入口不符')
+        sourcePath = `/cases/${encodeURIComponent(caseId)}${intent === 'edit' ? '/edit' : ''}`
+      }
+      current = { id: ++counter, section, entityId, sourcePath, caseId, intent, phase: 'REQUESTING' }
       return current
     },
     current: () => current,
@@ -38,12 +43,12 @@ export function createAfterSalesLaunchSession() {
       if (current !== attempt || attempt.phase !== 'LOADING' || attempt.frame !== frame) return 'ignored'
       try {
         const expected = new URL('/after-sales-app' + attempt.sourcePath, origin), actual = new URL(actualUrl)
-        const repairAlias = attempt.section === 'repairs' && actual.pathname === '/after-sales-app/cases' &&
+        const repairAlias = !attempt.caseId && attempt.section === 'repairs' && actual.pathname === '/after-sales-app/cases' &&
           actual.searchParams.size === 2 && actual.searchParams.getAll('type').length === 1 &&
           actual.searchParams.get('type') === 'REPAIR' && actual.searchParams.getAll('queue').length === 1 &&
           actual.searchParams.get('queue') === 'technician'
         const listType = CASE_LIST_REDIRECT_TYPES[attempt.section as keyof typeof CASE_LIST_REDIRECT_TYPES]
-        const caseListAlias = !!listType && actual.pathname === '/after-sales-app/cases' &&
+        const caseListAlias = !attempt.caseId && !!listType && actual.pathname === '/after-sales-app/cases' &&
           actual.searchParams.size === 1 && actual.searchParams.getAll('type').length === 1 &&
           actual.searchParams.get('type') === listType
         const canonical = actual.pathname === expected.pathname && actual.search === expected.search

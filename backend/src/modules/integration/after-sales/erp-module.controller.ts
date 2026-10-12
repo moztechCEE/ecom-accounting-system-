@@ -9,7 +9,13 @@ import {
   Req,
   SetMetadata,
 } from '@nestjs/common';
-import { IsIn, IsNotEmpty, IsString } from 'class-validator';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+} from 'class-validator';
 import {
   ERP_AFTER_SALES_SERVICE_AUTH,
   SOURCE_SECTIONS,
@@ -18,6 +24,8 @@ import { ErpAfterSalesModuleService } from './erp-module.service';
 class LaunchDto {
   @IsString() @IsNotEmpty() entityId!: string;
   @IsIn(Object.keys(SOURCE_SECTIONS)) section!: string;
+  @IsOptional() @IsString() @Matches(/^[A-Za-z0-9_-]{1,128}$/) caseId?: string;
+  @IsOptional() @IsIn(['detail', 'edit']) intent?: 'detail' | 'edit';
 }
 @Controller('after-sales/module')
 export class ErpAfterSalesModuleController {
@@ -39,6 +47,8 @@ export class ErpAfterSalesModuleController {
       body.entityId,
       body.section,
       req.headers.origin || '',
+      body.caseId,
+      body.intent,
     );
   }
   @Get('actors/:id')

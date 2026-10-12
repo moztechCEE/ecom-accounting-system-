@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:d3a6ec741cf4e8654b89a5c9e6a8dfa0b42a926bf94b9205d47db625f97fce4e",
+  "sourceVersion": "sha256:b0ebe048aa12606c67b205cb6acc300acaa6ea6022729ff46e97a08beded7c47",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 79,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "743a98426ef405b71062ff961f6fbdfea64d8910cacff7b577f15772fc8da4ad",
+  "catalogSha256": "0378387b3d048a00c6d0243e3d8c119b537ca029a489a30ce70d78bc6452eb42",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -336,11 +336,11 @@
     },
     {
       "path": "backend/src/modules/integration/after-sales/erp-module.controller.ts",
-      "sha256": "eac69ac32c05ddb08f5c43e96dbf5fd0ba8ef4a095d62c50197a7bcc1f2dd3c2"
+      "sha256": "74dfcb9c37177dbca0651b2eb1a90d4bbc94717444220085b1f30ad828e9b265"
     },
     {
       "path": "backend/src/modules/integration/after-sales/erp-module.service.ts",
-      "sha256": "f3d1d091cbe5a74ce9cbe9a34b5671fdb7a56a947f1b2ecf3419d574356f3de3"
+      "sha256": "2a78ab5a45bf6212f8d34faca1a61a68e902a1c904979e185133b35eb19ebdd9"
     },
     {
       "path": "backend/src/modules/integration/wms/wms-handover.module.ts",
@@ -353,6 +353,18 @@
     {
       "path": "backend/src/modules/inventory/inventory.controller.ts",
       "sha256": "3f751e5deee28cf0f3a86360b7e3532a5cb5ec8c4a2b3e84b3b76081466077a2"
+    },
+    {
+      "path": "backend/src/modules/mailroom/after-sales-tasks.controller.ts",
+      "sha256": "ccded189ed9c37efb58fd3c61bfee424dba5c73f138923c708771a56b373c1c3"
+    },
+    {
+      "path": "backend/src/modules/mailroom/after-sales-tasks.dto.ts",
+      "sha256": "ca9130822a61ca2ce7170908b8600d992e8d28b04a6f90605a6b6901da738694"
+    },
+    {
+      "path": "backend/src/modules/mailroom/after-sales-tasks.service.ts",
+      "sha256": "7bec6bdf470f3d7f6c8666abfff26cf638fc8ae56f6b15f610048c07eeeb1e7f"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-catalog.controller.ts",
@@ -436,7 +448,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom.module.ts",
-      "sha256": "3fd6e1cb190730ed098a406e15359b72f65a0d79af7a60b1af70ba685b6b242a"
+      "sha256": "c4006d17ea34636c590130d99fbeac42d38f7be2f27421914978749f7b38559c"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom.service.ts",
@@ -592,7 +604,7 @@
     },
     {
       "path": "frontend/src/App.tsx",
-      "sha256": "3b29495c2c5bed9dd5c5e0eeb3a249a347203bead482fb03e54f4442efeeedc7"
+      "sha256": "b66edb72ab6c952de707b846118deb4f2367c2a1b28297a71a069399d58c5849"
     },
     {
       "path": "frontend/src/components/CommandPalette.tsx",
@@ -659,6 +671,22 @@
       "sha256": "0e8362f5d2f506fd767288bdcb7fd113ec1cdc16cedca58b02dc1be323ef5dd0"
     },
     {
+      "path": "frontend/src/pages/after-sales/native-workbench-model.ts",
+      "sha256": "5a76889ea05b0e793fac8b788c59f8246be7cc3734208e233c847889dc226d16"
+    },
+    {
+      "path": "frontend/src/pages/after-sales/NativeAfterSalesCreate.tsx",
+      "sha256": "bbb52136c8cc063ce7648a9a82dff1874543659b5ff36ab7136d5ffd30b0a05a"
+    },
+    {
+      "path": "frontend/src/pages/after-sales/NativeAfterSalesWorkbench.css",
+      "sha256": "36c446686ecd9ba00e9d7fb65deb658016498e349f8328cc0d7736dff3cd6974"
+    },
+    {
+      "path": "frontend/src/pages/after-sales/NativeAfterSalesWorkbench.tsx",
+      "sha256": "0e3e1f5867ef5ffd22c4383fc8fc975fed44bc050792f623b9e7acc92fb6a5bd"
+    },
+    {
       "path": "frontend/src/pages/after-sales/workbench-model.ts",
       "sha256": "8c9beaef2a4e085ee1d00d28874eef76a955cf26934800a6199f98e4b1535aab"
     },
@@ -672,7 +700,7 @@
     },
     {
       "path": "frontend/src/pages/AfterSalesModulePage.tsx",
-      "sha256": "8c911cbe6da50b4847b5e71b5b1c3d513c8ecfc3a51740dfee173d634057be4b"
+      "sha256": "0e33b2e14d56e5294f362503b413d730e15a6312b3eb6ade79e06825d94ecbb3"
     },
     {
       "path": "frontend/src/pages/AfterSalesQuotesPage.tsx",
@@ -924,11 +952,11 @@
     },
     {
       "path": "frontend/src/pages/repair/after-sales-launch.ts",
-      "sha256": "6362699c0bd08d5d4e6b7a348803b56a49e6c52707c5e35b6568dd570b00e6ea"
+      "sha256": "245d5dbda2589824ffe8ae1f316b435b4886e5a177069df8e6dbf93fc9c91088"
     },
     {
       "path": "frontend/src/pages/repair/CustomerRepairQueue.tsx",
-      "sha256": "c882e9a075024cd80888ddde1418424c6653bd0e61ea23fdb8027e0cebf994b9"
+      "sha256": "f39f259408bc144414eab825f3880fb6feb2b403a632da22bcd962f9d9f23c06"
     },
     {
       "path": "frontend/src/pages/repair/repair-feedback.tsx",
@@ -1063,6 +1091,10 @@
       "sha256": "4bcea76dd636251122debfba4eef5a8d065a085b7f2337ab1e68bc99fb413dbb"
     },
     {
+      "path": "frontend/src/services/native-after-sales.service.ts",
+      "sha256": "4793955922281e11448c60c6e461cbf3513c94ce0470fd596927818bb37a0dc6"
+    },
+    {
       "path": "frontend/src/services/notification-refresh.ts",
       "sha256": "f6f496173ea6ad523e4dc1b1657cad3b47931c66a33689e8df0ddf92bf8e29be"
     },
@@ -1093,6 +1125,10 @@
     {
       "path": "frontend/src/utils/access.ts",
       "sha256": "2483d387421429e10e5f2515eec6045b8509d9e1e98cbcc80eb964470833ede9"
+    },
+    {
+      "path": "frontend/src/utils/after-sales-display.ts",
+      "sha256": "ec6b1090ba8161fcb37cd4177a7e91389bc4a3b0a01abfed604826fbe6a582f0"
     },
     {
       "path": "frontend/src/utils/login-destination.ts",

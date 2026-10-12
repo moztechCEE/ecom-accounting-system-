@@ -138,6 +138,56 @@ function approvedMailroomFetch(url, options) {
     headers.get('x-mailroom-time'), entry.entityId, createHash('sha256').update(event ? options.body : '').digest('hex')].join('\n')).digest();
   return timingSafeEqual(signature, Buffer.from(headers.get('x-mailroom-signature'), 'hex'));
 }
+// Native case registration/read is separate from physical mailroom events and
+// cannot authorize provider, refund, invoice or technician mutation endpoints.
+const nativeAfterSalesOrigin = 'https://corely-aftersales-module-dev-sp5g377smq-de.a.run.app';
+const nativeAfterSalesHost = new URL(nativeAfterSalesOrigin).hostname;
+const nativeAfterSalesContext = new AsyncLocalStorage();
+const nativeAfterSalesToken = Symbol('approved-dev-native-after-sales-fetch');
+const nativeAfterSalesEnabled = process.env.AFTER_SALES_MODULE_ENABLED === 'true' &&
+  process.env.AFTER_SALES_MODULE_ENTITY_ID === 'doa-dev-qa-20261002' &&
+  typeof process.env.AFTER_SALES_MODULE_SECRET === 'string' && process.env.AFTER_SALES_MODULE_SECRET.length >= 32;
+function approvedNativeAfterSalesFetch(url, options) {
+  if (!nativeAfterSalesEnabled || url.origin !== nativeAfterSalesOrigin || url.username || url.password || url.hash ||
+      !options || options.redirect !== 'error') return false;
+  const prefix = '/after-sales-app/api/integration/erp/workbench';
+  const list = options.method === 'GET' && options.body === undefined && url.pathname === prefix + '/cases';
+  const detail = options.method === 'GET' && options.body === undefined && !url.search &&
+    new RegExp('^' + prefix + '/cases/[A-Za-z0-9_-]{1,128}$').test(url.pathname);
+  const products = options.method === 'GET' && options.body === undefined && url.pathname === prefix + '/options';
+  const create = options.method === 'POST' && !url.search && url.pathname === prefix + '/cases' &&
+    typeof options.body === 'string' && Buffer.byteLength(options.body, 'utf8') <= 65536;
+  if (!list && !detail && !products && !create) return false;
+  const keys = [...url.searchParams.keys()];
+  const allowedQuery = products ? ['search'] : ['scope', 'lifecycle', 'type', 'stage', 'brand', 'search', 'page', 'pageSize', 'erpMineCaseIds'];
+  if (keys.length > allowedQuery.length || new Set(keys).size !== keys.length || keys.some(k => !allowedQuery.includes(k) ||
+      url.searchParams.get(k).length > (k === 'erpMineCaseIds' ? 13200 : 120))) return false;
+  if (url.searchParams.has('erpMineCaseIds')) {
+    let ids; try { ids = JSON.parse(url.searchParams.get('erpMineCaseIds')); } catch { return false; }
+    if (!Array.isArray(ids) || ids.length > 100 || new Set(ids).size !== ids.length || ids.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id))) return false;
+  }
+  if (create) {
+    let value; try { value = JSON.parse(options.body); } catch { return false; }
+    if (!value || typeof value !== 'object' || Array.isArray(value) ||
+        Object.keys(value).some(k => !['requestId', 'brand', 'customerKind', 'payload'].includes(k)) ||
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value.requestId || '') ||
+        !['MOZTECH', 'BONSON', 'MORITEK', 'OTHER'].includes(value.brand) || !['TO_C', 'TO_B'].includes(value.customerKind) ||
+        !value.payload || typeof value.payload !== 'object' || Array.isArray(value.payload) ||
+        !['RESHIPMENT', 'PRIVATE_PURCHASE', 'REPAIR', 'EXCHANGE_RETURN', 'REFUND_PICKUP', 'CUSTOMER_ISSUE'].includes(value.payload.type)) return false;
+  }
+  const headers = new Headers(options.headers);
+  const allowed = ['content-type', 'x-erp-time', 'x-erp-entity', 'x-erp-actor', 'x-erp-signature'];
+  if ([...headers.keys()].some(k => !allowed.includes(k)) ||
+      (headers.has('content-type') && headers.get('content-type') !== 'application/json') ||
+      (create && headers.get('content-type') !== 'application/json') || headers.get('x-erp-entity') !== 'doa-dev-qa-20261002' ||
+      !/^[A-Za-z0-9_-]{1,128}$/.test(headers.get('x-erp-actor') || '') ||
+      !/^\d{10}$/.test(headers.get('x-erp-time') || '') || Math.abs(Date.now() / 1000 - Number(headers.get('x-erp-time'))) > 60 ||
+      !/^[a-f0-9]{64}$/.test(headers.get('x-erp-signature') || '')) return false;
+  const expected = createHmac('sha256', process.env.AFTER_SALES_MODULE_SECRET).update(['erp.aftersales.v1', options.method,
+    url.pathname.slice('/after-sales-app'.length) + url.search, headers.get('x-erp-time'), headers.get('x-erp-entity'), headers.get('x-erp-actor'),
+    createHash('sha256').update(create ? options.body : '').digest('hex')].join('\n')).digest();
+  return timingSafeEqual(expected, Buffer.from(headers.get('x-erp-signature'), 'hex'));
+}
 const connect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function (...args) {
   // Node can pass normalized [options, callback] arguments to Socket.connect.
@@ -150,7 +200,9 @@ net.Socket.prototype.connect = function (...args) {
     Number(first.port) === 443 && first.host === aiHost && (!first.servername || first.servername === aiHost);
   const mailroomConnection = mailroomEnabled && mailroomFetchContext.getStore() === mailroomFetchToken && typeof first === 'object' &&
     Number(first.port) === 443 && first.host === mailroomHost && (!first.servername || first.servername === mailroomHost);
-  if (!warehouseConnection && !aiConnection && !mailroomConnection && (!path || !path.startsWith(`/cloudsql/${process.env.CLOUDSQL_INSTANCE}/.s.PGSQL.`))) blocked();
+  const nativeAfterSalesConnection = nativeAfterSalesEnabled && nativeAfterSalesContext.getStore() === nativeAfterSalesToken && typeof first === 'object' &&
+    Number(first.port) === 443 && first.host === nativeAfterSalesHost && (!first.servername || first.servername === nativeAfterSalesHost);
+  if (!warehouseConnection && !aiConnection && !mailroomConnection && !nativeAfterSalesConnection && (!path || !path.startsWith(`/cloudsql/${process.env.CLOUDSQL_INSTANCE}/.s.PGSQL.`))) blocked();
   return connect.apply(this, args);
 };
 const fetch = globalThis.fetch;
@@ -159,6 +211,13 @@ globalThis.fetch = async (input, options = {}) => {
   // Snapshot the signed body and headers once before validation and forwarding.
   const mailroomOptions = { method: options.method, redirect: options.redirect, body: options.body,
     headers: new Headers(options.headers), signal: options.signal };
+  if ((typeof input === 'string' || input instanceof URL) && approvedNativeAfterSalesFetch(url, mailroomOptions)) {
+    const headers = Object.fromEntries([...mailroomOptions.headers]);
+    return nativeAfterSalesContext.run(nativeAfterSalesToken, () => fetch(url.href, {
+      method: mailroomOptions.method, redirect: 'error', signal: mailroomOptions.signal, headers,
+      ...(mailroomOptions.method === 'POST' ? { body: mailroomOptions.body } : {}),
+    }));
+  }
   if ((typeof input === 'string' || input instanceof URL) && approvedMailroomFetch(url, mailroomOptions)) {
     const headers = mailroomOptions.headers;
     return mailroomFetchContext.run(mailroomFetchToken, () => fetch(url.href, {

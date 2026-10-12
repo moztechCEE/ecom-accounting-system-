@@ -1934,7 +1934,7 @@
       "group": "service",
       "sections": {
         "steps": [
-          "售後來源模組啟用時，由「售後工作台」首頁六類服務或案件總覽進原來源表單與流程；未啟用時沿用此舊 ERP 入口。",
+          "售後來源模組啟用時進入原生「售後工作台」，以待我處理／全部案件查看、篩選及登記六類案件；案件詳情的目前節點與原來源流程串接。未啟用時沿用此舊ERP入口。",
           "新版工作台啟用時，維修、漏寄補寄、來回件、退款派車、私下購買與客戶問題共用此入口；需要報價時依已提供動作建立草稿。"
         ],
         "boundaries": [
@@ -1960,7 +1960,7 @@
           ],
           "sections": {
             "steps": [
-              "When the source module is enabled, use the six service entries or Cases overview on the After-sales Workbench to open the original forms and workflow. Otherwise use this legacy ERP entry.",
+              "When the source module is enabled, open the native After-sales Workbench to view My tasks or All cases, filter cases and register six types. Current-node details link to the original workflow. Keep this legacy ERP entry when the module is disabled.",
               "When the staged workspace is enabled, repair, reshipment, exchange/return, refund pickup, private purchase and customer issues share this entry. Use the provided action to prepare a quote draft."
             ],
             "boundaries": [
@@ -1986,7 +1986,16 @@
         "frontend/src/config/release.ts",
         "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
         "frontend/src/pages/after-sales/workbench-model.ts",
-        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css"
+        "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css",
+        "frontend/src/pages/after-sales/NativeAfterSalesWorkbench.tsx",
+        "frontend/src/pages/after-sales/NativeAfterSalesCreate.tsx",
+        "frontend/src/pages/after-sales/NativeAfterSalesWorkbench.css",
+        "frontend/src/pages/after-sales/native-workbench-model.ts",
+        "frontend/src/services/native-after-sales.service.ts",
+        "backend/src/modules/mailroom/after-sales-tasks.controller.ts",
+        "backend/src/modules/mailroom/after-sales-tasks.dto.ts",
+        "backend/src/modules/mailroom/after-sales-tasks.service.ts",
+        "frontend/src/utils/after-sales-display.ts"
       ],
       "permissions": [
         "after_sales_cases:read",
@@ -5063,7 +5072,7 @@
     {
       "id": "after-sales-customer-workbench",
       "title": "售後工作台",
-      "summary": "以六類服務入口建立及追蹤原售後案件，分頁處理維修與收發交辦，依權限使用報價、顧客、收款退款與發票。",
+      "summary": "以待我處理與全部案件直接追蹤售後案件；依六種類型登記，按目前節點核對資料並處理跨部門交辦。",
       "keywords": [
         "DOA／售後處理台",
         "售後",
@@ -5071,7 +5080,12 @@
         "原生整合",
         "收發建案",
         "客服補建",
-        "待辨識"
+        "待辨識",
+        "待我處理",
+        "全部案件",
+        "案件類型",
+        "品牌待核對",
+        "新增案件"
       ],
       "module": "after-sales",
       "path": "/operations/after-sales/workbench",
@@ -5083,11 +5097,12 @@
       "availability": "after-sales-module",
       "sections": {
         "steps": [
-          "首頁以「補寄服務、商品與配件訂購、檢測與維修、換貨服務、退貨退款、產品問題回報」開啟原售後流程；依序對應舊名稱漏寄補寄、私下購買、維修、來回件、退款派車、客戶問題。案件總覽保留原新增、進行中、已結束、刪除清單、附件及各節點按鈕。入口只改顯示名稱；新增時仍須核對原表單的案件類型。",
-          "客服在「維修交辦」與「收發交辦」分頁查看及處理交辦；SUPER_ADMIN 的收發交辦顯示所選公司清單，其他人顯示本人清單；切分頁保留未保存內容，需要時再查看案件概況。收起原概況表單或離頁前须先儲存或明確放棄。新的收發通知連結在確認離開後定位該筆原收件。",
-          "接手後核對目前檢修、估價與處理方案版次，記錄同意方案或拒修結果；改版須重新確認。部門 SENT、ACCEPTED、RESOLVED 與通知送達各自追蹤。",
-          "正式對客報價、顧客對本報價版的同意與足額款項另依原來源流程。付費案件尚未入帳時維修師不能開工；免費案件仍須本報價版顧客同意。",
-          "收發補建交辦與維修覆核分開：只有指定客服本人可將未辨識實收件的 SENT 受理為 ACCEPTED。受理後由案件中心原 /cases 入口點「新增案件」，進入 /cases/new 建立一次主單，或核對既有案件，返回選目前申報品項及來源版次綁回同一 NativeID；成功後為 RESOLVED。"
+          "首頁預設「待我處理」，可切換「全部案件」。清單直接顯示案號、顧客、產品、目前進度、下一步、負責人與更新時間；以案件、姓名、電話、產品、SKU、SN 或物流單號搜尋，並用案件類型與進度篩選。更多篩選包含品牌、進行中、已結束與刪除清單；篩選不會自行切成全部案件。",
+          "點「新增案件」，選補寄服務、商品與配件訂購、檢測與維修、換貨服務、退貨退款或產品問題回報。依目前寫入權限顯示可登記類型；選品牌、一般顧客或代理商／經銷商、進線來源，填聯絡與地址、產品、數量及該類型所需原因後建立。產品可依名稱、SKU或型號搜尋；SN需實際填寫，選產品不會產生SN。",
+          "點案件在同頁查看目前節點、顧客及產品。案件承辦、部門交辦接手與實物保管分開；有本人可處理的維修交辦時，開啟對應交辦，核對目前檢修、估價及方案版次再受理或回覆。完整案件作業、報價、顧客、發票與收款退款沿用同一來源主單，不另建立流程或帳本。",
+          "接手後記錄顧客同意或拒修結果；方案改版須重新確認。正式對客報價、當版顧客同意與足額同幣入帳依原來源流程；免費方案仍須本版同意。付款確認、發票、通知、維修室與收發室實物狀態分開，付款狀態不表示維修已完成。",
+          "收發補建交辦保留在「跨部門交辦」。只有指定客服本人可把未辨識實收件的SENT受理為ACCEPTED；由原案件中心的 /cases/new 表單建案一次，或從本工作台建立同一來源主單，再選目前案件、申報品項及來源版次綁回同一NativeID。建案成功不等於已綁回，成功綁回才為RESOLVED。",
+          "案件詳情的顧客與LINE、收回寄送、款項發票、歷程與備註按需展開；保留原附件、匯入匯出、列印、修改、還原及各節點操作。產品問題回報沿用照片、影片與工廠問題留底；FAQ知識庫不列入本工作台。未保存的內容須先保存或明確放棄才離開。"
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
@@ -5109,8 +5124,14 @@
           "「指定補建客服」使用獨立的補建資格名單；原有維修、退貨及品項不符的客服覆核資格維持原流程，不因補建功能被收窄或變成建案授權。",
           "可依目前權限切換售後、收發、維修、儲運或營運管理工作區。「設為登入預設」只記錄此帳號及公司在目前瀏覽器的選擇；不同步其他裝置、不變更角色或授予權限。失效偏好回到有效入口。具有產品、匯入、來源帳號、操作紀錄、設定、庫存或儲運管理權限的人員，仍可由「營運管理」使用獲授權功能。切台保留網址明確指定的公司。",
           "報價、顧客、收款退款與發票沿用同一來源主單及原紀錄，不建立第二本帳。產品、LINE、發票及操作紀錄不另做一套；相關管理能力保留既有授權入口。原 FAQ／知識庫排除於本 DOA 工作台。",
-          "品牌與 LINE／AI 客服鏈路的新共同契約仍待整合；現有來源頁能開啟，不證明品牌、官方帳號、顧客 LINE 身分、會話與承辦人已正確綁定。寄出 consumer、品牌發票商戶及虛擬帳號自動對帳也未由本介面批完成；不得以保存成功或舊同步回執宣稱顧客通知或款項完成。",
-          "收發補建清單、詳情及本人待辦的讀取以目前有效帳號、mailroom:review 與公司範圍核對，不要求先符合客服接手或來源建案資格。售後工作台的收發交辦中，SUPER_ADMIN 可查看所選公司的 SENT／ACCEPTED 補建交辦；其他人只看指定或已由本人受理的交辦。公司檢視不授予代理接手或綁案，實際操作仍須指定本人、同公司在職與目前來源寫入資格。載入失敗顯示錯誤，不視為沒有交辦。"
+          "品牌與LINE／AI客服鏈路的共同契約仍須核對官方帳號、顧客身分、會話與承辦人；原來源頁可開啟不表示這些已正確綁定。寄出consumer及虛擬帳號自動對帳不由本介面批完成，不得以保存成功或舊同步回執宣稱顧客通知或款項完成。",
+          "收發補建清單、詳情及本人待辦的讀取以目前有效帳號、mailroom:review 與公司範圍核對，不要求先符合客服接手或來源建案資格。售後工作台的收發交辦中，SUPER_ADMIN 可查看所選公司的 SENT／ACCEPTED 補建交辦；其他人只看指定或已由本人受理的交辦。公司檢視不授予代理接手或綁案，實際操作仍須指定本人、同公司在職與目前來源寫入資格。載入失敗顯示錯誤，不視為沒有交辦。",
+          "「待我處理」使用目前有效來源帳號的承辦身份及本人可受理的ERP交辦；一般部門佇列不等於本人指派。「全部案件」仍需已綁定公司的ENTITY範圍或SUPER_ADMIN及專用售後讀取權，讀取不授予代理接手或寫入。ERP交辦接手人與來源主單承辦人可能不同，兩者均保留。",
+          "本工作台建立的品牌與客戶類型隨原案件建立事件保存；原案件沒有可靠品牌證據時顯示品牌待核對，進線來源不當作產品品牌。品牌欄位及LINE綁定顯示不代表已完成品牌發票商戶、AI會話或通知串接。",
+          "新建主單沿用原類型初始狀態，不將六類全部當作草稿。建立時不記錄已收件、檢修結果、顧客同意、已入帳、已開票或實物過帳；這些須由各正式節點完成。產品與服務資料仍使用原售後產品接口，不能因此宣稱Source產品主檔已遷移為ERP資料庫。",
+          "新建結果未知保留同一請求識別碼及原內容重試；同一內容回傳原案件，改內容須先核對先前結果，不以通知、畫面成功訊息或新識別碼當作原建立未成功。公司及帳號切換立即隔離舊清單、詳情與產品搜尋，不回填過期回應。",
+          "目前節點詳情只是讀取；點處理會開啟已核對身份與公司、實際案件及讀寫權限的原案件或現有ERP交辦。原報價、付款、退款、發票、LINE與物流按鈕仍各自核對權限、當版資料與狀態；不增加第二個維修寫入入口。",
+          "目前雲端發票的法律開立人為萬博創意科技有限公司，同一既有商戶可供MOZTECH與BONSON案件開立；案件品牌仍留在原案件及稽核紀錄。法律開立人與LINE官方帳號品牌是不同對標，不能因此跨品牌通知。其他新建案件品牌尚未確認商戶時不開票；既有商戶未設定完成亦不把本地生成號碼當作已完成雲端開票。"
         ],
         "related": [
           "repair-workbench",
@@ -5121,7 +5142,7 @@
       "translations": {
         "en": {
           "title": "After-sales Workbench",
-          "summary": "Create and track original after-sales cases through six service entries, handle repair and mailroom handoffs in tabs, and open quoting, customers, payments/refunds and invoices according to grants.",
+          "summary": "Track after-sales cases directly in My tasks and All cases, register six case types, and review the current node and departmental handoffs.",
           "category": "After-sales",
           "keywords": [
             "DOA and after-sales customer-service workbench",
@@ -5129,15 +5150,21 @@
             "native integration",
             "mailroom case intake",
             "assigned customer service",
-            "unidentified receipt"
+            "unidentified receipt",
+            "my tasks",
+            "all cases",
+            "case type",
+            "brand verification",
+            "new case"
           ],
           "sections": {
             "steps": [
-              "The home entries Reshipment service, Product and accessory orders, Inspection and repair, Exchange service, Returns and refunds, and Product issue reports open the original flows, respectively preserving RESHIPMENT, PRIVATE_PURCHASE, REPAIR, EXCHANGE_RETURN, REFUND_PICKUP and CUSTOMER_ISSUE. The case overview retains original create, in-progress, closed, deleted-list, attachment and node controls. Only entry labels change; verify the original form’s case type when creating.",
-              "Handle personally assigned tasks in Repair Handoffs and Mailroom Handoffs. Switching tabs retains unsaved work; open the original case overview when needed. Save or explicitly discard before hiding that form or leaving. A new mailroom deep link locates the requested original receipt after departure is confirmed. The mailroom-handoff list shows the selected company for SUPER_ADMIN and personal assignments for other accounts.",
-              "Review the current inspection, estimate and technical plan revision, then record approval or decline. Changes require a fresh review. Department SENT, ACCEPTED and RESOLVED states are separate from notification delivery.",
-              "Formal customer quoting, consent to that quote revision and confirmed sufficient funds remain in the original source workflow. Unpaid chargeable work cannot start; free work still requires customer consent to the current quote.",
-              "Mailroom case intake is separate from technical review. Only the assigned CSR accepts a received unidentified item from SENT to ACCEPTED. From the original /cases entry in the case center, choose New case and create once through its /cases/new form, or verify an existing case, then return to select its current declared line and source version and bind the same NativeID. Successful binding sets RESOLVED."
+              "The home defaults to My tasks, with an explicit All cases view. Rows show the case, customer, products, current stage, next action, owner and update time. Search by case number, name, phone, product, SKU, SN or tracking number, and filter by type and stage. More filters contains brand, active, closed and deleted lists. Filters never silently switch to all cases.",
+              "Choose New case, then Reshipment service, Product and accessory orders, Inspection and repair, Exchange service, Returns and refunds, or Product issue reports. Available types follow current write grants. Select an explicit brand, consumer or dealer/distributor, contact source, customer and return address, products, quantities and the required reason. Search products by name, SKU or model. Enter the actual SN; selecting a product does not generate it.",
+              "Open a case to review its current node, customer and products on the same page. Source case ownership, departmental task acceptance and physical custody remain separate. For a current actionable repair handoff, open that task and verify the inspection, estimate and plan revision before accepting or replying. Full case operations, quoting, customers, invoices and payment/refund checks reuse the same source case and ledger.",
+              "Record customer approval or decline after accepting a handoff. A changed plan requires new consent. Formal quotations, consent to the current quote and sufficient confirmed funds in the same currency retain the source workflow. Free plans still require current consent. Payment, invoice, notification, technical work and physical custody remain distinct; payment confirmation does not mean a repair is complete.",
+              "Mailroom case intake remains under Cross-department handoffs. Only the assigned CSR accepts an unidentified receipt from SENT to ACCEPTED. Create once through the original case center /cases/new form or register the same source case from this home, then select its current declared line and source version and bind the same NativeID. Creating the case does not bind the receipt; successful binding sets RESOLVED.",
+              "Expand customer and LINE, incoming/outgoing logistics, financial records, history and notes when needed. Original attachments, import/export, printing, editing, restoration and node actions remain available. Product issue reports retain photos, videos and factory evidence; FAQ management is excluded from this workbench. Save or explicitly discard unsaved work before leaving."
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
@@ -5159,8 +5186,14 @@
               "The Assigned intake CSR picker uses separate intake eligibility. Existing repair, return and mismatch reviewer eligibility keeps its original workflow; intake neither narrows that list nor turns review permission into case-creation authority.",
               "Switch among available after-sales, mailroom, repair, warehouse and operations workspaces according to current grants. Set as login default stores a preference for this account and company in this browser only; it does not sync devices, change roles or grant access. Invalid preferences fall back to an authorized entry. Management grants retain their features in Operations Management. Workspace switching retains an explicitly selected company in the URL.",
               "Quotes, customers, payments, refunds and invoices retain the same source case and original records; no second financial ledger or duplicate product, LINE, invoice or audit module is created. Existing management grants keep their entry points. This DOA workbench excludes the legacy FAQ/knowledge base.",
-              "New shared brand and LINE/AI customer-service contracts remain pending. Opening the existing source page does not prove correct binding of brand, official account, customer LINE identity, conversation and assigned staff. This UI batch does not complete the dispatch consumer, brand invoice merchants or virtual-account automatic reconciliation; neither save success nor prior acknowledgements prove customer notification or payment.",
-              "Reading the intake queue, item detail and personal tasks checks the current active account, mailroom:review and company scope without requiring CSR acceptance or source case-creation eligibility. In the after-sales mailroom-handoff tab, SUPER_ADMIN can view SENT/ACCEPTED intake handoffs in the selected company; everyone else sees only handoffs addressed to or accepted by themselves. Company viewing does not authorize accepting or binding on someone else’s behalf. Commands still require the assigned person, active employment in that company and current source write eligibility. A load failure remains an error, not an empty queue."
+              "The shared LINE and AI-service contract still requires verified official-account, customer-identity, conversation and staff mapping. Opening the source page does not prove those bindings. This UI batch does not implement the outbound consumer or virtual-account reconciliation; saving or older sync receipts prove neither customer notification nor payment.",
+              "Reading the intake queue, item detail and personal tasks checks the current active account, mailroom:review and company scope without requiring CSR acceptance or source case-creation eligibility. In the after-sales mailroom-handoff tab, SUPER_ADMIN can view SENT/ACCEPTED intake handoffs in the selected company; everyone else sees only handoffs addressed to or accepted by themselves. Company viewing does not authorize accepting or binding on someone else’s behalf. Commands still require the assigned person, active employment in that company and current source write eligibility. A load failure remains an error, not an empty queue.",
+              "My tasks uses the currently mapped source account and ERP handoffs the actor may personally accept. A department queue is not a personal assignment. All cases still requires the bound company with ENTITY scope or SUPER_ADMIN and dedicated after-sales read grants. Viewing never permits proxy acceptance or writes. The ERP task owner and source case owner may differ and remain separate.",
+              "The explicit brand and customer kind of a native registration are stored in the original case-created event. Older cases without reliable brand evidence show pending brand verification; the contact-source label is not a product brand. Brand and LINE identity displays do not prove invoice-merchant, AI conversation or notification integration.",
+              "Registration preserves each original case type initial status rather than calling every type a draft. It records no physical receipt, diagnosis, customer consent, confirmed funds, issued invoice or inventory posting. Those require their authoritative nodes. Product and service lookup retains the original after-sales product interface; this does not claim that the Source product master was migrated into the ERP database.",
+              "After an unknown creation result, retry with the same request ID and original content. Identical content returns the original case. Verify the prior result before changing content; neither notification, success copy nor a new request ID proves the first registration failed. Company/account changes isolate previous lists, details and product searches, rejecting stale responses.",
+              "Current-node details are read-only. Processing opens the original verified case or existing ERP handoff after checking identity, company, actual case and grants. Quotation, payment, refund, invoice, LINE and logistics actions retain their own permissions, revision and state checks. No second technician writer is introduced.",
+              "The current cloud-invoice legal issuer is 萬博創意科技有限公司; its existing shared merchant covers MOZTECH and BONSON cases. The case brand remains in the original case and audit records. The legal issuer and LINE official-account brand are separate mappings and do not authorize cross-brand notification. Other native brands need a confirmed merchant profile. An unavailable provider must not fabricate successful cloud invoicing through a locally generated number."
             ],
             "related": [
               "repair-workbench",
@@ -5218,7 +5251,21 @@
         "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.css",
         "frontend/src/components/DashboardLayout.tsx",
         "frontend/src/config/workspaces.ts",
-        "frontend/src/utils/login-destination.ts"
+        "frontend/src/utils/login-destination.ts",
+        "frontend/src/pages/after-sales/NativeAfterSalesWorkbench.tsx",
+        "frontend/src/pages/after-sales/NativeAfterSalesCreate.tsx",
+        "frontend/src/pages/after-sales/NativeAfterSalesWorkbench.css",
+        "frontend/src/pages/after-sales/native-workbench-model.ts",
+        "frontend/src/services/native-after-sales.service.ts",
+        "backend/src/modules/mailroom/after-sales-tasks.controller.ts",
+        "backend/src/modules/mailroom/after-sales-tasks.dto.ts",
+        "backend/src/modules/mailroom/after-sales-tasks.service.ts",
+        "frontend/src/utils/after-sales-display.ts"
+      ],
+      "aliases": [
+        "/operations/after-sales/workbench?scope=mine&type=REPAIR",
+        "/operations/after-sales/workbench?scope=all&view=closed",
+        "/operations/after-sales/workbench?scope=all&view=deleted"
       ]
     },
     {
@@ -6299,6 +6346,6 @@
   "legacyContentOverrideReasons": {
     "dashboard": "DashboardPage now shows operational and finance metrics by period, not an AI yesterday briefing. Reviewed 2026-10-08 dedicated workspaces and browser-scoped login preferences; permissions remain separate.",
     "reimbursement-items": "Use the actual starter-library label and configured fields instead of claiming an AI question library.",
-    "after-sales": "Reviewed 2026-10-08 source-enabled clean workbench entry and six service labels; legacy fallback and original workflows remain."
+    "after-sales": "Reviewed 2026-10-12 native task-oriented after-sales home, explicit six-type registration, personal/all filters and verified contextual source operations; legacy fallback and authoritative workflows remain."
   }
 }

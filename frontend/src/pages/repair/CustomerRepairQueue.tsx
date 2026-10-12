@@ -13,7 +13,7 @@ import { currentItemCustody } from '../mailroom/item-custody';
 import { useRepairFeedback } from './repair-feedback';
 import type { RepairMessage } from './repair-feedback';
 /** Native departmental acceptance; source customer consent and finance remain separate. */
-export default function CustomerRepairQueue({entityId,onDirtyChange}:{entityId:string;onDirtyChange?:(dirty:boolean)=>void}) {
+export default function CustomerRepairQueue({entityId,onDirtyChange,initialItemId}:{entityId:string;onDirtyChange?:(dirty:boolean)=>void;initialItemId?:string}) {
   const {modal,message,contextHolder}=useRepairFeedback();
   const confirmDiscard=useCallback(()=>new Promise<boolean>(resolve=>modal.confirm({title:'回覆尚未儲存',content:'要放棄修改並離開嗎？',okText:'放棄修改',cancelText:'繼續編輯',maskClosable:false,onOk:()=>{resolve(true);},onCancel:()=>{resolve(false);}})),[modal]);
   const {user}=useAuth();
@@ -21,7 +21,7 @@ export default function CustomerRepairQueue({entityId,onDirtyChange}:{entityId:s
   const [rows,setRows]=useState<RepairItem[]>([]);const [total,setTotal]=useState(0);
   const [page,setPage]=useState(1);const [search,setSearch]=useState('');
   const [busy,setBusy]=useState(false);const [failure,setFailure]=useState('');
-  const [selected,setSelected]=useState<string>();const [detail,setDetail]=useState<{entityId:string;item:RepairItem}>();
+  const [selected,setSelected]=useState<string | undefined>(initialItemId);const [detail,setDetail]=useState<{entityId:string;item:RepairItem}>();
   const [detailBusy,setDetailBusy]=useState(false);const [changed,setChanged]=useState(false);
   const generation=useRef(0);const detailGeneration=useRef(0);const dirty=useRef(false);
   const currentEntity=useRef(entityId);
@@ -52,6 +52,7 @@ export default function CustomerRepairQueue({entityId,onDirtyChange}:{entityId:s
     return()=>{requests.current++;clearInterval(timer);stop();};
   },[load,entityId,selected,setDirty,detail?.item.receipt.sourceCaseId]);
   useEffect(()=>{const requests=detailGeneration;void loadDetail();return()=>{requests.current++;};},[loadDetail]);
+  useEffect(()=>{if(initialItemId){setDirty(false);setSelected(initialItemId);}},[initialItemId,setDirty]);
   async function select(id?:string){if(dirty.current){if(!await confirmDiscard())return;setDirty(false);}setSelected(id);}
   if(!permitted||!entityId)return null;
   const item=detail?.entityId===entityId?detail.item:undefined;

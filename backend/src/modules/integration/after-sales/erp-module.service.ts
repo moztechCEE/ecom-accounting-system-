@@ -86,6 +86,8 @@ export class ErpAfterSalesModuleService {
     entityId: string,
     section: string,
     returnOrigin: string,
+    caseId?: string,
+    intent: 'detail' | 'edit' = 'detail',
   ) {
     const allowed = [
       'https://corely-erp-dev-sp5g377smq-de.a.run.app',
@@ -94,7 +96,7 @@ export class ErpAfterSalesModuleService {
     ];
     if (!allowed.includes(returnOrigin))
       throw new ForbiddenException('售後入口來源不符');
-    const path = SOURCE_SECTIONS[section as keyof typeof SOURCE_SECTIONS];
+    let path: string = SOURCE_SECTIONS[section as keyof typeof SOURCE_SECTIONS];
     if (!path) throw new ForbiddenException('售後功能入口不存在');
     const actor = await this.actor(userId, entityId);
     const required =
@@ -118,6 +120,108 @@ export class ErpAfterSalesModuleService {
     if (!actor.modules.includes(required))
       throw new ForbiddenException('沒有此售後功能權限');
     const { secret } = this.settings();
+    if (caseId !== undefined) {
+      if (
+        ![
+          'cases',
+          'repairs',
+          'reshipments',
+          'exchange-returns',
+          'refund-pickups',
+          'private-purchases',
+          'customer-issues',
+        ].includes(section) ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(caseId)
+      )
+        throw new ForbiddenException('案件入口不符');
+      if (
+        intent === 'edit' &&
+        !actor.writeModules.includes(
+          section === 'repairs' ? 'repairs' : 'cases',
+        )
+      )
+        throw new ForbiddenException('沒有此案件編輯權限');
+      // Resolve the actual case before signing a contextual path. Reserved route
+      // names and non-existent IDs must never become arbitrary module launches.
+      const base =
+        this.config.get<string>('AFTER_SALES_TASK_SOURCE_URL', '').trim() ||
+        (this.config.get('ERP_DEV_SANDBOX') === 'true'
+          ? 'https://corely-aftersales-module-dev-sp5g377smq-de.a.run.app/after-sales-app'
+          : '');
+      let source: URL;
+      try {
+        source = new URL(base);
+      } catch {
+        throw new ServiceUnavailableException('售後案件來源尚未設定');
+      }
+      if (
+        source.protocol !== 'https:' ||
+        source.username ||
+        source.password ||
+        source.search ||
+        source.hash ||
+        !['/', '/after-sales-app', '/after-sales-app/'].includes(
+          source.pathname,
+        )
+      )
+        throw new ServiceUnavailableException('售後案件來源設定不符');
+      const sourceUrl = new URL(source.toString().replace(/\/$/, '') + '/api/integration/erp/workbench/cases/' + encodeURIComponent(caseId));
+      const sourcePath = '/api/integration/erp/workbench/cases/' + encodeURIComponent(caseId);
+      const time = Math.floor(Date.now() / 1000).toString();
+      const response = await fetch(
+        sourceUrl.href,
+        {
+          method: 'GET',
+          redirect: 'error',
+          signal: AbortSignal.timeout(20000),
+          headers: {
+            'x-erp-time': time,
+            'x-erp-entity': entityId,
+            'x-erp-actor': userId,
+            'x-erp-signature': serviceSignature(
+              secret,
+              'GET',
+              sourcePath,
+              time,
+              entityId,
+              userId,
+            ),
+          },
+        },
+      );
+      if (!response.ok) throw new ForbiddenException('找不到可存取的售後案件');
+      if (Number(response.headers.get('content-length') || 0) > 1048576) {
+        await response.body?.cancel();
+        throw new ServiceUnavailableException('售後案件回應過大');
+      }
+      const text = await response.text();
+      if (Buffer.byteLength(text) > 1048576)
+        throw new ServiceUnavailableException('售後案件回應過大');
+      let detail: {
+        contractVersion?: string;
+        item?: { id?: string; type?: string };
+        actions?: { id?: string }[];
+      };
+      try {
+        detail = JSON.parse(text) as typeof detail;
+      } catch {
+        throw new ServiceUnavailableException('售後案件回應不符');
+      }
+      if (
+        detail.contractVersion !== 'corely.doa.tasks.v1' ||
+        detail.item?.id !== caseId ||
+        (intent === 'edit' &&
+          !detail.actions?.some((action) => action.id === 'edit_source'))
+      )
+        throw new ForbiddenException('案件入口權限不符');
+      if (detail.item.type === 'REPAIR' && !actor.modules.includes('repairs'))
+        throw new ForbiddenException('沒有維修案件權限');
+      await this.actor(userId, entityId);
+      path =
+        '/cases/' +
+        encodeURIComponent(caseId) +
+        (intent === 'edit' ? '/edit' : '');
+    }
     const payload = Buffer.from(
       JSON.stringify({
         userId: actor.userId,
