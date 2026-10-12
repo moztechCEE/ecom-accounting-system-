@@ -17,6 +17,8 @@ export const EXPORT_KINDS = [
 @Injectable()
 export class SnLabelsExport {
   workbook(kind: string, d: SnData, items: any[], columns?: string[]) {
+    if (kind === 'warranty' && !d.barcode)
+      throw new BadRequestException('保固匯入需要已確認的國際條碼');
     const mapping: Record<string, (s: any) => string> = {
       一般序號: (s) => s.sn,
       SKU: () => d.barcode,
@@ -109,6 +111,35 @@ export class SnLabelsExport {
         throw new BadRequestException('外箱文字過長，請調整產品名稱或標籤尺寸');
       text(s, x, y, actual, w);
     };
+    const serialText = (
+      value: string,
+      x: number,
+      y: number,
+      size: number,
+      width: number,
+      height: number,
+    ) => {
+      let actual = size;
+      doc.font(font);
+      while (actual >= 1) {
+        doc.fontSize(actual * mm);
+        if (
+          doc.heightOfString(value, { width: width * mm, lineGap: 0 }) <=
+          height * mm
+        )
+          break;
+        actual -= 0.1;
+      }
+      if (actual < 1) throw new BadRequestException('外箱 SN 過長，請放大標籤');
+      doc
+        .fillColor('black')
+        .fontSize(actual * mm)
+        .text(value, x * mm, y * mm, {
+          width: width * mm,
+          height: height * mm,
+          lineGap: 0,
+        });
+    };
     const qr = (value: string, x: number, y: number, size: number) => {
       const q = QR.create(value, { errorCorrectionLevel: 'M' }).modules,
         n = q.size,
@@ -200,19 +231,38 @@ export class SnLabelsExport {
           fit('一箱共 ' + item.quantity + ' 入', 37 * s, 3 * s, 3 * s, 20 * s);
           fit('款式: ' + (d.style || '—'), 3 * s, 9 * s, 2.5 * s, 28 * s);
           fit('顏色: ' + (d.color || '—'), 3 * s, 14 * s, 2.5 * s, 28 * s);
-          bars(item.id, 3 * s, 24 * s, 54 * s, 9 * s);
-          fit('箱號: ' + item.id, 3 * s, 35 * s, 2.5 * s, 54 * s);
+          const noSerialLabel = kind === 'cartons-no-sn';
+          bars(
+            item.id,
+            3 * s,
+            (noSerialLabel ? 30 : 24) * s,
+            54 * s,
+            (noSerialLabel ? 6 : 9) * s,
+          );
+          fit(
+            '箱號: ' + item.id,
+            3 * s,
+            (noSerialLabel ? 38 : 35) * s,
+            2.5 * s,
+            54 * s,
+          );
+          qr(
+            `CARTON:${item.id}`,
+            (noSerialLabel ? 37 : 3) * s,
+            (noSerialLabel ? 8 : 41) * s,
+            (noSerialLabel ? 20 : 31) * s,
+          );
           if (kind !== 'cartons-no-sn') {
-            qr(item.serials.join(','), 3 * s, 41 * s, 31 * s);
             fit('箱內序號', 36 * s, 44 * s, 2.4 * s, 21 * s);
-            fit(item.serials[0], 35 * s, 52 * s, 2.2 * s, 22 * s);
+            serialText(item.serials[0], 35 * s, 49 * s, 2.2 * s, 22 * s, 8 * s);
             text('至', 43 * s, 58 * s, 2 * s, 10 * s);
-            fit(
+            serialText(
               item.serials[item.serials.length - 1],
               35 * s,
               64 * s,
               2.2 * s,
               22 * s,
+              8 * s,
             );
           }
         }

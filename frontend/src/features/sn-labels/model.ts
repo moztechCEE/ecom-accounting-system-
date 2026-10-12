@@ -11,6 +11,7 @@ export type SnDraft = {
   style: string; color: string; modelCode: string; styleCode: string; colorCode: string
   orderDate: string; manufactureDate: string; legacyManualYear?: number
   quantity: number; capacity: number | null; label: LabelLayout; cartonWidth?: number; cartonHeight?: number
+  serialSource?: 'generated' | 'existing'; actualSN?: string[]; wmsItemCode?: string; internalScanCode?: string
 }
 export const PENDING_RULES = [
   ['倉儲匯入', '欄位與檔案格式於後續設定'],
@@ -33,6 +34,7 @@ export function newDraft(id: string): SnDraft {
     version: 2, id, updatedAt: '', name: '', productId: '', productName: '', sku: '', barcode: '', model: '',
     style: '', color: '', modelCode: '', styleCode: '', colorCode: '',
     orderDate: '', manufactureDate: '', quantity: 100, capacity: null, label: defaultLayout(),
+    serialSource: 'generated', actualSN: [], wmsItemCode: '', internalScanCode: '',
   }
 }
 export function yearCode(year: number): string {
@@ -47,7 +49,23 @@ export function manufacturingYear(date: string): number {
   yearCode(year)
   return year
 }
-export const isNoSerial = (draft: Pick<SnDraft, 'modelCode'>) => draft.modelCode === 'NSI'
+export const isNoSerial = (draft: Pick<SnDraft, 'modelCode' | 'serialSource'>) => draft.serialSource !== 'existing' && draft.modelCode === 'NSI'
+export function splitExistingSerials(text: string): string[] {
+  return text.split(/[,\r\n\t]/).map(value => value.trim()).filter(Boolean)
+}
+export function defaultInternalScanCode(sku: string) {
+  return /^[A-Za-z0-9._-]{1,96}$/.test(sku) ? `ITM-${sku}` : ''
+}
+export function validateExistingSerials(serials: string[]): string[] {
+  if (!serials.length || serials.length > 10000) throw new Error('請輸入 1～10,000 個既有 SN')
+  const seen = new Set<string>()
+  for (const sn of serials) {
+    if (!/^[\x21-\x2b\x2d-\x7e]{1,100}$/.test(sn) || /^(?:CARTON:|CTN-|DRAFT:)/i.test(sn)) throw new Error('SN 不可含空白、逗號、箱號或草稿前綴，長度限 100 字')
+    if (seen.has(sn)) throw new Error(`SN ${sn} 重複`)
+    seen.add(sn)
+  }
+  return [...serials]
+}
 function itemPrefix(draft: SnDraft) {
   if (isNoSerial(draft)) throw new Error('NSI 無 SN 產品，不產生單品序號')
   const codes = [draft.modelCode, draft.styleCode, draft.colorCode]
@@ -63,6 +81,11 @@ export function sequenceScopeKey(draft: SnDraft): string {
   return JSON.stringify([draft.modelCode, draft.styleCode, draft.colorCode, manufacturingYear(draft.manufactureDate)])
 }
 export function sampleSerial(draft: SnDraft, sequence = 1): string {
+  if (draft.serialSource === 'existing') {
+    const sn = validateExistingSerials(draft.actualSN || [])[sequence - 1]
+    if (!Number.isInteger(sequence) || !sn) throw new Error('既有 SN 列序無效')
+    return sn
+  }
   const prefix = itemPrefix(draft)
   if (!Number.isInteger(sequence) || sequence < 1 || sequence > 999999) throw new Error('流水號超出六碼範圍')
   return prefix + yearCode(manufacturingYear(draft.manufactureDate)) + String(sequence).padStart(6, '0')
