@@ -614,22 +614,22 @@ body.dark .ant-table-tbody > tr:hover > td {
 
 /* Keep Ant's validation and disabled cues on the single control surface. */
 .ant-input-status-error:not(.ant-input-disabled),
-.ant-input-affix-wrapper-status-error:not(.ant-input-affix-wrapper-disabled) {
+.ant-input-affix-wrapper.ant-input-status-error:not(.ant-input-affix-wrapper-disabled) {
   border-color: #ff4d4f !important;
 }
 
 .ant-input-status-warning:not(.ant-input-disabled),
-.ant-input-affix-wrapper-status-warning:not(.ant-input-affix-wrapper-disabled) {
+.ant-input-affix-wrapper.ant-input-status-warning:not(.ant-input-affix-wrapper-disabled) {
   border-color: #faad14 !important;
 }
 
-.ant-input-status-error:focus,
-.ant-input-affix-wrapper-status-error:focus-within {
+.ant-input-status-error:not(.ant-input-disabled):focus,
+.ant-input-affix-wrapper.ant-input-status-error:not(.ant-input-affix-wrapper-disabled):focus-within {
   box-shadow: 0 0 0 4px rgba(255, 77, 79, 0.15) !important;
 }
 
-.ant-input-status-warning:focus,
-.ant-input-affix-wrapper-status-warning:focus-within {
+.ant-input-status-warning:not(.ant-input-disabled):focus,
+.ant-input-affix-wrapper.ant-input-status-warning:not(.ant-input-affix-wrapper-disabled):focus-within {
   box-shadow: 0 0 0 4px rgba(250, 173, 20, 0.15) !important;
 }
 

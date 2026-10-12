@@ -218,7 +218,15 @@ test('native Antd controls and actual repair forms have one input surface, seman
     const focusedError = await surface(errorControl);
     assertSingleSurface(focusedError, 'focused error');
     assert.equal(focusedError.outer.borderColor, error.outer.borderColor, 'Focus must not hide the validation error');
-    observations.semantics = { normal, disabled, disabledPlain, readonly, error, focusedError };
+    assert.match(focusedError.outer.shadow, /rgba\(255, 77, 79,/, 'Error focus ring keeps the error hue');
+    const warningControl = page.getByLabel('提醒輸入', { exact: true });
+    const warning = await surface(warningControl);
+    await warningControl.focus(); await page.waitForTimeout(350);
+    const focusedWarning = await surface(warningControl);
+    assertSingleSurface(focusedWarning, 'focused warning');
+    assert.equal(focusedWarning.outer.borderColor, warning.outer.borderColor, 'Focus must not hide the warning');
+    assert.match(focusedWarning.outer.shadow, /rgba\(250, 173, 20,/, 'Warning focus ring keeps the warning hue');
+    observations.semantics = { normal, disabled, disabledPlain, readonly, error, focusedError, warning, focusedWarning };
     await page.close();
   });
 
