@@ -1,3 +1,6 @@
+import OperationInteractionTracker from './components/OperationInteractionTracker'
+import IntegrationSettingsPage from './pages/IntegrationSettingsPage'
+import OperationLogsPage from './pages/OperationLogsPage'
 import MailroomPage from './pages/mailroom/MailroomPage'
 import RepairWorkbenchPage from './pages/repair/RepairWorkbenchPage'
 import AfterSalesModulePage from './pages/AfterSalesModulePage'
@@ -78,6 +81,10 @@ function AfterSalesEntryRedirect() {
   const { search } = useLocation()
   return <Navigate to={`/operations/after-sales/workbench${search}`} replace />
 }
+function LegacyAdminRedirect({ target, source }: {target:string; source?:string}) {
+ const {search}=useLocation(); const params=new URLSearchParams(search);if(source)params.set('source',source);
+ return <Navigate to={target+'?'+params.toString()} replace />
+}
 const AppRoutes: React.FC = () => {
   const staged = stagedOperationsEnabled()
   return (
@@ -103,6 +110,11 @@ const AppRoutes: React.FC = () => {
                 <Route index element={<HomeEntry />} />
                 <Route path="operations/mailroom" element={<PermissionRoute anyPermissions={['mailroom:read']}><MailroomPage /></PermissionRoute>} />
                 <Route path="operations/repair" element={mailroomEnabled() ? <PermissionRoute anyPermissions={['repair_workbench:read']}><RepairWorkbenchPage /></PermissionRoute> : <Navigate to="/dashboard" replace />} />
+                <Route path="admin/integrations" element={<PermissionRoute anyPermissions={['integration_settings:read','after_sales_settings:read']}><IntegrationSettingsPage /></PermissionRoute>} />
+                <Route path="admin/operation-logs" element={<PermissionRoute anyPermissions={['operation_logs:read','after_sales_audit:read','wms_logs:read']}><OperationLogsPage /></PermissionRoute>} />
+                <Route path="operations/after-sales/settings/advanced" element={<AfterSalesModulePage sectionOverride="settings" />} />
+                <Route path="operations/after-sales/settings" element={<LegacyAdminRedirect target="/admin/integrations" />} />
+                <Route path="operations/after-sales/audit-logs" element={<LegacyAdminRedirect target="/admin/operation-logs" source="SOURCE" />} />
                 <Route path="operations/after-sales/:section" element={<AfterSalesModulePage />} />
                 <Route path="my/inbox" element={<MailroomPage mode="mine" />} />
                 <Route path="dashboard" element={<HomeEntry dashboard />} />
@@ -169,7 +181,7 @@ const AppRoutes: React.FC = () => {
 }
 
 function EmployeeProviders() {
-  return <ThemeProvider><AuthProvider><AIProvider><Outlet /></AIProvider></AuthProvider></ThemeProvider>
+  return <ThemeProvider><AuthProvider><AIProvider><OperationInteractionTracker /><Outlet /></AIProvider></AuthProvider></ThemeProvider>
 }
 
 const router = createBrowserRouter([{ path: '*', element: <AppRoutes /> }])

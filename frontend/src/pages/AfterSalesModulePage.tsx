@@ -15,12 +15,14 @@ import type { AfterSalesAttempt } from './repair/after-sales-launch'
 import AfterSalesWorkbenchHub from './after-sales/AfterSalesWorkbenchHub'
 import { canOpenAfterSalesSection } from './after-sales/workbench-model'
 import { hasPermission } from '../utils/access'
+import { trustedSourceInteractionBatch } from '../services/source-interaction-bridge'
 import NativeAfterSalesWorkbench from './after-sales/NativeAfterSalesWorkbench'
 
 type FrameLaunch = { attempt: AfterSalesAttempt; ticket: string; name: string }
-export default function AfterSalesModulePage() {
+export default function AfterSalesModulePage({ sectionOverride }: {sectionOverride?:string} = {}) {
   const { modal, message, contextHolder } = useRepairFeedback()
-  const { section = 'cases' } = useParams()
+  const { section: routeSection = 'cases' } = useParams()
+  const section = sectionOverride || routeSection
   const navigate = useNavigate(), {user} = useAuth()
   const [params] = useSearchParams()
   const entityId = params.get('entityId') || localStorage.getItem('entityId') || ''
@@ -76,7 +78,7 @@ export default function AfterSalesModulePage() {
     } catch (cause) {
       if (session.current.isCurrent(attempt)) showFailure(attempt, cause instanceof Error ? cause.message : '無法開啟售後工作台')
     }
-  }, [entityId, section, canOpenSection, sourceCaseId, sourceIntent, clearDeadline, showFailure])
+  }, [entityId, section, canOpenSection, sourceCaseId, sourceIntent, clearDeadline, showFailure, user?.id])
   useEffect(() => {
     iframeDirty.current = false; dirty.current = customerDirty.current || intakeDirty.current || nativeDirty.current; void launch()
     const currentSession = session.current
@@ -98,7 +100,14 @@ export default function AfterSalesModulePage() {
   useEffect(() => {
     const receive = (event: MessageEvent) => {
       const attempt = session.current.current()
-      if (!attempt || event.origin !== window.location.origin || event.source !== frame.current?.contentWindow || event.source !== attempt.frame || event.data?.source !== 'corely.aftersales.v1') return
+      if (!attempt || event.origin !== window.location.origin || event.source !== frame.current?.contentWindow || event.source !== attempt.frame) return
+      if (event.data?.source === 'corely.aftersales.interactions.v1') {
+        if (attempt.phase !== 'READY') return
+        const items = trustedSourceInteractionBatch(event, window.location.origin, attempt.frame, attempt.phase)
+        for (const detail of items) window.dispatchEvent(new CustomEvent('operation-interaction', { detail }))
+        return
+      }
+      if (event.data?.source !== 'corely.aftersales.v1') return
       if (event.data.ready && attempt.phase === 'LOADING') {
         let url = ''
         try { url = frame.current?.contentWindow?.location.href || '' } catch { /* Cross-origin or error documents cannot prove readiness. */ }

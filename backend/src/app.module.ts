@@ -1,3 +1,4 @@
+import { OperationsAdminModule } from './modules/operations-admin/operations-admin.module';
 import { MailroomModule } from './modules/mailroom/mailroom.module';
 import { Module } from '@nestjs/common';
 import { SnLabelsModule } from './modules/sn-labels/sn-labels.module';
@@ -85,6 +86,7 @@ import { WmsWorkbenchModule } from './modules/integration/wms/wms-workbench.modu
 @Module({
   imports: [
     ConfigModule,
+    OperationsAdminModule,
     PrismaModule,
     AuditModule,
     DatabaseModule,

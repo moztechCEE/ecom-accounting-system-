@@ -155,6 +155,9 @@ model RolePermission {
 
 // 審計軌跡：記錄所有重要操作
 model AuditLog {
+  companyId String? @map("company_id")
+  brand String?
+  correlationId String? @map("correlation_id")
   id        String   @id @default(uuid())
   userId    String?  @map("user_id")
   tableName String   @map("table_name")
@@ -171,6 +174,7 @@ model AuditLog {
   @@index([tableName, recordId])
   @@index([userId])
   @@index([createdAt])
+  @@index([companyId, createdAt, id])
   @@map("audit_logs")
 }
 
@@ -180,6 +184,9 @@ model AuditLog {
 
 // 公司實體（支援多公司營運）
 model Entity {
+  integrationConnections IntegrationConnection[]
+  operationInteractions OperationInteraction[]
+  operationLogArchives OperationLogArchive[]
   shipmentLines ShipmentLine[]
   wmsHandoverInbox WmsHandoverInbox[]
   id           String  @id @default(uuid())
@@ -2501,6 +2508,7 @@ model MailroomAction {
 
   @@unique([entityId, actorId, requestId])
   @@unique([itemId, version])
+  @@index([entityId, createdAt, id])
   @@map("mailroom_actions")
 }
 
@@ -2539,6 +2547,7 @@ model MailroomDelivery {
 
   @@unique([eventId, target])
   @@index([status, nextAttemptAt])
+  @@index([entityId, createdAt, id])
   @@map("mailroom_deliveries")
 }
 
@@ -3273,4 +3282,116 @@ model MailroomSourceChange {
  processedAt DateTime @default(now()) @map("processed_at")
  @@unique([cursorId, sourceEventId])
  @@map("mailroom_source_changes")
+}
+
+// Shared connection registry stores identifiers and credential references only.
+model IntegrationConnection {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  category String
+  provider String
+  brand String @default("")
+  accountId String @map("account_id")
+  displayName String @map("display_name")
+  environment String
+  credentialRef String? @map("credential_ref")
+  metadata Json
+  version Int @default(1)
+  enabled Boolean @default(true)
+  verificationStatus String @default("UNVERIFIED") @map("verification_status")
+  verifiedAt DateTime? @map("verified_at")
+  verificationCode String? @map("verification_code")
+  updatedBy String @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@unique([entityId, provider, brand, accountId, environment])
+  @@index([entityId, category])
+  @@map("integration_connections")
+}
+
+// Interaction intent is separate from authoritative business commits.
+model OperationInteraction {
+  id String @id
+  entityId String @map("entity_id")
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  actorId String @map("actor_id")
+  actorName String @map("actor_name")
+  actorRoles Json @map("actor_roles")
+  actionId String @map("action_id")
+  workbench String
+  brand String?
+  recordId String? @map("record_id")
+  requestId String? @map("request_id")
+  outcome String
+  requestHash String @map("request_hash")
+  occurredAt DateTime @map("occurred_at")
+  receivedAt DateTime @default(now()) @map("received_at")
+  @@index([entityId, occurredAt, id])
+  @@index([entityId, requestId])
+  @@map("operation_interactions")
+}
+
+// Bounded downloadable, verified export; no source records are deleted.
+model OperationLogArchive {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  createdBy String @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  manifest Json
+  content Bytes
+  @@index([entityId, createdAt])
+  @@map("operation_log_archives")
+}
+
+// Append these models to the central schema. Existing custody/stock models stay intact.
+model MailroomOutboundOrder {
+  id               String   @id @default(uuid())
+  entityId         String   @map("entity_id")
+  sourceCaseId     String   @map("source_case_id")
+  sourceNumber     String   @map("source_number")
+  caseType         String   @map("case_type")
+  sourceVersion    String   @map("source_version")
+  sourceSnapshot   Json     @map("source_snapshot")
+  items            Json
+  status           String   @default("PENDING_PICK")
+  version          Int      @default(1)
+  location         String?
+  custodianId      String?  @map("custodian_id")
+  nextUserId       String?  @map("next_user_id")
+  preparedById     String?  @map("prepared_by_id")
+  stockRequestId   String?  @map("stock_request_id")
+  outboundShipment Json?    @map("outbound_shipment")
+  createdById      String   @map("created_by_id")
+  requestId        String   @map("request_id")
+  requestHash      String   @map("request_hash")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  actions          MailroomOutboundAction[]
+
+  @@unique([entityId, createdById, requestId])
+  @@index([entityId, status, createdAt])
+  @@index([entityId, sourceCaseId])
+  @@index([nextUserId, status])
+  @@map("mailroom_outbound_orders")
+}
+
+model MailroomOutboundAction {
+  id          String   @id @default(uuid())
+  entityId    String   @map("entity_id")
+  orderId     String   @map("order_id")
+  order       MailroomOutboundOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  actorId     String   @map("actor_id")
+  requestId   String   @map("request_id")
+  requestHash String   @map("request_hash")
+  action      String
+  fromStatus  String?  @map("from_status")
+  toStatus    String   @map("to_status")
+  version     Int
+  snapshot    Json
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([entityId, actorId, requestId])
+  @@unique([orderId, version])
+  @@map("mailroom_outbound_actions")
 }

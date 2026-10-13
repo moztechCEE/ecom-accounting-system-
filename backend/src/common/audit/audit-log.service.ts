@@ -3,6 +3,9 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 type AuditPayload = {
+  companyId?: string | null;
+  brand?: string | null;
+  correlationId?: string | null;
   userId?: string | null;
   tableName: string;
   recordId: string;
@@ -24,6 +27,9 @@ export class AuditLogService {
       await this.prisma.auditLog.create({
         data: {
           userId: payload.userId || null,
+          companyId: payload.companyId || null,
+          brand: payload.brand || null,
+          correlationId: payload.correlationId || null,
           tableName: payload.tableName,
           recordId: payload.recordId,
           action: payload.action,

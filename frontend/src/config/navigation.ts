@@ -70,11 +70,11 @@ export const NAVIGATION: NavigationItem[] = [
     { key: '/attendance/admin', label: '出勤審核', permissions: ['attendance_admin:read', 'attendance_team:read'] },
     { key: '/payroll/runs', label: '薪資管理', permissions: ['payroll_self:read', 'payroll_admin:read'] },
   ] },
-  { key: 'admin', label: '系統管理', adminOnly: true, permissions: ['access_control:read', 'access_control:update', 'after_sales_users:read', 'after_sales_audit:read', 'after_sales_settings:read'], children: [
+  { key: 'admin', label: '系統管理', adminOnly: true, permissions: ['access_control:read', 'access_control:update', 'after_sales_users:read', 'after_sales_audit:read', 'after_sales_settings:read', 'integration_settings:read', 'operation_logs:read', 'wms_logs:read'], children: [
     { key: '/admin/access-control', label: '帳號與權限', permissions: ['access_control:read', 'access_control:update'] },
     { key: '/operations/after-sales/users', label: '售後來源帳號與權限', permissions: ['after_sales_users:read'] },
-    { key: '/operations/after-sales/audit-logs', label: '售後操作紀錄', permissions: ['after_sales_audit:read'] },
-    { key: '/operations/after-sales/settings', label: '售後來源設定', permissions: ['after_sales_settings:read'] },
+    { key: '/admin/operation-logs', label: '操作日誌', permissions: ['operation_logs:read','after_sales_audit:read','wms_logs:read'] },
+    { key: '/admin/integrations', label: '串接設定', permissions: ['integration_settings:read','after_sales_settings:read'] },
     { key: '/admin/entities', label: '公司管理', superAdminOnly: true },
     { key: '/admin/reimbursement-items', label: '報銷項目', adminOnly: true },
     { key: '/admin/settings', label: '系統設定', adminOnly: true },
@@ -98,7 +98,7 @@ export function visibleNavigation(user: User | null | undefined, items = NAVIGAT
       }
       const destinations: Record<string,string[]> = {
         sales: ['/warehouse/logistics'], inventory: ['/warehouse/defects'],
-        people: ['/warehouse/scan-errors'], admin: ['/warehouse/logs','/warehouse/settings'],
+        people: ['/warehouse/scan-errors'], admin: ['/warehouse/settings'],
       }
       if (original.children && destinations[original.key]) {
         original = { ...original, children: [...original.children, ...portal.filter(link => destinations[original.key].includes(link.key))] }

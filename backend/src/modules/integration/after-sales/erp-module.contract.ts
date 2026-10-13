@@ -98,11 +98,13 @@ export function moduleGrants(permissions: string[], privileged: boolean) {
   const read: string[] = [],
     write: string[] = [];
   for (const [module, resource] of Object.entries(SOURCE_MODULE_RESOURCES)) {
-    if (privileged || permissions.includes(resource + ':read'))
+    const sharedRead = module === 'settings' ? permissions.includes('integration_settings:read') : module === 'audit_logs' ? permissions.includes('operation_logs:read') : false;
+    const sharedWrite = module === 'settings' && permissions.includes('integration_settings:update');
+    if (privileged || permissions.includes(resource + ':read') || sharedRead)
       read.push(module);
     if (
       module !== 'audit_logs' &&
-      (privileged || permissions.includes(resource + ':update'))
+      (privileged || permissions.includes(resource + ':update') || sharedWrite)
     )
       write.push(module);
   }
