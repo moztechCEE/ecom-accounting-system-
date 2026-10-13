@@ -27,6 +27,7 @@ import {
   confirmationLabels,
   confirmationStatuses,
   notificationStatuses,
+  notificationAction,
   notificationTypes,
   pendingConfirmationKey,
   proposalBlocker,
@@ -82,7 +83,7 @@ const planLabels: Record<string, string> = {
   RETURN: "寄回原件",
 };
 const errorText = (error: unknown) => {
-  const value = (error as any)?.response?.data?.message;
+  const value = (error as { response?: { data?: { message?: unknown } } })?.response?.data?.message;
   return typeof value === "string" && value.length < 500
     ? value
     : error instanceof Error && error.message.length < 200
@@ -517,6 +518,7 @@ export default function NativeCaseCommunication({
     }
   };
   const disabled = busy || !!pending || unknown || brandPending;
+  const activeNotificationAction = notification ? notificationAction(notification, communication?.aiCustomerService?.transport) : null;
   return (
     <section data-operation-record-id={detail.id} className="native-case-communication" aria-label="顧客確認與通知">
       <NativeLegacyBrandReview entityId={entityId} detail={detail} onReload={onReload} onPendingChange={markBrandPending} onDirtyChange={onDirtyChange} />
@@ -771,6 +773,7 @@ export default function NativeCaseCommunication({
                           {notificationStatuses[row.status] || row.status}
                         </Tag>
                         <span>{row.brand}</span>
+                        {row.provider === 'CORELY_AI' && <Tag>AI 客服</Tag>}
                         <Button
                           data-operation-action="after_sales.notification.preview"
                           onClick={() => setNotification(row)}
@@ -910,21 +913,29 @@ export default function NativeCaseCommunication({
                   審核通過
                 </Button>
               )}
-              {["APPROVED", "FAILED"].includes(notification.status) && (
+              {activeNotificationAction?.kind === 'POLL' && (
                 <Button
-                  data-operation-action="after_sales.notification.send"
-                  type="primary"
+                  data-operation-action="after_sales.notification.refresh"
                   disabled={disabled}
                   onClick={() =>
                     void run("communications", {
                       operation: "SEND_NOTIFICATION",
                       notificationId: notification.id,
+                      receiptOnly: true,
                     })
                   }
                 >
-                  {notification.status === "FAILED"
-                    ? "重新發送"
-                    : "發送 LINE 通知"}
+                  {activeNotificationAction.label}
+                </Button>
+              )}
+              {activeNotificationAction?.kind === 'SEND' && (
+                <Button
+                  data-operation-action="after_sales.notification.send"
+                  type="primary"
+                  disabled={disabled}
+                  onClick={() => void run("communications", { operation: "SEND_NOTIFICATION", notificationId: notification.id })}
+                >
+                  {activeNotificationAction.label}
                 </Button>
               )}
             </Space>
@@ -970,6 +981,7 @@ export default function NativeCaseCommunication({
                 {notificationStatuses[notification.status] ||
                   notification.status}
               </Tag>
+              {notification.provider === 'CORELY_AI' && <Tag>AI 客服</Tag>}
               <div className="native-notification-preview">
                 <h4>{notification.payload.title}</h4>
                 <p>{notification.payload.text}</p>

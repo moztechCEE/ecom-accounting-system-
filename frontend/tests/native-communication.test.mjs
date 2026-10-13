@@ -25,6 +25,9 @@ let posts = [],
   checks = [],
   confirmationMode = "unknown",
   notificationStatus = "DRAFT",
+  notificationProvider = null,
+  aiResultReads = 0,
+  aiEventPosts = 0,
   readonly = false,
   brand = "MOZTECH",
   feeMode = "PAID",
@@ -82,7 +85,7 @@ const detail = () => {
           status: notificationStatus,
           payload: { title: "款項進度", text: "示意通知內容" },
           createdAt: "2026-10-13T00:00:00.000Z",
-          provider: notificationStatus === "SIMULATED" ? "DEV_STUB" : null,
+          provider: notificationProvider || (notificationStatus === "SIMULATED" ? "DEV_STUB" : null),
         },
       ],
       factory,
@@ -218,6 +221,11 @@ const routeHandler = async (route) => {
       return json({ id: "notification-a", status: notificationStatus });
     }
     if (command.operation === "SEND_NOTIFICATION") {
+      if (command.receiptOnly === true) {
+        assert.equal(notificationProvider, 'CORELY_AI'); aiResultReads++;
+        return json({ id: 'notification-a', status: notificationStatus, provider: 'CORELY_AI' });
+      }
+      aiEventPosts++;
       notificationStatus = "SIMULATED";
       return json({
         id: "notification-a",
@@ -434,6 +442,37 @@ try {
       readonly = false;
     },
   );
+  await check('AI pending statuses expose receipt polling and UNKNOWN repeatedly queries the same notice without a new event', async () => {
+    notificationProvider = 'CORELY_AI';
+    const start = posts.length, sendsBefore = aiEventPosts;
+    for (const status of ['RECEIVED', 'HOLD', 'SENDING', 'UNKNOWN', 'UNKNOWN']) {
+      notificationStatus = status; await load(); await panel().getByText(/^LINE 通知/).click();
+      await panel().locator('[data-operation-action="after_sales.notification.preview"]').click();
+      const drawer = page.locator('.ant-drawer-open');
+      assert.equal(await drawer.locator('[data-operation-action="after_sales.notification.send"]').count(), 0);
+      const button = drawer.getByRole('button', { name: '核對發送結果', exact: true }); await button.waitFor();
+      assert.equal(await button.getAttribute('data-operation-action'), 'after_sales.notification.refresh');
+      const before = posts.length; await page.waitForTimeout(100); assert.equal(posts.length, before);
+      await button.click(); await drawer.waitFor({ state: 'hidden' });
+      assert.equal(posts.at(-1).payload.command.operation, 'SEND_NOTIFICATION');
+      assert.equal(posts.at(-1).payload.command.receiptOnly, true); assert.equal(posts.at(-1).payload.command.notificationId, 'notification-a');
+    }
+    assert.equal(aiResultReads, 5); assert.equal(aiEventPosts, sendsBefore);
+    assert.equal(posts.length - start, 5); assert.equal((await panel().innerText()).includes('已送達'), false);
+  });
+  await check('readonly and changed actor cannot query or resend an AI UNKNOWN row', async () => {
+    notificationStatus = 'UNKNOWN'; notificationProvider = 'CORELY_AI'; readonly = true;
+    const start = posts.length; await load(); await panel().getByText(/^LINE 通知/).click();
+    await panel().locator('[data-operation-action="after_sales.notification.preview"]').click();
+    assert.equal(await page.locator('.ant-drawer-open').getByRole('button', { name: '核對發送結果', exact: true }).count(), 0);
+    assert.equal(posts.length, start); readonly = false; await load(); await panel().getByText(/^LINE 通知/).click();
+    await panel().locator('[data-operation-action="after_sales.notification.preview"]').click();
+    await page.evaluate(other => localStorage.setItem('access_token', other), token('other-user'));
+    await page.locator('.ant-drawer-open').getByRole('button', { name: '核對發送結果', exact: true }).click();
+    await panel().getByText('登入狀態已變更，請重新登入', { exact: true }).waitFor(); assert.equal(posts.length, start);
+    await page.evaluate(qa => localStorage.setItem('access_token', qa), token(actor));
+    notificationProvider = null; notificationStatus = 'SIMULATED';
+  });
   await check('legacy brand review keeps UUID on unknown result, including reload after server brand becomes bound', async () => {
     brand = null; canConfirmBrand = true; await load();
     await panel().locator('[data-operation-action="after_sales.brand_review.open"]').click();

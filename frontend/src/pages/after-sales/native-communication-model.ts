@@ -65,7 +65,7 @@ export type NativeCommunication = {
   factory: FactoryIssue | null;
   productBindings?: PhysicalConfirmationBinding[];
   sourceActorId?: string;
-  aiCustomerService?: { status: string };
+  aiCustomerService?: { status: string; transport?: string };
 };
 export type RepairProposal = {
   id: string;
@@ -127,12 +127,22 @@ export const notificationStatuses: Record<string, string> = {
   DRAFT: "待審核",
   APPROVED: "已審核，待發送",
   QUEUED: "等待發送",
-  SENDING: "發送中",
+  RECEIVED: "AI 已接收，等待處理",
+  HOLD: "暫停，待客服核對",
+  SENDING: "通知處理中",
   FAILED: "發送失敗",
   UNKNOWN: "發送結果待確認",
   SENT: "LINE 已接受",
   SIMULATED: "DEV 模擬完成",
 };
+export function notificationAction(row: Pick<CustomerNotification, 'status' | 'provider'>, configuredTransport?: string) {
+  if (row.provider === 'CORELY_AI' && ['RECEIVED', 'HOLD', 'SENDING', 'UNKNOWN'].includes(row.status))
+    return { kind: 'POLL' as const, label: '核對發送結果', actionId: 'after_sales.notification.refresh', receiptOnly: true as const };
+  if (['APPROVED', 'FAILED'].includes(row.status)) return { kind: 'SEND' as const,
+    label: row.status === 'FAILED' ? '重新發送' : row.provider === 'CORELY_AI' || configuredTransport === 'CORELY_AI' ? '交給 AI 客服' : '發送 LINE 通知',
+    actionId: 'after_sales.notification.send' };
+  return null;
+}
 export const notificationTypes: Record<string, string> = {
   CASE_CREATED: "案件成立",
   PRODUCT_MISMATCH: "實收品項不符",

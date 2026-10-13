@@ -4,6 +4,7 @@ import { clearPendingBrandReview, readPendingBrandReview, savePendingBrandReview
 import {
   clearPendingConfirmation,
   notificationStatuses,
+  notificationAction,
   pendingConfirmationKey,
   proposalBlocker,
   readPendingConfirmation,
@@ -171,4 +172,16 @@ test("provider accepted and DEV simulated are never customer delivery assertions
     ),
     false,
   );
+});
+test('only a persisted AI pending provider offers receipt polling; UNKNOWN never offers resend', () => {
+  for (const status of ['RECEIVED', 'HOLD', 'SENDING', 'UNKNOWN']) {
+    const action = notificationAction({ status, provider: 'CORELY_AI' });
+    assert.equal(action?.kind, 'POLL'); assert.equal(action?.label, '核對發送結果');
+    assert.equal(action?.actionId, 'after_sales.notification.refresh'); assert.equal(action?.receiptOnly, true);
+    assert.equal(notificationAction({ status, provider: 'LINE' }), null);
+  }
+  assert.equal(notificationAction({ status: 'APPROVED', provider: null }, 'CORELY_AI')?.label, '交給 AI 客服');
+  assert.equal(notificationAction({ status: 'FAILED', provider: 'CORELY_AI' })?.kind, 'SEND');
+  for (const status of ['SENT', 'SIMULATED', 'CANCELLED', 'DRAFT']) assert.equal(notificationAction({ status, provider: 'CORELY_AI' }), null);
+  assert.equal(notificationStatuses.RECEIVED, 'AI 已接收，等待處理'); assert.equal(notificationStatuses.HOLD, '暫停，待客服核對');
 });
