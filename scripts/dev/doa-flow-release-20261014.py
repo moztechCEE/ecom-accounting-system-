@@ -71,6 +71,7 @@ SOURCE_REUSE_PROFILES = {
 }
 STORAGE_VERSION = '7.19.0'
 ORIGINS = {s: f'https://{s}-sp5g377smq-de.a.run.app' for s in DEV}
+SOURCE_DEV_VALUES = {'DOA_DEV_PROVIDER_MODE': 'stub', 'CUSTOMER_CONFIRMATION_PUBLIC_ORIGIN': ORIGINS[SOURCE]}
 EXISTING_EXTERNAL_REFS = {
     (API, 'corely-erp-api-dev-1', 'GEMINI_API_KEY'): ('ecom-accounting-gemini-api-key', '1'),
     (WMS, 'api', 'WMS_SHOPIFY_ACCESS_TOKEN'): ('ecom-accounting-shopify-admin-token', '1'),
@@ -785,9 +786,9 @@ def candidate_specs(baseline, pins, images, stage='review', pairing='candidate')
             set_env(c, {'API_URL': pair[API] + '/api/v1', 'WS_URL': pair[API], 'WMS_PORTAL_URL': pair[WMS],
                         'AFTER_SALES_MODULE_URL': ORIGINS[MODULE], 'COPILOT_CANDIDATE_WEB_ORIGIN': urls[WEB]})
         elif name in (SOURCE, MODULE):
-            set_env(c, {'ERP_INTEGRATION_API_ORIGIN': pair[API]})
-            # Preserve NEXTAUTH and public Source roots. Canonical dispatch
-            # proof MUST remain normal Source /api, never module-prefixed.
+            set_env(c, {**SOURCE_DEV_VALUES, 'ERP_INTEGRATION_API_ORIGIN': pair[API]})
+            # Browser SSO keeps NEXTAUTH. Customer links and canonical dispatch
+            # proof use normal Source; module /after-sales-app is transport only.
         elif name == WMS:
             set_env(containers(spec)[1], {'ERP_PORTAL_API_URL': pair[API] + '/api/v1'})
         # Splitting an owned tagged row that carries traffic is necessary:
@@ -809,6 +810,11 @@ def candidate_specs(baseline, pins, images, stage='review', pairing='candidate')
 
 
 def assert_candidate_preserved(before, after, own_tag):
+    name = before['metadata']['name']
+    require(name in DEV and after['metadata']['name'] == name and before['metadata']['namespace'] == NAMESPACE and
+            after['metadata']['namespace'] == NAMESPACE, 'Candidate preservation requires the same allowlisted DEV service')
+    if name in (SOURCE, MODULE):
+        need_values(containers(after)[0], SOURCE_DEV_VALUES)
     require(after['metadata'].get('resourceVersion') == before['metadata']['resourceVersion'], 'CAS version must be retained')
     old = before['spec']['traffic']
     new = after['spec']['traffic']
@@ -835,9 +841,10 @@ def assert_candidate_preserved(before, after, own_tag):
     allowed_env = {
         API: set(REPAIR_VALUES) | set(NEW_SECRET) | {'SOURCE_VERSION', 'AFTER_SALES_TASK_SOURCE_URL', 'WMS_PORTAL_SERVICE_URL', 'WMS_WORKSPACE_URL'},
         WEB: {'SOURCE_VERSION', 'API_URL', 'WS_URL', 'WMS_PORTAL_URL', 'AFTER_SALES_MODULE_URL', 'COPILOT_CANDIDATE_WEB_ORIGIN'},
-        SOURCE: {'SOURCE_VERSION', 'ERP_INTEGRATION_API_ORIGIN'}, MODULE: {'SOURCE_VERSION', 'ERP_INTEGRATION_API_ORIGIN'},
+        SOURCE: set(SOURCE_DEV_VALUES) | {'SOURCE_VERSION', 'ERP_INTEGRATION_API_ORIGIN'},
+        MODULE: set(SOURCE_DEV_VALUES) | {'SOURCE_VERSION', 'ERP_INTEGRATION_API_ORIGIN'},
         WMS: {'SOURCE_VERSION', 'ERP_PORTAL_API_URL'},
-    }[before['metadata']['name']]
+    }[name]
     for original, candidate in zip(containers(b), containers(a)):
         original.pop('image', None)
         candidate.pop('image', None)

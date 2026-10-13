@@ -198,6 +198,138 @@ class FlowReleaseTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             r.candidate_specs(self.live, PINS, self.images, pairing='production')
 
+    def test_source_dev_values_are_exactly_two_and_public_origin_is_normal_source(self):
+        self.assertEqual(r.SOURCE_DEV_VALUES, {'DOA_DEV_PROVIDER_MODE': 'stub', 'CUSTOMER_CONFIRMATION_PUBLIC_ORIGIN': r.ORIGINS[r.SOURCE]})
+        self.assertNotEqual(r.SOURCE_DEV_VALUES['CUSTOMER_CONFIRMATION_PUBLIC_ORIGIN'], r.ORIGINS[r.MODULE])
+
+    def test_missing_source_flags_become_exact_dev_values_in_both_candidates(self):
+        original = copy.deepcopy(self.live)
+        for name in (r.SOURCE, r.MODULE):
+            self.assertTrue(set(r.SOURCE_DEV_VALUES).isdisjoint(r.env_map(r.containers(self.live[name])[0])))
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        for name in (r.SOURCE, r.MODULE):
+            c = r.containers(specs[name])[0]
+            r.need_values(c, r.SOURCE_DEV_VALUES)
+            self.assertEqual(r.env_map(c)['DOA_DEV_PROVIDER_MODE'], {'name': 'DOA_DEV_PROVIDER_MODE', 'value': 'stub'})
+            self.assertEqual(r.env_map(c)['CUSTOMER_CONFIRMATION_PUBLIC_ORIGIN'], {'name': 'CUSTOMER_CONFIRMATION_PUBLIC_ORIGIN', 'value': r.ORIGINS[r.SOURCE]})
+        self.assertEqual(self.live, original)
+
+    def test_source_flags_are_required_for_review_final_and_candidate_canonical_pairings(self):
+        for stage in ('review', 'final'):
+            for pairing in ('candidate', 'canonical'):
+                specs, _ = r.candidate_specs(self.live, PINS, self.images, stage, pairing)
+                for name in (r.SOURCE, r.MODULE):
+                    with self.subTest(stage=stage, pairing=pairing, name=name):
+                        r.need_values(r.containers(specs[name])[0], r.SOURCE_DEV_VALUES)
+
+    def test_existing_correct_source_values_do_not_duplicate_or_mutate_baseline(self):
+        baseline = copy.deepcopy(self.live)
+        for name in (r.SOURCE, r.MODULE):
+            r.set_env(r.containers(baseline[name])[0], r.SOURCE_DEV_VALUES)
+        original = copy.deepcopy(baseline)
+        specs, _ = r.candidate_specs(baseline, PINS, self.images)
+        for name in (r.SOURCE, r.MODULE):
+            for key in r.SOURCE_DEV_VALUES:
+                self.assertEqual(sum(entry['name'] == key for entry in r.containers(specs[name])[0]['env']), 1)
+            r.assert_candidate_preserved(original[name], specs[name], 'aftersales-review')
+        self.assertEqual(baseline, original)
+
+    def test_module_customer_origin_is_corrected_without_changing_nextauth_sso(self):
+        baseline = copy.deepcopy(self.live)
+        r.set_env(r.containers(baseline[r.MODULE])[0], {'CUSTOMER_CONFIRMATION_PUBLIC_ORIGIN': r.ORIGINS[r.WEB] + '/after-sales-app'})
+        before = copy.deepcopy(baseline)
+        specs, _ = r.candidate_specs(baseline, PINS, self.images)
+        for name in (r.SOURCE, r.MODULE):
+            self.assertEqual(r.value(r.containers(specs[name])[0], 'CUSTOMER_CONFIRMATION_PUBLIC_ORIGIN'), r.ORIGINS[r.SOURCE])
+            self.assertEqual(r.value(r.containers(specs[name])[0], 'NEXTAUTH_URL'), r.value(r.containers(before[name])[0], 'NEXTAUTH_URL'))
+        self.assertEqual(baseline, before)
+
+    def test_source_public_origin_is_independent_of_api_callback_pair_and_source_version(self):
+        for pairing in ('candidate', 'canonical'):
+            specs, urls = r.candidate_specs(self.live, PINS, self.images, 'final', pairing)
+            expected_api = urls[r.API] if pairing == 'candidate' else r.ORIGINS[r.API]
+            for name in (r.SOURCE, r.MODULE):
+                c = r.containers(specs[name])[0]
+                self.assertEqual(r.value(c, 'ERP_INTEGRATION_API_ORIGIN'), expected_api)
+                self.assertEqual(r.value(c, 'CUSTOMER_CONFIRMATION_PUBLIC_ORIGIN'), r.ORIGINS[r.SOURCE])
+                self.assertEqual(r.value(c, 'SOURCE_VERSION'), PINS['source'])
+
+    def test_source_runtime_iam_database_refs_and_old_disabled_flags_are_preserved(self):
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        allowed = set(r.SOURCE_DEV_VALUES) | {'SOURCE_VERSION', 'ERP_INTEGRATION_API_ORIGIN'}
+        for name in (r.SOURCE, r.MODULE):
+            old, new = r.containers(self.live[name])[0], r.containers(specs[name])[0]
+            self.assertEqual({k: v for k, v in r.env_map(old).items() if k not in allowed}, {k: v for k, v in r.env_map(new).items() if k not in allowed})
+            self.assertEqual(r.env_map(new)['DATABASE_URL'], r.env_map(old)['DATABASE_URL'])
+            self.assertEqual(specs[name]['spec']['template']['spec']['serviceAccountName'], self.live[name]['spec']['template']['spec']['serviceAccountName'])
+            self.assertEqual(specs[name]['spec']['template']['metadata']['annotations'], self.live[name]['spec']['template']['metadata']['annotations'])
+            self.assertEqual(sum(t.get('percent', 0) for t in specs[name]['spec']['traffic']), 100)
+            self.assertEqual(next(t for t in specs[name]['spec']['traffic'] if t.get('percent') == 100)['revisionName'], name + '-serving')
+
+    def test_source_dev_values_are_not_added_or_allowed_on_api_web_or_warehouse(self):
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        for name in (r.API, r.WEB, r.WMS):
+            self.assertTrue(all(set(r.SOURCE_DEV_VALUES).isdisjoint(r.env_map(c)) for c in r.containers(specs[name])))
+            for key, value in r.SOURCE_DEV_VALUES.items():
+                altered = copy.deepcopy(specs[name])
+                r.set_env(r.containers(altered)[0], {key: value})
+                with self.subTest(name=name, key=key), self.assertRaises(RuntimeError):
+                    r.assert_candidate_preserved(self.live[name], altered, 'aftersales-review')
+
+    def test_source_preservation_rejects_wrong_missing_or_secret_ref_provider_mode(self):
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        for name in (r.SOURCE, r.MODULE):
+            for value in ('live', 'STUB', 'true', ''):
+                altered = copy.deepcopy(specs[name])
+                r.set_env(r.containers(altered)[0], {'DOA_DEV_PROVIDER_MODE': value})
+                with self.subTest(name=name, value=value), self.assertRaises(RuntimeError):
+                    r.assert_candidate_preserved(self.live[name], altered, 'aftersales-review')
+            for secret_ref in (False, True):
+                altered = copy.deepcopy(specs[name])
+                c = r.containers(altered)[0]
+                c['env'] = [e for e in c['env'] if e['name'] != 'DOA_DEV_PROVIDER_MODE']
+                if secret_ref:
+                    r.set_env(c, {}, {'DOA_DEV_PROVIDER_MODE': {'secretKeyRef': {'name': 'unapproved-dev-mode', 'key': '1'}}})
+                with self.assertRaises(RuntimeError): r.assert_candidate_preserved(self.live[name], altered, 'aftersales-review')
+
+    def test_source_preservation_rejects_module_erp_tagged_production_or_missing_public_origin(self):
+        specs, urls = r.candidate_specs(self.live, PINS, self.images)
+        for name in (r.SOURCE, r.MODULE):
+            for value in (r.ORIGINS[r.MODULE], r.ORIGINS[r.WEB] + '/after-sales-app', urls[r.SOURCE], 'https://pay.corely.cc', r.ORIGINS[r.SOURCE] + '/'):
+                altered = copy.deepcopy(specs[name])
+                r.set_env(r.containers(altered)[0], {'CUSTOMER_CONFIRMATION_PUBLIC_ORIGIN': value})
+                with self.subTest(name=name, origin=value), self.assertRaises(RuntimeError):
+                    r.assert_candidate_preserved(self.live[name], altered, 'aftersales-review')
+            altered = copy.deepcopy(specs[name])
+            c = r.containers(altered)[0]
+            c['env'] = [e for e in c['env'] if e['name'] != 'CUSTOMER_CONFIRMATION_PUBLIC_ORIGIN']
+            with self.assertRaises(RuntimeError): r.assert_candidate_preserved(self.live[name], altered, 'aftersales-review')
+
+    def test_source_env_allowlist_does_not_enable_new_external_capabilities_or_change_auth_secrets(self):
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        changes = [lambda s: r.set_env(r.containers(s)[0], {'LINE_CHANNEL_ACCESS_TOKEN': 'synthetic-not-a-token'}),
+                   lambda s: r.set_env(r.containers(s)[0], {'AFTER_SALES_NOTIFICATION_TRANSPORT': 'CORELY_AI'}),
+                   lambda s: r.set_env(r.containers(s)[0], {'NEXTAUTH_URL': r.ORIGINS[r.WEB]}),
+                   lambda s: r.set_env(r.containers(s)[0], {}, {'DATABASE_URL': {'secretKeyRef': {'name': 'production-db', 'key': '1'}}}),
+                   lambda s: s['spec']['template']['spec'].update(serviceAccountName='other-account')]
+        for name in (r.SOURCE, r.MODULE):
+            for change in changes:
+                altered = copy.deepcopy(specs[name])
+                change(altered)
+                with self.assertRaises(RuntimeError): r.assert_candidate_preserved(self.live[name], altered, 'aftersales-review')
+
+    def test_source_config_candidate_and_preservation_never_target_production_or_foreign_namespace(self):
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        self.assertEqual(set(specs), set(r.DEV))
+        for name in r.PROTECTED:
+            self.assertNotIn(name, specs)
+            with self.assertRaises(RuntimeError): r.assert_candidate_preserved(self.live[name], r.portable(self.live[name]), 'aftersales-review')
+        for name in (r.SOURCE, r.MODULE):
+            for field, value in (('name', r.PROTECTED[-1]), ('namespace', 'foreign-project')):
+                before, after = copy.deepcopy(self.live[name]), copy.deepcopy(specs[name])
+                before['metadata'][field] = after['metadata'][field] = value
+                with self.assertRaises(RuntimeError): r.assert_candidate_preserved(before, after, 'aftersales-review')
+
     def test_preservation_assertion_rejects_extra_external_capability_or_runtime_change(self):
         specs, _ = r.candidate_specs(self.live, PINS, self.images)
         for change in (lambda s: r.set_env(r.containers(s)[0], {'SHOPIFY_SYNC_ENABLED': 'true'}),
