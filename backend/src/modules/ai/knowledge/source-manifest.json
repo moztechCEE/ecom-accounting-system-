@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:490d0d8b58beba74af06fe26e95442e4a46da125be74bdb640c6ba681379e420",
+  "sourceVersion": "sha256:883114abb3dae4a966eed16ecb70596a1018ebe92fb5d94d3332b47a90308445",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -508,7 +508,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/repair-prerequisites.service.ts",
-      "sha256": "81d0c84495570fa81913bcd22b9277dcc3ea7b840da8252c493a5eeccd45e4f6"
+      "sha256": "88687b06aa374ad9f9484ba6555fbe661d3b535d4f7f6438bfd4d15c321d581f"
     },
     {
       "path": "backend/src/modules/mailroom/repair-stock-custody.contract.ts",

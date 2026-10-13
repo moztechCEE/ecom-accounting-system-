@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, forwardRef } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import {
   type InspectionData,
@@ -27,7 +27,9 @@ type ReadItem = Pick<
 @Injectable()
 export class RepairPrerequisitesService {
   constructor(
+    @Inject(forwardRef(() => RepairTestRegistryService))
     private readonly registry: RepairTestRegistryService,
+    @Inject(forwardRef(() => RepairMaterialsService))
     private readonly materials: RepairMaterialsService,
   ) {}
   private async resolved(
