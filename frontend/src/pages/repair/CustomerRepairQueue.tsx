@@ -81,6 +81,8 @@ function CustomerReview({item,entityId,userId,onDirty,onSaved,feedback}:{item:Re
   const custody=currentItemCustody(item);
   const csr=item.repairWorkflow?.csr;
   const quoteRevision=item.release?.releaseInfo?.quoteRevision;
+  const customerQuoteRequired=item.receipt.category==='REPAIR';
+  const canApprove=customerQuoteRequired?sourceQuoteConsentCurrent(item.release?.releaseInfo):!!item.receipt.sourceCaseId&&item.release?.available===true;
   const canClaim=item.allowedWorkflowActions?.includes('claim_customer')===true;
   const canResolve=item.allowedWorkflowActions?.includes('resolve_customer')===true && csr?.status==='ACCEPTED' && csr.ownerId===userId;
   async function act(action:'claim_customer'|'resolve_customer',values?:{decision:'APPROVE'|'DECLINE';note:string}) {
@@ -102,9 +104,10 @@ function CustomerReview({item,entityId,userId,onDirty,onSaved,feedback}:{item:Re
     ]} />
     {failure&&<Alert type="error" showIcon message={failure} />}
     {canClaim&&<Button type="primary" loading={busy} onClick={()=>void act('claim_customer')}>接手交辦</Button>}
-    {canResolve&&!sourceQuoteConsentCurrent(item.release?.releaseInfo)&&<Alert type="warning" showIcon message={quoteRevision==null?'尚未建立報價':`報價 v${quoteRevision} 尚未取得顧客同意`} />}
+    {canResolve&&customerQuoteRequired&&!sourceQuoteConsentCurrent(item.release?.releaseInfo)&&<Alert type="warning" showIcon message={quoteRevision==null?'尚未建立報價':`報價 v${quoteRevision} 尚未取得顧客同意`} />}
+    {canResolve&&!customerQuoteRequired&&!canApprove&&<Alert type="warning" showIcon message="售後來源暫無法確認" />}
     {canResolve&&<Form name={`customer-repair-review-${item.id}`} form={form} layout="vertical" onValuesChange={()=>onDirty(true)} onFinish={values=>void act('resolve_customer',values)} disabled={busy}>
-      <Form.Item name="decision" label={`檢修 v${item.repairInspection?.revision} 方案結果`} rules={[{required:true,message:'請選擇此版方案結果'}]}><Radio.Group options={[{value:'APPROVE',label:'同意方案',disabled:!sourceQuoteConsentCurrent(item.release?.releaseInfo)},{value:'DECLINE',label:'拒修'}]} /></Form.Item>
+      <Form.Item name="decision" label={`檢修 v${item.repairInspection?.revision} 方案結果`} rules={[{required:true,message:'請選擇此版方案結果'}]}><Radio.Group options={[{value:'APPROVE',label:customerQuoteRequired?'同意方案':'核准整新方案',disabled:!canApprove},{value:'DECLINE',label:customerQuoteRequired?'拒修':'不進行整新'}]} /></Form.Item>
       <Form.Item name="note" label="回覆依據" rules={[{required:true,whitespace:true,message:'請記錄方案審核與確認依據'}]}><Input.TextArea rows={3} maxLength={2000} showCount /></Form.Item>
       <Button type="primary" htmlType="submit" loading={busy}>儲存回覆</Button>
     </Form>}

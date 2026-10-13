@@ -4,6 +4,8 @@
 `prepare-build` exports clean, exact Git sources and checks the reviewed WMS
 manifest/SUCCESS receipt, then writes four new ERP/Source Docker build recipes.
 It reuses the two fixed WMS images and DOES NOT execute any recipe.
+An explicitly hash-pinned existing Source pair can instead be verified against
+the complete old context and current Git blobs; then only ERP API/Web rebuild.
 `candidate` consumes SUCCESS build receipts and writes Knative Service JSON
 (JSON is a YAML subset). Existing traffic percentages, foreign tags, container
 names/order, IAM annotations, secret references and runtime settings survive.
@@ -51,6 +53,11 @@ WMS_EXISTING_TAGS = {'wms-api': REGISTRY + 'corely-wms-backend:workstation-' + W
                      'wms-web': REGISTRY + 'corely-wms-frontend:dev-' + WMS_MANIFEST_HASH[:12]}
 WMS_EXISTING_DIGESTS = {'wms-api': 'sha256:2045e16a6f9c69945b24a3e8d6335df987d3e9966844fec407e6bbee7ba3e286',
                         'wms-web': 'sha256:0aacc9d550363b48109ad95931a571638d05af890bacb15d3d6b23f009fc618c'}
+SOURCE_EXISTING_SHA = '4592341964ae542e6b9f5a8b578d0deb9acfe7f3'
+SOURCE_EXISTING_BUILD = 'e399c55e-cdc4-4b41-9858-81a39515ebab'
+SOURCE_EXISTING_MANIFEST = '1cfc1c6f611f5c94b4e45018fd026790718d4fa522e7b3543900a5a9bcfdff7f'
+SOURCE_EXISTING_DIGESTS = {SOURCE: 'sha256:4c29269d108ca1183fcc3955e90d3e0dfda29e570df4ae857af52625b8cfa346',
+                           MODULE: 'sha256:80ffadaf8e5979d91fa418c4f66d87136121cd2bc84cec46c23d2d8031887a69'}
 STORAGE_VERSION = '7.19.0'
 ORIGINS = {s: f'https://{s}-sp5g377smq-de.a.run.app' for s in DEV}
 EXISTING_EXTERNAL_REFS = {
@@ -295,6 +302,22 @@ def export_git(root, sha, target, prefix=''):
     return manifest
 
 
+def git_files(root, sha):
+    """Hash current exact Git blobs, never read filtered credential files."""
+    result = []
+    for row in git(root, 'ls-tree', '-r', '-z', sha, binary=True).split(b'\0'):
+        if not row:
+            continue
+        meta, raw_path = row.split(b'\t', 1)
+        mode, kind, object_id = meta.decode().split()
+        path = raw_path.decode()
+        if not allowed_file(path):
+            continue
+        require(kind == 'blob' and mode in {'100644', '100755'}, 'Unsafe Source Git blob')
+        result.append({'path': path, 'sha256': sha256(git(root, 'cat-file', 'blob', object_id, binary=True))})
+    return result
+
+
 def wms_context(root, sha, target=None):
     full_sha(sha)
     manifest = read_json(Path(root) / 'source-manifest.json')
@@ -411,12 +434,68 @@ def existing_wms_proof(raw, config, manifest):
             'supplierRecipe': config}
 
 
-def build_prepare(baseline, pins, erp_root, source_root, wms_root, output, existing_wms_path):
+def source_reuse_options(build, manifest, checksum):
+    require(all(v is not None for v in (build, manifest, checksum)) or all(v is None for v in (build, manifest, checksum)),
+            'Existing Source reuse requires build, manifest and pinned checksum together')
+    return build is not None
+
+
+def existing_source_proof(raw, old, config, manifest_sha, current_sha, source_files):
+    require(manifest_sha == SOURCE_EXISTING_MANIFEST and old['sourcePins']['source'] == current_sha == SOURCE_EXISTING_SHA,
+            'Existing Source frozen manifest/SHA differs')
+    require(source_files == old.get('exportedSourceFiles', {}).get('source') and source_files,
+            'Current Source Git blobs differ from existing immutable context')
+    context_source_files = [{'path': f['path'][len('source/'):], 'sha256': f['sha256']} for f in old['files'] if f['path'].startswith('source/')]
+    # Path.rglob sorting is component based, whereas git tree/string ordering
+    # differs for siblings such as foo.ts and foo/bar.ts. Canonicalize both
+    # lists, retaining duplicates so no extra/missing file can be concealed.
+    require(sorted(context_source_files, key=lambda f: f['path']) == sorted(source_files, key=lambda f: f['path']),
+            'Existing Source Docker/source context differs from exact Git blobs')
+    require(raw.get('id') == SOURCE_EXISTING_BUILD and raw.get('status') == 'SUCCESS' and raw.get('projectId') == PROJECT and
+            raw.get('name') == f'projects/{NAMESPACE}/locations/{REGION}/builds/{SOURCE_EXISTING_BUILD}' and
+            not raw.get('secrets') and not raw.get('availableSecrets'), 'Existing Source SUCCESS regional build identity differs')
+    expected = {step['id']: step for step in config['steps']}
+    actual = {step.get('id'): step for step in raw.get('steps', [])}
+    require(len(expected) == len(config['steps']) and len(actual) == len(raw.get('steps', [])) and
+            set(expected) == set(actual), 'Ambiguous/missing existing Source original build steps')
+    # Bind the entire prior four-image build recipe, although only its two
+    # Source results are reusable. Nothing from its old ERP pair is selected.
+    require(all(found.get('status') == 'SUCCESS' and all(found.get(k) == v for k, v in expected[key].items()) and
+                not any(k in found for k in ('env', 'secretEnv', 'script', 'entrypoint'))
+                for key, found in actual.items()), 'Existing Source original build recipe differs')
+    source_steps, images = {}, {}
+    for key in (SOURCE, MODULE):
+        step = expected.get(key)
+        found = actual.get(key, {})
+        tag = REGISTRY + IMAGE_KEYS[key] + ':doaf-' + current_sha
+        require(step and found.get('status') == 'SUCCESS' and all(found.get(k) == v for k, v in step.items()) and
+                not any(k in found for k in ('env', 'secretEnv', 'script', 'entrypoint')) and
+                'SOURCE_VERSION=' + current_sha in step['args'] and
+                'ERP_MODULE_BUILD=' + ('true' if key == MODULE else 'false') in step['args'] and
+                step.get('dir') == 'source' and tag in raw.get('images', []), 'Existing Source normal/module recipe differs')
+        rows = [row for row in raw.get('results', {}).get('images', []) if row.get('name') == tag]
+        require(len(rows) == 1 and rows[0].get('digest') == SOURCE_EXISTING_DIGESTS[key], 'Existing Source immutable normal/module digest differs')
+        source_steps[key] = step
+        images[key] = {'image': REGISTRY + IMAGE_KEYS[key] + '@' + rows[0]['digest'], 'buildId': SOURCE_EXISTING_BUILD}
+    # The previous manifest also contains ERP f22 images; they are NOT reusable
+    # for this new ERP source. Only these two Source keys enter the new matrix.
+    return {'buildId': SOURCE_EXISTING_BUILD, 'sourceSha': current_sha, 'manifestSha256': manifest_sha,
+            'sourceFiles': source_files, 'sourceSteps': source_steps, 'originalRecipe': config, 'images': images,
+            'description': {**raw, 'region': REGION}, 'previousErpImagesReused': False}
+
+
+def build_prepare(baseline, pins, erp_root, source_root, wms_root, output, existing_wms_path,
+                  existing_source_path=None, existing_source_manifest=None, existing_source_manifest_sha=None):
     refs = snapshot_guard(baseline)
     clean_checkout(erp_root, pins['erp'])
     clean_checkout(source_root, pins['source'])
     wms = wms_context(wms_root, pins['wms'])
     existing_wms = existing_wms_proof(read_json(existing_wms_path), read_json(Path(wms_root) / 'cloudbuild.json'), wms)
+    existing_source = None
+    if source_reuse_options(existing_source_path, existing_source_manifest, existing_source_manifest_sha):
+        old, old_config = verify_build_context(existing_source_manifest, existing_source_manifest_sha)
+        existing_source = existing_source_proof(read_json(existing_source_path), old, old_config, existing_source_manifest_sha,
+                                                pins['source'], git_files(source_root, pins['source']))
     dependencies = package_fingerprints(erp_root, {'api': 'backend', 'web': 'frontend'})
     dependencies.update(package_fingerprints(source_root, {'source': ''}))
     dependencies.update(package_fingerprints(Path(wms_root) / 'build-source', {'wms-api': 'backend', 'wms-web': 'frontend'}))
@@ -441,6 +520,9 @@ def build_prepare(baseline, pins, erp_root, source_root, wms_root, output, exist
         if key.startswith('wms-'):
             images[key] = WMS_EXISTING_TAGS[key]
             continue  # The reviewed SUCCESS build already produced these two.
+        if existing_source and key in (SOURCE, MODULE):
+            images[key] = REGISTRY + repository + ':doaf-' + pins['source']
+            continue  # Reuse only the unchanged Source pair, never old ERP.
         owner = 'wms' if key.startswith('wms-') else 'source' if key in (SOURCE, MODULE) else 'erp'
         image = REGISTRY + repository + ':doaf-' + pins[owner]
         images[key] = image
@@ -457,7 +539,7 @@ def build_prepare(baseline, pins, erp_root, source_root, wms_root, output, exist
         # This preparation favors a deterministic sequential build, not fanout.
         steps.append({'id': key, 'name': 'gcr.io/cloud-builders/docker', 'dir': directory, 'args': args,
                       'waitFor': [steps[-1]['id']] if steps else ['-']})
-    built_keys = [k for k in images if not k.startswith('wms-')]
+    built_keys = [k for k in images if not k.startswith('wms-') and not (existing_source and k in (SOURCE, MODULE))]
     private_json(context / 'cloudbuild.json', {'steps': steps, 'images': [images[k] for k in built_keys], 'timeout': '3600s',
                                               'options': {'logging': 'CLOUD_LOGGING_ONLY', 'machineType': 'E2_HIGHCPU_8'},
                                               'tags': ['doaf-' + pins['erp'][:12]]})
@@ -477,6 +559,8 @@ def build_prepare(baseline, pins, erp_root, source_root, wms_root, output, exist
               'requires': ['Root submits exact context; SUCCESS immutable digests', 'separate reviewed DEV migration receipts',
                            'fresh nine-service resourceVersion check before each replacement', 'promote normal Source canonical before ERP candidate flow testing',
                            'authenticated six-case acceptance; stubs are not invoice/LINE delivery']}
+    if existing_source:
+        record['existingSource'] = existing_source
     private_json(folder / 'build-manifest.private.json', record)
     clean_checkout(erp_root, pins['erp'])
     clean_checkout(source_root, pins['source'])
@@ -518,6 +602,21 @@ def verify_build_context(manifest_path, expected_sha256):
         existing = manifest['existingWms']
         require(existing_wms_proof(existing['description'], existing['supplierRecipe'], manifest['wmsManifest']) == existing,
                 'Existing WMS evidence changed')
+    if manifest.get('existingSource'):
+        existing = manifest['existingSource']
+        require(existing.get('sourceSha') == manifest['sourcePins']['source'] == SOURCE_EXISTING_SHA and
+                existing.get('manifestSha256') == SOURCE_EXISTING_MANIFEST and
+                existing.get('buildId') == SOURCE_EXISTING_BUILD and existing.get('previousErpImagesReused') is False and
+                set(existing.get('images', {})) == {SOURCE, MODULE} and
+                existing.get('sourceFiles') == manifest.get('exportedSourceFiles', {}).get('source'),
+                'Existing Source retained evidence differs')
+        old_like = {'sourcePins': {'source': existing['sourceSha']}, 'exportedSourceFiles': {'source': existing['sourceFiles']},
+                    'files': [{'path': 'source/' + f['path'], 'sha256': f['sha256']} for f in sorted(existing['sourceFiles'], key=lambda f: f['path'])]}
+        proof = existing_source_proof(existing['description'], old_like, existing['originalRecipe'],
+                                       existing['manifestSha256'], manifest['sourcePins']['source'], existing['sourceFiles'])
+        require(proof == existing and len(built_keys) == 2 and set(built_keys) == {API, WEB} and
+                len(config['steps']) == 2 and {step.get('id') for step in config['steps']} == {API, WEB},
+                'Reused Source cannot enter new build steps or reuse old ERP')
     return manifest, config
 
 
@@ -529,6 +628,10 @@ def success_build_receipt(manifest_path, expected_sha256, build_paths, output):
     if existing:
         images.update(existing['images'])
         builds[existing['buildId']] = existing['description']
+    existing_source = manifest.get('existingSource')
+    if existing_source:
+        images.update(existing_source['images'])
+        builds[existing_source['buildId']] = existing_source['description']
     for path in build_paths:
         # Read-only GCloud captures must carry their explicitly selected region.
         # No mutable image, missing regional provenance or secret-bearing build
@@ -560,6 +663,8 @@ def success_build_receipt(manifest_path, expected_sha256, build_paths, output):
                'preparedManifestSha256': expected_sha256, 'preparedContextSha256': manifest['contextSha256']}
     if existing:
         receipt['existingWms'] = existing
+    if existing_source:
+        receipt['existingSource'] = existing_source
     build_images(receipt, manifest['sourcePins'])
     private_json(output, receipt)
     return receipt
@@ -579,6 +684,17 @@ def build_images(receipt, pins):
         build = builds.get(row['buildId'], {})
         require(build.get('status') == 'SUCCESS' and build.get('projectId') == PROJECT and build.get('region') == REGION,
                 'Candidate needs an exact successful regional build receipt')
+        if receipt.get('existingSource'):
+            existing_source = receipt['existingSource']
+            if key in (API, WEB):
+                require(row['buildId'] != existing_source['buildId'], 'Previous ERP images cannot be reused from the Source build')
+            if key in (SOURCE, MODULE):
+                require(row == existing_source['images'].get(key) and row['buildId'] == SOURCE_EXISTING_BUILD and
+                        row['image'].split('@')[-1] == SOURCE_EXISTING_DIGESTS[key] and
+                        existing_source.get('sourceSha') == pins['source'] == SOURCE_EXISTING_SHA and
+                        existing_source.get('manifestSha256') == SOURCE_EXISTING_MANIFEST and
+                        existing_source.get('previousErpImagesReused') is False,
+                        'Existing Source exact build/source/digest proof differs')
         owner = 'wms' if key.startswith('wms-') else 'source' if key in (SOURCE, MODULE) else 'erp'
         tag = WMS_EXISTING_TAGS[key] if receipt.get('existingWms') and key.startswith('wms-') else REGISTRY + IMAGE_KEYS[key] + ':doaf-' + pins[owner]
         require(tag in build.get('images', []) and any(r.get('name') == tag and r.get('digest') == row['image'].split('@')[-1]
@@ -762,6 +878,12 @@ def main():
         else:
             p.add_argument('--existing-wms-build', type=Path, required=True,
                            help='Raw regional SUCCESS describe for the pinned supplier build; WMS is reused, not rebuilt')
+            p.add_argument('--existing-source-build', type=Path,
+                           help='Optional raw regional SUCCESS describe for the exact reviewed Source pair; all three Source options required')
+            p.add_argument('--existing-source-manifest', type=Path,
+                           help='Immutable original four-image prepared manifest; previous ERP images are never reused')
+            p.add_argument('--existing-source-manifest-sha256',
+                           help='Explicit original Source manifest SHA256; complete context/Git blobs are checked')
     fresh = commands.add_parser('verify-fresh')
     fresh.add_argument('--expected', type=Path, required=True)
     fresh.add_argument('--observed', type=Path, required=True)
@@ -794,7 +916,8 @@ def main():
     pins = source_pins(args.erp_sha, args.source_sha, args.wms_sha)
     baseline = read_json(args.baseline)
     if args.command == 'prepare-build':
-        result = build_prepare(baseline, pins, args.erp_root, args.source_root, args.wms_root, args.output, args.existing_wms_build)
+        result = build_prepare(baseline, pins, args.erp_root, args.source_root, args.wms_root, args.output, args.existing_wms_build,
+                               args.existing_source_build, args.existing_source_manifest, args.existing_source_manifest_sha256)
     else:
         result = candidate_prepare(baseline, pins, read_json(args.images_receipt), args.erp_root, args.source_root,
                                    args.wms_root, args.output, args.stage, args.pairing)

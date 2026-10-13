@@ -635,7 +635,12 @@ export function transition(
       break;
     case 'await_customer':
       requireRepairOwner();
-      requireStage('REPAIR_RECEIVED', 'INSPECTING', 'REPAIRING');
+      requireStage(
+        'REPAIR_RECEIVED',
+        'INSPECTING',
+        'REPAIRING',
+        ...(item.receipt.category === 'RETURN' ? ['REFURBISHING'] : []),
+      );
       requireNote();
       changes.status = 'WAITING_CUSTOMER';
       changes.conditionNote = note;

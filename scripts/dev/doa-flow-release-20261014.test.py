@@ -440,6 +440,233 @@ class FlowReleaseTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     r.existing_wms_proof(wrong, config, manifest)
 
+    def existing_source_fixture(self):
+        # These sibling paths exercise Git/string versus component-based Path
+        # sorting without relying on a real checkout or reading private files.
+        content = {'Dockerfile': b'FROM synthetic\nARG SOURCE_VERSION\nARG ERP_MODULE_BUILD\n',
+                   'lib/a.ts': b'export const synthetic = true;\n', 'lib/a/a.ts': b'export {};\n'}
+        source_files = [{'path': name, 'sha256': r.sha256(value)} for name, value in content.items()]
+        steps, tags = [], {}
+        for key in (r.API, r.WEB, r.SOURCE, r.MODULE):
+            sha = r.SOURCE_EXISTING_SHA if key in (r.SOURCE, r.MODULE) else 'f' * 40
+            tag = r.REGISTRY + r.IMAGE_KEYS[key] + ':doaf-' + sha
+            tags[key] = tag
+            args = ['build', '-t', tag]
+            if key in (r.SOURCE, r.MODULE):
+                args += ['--build-arg', 'SOURCE_VERSION=' + sha, '--build-arg',
+                         'ERP_MODULE_BUILD=' + ('true' if key == r.MODULE else 'false')]
+            steps.append({'id': key, 'name': 'gcr.io/cloud-builders/docker', 'args': args + ['.'],
+                          'dir': 'source' if key in (r.SOURCE, r.MODULE) else key,
+                          'waitFor': [steps[-1]['id']] if steps else ['-']})
+        config = {'steps': steps, 'images': list(tags.values())}
+        raw = {'id': r.SOURCE_EXISTING_BUILD, 'status': 'SUCCESS', 'projectId': r.PROJECT,
+               'name': f'projects/{r.NAMESPACE}/locations/{r.REGION}/builds/{r.SOURCE_EXISTING_BUILD}',
+               'steps': [{**step, 'status': 'SUCCESS'} for step in steps], 'images': config['images'],
+               'results': {'images': [{'name': tag, 'digest': r.SOURCE_EXISTING_DIGESTS.get(key, 'sha256:' + 'f' * 64)}
+                                      for key, tag in tags.items()]}}
+        old = {'sourcePins': {'erp': 'f' * 40, 'source': r.SOURCE_EXISTING_SHA},
+               'exportedSourceFiles': {'source': source_files},
+               'files': [{'path': 'source/' + row['path'], 'sha256': row['sha256']} for row in reversed(source_files)]}
+        return raw, old, config, source_files, content
+
+    def test_source_reuse_requires_all_three_explicit_options(self):
+        self.assertFalse(r.source_reuse_options(None, None, None))
+        self.assertTrue(r.source_reuse_options('raw.json', 'manifest.json', 'f' * 64))
+        for mask in range(1, 7):
+            supplied = ['synthetic' if mask & (1 << n) else None for n in range(3)]
+            with self.subTest(mask=mask), self.assertRaisesRegex(RuntimeError, 'together'):
+                r.source_reuse_options(*supplied)
+
+    def test_source_reuse_full_context_matches_current_git_despite_path_ordering(self):
+        raw, old, config, files, _ = self.existing_source_fixture()
+        proof = r.existing_source_proof(raw, old, config, r.SOURCE_EXISTING_MANIFEST, r.SOURCE_EXISTING_SHA, files)
+        self.assertEqual(set(proof['images']), {r.SOURCE, r.MODULE})
+        self.assertFalse(proof['previousErpImagesReused'])
+        self.assertNotIn(r.API, proof['images'])
+        self.assertEqual(proof['sourceFiles'], files)
+        self.assertEqual(proof['sourceSteps'][r.MODULE]['dir'], 'source')
+
+    def test_source_reuse_rejects_sha_and_manifest_hash_drift(self):
+        raw, old, config, files, _ = self.existing_source_fixture()
+        for checksum, source_sha in (('0' * 64, r.SOURCE_EXISTING_SHA), (r.SOURCE_EXISTING_MANIFEST, 'b' * 40)):
+            with self.assertRaisesRegex(RuntimeError, 'manifest/SHA'):
+                r.existing_source_proof(raw, old, config, checksum, source_sha, files)
+        changed = copy.deepcopy(old)
+        changed['sourcePins']['source'] = 'b' * 40
+        with self.assertRaises(RuntimeError):
+            r.existing_source_proof(raw, changed, config, r.SOURCE_EXISTING_MANIFEST, r.SOURCE_EXISTING_SHA, files)
+
+    def test_source_reuse_rejects_modified_git_blobs_missing_extra_and_duplicate_context(self):
+        raw, old, config, files, _ = self.existing_source_fixture()
+        wrong_git = copy.deepcopy(files)
+        wrong_git[0]['sha256'] = '0' * 64
+        with self.assertRaisesRegex(RuntimeError, 'Git blobs'):
+            r.existing_source_proof(raw, old, config, r.SOURCE_EXISTING_MANIFEST, r.SOURCE_EXISTING_SHA, wrong_git)
+        modifications = [lambda m: m['files'][0].update(sha256='0' * 64),
+                         lambda m: m['files'].pop(),
+                         lambda m: m['files'].append({'path': 'source/extra.ts', 'sha256': '0' * 64}),
+                         lambda m: m['files'].append(copy.deepcopy(m['files'][0]))]
+        for change in modifications:
+            wrong = copy.deepcopy(old)
+            change(wrong)
+            with self.assertRaisesRegex(RuntimeError, 'context differs'):
+                r.existing_source_proof(raw, wrong, config, r.SOURCE_EXISTING_MANIFEST, r.SOURCE_EXISTING_SHA, files)
+
+    def test_source_reuse_failed_foreign_or_nonregional_build_and_secret_steps_refused(self):
+        raw, old, config, files, _ = self.existing_source_fixture()
+        changes = [lambda d: d.update(status='FAILURE'), lambda d: d.update(id=BUILD_ID),
+                   lambda d: d.update(projectId='foreign-project'),
+                   lambda d: d.update(name=d['name'].replace('asia-east1', 'global')),
+                   lambda d: d.update(availableSecrets={'secretManager': ['do-not-read']}),
+                   lambda d: d['steps'][2].update(secretEnv=['PRIVATE_TOKEN']),
+                   lambda d: d['steps'][3].update(status='QUEUED')]
+        for change in changes:
+            wrong = copy.deepcopy(raw)
+            change(wrong)
+            with self.assertRaises(RuntimeError):
+                r.existing_source_proof(wrong, old, config, r.SOURCE_EXISTING_MANIFEST, r.SOURCE_EXISTING_SHA, files)
+
+    def test_source_reuse_exact_normal_module_args_and_both_digests_required(self):
+        raw, old, config, files, _ = self.existing_source_fixture()
+        changes = [lambda d: d['steps'].pop(), lambda d: d['steps'].append(copy.deepcopy(d['steps'][2])),
+                   lambda d: d['steps'][0]['args'].append('--modified-old-erp-recipe'),
+                   lambda d: d['steps'][2].update(dir='other-source'),
+                   lambda d: d['steps'][3]['args'].append('--different-build'),
+                   lambda d: d['results']['images'].pop(),
+                   lambda d: d['results']['images'][2].update(digest='sha256:' + '0' * 64),
+                   lambda d: d['images'].remove(config['images'][3])]
+        for change in changes:
+            wrong = copy.deepcopy(raw)
+            change(wrong)
+            with self.assertRaises(RuntimeError):
+                r.existing_source_proof(wrong, old, config, r.SOURCE_EXISTING_MANIFEST, r.SOURCE_EXISTING_SHA, files)
+
+    def prepare_build_fixture(self, reuse=False):
+        source_raw, old, old_config, files, content = self.existing_source_fixture()
+        wms_raw, wms_config, wms_manifest = self.existing_wms_fixture()
+        source_capture = self.directory / 'existing-source.json'
+        wms_capture = self.directory / 'existing-wms.json'
+        wms_root = self.directory / 'wms'
+        wms_root.mkdir()
+        r.private_json(source_capture, source_raw)
+        r.private_json(wms_capture, wms_raw)
+        r.private_json(wms_root / 'cloudbuild.json', wms_config)
+        pins = {**PINS, 'source': r.SOURCE_EXISTING_SHA}
+
+        def export(_root, _sha, destination, prefix=''):
+            Path(destination).mkdir(parents=True, mode=0o700)
+            data = content if not prefix else {'package.json': b'{}'}
+            for name, value in data.items():
+                r.private_write(Path(destination) / name, value)
+            return [{'path': name, 'sha256': r.sha256(value)} for name, value in data.items()]
+
+        dependencies = {'api': {'storageDeclared': r.STORAGE_VERSION, 'storageResolved': r.STORAGE_VERSION}}
+        patches = [patch.object(r, 'clean_checkout'), patch.object(r, 'wms_context', return_value=wms_manifest),
+                   patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))),
+                   patch.object(r, 'package_fingerprints', return_value=dependencies),
+                   patch.object(r, 'migration_hashes', return_value={}), patch.object(r, 'export_git', side_effect=export),
+                   patch.object(r, 'git_files', return_value=files), patch.object(r, 'verify_build_context', return_value=(old, old_config))]
+        for mocked in patches:
+            mocked.start()
+        try:
+            options = (source_capture, self.directory / 'frozen-manifest.json', r.SOURCE_EXISTING_MANIFEST) if reuse else ()
+            manifest = r.build_prepare(self.live, pins, self.directory, self.directory, wms_root,
+                                       self.directory / 'prepared', wms_capture, *options)
+        finally:
+            for mocked in reversed(patches):
+                mocked.stop()
+        return manifest, pins, wms_manifest
+
+    def test_default_prepare_still_builds_four_new_images(self):
+        manifest, _, wms_manifest = self.prepare_build_fixture()
+        config = r.read_json(Path(manifest['buildContext']) / 'cloudbuild.json')
+        self.assertEqual(manifest['builtImageKeys'], [r.API, r.WEB, r.SOURCE, r.MODULE])
+        self.assertEqual([step['id'] for step in config['steps']], manifest['builtImageKeys'])
+        self.assertEqual(len(config['images']), 4)
+        self.assertNotIn('existingSource', manifest)
+        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+            path = Path(manifest['buildContext']).parent / 'build-manifest.private.json'
+            self.assertEqual(r.verify_build_context(path, r.sha256(path.read_bytes()))[0], manifest)
+
+    def source_reuse_prepared_fixture(self):
+        manifest, pins, wms_manifest = self.prepare_build_fixture(reuse=True)
+        config = r.read_json(Path(manifest['buildContext']) / 'cloudbuild.json')
+        raw = {'id': BUILD_ID, 'status': 'SUCCESS', 'projectId': r.PROJECT,
+               'steps': [{**step, 'status': 'SUCCESS'} for step in config['steps']], 'images': config['images'],
+               'results': {'images': [{'name': name, 'digest': 'sha256:' + '2' * 64} for name in config['images']]}}
+        capture = self.directory / 'two-new-erp.json'
+        r.private_json(capture, {'region': r.REGION, 'description': raw})
+        path = Path(manifest['buildContext']).parent / 'build-manifest.private.json'
+        return manifest, pins, wms_manifest, config, capture, path
+
+    def test_source_reuse_only_two_new_erp_steps_produce_complete_six_digest_matrix(self):
+        manifest, pins, wms_manifest, config, capture, path = self.source_reuse_prepared_fixture()
+        self.assertEqual(manifest['builtImageKeys'], [r.API, r.WEB])
+        self.assertEqual([step['id'] for step in config['steps']], [r.API, r.WEB])
+        self.assertEqual(config['steps'][1]['waitFor'], [r.API])
+        self.assertEqual(len(config['images']), 2)
+        self.assertFalse(manifest['existingSource']['previousErpImagesReused'])
+        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+            receipt = r.success_build_receipt(path, r.sha256(path.read_bytes()), [capture], self.directory / 'combined-six.json')
+        self.assertEqual(len(receipt['images']), 6)
+        self.assertEqual(set(receipt['builds']), {BUILD_ID, r.SOURCE_EXISTING_BUILD, r.WMS_EXISTING_BUILD})
+        self.assertEqual(receipt['images'][r.API]['buildId'], BUILD_ID)
+        self.assertEqual(receipt['images'][r.SOURCE]['buildId'], r.SOURCE_EXISTING_BUILD)
+        self.assertEqual(receipt['images'][r.MODULE]['image'].split('@')[-1], r.SOURCE_EXISTING_DIGESTS[r.MODULE])
+        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+            self.assertEqual(r.build_images(receipt, pins)[r.WEB], image(r.WEB, '2'))
+
+    def test_reused_source_manifest_retained_recipe_or_build_keys_tamper_refused(self):
+        manifest, _, wms_manifest, _, _, path = self.source_reuse_prepared_fixture()
+        for change in (lambda d: d['existingSource'].update(previousErpImagesReused=True),
+                       lambda d: d['existingSource']['sourceSteps'][r.MODULE]['args'].append('--modified'),
+                       lambda d: d['builtImageKeys'].append(r.SOURCE),
+                       lambda d: d['existingSource'].update(manifestSha256='0' * 64)):
+            wrong = copy.deepcopy(manifest)
+            change(wrong)
+            path.write_text(json.dumps(wrong))
+            with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))), self.assertRaises(RuntimeError):
+                r.verify_build_context(path, r.sha256(path.read_bytes()))
+
+    def test_reused_source_cannot_be_added_to_new_build_steps(self):
+        manifest, _, wms_manifest, config, _, path = self.source_reuse_prepared_fixture()
+        context = Path(manifest['buildContext'])
+        config['steps'].append(manifest['existingSource']['sourceSteps'][r.SOURCE])
+        (context / 'cloudbuild.json').write_text(json.dumps(config))
+        manifest['files'] = r.file_manifest(context)
+        manifest['contextSha256'] = r.sha256(r.canonical(manifest['files']))
+        path.write_text(json.dumps(manifest))
+        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))), self.assertRaisesRegex(RuntimeError, 'new build steps'):
+            r.verify_build_context(path, r.sha256(path.read_bytes()))
+
+    def test_reuse_stale_erp_digest_or_missing_source_pair_never_becomes_candidate(self):
+        _, pins, wms_manifest, _, capture, path = self.source_reuse_prepared_fixture()
+        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+            receipt = r.success_build_receipt(path, r.sha256(path.read_bytes()), [capture], self.directory / 'valid-six.json')
+        stale = copy.deepcopy(receipt)
+        stale['images'][r.API] = {'image': image(r.API, 'f'), 'buildId': r.SOURCE_EXISTING_BUILD}
+        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))), self.assertRaisesRegex(RuntimeError, 'Previous ERP'):
+            r.build_images(stale, pins)
+        for change in (lambda d: d['images'].pop(r.MODULE),
+                       lambda d: d['sourcePins'].update(source='b' * 40),
+                       lambda d: d['images'][r.MODULE].update(image=image(r.MODULE, '2')),
+                       lambda d: d['builds'][r.SOURCE_EXISTING_BUILD].update(status='FAILURE')):
+            wrong = copy.deepcopy(receipt)
+            change(wrong)
+            with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))), self.assertRaises(RuntimeError):
+                r.build_images(wrong, pins)
+
+    def test_source_git_blob_reader_filters_secrets_before_reading_and_rejects_symlink(self):
+        row = ('100644 blob ' + 'a' * 40 + '\tDockerfile\0' +
+               '100644 blob ' + 'b' * 40 + '\t.env.production\0').encode()
+        with patch.object(r, 'git', side_effect=[row, b'FROM synthetic']) as local:
+            self.assertEqual(r.git_files(self.directory, r.SOURCE_EXISTING_SHA),
+                             [{'path': 'Dockerfile', 'sha256': r.sha256(b'FROM synthetic')}])
+            self.assertEqual(local.call_count, 2)
+        with patch.object(r, 'git', return_value=('120000 blob ' + 'a' * 40 + '\tDockerfile\0').encode()):
+            with self.assertRaisesRegex(RuntimeError, 'Unsafe Source Git blob'):
+                r.git_files(self.directory, r.SOURCE_EXISTING_SHA)
+
 
 if __name__ == '__main__':
     unittest.main()

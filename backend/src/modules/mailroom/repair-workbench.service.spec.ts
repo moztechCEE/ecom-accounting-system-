@@ -4,7 +4,19 @@ import { validate } from 'class-validator';
 import { RepairWorkbenchService } from './repair-workbench.service';
 import { SaveInspectionDto, SaveRepairDto } from './repair-document.dto';
 import { RepairPrerequisitesService } from './repair-prerequisites.service';
-import { type Actor } from './mailroom.contract';
+import { type Actor, type SourceCase } from './mailroom.contract';
+import { type PrismaService } from '../../common/prisma/prisma.service';
+import { type MailroomService } from './mailroom.service';
+import { type MailroomSyncService } from './mailroom-sync.service';
+import {
+  inspectionPlanHash,
+  type InspectionDocument,
+} from './repair-document.contract';
+import {
+  sentCustomerWorkflow,
+  type RepairWorkflow,
+} from './repair-workflow.contract';
+import { type RepairWorkflowDto } from './repair-workflow.dto';
 
 const actor = (
   permissions = ['repair_workbench:read', 'repair_workbench:update'],
@@ -181,6 +193,266 @@ describe('RepairWorkbenchService document authorization, versions and release co
         completionCalibrationRecords: [],
       }),
     } as unknown as RepairPrerequisitesService);
+  });
+
+  type CsrFixtureRow = {
+    id: string;
+    entityId: string;
+    status: string;
+    version: number;
+    repairOwnerId: string;
+    custodianId: string;
+    receipt: {
+      category: string;
+      sourceCaseId: string | null;
+      customerServiceUserId?: string;
+    };
+    repairInspection: InspectionDocument;
+    repairWorkflow: RepairWorkflow & {
+      csr: NonNullable<RepairWorkflow['csr']>;
+    };
+  };
+  const csrRow = () => row as CsrFixtureRow;
+  const actorStub = () =>
+    (mailroom as { actor: jest.Mock<Promise<Actor>, []> }).actor;
+  const sourceStub = () =>
+    (
+      sync as {
+        cases: jest.Mock<Promise<{ items: Partial<SourceCase>[] }>, []>;
+      }
+    ).cases;
+  const updateStub = () =>
+    (prisma as { mailroomItem: { update: jest.Mock<Promise<unknown>, []> } })
+      .mailroomItem.update;
+  const recordStub = () =>
+    (mailroom as { record: jest.Mock<Promise<unknown>, []> }).record;
+  const employeeStub = () =>
+    (
+      prisma as {
+        employee: { findFirst: jest.Mock<Promise<{ id: string } | null>, []> };
+      }
+    ).employee.findFirst;
+
+  function csrReview(
+    category: 'REPAIR' | 'RETURN',
+    sourceCaseId: string | null,
+  ) {
+    const doc: InspectionDocument = {
+      number: 'INS-COMPANY-RETURN',
+      revision: 3,
+      status: 'SUBMITTED',
+      authorId: 'tech',
+      authorName: 'tech',
+      updatedAt: '2026-10-14T00:00:00Z',
+      data: structuredClone(inspectionData),
+    };
+    Object.assign(csrRow(), {
+      status: 'WAITING_CUSTOMER',
+      receipt: { category, sourceCaseId, customerServiceUserId: 'csr' },
+      repairInspection: doc,
+    });
+    const workflow = sentCustomerWorkflow(
+      csrRow(),
+      actor(),
+      '2026-10-14T00:00:00Z',
+      category === 'RETURN' ? null : 4,
+    );
+    csrRow().repairWorkflow = {
+      ...workflow,
+      csr: {
+        ...workflow.csr,
+        status: 'ACCEPTED',
+        ownerId: 'csr',
+        acceptedAt: '2026-10-14T00:01:00Z',
+        sourceVersion: 'historical-source-version',
+      },
+    };
+    actorStub().mockResolvedValue({
+      ...actor(['mailroom:review']),
+      id: 'csr',
+    });
+    (
+      prisma as {
+        employee: { findFirst: jest.Mock<Promise<{ id: string } | null>, []> };
+      }
+    ).employee = {
+      findFirst: jest
+        .fn<Promise<{ id: string } | null>, []>()
+        .mockResolvedValue({ id: 'active-csr' }),
+    };
+    if (category === 'RETURN')
+      sourceStub().mockResolvedValue({
+        items: [
+          {
+            id: 'source-case',
+            type: 'RETURN',
+            version: 'return-source-version',
+            repairAllowed: false,
+          },
+        ],
+      });
+    return {
+      entityId: 'company',
+      requestId: 'company-review-001',
+      expectedVersion: 5,
+      action: 'resolve_customer',
+      inspectionRevision: doc.revision,
+      decision: 'APPROVE',
+      note: '公司退貨整新方案已核對',
+    } satisfies RepairWorkflowDto;
+  }
+
+  it('approves a current linked company RETURN with explicit null quote and fresh Source identity, preserving real start prerequisites', async () => {
+    const command = csrReview('RETURN', 'source-case');
+    const prerequisites = {
+      require: jest.fn().mockResolvedValue(undefined),
+    };
+    service = new RepairWorkbenchService(
+      prisma as PrismaService,
+      mailroom as MailroomService,
+      sync as MailroomSyncService,
+      prerequisites as unknown as RepairPrerequisitesService,
+    );
+    await expect(service.workflow('csr', 'piece', command)).resolves.toEqual({
+      id: 'piece',
+      duplicate: false,
+    });
+    expect(sourceStub()).toHaveBeenCalledWith('company', '', 'source-case');
+    expect(csrRow().status).toBe('INSPECTING');
+    expect(csrRow().custodianId).toBe('tech');
+    expect(csrRow().repairOwnerId).toBe('tech');
+    expect(csrRow().repairWorkflow.csr).toMatchObject({
+      status: 'RESOLVED',
+      ownerId: 'csr',
+      decision: 'APPROVE',
+      inspectionRevision: 3,
+      estimateRevision: 3,
+      quoteRevision: null,
+      planHash: inspectionPlanHash(csrRow().repairInspection),
+    });
+    expect(csrRow().repairWorkflow.csr.sourceVersion).toBe(
+      'return-source-version',
+    );
+    expect(csrRow().repairInspection.review!.quoteRevision).toBeNull();
+    expect(csrRow().repairInspection.review!.planHash).toBe(
+      inspectionPlanHash(csrRow().repairInspection),
+    );
+    await expect(service.workflow('csr', 'piece', command)).resolves.toEqual({
+      id: 'piece',
+      duplicate: true,
+    });
+    expect(updateStub()).toHaveBeenCalledTimes(1);
+    actorStub().mockResolvedValue(actor());
+    const start: RepairWorkflowDto = {
+      entityId: 'company',
+      requestId: 'company-start-001',
+      expectedVersion: csrRow().version,
+      action: 'start_refurbishment',
+      note: '本人開始整新',
+    };
+    prerequisites.require.mockRejectedValueOnce(
+      new Error('material or registry blocked'),
+    );
+    await expect(service.workflow('tech', 'piece', start)).rejects.toThrow(
+      'material or registry blocked',
+    );
+    expect(updateStub()).toHaveBeenCalledTimes(1);
+    await service.workflow('tech', 'piece', start);
+    expect(prerequisites.require).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'piece', entityId: 'company' }),
+      'START',
+      prisma,
+    );
+    expect(csrRow().status).toBe('REFURBISHING');
+    expect(csrRow().repairWorkflow.workStart).toMatchObject({
+      kind: 'REFURBISHMENT',
+      ownerId: 'tech',
+      custodianId: 'tech',
+      startedById: 'tech',
+    });
+    expect(sourceStub()).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects stale linked RETURN document, changed plan hash or inactive CSR before approval', async () => {
+    const command = csrReview('RETURN', 'source-case');
+    await expect(
+      service.workflow('csr', 'piece', { ...command, inspectionRevision: 2 }),
+    ).rejects.toThrow('版本');
+    csrRow().repairInspection.data.planNote = 'new plan after handoff';
+    await expect(service.workflow('csr', 'piece', command)).rejects.toThrow(
+      '版本',
+    );
+    csrRow().repairInspection.data.planNote = inspectionData.planNote;
+    employeeStub().mockResolvedValue(null);
+    await expect(service.workflow('csr', 'piece', command)).rejects.toThrow(
+      '在職員工',
+    );
+    expect(updateStub()).not.toHaveBeenCalled();
+    expect(recordStub()).not.toHaveBeenCalled();
+    expect(sourceStub()).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps unlinked RETURN unsupported and rejects missing or wrong fresh Source before approval', async () => {
+    let command = csrReview('RETURN', null);
+    await expect(service.workflow('csr', 'piece', command)).rejects.toThrow(
+      '沒有售後來源案件',
+    );
+    expect(sourceStub()).not.toHaveBeenCalled();
+    command = csrReview('RETURN', 'source-case');
+    const invalidSources: Partial<SourceCase>[][] = [
+      [],
+      [{ id: 'source-case', type: 'REPAIR' }],
+      [{ id: 'foreign-source', type: 'RETURN' }],
+    ];
+    for (const items of invalidSources) {
+      sourceStub().mockResolvedValue({ items });
+      await expect(service.workflow('csr', 'piece', command)).rejects.toThrow(
+        '來源案件不存在或類別不符',
+      );
+    }
+    expect(updateStub()).not.toHaveBeenCalled();
+    expect(recordStub()).not.toHaveBeenCalled();
+  });
+
+  it('retains REPAIR fresh Source requirements even when a local current CSR review is available', async () => {
+    let command = csrReview('REPAIR', null);
+    await expect(service.workflow('csr', 'piece', command)).rejects.toThrow(
+      '沒有售後來源案件',
+    );
+    command = csrReview('REPAIR', 'source-case');
+    sourceStub().mockResolvedValue({ items: [] });
+    await expect(service.workflow('csr', 'piece', command)).rejects.toThrow(
+      '來源案件不存在',
+    );
+    sourceStub().mockResolvedValue({
+      items: [{ id: 'source-case', type: 'REPAIR', repairAllowed: true }],
+    });
+    await expect(service.workflow('csr', 'piece', command)).rejects.toThrow();
+    expect(sourceStub()).toHaveBeenCalledWith('company', '', 'source-case');
+    expect(updateStub()).not.toHaveBeenCalled();
+    expect(recordStub()).not.toHaveBeenCalled();
+  });
+
+  it('keeps factory dispatch Source-backed after linked RETURN review', async () => {
+    const command = csrReview('RETURN', 'source-case');
+    csrRow().repairInspection.data.plan = 'FACTORY';
+    csrRow().repairWorkflow.csr.planHash = inspectionPlanHash(
+      csrRow().repairInspection,
+    );
+    await service.workflow('csr', 'piece', command);
+    actorStub().mockResolvedValue(actor());
+    sourceStub().mockResolvedValue({ items: [] });
+    await expect(
+      service.workflow('tech', 'piece', {
+        entityId: 'company',
+        requestId: 'company-factory-001',
+        expectedVersion: csrRow().version,
+        action: 'send_factory',
+        note: 'request factory handling',
+      }),
+    ).rejects.toThrow('來源案件不存在或類別不符');
+    expect(updateStub()).toHaveBeenCalledTimes(1);
+    expect(sourceStub()).toHaveBeenCalledTimes(2);
   });
 
   it.each([

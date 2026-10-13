@@ -38,6 +38,30 @@ const item: ItemState = {
 };
 const cmd = { entityId: 'tw', requestId: 'request-1', expectedVersion: 1 };
 describe('Mailroom physical custody and permissions', () => {
+  it('allows the signed-in return technician to submit the refurbishment plan for CSR review before work starts', () => {
+    const returned = {
+      ...item,
+      status: 'REFURBISHING',
+      custodianId: repair.id,
+      repairOwnerId: repair.id,
+      receipt: { ...item.receipt, category: 'RETURN' },
+    };
+    const command = { ...cmd, action: 'await_customer', note: '整新方案待客服審核' };
+    const changes = transition(returned, command, repair).changes;
+    expect(changes).toMatchObject({ status: 'WAITING_CUSTOMER' });
+    expect(changes).not.toHaveProperty('custodianId');
+    expect(changes).not.toHaveProperty('repairOwnerId');
+    expect(() => transition(returned, command, mail)).toThrow();
+    expect(() => transition(returned, { ...command, expectedVersion: 2 }, repair)).toThrow('資料已更新');
+    expect(() => transition({ ...returned, custodianId: mail.id }, command, repair)).toThrow();
+  });
+  it('does not admit a repair case into the return refurbishment review stage', () => {
+    expect(() => transition(
+      { ...item, status: 'REFURBISHING', custodianId: repair.id, repairOwnerId: repair.id },
+      { ...cmd, action: 'await_customer', note: '錯誤類別' },
+      repair,
+    )).toThrow();
+  });
   it('requires inspection before repair pickup, and refuses a stale click', () => {
     expect(() =>
       transition(

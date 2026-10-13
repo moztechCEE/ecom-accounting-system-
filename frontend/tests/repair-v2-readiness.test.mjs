@@ -132,6 +132,13 @@ test('company refurbishment starts through its own current CSR, physical and sta
     const wrong=structuredClone(value);mutate(wrong);assert(!nextstep.repairWorkflowGate(wrong,'start_refurbishment',context).ready);assert(!repairReadiness(wrong,context).startReady);
   }
 });
+test('company RETURN after CSR approval exposes only its refurbishment workflow, never generic customer repair start',()=>{
+  const value=companyItem();value.status='INSPECTING';
+  const actions=nextstep.repairNextStepActions(value,{...context,note:'Actual company handoff'});
+  assert(!actions.some(action=>action.name==='start_repair'));
+  assert(nextstep.repairWorkflowGate(value,'start_refurbishment',context).ready);
+  const customer=item();assert(nextstep.repairNextStepActions(customer,{...context,note:'Actual customer handoff'}).some(action=>action.name==='start_repair'&&!action.disabled));
+});
 test('old REFURBISHING status and passing QC cannot substitute for server current work-start evidence',()=>{
   const value=companyItem();assert(model.repairReportReady(value));assert(!repairReadiness(value,context).completionReady);
   for(const workStart of [undefined,{state:'UNKNOWN',reason:'UNAVAILABLE'},{state:'BLOCKED',reason:'OLD_REVISION'}]){

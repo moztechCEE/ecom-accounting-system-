@@ -45,7 +45,7 @@ export function repairNextStepActions(item:RepairItem,context:RepairNextStepCont
   if(own && item.status==='REPAIR_RECEIVED')actions.push({name:'start_inspection',label:'開始檢測'});
   const companyPreStart=item.receipt.category==='RETURN' && item.status==='REFURBISHING' && !sourceWorkStartCurrent(item);
   if(own && !disposition && (['REPAIR_RECEIVED','INSPECTING','REPAIRING'].includes(item.status) || companyPreStart))actions.push({name:'await_customer',label:'送客服確認',disabled:!submitted || !context.note?.trim() || !item.receipt.customerServiceUserId,reason:!submitted?'請先提交檢修單':!item.receipt.customerServiceUserId?'請指派承辦客服':'請填交辦說明'});
-  if(own && !disposition && item.status==='INSPECTING' && ['REPAIR','REPLACE'].includes(item.repairInspection?.data.plan || ''))actions.push({name:'start_repair',label:item.repairInspection?.data.plan==='REPLACE'?'開始換機':'開始維修',disabled:!readiness.startReady,reason:'本版客服與放行未齊'});
+  if(own && item.receipt.category==='REPAIR' && !disposition && item.status==='INSPECTING' && ['REPAIR','REPLACE'].includes(item.repairInspection?.data.plan || ''))actions.push({name:'start_repair',label:item.repairInspection?.data.plan==='REPLACE'?'開始換機':'開始維修',disabled:!readiness.startReady,reason:'本版客服與放行未齊'});
   if(own && ['REPAIRING','REFURBISHING'].includes(item.status))actions.push({name:item.status==='REFURBISHING'?'complete_refurbish':'complete_repair',label:'交回收發室',disabled:!readiness.completionReady,reason:readiness.completionChecks.find(check=>!check.ready)?.key==='handoff_note'?'請填交回品況與配件':'本版複驗與放行未齊'});
   return actions;
 }

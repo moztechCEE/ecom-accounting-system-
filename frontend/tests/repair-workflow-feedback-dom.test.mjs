@@ -25,10 +25,12 @@ import {createMemoryRouter,RouterProvider} from 'react-router-dom';
 import RepairWorkbenchPage from '/src/pages/repair/RepairWorkbenchPage.tsx';
 ${baselineRequested ? "import BaselinePage from '/src/pages/repair/RepairWorkbenchPage.tsx?feedback-baseline';" : 'const BaselinePage=RepairWorkbenchPage;'}
 import RepairReplacementStock from '/src/pages/repair/RepairReplacementStock.tsx';
+import CustomerRepairQueue from '/src/pages/repair/CustomerRepairQueue.tsx';
 window.__APP_CONFIG__={mailroomEnabled:true};
 const query=new URLSearchParams(location.search),state=window.__workflowFeedbackProbe;
 let element;
-if(query.get('kind')==='stock')element=React.createElement(RepairReplacementStock,{
+if(query.get('kind')==='csr')element=React.createElement(CustomerRepairQueue,{entityId:'feedback-company',initialItemId:'feedback-item'});
+else if(query.get('kind')==='stock')element=React.createElement(RepairReplacementStock,{
   item:state.item,onSelected:value=>state.selections.push(value),onReleased:id=>state.released.push(id)});
 else {
   const Page=query.has('baseline')?BaselinePage:RepairWorkbenchPage;
@@ -55,6 +57,15 @@ const item={id:'feedback-item',entityId:'feedback-company',label:'SYNTHETIC-FEED
       planNote:'合成方案',feeSuggestion:'FREE',estimateNote:''}},repairReport:null,
   repairWorkflow:{factory:{stage:'RECEIVED',physicalCustody:'FACTORY',factoryName:'合成原廠',reference:'SYNTHETIC-FACTORY-REF',
     carrier:'合成送廠物流',trackingNumber:'SYNTHETIC-OUTBOUND'}},history:[],deliverySummary:[]};
+if(query.get('kind')==='csr') {
+  const company=query.get('category')==='RETURN';
+  Object.assign(item,{status:'WAITING_CUSTOMER',allowedWorkflowActions:['resolve_customer'],
+    repairWorkflow:{csr:{status:'ACCEPTED',ownerId:'feedback-csr',inspectionRevision:3,estimateRevision:3,quoteRevision:company?null:4}},
+    release:{available:!query.has('source-unavailable'),repairAllowed:false}});
+  item.receipt.category=company?'RETURN':'REPAIR';
+  if(query.has('unlinked'))item.receipt.sourceCaseId=null;
+  item.repairInspection.data.plan='REPAIR';
+}
 const own=['release-403','expired'].includes(query.get('stock'));
 const unit={id:'synthetic-unit',unitLabel:'SYNTHETIC-UNIT',serialNumber:'SYNTHETIC-REPLACEMENT-SN',status:own?'RESERVED':'QUALIFIED',
   kind:'NEW',qualification:{sku:'SYNTHETIC-REPLACEMENT',hasSerialNumbers:true},
@@ -69,6 +80,7 @@ export default {
     state.gets.push({path,params:clone(options.params||{})});
     if(path==='/mailroom/items')return {data:{items:[clone(item)],total:1}};
     if(path==='/mailroom/source-cases')return {data:{items:[],nextCursor:null}};
+    if(path==='/repair-workbench/csr-queue')return {data:{items:[clone(item)],total:1}};
     if(path==='/repair-workbench/items/feedback-item/documents')return {data:clone(item)};
     if(path==='/after-sales/stock/units'){
       if(query.get('stock')==='units-403')throw responseError('SYNTHETIC 403：沒有合格庫存讀取權限');
@@ -79,6 +91,9 @@ export default {
   },
   async post(path,body) {
     state.posts.push({path,body:clone(body)});
+    if(query.get('kind')==='csr'&&path==='/repair-workbench/items/feedback-item/workflow'&&body.action==='resolve_customer') {
+      item.allowedWorkflowActions=[];item.repairWorkflow.csr.status='RESOLVED';return {data:{id:item.id,duplicate:false}};
+    }
     if(path==='/repair-workbench/items/feedback-item/workflow'&&body.action==='cancel_factory'){
       await new Promise((resolve,reject)=>state.pending.push({resolve,reject}));
       return {data:{id:item.id,duplicate:false}};
@@ -109,7 +124,7 @@ test('actual repair page and replacement stock preserve feedback, mounted forms 
         if (id === virtual) return fixture;
         if (id.endsWith('/src/pages/repair/RepairWorkbenchPage.tsx?feedback-baseline')) return baselinePage;
         if (id.endsWith('/src/pages/repair/RepairWorkflowPanel.tsx?feedback-baseline')) return baselineWorkflow;
-        if (id.endsWith('/src/contexts/AuthContext.tsx')) return `export const useAuth=()=>({user:{id:'feedback-tech',roles:[],permissions:new URLSearchParams(location.search).has('readonly')?['repair_workbench:read']:['repair_workbench:read','repair_workbench:update']}});`;
+        if (id.endsWith('/src/contexts/AuthContext.tsx')) return `const query=new URLSearchParams(location.search),csr=query.get('kind')==='csr';export const useAuth=()=>({user:{id:csr?'feedback-csr':'feedback-tech',roles:[],permissions:query.has('readonly')?['repair_workbench:read']:csr?['mailroom:review']:['repair_workbench:read','repair_workbench:update']}});`;
         if (id.endsWith('/src/services/api.ts')) return api;
         if (id.endsWith('/src/services/websocket.service.ts')) return `export const webSocketService={subscribe:()=>()=>{}};`;
       },
@@ -144,7 +159,8 @@ test('actual repair page and replacement stock preserve feedback, mounted forms 
     await page.goto(origin + '/__repair-workflow-feedback?' + query);
     const drawer = page.locator('.ant-drawer-open');
     const disclosure = drawer.locator('.repair-editor-sidebar .ant-collapse-header').filter({ hasText: /原件.*原廠作業/ });
-    await disclosure.waitFor(); await disclosure.click();
+    await disclosure.waitFor();
+    if (await disclosure.getAttribute('aria-expanded') !== 'true') await disclosure.click();
     return { drawer, disclosure, form: drawer.locator('form#repair-workflow-feedback-item') };
   };
   const rejectPending = async () => page.evaluate(() => window.__workflowFeedbackProbe.pending.shift().reject({
@@ -183,6 +199,7 @@ test('actual repair page and replacement stock preserve feedback, mounted forms 
     await note.evaluate(node => { window.__workflowOriginalTextarea = node; });
     await form.locator('button[type="submit"]').click();
     await page.waitForFunction(() => window.__workflowFeedbackProbe.pending.length === 1);
+    await page.waitForFunction(() => document.querySelector('.repair-editor-sidebar .ant-collapse-header')?.getAttribute('aria-disabled') === 'true');
     assert.equal(await disclosure.getAttribute('aria-expanded'), 'true');
     assert.equal(await disclosure.getAttribute('aria-disabled'), 'true');
     await disclosure.click({ force: true });
@@ -290,6 +307,49 @@ test('actual repair page and replacement stock preserve feedback, mounted forms 
     assert.deepEqual(await page.evaluate(() => window.__workflowFeedbackProbe.posts), []);
     assert.deepEqual(await page.evaluate(() => window.__workflowFeedbackProbe.selections), []);
     assert.deepEqual(await page.evaluate(() => window.__workflowFeedbackProbe.released), []);
+  });
+  await t.test('mounted CSR queue approves linked RETURN without a customer quote and preserves the server command contract', async () => {
+    await page.goto(origin + '/__repair-workflow-feedback?kind=csr&category=RETURN');
+    const drawer = page.locator('.ant-drawer-open'), form = drawer.locator('form#customer-repair-review-feedback-item');
+    const approval = form.getByRole('radio', { name: '核准整新方案', exact: true });
+    await approval.waitFor(); assert.equal(await approval.isEnabled(), true);
+    assert.equal(await drawer.getByText('尚未建立報價', { exact: true }).count(), 0);
+    assert.equal(await drawer.getByText(/尚未取得顧客同意/).count(), 0);
+    await approval.check(); await form.locator('textarea').fill('  合成公司整新核對紀錄  ');
+    await form.getByRole('button', { name: '儲存回覆', exact: true }).click();
+    await page.waitForFunction(() => window.__workflowFeedbackProbe.posts.length === 1);
+    const post = await page.evaluate(() => window.__workflowFeedbackProbe.posts[0]);
+    assert.equal(post.path, '/repair-workbench/items/feedback-item/workflow');
+    assert.deepEqual(Object.keys(post.body).sort(), ['action', 'decision', 'entityId', 'expectedVersion', 'inspectionRevision', 'note', 'requestId']);
+    assert.deepEqual({ ...post.body, requestId: undefined }, { entityId: 'feedback-company', expectedVersion: 17,
+      action: 'resolve_customer', inspectionRevision: 3, decision: 'APPROVE', note: '合成公司整新核對紀錄', requestId: undefined });
+    assert.match(post.body.requestId, /^[a-f0-9-]{36}$/);
+  });
+  await t.test('mounted CSR queue still requires customer quote consent for REPAIR', async () => {
+    await page.goto(origin + '/__repair-workflow-feedback?kind=csr&category=REPAIR');
+    const drawer = page.locator('.ant-drawer-open');
+    const approval = drawer.getByRole('radio', { name: '同意方案', exact: true });
+    await approval.waitFor(); assert.equal(await approval.isDisabled(), true);
+    await drawer.getByText('尚未建立報價', { exact: true }).waitFor();
+    assert.equal(await drawer.getByRole('radio', { name: '核准整新方案', exact: true }).count(), 0);
+    assert.deepEqual(await page.evaluate(() => window.__workflowFeedbackProbe.posts), []);
+  });
+  await t.test('RETURN approval remains blocked for an unlinked or unavailable Source rather than inventing customer authority', async () => {
+    for (const mode of ['unlinked', 'source-unavailable']) {
+      await page.goto(origin + '/__repair-workflow-feedback?kind=csr&category=RETURN&' + mode + '=1');
+      const drawer = page.locator('.ant-drawer-open');
+      const approval = drawer.getByRole('radio', { name: '核准整新方案', exact: true });
+      await approval.waitFor(); assert.equal(await approval.isDisabled(), true);
+      await drawer.getByText('售後來源暫無法確認', { exact: true }).waitFor();
+      assert.equal(await drawer.getByText('尚未建立報價', { exact: true }).count(), 0);
+      assert.deepEqual(await page.evaluate(() => window.__workflowFeedbackProbe.posts), []);
+    }
+  });
+  await t.test('read-only staff cannot open the mounted CSR approval surface or issue a workflow command', async () => {
+    await page.goto(origin + '/__repair-workflow-feedback?kind=csr&category=RETURN&readonly=1');
+    assert.equal(await page.getByRole('radio').count(), 0);
+    assert.deepEqual(await page.evaluate(() => window.__workflowFeedbackProbe.posts), []);
+    assert.deepEqual(await page.evaluate(() => window.__workflowFeedbackProbe.gets), []);
   });
   assert.deepEqual(await page.evaluate(() => window.__workflowFeedbackProbe.blockedWrites), []);
   assert.deepEqual(errors, []); assert.deepEqual(external, []); assert.deepEqual(networkWrites, []);

@@ -60,8 +60,8 @@ export function RepairDocumentExtras({ form, item, entityId, kind, editable, act
   return <>
     <Collapse style={{ marginBottom: 16 }} onChange={keys=>setMediaOpen((Array.isArray(keys)?keys:[keys]).includes('media'))} items={[
       ...(kind === 'inspection' ? [{ key: 'materials', label: '材料需求', forceRender: true, children: <RepairMaterialPlanFields form={form} item={item} editable={editable} /> }] : []),
-      { key: 'customer', label: '顧客報告草稿', forceRender: true, children: <>
-        <Form.Item name="customerVisibleSummary" label="顧客摘要"><Input.TextArea maxLength={2000} rows={3} showCount /></Form.Item>
+      { key: 'customer', label: item.receipt.category === 'RETURN' ? '整新摘要紀錄' : '顧客報告草稿', forceRender: true, children: <>
+        <Form.Item name="customerVisibleSummary" label={item.receipt.category === 'RETURN' ? '作業摘要' : '顧客摘要'}><Input.TextArea maxLength={2000} rows={3} showCount /></Form.Item>
         <>
           <Form.Item name={['customerReportDraft', 'findings']} label="發現的問題"><Input.TextArea maxLength={2000} rows={2} /></Form.Item>
           <Form.Item name={['customerReportDraft', 'handling']} label="處置說明"><Input.TextArea maxLength={2000} rows={2} /></Form.Item>
@@ -69,11 +69,11 @@ export function RepairDocumentExtras({ form, item, entityId, kind, editable, act
           {(refs?.length || 0) > 0 && <Form.Item name={['customerReportDraft', 'mediaIds']} label="草稿選用媒體"><Select mode="multiple" options={(refs || []).map((ref,index) => ({ value: ref.mediaId, label: assets.find(asset => asset.mediaId === ref.mediaId)?.fileName || `${PHASE[ref.phase]}影像 ${index+1}` }))} /></Form.Item>}
           <Button disabled={false} onClick={() => setPreview(form.getFieldValue('customerReportDraft') || { findings: '', handling: '', verification: '', mediaIds: [] })}>預覽草稿</Button>
         </>
-        <RepairReportPanel form={form} item={item} entityId={entityId} kind={kind} mediaPending={mediaPending} />
+        {item.receipt.category === 'REPAIR' && <RepairReportPanel form={form} item={item} entityId={entityId} kind={kind} mediaPending={mediaPending} />}
       </> },
       { key: 'media', label: '工作單媒體', children: <RepairEvidencePanel form={form} item={item} entityId={entityId} kind={kind} editable={editable} active={active && mediaOpen} onDirtyChange={onDirtyChange} onPendingChange={pending=>{setMediaPending(pending);onMediaPendingChange?.(pending)}} /> },
     ]} />
-    <Modal title={<Space>顧客報告預覽<Tag>草稿</Tag></Space>} open={!!preview} onCancel={() => setPreview(undefined)} footer={<Button onClick={() => setPreview(undefined)}>關閉</Button>}>
+    <Modal title={<Space>{item.receipt.category === 'RETURN' ? '整新摘要預覽' : '顧客報告預覽'}<Tag>草稿</Tag></Space>} open={!!preview} onCancel={() => setPreview(undefined)} footer={<Button onClick={() => setPreview(undefined)}>關閉</Button>}>
       {preview && <>{[['發現的問題', preview.findings], ['實際處置', preview.handling], ['複驗結果', preview.verification]].map(([label, value]) => <section key={label}><Typography.Text strong>{label}</Typography.Text><Typography.Paragraph style={{ whiteSpace: 'pre-wrap' }}>{value || '未填'}</Typography.Paragraph></section>)}</>}
     </Modal>
   </>
