@@ -45,3 +45,13 @@ ERP tracker 僅收有 `data-operation-action` 的已啟用控制項。Source 透
 工廠交辦指派使用 Source 活躍帳號選單，接手／回覆／核定各帶版本；目前接手人或管理者才顯示後續動作。`caseActivity` URL 只保存展開區塊名稱，重新讀取後維持工作位置，不含顧客資料。
 
 新增 `frontend/tests/native-communication-model.test.ts` 7 項純邊界檢查；`native-communication.test.mjs` 9 個離線 DOM 情境涵蓋 unknown UUID 重開、實際 POST 身分、跨分頁 Web Lock、READONLY、品牌缺失、待審報價不能轉免費、通知審核／發送／模擬及工廠四節點／390px。所有資料為本地虛構 fixture，沒有 DEV 或外部業務效果。
+
+## 固定按鈕識別碼與歷史品牌確認
+
+Source scoped commit b059a19、306f095 提供 explicit controls、authenticated intent writer 與 same-origin iframe emitter。目前402個宣告控制項（Source333、ERP售後與共用管理69），原268盤點保留264；清單「付款維修」與「不付款寄回」兩組form+button改到詳情正式確認，避免略過顧客本版意願。宣告數不代表同時顯示的按鈕數；public/Login/preview不冒充staff點選。Standalone Source公司不推測，company=null不列入ERP公司日誌。尚未覆蓋peer-owned收發、維修或WMS全站控制項。
+
+Source通知只保留白名單eventClass、狀態、notificationId和opaque providerReceipt。SENT是LINE接受，SIMULATED是DEV模擬；未提供有效通知識別碼的異常回應不推測成功。操作INTENT與伺服器COMMITTED分開，私密欄位、訊息文案及任意metadata不進統一reader。
+
+只有canConfirmBrand才可開歷史品牌核對，需品牌及核對依據。獨立UUID journal先保存再POST；未知回應保留同UUID、updatedAt和內容。重開後即使品牌已在伺服器綁定，也可用原request重試取得回執。品牌與其他communication pending合併，沒有修改原建單journal。
+
+增加到10個離線Native DOM、9個純model與46個logs module檢查；ERP前後端build與Sourcetsc通過。Source另6個writer、6個offline DOM檢查，所有網路均fixture攔截；沒有DEV寫入或provider效果。
