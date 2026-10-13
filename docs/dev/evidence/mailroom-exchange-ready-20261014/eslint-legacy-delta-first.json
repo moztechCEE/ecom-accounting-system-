@@ -1,0 +1,203 @@
+{
+  "mailroom-outbound.service.spec.ts": {
+    "errorCount": 62,
+    "warningCount": 20,
+    "newMessages": [
+      {
+        "ruleId": "@typescript-eslint/require-await",
+        "severity": 2,
+        "message": "Async arrow function has no 'await' expression.",
+        "line": 309,
+        "column": 49,
+        "nodeType": "ArrowFunctionExpression",
+        "messageId": "missingAwait",
+        "endLine": 309,
+        "endColumn": 51,
+        "suggestions": [
+          {
+            "messageId": "removeAsync",
+            "fix": {
+              "range": [
+                9002,
+                9008
+              ],
+              "text": ""
+            },
+            "desc": "Remove 'async'."
+          }
+        ]
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-argument",
+        "severity": 1,
+        "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+        "line": 312,
+        "column": 58,
+        "nodeType": "Identifier",
+        "messageId": "unsafeArgument",
+        "endLine": 312,
+        "endColumn": 63
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-member-access",
+        "severity": 2,
+        "message": "Unsafe member access .schema on an `any` value.",
+        "line": 587,
+        "column": 30,
+        "nodeType": "Identifier",
+        "messageId": "unsafeMemberExpression",
+        "endLine": 587,
+        "endColumn": 36
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-return",
+        "severity": 2,
+        "message": "Unsafe return of a value of type `any`.",
+        "line": 593,
+        "column": 43,
+        "nodeType": "MemberExpression",
+        "messageId": "unsafeReturn",
+        "endLine": 593,
+        "endColumn": 54
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-return",
+        "severity": 2,
+        "message": "Unsafe return of a value of type `any`.",
+        "line": 1163,
+        "column": 54,
+        "nodeType": "MemberExpression",
+        "messageId": "unsafeReturn",
+        "endLine": 1163,
+        "endColumn": 67
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-assignment",
+        "severity": 2,
+        "message": "Unsafe assignment of an `any` value.",
+        "line": 1189,
+        "column": 11,
+        "nodeType": "Property",
+        "messageId": "anyAssignment",
+        "endLine": 1189,
+        "endColumn": 53
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-return",
+        "severity": 2,
+        "message": "Unsafe return of a value of type `any`.",
+        "line": 1213,
+        "column": 49,
+        "nodeType": "MemberExpression",
+        "messageId": "unsafeReturn",
+        "endLine": 1213,
+        "endColumn": 69
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-member-access",
+        "severity": 2,
+        "message": "Unsafe member access .itemId on an `any` value.",
+        "line": 1213,
+        "column": 63,
+        "nodeType": "Identifier",
+        "messageId": "unsafeMemberExpression",
+        "endLine": 1213,
+        "endColumn": 69
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-argument",
+        "severity": 1,
+        "message": "Unsafe argument of type `any` assigned to a parameter of type `Iterable<unknown> | null | undefined`.",
+        "line": 1215,
+        "column": 15,
+        "nodeType": "CallExpression",
+        "messageId": "unsafeArgument",
+        "endLine": 1215,
+        "endColumn": 71
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-call",
+        "severity": 2,
+        "message": "Unsafe call of a(n) `any` typed value.",
+        "line": 1215,
+        "column": 15,
+        "nodeType": "MemberExpression",
+        "messageId": "unsafeCall",
+        "endLine": 1215,
+        "endColumn": 34
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-member-access",
+        "severity": 2,
+        "message": "Unsafe member access .map on an `any` value.",
+        "line": 1215,
+        "column": 31,
+        "nodeType": "Identifier",
+        "messageId": "unsafeMemberExpression",
+        "endLine": 1215,
+        "endColumn": 34
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-argument",
+        "severity": 1,
+        "message": "Unsafe argument of type `any` assigned to a parameter of type `string`.",
+        "line": 1244,
+        "column": 20,
+        "nodeType": "MemberExpression",
+        "messageId": "unsafeArgument",
+        "endLine": 1244,
+        "endColumn": 40
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-argument",
+        "severity": 1,
+        "message": "Unsafe argument of type `any` assigned to a parameter of type `ReadyHashInput`.",
+        "line": 1282,
+        "column": 42,
+        "nodeType": "MemberExpression",
+        "messageId": "unsafeArgument",
+        "endLine": 1282,
+        "endColumn": 58
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-return",
+        "severity": 2,
+        "message": "Unsafe return of a value of type `any`.",
+        "line": 1327,
+        "column": 45,
+        "nodeType": "MemberExpression",
+        "messageId": "unsafeReturn",
+        "endLine": 1327,
+        "endColumn": 57
+      }
+    ]
+  },
+  "mailroom-sync.service.spec.ts": {
+    "errorCount": 32,
+    "warningCount": 2,
+    "newMessages": [
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-assignment",
+        "severity": 2,
+        "message": "Unsafe assignment of an `any` value.",
+        "line": 571,
+        "column": 9,
+        "nodeType": "Property",
+        "messageId": "anyAssignment",
+        "endLine": 571,
+        "endColumn": 61
+      },
+      {
+        "ruleId": "@typescript-eslint/no-unsafe-assignment",
+        "severity": 2,
+        "message": "Unsafe assignment of an `any` value.",
+        "line": 619,
+        "column": 9,
+        "nodeType": "Property",
+        "messageId": "anyAssignment",
+        "endLine": 619,
+        "endColumn": 63
+      }
+    ]
+  }
+}

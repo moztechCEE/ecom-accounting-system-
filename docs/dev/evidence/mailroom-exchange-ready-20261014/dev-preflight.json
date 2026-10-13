@@ -1,0 +1,58 @@
+{
+  "checkedAt": "2026-10-13T16:14:55.915372+00:00",
+  "scope": "read-only Cloud Run metadata; not runtime-source, authentication, DB or business acceptance",
+  "services": [
+    {
+      "service": "corely-erp-api-dev",
+      "ready": "True",
+      "latestReady": "corely-erp-api-dev-native-d3b7ed2c654d-c",
+      "positiveTraffic": [
+        {
+          "percent": 100,
+          "revisionName": "corely-erp-api-dev-native-d3b7ed2c654d-c",
+          "tag": "aftersales-review",
+          "url": "https://aftersales-review---corely-erp-api-dev-sp5g377smq-de.a.run.app"
+        }
+      ]
+    },
+    {
+      "service": "corely-erp-dev",
+      "ready": "True",
+      "latestReady": "corely-erp-dev-native-d3b7ed2c654d-c",
+      "positiveTraffic": [
+        {
+          "percent": 100,
+          "revisionName": "corely-erp-dev-native-d3b7ed2c654d-c",
+          "tag": "aftersales-review",
+          "url": "https://aftersales-review---corely-erp-dev-sp5g377smq-de.a.run.app"
+        }
+      ]
+    },
+    {
+      "service": "moztech-after-sales-dev",
+      "ready": "True",
+      "latestReady": "moztech-after-sales-dev-native-f56b794401b2-c",
+      "positiveTraffic": [
+        {
+          "percent": 100,
+          "revisionName": "moztech-after-sales-dev-native-f56b794401b2-c",
+          "tag": "aftersales-review",
+          "url": "https://aftersales-review---moztech-after-sales-dev-sp5g377smq-de.a.run.app"
+        }
+      ]
+    },
+    {
+      "service": "corely-aftersales-module-dev",
+      "ready": "True",
+      "latestReady": "corely-aftersales-module-dev-native-f56b794401b2-c",
+      "positiveTraffic": [
+        {
+          "percent": 100,
+          "revisionName": "corely-aftersales-module-dev-native-f56b794401b2-c",
+          "tag": "aftersales-review",
+          "url": "https://aftersales-review---corely-aftersales-module-dev-sp5g377smq-de.a.run.app"
+        }
+      ]
+    }
+  ]
+}

@@ -2,6 +2,10 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { signRequest } from './mailroom.contract';
 import { MailroomSyncService } from './mailroom-sync.service';
 import {
+  exchangeReadyHash,
+  type ExchangeReadyEvent,
+} from './mailroom-exchange-ready.contract';
+import {
   repairProposalHash,
   type RepairProposalEvent,
 } from './repair-proposal.contract';
@@ -9,6 +13,7 @@ import {
   DISPATCH_SCHEMA,
   REPAIR_PROPOSAL_SCHEMA,
   MailroomDispatchEvent,
+  assertMailroomDeliveryAck,
 } from './mailroom-workflow-event.contract';
 
 describe('Mailroom source search URL signatures', () => {
@@ -180,6 +185,46 @@ describe('Mailroom source search URL signatures', () => {
 describe('Mailroom dispatch delivery acknowledgment', () => {
   const entityId = 'doa-dev-qa-20261002';
   const eventId = '83362099-c6d6-4831-9d06-0b539ea9ad37';
+  function readyFixture(): ExchangeReadyEvent {
+    const event: ExchangeReadyEvent = {
+      schema: REPAIR_PROPOSAL_SCHEMA,
+      kind: 'EXCHANGE_READY',
+      eventId,
+      entityId,
+      sourceCaseId: 'case-exchange',
+      sourceNumber: 'SYNTHETIC-EXCHANGE',
+      sourceVersion: '2026-10-13T04:00:00.000Z',
+      itemId: 'aaad7cc6-7273-4000-8abc-333333333333',
+      receiptId: 'aaad7cc6-7273-4000-8abc-444444444444',
+      version: 3,
+      occurredAt: '2026-10-13T04:01:00.000Z',
+      actor: { id: 'clerk', name: 'SYNTHETIC Clerk' },
+      replacementRelease: {
+        schema: 'corely.mailroom.exchange-ready.v1',
+        orderId: 'aaad7cc6-7273-4000-8abc-444444444444',
+        itemId: 'aaad7cc6-7273-4000-8abc-333333333333',
+        sourceCaseItemId: 'source-line',
+        prepareRequestId: 'aaad7cc6-7273-4000-8abc-555555555555',
+        generation: 3,
+        readyAt: '2026-10-13T04:01:00.000Z',
+        productName: 'SYNTHETIC Catalog Product',
+        sku: 'EXCHANGE-SKU',
+        serialNumber: 'EXCHANGE-SN',
+        quantity: 1,
+        stock: {
+          postingId: 'synthetic-out-1',
+          referenceType: 'AFTER_SALES_OUTBOUND',
+          referenceId: 'aaad7cc6-7273-4000-8abc-444444444444',
+          productId: 'synthetic-product',
+          warehouseId: 'synthetic-warehouse',
+          externalInventoryPosted: false,
+        },
+        readyHash: '',
+      },
+    };
+    event.replacementRelease.readyHash = exchangeReadyHash(event);
+    return event;
+  }
   // Full supplier F19 fixture, with this suite's QA company/event identities rehashed.
   function proposalFixture(): RepairProposalEvent {
     const proposal: RepairProposalEvent = {
@@ -504,6 +549,147 @@ describe('Mailroom dispatch delivery acknowledgment', () => {
       expect(
         update.mock.calls.some(([input]) => input.data.status === 'DELIVERED'),
       ).toBe(false);
+    },
+  );
+  function useReady(event: unknown, target = 'AFTER_SALES') {
+    query
+      .mockReset()
+      .mockResolvedValueOnce([
+        {
+          id: 'delivery-ready',
+          entity_id: entityId,
+          target,
+          payload: event,
+          attempts: 1,
+        },
+      ])
+      .mockResolvedValue([]);
+  }
+  function deliveryWrites() {
+    return update.mock.calls.map(
+      ([input]) => (input as { data: Record<string, unknown> }).data,
+    );
+  }
+  function expectReadyPending() {
+    const writes = deliveryWrites();
+    expect(writes.some((data) => data.status === 'PENDING')).toBe(true);
+    expect(writes.some((data) => data.status === 'DELIVERED')).toBe(false);
+    // Retrying delivery changes its lease only, never its immutable physical proof.
+    expect(writes.every((data) => !('payload' in data))).toBe(true);
+  }
+  it('signs EXCHANGE_READY on the workflow route and accepts only its case-bound ready hash without requiring applied', async () => {
+    const event = readyFixture();
+    const ack = {
+      accepted: true,
+      eventId,
+      sourceCaseId: event.sourceCaseId,
+      acceptedReadyHash: event.replacementRelease.readyHash,
+    };
+    expect(assertMailroomDeliveryAck(event, ack)).toBeNull();
+    const connections = JSON.parse(process.env.MAILROOM_CONNECTIONS!) as Array<{
+      secret: string;
+      eventsPath?: string;
+    }>;
+    connections[0].eventsPath = '/custom/progress-events';
+    process.env.MAILROOM_CONNECTIONS = JSON.stringify(connections);
+    useReady(event);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      text: () => Promise.resolve(JSON.stringify(ack)),
+    } as Response);
+    await service.deliverPending();
+    const [input, options] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    const url = new URL(input.toString());
+    expect(url.pathname).toBe('/api/integration/mailroom/workflow-events');
+    expect(JSON.parse(options.body as string)).toEqual(event);
+    const headers = options.headers as Record<string, string>;
+    expect(headers['x-mailroom-signature']).toBe(
+      signRequest(
+        connections[0].secret,
+        'POST',
+        url.pathname,
+        headers['x-mailroom-time'],
+        options.body as string,
+        entityId,
+      ),
+    );
+    expect(deliveryWrites().some((data) => data.status === 'DELIVERED')).toBe(
+      true,
+    );
+  });
+  it.each([
+    'receipt-only',
+    'proposal-hash',
+    'missing-hash',
+    'wrong-hash',
+    'wrong-case',
+    'wrong-event',
+    'false-accepted',
+  ] as const)(
+    'keeps immutable EXCHANGE_READY PENDING for %s ACK',
+    async (change) => {
+      const event = readyFixture();
+      const ack: Record<string, unknown> = {
+        accepted: true,
+        eventId,
+        sourceCaseId: event.sourceCaseId,
+        acceptedReadyHash: event.replacementRelease.readyHash,
+      };
+      if (change === 'receipt-only') {
+        delete ack.sourceCaseId;
+        delete ack.acceptedReadyHash;
+      } else if (change === 'proposal-hash') {
+        delete ack.acceptedReadyHash;
+        ack.acceptedProposalHash = event.replacementRelease.readyHash;
+      } else if (change === 'missing-hash') delete ack.acceptedReadyHash;
+      else if (change === 'wrong-hash') ack.acceptedReadyHash = 'b'.repeat(64);
+      else if (change === 'wrong-case') ack.sourceCaseId = 'case-other';
+      else if (change === 'wrong-event')
+        ack.eventId = 'aaad7cc6-7273-4000-8abc-666666666666';
+      else ack.accepted = false;
+      expect(() => assertMailroomDeliveryAck(event, ack)).toThrow();
+      useReady(event);
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(JSON.stringify(ack)),
+      } as Response);
+      await service.deliverPending();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expectReadyPending();
+    },
+  );
+  it.each([
+    'digest',
+    'stock-reference',
+    'unit-alias',
+    'quantity',
+    'AI-target',
+    'company-scope',
+  ] as const)(
+    'blocks EXCHANGE_READY %s before any transport',
+    async (change) => {
+      const event = readyFixture();
+      if (change === 'digest')
+        event.replacementRelease.readyHash = 'b'.repeat(64);
+      else if (change === 'stock-reference')
+        event.replacementRelease.stock.referenceId =
+          'aaad7cc6-7273-4000-8abc-666666666666';
+      else if (change === 'unit-alias')
+        event.replacementRelease.itemId =
+          'aaad7cc6-7273-4000-8abc-666666666666';
+      else if (change === 'quantity')
+        Object.assign(event.replacementRelease, { quantity: 2 });
+      else if (change === 'company-scope') event.entityId = 'another-company';
+      // Even a newly rehashed shape may not change the stock order, unit alias or quantity.
+      if (change !== 'digest')
+        event.replacementRelease.readyHash = exchangeReadyHash(event);
+      useReady(
+        event,
+        change === 'AI-target' ? 'AI_CUSTOMER_SERVICE' : 'AFTER_SALES',
+      );
+      await service.deliverPending();
+      expect(fetchMock).not.toHaveBeenCalled();
+      expectReadyPending();
     },
   );
   it.each(['digest', 'extra-source-version'] as const)(

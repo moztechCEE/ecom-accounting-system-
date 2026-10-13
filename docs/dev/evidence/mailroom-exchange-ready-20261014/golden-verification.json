@@ -1,0 +1,7 @@
+{
+  "syntheticOnly": true,
+  "independentPythonHashMatchesCompiledProducer": true,
+  "compiledWireValidator": true,
+  "exactFourFieldAckWithoutApplied": true,
+  "readyHash": "abce5a39c47c5d2e2dea42782351def6d2f2f94ec7fc3a4f694da6458d158e29"
+}

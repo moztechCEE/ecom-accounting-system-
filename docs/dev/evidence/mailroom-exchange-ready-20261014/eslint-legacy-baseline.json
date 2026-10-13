@@ -1,0 +1,1507 @@
+{
+  "baseSha": "454ec8ed0467269717392db8e1a0448e551d01d3",
+  "files": {
+    "mailroom-outbound.service.spec.ts": {
+      "exitCode": 1,
+      "errorCount": 53,
+      "warningCount": 16,
+      "messages": [
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-call",
+          "severity": 2,
+          "message": "Unsafe call of a(n) `any` typed value.",
+          "line": 91,
+          "column": 36,
+          "nodeType": "MemberExpression",
+          "messageId": "unsafeCall",
+          "endLine": 91,
+          "endColumn": 56
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .in on an `any` value.",
+          "line": 91,
+          "column": 45,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 91,
+          "endColumn": 47
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .not on an `any` value.",
+          "line": 92,
+          "column": 59,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 92,
+          "endColumn": 62
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .lte on an `any` value.",
+          "line": 94,
+          "column": 65,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 94,
+          "endColumn": 68
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `string`.",
+          "line": 97,
+          "column": 61,
+          "nodeType": "MemberExpression",
+          "messageId": "unsafeArgument",
+          "endLine": 97,
+          "endColumn": 78
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .contains on an `any` value.",
+          "line": 97,
+          "column": 70,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 97,
+          "endColumn": 78
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 174,
+          "column": 48,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 174,
+          "endColumn": 50,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  4787,
+                  4793
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+          "line": 177,
+          "column": 22,
+          "nodeType": "MemberExpression",
+          "messageId": "unsafeArgument",
+          "endLine": 177,
+          "endColumn": 58
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .entityId_createdById_requestId on an `any` value.",
+          "line": 177,
+          "column": 28,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 177,
+          "endColumn": 58
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 181,
+          "column": 47,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 181,
+          "endColumn": 49,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  4989,
+                  4995
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+          "line": 182,
+          "column": 61,
+          "nodeType": "Identifier",
+          "messageId": "unsafeArgument",
+          "endLine": 182,
+          "endColumn": 66
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 185,
+          "column": 77,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 185,
+          "endColumn": 79,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  5129,
+                  5135
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+          "line": 188,
+          "column": 41,
+          "nodeType": "Identifier",
+          "messageId": "unsafeArgument",
+          "endLine": 188,
+          "endColumn": 46
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `number | undefined`.",
+          "line": 189,
+          "column": 20,
+          "nodeType": "Identifier",
+          "messageId": "unsafeArgument",
+          "endLine": 189,
+          "endColumn": 24
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `number | undefined`.",
+          "line": 189,
+          "column": 26,
+          "nodeType": "BinaryExpression",
+          "messageId": "unsafeArgument",
+          "endLine": 189,
+          "endColumn": 37
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 193,
+          "column": 30,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 193,
+          "endColumn": 32,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  5381,
+                  5387
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+          "line": 194,
+          "column": 49,
+          "nodeType": "Identifier",
+          "messageId": "unsafeArgument",
+          "endLine": 194,
+          "endColumn": 54
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 196,
+          "column": 43,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 196,
+          "endColumn": 45,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  5498,
+                  5504
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 197,
+          "column": 13,
+          "nodeType": "VariableDeclarator",
+          "messageId": "anyAssignment",
+          "endLine": 209,
+          "endColumn": 8
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+          "line": 210,
+          "column": 25,
+          "nodeType": "Identifier",
+          "messageId": "unsafeArgument",
+          "endLine": 210,
+          "endColumn": 28
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-return",
+          "severity": 2,
+          "message": "Unsafe return of a value of type `any`.",
+          "line": 212,
+          "column": 7,
+          "nodeType": "ReturnStatement",
+          "messageId": "unsafeReturn",
+          "endLine": 212,
+          "endColumn": 35
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 214,
+          "column": 50,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 214,
+          "endColumn": 52,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  5994,
+                  6000
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+          "line": 215,
+          "column": 57,
+          "nodeType": "Identifier",
+          "messageId": "unsafeArgument",
+          "endLine": 215,
+          "endColumn": 62
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `{ [s: string]: unknown; } | ArrayLike<unknown>`.",
+          "line": 217,
+          "column": 49,
+          "nodeType": "Identifier",
+          "messageId": "unsafeArgument",
+          "endLine": 217,
+          "endColumn": 53
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 218,
+          "column": 9,
+          "nodeType": "AssignmentExpression",
+          "messageId": "anyAssignment",
+          "endLine": 221,
+          "endColumn": 37
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 228,
+          "column": 48,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 228,
+          "endColumn": 50,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  6558,
+                  6564
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+          "line": 231,
+          "column": 22,
+          "nodeType": "MemberExpression",
+          "messageId": "unsafeArgument",
+          "endLine": 231,
+          "endColumn": 54
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .entityId_actorId_requestId on an `any` value.",
+          "line": 231,
+          "column": 28,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 231,
+          "endColumn": 54
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 235,
+          "column": 43,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 235,
+          "endColumn": 45,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  6754,
+                  6760
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .entityId on an `any` value.",
+          "line": 239,
+          "column": 35,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 239,
+          "endColumn": 43
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .actorId on an `any` value.",
+          "line": 240,
+          "column": 34,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 240,
+          "endColumn": 41
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .requestId on an `any` value.",
+          "line": 241,
+          "column": 36,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 241,
+          "endColumn": 45
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 245,
+          "column": 13,
+          "nodeType": "VariableDeclarator",
+          "messageId": "anyAssignment",
+          "endLine": 249,
+          "endColumn": 8
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+          "line": 250,
+          "column": 26,
+          "nodeType": "Identifier",
+          "messageId": "unsafeArgument",
+          "endLine": 250,
+          "endColumn": 29
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-return",
+          "severity": 2,
+          "message": "Unsafe return of a value of type `any`.",
+          "line": 253,
+          "column": 7,
+          "nodeType": "ReturnStatement",
+          "messageId": "unsafeReturn",
+          "endLine": 253,
+          "endColumn": 35
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 257,
+          "column": 47,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 257,
+          "endColumn": 49,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  7414,
+                  7420
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 272,
+          "column": 16,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 272,
+          "endColumn": 34
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .length on an `any` value.",
+          "line": 272,
+          "column": 28,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 272,
+          "endColumn": 34
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 274,
+          "column": 46,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 274,
+          "endColumn": 48,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  7985,
+                  7991
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+          "line": 275,
+          "column": 67,
+          "nodeType": "Identifier",
+          "messageId": "unsafeArgument",
+          "endLine": 275,
+          "endColumn": 72
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 277,
+          "column": 54,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 277,
+          "endColumn": 56,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  8118,
+                  8124
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+          "line": 278,
+          "column": 64,
+          "nodeType": "Identifier",
+          "messageId": "unsafeArgument",
+          "endLine": 278,
+          "endColumn": 69
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 297,
+          "column": 33,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 297,
+          "endColumn": 35,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  8728,
+                  8734
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 299,
+          "column": 49,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 299,
+          "endColumn": 51,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  8786,
+                  8792
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+          "line": 301,
+          "column": 60,
+          "nodeType": "Identifier",
+          "messageId": "unsafeArgument",
+          "endLine": 301,
+          "endColumn": 65
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 306,
+          "column": 45,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 306,
+          "endColumn": 47,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  8982,
+                  8988
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 307,
+          "column": 15,
+          "nodeType": "VariableDeclarator",
+          "messageId": "anyAssignment",
+          "endLine": 312,
+          "endColumn": 10
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `Row`.",
+          "line": 313,
+          "column": 34,
+          "nodeType": "Identifier",
+          "messageId": "unsafeArgument",
+          "endLine": 313,
+          "endColumn": 37
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-return",
+          "severity": 2,
+          "message": "Unsafe return of a value of type `any`.",
+          "line": 317,
+          "column": 9,
+          "nodeType": "ReturnStatement",
+          "messageId": "unsafeReturn",
+          "endLine": 317,
+          "endColumn": 37
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 324,
+          "column": 48,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 324,
+          "endColumn": 50,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  9464,
+                  9470
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-call",
+          "severity": 2,
+          "message": "Unsafe call of a(n) `any` typed value.",
+          "line": 326,
+          "column": 29,
+          "nodeType": "MemberExpression",
+          "messageId": "unsafeCall",
+          "endLine": 326,
+          "endColumn": 49
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .id on an `any` value.",
+          "line": 326,
+          "column": 35,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 326,
+          "endColumn": 37
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 356,
+          "column": 39,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 356,
+          "endColumn": 41,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  10381,
+                  10387
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 364,
+          "column": 64,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 364,
+          "endColumn": 66,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  10628,
+                  10634
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 375,
+          "column": 73,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 375,
+          "endColumn": 75,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  10957,
+                  10963
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async arrow function has no 'await' expression.",
+          "line": 394,
+          "column": 75,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 394,
+          "endColumn": 77,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  11699,
+                  11705
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 479,
+          "column": 5,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 479,
+          "endColumn": 39
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-return",
+          "severity": 2,
+          "message": "Unsafe return of a value of type `any`.",
+          "line": 542,
+          "column": 51,
+          "nodeType": "MemberExpression",
+          "messageId": "unsafeReturn",
+          "endLine": 542,
+          "endColumn": 62
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 551,
+          "column": 11,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 551,
+          "endColumn": 34
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-return",
+          "severity": 2,
+          "message": "Unsafe return of a value of type `any`.",
+          "line": 559,
+          "column": 43,
+          "nodeType": "MemberExpression",
+          "messageId": "unsafeReturn",
+          "endLine": 559,
+          "endColumn": 53
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 864,
+          "column": 7,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 864,
+          "endColumn": 30
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 865,
+          "column": 7,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 865,
+          "endColumn": 40
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 866,
+          "column": 7,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 866,
+          "endColumn": 34
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 867,
+          "column": 7,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 867,
+          "endColumn": 46
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 1054,
+          "column": 7,
+          "nodeType": "VariableDeclarator",
+          "messageId": "anyAssignment",
+          "endLine": 1054,
+          "endColumn": 53
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-call",
+          "severity": 2,
+          "message": "Unsafe call of a(n) `any` typed value.",
+          "line": 1060,
+          "column": 12,
+          "nodeType": "MemberExpression",
+          "messageId": "unsafeCall",
+          "endLine": 1060,
+          "endColumn": 45
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .getFullYear on an `any` value.",
+          "line": 1060,
+          "column": 34,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 1060,
+          "endColumn": 45
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-call",
+          "severity": 2,
+          "message": "Unsafe call of a(n) `any` typed value.",
+          "line": 1089,
+          "column": 12,
+          "nodeType": "MemberExpression",
+          "messageId": "unsafeCall",
+          "endLine": 1089,
+          "endColumn": 45
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .getFullYear on an `any` value.",
+          "line": 1089,
+          "column": 34,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 1089,
+          "endColumn": 45
+        }
+      ]
+    },
+    "mailroom-sync.service.spec.ts": {
+      "exitCode": 1,
+      "errorCount": 30,
+      "warningCount": 2,
+      "messages": [
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async method 'text' has no 'await' expression.",
+          "line": 31,
+          "column": 7,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 31,
+          "endColumn": 19,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  1031,
+                  1037
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async method 'text' has no 'await' expression.",
+          "line": 85,
+          "column": 7,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 85,
+          "endColumn": 19,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  2804,
+                  2810
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async method 'text' has no 'await' expression.",
+          "line": 107,
+          "column": 7,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 107,
+          "endColumn": 19,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  3496,
+                  3502
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async method 'text' has no 'await' expression.",
+          "line": 163,
+          "column": 7,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 163,
+          "endColumn": 19,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  5524,
+                  5530
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async method 'text' has no 'await' expression.",
+          "line": 171,
+          "column": 7,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 171,
+          "endColumn": 19,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  5814,
+                  5820
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async method 'text' has no 'await' expression.",
+          "line": 305,
+          "column": 7,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 305,
+          "endColumn": 19,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  10072,
+                  10078
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 326,
+          "column": 9,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 326,
+          "endColumn": 63
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access [0] on an `any` value.",
+          "line": 334,
+          "column": 32,
+          "nodeType": "Literal",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 334,
+          "endColumn": 33
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async method 'text' has no 'await' expression.",
+          "line": 366,
+          "column": 9,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 366,
+          "endColumn": 21,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  11926,
+                  11932
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 371,
+          "column": 11,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 371,
+          "endColumn": 63
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .data on an `any` value.",
+          "line": 375,
+          "column": 51,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 375,
+          "endColumn": 55
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async method 'text' has no 'await' expression.",
+          "line": 394,
+          "column": 7,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 394,
+          "endColumn": 19,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  12740,
+                  12746
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 399,
+          "column": 9,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 399,
+          "endColumn": 63
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 423,
+          "column": 9,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 423,
+          "endColumn": 61
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 430,
+          "column": 11,
+          "nodeType": "VariableDeclarator",
+          "messageId": "anyAssignment",
+          "endLine": 430,
+          "endColumn": 70
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access [0] on an `any` value.",
+          "line": 431,
+          "column": 17,
+          "nodeType": "Literal",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 431,
+          "endColumn": 18
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async method 'text' has no 'await' expression.",
+          "line": 447,
+          "column": 7,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 447,
+          "endColumn": 19,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  14420,
+                  14426
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `string`.",
+          "line": 462,
+          "column": 9,
+          "nodeType": "MemberExpression",
+          "messageId": "unsafeArgument",
+          "endLine": 462,
+          "endColumn": 30
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access [0] on an `any` value.",
+          "line": 462,
+          "column": 21,
+          "nodeType": "Literal",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 462,
+          "endColumn": 22
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 472,
+          "column": 9,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 472,
+          "endColumn": 63
+        },
+        {
+          "ruleId": "@typescript-eslint/require-await",
+          "severity": 2,
+          "message": "Async method 'text' has no 'await' expression.",
+          "line": 494,
+          "column": 9,
+          "nodeType": "ArrowFunctionExpression",
+          "messageId": "missingAwait",
+          "endLine": 494,
+          "endColumn": 21,
+          "suggestions": [
+            {
+              "messageId": "removeAsync",
+              "fix": {
+                "range": [
+                  15887,
+                  15893
+                ],
+                "text": ""
+              },
+              "desc": "Remove 'async'."
+            }
+          ]
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 501,
+          "column": 11,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 501,
+          "endColumn": 63
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .data on an `any` value.",
+          "line": 505,
+          "column": 51,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 505,
+          "endColumn": 55
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .proposalHash on an `any` value.",
+          "line": 513,
+          "column": 50,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 513,
+          "endColumn": 62
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 531,
+          "column": 11,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 531,
+          "endColumn": 63
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access .data on an `any` value.",
+          "line": 535,
+          "column": 51,
+          "nodeType": "Identifier",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 535,
+          "endColumn": 55
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 542,
+          "column": 13,
+          "nodeType": "VariableDeclarator",
+          "messageId": "anyAssignment",
+          "endLine": 542,
+          "endColumn": 72
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access [0] on an `any` value.",
+          "line": 543,
+          "column": 19,
+          "nodeType": "Literal",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 543,
+          "endColumn": 20
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-argument",
+          "severity": 1,
+          "message": "Unsafe argument of type `any` assigned to a parameter of type `string | URL`.",
+          "line": 558,
+          "column": 22,
+          "nodeType": "CallExpression",
+          "messageId": "unsafeArgument",
+          "endLine": 558,
+          "endColumn": 59
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-call",
+          "severity": 2,
+          "message": "Unsafe call of a(n) `any` typed value.",
+          "line": 558,
+          "column": 22,
+          "nodeType": "MemberExpression",
+          "messageId": "unsafeCall",
+          "endLine": 558,
+          "endColumn": 57
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-member-access",
+          "severity": 2,
+          "message": "Unsafe member access [0] on an `any` value.",
+          "line": 558,
+          "column": 46,
+          "nodeType": "Literal",
+          "messageId": "unsafeMemberExpression",
+          "endLine": 558,
+          "endColumn": 47
+        },
+        {
+          "ruleId": "@typescript-eslint/no-unsafe-assignment",
+          "severity": 2,
+          "message": "Unsafe assignment of an `any` value.",
+          "line": 563,
+          "column": 11,
+          "nodeType": "Property",
+          "messageId": "anyAssignment",
+          "endLine": 563,
+          "endColumn": 65
+        }
+      ]
+    }
+  }
+}

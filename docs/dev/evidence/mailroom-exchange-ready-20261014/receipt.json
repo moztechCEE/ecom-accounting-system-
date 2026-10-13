@@ -1,0 +1,158 @@
+{
+  "status": "PASS_SCOPE_ERP_PRODUCER_OFFLINE",
+  "recordedAt": "2026-10-13T16:22:17.481567+00:00",
+  "branch": "codex/exchange-ready-proof-20261013",
+  "baseSha": "454ec8ed0467269717392db8e1a0448e551d01d3",
+  "checkout": "/Users/moztecheason/Documents/ChatGPT/AI ERP 系統/corely-erp-mailroom-outbound-delivery-20261013",
+  "privateGitOwner": "/private/tmp/corely-mailroom-erp-owner-20261013.git",
+  "rootExecuted": {
+    "jest": {
+      "exitCode": 0,
+      "suites": 4,
+      "tests": 292,
+      "runTestsByPath": true,
+      "initial291RetainedNotAdded": true
+    },
+    "backendNestBuild": {
+      "exitCode": 0,
+      "client": "previous private offline-generated 454 schema+fragment client; tracked schema unchanged"
+    },
+    "productionAndNewContractSpecLint": {
+      "exitCode": 0,
+      "files": 5,
+      "errors": 0,
+      "warnings": 0,
+      "malformedContractSpecHasLocalUnsafeTypeDirectives": true
+    },
+    "legacySpecLintDelta": {
+      "newMessages": 0,
+      "fullExistingSpecsAreNotLintClean": true,
+      "baselineErrors": 83,
+      "baselineWarnings": 18,
+      "finalErrors": 82,
+      "finalWarnings": 18
+    },
+    "golden": {
+      "syntheticOnly": true,
+      "independentPythonHashMatchesCompiledProducer": true,
+      "compiledWireValidator": true,
+      "exactFourFieldAckWithoutApplied": true,
+      "readyHash": "abce5a39c47c5d2e2dea42782351def6d2f2f94ec7fc3a4f694da6458d158e29"
+    },
+    "devPreflight": {
+      "checkedAt": "2026-10-13T16:14:55.915372+00:00",
+      "scope": "read-only Cloud Run metadata; not runtime-source, authentication, DB or business acceptance",
+      "services": [
+        {
+          "service": "corely-erp-api-dev",
+          "ready": "True",
+          "latestReady": "corely-erp-api-dev-native-d3b7ed2c654d-c",
+          "positiveTraffic": [
+            {
+              "percent": 100,
+              "revisionName": "corely-erp-api-dev-native-d3b7ed2c654d-c",
+              "tag": "aftersales-review",
+              "url": "https://aftersales-review---corely-erp-api-dev-sp5g377smq-de.a.run.app"
+            }
+          ]
+        },
+        {
+          "service": "corely-erp-dev",
+          "ready": "True",
+          "latestReady": "corely-erp-dev-native-d3b7ed2c654d-c",
+          "positiveTraffic": [
+            {
+              "percent": 100,
+              "revisionName": "corely-erp-dev-native-d3b7ed2c654d-c",
+              "tag": "aftersales-review",
+              "url": "https://aftersales-review---corely-erp-dev-sp5g377smq-de.a.run.app"
+            }
+          ]
+        },
+        {
+          "service": "moztech-after-sales-dev",
+          "ready": "True",
+          "latestReady": "moztech-after-sales-dev-native-f56b794401b2-c",
+          "positiveTraffic": [
+            {
+              "percent": 100,
+              "revisionName": "moztech-after-sales-dev-native-f56b794401b2-c",
+              "tag": "aftersales-review",
+              "url": "https://aftersales-review---moztech-after-sales-dev-sp5g377smq-de.a.run.app"
+            }
+          ]
+        },
+        {
+          "service": "corely-aftersales-module-dev",
+          "ready": "True",
+          "latestReady": "corely-aftersales-module-dev-native-f56b794401b2-c",
+          "positiveTraffic": [
+            {
+              "percent": 100,
+              "revisionName": "corely-aftersales-module-dev-native-f56b794401b2-c",
+              "tag": "aftersales-review",
+              "url": "https://aftersales-review---corely-aftersales-module-dev-sp5g377smq-de.a.run.app"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "codeHashes": {
+    "backend/src/modules/mailroom/mailroom-exchange-ready.contract.ts": "e07f2d1ba887d2324e99e2c75bc69091d50adc73f2250ba25d9c7a7c61bb7d61",
+    "backend/src/modules/mailroom/mailroom-exchange-ready.contract.spec.ts": "0705d4c20347b9af2282ff371f7506fa71d558cb045869063c5618b6e2437bbc",
+    "backend/src/modules/mailroom/mailroom-outbound.service.ts": "9b1e79ab8b291206807fb428d984117fb34ee69cf827aad5229e770f147122d6",
+    "backend/src/modules/mailroom/mailroom-outbound.service.spec.ts": "960510ae0635aa63b8658756767c5238828f8c3fbfbd4bfaae1cda04ce026958",
+    "backend/src/modules/mailroom/mailroom-sync.service.ts": "b965a3b7f794da5a4608f707857859bb30a25f5dda5c71323d7f56d62daecc81",
+    "backend/src/modules/mailroom/mailroom-sync.service.spec.ts": "9f36c9ecb4162beb9675aca5fdcb96c565f383a70f7a585e163df3c502413983",
+    "backend/src/modules/mailroom/mailroom-workflow-event.contract.ts": "f18f52bc1b63160d666e822f453666db69ff5383039748c66cec02c9e8aa6204"
+  },
+  "protectedPathsUnchangedFromBase": [
+    "backend/prisma/schema.prisma",
+    "backend/src/modules/mailroom/mailroom.module.ts",
+    "backend/src/modules/mailroom/mailroom.service.ts",
+    "backend/src/modules/mailroom/mailroom.contract.ts",
+    "frontend/src/App.tsx",
+    "frontend/src/index.css",
+    "backend/src/modules/ai/knowledge/catalog.source.json"
+  ],
+  "artifactHashes": {
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/eslint-production-final.json": "faf82ebcfc33a34badadead4f89aea59301379d1c31befca991f138e24db9262",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/jest.log": "16445c47b63a57262c996fdd7d12478bbab17a042ef6e844214b49b914495cc2",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/eslint.log": "03c052bf9be05d3f6a605ae656e47b1c3433cd6132efbe450da032260f6669be",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/eslint-production.json": "faf82ebcfc33a34badadead4f89aea59301379d1c31befca991f138e24db9262",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/eslint-legacy-delta-final.json": "5b7de8229e1980420082c0964fe258d6690a08b9c832a7a34e31e766c443915d",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/jest-final.log": "1ab12852852881a1794d80100fda294415b39dba5ca79364c85368210d636d25",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/jest-final.json": "2c6e8cd82bdc130054e1656c53db761a61e6919eb28bdaa34ea44d6b3538c3b3",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/build-final.log": "2e91036ba73d0f2b38093ae5d2277896579ed7323f8129f7d47507192515e89d",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/moztech-after-sales-dev.json": "0fdd4b77c4002961f4d0e10f0e2e7400c31c8a56a46e8b0d1d111d7317143264",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/corely-erp-dev.json": "63319cad0b36042c33752571b01b9d42472d58bad99d08b8b39df8e94b224f0f",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/corely-erp-api-dev.json": "664d1a2be2e0085b82d8837d10378eec9c4be1d69fdcd12f2ce2bf5ba5467087",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/eslint-legacy-delta-first.json": "4635602b707cc4ec337eae7590e5e0815324c17fe08149d25e3f643e5d9cf77e",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/golden-ack.json": "9c53cfc5d571af7973ab99e540bdfbf35dcaf1bf2f06877c7f7566abfe906cad",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/golden-event.json": "f3db5a691c801e6c83560fe4dc22e5664a0ca94d9e6ab317f41e4f66a3efe4d7",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/eslint-legacy-baseline.json": "3cd83455aa258424853d99ecb64bc67a5d5c07334abcfaface7b10f833fe6b45",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/corely-aftersales-module-dev.json": "388eeeb1484a9f7466e9de17f9dab586a8d6ff84a08ebf35b18f7deb4a6186e7",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/golden-hash-input.txt": "3bf59c10b106a951a809970402e7bc18dd58171bcb3ca7140f186e2b89c7d323",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/dev-preflight.json": "796caaefe7da5f2cba799c363b189e651f9fbbb6b9289c5886b619a6322cc0aa",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/golden-verification.json": "821ea1beed60433216e527017e4a10bd04d7861909623122d202c32ae3d2669d",
+    "docs/dev/evidence/mailroom-exchange-ready-20261014/build.log": "2e91036ba73d0f2b38093ae5d2277896579ed7323f8129f7d47507192515e89d"
+  },
+  "notExecuted": [
+    "database writes",
+    "migrations",
+    "real Source requests",
+    "external stock posting",
+    "LINE or AI customer delivery",
+    "carrier calls",
+    "refund or accounting changes",
+    "Cloud Run mutation or deployment"
+  ],
+  "acceptanceLimits": [
+    "Source consumer and final integrated SHA have separate execution evidence",
+    "transport ACK is not dispatch or customer notification",
+    "suppliers 125/79 and previous 495 or 799 are not additional unique tests in final292",
+    "deployment remains central DOA only"
+  ],
+  "freezeSha": "recorded in external workbench-coordination fixed delivery ticket after commit; not self-referenced in this committed receipt"
+}

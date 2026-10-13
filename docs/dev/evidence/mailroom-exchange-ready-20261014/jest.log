@@ -1,0 +1,10 @@
+PASS src/modules/mailroom/mailroom-outbound.service.spec.ts
+PASS src/modules/mailroom/mailroom-exchange-ready.contract.spec.ts
+PASS src/modules/mailroom/mailroom-sync.service.spec.ts
+PASS src/modules/mailroom/mailroom-workflow-event.contract.spec.ts
+
+Test Suites: 4 passed, 4 total
+Tests:       291 passed, 291 total
+Snapshots:   0 total
+Time:        1.331 s, estimated 2 s
+Ran all test suites within paths "src/modules/mailroom/mailroom-exchange-ready.contract.spec.ts", "src/modules/mailroom/mailroom-outbound.service.spec.ts", "src/modules/mailroom/mailroom-sync.service.spec.ts", "src/modules/mailroom/mailroom-workflow-event.contract.spec.ts".

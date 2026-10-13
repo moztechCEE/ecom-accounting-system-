@@ -1,0 +1,224 @@
+{
+  "metadata": {
+    "name": "corely-erp-dev"
+  },
+  "status": {
+    "conditions": [
+      {
+        "lastTransitionTime": "2026-10-12T16:24:26.608652Z",
+        "status": "True",
+        "type": "Ready"
+      },
+      {
+        "lastTransitionTime": "2026-10-12T16:14:10.951875Z",
+        "status": "True",
+        "type": "ConfigurationsReady"
+      },
+      {
+        "lastTransitionTime": "2026-10-12T16:24:26.574001Z",
+        "status": "True",
+        "type": "RoutesReady"
+      }
+    ],
+    "latestReadyRevisionName": "corely-erp-dev-native-d3b7ed2c654d-c",
+    "traffic": [
+      {
+        "revisionName": "corely-erp-dev-access-870e3b18-r",
+        "tag": "access-870e3b18-reviewed",
+        "url": "https://access-870e3b18-reviewed---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-account-sso-0923",
+        "tag": "account-sso-candidate",
+        "url": "https://account-sso-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-account-sso2-0923",
+        "tag": "account-sso2-candidate",
+        "url": "https://account-sso2-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-aex-637518d0-c",
+        "tag": "aex-637518d0-candidate",
+        "url": "https://aex-637518d0-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-aex-637518d0-f",
+        "tag": "aex-637518d0-final",
+        "url": "https://aex-637518d0-final---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-aex-c3c29e25-c",
+        "tag": "aex-c3c29e25-candidate",
+        "url": "https://aex-c3c29e25-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-agent-0f68811c6466-c",
+        "tag": "agent-0f68811c6466-candidate",
+        "url": "https://agent-0f68811c6466-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-agent-1b112498ec71-c",
+        "tag": "agent-1b112498ec71-candidate",
+        "url": "https://agent-1b112498ec71-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-agent-5f0f94450e6f-c",
+        "tag": "agent-5f0f94450e6f-candidate",
+        "url": "https://agent-5f0f94450e6f-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-agent-bf2d06a00e8b-c",
+        "tag": "agent-bf2d06a00e8b-candidate",
+        "url": "https://agent-bf2d06a00e8b-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-agent-cb4f29c06e60-c",
+        "tag": "agent-cb4f29c06e60-candidate",
+        "url": "https://agent-cb4f29c06e60-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-agent-f0250ae6dc09-c",
+        "tag": "agent-f0250ae6dc09-candidate",
+        "url": "https://agent-f0250ae6dc09-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-b2b-a75132f0b6b3-c",
+        "tag": "b2b-a75132f0b6b3-candidate",
+        "url": "https://b2b-a75132f0b6b3-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-b2b-a75132f0b6b3-f",
+        "tag": "b2b-a75132f0b6b3-final",
+        "url": "https://b2b-a75132f0b6b3-final---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-b2b-preview-0930",
+        "tag": "b2b-preview-0930",
+        "url": "https://b2b-preview-0930---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-claw-a861a006-c",
+        "tag": "claw-a861a006-candidate",
+        "url": "https://claw-a861a006-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-claw-a861a006-f",
+        "tag": "claw-a861a006-final",
+        "url": "https://claw-a861a006-final---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-claw-d366985f-c",
+        "tag": "claw-d366985f-candidate",
+        "url": "https://claw-d366985f-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-claw-d366985f-f",
+        "tag": "claw-d366985f-final",
+        "url": "https://claw-d366985f-final---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-claw-ff5e636e-c",
+        "tag": "claw-ff5e636e-candidate",
+        "url": "https://claw-ff5e636e-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-department2-0923",
+        "tag": "department-candidate",
+        "url": "https://department-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-doa-3245db07e482-c",
+        "tag": "doa-3245db07e482-candidate",
+        "url": "https://doa-3245db07e482-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-doa-3245db07e482-f",
+        "tag": "doa-3245db07e482-final",
+        "url": "https://doa-3245db07e482-final---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-doa-73e3b6c0e7a3-c",
+        "tag": "doa-73e3b6c0e7a3-candidate",
+        "url": "https://doa-73e3b6c0e7a3-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-doa-73e3b6c0e7a3-f",
+        "tag": "doa-73e3b6c0e7a3-final",
+        "url": "https://doa-73e3b6c0e7a3-final---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-doa-ac9c85a7dc39-c",
+        "tag": "doa-ac9c85a7dc39-candidate",
+        "url": "https://doa-ac9c85a7dc39-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-doa-ac9c85a7dc39-f",
+        "tag": "doa-ac9c85a7dc39-final",
+        "url": "https://doa-ac9c85a7dc39-final---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-doa-d0ed6d49c580-c",
+        "tag": "doa-d0ed6d49c580-candidate",
+        "url": "https://doa-d0ed6d49c580-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-doa-d0ed6d49c580-f",
+        "tag": "doa-d0ed6d49c580-final",
+        "url": "https://doa-d0ed6d49c580-final---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-entry-audit-0923",
+        "tag": "entry-audit-candidate",
+        "url": "https://entry-audit-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-input-5c882235-c",
+        "tag": "aftersales-final",
+        "url": "https://aftersales-final---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "percent": 100,
+        "revisionName": "corely-erp-dev-native-d3b7ed2c654d-c",
+        "tag": "aftersales-review",
+        "url": "https://aftersales-review---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-pair-a75132f0-0923",
+        "tag": "pair-a75132f0-0923",
+        "url": "https://pair-a75132f0-0923---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-psave-be971b5f",
+        "tag": "psave-be971b5f",
+        "url": "https://psave-be971b5f---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-quote-0e57910f-0924",
+        "tag": "quote-0e57910f-0924",
+        "url": "https://quote-0e57910f-0924---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-quote-2883c0f7-0924",
+        "tag": "quote-2883c0f7-0924",
+        "url": "https://quote-2883c0f7-0924---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-quote-pair-0e57910f-0924",
+        "tag": "quote-pair-0e57910f-0924",
+        "url": "https://quote-pair-0e57910f-0924---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-quote-workbench-v2-0924",
+        "tag": "quote-workbench-v2-0924",
+        "url": "https://quote-workbench-v2-0924---corely-erp-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "revisionName": "corely-erp-dev-workspace-0923",
+        "tag": "workspace-candidate",
+        "url": "https://workspace-candidate---corely-erp-dev-sp5g377smq-de.a.run.app"
+      }
+    ],
+    "url": "https://corely-erp-dev-sp5g377smq-de.a.run.app"
+  }
+}

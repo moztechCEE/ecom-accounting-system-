@@ -1,0 +1,12 @@
+{
+  "mailroom-outbound.service.spec.ts": {
+    "errorCount": 52,
+    "warningCount": 16,
+    "newMessages": []
+  },
+  "mailroom-sync.service.spec.ts": {
+    "errorCount": 30,
+    "warningCount": 2,
+    "newMessages": []
+  }
+}

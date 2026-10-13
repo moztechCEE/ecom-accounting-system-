@@ -1,0 +1,131 @@
+
+/Users/moztecheason/Documents/ChatGPT/AI ERP 系統/corely-erp-mailroom-outbound-delivery-20261013/backend/src/modules/mailroom/mailroom-outbound.service.spec.ts
+    97:36  error    Unsafe call of a(n) `any` typed value                                                                           @typescript-eslint/no-unsafe-call
+    97:45  error    Unsafe member access .in on an `any` value                                                                      @typescript-eslint/no-unsafe-member-access
+    98:59  error    Unsafe member access .not on an `any` value                                                                     @typescript-eslint/no-unsafe-member-access
+   100:65  error    Unsafe member access .lte on an `any` value                                                                     @typescript-eslint/no-unsafe-member-access
+   103:61  warning  Unsafe argument of type `any` assigned to a parameter of type `string`                                          @typescript-eslint/no-unsafe-argument
+   103:70  error    Unsafe member access .contains on an `any` value                                                                @typescript-eslint/no-unsafe-member-access
+   194:48  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   197:22  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   197:28  error    Unsafe member access .entityId_createdById_requestId on an `any` value                                          @typescript-eslint/no-unsafe-member-access
+   201:47  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   202:61  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   205:77  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   208:41  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   209:20  warning  Unsafe argument of type `any` assigned to a parameter of type `number | undefined`                              @typescript-eslint/no-unsafe-argument
+   209:26  warning  Unsafe argument of type `any` assigned to a parameter of type `number | undefined`                              @typescript-eslint/no-unsafe-argument
+   213:30  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   214:49  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   216:43  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   217:13  error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+   230:25  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   232:7   error    Unsafe return of a value of type `any`                                                                          @typescript-eslint/no-unsafe-return
+   234:50  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   235:57  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   237:49  warning  Unsafe argument of type `any` assigned to a parameter of type `{ [s: string]: unknown; } | ArrayLike<unknown>`  @typescript-eslint/no-unsafe-argument
+   238:9   error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+   248:48  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   251:22  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   251:28  error    Unsafe member access .entityId_actorId_requestId on an `any` value                                              @typescript-eslint/no-unsafe-member-access
+   255:43  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   259:35  error    Unsafe member access .entityId on an `any` value                                                                @typescript-eslint/no-unsafe-member-access
+   260:34  error    Unsafe member access .actorId on an `any` value                                                                 @typescript-eslint/no-unsafe-member-access
+   261:36  error    Unsafe member access .requestId on an `any` value                                                               @typescript-eslint/no-unsafe-member-access
+   265:13  error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+   270:26  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   273:7   error    Unsafe return of a value of type `any`                                                                          @typescript-eslint/no-unsafe-return
+   277:47  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   292:16  error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+   292:28  error    Unsafe member access .length on an `any` value                                                                  @typescript-eslint/no-unsafe-member-access
+   294:46  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   295:67  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   297:54  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   298:64  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   309:49  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   312:58  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   334:33  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   336:49  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   338:60  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   343:45  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   344:15  error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+   350:34  warning  Unsafe argument of type `any` assigned to a parameter of type `Row`                                             @typescript-eslint/no-unsafe-argument
+   354:9   error    Unsafe return of a value of type `any`                                                                          @typescript-eslint/no-unsafe-return
+   361:48  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   363:29  error    Unsafe call of a(n) `any` typed value                                                                           @typescript-eslint/no-unsafe-call
+   363:35  error    Unsafe member access .id on an `any` value                                                                      @typescript-eslint/no-unsafe-member-access
+   393:39  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   401:64  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   415:73  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   434:75  error    Async arrow function has no 'await' expression                                                                  @typescript-eslint/require-await
+   520:5   error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+   587:30  error    Unsafe member access .schema on an `any` value                                                                  @typescript-eslint/no-unsafe-member-access
+   593:43  error    Unsafe return of a value of type `any`                                                                          @typescript-eslint/no-unsafe-return
+   602:11  error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+   610:43  error    Unsafe return of a value of type `any`                                                                          @typescript-eslint/no-unsafe-return
+   915:7   error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+   916:7   error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+   917:7   error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+   918:7   error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+  1105:7   error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+  1111:12  error    Unsafe call of a(n) `any` typed value                                                                           @typescript-eslint/no-unsafe-call
+  1111:34  error    Unsafe member access .getFullYear on an `any` value                                                             @typescript-eslint/no-unsafe-member-access
+  1140:12  error    Unsafe call of a(n) `any` typed value                                                                           @typescript-eslint/no-unsafe-call
+  1140:34  error    Unsafe member access .getFullYear on an `any` value                                                             @typescript-eslint/no-unsafe-member-access
+  1163:54  error    Unsafe return of a value of type `any`                                                                          @typescript-eslint/no-unsafe-return
+  1189:11  error    Unsafe assignment of an `any` value                                                                             @typescript-eslint/no-unsafe-assignment
+  1213:49  error    Unsafe return of a value of type `any`                                                                          @typescript-eslint/no-unsafe-return
+  1213:63  error    Unsafe member access .itemId on an `any` value                                                                  @typescript-eslint/no-unsafe-member-access
+  1215:15  warning  Unsafe argument of type `any` assigned to a parameter of type `Iterable<unknown> | null | undefined`            @typescript-eslint/no-unsafe-argument
+  1215:15  error    Unsafe call of a(n) `any` typed value                                                                           @typescript-eslint/no-unsafe-call
+  1215:31  error    Unsafe member access .map on an `any` value                                                                     @typescript-eslint/no-unsafe-member-access
+  1244:20  warning  Unsafe argument of type `any` assigned to a parameter of type `string`                                          @typescript-eslint/no-unsafe-argument
+  1282:42  warning  Unsafe argument of type `any` assigned to a parameter of type `ReadyHashInput`                                  @typescript-eslint/no-unsafe-argument
+  1327:45  error    Unsafe return of a value of type `any`                                                                          @typescript-eslint/no-unsafe-return
+
+/Users/moztecheason/Documents/ChatGPT/AI ERP 系統/corely-erp-mailroom-outbound-delivery-20261013/backend/src/modules/mailroom/mailroom-sync.service.spec.ts
+   36:7   error    Async method 'text' has no 'await' expression                                 @typescript-eslint/require-await
+   90:7   error    Async method 'text' has no 'await' expression                                 @typescript-eslint/require-await
+  112:7   error    Async method 'text' has no 'await' expression                                 @typescript-eslint/require-await
+  168:7   error    Async method 'text' has no 'await' expression                                 @typescript-eslint/require-await
+  176:7   error    Async method 'text' has no 'await' expression                                 @typescript-eslint/require-await
+  350:7   error    Async method 'text' has no 'await' expression                                 @typescript-eslint/require-await
+  371:9   error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+  379:32  error    Unsafe member access [0] on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  411:9   error    Async method 'text' has no 'await' expression                                 @typescript-eslint/require-await
+  416:11  error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+  420:51  error    Unsafe member access .data on an `any` value                                  @typescript-eslint/no-unsafe-member-access
+  439:7   error    Async method 'text' has no 'await' expression                                 @typescript-eslint/require-await
+  444:9   error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+  468:9   error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+  475:11  error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+  476:17  error    Unsafe member access [0] on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  492:7   error    Async method 'text' has no 'await' expression                                 @typescript-eslint/require-await
+  507:9   warning  Unsafe argument of type `any` assigned to a parameter of type `string`        @typescript-eslint/no-unsafe-argument
+  507:21  error    Unsafe member access [0] on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  517:9   error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+  539:9   error    Async method 'text' has no 'await' expression                                 @typescript-eslint/require-await
+  546:11  error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+  550:51  error    Unsafe member access .data on an `any` value                                  @typescript-eslint/no-unsafe-member-access
+  571:9   error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+  575:49  error    Unsafe member access .data on an `any` value                                  @typescript-eslint/no-unsafe-member-access
+  579:65  error    Unsafe member access .data on an `any` value                                  @typescript-eslint/no-unsafe-member-access
+  591:11  error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+  592:17  error    Unsafe member access [0] on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  597:7   error    Async method 'text' has no 'await' expression                                 @typescript-eslint/require-await
+  607:9   warning  Unsafe argument of type `any` assigned to a parameter of type `string`        @typescript-eslint/no-unsafe-argument
+  607:21  error    Unsafe member access [0] on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  617:9   error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+  655:9   error    Async method 'text' has no 'await' expression                                 @typescript-eslint/require-await
+  698:50  error    Unsafe member access .proposalHash on an `any` value                          @typescript-eslint/no-unsafe-member-access
+  716:11  error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+  720:51  error    Unsafe member access .data on an `any` value                                  @typescript-eslint/no-unsafe-member-access
+  727:13  error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+  728:19  error    Unsafe member access [0] on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  743:22  warning  Unsafe argument of type `any` assigned to a parameter of type `string | URL`  @typescript-eslint/no-unsafe-argument
+  743:22  error    Unsafe call of a(n) `any` typed value                                         @typescript-eslint/no-unsafe-call
+  743:46  error    Unsafe member access [0] on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  748:11  error    Unsafe assignment of an `any` value                                           @typescript-eslint/no-unsafe-assignment
+
+✖ 124 problems (101 errors, 23 warnings)
+
