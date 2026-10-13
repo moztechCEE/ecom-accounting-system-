@@ -273,7 +273,7 @@ def allowed_file(path):
 
 
 def export_git(root, sha, target, prefix=''):
-    rows = git(root, 'ls-tree', '-r', '-z', sha, '--', prefix, binary=True).split(b'\0')
+    rows = git(root, 'ls-tree', '-r', '-z', sha, *(['--', prefix] if prefix else []), binary=True).split(b'\0')
     manifest = []
     for row in rows:
         if not row:

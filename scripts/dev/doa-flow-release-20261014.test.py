@@ -331,6 +331,13 @@ class FlowReleaseTests(unittest.TestCase):
         r.private_json(path, manifest)
         return path, r.sha256(path.read_bytes()), manifest, config
 
+    def test_whole_source_export_never_passes_an_empty_git_pathspec(self):
+        row = ('100644 blob ' + 'a' * 40 + '\tpackage.json\0').encode()
+        with patch.object(r, 'git', side_effect=[row, b'{}']) as local:
+            result = r.export_git(self.directory, PINS['source'], self.directory / 'whole-source')
+            self.assertEqual(result[0]['path'], 'package.json')
+            self.assertEqual(local.call_args_list[0].args, (self.directory, 'ls-tree', '-r', '-z', PINS['source']))
+
     def test_build_context_readback_requires_pinned_checksum_and_exact_files(self):
         path, checksum, manifest, _ = self.prepared_context()
         self.assertEqual(r.verify_build_context(path, checksum)[0], manifest)
