@@ -1,3 +1,4 @@
+import { Inject, forwardRef } from '@nestjs/common';
 import {
   BadRequestException,
   ConflictException,
@@ -180,6 +181,7 @@ const calibrationView = (row: CalibrationRow): Record<string, unknown> => ({
 export class RepairTestRegistryService {
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => MailroomService))
     private readonly mailroom: MailroomService,
   ) {}
   private db(tx?: Prisma.TransactionClient): RegistryDb {

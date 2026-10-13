@@ -1,3 +1,4 @@
+import { Inject, forwardRef } from '@nestjs/common';
 import {
   BadRequestException,
   ConflictException,
@@ -116,6 +117,7 @@ const iso = (value: Date | null) => value?.toISOString() ?? null;
 export class RepairMaterialsService {
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => MailroomService))
     private readonly mailroom: MailroomService,
     private readonly sync: MailroomSyncService,
   ) {}

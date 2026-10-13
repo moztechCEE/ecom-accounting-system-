@@ -1,3 +1,15 @@
+import { RepairTestRegistryController } from './repair-test-registry.controller';
+import { RepairMaterialsController } from './repair-materials.controller';
+import {
+  RepairEvidenceController,
+  RepairPublicReportController,
+} from './repair-evidence.controller';
+import { RepairTestRegistryService } from './repair-test-registry.service';
+import { RepairMaterialsService } from './repair-materials.service';
+import { RepairPrerequisitesService } from './repair-prerequisites.service';
+import { RepairMediaStorageService } from './repair-media-storage.service';
+import { RepairMediaService } from './repair-media.service';
+import { RepairCustomerReportService } from './repair-customer-report.service';
 import { AfterSalesIntegrationModule } from '../integration/after-sales/after-sales.module';
 import { MailroomIntakeService } from './mailroom-intake.service';
 import { Module } from '@nestjs/common';
@@ -32,6 +44,10 @@ import { MailroomOutboundStockService } from './mailroom-outbound-stock.service'
     AfterSalesIntegrationModule,
   ],
   controllers: [
+    RepairTestRegistryController,
+    RepairMaterialsController,
+    RepairEvidenceController,
+    RepairPublicReportController,
     AfterSalesTasksController,
     MailroomController,
     MailroomTabletController,
@@ -42,6 +58,12 @@ import { MailroomOutboundStockService } from './mailroom-outbound-stock.service'
     MailroomOutboundController,
   ],
   providers: [
+    RepairTestRegistryService,
+    RepairMaterialsService,
+    RepairPrerequisitesService,
+    RepairMediaStorageService,
+    RepairMediaService,
+    RepairCustomerReportService,
     AfterSalesTasksService,
     MailroomService,
     MailroomIntakeService,

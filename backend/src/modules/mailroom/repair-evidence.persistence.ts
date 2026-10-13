@@ -70,12 +70,13 @@ export type EvidenceOperation = {
   requestHash: string;
   result: unknown;
 };
-export type EvidenceDatabase = Prisma.TransactionClient & {
+export type EvidenceDatabase = Omit<Prisma.TransactionClient,
+  'repairMediaAsset' | 'repairCustomerReport' | 'repairEvidenceOperation'> & {
   repairMediaAsset: EvidenceTable<MediaAsset>;
   repairCustomerReport: EvidenceTable<CustomerReport>;
   repairEvidenceOperation: EvidenceTable<EvidenceOperation>;
 };
-/** Structural bridge until the central schema editor generates the app client.
+/** Narrow interface for the centrally generated SQL-check constrained evidence tables.
  * Missing deployed migrations never become empty records or positive evidence. */
 export function evidenceDatabase(value: unknown): EvidenceDatabase {
   const db = value as EvidenceDatabase;

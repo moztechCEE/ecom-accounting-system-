@@ -1,3 +1,4 @@
+import RepairPublicReportPage from './pages/repair/RepairPublicReportPage'
 import OperationInteractionTracker from './components/OperationInteractionTracker'
 import IntegrationSettingsPage from './pages/IntegrationSettingsPage'
 import OperationLogsPage from './pages/OperationLogsPage'
@@ -89,6 +90,7 @@ const AppRoutes: React.FC = () => {
   const staged = stagedOperationsEnabled()
   return (
       <Routes>
+        <Route path="/repair-report/:id" element={<RepairPublicReportPage />} />
         <Route path="/b2b/shop" element={<GuestShopPage />} />
         <Route path="/b2b/order/:reference" element={<GuestOrderPage />} />
         <Route path="/b2b/private-quote" element={<PrivateQuotePage />} />

@@ -184,6 +184,9 @@ model AuditLog {
 
 // 公司實體（支援多公司營運）
 model Entity {
+  repairTestStandards RepairTestStandard[]
+  repairCalibrationRecords RepairCalibrationRecord[]
+  repairMaterialAllocations RepairMaterialAllocation[] @relation("RepairMaterialEntity")
   integrationConnections IntegrationConnection[]
   operationInteractions OperationInteraction[]
   operationLogArchives OperationLogArchive[]
@@ -473,6 +476,8 @@ enum ProductType {
 
 // 商品
 model Product {
+  repairTestStandards RepairTestStandard[]
+  repairMaterialAllocations RepairMaterialAllocation[] @relation("RepairMaterialProduct")
   shipmentLines ShipmentLine[]
   id          String      @id @default(uuid())
   entityId    String      @map("entity_id")
@@ -627,6 +632,7 @@ model AssemblyOrder {
 
 // 倉庫（多倉管理：公司倉、3PL、平台倉等）
 model Warehouse {
+  repairMaterialAllocations RepairMaterialAllocation[] @relation("RepairMaterialWarehouse")
   wmsHandoverInbox WmsHandoverInbox[]
   id        String   @id @default(uuid())
   entityId  String   @map("entity_id")
@@ -672,6 +678,9 @@ model InventorySnapshot {
 
 // 庫存異動流水（入庫/出庫/預留/釋放/調整）
 model InventoryTransaction {
+  repairMaterialReserve RepairMaterialAllocation? @relation("RepairMaterialReserve")
+  repairMaterialOut RepairMaterialAllocation? @relation("RepairMaterialOut")
+  repairMaterialRelease RepairMaterialAllocation? @relation("RepairMaterialRelease")
   afterSalesReserve AfterSalesStockReservation? @relation("AfterSalesReserve")
   afterSalesRelease AfterSalesStockReservation? @relation("AfterSalesRelease")
   afterSalesOut AfterSalesStockReservation? @relation("AfterSalesOut")
@@ -2349,6 +2358,7 @@ model MailroomReceipt {
 }
 
 model MailroomItem {
+  repairMaterialAllocations RepairMaterialAllocation[] @relation("RepairMaterialItem")
   stockReservations AfterSalesStockReservation[]
   id                  String   @id @default(uuid())
   receiptId           String   @map("receipt_id")
@@ -3420,4 +3430,204 @@ model MailroomProductMismatchFact {
   @@index([entityId, sourceCaseId, status], map: "mailroom_product_mismatch_source_status_idx")
   @@index([firstReviewErpActorId, status], map: "mailroom_product_mismatch_first_reviewer_idx")
   @@map("mailroom_product_mismatch_facts")
+}
+
+// Central schema editor appends these models and the three back references:
+// Entity.repairTestStandards RepairTestStandard[]
+// Entity.repairCalibrationRecords RepairCalibrationRecord[]
+// Product.repairTestStandards RepairTestStandard[]
+model RepairTestStandard {
+  id           String    @id @default(uuid())
+  entityId     String    @map("entity_id")
+  productId    String    @map("product_id")
+  sku          String
+  revision     Int
+  status       String    @default("DRAFT")
+  data         Json
+  contentHash  String    @map("content_hash")
+  createdById  String    @map("created_by_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  reviewedById String?   @map("reviewed_by_id")
+  reviewedAt   DateTime? @map("reviewed_at")
+  retiredById  String?   @map("retired_by_id")
+  retiredAt    DateTime? @map("retired_at")
+  commandKeys  String[]  @default([]) @map("command_keys")
+  commands     Json      @default("{}")
+  entity       Entity    @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  product      Product   @relation(fields: [productId, entityId], references: [id, entityId], onDelete: Restrict)
+
+  @@unique([entityId, productId, sku, revision])
+  @@index([entityId, productId, sku, status], map: "repair_test_standard_scope")
+  @@map("repair_test_standards")
+}
+
+model RepairCalibrationRecord {
+  id             String    @id @default(uuid())
+  entityId       String    @map("entity_id")
+  instrumentId   String    @map("instrument_id")
+  equipmentType  String    @map("equipment_type")
+  proofReference String    @map("proof_reference")
+  status         String    @default("VALID")
+  validFrom      DateTime  @map("valid_from")
+  validUntil     DateTime  @map("valid_until")
+  createdById    String    @map("created_by_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  revokedById    String?   @map("revoked_by_id")
+  revokedAt      DateTime? @map("revoked_at")
+  commandKeys    String[]  @default([]) @map("command_keys")
+  commands       Json      @default("{}")
+  entity         Entity    @relation(fields: [entityId], references: [id], onDelete: Restrict)
+
+  @@unique([entityId, instrumentId, proofReference])
+  @@index([entityId, instrumentId, status, validFrom, validUntil], map: "repair_calibration_scope")
+  @@map("repair_calibration_records")
+}
+
+// Candidate fragment. Only the central schema owner appends this to schema.prisma.
+// Required inverse relation additions are listed in repair-materials-producer-20261013.md.
+model RepairMaterialAllocation {
+  id                   String    @id @default(uuid())
+  entityId             String    @map("entity_id")
+  itemId               String    @map("item_id")
+  inspectionRevision   Int       @map("inspection_revision")
+  planHash             String    @map("plan_hash")
+  requirementId        String    @map("requirement_id")
+  productId            String    @map("product_id")
+  warehouseId          String    @map("warehouse_id")
+  requiredQuantity     Decimal   @map("required_quantity") @db.Decimal(18, 2)
+  allocatedQuantity    Decimal   @map("allocated_quantity") @db.Decimal(18, 2)
+  receivedQuantity     Decimal   @default(0) @map("received_quantity") @db.Decimal(18, 2)
+  consumedQuantity     Decimal   @default(0) @map("consumed_quantity") @db.Decimal(18, 2)
+  releasedQuantity     Decimal   @default(0) @map("released_quantity") @db.Decimal(18, 2)
+  returnedQuantity     Decimal   @default(0) @map("returned_quantity") @db.Decimal(18, 2)
+  status               String    @default("ALLOCATED")
+  activeKey            String?   @unique @map("active_key")
+  version              Int       @default(1)
+  allocatedById        String    @map("allocated_by_id")
+  allocatedAt          DateTime  @default(now()) @map("allocated_at")
+  physicalReceiptId    String?   @unique @map("physical_receipt_id")
+  receivedById         String?   @map("received_by_id")
+  receivedAt           DateTime? @map("received_at")
+  physicalReturnId     String?   @unique @map("physical_return_id")
+  returnedById         String?   @map("returned_by_id")
+  returnedAt           DateTime? @map("returned_at")
+  returnLocation       String?   @map("return_location")
+  consumedById         String?   @map("consumed_by_id")
+  consumedAt           DateTime? @map("consumed_at")
+  releasedById         String?   @map("released_by_id")
+  releasedAt           DateTime? @map("released_at")
+  reserveTransactionId String    @unique @map("reserve_transaction_id")
+  outTransactionId     String?   @unique @map("out_transaction_id")
+  releaseTransactionId String?   @unique @map("release_transaction_id")
+  costStatus           String    @default("UNKNOWN") @map("cost_status")
+  unitCost             Decimal?  @map("unit_cost") @db.Decimal(18, 4)
+  costCurrency         String?   @map("cost_currency")
+  costSourceReference  String?   @map("cost_source_reference")
+  sourceVersion        String?   @map("source_version")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  entity             Entity                    @relation("RepairMaterialEntity", fields: [entityId], references: [id], onDelete: Restrict)
+  item               MailroomItem              @relation("RepairMaterialItem", fields: [itemId], references: [id], onDelete: Restrict)
+  product            Product                   @relation("RepairMaterialProduct", fields: [productId, entityId], references: [id, entityId], onDelete: Restrict)
+  warehouse          Warehouse                 @relation("RepairMaterialWarehouse", fields: [warehouseId], references: [id], onDelete: Restrict)
+  reserveTransaction InventoryTransaction      @relation("RepairMaterialReserve", fields: [reserveTransactionId], references: [id], onDelete: Restrict)
+  outTransaction     InventoryTransaction?     @relation("RepairMaterialOut", fields: [outTransactionId], references: [id], onDelete: Restrict)
+  releaseTransaction InventoryTransaction?     @relation("RepairMaterialRelease", fields: [releaseTransactionId], references: [id], onDelete: Restrict)
+  operations         RepairMaterialOperation[]
+
+  @@index([entityId, itemId, inspectionRevision, planHash], map: "repair_material_allocations_context_idx")
+  @@index([entityId, status, productId, warehouseId], map: "repair_material_allocations_stock_idx")
+  @@map("repair_material_allocations")
+}
+
+model RepairMaterialOperation {
+  id           String   @id @default(uuid())
+  entityId     String   @map("entity_id")
+  itemId       String   @map("item_id")
+  allocationId String   @map("allocation_id")
+  actorId      String   @map("actor_id")
+  requestId    String   @map("request_id")
+  requestHash  String   @map("request_hash")
+  action       String
+  result       Json
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  allocation RepairMaterialAllocation @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+
+  @@unique([entityId, actorId, requestId])
+  @@index([entityId, itemId, createdAt], map: "repair_material_operations_item_idx")
+  @@map("repair_material_operations")
+}
+
+// Candidate only. Central schema editor appends models, scoped relations and migration.
+model RepairMediaAsset {
+  id               String    @id @default(uuid())
+  entityId         String    @map("entity_id")
+  itemId           String    @map("item_id")
+  kind             String
+  documentRevision Int       @map("document_revision")
+  phase            String
+  checkKey         String?   @map("check_key")
+  status           String    @default("PENDING")
+  bucket           String
+  objectKey        String    @unique @map("object_key")
+  generation       String?
+  sha256           String?
+  contentType      String    @map("content_type")
+  sizeBytes        BigInt?   @map("size_bytes")
+  bindings         Json      @default("[]")
+  uploadedById     String    @map("uploaded_by_id")
+  finalizedAt      DateTime? @map("finalized_at")
+  revokedById      String?   @map("revoked_by_id")
+  revokedAt        DateTime? @map("revoked_at")
+  expiresAt        DateTime  @map("expires_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([entityId, itemId, status])
+  @@map("repair_media_assets")
+}
+
+model RepairCustomerReport {
+  id                 String    @id @default(uuid())
+  entityId           String    @map("entity_id")
+  itemId             String    @map("item_id")
+  sourceCaseId       String    @map("source_case_id")
+  sourceBrand        String    @map("source_brand")
+  verifiedCustomerId String    @map("verified_customer_id")
+  inspectionRevision Int       @map("inspection_revision")
+  reportRevision     Int?      @map("report_revision")
+  planHash           String    @map("plan_hash")
+  proposalHash       String    @map("proposal_hash")
+  itemIdentityHash   String    @map("item_identity_hash")
+  currency           String
+  quoteRevision      Int       @map("quote_revision")
+  content            Json
+  contentHash        String    @map("content_hash")
+  mediaIds           String[]  @map("media_ids")
+  status             String    @default("PUBLISHED")
+  tokenHash          String    @map("token_hash")
+  expiresAt          DateTime  @map("expires_at")
+  publishedById      String    @map("published_by_id")
+  publishedAt        DateTime  @default(now()) @map("published_at")
+  revokedById        String?   @map("revoked_by_id")
+  revokedAt          DateTime? @map("revoked_at")
+
+  @@index([entityId, itemId, status])
+  @@map("repair_customer_reports")
+}
+
+model RepairEvidenceOperation {
+  id          String   @id @default(uuid())
+  entityId    String   @map("entity_id")
+  actorId     String   @map("actor_id")
+  requestId   String   @map("request_id")
+  action      String
+  requestHash String   @map("request_hash")
+  result      Json
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([entityId, actorId, requestId])
+  @@map("repair_evidence_operations")
 }

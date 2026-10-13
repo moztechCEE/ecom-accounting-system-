@@ -1,3 +1,5 @@
+import { RepairPrerequisitesService } from './repair-prerequisites.service';
+import { requireRefurbishmentWorkStart } from './repair-work-start.contract';
 import { ErpAfterSalesModuleService } from '../integration/after-sales/erp-module.service';
 import {
   buildRepairProposalEvent,
@@ -23,6 +25,8 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Inject,
+  forwardRef,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
@@ -171,6 +175,9 @@ export class MailroomService {
     private readonly sync: MailroomSyncService,
     @Optional() private readonly stock?: AfterSalesStockService,
     @Optional() private readonly sourceModule?: ErpAfterSalesModuleService,
+    @Optional()
+    @Inject(forwardRef(() => RepairPrerequisitesService))
+    private readonly prerequisites?: RepairPrerequisitesService,
   ) {}
   enabled() {
     if (process.env.MAILROOM_ENABLED !== 'true')
@@ -1764,8 +1771,9 @@ export class MailroomService {
             throw new BadRequestException(
               '送原廠或原件返還方案須由客服安排，不能直接開始維修',
             );
-          if (input.action === 'start_repair')
+          if (input.action === 'start_repair') {
             validateInspectionRelease(documents.repairInspection);
+          }
           if (
             input.action === 'start_repair' &&
             item.receipt.category === 'REPAIR'
@@ -1787,11 +1795,14 @@ export class MailroomService {
             );
           }
         }
-        if (['complete_repair', 'complete_refurbish'].includes(input.action))
+        if (['complete_repair', 'complete_refurbish'].includes(input.action)) {
           validateRepairCompletion(
             documents.repairInspection,
             documents.repairReport,
           );
+          if (input.action === 'complete_refurbish')
+            requireRefurbishmentWorkStart(item);
+        }
         if (
           input.action === 'complete_repair' &&
           item.receipt.category === 'REPAIR'
@@ -1814,6 +1825,10 @@ export class MailroomService {
               repairSourceBindingForItem(item, repairSource),
             );
           }
+        }
+        if (['start_repair', 'complete_repair', 'complete_refurbish'].includes(input.action)) {
+          if (!this.prerequisites) throw new ServiceUnavailableException('維修檢測與備料確認尚未啟用');
+          await this.prerequisites.require(item, input.action === 'start_repair' ? 'START' : 'COMPLETION', tx);
         }
         const { changes, replaceTasks: initialReplaceTasks } = transition(
           item,
