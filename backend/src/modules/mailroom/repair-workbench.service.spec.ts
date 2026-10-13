@@ -3,6 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { RepairWorkbenchService } from './repair-workbench.service';
 import { SaveInspectionDto, SaveRepairDto } from './repair-document.dto';
+import { RepairPrerequisitesService } from './repair-prerequisites.service';
 import { type Actor } from './mailroom.contract';
 
 const actor = (
@@ -15,6 +16,8 @@ const actor = (
   entityIds,
 });
 const inspectionData = {
+  protocol: 2 as const,
+  materialPlan: { mode: 'NONE' as const, lines: [] },
   complaint: '無法開機',
   reproduction: 'YES' as const,
   testConditions: '原廠電源與配件',
@@ -27,6 +30,8 @@ const inspectionData = {
   estimateNote: '由客服確認保固處理',
 };
 const emptyInspectionData = {
+  protocol: 2 as const,
+  materialPlan: { mode: 'NONE' as const, lines: [] },
   complaint: '',
   reproduction: 'NOT_TESTED' as const,
   testConditions: '',
@@ -39,6 +44,7 @@ const emptyInspectionData = {
   estimateNote: '',
 };
 const repairData = {
+  protocol: 2 as const,
   outcome: 'REPAIRED' as const,
   workPerformed: '更換電源模組',
   parts: [{ name: '電源模組', sku: 'DEMO-PART', quantity: 1 }],
@@ -115,7 +121,9 @@ describe('RepairWorkbenchService document authorization, versions and release co
       },
       product: {
         findFirst: jest.fn().mockResolvedValue({ hasSerialNumbers: false }),
+        findMany: jest.fn().mockResolvedValue([]),
       },
+      warehouse: { findMany: jest.fn().mockResolvedValue([]) },
       $queryRaw: jest.fn().mockResolvedValue([]),
       $transaction: jest.fn(async (callback: any) => callback(prisma)),
     };
@@ -158,7 +166,21 @@ describe('RepairWorkbenchService document authorization, versions and release co
         ],
       }),
     };
-    service = new RepairWorkbenchService(prisma, mailroom, sync);
+    service = new RepairWorkbenchService(prisma, mailroom, sync, {
+      recordValidation: jest.fn().mockResolvedValue(undefined),
+      forItem: jest.fn().mockResolvedValue({
+        materials: {
+          start: { state: 'READY' },
+          completion: { state: 'READY' },
+        },
+        template: null,
+        repairTemplate: null,
+        completionTemplate: null,
+        templateChecks: { inspection: 'UNKNOWN', completion: 'UNKNOWN' },
+        calibrationRecords: [],
+        completionCalibrationRecords: [],
+      }),
+    } as unknown as RepairPrerequisitesService);
   });
 
   it.each([

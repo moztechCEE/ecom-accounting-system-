@@ -14,7 +14,7 @@ import { B2bAwareJwtAuthGuard } from '../b2b/b2b-auth.guard';
 import { B2bService } from '../b2b/b2b.service';
 import { JwtStrategy } from '../auth/strategies/jwt.strategy';
 import { AuthService } from '../auth/auth.service';
-import type { Actor, SourceCase } from './mailroom.contract';
+import { fingerprint, type Actor, type SourceCase } from './mailroom.contract';
 import { MailroomService } from './mailroom.service';
 import { RepairWorkbenchController } from './repair-workbench.controller';
 import { RepairWorkbenchService } from './repair-workbench.service';
@@ -27,6 +27,9 @@ import {
   repairTodoSourceDecision,
 } from './repair-todo.contract';
 import { repairSourceBindingForItem } from './repair-proposal.contract';
+import { requireSourceDisposition } from './repair-disposition-source.contract';
+import { type RepairDispositionProof } from './repair-disposition.contract';
+import { allowedWorkflowActions } from './repair-workflow.contract';
 import { RepairTodoService } from './repair-todo.service';
 import type { RepairTodoQuery } from './repair-todo.dto';
 
@@ -164,8 +167,35 @@ type SourceReleaseFixture = NonNullable<SourceCase['releaseInfo']> & {
     proposalHash: string;
     quoteRevision: number;
   }[];
+  customerIdentity?: {
+    companyId: string;
+    caseId: string;
+    brand: string;
+    verifiedCustomerId: string;
+    verified: boolean;
+  };
+  customerDecisions?: {
+    proofId: string;
+    proofRevision: number;
+    status: string;
+    purpose: string;
+    quoteRevision: number;
+    itemId: string;
+    planVersion: number;
+    planHash: string;
+    proposalHash: string;
+    customerDecision: 'RETURN_ORIGINAL' | 'SCRAP';
+    verifiedCustomerId: string;
+    provider: string;
+    reviewedById: string;
+    reviewedAt: string;
+    submittedAt: string;
+  }[];
 };
-type SourceFixture = SourceCase & { releaseInfo: SourceReleaseFixture };
+type SourceFixture = SourceCase & {
+  caseBrand: 'MOZTECH';
+  releaseInfo: SourceReleaseFixture;
+};
 function source(
   id: string,
   rows = [piece(id.replace(/^source-/, ''))],
@@ -175,6 +205,7 @@ function source(
     number: rows[0]?.receipt.sourceNumber || 'CASE-' + id,
     type: 'REPAIR',
     brand: 'SYNTHETIC',
+    caseBrand: 'MOZTECH',
     version: 'source-current-v9',
     status: 'READY_FOR_REPAIR',
     customerLabel: 'Synthetic Customer',
@@ -219,6 +250,7 @@ function workflow(row: Piece) {
     schema: number;
     csr?: Record<string, unknown>;
     factory?: Record<string, unknown>;
+    dispositionAuthorization?: RepairDispositionProof;
   };
 }
 function setPlan(row: Piece, plan: InspectionDocument['data']['plan']) {
@@ -226,6 +258,53 @@ function setPlan(row: Piece, plan: InspectionDocument['data']['plan']) {
   row.repairInspection = doc;
   workflow(row).csr!.planHash = inspectionPlanHash(doc);
   return row;
+}
+function dispositionSource(
+  row: Piece,
+  decision: 'RETURN_ORIGINAL' | 'SCRAP',
+): SourceFixture {
+  const current = source(row.receipt.sourceCaseId!, [row]);
+  current.brand = 'MOZTECH';
+  current.status = 'PENDING_SHIPMENT';
+  current.repairAllowed = false;
+  Object.assign(current.releaseInfo, {
+    customerApprovedQuoteRevision: null,
+    customerApprovedAt: null,
+    confirmedPaymentQuoteRevision: null,
+    amount: 0,
+    invoiceRequired: false,
+    invoiceStatus: 'NOT_REQUIRED',
+  });
+  const opaqueCustomer = fingerprint({
+    companyId: 'synthetic-source-company',
+    caseId: current.id,
+    brand: current.caseBrand,
+    fixtureSubject: 'synthetic-line-identity',
+  });
+  current.releaseInfo.customerIdentity = {
+    companyId: 'synthetic-source-company',
+    caseId: current.id,
+    brand: current.caseBrand,
+    verifiedCustomerId: opaqueCustomer,
+    verified: true,
+  };
+  current.releaseInfo.customerDecisions = [
+    {
+      proofId: 'confirmation-' + row.id,
+      proofRevision: 1,
+      status: 'APPROVED',
+      purpose: 'DISPOSITION',
+      quoteRevision: current.releaseInfo.quoteRevision,
+      ...repairSourceBindingForItem(row, current),
+      customerDecision: decision,
+      verifiedCustomerId: opaqueCustomer,
+      provider: 'LINE',
+      reviewedById: 'synthetic-source-csr',
+      reviewedAt: '2026-10-05T00:02:00Z',
+      submittedAt: '2026-10-05T00:01:00Z',
+    },
+  ];
+  return current;
 }
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -279,7 +358,7 @@ function selectedProjection(
   );
 }
 const fixtures: { writes: Record<string, jest.Mock> }[] = [];
-function fixture(rows = [piece('ready')]) {
+function fixture(rows = [piece('ready')], withPrerequisiteReader = true) {
   const state = {
     active: true,
     mustChangePassword: false,
@@ -405,11 +484,24 @@ function fixture(rows = [piece('ready')]) {
     sync as unknown as MailroomDependencies[2],
   );
   const views = jest.spyOn(mailroom, 'views');
+  const readyPrerequisites = {
+    materials: { start: { state: 'READY' } },
+    templateChecks: { inspection: 'READY' },
+  };
+  const prerequisites = {
+    forItem: jest.fn((row: unknown) => {
+      void row;
+      return Promise.resolve(structuredClone(readyPrerequisites));
+    }),
+  };
   type Dependencies = ConstructorParameters<typeof RepairTodoService>;
   const service = new RepairTodoService(
     prisma as unknown as Dependencies[0],
     mailroom,
     sync as unknown as Dependencies[2],
+    withPrerequisiteReader
+      ? (prerequisites as unknown as Dependencies[3])
+      : undefined,
   );
   const list = (query: Partial<RepairTodoQuery> = {}) =>
     service.list(USER, { entityId: COMPANY, ...query });
@@ -422,6 +514,7 @@ function fixture(rows = [piece('ready')]) {
     sync,
     mailroom,
     views,
+    prerequisites,
     service,
     list,
   };
@@ -571,9 +664,12 @@ describe('repair todo native read projection', () => {
     });
     const refurb = piece('refurb', 'REFURBISHING');
     refurb.receipt.category = 'RETURN';
+    workflow(refurb).csr!.quoteRevision = null;
+    (refurb.repairInspection as InspectionDocument).review!.quoteRevision =
+      null;
     expect(repairTodoDecision(actor(), COMPANY, refurb)).toEqual({
       state: 'ready',
-      kind: 'REPAIR_WORK',
+      kind: 'START_REFURBISHMENT',
     });
     expect(repairTodoDecision(actor(), COMPANY, factory)).toEqual({
       state: 'ready',
@@ -610,15 +706,177 @@ describe('repair todo native read projection', () => {
       expect(repairTodoDecision(actor(), COMPANY, row).state).toBe('blocked');
     },
   );
-  it('uses native return_original even if original plan was repair and customer declined', () => {
+  it('requires a fresh customer disposition proof even when the local CSR declined', () => {
     const row = piece('decline');
     workflow(row).csr!.decision = 'DECLINE';
     (row.repairInspection as InspectionDocument).review!.decision = 'DECLINE';
     row.receipt.sourceCaseId = null;
+    expect(repairTodoDecision(actor(), COMPANY, row).state).toBe('unknown');
+    row.receipt.sourceCaseId = 'source-decline';
+    expect(repairTodoDecision(actor(), COMPANY, row)).toEqual({
+      state: 'source',
+      kind: 'RETURN_ORIGINAL',
+      sourceId: 'source-decline',
+    });
+    const current = dispositionSource(row, 'RETURN_ORIGINAL');
+    expect(repairTodoSourceDecision(actor(), COMPANY, row, current)).toEqual({
+      state: 'ready',
+      kind: 'RETURN_ORIGINAL',
+    });
+  });
+
+  it('keeps corporate RETURN outside customer disposition proof and financial gates', () => {
+    const row = setPlan(piece('corporate-return'), 'RETURN');
+    row.receipt.category = 'RETURN';
+    row.receipt.sourceCaseId = null;
+    workflow(row).csr!.quoteRevision = null;
+    (row.repairInspection as InspectionDocument).review!.quoteRevision = null;
     expect(repairTodoDecision(actor(), COMPANY, row)).toEqual({
       state: 'ready',
       kind: 'RETURN_ORIGINAL',
     });
+  });
+
+  it.each(['RETURN_ORIGINAL', 'SCRAP'] as const)(
+    'counts only a fresh LINE %s authority without positive repair approval or invoice release',
+    async (decision) => {
+      const row = setPlan(
+        piece('disposition-ready'),
+        decision === 'SCRAP' ? 'SCRAP' : 'RETURN',
+      );
+      const current = dispositionSource(row, decision);
+      const before = structuredClone(row);
+      const f = fixture([row]);
+      f.sources.set(row.receipt.sourceCaseId!, current);
+      const result = await f.list();
+      expect(result).toMatchObject({
+        total: 1,
+        countExact: true,
+        queueCounts: { todo: 1 },
+      });
+      expect(result.items[0].todoKind).toBe(
+        decision === 'SCRAP' ? 'SCRAP_AUTHORIZATION' : 'RETURN_ORIGINAL',
+      );
+      expect(row).toEqual(before);
+      expect(current.repairAllowed).toBe(false);
+      expect(current.releaseInfo.customerApprovedQuoteRevision).toBeNull();
+    },
+  );
+
+  it('selects an authorized SCRAP route after CSR refusal instead of prioritizing return_original', () => {
+    const row = piece('declined-scrap');
+    workflow(row).csr!.decision = 'DECLINE';
+    (row.repairInspection as InspectionDocument).review!.decision = 'DECLINE';
+    expect(
+      repairTodoSourceDecision(
+        actor(),
+        COMPANY,
+        row,
+        dispositionSource(row, 'SCRAP'),
+      ),
+    ).toEqual({
+      state: 'ready',
+      kind: 'SCRAP_AUTHORIZATION',
+    });
+  });
+
+  it('does not reuse a locally consistent CSR review of an older Source quote', () => {
+    const row = setPlan(piece('old-disposition-csr'), 'RETURN');
+    workflow(row).csr!.quoteRevision = 3;
+    (row.repairInspection as InspectionDocument).review!.quoteRevision = 3;
+    const current = dispositionSource(row, 'RETURN_ORIGINAL');
+    expect(repairTodoSourceDecision(actor(), COMPANY, row, current).state).toBe(
+      'blocked',
+    );
+  });
+
+  it('removes the same saved scrap authorization from todo but keeps the native case unchanged', async () => {
+    const row = setPlan(piece('scrap-recorded'), 'SCRAP');
+    const current = dispositionSource(row, 'SCRAP');
+    const proof = requireSourceDisposition(current, row, 'SCRAP', {
+      entityId: COMPANY,
+      allowDevStub: false,
+    });
+    workflow(row).dispositionAuthorization = proof;
+    const before = structuredClone(row);
+    const f = fixture([row]);
+    f.sources.set(row.receipt.sourceCaseId!, current);
+    expect(await f.list()).toMatchObject({
+      total: 0,
+      countExact: true,
+      queueCounts: { todo: 0 },
+    });
+    expect(row).toEqual(before);
+    expect(row.status).toBe('INSPECTING');
+    expect(row.custodianId).toBe(USER);
+    expect(row.repairReport).toBeNull();
+    current.releaseInfo.customerDecisions![0].proofRevision++;
+    expect(await f.list()).toMatchObject({
+      total: 1,
+      queueCounts: { todo: 1 },
+    });
+  });
+
+  it.each([
+    'identity',
+    'customer',
+    'proof',
+    'revision',
+    'brand',
+    'case',
+    'item',
+    'plan',
+    'planHash',
+    'proposalHash',
+    'quote',
+    'provider',
+    'purpose',
+    'pending',
+    'closed',
+    'decision',
+  ])(
+    'does not count scrap authorization with missing or unsafe %s evidence',
+    async (reason) => {
+      const row = setPlan(piece('scrap-blocked'), 'SCRAP');
+      const current = dispositionSource(row, 'SCRAP');
+      const identity = current.releaseInfo.customerIdentity!;
+      const proof = current.releaseInfo.customerDecisions![0];
+      if (reason === 'identity') identity.verified = false;
+      if (reason === 'customer')
+        proof.verifiedCustomerId = fingerprint('other-line-customer');
+      if (reason === 'proof') current.releaseInfo.customerDecisions = [];
+      if (reason === 'revision') proof.proofRevision = 0;
+      if (reason === 'brand') identity.brand = 'BONSON';
+      if (reason === 'case') identity.caseId = 'another-case';
+      if (reason === 'item') proof.itemId = 'another-piece';
+      if (reason === 'plan') proof.planVersion++;
+      if (reason === 'planHash') proof.planHash = fingerprint('another-plan');
+      if (reason === 'proposalHash') row.serialNumber = 'different-original-sn';
+      if (reason === 'quote') proof.quoteRevision++;
+      if (reason === 'provider') proof.provider = 'DEV_STUB';
+      if (reason === 'purpose') proof.purpose = 'QUOTE';
+      if (reason === 'pending') proof.status = 'PENDING';
+      if (reason === 'closed') current.status = 'CLOSED';
+      if (reason === 'decision') proof.customerDecision = 'RETURN_ORIGINAL';
+      const f = fixture([row]);
+      f.sources.set(row.receipt.sourceCaseId!, current);
+      const before = structuredClone(row);
+      expect(await f.list()).toMatchObject({
+        total: 0,
+        countExact: true,
+        queueCounts: { todo: 0 },
+      });
+      expect(row).toEqual(before);
+    },
+  );
+
+  it('does not treat positive legacy approval flags as a customer disposition proof', () => {
+    const row = setPlan(piece('legacy-disposition'), 'RETURN');
+    const current = source(row.receipt.sourceCaseId!, [row]);
+    expect(current.repairAllowed).toBe(true);
+    expect(repairTodoSourceDecision(actor(), COMPANY, row, current).state).toBe(
+      'blocked',
+    );
   });
   it.each(['REPAIR', 'REPLACE', 'FACTORY'] as const)(
     'names approved %s work only after fresh source consent/payment',
@@ -918,6 +1176,308 @@ describe('repair todo native read projection', () => {
 });
 
 describe('repair todo complete population and bounded fresh source reads', () => {
+  it.each(['REPAIR', 'REPLACE', 'FACTORY'] as const)(
+    'requires actual material and inspection READY before a customer %s start todo',
+    async (plan) => {
+      const row = setPlan(piece('prerequisite-start'), plan),
+        f = fixture([row]);
+      const result = await f.list();
+      expect(result).toMatchObject({
+        total: 1,
+        countExact: true,
+        queueCounts: { todo: 1 },
+      });
+      expect(result.items[0].todoKind).toBe(
+        plan === 'REPAIR'
+          ? 'START_REPAIR'
+          : plan === 'REPLACE'
+            ? 'START_REPLACEMENT'
+            : 'SEND_FACTORY',
+      );
+      expect(f.prerequisites.forItem).toHaveBeenCalledTimes(2);
+      expect(f.prerequisites.forItem.mock.calls[0][0]).toMatchObject({
+        id: row.id,
+        entityId: COMPANY,
+        repairReport: null,
+      });
+    },
+  );
+  it('requires the same actual prerequisites for a corporate START_REFURBISHMENT without inventing customer finance', async () => {
+    const row = piece('corporate-start', 'REFURBISHING');
+    row.receipt.category = 'RETURN';
+    row.receipt.sourceCaseId = null;
+    workflow(row).csr!.quoteRevision = null;
+    (row.repairInspection as InspectionDocument).review!.quoteRevision = null;
+    const f = fixture([row]);
+    expect(repairTodoDecision(actor(), COMPANY, row)).toEqual({
+      state: 'ready',
+      kind: 'START_REFURBISHMENT',
+    });
+    expect(await f.list()).toMatchObject({
+      total: 1,
+      items: [{ todoKind: 'START_REFURBISHMENT' }],
+    });
+    expect(f.sync.cases).not.toHaveBeenCalled();
+    expect(f.prerequisites.forItem).toHaveBeenCalledTimes(2);
+    f.prerequisites.forItem.mockResolvedValue({
+      materials: { start: { state: 'BLOCKED' } },
+      templateChecks: { inspection: 'READY' },
+    });
+    expect(await f.list()).toMatchObject({
+      total: 0,
+      countExact: true,
+      queueCounts: { todo: 0 },
+    });
+  });
+  it.each([4, undefined])(
+    'does not present corporate startup with a non-null quote revision (%s)',
+    async (revision) => {
+      const row = piece('corporate-invalid-quote', 'REFURBISHING');
+      row.receipt.category = 'RETURN';
+      row.receipt.sourceCaseId = null;
+      workflow(row).csr!.quoteRevision = revision;
+      (row.repairInspection as InspectionDocument).review!.quoteRevision =
+        revision;
+      const f = fixture([row]);
+      expect(allowedWorkflowActions(actor(), row)).not.toContain(
+        'start_refurbishment',
+      );
+      expect(repairTodoDecision(actor(), COMPANY, row)).toEqual({
+        state: 'unknown',
+      });
+      expect(await f.list()).toMatchObject({
+        items: [],
+        total: 0,
+        countExact: false,
+        unknownCount: 1,
+      });
+      expect(f.prerequisites.forItem).not.toHaveBeenCalled();
+      expect(f.sync.cases).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['wrong-schema', 'wrong-scope', 'future-start'])(
+    'does not mistake a %s workStart for a current start or prevent authorized reconstruction',
+    async (change) => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-10-13T04:00:00Z'));
+      const row = piece('corporate-invalid-proof', 'REFURBISHING');
+      row.receipt.category = 'RETURN';
+      row.receipt.sourceCaseId = null;
+      workflow(row).csr!.quoteRevision = null;
+      (row.repairInspection as InspectionDocument).review!.quoteRevision = null;
+      const start: Record<string, unknown> = {
+        schema: 'corely.repair.work-start.v1',
+        kind: 'REFURBISHMENT',
+        entityId: COMPANY,
+        itemId: row.id,
+        inspectionRevision: 3,
+        planHash: inspectionPlanHash(
+          row.repairInspection as InspectionDocument,
+        ),
+        ownerId: USER,
+        custodianId: USER,
+        startedById: USER,
+        startedAt: '2026-10-13T03:00:00Z',
+      };
+      if (change === 'wrong-schema') start.schema = 'unrecognized-protocol';
+      if (change === 'wrong-scope') start.itemId = 'another-item';
+      if (change === 'future-start')
+        start.startedAt = '2026-10-13T04:00:00.001Z';
+      Object.assign(workflow(row), { workStart: start });
+      const f = fixture([row]);
+      expect(allowedWorkflowActions(actor(), row)).toContain(
+        'start_refurbishment',
+      );
+      expect(repairTodoDecision(actor(), COMPANY, row)).toEqual({
+        state: 'ready',
+        kind: 'START_REFURBISHMENT',
+      });
+      expect(await f.list()).toMatchObject({
+        total: 1,
+        items: [{ todoKind: 'START_REFURBISHMENT' }],
+      });
+      expect(f.prerequisites.forItem).toHaveBeenCalledTimes(2);
+    },
+  );
+  it('recognizes only a complete current corporate workStart as ongoing documentation work', async () => {
+    const row = piece('corporate-started', 'REFURBISHING');
+    row.receipt.category = 'RETURN';
+    row.receipt.sourceCaseId = null;
+    workflow(row).csr!.quoteRevision = null;
+    (row.repairInspection as InspectionDocument).review!.quoteRevision = null;
+    Object.assign(workflow(row), {
+      workStart: {
+        schema: 'corely.repair.work-start.v1',
+        kind: 'REFURBISHMENT',
+        entityId: COMPANY,
+        itemId: row.id,
+        inspectionRevision: 3,
+        planHash: inspectionPlanHash(
+          row.repairInspection as InspectionDocument,
+        ),
+        ownerId: USER,
+        custodianId: USER,
+        startedById: USER,
+        startedAt: '2026-10-08T00:00:00Z',
+      },
+    });
+    const f = fixture([row]);
+    expect(allowedWorkflowActions(actor(), row)).not.toContain(
+      'start_refurbishment',
+    );
+    expect(repairTodoDecision(actor(), COMPANY, row)).toEqual({
+      state: 'ready',
+      kind: 'REPAIR_WORK',
+    });
+    expect(await f.list()).toMatchObject({
+      total: 1,
+      items: [{ todoKind: 'REPAIR_WORK' }],
+    });
+    expect(f.prerequisites.forItem).not.toHaveBeenCalled();
+  });
+  it.each([
+    'material-unknown',
+    'inspection-unknown',
+    'malformed',
+    'reader-error',
+    'missing-reader',
+  ])('keeps a start %s nonready and withholds an exact badge', async (kind) => {
+    const f = fixture([piece('unproven-start')], kind !== 'missing-reader');
+    if (kind === 'material-unknown')
+      f.prerequisites.forItem.mockResolvedValue({
+        materials: { start: { state: 'UNKNOWN' } },
+        templateChecks: { inspection: 'READY' },
+      });
+    if (kind === 'inspection-unknown')
+      f.prerequisites.forItem.mockResolvedValue({
+        materials: { start: { state: 'READY' } },
+        templateChecks: { inspection: 'UNKNOWN' },
+      });
+    if (kind === 'malformed')
+      f.prerequisites.forItem.mockResolvedValue({
+        materials: { start: { state: 'true' } },
+        templateChecks: { inspection: 'true' },
+      });
+    if (kind === 'reader-error')
+      f.prerequisites.forItem.mockRejectedValue(
+        new Error('synthetic missing registry'),
+      );
+    expect(await f.list()).toMatchObject({
+      items: [],
+      total: 0,
+      countExact: false,
+      unknownCount: 1,
+    });
+    expect((await f.list({ summary: 'true' })).queueCounts).not.toHaveProperty(
+      'todo',
+    );
+  });
+  it.each(['material', 'inspection'])(
+    'does not count an explicitly blocked %s as an actionable start',
+    async (kind) => {
+      const f = fixture();
+      f.prerequisites.forItem.mockResolvedValue({
+        materials: {
+          start: { state: kind === 'material' ? 'BLOCKED' : 'READY' },
+        },
+        templateChecks: {
+          inspection: kind === 'inspection' ? 'BLOCKED' : 'READY',
+        },
+      });
+      expect(await f.list()).toMatchObject({
+        items: [],
+        total: 0,
+        countExact: true,
+        queueCounts: { todo: 0 },
+        unknownCount: 0,
+      });
+    },
+  );
+  it('rechecks changed prerequisites at hydration rather than displaying the previously READY start', async () => {
+    const f = fixture();
+    f.prerequisites.forItem.mockResolvedValueOnce({
+      materials: { start: { state: 'READY' } },
+      templateChecks: { inspection: 'READY' },
+    });
+    f.prerequisites.forItem.mockResolvedValueOnce({
+      materials: { start: { state: 'READY' } },
+      templateChecks: { inspection: 'BLOCKED' },
+    });
+    expect(await f.list()).toMatchObject({
+      items: [],
+      total: 0,
+      countExact: false,
+      unknownCount: 1,
+    });
+    expect(f.prerequisites.forItem).toHaveBeenCalledTimes(2);
+    expect(f.views.mock.calls[0][0]).toEqual([]);
+  });
+  it.each(['version', 'custody', 'owner', 'status'])(
+    'does not use a READY gate after native %s changes during the prerequisite read, including summary',
+    async (kind) => {
+      const row = piece('changing-start'),
+        f = fixture([row]);
+      f.prerequisites.forItem.mockImplementationOnce(() => {
+        if (kind === 'version') row.version++;
+        if (kind === 'custody') row.custodianId = OTHER;
+        if (kind === 'owner') row.repairOwnerId = OTHER;
+        if (kind === 'status') row.status = 'WAITING_CUSTOMER';
+        return Promise.resolve({
+          materials: { start: { state: 'READY' } },
+          templateChecks: { inspection: 'READY' },
+        });
+      });
+      expect(await f.list({ summary: 'true' })).toMatchObject({
+        total: 0,
+        countExact: false,
+        unknownCount: 1,
+      });
+      expect(f.views).not.toHaveBeenCalled();
+    },
+  );
+  it('rechecks current read permission after a prerequisite wait', async () => {
+    const f = fixture();
+    f.prerequisites.forItem.mockImplementationOnce(() => {
+      f.state.permissions = [UPDATE];
+      return Promise.resolve({
+        materials: { start: { state: 'READY' } },
+        templateChecks: { inspection: 'READY' },
+      });
+    });
+    await expect(f.list()).rejects.toBeInstanceOf(ForbiddenException);
+    expect(f.views).not.toHaveBeenCalled();
+  });
+  it('does not read start prerequisites for waiting customer, blocked financial release or ongoing documentation work', async () => {
+    const waiting = piece('waiting', 'WAITING_CUSTOMER'),
+      blocked = piece('financial-blocked'),
+      work = piece('ongoing', 'REPAIRING'),
+      inspectionRow = piece('inspect', 'REPAIR_RECEIVED');
+    inspectionRow.repairWorkflow = null;
+    const f = fixture([waiting, blocked, work, inspectionRow]);
+    (
+      f.sources.get(blocked.receipt.sourceCaseId!) as SourceFixture
+    ).repairAllowed = false;
+    expect(await f.list()).toMatchObject({ total: 2 });
+    expect(f.prerequisites.forItem).not.toHaveBeenCalled();
+  });
+  it('bounds hanging prerequisite reads within the existing request deadline and leaves no timeout timers', async () => {
+    jest.useFakeTimers();
+    const f = fixture(
+      Array.from({ length: 12 }, (_, i) => piece('prereq-hang-' + i)),
+    );
+    f.prerequisites.forItem.mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    const pending = f.list({ summary: 'true' });
+    await jest.advanceTimersByTimeAsync(16000);
+    expect(await pending).toMatchObject({
+      total: 0,
+      countExact: false,
+      unknownCount: 12,
+    });
+    expect(f.prerequisites.forItem).toHaveBeenCalledTimes(10);
+    expect(jest.getTimerCount()).toBe(0);
+  });
   it('filters 65 ready pieces after 210 blocked pieces before count/page and keeps global badges independent of search', async () => {
     const blocked = Array.from({ length: 210 }, (_, i) =>
       piece('blocked-' + i),
@@ -959,16 +1519,16 @@ describe('repair todo complete population and bounded fresh source reads', () =>
           item.status === 'INSPECTING' && item.todoKind === 'START_REPAIR',
       ),
     ).toBe(true);
-    expect(f.prisma.mailroomItem.findMany).toHaveBeenCalledTimes(5);
+    expect(f.prisma.mailroomItem.findMany).toHaveBeenCalledTimes(7);
     const reads = f.prisma.mailroomItem.findMany.mock.calls.map(
       ([query]) => query,
     );
-    const scans = reads.filter((query) => !!query.select);
+    const scans = reads.filter((query) => !!query.select?.repairInspection);
     expect(scans).toHaveLength(4);
     for (const scan of scans) {
       expect(scan).not.toHaveProperty('include');
       expect(scan.select).not.toHaveProperty('evidence');
-      expect(scan.select).not.toHaveProperty('repairReport');
+      expect(scan.select).toHaveProperty('repairReport', true);
       expect(scan.select).not.toHaveProperty('receipt.select.sourceSnapshot');
     }
     const hydration = reads.filter((query) => !!query.include);
@@ -1228,9 +1788,9 @@ describe('repair todo complete population and bounded fresh source reads', () =>
     expect(peak).toBe(5);
     expect(f.sync.cases).toHaveBeenCalledTimes(15);
     expect(result).toMatchObject({
-      total: 15,
+      total: 0,
       countExact: false,
-      unknownCount: 10,
+      unknownCount: 25,
     });
     expect(result.queueCounts).not.toHaveProperty('todo');
     expect(jest.getTimerCount()).toBe(0);

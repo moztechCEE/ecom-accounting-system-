@@ -16,11 +16,15 @@ import {
   inspectionPlanHash,
   validateInspectionSubmission,
 } from './repair-document.contract';
+import { type RepairDispositionProof } from './repair-disposition.contract';
+import type { RepairWorkStartProof } from './repair-work-start.contract';
 
 export const REPAIR_WORKFLOW_ACTIONS = [
   'claim_customer',
   'resolve_customer',
   'return_original',
+  'record_scrap_authorization',
+  'start_refurbishment',
   'send_factory',
   'accept_factory',
   'request_factory_return',
@@ -43,6 +47,8 @@ export type RepairWorkflow = {
   intake?: CaseIntakeState;
   inventoryReceipt?: Record<string, unknown>;
   materialsReceipt?: unknown;
+  dispositionAuthorization?: RepairDispositionProof;
+  workStart?: RepairWorkStartProof;
   outboundShipment?: OutboundShipment;
   csr?: {
     status: 'SENT' | 'ACCEPTED' | 'RESOLVED';
@@ -105,13 +111,15 @@ export type RepairWorkflow = {
   };
 };
 export type WorkflowItem = {
+  id?: string;
+  entityId?: string;
   status: string;
   physicalCustody?: PhysicalCustody;
   repairOwnerId: string | null;
   custodianId: string;
   repairInspection?: unknown;
   repairWorkflow?: unknown;
-  receipt: { customerServiceUserId?: string | null };
+  receipt: { customerServiceUserId?: string | null; category?: string };
 };
 
 export function repairWorkflow(value: unknown): RepairWorkflow {
@@ -347,7 +355,7 @@ export function allowedWorkflowActions(
     return ['receive_factory'];
   if (
     physicalCustody(item) !== 'TECHNICIAN' ||
-    !['INSPECTING', 'REPAIR_RECEIVED'].includes(item.status)
+    !['INSPECTING', 'REPAIR_RECEIVED', 'REFURBISHING'].includes(item.status)
   )
     return [];
   let doc: InspectionDocument;
@@ -356,6 +364,48 @@ export function allowedWorkflowActions(
   } catch {
     return [];
   }
+  if (
+    item.receipt.category === 'RETURN' &&
+    csr?.decision === 'APPROVE' &&
+    doc.data.plan === 'REPAIR'
+  ) {
+    if (csr.quoteRevision !== null || doc.review?.quoteRevision !== null)
+      return [];
+    const start = workflow.workStart;
+    const now = new Date().getTime();
+    if (
+      !start ||
+      start.schema !== 'corely.repair.work-start.v1' ||
+      start.kind !== 'REFURBISHMENT' ||
+      item.status !== 'REFURBISHING' ||
+      typeof item.id !== 'string' ||
+      !item.id.trim() ||
+      typeof item.entityId !== 'string' ||
+      !item.entityId.trim() ||
+      start.entityId !== item.entityId ||
+      start.itemId !== item.id ||
+      start.inspectionRevision !== doc.revision ||
+      start.planHash !== inspectionPlanHash(doc) ||
+      start.ownerId !== actor.id ||
+      start.custodianId !== actor.id ||
+      start.startedById !== actor.id ||
+      typeof start.startedAt !== 'string' ||
+      !Number.isFinite(now) ||
+      !Number.isFinite(Date.parse(start.startedAt)) ||
+      Date.parse(start.startedAt) > now
+    )
+      return ['start_refurbishment'];
+    return [];
+  }
+  if (
+    item.receipt.category === 'REPAIR' &&
+    (csr?.decision === 'DECLINE' || doc.data.plan === 'SCRAP')
+  )
+    return [
+      ...(doc.data.plan === 'SCRAP' ? [] : ['return_original' as const]),
+      'record_scrap_authorization',
+    ];
+  if (doc.data.plan === 'SCRAP') return [];
   if (csr?.decision === 'DECLINE' || doc.data.plan === 'RETURN')
     return ['return_original'];
   if (doc.data.plan === 'FACTORY' && csr?.decision === 'APPROVE') {

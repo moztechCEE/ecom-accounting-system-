@@ -1,4 +1,4 @@
-import { inspectionReviewCurrent, repairStartReady, sourceQuoteConsentCurrent, type RepairItem, type RepairQueue } from './repair-model';
+import { inspectionReviewCurrent, repairStartReady, sourceQuoteConsentCurrent, sourceWorkStartCurrent, type RepairItem, type RepairQueue } from './repair-model';
 
 export type RepairListScope = RepairQueue | 'todo';
 export type RepairWorkbenchTab = 'todo' | 'acceptance' | 'all';
@@ -11,7 +11,7 @@ export function repairWorkbenchTab(scope: RepairListScope): RepairWorkbenchTab {
   return scope === 'todo' || scope === 'acceptance' ? scope : 'all';
 }
 export type RepairQueueCounts = Partial<Record<RepairListScope, number>>;
-export const REPAIR_TODO_LABELS = {INSPECTION:'檢修待處理',REPAIR_WORK:'維修與複驗',START_REPAIR:'待開始維修',START_REPLACEMENT:'待開始換機',SEND_FACTORY:'待交運原廠',FACTORY_RETURN_RECEIPT:'待簽收返還件',RETURN_ORIGINAL:'待交回原件'} as const;
+export const REPAIR_TODO_LABELS = {INSPECTION:'檢修待處理',REPAIR_WORK:'維修與複驗',START_REPAIR:'待開始維修',START_REPLACEMENT:'待開始換機',START_REFURBISHMENT:'待開始整新',SEND_FACTORY:'待交運原廠',FACTORY_RETURN_RECEIPT:'待簽收返還件',RETURN_ORIGINAL:'待交回原件',SCRAP_AUTHORIZATION:'待記錄報廢授權'} as const;
 export type RepairListItem = RepairItem & {
   todoKind?: keyof typeof REPAIR_TODO_LABELS;
   repairOverview?: {
@@ -34,6 +34,7 @@ export function repairQueueCount(counts: RepairQueueCounts | undefined, queue: R
 }
 
 export function repairCaseProgress(item: RepairItem): string | undefined {
+  if(item.receipt.category==='RETURN' && item.status==='REFURBISHING')return sourceWorkStartCurrent(item)?'整新已開工':'整新開工待確認';
   if (item.receipt.category !== 'REPAIR' || !['INSPECTING', 'WAITING_CUSTOMER'].includes(item.status) || item.repairInspection?.status !== 'SUBMITTED' || item.repairInspection.data.plan === 'RETURN' || item.repairWorkflow?.csr?.decision === 'DECLINE') return undefined;
   if (repairStartReady(item)) return item.repairInspection.data.plan === 'REPLACE' ? '待開始換機' : '待開始維修';
   const inspection = item.repairInspection;

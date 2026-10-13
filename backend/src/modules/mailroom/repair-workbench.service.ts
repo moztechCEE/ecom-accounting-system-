@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -20,17 +21,27 @@ import {
 import { SaveInspectionDto, SaveRepairDto } from './repair-document.dto';
 import {
   RepairDocument,
+  type InspectionData,
   inspectionPlanHash,
   validateFactoryCompletion,
   validateInspectionData,
   validateInspectionSubmission,
   validateRepairData,
+  validateDocumentV2,
+  validateDocumentMediaReferences,
 } from './repair-document.contract';
+import { materialReadiness } from './repair-material.contract';
+import { repairSourceCaseBrand } from './repair-source-brand.contract';
+import { RepairPrerequisitesService } from './repair-prerequisites.service';
+import { RepairMediaService } from './repair-media.service';
+import { requireRefurbishmentWorkStart } from './repair-work-start.contract';
 import {
   RepairCustomerQueueQuery,
   RepairWorkflowDto,
 } from './repair-workflow.dto';
 import { repairSourceBindingForItem } from './repair-proposal.contract';
+import { requireSourceDisposition } from './repair-disposition-source.contract';
+import type { RepairDispositionDecision } from './repair-disposition.contract';
 import {
   allowedWorkflowActions,
   currentCsrReview,
@@ -47,6 +58,8 @@ export class RepairWorkbenchService {
     private readonly prisma: PrismaService,
     private readonly mailroom: MailroomService,
     private readonly sync: MailroomSyncService,
+    @Optional() private readonly prerequisites?: RepairPrerequisitesService,
+    @Optional() private readonly media?: RepairMediaService,
   ) {}
   async customerQueue(userId: string, q: RepairCustomerQueueQuery) {
     this.mailroom.enabled();
@@ -141,37 +154,6 @@ export class RepairWorkbenchService {
       actorId: userId,
       requestId: input.requestId,
     };
-    const committed = await this.prisma.mailroomAction.findUnique({
-      where: { entityId_actorId_requestId: operationKey },
-    });
-    let source: SourceCase | undefined;
-    if (
-      !committed &&
-      (['send_factory', 'complete_factory'].includes(input.action) ||
-        (input.action === 'resolve_customer' && input.decision === 'APPROVE'))
-    ) {
-      const current = await this.prisma.mailroomItem.findUnique({
-        where: { id },
-        include: { receipt: true },
-      });
-      if (
-        !current ||
-        current.entityId !== input.entityId ||
-        !isRepairWorkbenchItem(current)
-      )
-        throw new NotFoundException('找不到維修物件');
-      if (!current.receipt.sourceCaseId)
-        throw new ConflictException('沒有售後來源案件，不能放行');
-      source = (
-        await this.sync.cases(input.entityId, '', current.receipt.sourceCaseId)
-      ).items[0];
-      if (
-        !source ||
-        source.id !== current.receipt.sourceCaseId ||
-        source.type !== current.receipt.category
-      )
-        throw new ConflictException('來源案件不存在或類別不符');
-    }
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw(
         Prisma.sql`SELECT id FROM mailroom_items WHERE id=${id} FOR UPDATE`,
@@ -212,11 +194,40 @@ export class RepairWorkbenchService {
         throw new ForbiddenException(
           '目前交辦階段、接手人或實物保管不允許此操作',
         );
+      // Read signed Source authority after the row lock and replay check.
+      let source: SourceCase | undefined;
+      const needsSource =
+        ['send_factory', 'complete_factory'].includes(input.action) ||
+        (input.action === 'resolve_customer' && input.decision === 'APPROVE') ||
+        (row.receipt.category === 'REPAIR' &&
+          [
+            'resolve_customer',
+            'return_original',
+            'record_scrap_authorization',
+          ].includes(input.action));
+      if (needsSource) {
+        if (!row.receipt.sourceCaseId)
+          throw new ConflictException('沒有售後來源案件，不能放行');
+        const sources = (
+          await this.sync.cases(input.entityId, '', row.receipt.sourceCaseId)
+        ).items;
+        source = sources.length === 1 ? sources[0] : undefined;
+        if (
+          !source ||
+          source.id !== row.receipt.sourceCaseId ||
+          source.type !== row.receipt.category
+        )
+          throw new ConflictException('來源案件不存在或類別不符');
+        const finalActor = await this.mailroom.actor(userId, tx);
+        requireEntity(finalActor, input.entityId);
+        requirePermission(finalActor, permission);
+      }
       const now = new Date().toISOString();
-      const note =
-        input.action === 'claim_customer'
-          ? input.note?.trim()
-          : requireWorkflowText(input.note, '處理說明');
+      const note = ['claim_customer', 'start_refurbishment'].includes(
+        input.action,
+      )
+        ? input.note?.trim()
+        : requireWorkflowText(input.note, '處理說明');
       const changes: Prisma.MailroomItemUpdateInput = {};
       if (input.action === 'claim_customer') {
         const doc = validateInspectionSubmission(row.repairInspection);
@@ -249,17 +260,29 @@ export class RepairWorkbenchService {
             source.type !== row.receipt.category)
         )
           throw new ConflictException('來源案件不存在或類別不符');
-        const quoteRevision =
-          input.decision === 'APPROVE' && doc.data.plan !== 'RETURN'
-            ? requireSourceConsent(
-                source!,
-                null,
-                false,
-                source!.type === 'REPAIR'
-                  ? repairSourceBindingForItem(row, source!)
-                  : undefined,
-              )
-            : workflow.csr!.quoteRevision;
+        let quoteRevision = workflow.csr!.quoteRevision;
+        if (
+          source?.type === 'REPAIR' &&
+          (input.decision === 'DECLINE' ||
+            ['RETURN', 'SCRAP'].includes(doc.data.plan))
+        ) {
+          const decision =
+            doc.data.plan === 'SCRAP'
+              ? 'SCRAP'
+              : doc.data.plan === 'RETURN'
+                ? 'RETURN_ORIGINAL'
+                : undefined;
+          quoteRevision = this.disposition(source, row, decision).quoteRevision;
+        } else if (input.decision === 'APPROVE' && doc.data.plan !== 'RETURN') {
+          quoteRevision = requireSourceConsent(
+            source!,
+            null,
+            false,
+            source!.type === 'REPAIR'
+              ? repairSourceBindingForItem(row, source!)
+              : undefined,
+          );
+        }
         workflow.csr = {
           ...workflow.csr!,
           quoteRevision,
@@ -289,18 +312,62 @@ export class RepairWorkbenchService {
         if (row.repairOwnerId !== userId || row.custodianId !== userId)
           throw new ForbiddenException('僅本人的維修交辦可更新');
         if (
-          ['return_original', 'send_factory', 'complete_factory'].includes(
-            input.action,
-          )
+          [
+            'return_original',
+            'record_scrap_authorization',
+            'send_factory',
+            'complete_factory',
+          ].includes(input.action)
         )
           requireTechnicianCustody(fresh, row);
-        if (input.action === 'return_original') {
+        if (input.action === 'start_refurbishment') {
+          requireTechnicianCustody(fresh, row);
+          const doc = currentCsrReview(row);
+          if (
+            row.receipt.category !== 'RETURN' ||
+            doc.data.plan !== 'REPAIR' ||
+            workflow.csr?.decision !== 'APPROVE' ||
+            workflow.csr.quoteRevision !== null ||
+            doc.review?.quoteRevision !== null
+          )
+            throw new ConflictException('此件尚未核准本版整新方案');
+          if (
+            !(await tx.employee.findFirst({
+              where: { userId, entityId: input.entityId, isActive: true },
+              select: { id: true },
+            }))
+          )
+            throw new ForbiddenException('請由此公司在職維修師本人確認');
+          if (!this.prerequisites)
+            throw new ConflictException('檢修證據服務尚未就緒');
+          await this.prerequisites.require(row, 'START', tx);
+          workflow.workStart = {
+            schema: 'corely.repair.work-start.v1',
+            kind: 'REFURBISHMENT',
+            entityId: row.entityId,
+            itemId: row.id,
+            inspectionRevision: doc.revision,
+            planHash: inspectionPlanHash(doc),
+            ownerId: userId,
+            custodianId: userId,
+            startedById: userId,
+            startedAt: now,
+          };
+          changes.status = 'REFURBISHING';
+          changes.nextUserId = userId;
+        } else if (input.action === 'return_original') {
           const doc = currentCsrReview(row);
           if (
             workflow.csr!.decision !== 'DECLINE' &&
             doc.data.plan !== 'RETURN'
           )
             throw new ConflictException('原件未修退回須先由客服確認顧客決定');
+          if (row.receipt.category === 'REPAIR') {
+            const proof = this.disposition(source!, row, 'RETURN_ORIGINAL');
+            if (proof.quoteRevision !== workflow.csr!.quoteRevision)
+              throw new ConflictException('顧客原件處置與客服確認版本不符');
+            workflow.dispositionAuthorization = proof;
+          }
           this.confirmPhysical(input);
           workflow.release = {
             purpose: 'RETURN_UNREPAIRED',
@@ -312,6 +379,24 @@ export class RepairWorkbenchService {
           changes.status = 'WAITING_RETURN_ACCEPTANCE';
           changes.nextUserId = row.receipt.receivedById;
           changes.location = input.location!.trim();
+        } else if (input.action === 'record_scrap_authorization') {
+          const doc = currentCsrReview(row);
+          if (
+            row.receipt.category !== 'REPAIR' ||
+            (doc.data.plan !== 'SCRAP' && workflow.csr?.decision !== 'DECLINE')
+          )
+            throw new ConflictException('此案件尚未確認報廢處置');
+          const proof = this.disposition(source!, row, 'SCRAP');
+          if (proof.quoteRevision !== workflow.csr!.quoteRevision)
+            throw new ConflictException('顧客原件處置與客服確認版本不符');
+          if (
+            workflow.dispositionAuthorization &&
+            fingerprint(workflow.dispositionAuthorization) ===
+              fingerprint(proof)
+          )
+            throw new ConflictException('本版報廢授權已記錄');
+          workflow.dispositionAuthorization = proof;
+          // No physical disposal, stock OUT or terminal state is implied.
         } else if (input.action === 'send_factory') {
           const doc = currentCsrReview(row);
           if (
@@ -331,6 +416,9 @@ export class RepairWorkbenchService {
               ? repairSourceBindingForItem(row, source)
               : undefined,
           );
+          if (!this.prerequisites)
+            throw new ConflictException('檢修證據服務尚未就緒');
+          await this.prerequisites.require(row, 'START', tx);
           this.confirmPhysical(input);
           workflow.factory = {
             stage: 'SENT',
@@ -431,6 +519,9 @@ export class RepairWorkbenchService {
               )
           )
             throw new ConflictException('原廠交辦版本已變更，請重新由客服確認');
+          if (!this.prerequisites)
+            throw new ConflictException('檢修證據服務尚未就緒');
+          await this.prerequisites.require(row, 'COMPLETION', tx);
           workflow.release = {
             purpose: 'FACTORY_REPAIRED',
             inspectionRevision: report.inspectionRevision,
@@ -468,6 +559,28 @@ export class RepairWorkbenchService {
     this.mailroom.publish(result.notifications);
     return { id, duplicate: result.duplicate };
   }
+  private disposition(
+    source: SourceCase,
+    item: Parameters<typeof requireSourceDisposition>[1],
+    decision?: RepairDispositionDecision,
+  ) {
+    const policy = {
+      entityId: item.entityId,
+      allowDevStub: process.env.REPAIR_DISPOSITION_DEV_STUB_ENABLED === 'true',
+    };
+    if (decision)
+      return requireSourceDisposition(source, item, decision, policy);
+    const proofs = (['RETURN_ORIGINAL', 'SCRAP'] as const).flatMap((kind) => {
+      try {
+        return [requireSourceDisposition(source, item, kind, policy)];
+      } catch {
+        return [];
+      }
+    });
+    if (proofs.length !== 1)
+      throw new ConflictException('當版顧客原件處置尚未確認');
+    return proofs[0];
+  }
   private confirmPhysical(input: RepairWorkflowDto) {
     if (input.confirmedItems !== true)
       throw new BadRequestException('請本人核對實物並確認交接');
@@ -483,13 +596,46 @@ export class RepairWorkbenchService {
     )
       throw new ForbiddenException('無檢修文件存取權限');
     requireEntity(actor, entityId);
+    const evidenceRow = await this.prisma.mailroomItem.findUnique({
+      where: { id },
+      include: { receipt: true },
+    });
+    if (
+      !evidenceRow ||
+      evidenceRow.entityId !== entityId ||
+      !isRepairWorkbenchItem(evidenceRow)
+    )
+      throw new NotFoundException('找不到維修物件');
+    if (evidenceRow.version !== detail.version)
+      throw new ConflictException('案件已更新，請重新載入');
+    const catalog = await Promise.all([
+      this.prisma.product.findMany({
+        where: { entityId, isActive: true, hasSerialNumbers: false },
+        select: { id: true, sku: true, name: true },
+        orderBy: { sku: 'asc' },
+        take: 1000,
+      }),
+      this.prisma.warehouse.findMany({
+        where: { entityId, isActive: true },
+        select: { id: true, code: true, name: true },
+        orderBy: { code: 'asc' },
+      }),
+    ]);
     const sourceId = detail.receipt.sourceCaseId;
     let repairProposalBinding: ReturnType<
       typeof repairSourceBindingForItem
     > | null = null;
+    let disposition = {
+      returnOriginal: { state: 'UNKNOWN', reason: 'SOURCE_UNAVAILABLE' },
+      scrapAuthorization: { state: 'UNKNOWN', reason: 'SOURCE_UNAVAILABLE' },
+      authorization:
+        repairWorkflow(detail.repairWorkflow).dispositionAuthorization || null,
+    };
     let release: {
       available: boolean;
       repairAllowed?: boolean;
+      sourceCaseId?: string;
+      caseBrand?: string | null;
       sourceStatus?: string;
       sourceStatusLabel?: string;
       releaseInfo?: SourceCase['releaseInfo'];
@@ -505,6 +651,14 @@ export class RepairWorkbenchService {
           source.type === detail.receipt.category
             ? {
                 available: true,
+                sourceCaseId: source.id,
+                caseBrand: (() => {
+                  try {
+                    return repairSourceCaseBrand(source);
+                  } catch {
+                    return null;
+                  }
+                })(),
                 repairAllowed: source.repairAllowed,
                 sourceStatus: source.status,
                 releaseInfo: source.releaseInfo || null,
@@ -519,6 +673,38 @@ export class RepairWorkbenchService {
           } catch {
             repairProposalBinding = null;
           }
+          const readiness = (decision: RepairDispositionDecision) => {
+            try {
+              const doc = currentCsrReview(detail);
+              const workflow = repairWorkflow(detail.repairWorkflow);
+              if (
+                decision === 'SCRAP'
+                  ? doc.data.plan !== 'SCRAP' &&
+                    workflow.csr?.decision !== 'DECLINE'
+                  : doc.data.plan !== 'RETURN' &&
+                    workflow.csr?.decision !== 'DECLINE'
+              )
+                return { state: 'BLOCKED', reason: 'DECISION_MISMATCH' };
+              const proof = this.disposition(source, detail, decision);
+              if (proof.quoteRevision !== workflow.csr?.quoteRevision)
+                return { state: 'BLOCKED', reason: 'QUOTE_MISMATCH' };
+              if (
+                decision === 'SCRAP' &&
+                workflow.dispositionAuthorization &&
+                fingerprint(workflow.dispositionAuthorization) ===
+                  fingerprint(proof)
+              )
+                return { state: 'BLOCKED', reason: 'ALREADY_RECORDED' };
+              return { state: 'READY', reason: 'CURRENT_APPROVED_PROOF' };
+            } catch {
+              return { state: 'BLOCKED', reason: 'PROOF_UNAVAILABLE' };
+            }
+          };
+          disposition = {
+            ...disposition,
+            returnOriginal: readiness('RETURN_ORIGINAL'),
+            scrapAuthorization: readiness('SCRAP'),
+          };
         }
       } catch {
         release = {
@@ -527,10 +713,98 @@ export class RepairWorkbenchService {
         };
       }
     }
+    const inspection =
+      detail.repairInspection as RepairDocument<InspectionData> | null;
+    const context = {
+      entityId,
+      itemId: id,
+      inspectionRevision: inspection?.revision || 0,
+      planHash: inspection ? inspectionPlanHash(inspection) : '',
+      requiredReceiverId: detail.custodianId,
+    };
+    const receipt = repairWorkflow(detail.repairWorkflow).materialsReceipt;
+    let evidence = {
+      materials: {
+        start: materialReadiness(
+          context,
+          inspection?.data.materialPlan,
+          receipt,
+          'START',
+        ),
+        completion: materialReadiness(
+          context,
+          inspection?.data.materialPlan,
+          receipt,
+          'COMPLETION',
+        ),
+      },
+      template: null as Awaited<
+        ReturnType<RepairPrerequisitesService['forItem']>
+      >['template'],
+      completionTemplate: null as Awaited<
+        ReturnType<RepairPrerequisitesService['forItem']>
+      >['completionTemplate'],
+      repairTemplate: null as Awaited<
+        ReturnType<RepairPrerequisitesService['forItem']>
+      >['repairTemplate'],
+      templateChecks: { inspection: 'UNKNOWN', completion: 'UNKNOWN' },
+      calibrationRecords: [] as Awaited<
+        ReturnType<RepairPrerequisitesService['forItem']>
+      >['calibrationRecords'],
+      completionCalibrationRecords: [] as Awaited<
+        ReturnType<RepairPrerequisitesService['forItem']>
+      >['completionCalibrationRecords'],
+    };
+    if (this.prerequisites) {
+      try {
+        evidence = await this.prerequisites.forItem(evidenceRow);
+      } catch {
+        evidence = {
+          ...evidence,
+          materials: {
+            start: {
+              state: 'UNKNOWN',
+              reason: 'RECEIPT_UNKNOWN',
+              requiredCount: 0,
+            },
+            completion: {
+              state: 'UNKNOWN',
+              reason: 'RECEIPT_UNKNOWN',
+              requiredCount: 0,
+            },
+          },
+        };
+      }
+    }
+    let mediaAssets: Awaited<ReturnType<RepairMediaService['list']>>['items'] =
+      [];
+    if (this.media) {
+      try {
+        mediaAssets = (await this.media.list(userId, entityId, id)).items;
+      } catch {
+        mediaAssets = [];
+      }
+    }
     return {
       ...detail,
       release,
       repairProposalBinding,
+      repairPrerequisites: {
+        workStart: (() => {
+          if (evidenceRow.receipt.category !== 'RETURN')
+            return { state: 'UNKNOWN', reason: 'NOT_APPLICABLE' };
+          try {
+            requireRefurbishmentWorkStart(evidenceRow);
+            return { state: 'READY', reason: 'CURRENT_STARTED_PROOF' };
+          } catch {
+            return { state: 'BLOCKED', reason: 'NOT_STARTED' };
+          }
+        })(),
+        materialCatalog: { products: catalog[0], warehouses: catalog[1] },
+        ...evidence,
+        mediaAssets,
+        disposition,
+      },
       allowedWorkflowActions: allowedWorkflowActions(actor, detail),
       physicalCustody: physicalCustody(detail),
       editable:
@@ -552,6 +826,7 @@ export class RepairWorkbenchService {
     requireEntity(actor, input.entityId);
     requirePermission(actor, 'repair_workbench:update');
     if (input.status === 'SUBMITTED') {
+      validateDocumentV2(input.data, kind);
       if (kind === 'inspection')
         validateInspectionData((input as SaveInspectionDto).data, true);
       else validateRepairData((input as SaveRepairDto).data);
@@ -593,6 +868,42 @@ export class RepairWorkbenchService {
       if (row.version !== input.expectedVersion)
         throw new ConflictException('案件已更新，請重新載入後再儲存');
       requireTechnicianCustody(fresh, row);
+      if (input.status === 'SUBMITTED') {
+        if (!this.prerequisites)
+          throw new ConflictException('檢修證據服務尚未就緒');
+        await this.prerequisites.recordValidation(row, kind, input.data, tx);
+      }
+      if (input.status === 'SUBMITTED' && kind === 'inspection') {
+        for (const line of (input as SaveInspectionDto).data.materialPlan
+          ?.lines || []) {
+          const [product, warehouse] = await Promise.all([
+            tx.product.findFirst({
+              where: {
+                id: line.productId,
+                entityId: row.entityId,
+                isActive: true,
+                hasSerialNumbers: false,
+              },
+              select: { id: true, sku: true, name: true },
+            }),
+            tx.warehouse.findFirst({
+              where: {
+                id: line.warehouseId,
+                entityId: row.entityId,
+                isActive: true,
+              },
+              select: { id: true },
+            }),
+          ]);
+          if (
+            !product ||
+            !warehouse ||
+            (line.sku !== undefined && line.sku !== product.sku) ||
+            (line.name !== undefined && line.name !== product.name)
+          )
+            throw new ConflictException('材料品項或倉位已變更，請重新選擇');
+        }
+      }
       const stages =
         kind === 'inspection'
           ? ['REPAIR_RECEIVED', 'INSPECTING', 'REPAIRING', 'REFURBISHING']
@@ -666,6 +977,27 @@ export class RepairWorkbenchService {
       }
       const key = kind === 'inspection' ? 'repairInspection' : 'repairReport';
       const old = row[key] as RepairDocument | null;
+      // Media IDs alone cannot prove a finalized, scoped upload. The unified
+      // media resolver must supply its verified records before media is accepted.
+      const finalized = input.data.mediaRefs?.length
+        ? await this.media?.attach(
+            tx,
+            row,
+            kind,
+            (old?.revision || 0) + 1,
+            input.data.mediaRefs,
+          )
+        : [];
+      validateDocumentMediaReferences(
+        input.data.mediaRefs,
+        {
+          entityId: row.entityId,
+          itemId: id,
+          kind,
+          documentRevision: (old?.revision || 0) + 1,
+        },
+        finalized || [],
+      );
       const now = new Date().toISOString();
       const doc = {
         number: (kind === 'inspection' ? 'INS-' : 'REP-') + row.label,
@@ -695,6 +1027,8 @@ export class RepairWorkbenchService {
                     ...repairWorkflow(row.repairWorkflow),
                     csr: undefined,
                     release: undefined,
+                    dispositionAuthorization: undefined,
+                    workStart: undefined,
                   }),
                 ) as Prisma.InputJsonValue,
                 ...(row.status === 'REPAIRING'

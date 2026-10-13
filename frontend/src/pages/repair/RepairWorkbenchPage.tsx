@@ -9,12 +9,14 @@ import api from '../../services/api';
 import { repairService } from '../../services/repair';
 import { webSocketService } from '../../services/websocket.service';
 import { ACTIONS, STATUS, errorText, mailroomEnabled, type Source } from '../mailroom/model';
-import { PLANS, REPAIR_STATUS, WORKFLOW_ACTIONS, sourceQuoteConsentCurrent, inspectionReviewCurrent, repairStartReady, repairReportReady, type RepairItem } from './repair-model';
+import { PLANS, REPAIR_STATUS, WORKFLOW_ACTIONS, sourceQuoteConsentCurrent, sourceWorkStartCurrent, inspectionReviewCurrent, type RepairItem } from './repair-model';
+import { repairNextStepActions, repairDispositionRoute } from './repair-nextstep';
 import RepairDocuments from './RepairDocuments';
 import RepairCaseList from './RepairCaseList';
 import { REPAIR_WORKBENCH_TABS, REPAIR_QUERY_FILTERS, repairListScope, repairWorkbenchTab, repairQueueCount, repairCaseProgress, type RepairListScope, type RepairWorkbenchTab, type RepairListResponse, type RepairQueueCounts } from './repair-list-model';
 import RepairWorkflowPanel from './RepairWorkflowPanel';
 import RepairReadinessPanel from './RepairReadinessPanel';
+import RepairTestStandardManager from './RepairTestStandardManager';
 import { useRepairNavigationGuard } from './repair-navigation';
 import { useRepairFeedback } from './repair-feedback';
 import type { RepairMessage } from './repair-feedback';
@@ -23,7 +25,6 @@ import './repair.css';
 import { currentItemCustody } from '../mailroom/item-custody';
 const { Title, Text, Paragraph } = Typography;
 const time = (value: string) => dayjs(value).format('MM/DD HH:mm');
-const documentReady = (item: RepairItem) => item.repairInspection?.status === 'SUBMITTED';
 function historyNote(action: string, note: string): string {
   if (!['save_repair_inspection','submit_repair_inspection','save_repair_repair','submit_repair_repair'].includes(action)) return note;
   try {
@@ -220,17 +221,39 @@ function RepairDetail({item,entityId,onSaved,onDirtyChange,feedback,confirmDisca
   const operation=useRef<{body:string;id:string}|null>(null);
   const [workflowFailure,setWorkflowFailure]=useState('');
   const [workflowBusy,setWorkflowBusy]=useState(false);
-  const [workflowOpen,setWorkflowOpen]=useState<string[]>([]);
+  const [standardsOpen,setStandardsOpen]=useState(false);
+  const [standardsClosing,setStandardsClosing]=useState(false);
+  const [standardsBusy,setStandardsBusy]=useState(false);
+  const [standardsEpoch,setStandardsEpoch]=useState(0);
+  const standardsChanged=useRef(false);
+  const closingStandards=useRef(false);
+  const standardsTrigger=useRef<HTMLButtonElement|HTMLAnchorElement|null>(null);
+  const [workflowOpen,setWorkflowOpen]=useState<string[]>(()=>item.allowedWorkflowActions?.some(action=>!['claim_customer','resolve_customer'].includes(action))?['workflow']:[]);
   const documentsDirty=useRef(false);
   const workflowDirty=useRef(false);
   const actionDirty=useRef(false);
   const publishDirty=()=>onDirtyChange(documentsDirty.current || workflowDirty.current || actionDirty.current);
   const running=useRef(false);
   const canUpdate=hasPermission(user,'repair_workbench:update');
+  const canManage=hasPermission(user,'repair_workbench:manage');
   const own=canUpdate && item.repairOwnerId===user?.id && item.custodianId===user?.id && item.editable===true;
   const waiting=['WAITING_REPAIR_ACCEPTANCE','PENDING_REFURBISH'].includes(item.status);
   const plan=item.repairInspection?.data.plan;
-  const reportReason=!documentReady(item)?'請先提交檢修單':item.repairReport?.status!=='SUBMITTED'?'請先提交維修單':item.repairReport.inspectionRevision!==item.repairInspection?.revision?'維修單依據的檢修版本已變更':item.repairReport.data.qcResult!=='PASS'||!item.repairReport.data.checks.length||item.repairReport.data.checks.some(check=>check.result!=='PASS')?'複驗尚未通過':'請核對方案與實際處置';
+  const noteLabel=['REPAIRING','REFURBISHING'].includes(item.status) && !(item.receipt.category==='RETURN' && !sourceWorkStartCurrent(item))?'交回品況與配件':'交辦說明';
+  async function closeStandards() {
+    if(closingStandards.current || standardsBusy || busy || workflowBusy)return;
+    closingStandards.current=true;setStandardsClosing(true);
+    try {
+      if(standardsChanged.current && (documentsDirty.current || workflowDirty.current || actionDirty.current) && !await confirmDiscard())return;
+      setStandardsOpen(false);
+      if(standardsChanged.current){
+        await onSaved();standardsChanged.current=false;documentsDirty.current=false;workflowDirty.current=false;actionDirty.current=false;
+        setNote('');setConfirmed(false);setLocation(item.location);publishDirty();setStandardsEpoch(value=>value+1);
+      }
+      requestAnimationFrame(()=>standardsTrigger.current?.focus());
+    } catch(error){setFailure(errorText(error));}
+    finally{closingStandards.current=false;setStandardsClosing(false);}
+  }
   async function act(action:string) {
     if(running.current)return;
     running.current=true;
@@ -243,30 +266,27 @@ function RepairDetail({item,entityId,onSaved,onDirtyChange,feedback,confirmDisca
       await api.post(`/mailroom/items/${encodeURIComponent(item.id)}/actions`,{...payload,requestId:operation.current.id});message.success('已保存進度與交接紀錄');await onSaved();
     } catch(error){setFailure(errorText(error));}finally{running.current=false;setBusy(false);}
   }
-  const actions: {name:string;label:string;disabled?:boolean;reason?:string}[]=[];
-  if(canUpdate&&waiting&&!item.nextUserId&&!item.repairOwnerId)actions.push({name:'claim',label:'認領案件'});
-  if(canUpdate&&waiting&&item.nextUserId===user?.id)actions.push({name:'accept',label:'簽收實物',disabled:!confirmed||!location.trim(),reason:!location.trim()?'請填存放位置':'請確認已核對實物'});
-  if(own&&item.status==='REPAIR_RECEIVED')actions.push({name:'start_inspection',label:'開始檢測'});
-  if(own&&['REPAIR_RECEIVED','INSPECTING','REPAIRING'].includes(item.status))actions.push({name:'await_customer',label:'送客服確認',disabled:!documentReady(item)||!note.trim()||!item.receipt.customerServiceUserId,reason:!documentReady(item)?'請先提交檢修單':!item.receipt.customerServiceUserId?'請指派承辦客服':'請填交辦說明'});
-  if(own&&item.status==='INSPECTING'&&['REPAIR','REPLACE'].includes(plan || ''))actions.push({name:'start_repair',label:plan==='REPLACE'?'開始換機':'開始維修',disabled:!repairStartReady(item),reason:'請完成客服與放行核對'});
-  if(own&&['REPAIRING','REFURBISHING'].includes(item.status))actions.push({name:item.status==='REFURBISHING'?'complete_refurbish':'complete_repair',label:'交回收發室',disabled:!repairReportReady(item)||!note.trim(),reason:!repairReportReady(item)?reportReason:'請填交回品況與配件'});
+  const actions=repairNextStepActions(item,{canUpdate,viewerId:user?.id,confirmed,location,note});
   const primaryAction=actions.find(action=>!action.disabled && ['start_repair','complete_repair','complete_refurbish'].includes(action.name)) || actions.find(action=>!action.disabled) || actions[0];
   return <div className="repair-detail">
-    <div className="repair-detail-summary"><Tag color="blue">{repairCaseProgress(item) || item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag>{item.receipt.category==='RETURN'&&<Tag>退貨整新</Tag>}<Text type="secondary">SN：{item.serialNumber || '未提供'} · SKU：{item.sku || '未提供'}</Text></div>
+    <div className="repair-detail-summary"><Tag color="blue">{repairCaseProgress(item) || item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag>{item.receipt.category==='RETURN'&&<Tag>退貨整新</Tag>}<Text type="secondary">SN：{item.serialNumber || '未提供'} · SKU：{item.sku || '未提供'}</Text>{canManage&&<Button ref={node=>{standardsTrigger.current=node;}} size="small" disabled={busy || workflowBusy || standardsClosing} onClick={()=>setStandardsOpen(true)}>檢測標準</Button>}</div>
+    <Drawer title="檢測標準" open={standardsOpen} width="min(900px, 100vw)" maskClosable={false} onClose={()=>void closeStandards()} closable={!standardsBusy && !standardsClosing && !busy && !workflowBusy} destroyOnHidden>
+      <RepairTestStandardManager key={`${entityId}:${item.productId || ''}`} entityId={entityId} product={item.productId && item.productName && item.sku?{id:item.productId,name:item.productName,sku:item.sku}:null} canManage={canManage} feedback={message} onChanged={()=>{standardsChanged.current=true;}} onBusyChange={setStandardsBusy} />
+    </Drawer>
     <RepairReadinessPanel compact item={item} canUpdate={canUpdate} viewerId={user?.id} handoffNote={note} />
     {workflowFailure&&<Alert type="error" showIcon message={workflowFailure} />}
     <div className="repair-documents-layout">
-      <div className="repair-editor-main">    <RepairDocuments feedback={message} item={item} entityId={entityId} onSaved={onSaved} onBeforeSave={async()=>!(workflowDirty.current || actionDirty.current) || await confirmDiscard()} onDirtyChange={dirty=>{documentsDirty.current=dirty;publishDirty();}} />
+      <div className="repair-editor-main">    <RepairDocuments key={`documents:${standardsEpoch}`} feedback={message} item={item} entityId={entityId} onSaved={onSaved} onBeforeSave={async()=>!(workflowDirty.current || actionDirty.current) || await confirmDiscard()} onDirtyChange={dirty=>{documentsDirty.current=dirty;publishDirty();}} />
 </div>
       <aside className="repair-editor-sidebar" aria-label="案件操作">
     {!item.receipt.customerServiceUserId&&item.receipt.sourceCaseId&&<Alert type="warning" message="尚未指派承辦客服" />}
     {failure&&<Alert type="error" message={failure} showIcon />}
     {actions.length>0&&<Card size="small" title="案件操作">
       {waiting&&item.nextUserId===user?.id&&<Space direction="vertical" style={{width:'100%',marginBottom:14}}><Text>簽收人：{user?.name}</Text><Input value={location} maxLength={160} onChange={event=>{setLocation(event.target.value);actionDirty.current=true;publishDirty();}} placeholder="存放位置" aria-label="存放位置" /><Checkbox checked={confirmed} onChange={event=>{setConfirmed(event.target.checked);actionDirty.current=true;publishDirty();}}>已收到並核對實物與配件</Checkbox></Space>}
-      {own&&<Input.TextArea value={note} maxLength={2000} rows={2} onChange={event=>{setNote(event.target.value);actionDirty.current=true;publishDirty();}} placeholder={['REPAIRING','REFURBISHING'].includes(item.status)?'交回品況與配件':'交辦說明'} aria-label={['REPAIRING','REFURBISHING'].includes(item.status)?'交回品況與配件':'交辦說明'} style={{marginBottom:12}} />}
-      <Space wrap>{actions.map(action=><Tooltip key={action.name} title={action.disabled && !busy ? action.reason : undefined}><span><Button type={action===primaryAction?'primary':'default'} loading={busy} disabled={action.disabled || busy} onClick={()=>void act(action.name)}>{action.label}</Button></span></Tooltip>)}</Space>
+      {own&&<Input.TextArea value={note} maxLength={2000} rows={2} onChange={event=>{setNote(event.target.value);actionDirty.current=true;publishDirty();}} placeholder={noteLabel} aria-label={noteLabel} style={{marginBottom:12}} />}
+      <Space wrap>{actions.map(action=><Tooltip key={action.name} title={action.disabled && !busy ? action.reason : undefined}><span><Button type={action===primaryAction && !(workflowOpen.includes('workflow') && item.allowedWorkflowActions?.some(value=>!['claim_customer','resolve_customer'].includes(value)))?'primary':'default'} loading={busy} disabled={action.disabled || busy || workflowBusy} onClick={()=>void act(action.name)}>{action.label}</Button></span></Tooltip>)}</Space>
     </Card>}
-        <Collapse activeKey={workflowOpen} onChange={keys=>{if(!workflowBusy)setWorkflowOpen(Array.isArray(keys)?keys:[keys]);}} items={[{key:'workflow',label:'原件與原廠作業',collapsible:workflowBusy?'disabled':undefined,forceRender:true,children:<>    <RepairWorkflowPanel feedback={message} item={item} entityId={entityId} canUpdate={canUpdate && item.repairOwnerId===user?.id} onSaved={onSaved} onFailure={setWorkflowFailure} onBusyChange={setWorkflowBusy} onDirtyChange={dirty=>{workflowDirty.current=dirty;publishDirty();}} onBeforeAction={async()=>!(documentsDirty.current || actionDirty.current) || await confirmDiscard()} />
+        <Collapse activeKey={workflowOpen} onChange={keys=>{if(!workflowBusy)setWorkflowOpen(Array.isArray(keys)?keys:[keys]);}} items={[{key:'workflow',label:item.receipt.category==='RETURN'?'公司整新作業':repairDispositionRoute(item)?'原件處置':'原件與原廠作業',collapsible:workflowBusy?'disabled':undefined,forceRender:true,children:<>    <RepairWorkflowPanel key={`workflow:${standardsEpoch}`} feedback={message} item={item} entityId={entityId} canUpdate={canUpdate && item.repairOwnerId===user?.id && !busy} onSaved={onSaved} onFailure={setWorkflowFailure} onBusyChange={setWorkflowBusy} onDirtyChange={dirty=>{workflowDirty.current=dirty;publishDirty();}} onBeforeAction={async()=>!(documentsDirty.current || actionDirty.current) || await confirmDiscard()} />
 </>}]} />
       </aside>
     </div>
@@ -279,7 +299,7 @@ function RepairDetail({item,entityId,onSaved,onDirtyChange,feedback,confirmDisca
       {key:'next',label:'下一位實物接收人',children:item.nextUserName || '待安排'}, {key:'receipt',label:'收發室收件單',children:item.receipt.number},
       {key:'source',label:'售後來源狀態',children:item.release?.sourceStatusLabel || item.release?.sourceStatus || item.release?.message || '無來源'},
       {key:'plan',label:'已保存檢修方案',children:plan?PLANS[plan]:'尚未提交'},
-      {key:'review',label:'客服方案確認',children:item.receipt.category==='RETURN'?'不適用':inspectionReviewCurrent(item.repairInspection)?`${item.repairInspection?.review?.decision==='DECLINE'?'客服拒修':'客服確認'}檢修 v${item.repairInspection?.revision}`:'目前版次尚未確認'},
+      {key:'review',label:'客服方案確認',children:inspectionReviewCurrent(item.repairInspection)?`${item.repairInspection?.review?.decision==='DECLINE'?'客服拒修':'客服確認'}檢修 v${item.repairInspection?.revision}`:'目前版次尚未確認'},
     ]} />
     {item.receipt.category==='REPAIR' && item.release?.releaseInfo && <Descriptions size="small" bordered column={{xs:1,sm:2}} style={{marginBottom:16}} items={[
       {key:'quoteRevision',label:'報價版次',children:`v${item.release.releaseInfo.quoteRevision}`},

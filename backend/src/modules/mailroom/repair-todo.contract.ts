@@ -2,6 +2,7 @@ import {
   type Actor,
   type SourceCase,
   can,
+  fingerprint,
   isRepairWorkbenchItem,
 } from './mailroom.contract';
 import {
@@ -16,15 +17,20 @@ import {
   type RepairProposalItem,
   repairSourceBindingForItem,
 } from './repair-proposal.contract';
+import { requireSourceDisposition } from './repair-disposition-source.contract';
+import { type RepairDispositionPolicy } from './repair-disposition.contract';
+import { requireRefurbishmentWorkStart } from './repair-work-start.contract';
 
 export const REPAIR_TODO_KINDS = [
   'INSPECTION',
   'REPAIR_WORK',
   'START_REPAIR',
   'START_REPLACEMENT',
+  'START_REFURBISHMENT',
   'SEND_FACTORY',
   'FACTORY_RETURN_RECEIPT',
   'RETURN_ORIGINAL',
+  'SCRAP_AUTHORIZATION',
 ] as const;
 export type RepairTodoKind = (typeof REPAIR_TODO_KINDS)[number];
 export const REPAIR_TODO_STATUSES = [
@@ -94,8 +100,25 @@ export function repairTodoDecision(
     const actualWork = ['REPAIRING', 'REFURBISHING'].includes(item.status);
     // Internal refurbishment has no customer financial release. Customer work
     // still requires the current source release before counting as actionable.
-    if (actualWork && item.receipt.category !== 'REPAIR')
-      return { state: 'ready', kind: 'REPAIR_WORK' };
+    if (actualWork && item.receipt.category !== 'REPAIR') {
+      if (!workflow.csr) return { state: 'ready', kind: 'INSPECTION' };
+      if (workflow.csr.status !== 'RESOLVED') return blocked;
+      try {
+        currentCsrReview(item);
+      } catch {
+        return { state: 'ready', kind: 'INSPECTION' };
+      }
+      try {
+        requireRefurbishmentWorkStart(item);
+        return { state: 'ready', kind: 'REPAIR_WORK' };
+      } catch {
+        return allowedWorkflowActions(actor, item).includes(
+          'start_refurbishment',
+        )
+          ? { state: 'ready', kind: 'START_REFURBISHMENT' }
+          : unknown;
+      }
+    }
     const csr = workflow.csr;
     if (!csr)
       return actualWork ? blocked : { state: 'ready', kind: 'INSPECTION' };
@@ -109,20 +132,31 @@ export function repairTodoDecision(
       return { state: 'ready', kind: 'INSPECTION' };
     }
     const actions = allowedWorkflowActions(actor, item);
-    if (actions.includes('return_original'))
+    if (actions.includes('start_refurbishment'))
+      return { state: 'ready', kind: 'START_REFURBISHMENT' };
+    if (
+      actions.includes('return_original') &&
+      item.receipt.category !== 'REPAIR'
+    )
       return { state: 'ready', kind: 'RETURN_ORIGINAL' };
     const factoryCompletion = actions.includes('complete_factory');
     if (factoryCompletion && item.receipt.category !== 'REPAIR')
       return { state: 'ready', kind: 'REPAIR_WORK' };
-    if (csr.decision !== 'APPROVE') return unknown;
     let kind: RepairTodoKind;
-    if (actualWork || factoryCompletion) kind = 'REPAIR_WORK';
+    if (actions.includes('return_original')) kind = 'RETURN_ORIGINAL';
+    else if (actions.includes('record_scrap_authorization'))
+      kind = 'SCRAP_AUTHORIZATION';
+    else if (csr.decision !== 'APPROVE') return unknown;
+    else if (actualWork || factoryCompletion) kind = 'REPAIR_WORK';
     else if (doc.data.plan === 'REPAIR') kind = 'START_REPAIR';
     else if (doc.data.plan === 'REPLACE') kind = 'START_REPLACEMENT';
     else if (actions.includes('send_factory')) kind = 'SEND_FACTORY';
     else return { state: 'ready', kind: 'INSPECTION' };
     // REPAIR_RECEIVED must first enter inspection; it is not a start action.
-    if (item.status === 'REPAIR_RECEIVED')
+    if (
+      item.status === 'REPAIR_RECEIVED' &&
+      !['RETURN_ORIGINAL', 'SCRAP_AUTHORIZATION'].includes(kind)
+    )
       return { state: 'ready', kind: 'INSPECTION' };
     const sourceId = item.receipt.sourceCaseId;
     if (
@@ -143,6 +177,10 @@ export function repairTodoSourceDecision(
   entityId: string,
   item: RepairTodoItem,
   source: unknown,
+  dispositionPolicy: RepairDispositionPolicy = {
+    entityId,
+    allowDevStub: false,
+  },
 ): RepairTodoDecision {
   const decision = repairTodoDecision(actor, entityId, item);
   if (decision.state !== 'source') return decision;
@@ -157,6 +195,47 @@ export function repairTodoSourceDecision(
     typeof current.repairAllowed !== 'boolean'
   )
     return unknown;
+  if (['RETURN_ORIGINAL', 'SCRAP_AUTHORIZATION'].includes(decision.kind)) {
+    try {
+      currentCsrReview(item);
+      const csr = repairWorkflow(item.repairWorkflow).csr;
+      if (csr?.quoteRevision !== current.releaseInfo?.quoteRevision)
+        return blocked;
+      const actions = allowedWorkflowActions(actor, item);
+      const choices = [
+        ...(actions.includes('return_original')
+          ? ['RETURN_ORIGINAL' as const]
+          : []),
+        ...(actions.includes('record_scrap_authorization')
+          ? ['SCRAP' as const]
+          : []),
+      ];
+      for (const choice of choices) {
+        try {
+          const proof = requireSourceDisposition(
+            current,
+            item as RepairProposalItem,
+            choice,
+            dispositionPolicy,
+          );
+          if (choice === 'SCRAP') {
+            const saved = repairWorkflow(
+              item.repairWorkflow,
+            ).dispositionAuthorization;
+            if (saved && fingerprint(saved) === fingerprint(proof))
+              return blocked;
+            return { state: 'ready', kind: 'SCRAP_AUTHORIZATION' };
+          }
+          return { state: 'ready', kind: 'RETURN_ORIGINAL' };
+        } catch {
+          // A different disposition must not authorize this requested route.
+        }
+      }
+      return blocked;
+    } catch {
+      return blocked;
+    }
+  }
   if (current.type === 'REPAIR') {
     const info = current.releaseInfo;
     if (

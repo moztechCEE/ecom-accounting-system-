@@ -1,28 +1,61 @@
 import { BadRequestException } from '@nestjs/common';
 import { fingerprint } from './mailroom.contract';
+import {
+  validateMaterialPlan,
+  type RepairMaterialPlan,
+} from './repair-material.contract';
+import type { RepairTemplateBinding } from './repair-template.contract';
+
+export type RepairDocumentMediaRef = {
+  mediaId: string;
+  phase: 'BEFORE' | 'AFTER' | 'DIAGNOSTIC';
+  checkKey?: string;
+};
+export type CustomerRepairReportDraft = {
+  findings: string;
+  handling: string;
+  verification: string;
+  mediaIds: string[];
+};
+export type RepairDocumentV2Fields = {
+  protocol?: 2;
+  isUnderWarranty?: boolean;
+  isAccidentalDamage?: boolean;
+  customerVisibleSummary?: string;
+  templateBinding?: RepairTemplateBinding;
+  mediaRefs?: RepairDocumentMediaRef[];
+  customerReportDraft?: CustomerRepairReportDraft;
+};
 
 export type TestResult = 'PASS' | 'FAIL' | 'NOT_TESTED';
 export type RepairCheck = {
   name: string;
   result: TestResult;
   observation: string;
+  key?: string;
+  measurementValue?: string | boolean;
+  unit?: string;
+  instrumentId?: string;
+  calibrationRecordId?: string;
+  measuredAt?: string;
 };
-export type InspectionData = {
+export type InspectionData = RepairDocumentV2Fields & {
   complaint: string;
   reproduction: 'YES' | 'INTERMITTENT' | 'NO' | 'NOT_TESTED';
   testConditions: string;
   checks: RepairCheck[];
   diagnosis: string;
   causeStatus: 'CONFIRMED' | 'SUSPECTED' | 'UNKNOWN';
-  plan: 'REPAIR' | 'REPLACE' | 'FACTORY' | 'RETURN';
+  plan: 'REPAIR' | 'REPLACE' | 'FACTORY' | 'RETURN' | 'SCRAP';
   planNote: string;
   feeSuggestion: 'FREE' | 'PAID' | 'REVIEW';
   estimateAmount?: number;
   estimateNote: string;
   replacementCondition?: 'NEW' | 'REFURBISHED';
   replacementSku?: string;
+  materialPlan?: RepairMaterialPlan;
 };
-export type RepairData = {
+export type RepairData = RepairDocumentV2Fields & {
   outcome: 'REPAIRED' | 'REPLACED' | 'FACTORY_REPAIRED';
   workPerformed: string;
   parts: { name: string; sku: string; quantity: number }[];
@@ -67,10 +100,158 @@ export function inspectionPlanHash(doc: InspectionDocument): string {
 }
 
 const nonempty = (v: unknown) => typeof v === 'string' && !!v.trim();
+/** Called by the server for every new submission; historical v1 reads remain intact. */
+export function validateDocumentV2(
+  value: unknown,
+  kind: 'inspection' | 'repair',
+) {
+  const data = value as InspectionData | RepairData | null;
+  if (!data || data.protocol !== 2)
+    throw new BadRequestException('請使用目前工作單版本提交');
+  for (const key of ['isUnderWarranty', 'isAccidentalDamage'] as const)
+    if (data[key] !== undefined && typeof data[key] !== 'boolean')
+      throw new BadRequestException('保固與人為損壞判定須明確選擇');
+  if (
+    data.customerVisibleSummary !== undefined &&
+    (typeof data.customerVisibleSummary !== 'string' ||
+      data.customerVisibleSummary.length > 2000)
+  )
+    throw new BadRequestException('顧客摘要格式不符');
+  if (
+    data.templateBinding !== undefined &&
+    (!data.templateBinding ||
+      Object.keys(data.templateBinding).some(
+        (key) => !['id', 'revision', 'contentHash'].includes(key),
+      ) ||
+      !nonempty(data.templateBinding.id) ||
+      !Number.isInteger(data.templateBinding.revision) ||
+      data.templateBinding.revision < 1 ||
+      !/^[a-f0-9]{64}$/.test(data.templateBinding.contentHash))
+  )
+    throw new BadRequestException('檢測基準關聯不完整');
+  if (
+    !Array.isArray(data.checks) ||
+    data.checks.some(
+      (check) =>
+        check?.measurementValue !== undefined &&
+        typeof check.measurementValue !== 'string' &&
+        typeof check.measurementValue !== 'boolean',
+    )
+  )
+    throw new BadRequestException('實際量測值格式不符');
+  if (
+    data.mediaRefs !== undefined &&
+    (!Array.isArray(data.mediaRefs) ||
+      data.mediaRefs.length > 12 ||
+      data.mediaRefs.some(
+        (ref) =>
+          !ref ||
+          Object.keys(ref).some(
+            (key) => !['mediaId', 'phase', 'checkKey'].includes(key),
+          ) ||
+          !nonempty(ref.mediaId) ||
+          ref.mediaId.length > 128 ||
+          !['BEFORE', 'AFTER', 'DIAGNOSTIC'].includes(ref.phase) ||
+          (ref.checkKey !== undefined &&
+            (!nonempty(ref.checkKey) ||
+              ref.checkKey.length > 128 ||
+              !data.checks?.some((check) => check.key === ref.checkKey))),
+      ) ||
+      new Set(data.mediaRefs.map((ref) => ref.mediaId)).size !==
+        data.mediaRefs.length)
+  )
+    throw new BadRequestException('工作單媒體關聯不完整或重複');
+  const draft = data.customerReportDraft;
+  if (
+    draft !== undefined &&
+    (!draft ||
+      Object.keys(draft).some(
+        (key) =>
+          !['findings', 'handling', 'verification', 'mediaIds'].includes(key),
+      ) ||
+      ![draft.findings, draft.handling, draft.verification].every(
+        (text) => typeof text === 'string' && text.length <= 2000,
+      ) ||
+      !Array.isArray(draft.mediaIds) ||
+      draft.mediaIds.length > 12 ||
+      draft.mediaIds.some((id) => !nonempty(id) || id.length > 128) ||
+      new Set(draft.mediaIds).size !== draft.mediaIds.length ||
+      draft.mediaIds.some(
+        (id) => !data.mediaRefs?.some((ref) => ref.mediaId === id),
+      ))
+  )
+    throw new BadRequestException('顧客報告草稿或選用媒體不完整');
+  if (kind === 'inspection')
+    validateMaterialPlan((data as InspectionData).materialPlan);
+  return data;
+}
+
+export type FinalizedRepairMedia = RepairDocumentMediaRef & {
+  entityId: string;
+  itemId: string;
+  kind: 'inspection' | 'repair';
+  documentRevision: number;
+  status: 'FINALIZED';
+  sha256: string;
+  contentType: string;
+  sizeBytes: number;
+};
+/** Descriptors are read from the central finalized-media registry, not from the submission body. */
+export function validateDocumentMediaReferences(
+  refs: RepairDocumentMediaRef[] | undefined,
+  context: {
+    entityId: string;
+    itemId: string;
+    kind: 'inspection' | 'repair';
+    documentRevision: number;
+  },
+  finalized: unknown = [],
+) {
+  if (!refs?.length) return;
+  if (!Array.isArray(finalized))
+    throw new BadRequestException('工作單媒體尚未確認');
+  for (const ref of refs) {
+    const matches = finalized.filter(
+      (value: FinalizedRepairMedia) => value?.mediaId === ref.mediaId,
+    );
+    const proof =
+      matches.length === 1 ? (matches[0] as FinalizedRepairMedia) : undefined;
+    if (
+      !proof ||
+      proof.status !== 'FINALIZED' ||
+      proof.entityId !== context.entityId ||
+      proof.itemId !== context.itemId ||
+      proof.kind !== context.kind ||
+      proof.documentRevision !== context.documentRevision ||
+      proof.phase !== ref.phase ||
+      proof.checkKey !== ref.checkKey ||
+      !/^[a-f0-9]{64}$/.test(proof.sha256) ||
+      ![
+        'image/png',
+        'image/jpeg',
+        'image/webp',
+        'video/mp4',
+        'video/webm',
+        'video/quicktime',
+      ].includes(proof.contentType) ||
+      !Number.isSafeInteger(proof.sizeBytes) ||
+      proof.sizeBytes <= 0
+    )
+      throw new BadRequestException('工作單媒體尚未取得本版確認回執');
+  }
+}
 function assertChecks(checks: RepairCheck[], completion = false) {
   if (!Array.isArray(checks) || !checks.length)
     throw new BadRequestException('請至少填寫一項檢測');
-  if (checks.some((c) => !nonempty(c.name) || !nonempty(c.observation)))
+  if (
+    checks.some(
+      (c) =>
+        !c ||
+        !nonempty(c.name) ||
+        !nonempty(c.observation) ||
+        !['PASS', 'FAIL', 'NOT_TESTED'].includes(c.result),
+    )
+  )
     throw new BadRequestException('請填寫每項測試名稱與結果或未測原因');
   if (completion && checks.some((c) => c.result !== 'PASS'))
     throw new BadRequestException('交付前必要複驗項目須全部通過');
@@ -88,6 +269,8 @@ export function validateInspectionData(
   )
     throw new BadRequestException('請完成故障描述、測試條件、診斷與建議方案');
   assertChecks(data.checks);
+  if (!['REPAIR', 'REPLACE', 'FACTORY', 'RETURN', 'SCRAP'].includes(data.plan))
+    throw new BadRequestException('建議處理方式不符');
   if (
     requireReplacementPlan &&
     data.plan === 'REPLACE' &&

@@ -1,0 +1,68 @@
+// Candidate only. Central schema editor appends models, scoped relations and migration.
+model RepairMediaAsset {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  itemId String @map("item_id")
+  kind String
+  documentRevision Int @map("document_revision")
+  phase String
+  checkKey String? @map("check_key")
+  status String @default("PENDING")
+  bucket String
+  objectKey String @unique @map("object_key")
+  generation String?
+  sha256 String?
+  contentType String @map("content_type")
+  sizeBytes BigInt? @map("size_bytes")
+  bindings Json @default("[]")
+  uploadedById String @map("uploaded_by_id")
+  finalizedAt DateTime? @map("finalized_at")
+  revokedById String? @map("revoked_by_id")
+  revokedAt DateTime? @map("revoked_at")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([entityId,itemId,status])
+  @@map("repair_media_assets")
+}
+
+model RepairCustomerReport {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  itemId String @map("item_id")
+  sourceCaseId String @map("source_case_id")
+  sourceBrand String @map("source_brand")
+  verifiedCustomerId String @map("verified_customer_id")
+  inspectionRevision Int @map("inspection_revision")
+  reportRevision Int? @map("report_revision")
+  planHash String @map("plan_hash")
+  proposalHash String @map("proposal_hash")
+  itemIdentityHash String @map("item_identity_hash")
+  currency String
+  quoteRevision Int @map("quote_revision")
+  content Json
+  contentHash String @map("content_hash")
+  mediaIds String[] @map("media_ids")
+  status String @default("PUBLISHED")
+  tokenHash String @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  publishedById String @map("published_by_id")
+  publishedAt DateTime @default(now()) @map("published_at")
+  revokedById String? @map("revoked_by_id")
+  revokedAt DateTime? @map("revoked_at")
+  @@index([entityId,itemId,status])
+  @@map("repair_customer_reports")
+}
+
+model RepairEvidenceOperation {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  actorId String @map("actor_id")
+  requestId String @map("request_id")
+  action String
+  requestHash String @map("request_hash")
+  result Json
+  createdAt DateTime @default(now()) @map("created_at")
+  @@unique([entityId,actorId,requestId])
+  @@map("repair_evidence_operations")
+}

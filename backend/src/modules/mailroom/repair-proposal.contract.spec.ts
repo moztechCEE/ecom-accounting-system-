@@ -187,7 +187,7 @@ describe('server-built same-case repair proposals', () => {
     expect(proposal.replacementCondition).toBe('REFURBISHED');
   });
 
-  it.each(['FACTORY', 'RETURN'] as const)(
+  it.each(['FACTORY', 'RETURN', 'SCRAP'] as const)(
     'preserves the %s proposal without fabricating a repair outcome',
     (plan) => {
       const input = fixture();
@@ -198,6 +198,82 @@ describe('server-built same-case repair proposals', () => {
       expect(event).not.toHaveProperty('inventoryPosted');
     },
   );
+
+  it('recomputes a SCRAP proposal binding without manufacturing customer consent or completed disposal', () => {
+    const input = fixture();
+    const doc = input.item.repairInspection as InspectionDocument;
+    doc.data.plan = 'SCRAP';
+    doc.data.feeSuggestion = 'REVIEW';
+    const event = buildRepairProposalEvent(input);
+    input.item.status = 'INSPECTING';
+    expect(repairSourceBindingForItem(input.item, input.source)).toEqual({
+      itemId: input.item.id,
+      planVersion: doc.revision,
+      planHash: event.proposal.planHash,
+      proposalHash: event.proposal.proposalHash,
+    });
+    expect(event.proposal).toMatchObject({
+      plan: 'SCRAP',
+      feeMode: 'REVIEW',
+      amount: null,
+    });
+    expect(event.proposal).not.toHaveProperty('customerApproved');
+    expect(event.proposal).not.toHaveProperty('authorization');
+    expect(event.proposal).not.toHaveProperty('disposedAt');
+  });
+
+  it('invalidates the old return binding when the technician proposes SCRAP, preserving the original inspection hash algorithm', () => {
+    const input = fixture();
+    const doc = input.item.repairInspection as InspectionDocument;
+    doc.data.plan = 'RETURN';
+    const originalReturn = repairSourceBindingForItem(input.item, input.source);
+    doc.data.plan = 'SCRAP';
+    const scrap = repairSourceBindingForItem(input.item, input.source);
+    expect(scrap.planVersion).toBe(originalReturn.planVersion);
+    expect(scrap.planHash).toBe(inspectionPlanHash(doc));
+    expect(scrap.planHash).not.toBe(originalReturn.planHash);
+    expect(scrap.proposalHash).not.toBe(originalReturn.proposalHash);
+  });
+
+  it('drops stale replacement suggestions from a SCRAP proposal without consuming or selecting stock', () => {
+    const input = fixture();
+    const doc = input.item.repairInspection as InspectionDocument;
+    doc.data.plan = 'SCRAP';
+    doc.data.replacementSku = 'OLD-REPLACEMENT-SKU';
+    doc.data.replacementCondition = 'REFURBISHED';
+    const proposal = buildRepairProposalEvent(input).proposal;
+    expect(proposal.original.sku).toBe('ORIGINAL-SKU');
+    expect(proposal.replacementSku).toBeNull();
+    expect(proposal.replacementCondition).toBeNull();
+    expect(proposal).not.toHaveProperty('reservationId');
+    expect(proposal).not.toHaveProperty('stockPosting');
+  });
+
+  it.each(['replacement', 'completed disposal', 'unknown execution status'])(
+    'rejects a SCRAP payload falsely containing %s',
+    (reason) => {
+      const input = fixture();
+      (input.item.repairInspection as InspectionDocument).data.plan = 'SCRAP';
+      const event = structuredClone(buildRepairProposalEvent(input));
+      if (reason === 'replacement') {
+        event.proposal.replacementSku = 'REFURB-SKU';
+        event.proposal.replacementCondition = 'REFURBISHED';
+      }
+      if (reason === 'completed disposal')
+        Object.assign(event.proposal, { disposedAt: input.occurredAt });
+      if (reason === 'unknown execution status')
+        Object.assign(event.proposal, { plan: 'SCRAPPED' });
+      event.proposal.proposalHash = repairProposalHash(event);
+      expect(() => validateRepairProposalEvent(event)).toThrow();
+    },
+  );
+
+  it('does not let a SCRAP plan bypass the current technician physical-custody gate', () => {
+    const input = fixture();
+    (input.item.repairInspection as InspectionDocument).data.plan = 'SCRAP';
+    input.item.custodianId = 'other-holder';
+    expect(() => buildRepairProposalEvent(input)).toThrow('實物已簽收');
+  });
 
   it('takes explicit assessments/customer summary only from the hash-bound inspection', () => {
     const input = fixture();

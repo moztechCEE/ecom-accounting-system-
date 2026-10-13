@@ -1,0 +1,76 @@
+// Candidate fragment. Only the central schema owner appends this to schema.prisma.
+// Required inverse relation additions are listed in repair-materials-producer-20261013.md.
+model RepairMaterialAllocation {
+  id                     String   @id @default(uuid())
+  entityId               String   @map("entity_id")
+  itemId                 String   @map("item_id")
+  inspectionRevision     Int      @map("inspection_revision")
+  planHash               String   @map("plan_hash")
+  requirementId          String   @map("requirement_id")
+  productId              String   @map("product_id")
+  warehouseId            String   @map("warehouse_id")
+  requiredQuantity       Decimal  @map("required_quantity") @db.Decimal(18, 2)
+  allocatedQuantity      Decimal  @map("allocated_quantity") @db.Decimal(18, 2)
+  receivedQuantity       Decimal  @default(0) @map("received_quantity") @db.Decimal(18, 2)
+  consumedQuantity       Decimal  @default(0) @map("consumed_quantity") @db.Decimal(18, 2)
+  releasedQuantity       Decimal  @default(0) @map("released_quantity") @db.Decimal(18, 2)
+  returnedQuantity       Decimal  @default(0) @map("returned_quantity") @db.Decimal(18, 2)
+  status                 String   @default("ALLOCATED")
+  activeKey              String?  @unique @map("active_key")
+  version                Int      @default(1)
+  allocatedById          String   @map("allocated_by_id")
+  allocatedAt            DateTime @default(now()) @map("allocated_at")
+  physicalReceiptId      String?  @unique @map("physical_receipt_id")
+  receivedById           String?  @map("received_by_id")
+  receivedAt             DateTime? @map("received_at")
+  physicalReturnId       String?  @unique @map("physical_return_id")
+  returnedById           String?  @map("returned_by_id")
+  returnedAt             DateTime? @map("returned_at")
+  returnLocation         String?  @map("return_location")
+  consumedById           String?  @map("consumed_by_id")
+  consumedAt             DateTime? @map("consumed_at")
+  releasedById           String?  @map("released_by_id")
+  releasedAt             DateTime? @map("released_at")
+  reserveTransactionId   String   @unique @map("reserve_transaction_id")
+  outTransactionId       String?  @unique @map("out_transaction_id")
+  releaseTransactionId   String?  @unique @map("release_transaction_id")
+  costStatus             String   @default("UNKNOWN") @map("cost_status")
+  unitCost               Decimal? @map("unit_cost") @db.Decimal(18, 4)
+  costCurrency           String?  @map("cost_currency")
+  costSourceReference    String?  @map("cost_source_reference")
+  sourceVersion          String?  @map("source_version")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  entity                 Entity @relation("RepairMaterialEntity", fields: [entityId], references: [id], onDelete: Restrict)
+  item                   MailroomItem @relation("RepairMaterialItem", fields: [itemId], references: [id], onDelete: Restrict)
+  product                Product @relation("RepairMaterialProduct", fields: [productId, entityId], references: [id, entityId], onDelete: Restrict)
+  warehouse              Warehouse @relation("RepairMaterialWarehouse", fields: [warehouseId], references: [id], onDelete: Restrict)
+  reserveTransaction     InventoryTransaction @relation("RepairMaterialReserve", fields: [reserveTransactionId], references: [id], onDelete: Restrict)
+  outTransaction         InventoryTransaction? @relation("RepairMaterialOut", fields: [outTransactionId], references: [id], onDelete: Restrict)
+  releaseTransaction     InventoryTransaction? @relation("RepairMaterialRelease", fields: [releaseTransactionId], references: [id], onDelete: Restrict)
+  operations             RepairMaterialOperation[]
+
+  @@index([entityId, itemId, inspectionRevision, planHash])
+  @@index([entityId, status, productId, warehouseId])
+  @@map("repair_material_allocations")
+}
+
+model RepairMaterialOperation {
+  id              String   @id @default(uuid())
+  entityId        String   @map("entity_id")
+  itemId          String   @map("item_id")
+  allocationId    String   @map("allocation_id")
+  actorId         String   @map("actor_id")
+  requestId       String   @map("request_id")
+  requestHash     String   @map("request_hash")
+  action          String
+  result          Json
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  allocation      RepairMaterialAllocation @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+
+  @@unique([entityId, actorId, requestId])
+  @@index([entityId, itemId, createdAt])
+  @@map("repair_material_operations")
+}

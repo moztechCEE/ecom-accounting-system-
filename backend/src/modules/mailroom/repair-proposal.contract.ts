@@ -257,7 +257,9 @@ function validateProposal(proposal: Record<string, unknown>) {
   if (original.quantity !== 1)
     throw new BadRequestException('維修提案須逐件建立');
   if (
-    !['REPAIR', 'REPLACE', 'FACTORY', 'RETURN'].includes(String(proposal.plan))
+    !['REPAIR', 'REPLACE', 'FACTORY', 'RETURN', 'SCRAP'].includes(
+      String(proposal.plan),
+    )
   )
     throw new BadRequestException('維修提案方案不符');
   if (proposal.plan === 'REPLACE') {

@@ -1,7 +1,8 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDefined,
   IsIn,
   IsInt,
@@ -14,11 +15,111 @@ import {
   MaxLength,
   Min,
   ValidateNested,
+  ValidateBy,
 } from 'class-validator';
+const rawInputValue = ({ obj, key }: { obj: unknown; key: string }): unknown =>
+  obj && typeof obj === 'object'
+    ? (obj as Record<string, unknown>)[key]
+    : undefined;
+export class RepairTemplateBindingDto {
+  @IsString() @IsNotEmpty() @MaxLength(128) id!: string;
+  @IsInt() @Min(1) revision!: number;
+  @IsString() @Matches(/^[a-f0-9]{64}$/) contentHash!: string;
+}
+export class RepairDocumentMediaRefDto {
+  @IsString() @IsNotEmpty() @MaxLength(128) mediaId!: string;
+  @IsIn(['BEFORE', 'AFTER', 'DIAGNOSTIC']) phase!:
+    | 'BEFORE'
+    | 'AFTER'
+    | 'DIAGNOSTIC';
+  @IsOptional() @IsString() @MaxLength(128) checkKey?: string;
+}
+export class CustomerRepairReportDraftDto {
+  @IsString() @MaxLength(2000) findings!: string;
+  @IsString() @MaxLength(2000) handling!: string;
+  @IsString() @MaxLength(2000) verification!: string;
+  @IsArray()
+  @ArrayMaxSize(12)
+  @IsString({ each: true })
+  @MaxLength(128, { each: true })
+  mediaIds!: string[];
+}
+class RepairDocumentV2Dto {
+  @IsOptional()
+  @Transform(rawInputValue, { toClassOnly: true })
+  @IsIn([2])
+  protocol?: 2;
+  @IsOptional()
+  @Transform(rawInputValue, { toClassOnly: true })
+  @IsBoolean()
+  isUnderWarranty?: boolean;
+  @IsOptional()
+  @Transform(rawInputValue, { toClassOnly: true })
+  @IsBoolean()
+  isAccidentalDamage?: boolean;
+  @IsOptional() @IsString() @MaxLength(2000) customerVisibleSummary?: string;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RepairTemplateBindingDto)
+  templateBinding?: RepairTemplateBindingDto;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(12)
+  @ValidateNested({ each: true })
+  @Type(() => RepairDocumentMediaRefDto)
+  mediaRefs?: RepairDocumentMediaRefDto[];
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CustomerRepairReportDraftDto)
+  customerReportDraft?: CustomerRepairReportDraftDto;
+}
+export class RepairMaterialRequirementDto {
+  @IsString() @IsNotEmpty() @MaxLength(128) id!: string;
+  @IsString() @IsNotEmpty() @MaxLength(128) productId!: string;
+  @IsString() @IsNotEmpty() @MaxLength(128) warehouseId!: string;
+  @IsOptional() @IsString() @MaxLength(100) sku?: string;
+  @IsOptional() @IsString() @MaxLength(160) name?: string;
+  @Transform(rawInputValue, { toClassOnly: true })
+  @IsString()
+  @Matches(/^(?:0|[1-9]\d{0,5})(?:\.\d{1,2})?$/)
+  requiredQuantity!: string;
+  @Transform(rawInputValue, { toClassOnly: true })
+  @IsBoolean()
+  requiredForStart!: boolean;
+}
+export class RepairMaterialPlanDto {
+  @IsIn(['UNASSESSED', 'NONE', 'REQUIRED']) mode!:
+    | 'UNASSESSED'
+    | 'NONE'
+    | 'REQUIRED';
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => RepairMaterialRequirementDto)
+  lines!: RepairMaterialRequirementDto[];
+}
 export class RepairCheckDto {
   @IsString() @MaxLength(160) name!: string;
   @IsIn(['PASS', 'FAIL', 'NOT_TESTED']) result!: 'PASS' | 'FAIL' | 'NOT_TESTED';
   @IsString() @MaxLength(1000) observation!: string;
+  @IsOptional() @IsString() @MaxLength(128) key?: string;
+  // Preserve numeric strings and true booleans; the reviewed template validates their kind.
+  @IsOptional()
+  @Transform(rawInputValue, { toClassOnly: true })
+  @ValidateBy({
+    name: 'measurementPrimitive',
+    validator: {
+      validate: (value) =>
+        typeof value === 'boolean' ||
+        (typeof value === 'string' && value.length <= 100),
+      defaultMessage: () => '量測值須為數值字串或功能布林值',
+    },
+  })
+  measurementValue?: string | boolean;
+  @IsOptional() @IsString() @MaxLength(30) unit?: string;
+  @IsOptional() @IsString() @MaxLength(128) instrumentId?: string;
+  @IsOptional() @IsString() @MaxLength(128) calibrationRecordId?: string;
+  @IsOptional() @IsString() @MaxLength(40) measuredAt?: string;
 }
 export class RepairPartDto {
   @IsString() @MaxLength(160) name!: string;
@@ -28,7 +129,7 @@ export class RepairPartDto {
   @Max(100000)
   quantity!: number;
 }
-export class InspectionDataDto {
+export class InspectionDataDto extends RepairDocumentV2Dto {
   @IsString() @MaxLength(2000) complaint!: string;
   @IsIn(['YES', 'INTERMITTENT', 'NO', 'NOT_TESTED']) reproduction!:
     | 'YES'
@@ -46,11 +147,12 @@ export class InspectionDataDto {
     | 'CONFIRMED'
     | 'SUSPECTED'
     | 'UNKNOWN';
-  @IsIn(['REPAIR', 'REPLACE', 'FACTORY', 'RETURN']) plan!:
+  @IsIn(['REPAIR', 'REPLACE', 'FACTORY', 'RETURN', 'SCRAP']) plan!:
     | 'REPAIR'
     | 'REPLACE'
     | 'FACTORY'
-    | 'RETURN';
+    | 'RETURN'
+    | 'SCRAP';
   @IsString() @MaxLength(2000) planNote!: string;
   @IsIn(['FREE', 'PAID', 'REVIEW']) feeSuggestion!: 'FREE' | 'PAID' | 'REVIEW';
   @IsOptional()
@@ -63,8 +165,12 @@ export class InspectionDataDto {
     | 'NEW'
     | 'REFURBISHED';
   @IsOptional() @IsString() @MaxLength(100) replacementSku?: string;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RepairMaterialPlanDto)
+  materialPlan?: RepairMaterialPlanDto;
 }
-export class RepairDataDto {
+export class RepairDataDto extends RepairDocumentV2Dto {
   @IsIn(['REPAIRED', 'REPLACED', 'FACTORY_REPAIRED']) outcome!:
     | 'REPAIRED'
     | 'REPLACED'

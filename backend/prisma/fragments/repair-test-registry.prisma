@@ -1,0 +1,48 @@
+// Central schema editor appends these models and the three back references:
+// Entity.repairTestStandards RepairTestStandard[]
+// Entity.repairCalibrationRecords RepairCalibrationRecord[]
+// Product.repairTestStandards RepairTestStandard[]
+model RepairTestStandard {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  productId String @map("product_id")
+  sku String
+  revision Int
+  status String @default("DRAFT")
+  data Json
+  contentHash String @map("content_hash")
+  createdById String @map("created_by_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  reviewedById String? @map("reviewed_by_id")
+  reviewedAt DateTime? @map("reviewed_at")
+  retiredById String? @map("retired_by_id")
+  retiredAt DateTime? @map("retired_at")
+  commandKeys String[] @default([]) @map("command_keys")
+  commands Json @default("{}")
+  entity Entity @relation(fields:[entityId], references:[id], onDelete:Restrict)
+  product Product @relation(fields:[productId,entityId], references:[id,entityId], onDelete:Restrict)
+  @@unique([entityId,productId,sku,revision])
+  @@index([entityId,productId,sku,status])
+  @@map("repair_test_standards")
+}
+
+model RepairCalibrationRecord {
+  id String @id @default(uuid())
+  entityId String @map("entity_id")
+  instrumentId String @map("instrument_id")
+  equipmentType String @map("equipment_type")
+  proofReference String @map("proof_reference")
+  status String @default("VALID")
+  validFrom DateTime @map("valid_from")
+  validUntil DateTime @map("valid_until")
+  createdById String @map("created_by_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  revokedById String? @map("revoked_by_id")
+  revokedAt DateTime? @map("revoked_at")
+  commandKeys String[] @default([]) @map("command_keys")
+  commands Json @default("{}")
+  entity Entity @relation(fields:[entityId], references:[id], onDelete:Restrict)
+  @@unique([entityId,instrumentId,proofReference])
+  @@index([entityId,instrumentId,status,validFrom,validUntil])
+  @@map("repair_calibration_records")
+}

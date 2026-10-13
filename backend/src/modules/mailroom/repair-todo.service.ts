@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { type Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
@@ -14,9 +14,11 @@ import {
   REPAIR_TODO_STATUSES,
   repairTodoDecision,
   repairTodoSourceDecision,
+  type RepairTodoDecision,
   type RepairTodoKind,
 } from './repair-todo.contract';
 import { type RepairTodoQuery } from './repair-todo.dto';
+import { RepairPrerequisitesService } from './repair-prerequisites.service';
 
 const candidateSelect = {
   id: true,
@@ -30,6 +32,7 @@ const candidateSelect = {
   custodianId: true,
   nextUserId: true,
   repairInspection: true,
+  repairReport: true,
   repairWorkflow: true,
   productName: true,
   sku: true,
@@ -56,6 +59,13 @@ export const REPAIR_TODO_SOURCE_LAUNCH_MS = 16000;
 export const REPAIR_TODO_SOURCE_TIMEOUT_MS = 8000;
 const SCAN_SIZE = 200;
 const PAGE_SIZE = 50;
+const START_KINDS = new Set<RepairTodoKind>([
+  'START_REPAIR',
+  'START_REPLACEMENT',
+  'SEND_FACTORY',
+  'START_REFURBISHMENT',
+]);
+type StartGate = 'READY' | 'BLOCKED' | 'UNKNOWN';
 
 @Injectable()
 export class RepairTodoService {
@@ -63,7 +73,101 @@ export class RepairTodoService {
     private readonly prisma: PrismaService,
     private readonly mailroom: MailroomService,
     private readonly sync: MailroomSyncService,
+    @Optional() private readonly prerequisites?: RepairPrerequisitesService,
   ) {}
+
+  private async startGates(
+    rows: TodoRow[],
+    where: Prisma.MailroomItemWhereInput,
+    deadline: number,
+  ) {
+    const gates = new Map<string, StartGate>();
+    const reader = this.prerequisites;
+    if (!reader || !rows.length) return gates;
+    let index = 0;
+    const worker = async () => {
+      while (index < rows.length && Date.now() < deadline) {
+        const row = rows[index++];
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const current = await Promise.race([
+            reader.forItem(row),
+            new Promise<never>((_resolve, reject) => {
+              timer = setTimeout(
+                () =>
+                  reject(new Error('repair todo prerequisite read timed out')),
+                Math.min(
+                  REPAIR_TODO_SOURCE_TIMEOUT_MS,
+                  Math.max(1, deadline - Date.now()),
+                ),
+              );
+            }),
+          ]);
+          const material = current?.materials?.start?.state;
+          const inspection = current?.templateChecks?.inspection;
+          gates.set(
+            row.id,
+            material === 'READY' && inspection === 'READY'
+              ? 'READY'
+              : material === 'BLOCKED' || inspection === 'BLOCKED'
+                ? 'BLOCKED'
+                : 'UNKNOWN',
+          );
+        } catch {
+          gates.set(row.id, 'UNKNOWN');
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(REPAIR_TODO_SOURCE_CONCURRENCY, rows.length) },
+        worker,
+      ),
+    );
+    // A prerequisite wait must not resurrect a changed native version or custody.
+    const positive = rows.filter((row) => gates.get(row.id) === 'READY');
+    for (let offset = 0; offset < positive.length; offset += SCAN_SIZE) {
+      const batch = positive.slice(offset, offset + SCAN_SIZE);
+      try {
+        const current = await this.prisma.mailroomItem.findMany({
+          where: {
+            ...where,
+            OR: batch.map((row) => ({
+              id: row.id,
+              version: row.version,
+              status: row.status,
+              receipt: {
+                category: row.receipt.category,
+                sourceCaseId: row.receipt.sourceCaseId,
+              },
+            })),
+          },
+          select: { id: true, version: true },
+        });
+        const verified = new Set(current.map((row) => row.id));
+        for (const row of batch)
+          if (!verified.has(row.id)) gates.set(row.id, 'UNKNOWN');
+      } catch {
+        for (const row of batch) gates.set(row.id, 'UNKNOWN');
+      }
+    }
+    return gates;
+  }
+
+  private withStartGate(
+    row: TodoRow,
+    decision: RepairTodoDecision,
+    gates: Map<string, StartGate>,
+  ): RepairTodoDecision {
+    if (decision.state !== 'ready' || !START_KINDS.has(decision.kind))
+      return decision;
+    const gate = gates.get(row.id);
+    return gate === 'READY'
+      ? decision
+      : { state: gate === 'BLOCKED' ? 'blocked' : 'unknown' };
+  }
 
   private async freshSources(
     entityId: string,
@@ -159,7 +263,7 @@ export class RepairTodoService {
       deadline,
     );
     // A source wait must not preserve a revoked account/company/read grant.
-    const freshActor = await this.mailroom.actor(userId);
+    let freshActor = await this.mailroom.actor(userId);
     requireEntity(freshActor, query.entityId);
     requirePermission(freshActor, 'repair_workbench:read');
     const currentRows = new Map<string, TodoRow>();
@@ -182,21 +286,33 @@ export class RepairTodoService {
     } else {
       for (const row of rows) currentRows.set(row.id, row);
     }
+    const decisionFor = (row: TodoRow) => {
+      const candidate = repairTodoDecision(freshActor, query.entityId, row);
+      return candidate.state === 'source'
+        ? repairTodoSourceDecision(
+            freshActor,
+            query.entityId,
+            row,
+            sources.get(candidate.sourceId),
+          )
+        : candidate;
+    };
+    const startRows = [...currentRows.values()].filter((row) => {
+      const decision = decisionFor(row);
+      return decision.state === 'ready' && START_KINDS.has(decision.kind);
+    });
+    const initialGates = await this.startGates(startRows, where, deadline);
+    if (startRows.length) {
+      freshActor = await this.mailroom.actor(userId);
+      requireEntity(freshActor, query.entityId);
+      requirePermission(freshActor, 'repair_workbench:read');
+    }
     const ready: { row: TodoRow; kind: RepairTodoKind }[] = [];
     let unknownCount = 0;
     for (const previous of rows) {
       const row = currentRows.get(previous.id);
       if (!row) continue;
-      const candidate = repairTodoDecision(freshActor, query.entityId, row);
-      const decision =
-        candidate.state === 'source'
-          ? repairTodoSourceDecision(
-              freshActor,
-              query.entityId,
-              row,
-              sources.get(candidate.sourceId),
-            )
-          : candidate;
+      const decision = this.withStartGate(row, decisionFor(row), initialGates);
       if (decision.state === 'ready') ready.push({ row, kind: decision.kind });
       else if (decision.state === 'unknown') unknownCount++;
     }
@@ -231,12 +347,26 @@ export class RepairTodoService {
       const native = new Map(hydrated.map((row) => [row.id, row]));
       const displayRows: typeof hydrated = [];
       const kinds = new Map<string, RepairTodoKind>();
+      const displayStartRows = hydrated.filter((row) => {
+        const decision = decisionFor(row);
+        return decision.state === 'ready' && START_KINDS.has(decision.kind);
+      });
+      const displayGates = await this.startGates(
+        displayStartRows,
+        where,
+        deadline,
+      );
+      if (displayStartRows.length) {
+        freshActor = await this.mailroom.actor(userId);
+        requireEntity(freshActor, query.entityId);
+        requirePermission(freshActor, 'repair_workbench:read');
+      }
       for (const { row, kind } of pageRows) {
         const full = native.get(row.id);
         const candidate = full
           ? repairTodoDecision(freshActor, query.entityId, full)
           : undefined;
-        const decision =
+        const rawDecision =
           candidate?.state === 'source' && full
             ? repairTodoSourceDecision(
                 freshActor,
@@ -245,6 +375,10 @@ export class RepairTodoService {
                 sources.get(candidate.sourceId),
               )
             : candidate;
+        const decision =
+          full && rawDecision
+            ? this.withStartGate(full, rawDecision, displayGates)
+            : rawDecision;
         if (
           !full ||
           full.version !== row.version ||

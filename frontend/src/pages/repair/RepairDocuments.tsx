@@ -7,9 +7,10 @@ import { useAuth } from '../../contexts/AuthContext'
 import api from '../../services/api'
 import { hasPermission } from '../../utils/access'
 import { errorText } from '../mailroom/model'
-import { FEES, PLANS, RESULTS, inspectionReviewCurrent } from './repair-model'
-import type { InspectionData, RepairData, RepairDocument, RepairItem } from './repair-model'
+import { FEES, PLANS, RESULTS, inspectionReviewCurrent, materialPlanPayload } from './repair-model'
+import type { InspectionData, RepairData, RepairDocument, RepairItem, RepairTemplateView, RepairDocumentV2Fields } from './repair-model'
 import RepairReplacementStock from './RepairReplacementStock'
+import { RepairDocumentExtras } from './RepairDocumentExtras'
 import { useRepairFeedback } from './repair-feedback'
 import type { RepairMessage } from './repair-feedback'
 
@@ -25,6 +26,25 @@ const requiredText = (text = '請填寫此項；未測或沒有配件也請明�
 const date = (value?: string) => value ? new Date(value).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }) : '—'
 const textValue = (value: unknown) => typeof value === 'string' ? value : ''
 const blankCheck = () => ({ name: '', result: 'NOT_TESTED' as const, observation: '' })
+const MATERIAL_MODES = { UNASSESSED: '待確認', NONE: '無需材料', REQUIRED: '需材料' }
+function documentExtraRows(data: InspectionData | RepairData): [string, string][] {
+  const rows: [string, string][] = []
+  if (typeof data.isUnderWarranty === 'boolean') rows.push(['保固判定', data.isUnderWarranty ? '保固內' : '保固外'])
+  if (typeof data.isAccidentalDamage === 'boolean') rows.push(['人為損壞判定', data.isAccidentalDamage ? '是' : '否'])
+  if (data.templateBinding) rows.push(['檢測基準', `${data.templateBinding.id} · v${data.templateBinding.revision}`])
+  if ('materialPlan' in data && data.materialPlan) {
+    rows.push(['材料需求', MATERIAL_MODES[data.materialPlan.mode]])
+    for (const material of data.materialPlan.lines) rows.push([`需求材料：${material.name || material.sku || material.productId}`, `${material.requiredQuantity} · ${material.requiredForStart ? '開工前備妥' : '後續需用'}`])
+  }
+  if (data.customerVisibleSummary !== undefined) rows.push(['顧客摘要草稿', data.customerVisibleSummary])
+  if (data.customerReportDraft) rows.push(['顧客草稿：發現的問題', data.customerReportDraft.findings], ['顧客草稿：實際處置', data.customerReportDraft.handling], ['顧客草稿：複驗結果', data.customerReportDraft.verification])
+  if (data.mediaRefs?.length) rows.push(['工作單媒體索引', data.mediaRefs.map(ref => `${ref.mediaId} · ${ref.phase}${ref.checkKey ? ` · ${ref.checkKey}` : ''}`).join('\n')])
+  return rows
+}
+function checkMeasurement(check: InspectionData['checks'][number]): string {
+  const measured = typeof check.measurementValue === 'boolean' ? check.measurementValue ? '是' : '否' : check.measurementValue || ''
+  return [measured ? `${measured}${check.unit ? ` ${check.unit}` : ''}` : '', check.instrumentId ? `設備 ${check.instrumentId}` : '', check.calibrationRecordId ? `校正 ${check.calibrationRecordId}` : '', check.measuredAt || ''].filter(Boolean).join(' · ')
+}
 
 function DocumentHeading({ document, title, inspection = false }: { document?: RepairDocument | null; title: string; inspection?: boolean }) {
   return <div className="repair-document-heading">
@@ -55,30 +75,50 @@ function DocumentSection({ title, children }: { title: string; children: ReactNo
   </section>
 }
 
-function CheckFields({ editable, passing = false, title = '檢測項目' }: { editable: boolean; passing?: boolean; title?: string }) {
+function CheckFields({ editable, passing = false, title = '檢測項目', template, phase = 'INSPECTION' }: { editable: boolean; passing?: boolean; title?: string; template?: RepairTemplateView; phase?: 'INSPECTION' | 'COMPLETION' }) {
+  const form = Form.useFormInstance()
+  const checkedValues = Form.useWatch('checks', form) as InspectionData['checks'] | undefined
   return <Form.List name="checks" rules={[{ validator: (_, value) => Array.isArray(value) && value.length > 0 ? Promise.resolve() : Promise.reject(new Error('請至少填寫一項檢測')) }]}>
     {(fields, { add, remove }, { errors }) => <>
-      {fields.map((field, index) => <Card key={field.key} className="repair-document-check" size="small" title={`${title} ${index + 1}`} style={{ marginBottom: 12 }}
-        extra={editable ? <Button size="small" type="text" danger onClick={() => remove(field.name)}>移除</Button> : undefined}>
+      {fields.map((field, index) => {
+        const spec = template?.checks.find(check => check.key === form.getFieldValue(['checks', field.name, 'key']))
+        const required = !!spec && (phase === 'INSPECTION' ? spec.requiredForInspection : spec.requiredForCompletion)
+        const measured = phase === 'COMPLETION' || checkedValues?.[field.name]?.result!=='NOT_TESTED'
+        const measuredTextRules = measured ? requiredText() : []
+        return <Card key={field.key} className="repair-document-check" size="small" title={`${title} ${index + 1}`} style={{ marginBottom: 12 }}
+        extra={editable && !required ? <Button size="small" type="text" danger onClick={() => remove(field.name)}>移除</Button> : required ? <Tag>必測</Tag> : undefined}>
+        <Form.Item name={[field.name, 'key']} hidden><Input /></Form.Item>
         <Row gutter={16}>
-          <Col xs={24} sm={16}><Form.Item name={[field.name, 'name']} label="項目名稱" rules={requiredText('請填寫測試項目名稱')}><Input maxLength={160} /></Form.Item></Col>
+          <Col xs={24} sm={16}><Form.Item name={[field.name, 'name']} label="項目名稱" rules={requiredText('請填寫測試項目名稱')}><Input maxLength={160} readOnly={!!spec} /></Form.Item></Col>
           <Col xs={24} sm={8}><Form.Item name={[field.name, 'result']} label="結果" rules={[{ required: true }, ...(passing ? [{ validator: (_: unknown, value: string) => value === 'PASS' ? Promise.resolve() : Promise.reject(new Error('總複驗通過時，此項也必須通過')) }] : [])]}>
             <Select options={options(RESULTS)} />
           </Form.Item></Col>
         </Row>
+        {spec && <Typography.Paragraph type="secondary">{spec.standard.instruction}{spec.standard.kind === 'NUMBER' ? ` · ${spec.standard.min || '—'}～${spec.standard.max || '—'} ${spec.standard.unit}` : ''}</Typography.Paragraph>}
+        {spec?.standard.kind === 'NUMBER' && <Row gutter={12}>
+          <Col xs={24} sm={16}><Form.Item name={[field.name, 'measurementValue']} label="實際量測值" rules={[{ required: measured, message: '請填寫實際量測值' }, { pattern: /^-?(?:0|[1-9]\d{0,11})(?:\.\d{1,6})?$/, message: '量測值格式不符' }]}><Input inputMode="decimal" maxLength={20} /></Form.Item></Col>
+          <Col xs={24} sm={8}><Form.Item name={[field.name, 'unit']} label="單位"><Input readOnly /></Form.Item></Col>
+        </Row>}
+        {spec?.standard.kind === 'BOOLEAN' && <Form.Item name={[field.name, 'measurementValue']} label="實際功能結果" rules={[{ required: measured, type: 'boolean' }]}><Select options={[{ value: true, label: '是' }, { value: false, label: '否' }]} /></Form.Item>}
+        {spec?.requiresCalibration && <Row gutter={12}>
+          <Col xs={24} sm={8}><Form.Item name={[field.name, 'instrumentId']} label="設備編號" rules={measuredTextRules}><Input maxLength={128} /></Form.Item></Col>
+          <Col xs={24} sm={8}><Form.Item name={[field.name, 'calibrationRecordId']} label="校正紀錄" rules={measuredTextRules}><Input maxLength={128} /></Form.Item></Col>
+          <Col xs={24} sm={8}><Form.Item name={[field.name, 'measuredAt']} label="量測時間" rules={measuredTextRules}><Input maxLength={40} /></Form.Item></Col>
+        </Row>}
         <Form.Item name={[field.name, 'observation']} label="觀察結果／量測值／未測原因" rules={requiredText()}><Input.TextArea rows={2} maxLength={1000} showCount /></Form.Item>
-      </Card>)}
+      </Card>})}
       <Form.ErrorList errors={errors} />
-      {editable && <Button block type="dashed" disabled={fields.length >= 50} onClick={() => add(blankCheck())} style={{ marginBottom: 20 }}>新增項目</Button>}
+      {editable && !template && <Button block type="dashed" disabled={fields.length >= 50} onClick={() => add(blankCheck())} style={{ marginBottom: 20 }}>新增項目</Button>}
     </>}
   </Form.List>
 }
 
 function CheckTable({ checks }: { checks: InspectionData['checks'] }) {
-  return <Table size="small" pagination={false} dataSource={checks.map((check, index) => ({ ...check, key: index }))} columns={[
+  return <Table size="small" rowKey="_rowKey" pagination={false} dataSource={checks.map((check, index) => ({ ...check, _rowKey: index }))} columns={[
     { title: '檢測項目', dataIndex: 'name' },
     { title: '結果', dataIndex: 'result', render: (value: keyof typeof RESULTS) => RESULTS[value] || value },
     { title: '觀察結果／未測原因', dataIndex: 'observation' },
+    ...(checks.some(check => check.measurementValue !== undefined || check.instrumentId) ? [{ title: '量測紀錄', render: (_: unknown, check: InspectionData['checks'][number]) => checkMeasurement(check) }] : []),
   ]} />
 }
 
@@ -108,6 +148,7 @@ function SavedDocument({ document, kind, customerRepair }: { document: RepairDoc
       ] : []),
     ]
   })()
+  details.push(...documentExtraRows(data))
   return <div>
     <DocumentHeading document={document} title={kind === 'inspection' ? '檢修單' : '維修單'} inspection={kind === 'inspection' && customerRepair} />
     <Descriptions column={1} size="small" bordered items={details.map(([label, value], index) => ({ key: index, label, children: <span style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{value === '' || value == null ? '—' : value}</span> }))} />
@@ -133,6 +174,7 @@ function printDocument(item: RepairItem, kind: 'inspection' | 'repair', message:
     ['物件', item.label], ['產品', item.productName], ['原件 SKU／SN', `${item.sku || '未提供'} / ${item.serialNumber || '未提供'}`],
     ['案件目的', customerRepair ? '顧客送修' : '公司退貨庫存整新'],
   ]
+  fields.push(...documentExtraRows(data))
   let parts = ''
   if (kind === 'inspection') {
     const inspection = data as InspectionData
@@ -165,7 +207,7 @@ function printDocument(item: RepairItem, kind: 'inspection' | 'repair', message:
   }
   const title = kind === 'inspection' ? '內部檢修單' : '內部維修單'
   printable.document.open()
-  printable.document.write(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${escape(document.number)} ${title}</title><style>@page{margin:16mm}body{font:14px sans-serif;color:#172534}h1{font-size:22px}p{line-height:1.6}table{width:100%;border-collapse:collapse;margin:16px 0;table-layout:fixed}th,td{border:1px solid #a9b6c4;padding:8px;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}th{background:#eef2f6}tr{break-inside:avoid}.label{width:25%}</style></head><body><h1>${title}</h1><table>${fields.map(([label, value]) => `<tr><th class="label">${escape(label)}</th><td>${escape(value)}</td></tr>`).join('')}</table><h2>逐項檢測／複驗</h2><table><thead><tr><th>項目</th><th>結果</th><th>觀察／量測／未測原因</th></tr></thead><tbody>${(data.checks || []).map(check => `<tr><td>${escape(check.name)}</td><td>${escape(RESULTS[check.result])}</td><td>${escape(check.observation)}</td></tr>`).join('')}</tbody></table>${parts}</body></html>`)
+  printable.document.write(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${escape(document.number)} ${title}</title><style>@page{margin:16mm}body{font:14px sans-serif;color:#172534}h1{font-size:22px}p{line-height:1.6}table{width:100%;border-collapse:collapse;margin:16px 0;table-layout:fixed}th,td{border:1px solid #a9b6c4;padding:8px;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}th{background:#eef2f6}tr{break-inside:avoid}.label{width:25%}</style></head><body><h1>${title}</h1><table>${fields.map(([label, value]) => `<tr><th class="label">${escape(label)}</th><td>${escape(value)}</td></tr>`).join('')}</table><h2>逐項檢測／複驗</h2><table><thead><tr><th>項目</th><th>結果</th><th>觀察／量測／未測原因</th><th>量測紀錄</th></tr></thead><tbody>${(data.checks || []).map(check => `<tr><td>${escape(check.name)}</td><td>${escape(RESULTS[check.result])}</td><td>${escape(check.observation)}</td><td>${escape(checkMeasurement(check))}</td></tr>`).join('')}</tbody></table>${parts}</body></html>`)
   printable.document.close()
   printable.focus()
   printable.print()
@@ -179,28 +221,49 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
   const [repairForm] = Form.useForm<RepairData>()
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState('')
+  const [activeTab,setActiveTab]=useState('inspection')
+  const pendingMedia=useRef({inspection:false,repair:false})
+  const dirtyForms=useRef({inspection:false,repair:false})
+  const markDirty=(kind:'inspection'|'repair')=>{dirtyForms.current[kind]=true;onDirtyChange?.(true)}
   const [selectedRequiresSerial, setSelectedRequiresSerial] = useState(!!item.serialNumber || !!item.repairReport?.data.replacementSerial)
   const saving = useRef(false)
   const operation = useRef<{ body: string; requestId: string } | null>(null)
   const ownSigned = item.editable === true && !!user?.id && item.repairOwnerId === user.id && item.custodianId === user.id && hasPermission(user, 'repair_workbench:update')
   const canInspect = ownSigned && INSPECTION_STAGES.includes(item.status)
   const canReport = ownSigned && REPORT_STAGES.includes(item.status) && (['REPAIR', 'REPLACE'].includes(item.repairInspection?.data.plan || '') || item.repairInspection?.data.plan === 'FACTORY' && item.repairWorkflow?.factory?.stage === 'RETURNED' && item.repairWorkflow.factory.physicalCustody === 'TECHNICIAN')
-  const inspectionInitial: InspectionData = item.repairInspection?.data || {
+  const providedTemplate = item.repairPrerequisites?.template
+  const template = providedTemplate?.status === 'REVIEWED' && providedTemplate.entityId === entityId && providedTemplate.productId === item.productId && providedTemplate.sku === item.sku ? providedTemplate : undefined
+  const templateBinding = template ? { id: template.id, revision: template.revision, contentHash: template.contentHash } : undefined
+  const templateChecks = template?.checks.map(check => ({ key: check.key, name: check.name, result: 'NOT_TESTED' as const, observation: '', ...(check.standard.unit ? { unit: check.standard.unit } : {}) }))
+  const providedRepairTemplate = item.repairInspection?.data.plan==='REPLACE' ? item.repairPrerequisites?.repairTemplate : template
+  const repairTemplate = providedRepairTemplate?.status==='REVIEWED' && providedRepairTemplate.entityId===entityId && providedRepairTemplate.sku===(item.repairInspection?.data.plan==='REPLACE'?item.repairInspection.data.replacementSku:item.sku) ? providedRepairTemplate : undefined
+  const repairTemplateBinding = repairTemplate ? {id:repairTemplate.id,revision:repairTemplate.revision,contentHash:repairTemplate.contentHash} : undefined
+  const repairTemplateChecks = repairTemplate?.checks.map(check=>({key:check.key,name:check.name,result:'NOT_TESTED' as const,observation:'',...(check.standard.unit?{unit:check.standard.unit}:{})}))
+  const inspectionInitial: InspectionData = { ...(item.repairInspection?.data || {
     complaint: '', reproduction: 'NOT_TESTED', testConditions: '', checks: [blankCheck()],
     diagnosis: '', causeStatus: 'UNKNOWN', plan: 'REPAIR', planNote: '', feeSuggestion: 'REVIEW', estimateNote: '',
-  }
-  const repairInitial: RepairData = item.repairReport?.data || {
+    ...(templateBinding ? { templateBinding, checks: templateChecks! } : {}),
+  }), protocol: 2, materialPlan: item.repairInspection?.data.materialPlan || { mode: 'UNASSESSED', lines: [] }, mediaRefs: item.repairInspection?.data.mediaRefs || [] }
+  const repairInitial: RepairData = { ...(item.repairReport?.data || {
     outcome: item.repairInspection?.data.plan === 'REPLACE' ? 'REPLACED' : item.repairInspection?.data.plan === 'FACTORY' ? 'FACTORY_REPAIRED' : 'REPAIRED', factoryReference: item.repairWorkflow?.factory?.reference, replacementSku:item.repairInspection?.data.replacementSku, replacementCondition:item.repairInspection?.data.replacementCondition, workPerformed: '',
     parts: [], laborMinutes: 0, checks: [blankCheck()], qcResult: 'NOT_TESTED', qcNotes: '', deliveredAccessories: '',
-  }
+    ...(repairTemplateBinding ? { templateBinding:repairTemplateBinding, checks: repairTemplateChecks! } : {}),
+  }), protocol: 2, mediaRefs: item.repairReport?.data.mediaRefs || [], customerReportDraft: item.repairReport?.data.customerReportDraft || { findings: '', handling: '', verification: '', mediaIds: [] } }
   const plan = Form.useWatch('plan', inspectionForm) || inspectionInitial.plan
   const fee = Form.useWatch('feeSuggestion', inspectionForm) || inspectionInitial.feeSuggestion
   const outcome = Form.useWatch('outcome', repairForm) || repairInitial.outcome
   const qc = Form.useWatch('qcResult', repairForm) || repairInitial.qcResult
+  const applyTemplate = (form: FormInstance, selected:RepairTemplateView|undefined=template) => {
+    if (!selected) return
+    const apply = () => { form.setFieldsValue({ templateBinding:{id:selected.id,revision:selected.revision,contentHash:selected.contentHash}, checks:selected.checks.map(check=>({key:check.key,name:check.name,result:'NOT_TESTED',observation:'',...(check.standard.unit?{unit:check.standard.unit}:{})})) }); markDirty(form===inspectionForm?'inspection':'repair') }
+    if ((form.getFieldValue('checks') || []).some((check: InspectionData['checks'][number]) => check.observation?.trim() || check.measurementValue !== undefined || check.instrumentId?.trim() || check.calibrationRecordId?.trim() || check.measuredAt?.trim() || check.result && check.result !== 'NOT_TESTED')) modal.confirm({ title: '套用目前檢測基準？', content: '目前表單的檢測內容將重新填寫。', okText: '套用', cancelText: '取消', onOk: apply })
+    else apply()
+  }
 
   async function save(kind: 'inspection' | 'repair', status: 'DRAFT' | 'SUBMITTED') {
     const editable = kind === 'inspection' ? canInspect : canReport
     if (!editable || saving.current) return
+    if(pendingMedia.current[kind]){setFailure('影像尚未上傳');return}
     const form = (kind === 'inspection' ? inspectionForm : repairForm) as FormInstance
     saving.current = true
     setBusy(`${kind}:${status}`)
@@ -210,7 +273,7 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
       if (onBeforeSave && !await onBeforeSave()) return
       if (status === 'SUBMITTED') await form.validateFields()
       const otherForm = kind === 'inspection' ? repairForm : inspectionForm
-      if (otherForm.isFieldsTouched()) {
+      if (otherForm.isFieldsTouched() || dirtyForms.current[kind==='inspection'?'repair':'inspection'] || pendingMedia.current[kind==='inspection'?'repair':'inspection']) {
         const discard = await new Promise<boolean>(resolve => modal.confirm({
           title: `另一張${kind === 'inspection' ? '維修單' : '檢修單'}有未保存修改`,
           content: '保存本單後會重新載入案件，另一張未保存的修改會遺失。您可以取消，返回整理或保存草稿。',
@@ -220,13 +283,26 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
         if (!discard) return
       }
       const values = form.getFieldsValue(true)
-      const checks = (values.checks || []).map((check: InspectionData['checks'][number]) => ({ name: textValue(check.name), result: check.result || 'NOT_TESTED', observation: textValue(check.observation) }))
+      const checks = (values.checks || []).map((check: InspectionData['checks'][number]) => ({ name: textValue(check.name), result: check.result || 'NOT_TESTED', observation: textValue(check.observation),
+        ...(check.key ? { key: textValue(check.key) } : {}), ...(typeof check.measurementValue === 'string' || typeof check.measurementValue === 'boolean' ? { measurementValue: check.measurementValue } : {}),
+        ...Object.fromEntries((['unit', 'instrumentId', 'calibrationRecordId', 'measuredAt'] as const).filter(key => check[key] !== undefined).map(key => [key, textValue(check[key])])),
+      }))
+      const extras: RepairDocumentV2Fields = { protocol: 2,
+        ...(typeof values.isUnderWarranty === 'boolean' ? { isUnderWarranty: values.isUnderWarranty } : {}),
+        ...(typeof values.isAccidentalDamage === 'boolean' ? { isAccidentalDamage: values.isAccidentalDamage } : {}),
+        ...(values.customerVisibleSummary !== undefined ? { customerVisibleSummary: textValue(values.customerVisibleSummary) } : {}),
+        ...(values.templateBinding ? { templateBinding: values.templateBinding } : {}),
+        mediaRefs: (values.mediaRefs || []).map((ref: NonNullable<RepairDocumentV2Fields['mediaRefs']>[number]) => ({ mediaId: ref.mediaId, phase: ref.phase, ...(ref.checkKey ? { checkKey: ref.checkKey } : {}) })),
+        ...(values.customerReportDraft ? { customerReportDraft: { findings: textValue(values.customerReportDraft.findings), handling: textValue(values.customerReportDraft.handling), verification: textValue(values.customerReportDraft.verification), mediaIds: values.customerReportDraft.mediaIds || [] } } : {}),
+      }
       const data: InspectionData | RepairData = kind === 'inspection' ? {
+        ...extras, materialPlan: materialPlanPayload(values.materialPlan),
         complaint: textValue(values.complaint), reproduction: values.reproduction || 'NOT_TESTED',
         testConditions: textValue(values.testConditions), checks, diagnosis: textValue(values.diagnosis), causeStatus: values.causeStatus || 'UNKNOWN',
         plan: values.plan || 'REPAIR', ...(values.plan === 'REPLACE' ? {replacementCondition: values.replacementCondition, replacementSku:textValue(values.replacementSku)} : {}), planNote: textValue(values.planNote), feeSuggestion: values.feeSuggestion || 'REVIEW',
         ...(typeof values.estimateAmount === 'number' ? { estimateAmount: values.estimateAmount } : {}), estimateNote: textValue(values.estimateNote),
       } : {
+        ...extras,
         outcome: values.outcome || 'REPAIRED', workPerformed: textValue(values.workPerformed),
         parts: (values.parts || []).map((part: RepairData['parts'][number]) => ({ name: textValue(part.name), sku: textValue(part.sku), quantity: typeof part.quantity === 'number' ? part.quantity : 1 })),
         laborMinutes: typeof values.laborMinutes === 'number' ? values.laborMinutes : 0, checks, qcResult: values.qcResult || 'NOT_TESTED',
@@ -243,6 +319,7 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
       if (operation.current?.body !== body) operation.current = { body, requestId: crypto.randomUUID() }
       await api.post(`/repair-workbench/items/${encodeURIComponent(item.id)}/${kind === 'inspection' ? 'inspection' : 'repair-report'}`, { ...JSON.parse(body), requestId: operation.current.requestId })
       saved = true
+      dirtyForms.current={inspection:false,repair:false}
       onDirtyChange?.(false)
       await onSaved()
       message.success(status === 'DRAFT' ? '草稿已儲存' : kind === 'inspection' ? '檢修單已提交' : '維修單已提交')
@@ -277,11 +354,11 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
     <Space wrap className="repair-documents-header"><Typography.Text strong>工作單</Typography.Text><Tag>案件版本 {item.version}</Tag></Space>
     {!ownSigned && <Alert type="warning" showIcon style={{ marginBottom: 16 }} message="唯讀：需本人簽收與編輯權限。" />}
     {failure && <Alert type="error" showIcon style={{ marginBottom: 16 }} message={failure} />}
-    <Tabs items={[
+    <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
       { key: 'inspection', label: '檢修單', forceRender: true, children: <>
         <DocumentHeading document={item.repairInspection} title="檢修單" inspection={customerRepair} />
         <div className="repair-document-tools"><Button icon={<PrinterOutlined />} disabled={!item.repairInspection || !!busy} onClick={() => printDocument(item, 'inspection', message)}>列印</Button></div>
-        <Form name={`repair-inspection-${item.id}`} form={inspectionForm} layout="vertical" initialValues={inspectionInitial} onValuesChange={() => onDirtyChange?.(true)} disabled={!canInspect || !!busy}>
+        <Form name={`repair-inspection-${item.id}`} form={inspectionForm} layout="vertical" initialValues={inspectionInitial} onValuesChange={() => markDirty('inspection')} disabled={!canInspect || !!busy}>
           <DocumentSection title="故障與檢測">
           <Form.Item name="complaint" label="客訴／故障描述" rules={requiredText()}><Input.TextArea rows={3} maxLength={2000} showCount /></Form.Item>
           <Row gutter={16}>
@@ -289,10 +366,16 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
             <Col xs={24} sm={12}><Form.Item name="causeStatus" label="原因確定度" rules={[{ required: true }]}><Select options={options(CAUSES)} /></Form.Item></Col>
           </Row>
           <Form.Item name="testConditions" label="測試條件／設備／參考基準" rules={requiredText()}><Input.TextArea rows={2} maxLength={2000} showCount /></Form.Item>
-          <CheckFields editable={canInspect && !busy} />
+          <Tag>{template ? `${template.sku} · 檢測基準 v${template.revision}` : '檢測基準待確認'}</Tag>
+          {template && canInspect && <Button size="small" disabled={!!busy} onClick={() => applyTemplate(inspectionForm)} style={{ marginBottom: 12 }}>套用檢測基準</Button>}
+          <CheckFields editable={canInspect && !busy} template={template} />
           </DocumentSection>
           <DocumentSection title="診斷與估價">
           <Form.Item name="diagnosis" label="診斷與原因判斷" rules={requiredText()}><Input.TextArea rows={3} maxLength={2000} showCount /></Form.Item>
+          <Row gutter={16}>
+            <Col xs={24} sm={12}><Form.Item name="isUnderWarranty" label="保固判定"><Select allowClear options={[{ value: true, label: '保固內' }, { value: false, label: '保固外' }]} /></Form.Item></Col>
+            <Col xs={24} sm={12}><Form.Item name="isAccidentalDamage" label="人為損壞判定"><Select allowClear options={[{ value: true, label: '是' }, { value: false, label: '否' }]} /></Form.Item></Col>
+          </Row>
           <Row gutter={16}>
             <Col xs={24} sm={12}><Form.Item name="plan" label="建議處理方式" rules={[{ required: true }]}><Select options={options(PLANS)} /></Form.Item></Col>
             <Col xs={24} sm={12}><Form.Item name="feeSuggestion" label={customerRepair ? '費用建議（交客服審核）' : '內部處理費用建議'} rules={[{ required: true }]}><Select options={options(customerRepair ? FEES : INTERNAL_FEES)} /></Form.Item></Col>
@@ -307,6 +390,7 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
           <Form.Item name="estimateAmount" label="內部估價金額" rules={[{ required: fee === 'PAID', type: 'number', min: fee === 'PAID' ? 0.01 : 0, max: 10000000, message: '付費建議需正數估價；金額最多 10,000,000' }]}><InputNumber min={0} max={10000000} precision={2} style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="estimateNote" label="估價項目／範圍／費用說明" rules={fee === 'PAID' ? requiredText('付費建議請填寫估價項目') : []}><Input.TextArea rows={2} maxLength={2000} showCount /></Form.Item>
           </DocumentSection>
+          <RepairDocumentExtras form={inspectionForm} item={item} entityId={entityId} kind="inspection" active={activeTab==='inspection'} editable={canInspect && !busy} onDirtyChange={()=>markDirty('inspection')} onMediaPendingChange={pending=>{pendingMedia.current.inspection=pending}} />
           {buttons('inspection', canInspect)}
         </Form>
       </> },
@@ -314,7 +398,7 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
         <DocumentHeading document={item.repairReport} title="維修單" />
         <div className="repair-document-tools"><Button icon={<PrinterOutlined />} disabled={!item.repairReport || !!busy} onClick={() => printDocument(item, 'repair', message)}>列印</Button></div>
         {item.repairReport && item.repairReport.inspectionRevision !== item.repairInspection?.revision && <Alert type="warning" showIcon style={{ marginBottom: 16 }} message="維修單與目前檢修版次不一致" description="請依目前檢修版次重新提交維修單。" />}
-        <Form name={`repair-report-${item.id}`} form={repairForm} layout="vertical" initialValues={repairInitial} onValuesChange={() => onDirtyChange?.(true)} disabled={!canReport || !!busy}>
+        <Form name={`repair-report-${item.id}`} form={repairForm} layout="vertical" initialValues={repairInitial} onValuesChange={() => markDirty('repair')} disabled={!canReport || !!busy}>
           <DocumentSection title="實際處置">
           <Row gutter={16}>
             <Col xs={24} sm={12}><Form.Item name="outcome" label="實際處置" rules={[{ required: true }]}><Select options={options(OUTCOMES)} /></Form.Item></Col>
@@ -328,11 +412,11 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
             {canReport && !busy && <div style={{ marginBottom: 16 }}><RepairReplacementStock feedback={message} item={{...item,entityId}} onSelected={selection => {
               setSelectedRequiresSerial(!!item.serialNumber || selection.hasSerialNumbers === true)
               repairForm.setFieldsValue({ replacementSku: selection.sku, replacementCondition: selection.condition, replacementSerial: selection.serialNumber || '', replacementSource: selection.unitLabel, inventoryReference: selection.reservationId })
-              onDirtyChange?.(true)
+              markDirty('repair')
             }} onReleased={id => {
               if (repairForm.getFieldValue('inventoryReference') === id) {
                 repairForm.setFieldsValue({ inventoryReference: '', replacementSource: '', replacementSerial: '' })
-                onDirtyChange?.(true)
+                markDirty('repair')
               }
             }} /></div>}
             <Form.Item name="replacementCondition" label="替換件品況" rules={[{ required: true, message: '請如實選擇全新品或複驗合格整新品' }]}><Select options={options(CONDITIONS)} /></Form.Item>
@@ -360,11 +444,14 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
           </>}</Form.List>
           </DocumentSection>
           <DocumentSection title="修後複驗">
-          <CheckFields editable={canReport && !busy} passing={qc === 'PASS'} title="修後／替換件複驗項目" />
+          <Tag>{repairTemplate?`${repairTemplate.sku} · 複驗基準 v${repairTemplate.revision}`:'複驗基準待確認'}</Tag>
+          {repairTemplate && canReport && <Button size="small" disabled={!!busy} onClick={() => applyTemplate(repairForm,repairTemplate)} style={{ marginBottom: 12 }}>套用複驗基準</Button>}
+          <CheckFields editable={canReport && !busy} passing={qc === 'PASS'} title="修後／替換件複驗項目" template={repairTemplate} phase="COMPLETION" />
           <Form.Item name="qcResult" label="總複驗結果" rules={[{ required: true }]}><Select options={options(RESULTS)} /></Form.Item>
           <Form.Item name="qcNotes" label="複驗說明與異常" rules={requiredText()}><Input.TextArea rows={2} maxLength={2000} showCount /></Form.Item>
           <Form.Item name="deliveredAccessories" label="交付配件（沒有也請註明）" rules={requiredText()}><Input.TextArea rows={2} maxLength={1000} showCount /></Form.Item>
           </DocumentSection>
+          <RepairDocumentExtras form={repairForm} item={item} entityId={entityId} kind="repair" active={activeTab==='repair'} editable={canReport && !busy} onDirtyChange={()=>markDirty('repair')} onMediaPendingChange={pending=>{pendingMedia.current.repair=pending}} />
           {buttons('repair', canReport)}
         </Form>
       </> },

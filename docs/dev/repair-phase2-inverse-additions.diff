@@ -1,0 +1,47 @@
+--- a/backend/prisma/schema.prisma
++++ b/backend/prisma/schema.prisma
+@@ -180,6 +180,9 @@
+
+ // 公司實體（支援多公司營運）
+ model Entity {
++  repairTestStandards RepairTestStandard[]
++  repairCalibrationRecords RepairCalibrationRecord[]
++  repairMaterialAllocations RepairMaterialAllocation[] @relation("RepairMaterialEntity")
+   shipmentLines ShipmentLine[]
+   wmsHandoverInbox WmsHandoverInbox[]
+   id           String  @id @default(uuid())
+@@ -466,6 +469,8 @@
+
+ // 商品
+ model Product {
++  repairTestStandards RepairTestStandard[]
++  repairMaterialAllocations RepairMaterialAllocation[] @relation("RepairMaterialProduct")
+   shipmentLines ShipmentLine[]
+   id          String      @id @default(uuid())
+   entityId    String      @map("entity_id")
+@@ -620,6 +625,7 @@
+
+ // 倉庫（多倉管理：公司倉、3PL、平台倉等）
+ model Warehouse {
++  repairMaterialAllocations RepairMaterialAllocation[] @relation("RepairMaterialWarehouse")
+   wmsHandoverInbox WmsHandoverInbox[]
+   id        String   @id @default(uuid())
+   entityId  String   @map("entity_id")
+@@ -665,6 +671,9 @@
+
+ // 庫存異動流水（入庫/出庫/預留/釋放/調整）
+ model InventoryTransaction {
++  repairMaterialReserve RepairMaterialAllocation? @relation("RepairMaterialReserve")
++  repairMaterialOut RepairMaterialAllocation? @relation("RepairMaterialOut")
++  repairMaterialRelease RepairMaterialAllocation? @relation("RepairMaterialRelease")
+   afterSalesReserve AfterSalesStockReservation? @relation("AfterSalesReserve")
+   afterSalesRelease AfterSalesStockReservation? @relation("AfterSalesRelease")
+   afterSalesOut AfterSalesStockReservation? @relation("AfterSalesOut")
+@@ -2342,6 +2351,7 @@
+ }
+
+ model MailroomItem {
++  repairMaterialAllocations RepairMaterialAllocation[] @relation("RepairMaterialItem")
+   stockReservations AfterSalesStockReservation[]
+   id                  String   @id @default(uuid())
+   receiptId           String   @map("receipt_id")

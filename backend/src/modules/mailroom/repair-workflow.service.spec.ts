@@ -8,6 +8,7 @@ import {
 import { sentCustomerWorkflow } from './repair-workflow.contract';
 import { type RepairWorkflowDto } from './repair-workflow.dto';
 import { repairSourceBindingForItem } from './repair-proposal.contract';
+import { RepairPrerequisitesService } from './repair-prerequisites.service';
 
 const actor = (id: string): Actor => ({
   id,
@@ -20,7 +21,7 @@ const actor = (id: string): Actor => ({
   ),
 });
 const inspection = (
-  plan: 'REPAIR' | 'FACTORY' | 'RETURN' = 'REPAIR',
+  plan: 'REPAIR' | 'FACTORY' | 'RETURN' | 'SCRAP' = 'REPAIR',
 ): InspectionDocument => ({
   number: 'INS-DEMO',
   revision: 3,
@@ -29,6 +30,8 @@ const inspection = (
   authorName: 'tech',
   updatedAt: '2026-10-05T00:00:00Z',
   data: {
+    protocol: 2,
+    materialPlan: { mode: 'NONE', lines: [] },
     complaint: '無法開機',
     reproduction: 'YES',
     testConditions: '原廠電源',
@@ -52,6 +55,7 @@ describe('native repair departmental acceptance, original return and factory cus
   let source: SourceCase;
   let events: Map<string, any>;
   let sequence: number;
+  let prerequisites: RepairPrerequisitesService;
   const command = (
     action: RepairWorkflowDto['action'],
     fields: Partial<RepairWorkflowDto> = {},
@@ -76,6 +80,37 @@ describe('native repair departmental acceptance, original return and factory cus
         },
       ],
     });
+  const bindDisposition = (
+    decision: 'RETURN_ORIGINAL' | 'SCRAP' = 'RETURN_ORIGINAL',
+  ) => {
+    if (source.type !== 'REPAIR') return;
+    const verifiedCustomerId = 'a'.repeat(64);
+    Object.assign(source.releaseInfo!, {
+      customerIdentity: {
+        companyId: 'source-company',
+        caseId: source.id,
+        brand: source.brand,
+        verified: true,
+        verifiedCustomerId,
+      },
+      customerDecisions: [
+        {
+          proofId: 'SYNTHETIC-DISPOSITION',
+          proofRevision: 2,
+          status: 'APPROVED',
+          purpose: 'DISPOSITION',
+          quoteRevision: 4,
+          ...repairSourceBindingForItem(row, source),
+          customerDecision: decision,
+          verifiedCustomerId,
+          provider: 'LINE',
+          reviewedById: 'csr',
+          submittedAt: '2026-10-05T00:01:00Z',
+          reviewedAt: '2026-10-05T00:02:00Z',
+        },
+      ],
+    });
+  };
   const reviewed = (decision: 'APPROVE' | 'DECLINE' = 'APPROVE') => {
     row.status = 'INSPECTING';
     row.repairWorkflow = {
@@ -99,6 +134,9 @@ describe('native repair departmental acceptance, original return and factory cus
       quoteRevision: 4,
     };
     bindCurrentQuote();
+    bindDisposition(
+      row.repairInspection.data.plan === 'SCRAP' ? 'SCRAP' : 'RETURN_ORIGINAL',
+    );
   };
   const send = () =>
     service.workflow(
@@ -175,7 +213,9 @@ describe('native repair departmental acceptance, original return and factory cus
         confirmedPaymentQuoteRevision: 4,
       },
     };
+    Object.assign(source, { caseBrand: 'MOZTECH' });
     bindCurrentQuote();
+    bindDisposition();
     prisma = {
       mailroomItem: {
         findUnique: jest.fn(async () => structuredClone(row)),
@@ -198,6 +238,8 @@ describe('native repair departmental acceptance, original return and factory cus
           );
         }),
       },
+      product: { findMany: jest.fn().mockResolvedValue([]) },
+      warehouse: { findMany: jest.fn().mockResolvedValue([]) },
       $queryRaw: jest.fn().mockResolvedValue([]),
       employee: { findFirst: jest.fn().mockResolvedValue({ id: 'employee' }) },
       $transaction: jest.fn(),
@@ -236,8 +278,95 @@ describe('native repair departmental acceptance, original return and factory cus
     sync = {
       cases: jest.fn(async () => ({ items: [structuredClone(source)] })),
     };
-    service = new RepairWorkbenchService(prisma, mailroom, sync);
+    prerequisites = {
+      require: jest.fn().mockResolvedValue({}),
+      recordValidation: jest.fn().mockResolvedValue({}),
+      forItem: jest.fn().mockResolvedValue({
+        materials: {
+          start: { state: 'READY', reason: 'NOT_REQUIRED', requiredCount: 0 },
+          completion: {
+            state: 'READY',
+            reason: 'NOT_REQUIRED',
+            requiredCount: 0,
+          },
+        },
+        template: null,
+        completionTemplate: null,
+        templateChecks: { inspection: 'UNKNOWN', completion: 'UNKNOWN' },
+        calibrationRecords: [],
+        completionCalibrationRecords: [],
+      }),
+    } as unknown as RepairPrerequisitesService;
+    service = new RepairWorkbenchService(prisma, mailroom, sync, prerequisites);
   });
+
+  const corporateReviewed = () => {
+    reviewed();
+    row.receipt.category = 'RETURN';
+    row.status = 'REFURBISHING';
+    row.repairInspection.review.quoteRevision = null;
+    row.repairWorkflow.csr.quoteRevision = null;
+  };
+  it('records explicit corporate start bound to the actual current inspection, actor and physical custody; does not borrow Source finance', async () => {
+    corporateReviewed();
+    sync.cases.mockRejectedValue(new Error('customer source unavailable'));
+    const cmd = command('start_refurbishment');
+    await service.workflow('tech', 'piece', cmd);
+    expect(row.repairWorkflow.workStart).toMatchObject({
+      schema: 'corely.repair.work-start.v1',
+      kind: 'REFURBISHMENT',
+      entityId: 'company',
+      itemId: 'piece',
+      inspectionRevision: 3,
+      planHash: inspectionPlanHash(row.repairInspection),
+      ownerId: 'tech',
+      custodianId: 'tech',
+      startedById: 'tech',
+    });
+    expect(prerequisites.require).toHaveBeenCalledWith(
+      expect.anything(),
+      'START',
+      prisma,
+    );
+    expect(sync.cases).not.toHaveBeenCalled();
+    expect(row.custodianId).toBe('tech');
+    await service.workflow('tech', 'piece', cmd);
+    expect(prisma.mailroomItem.update).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    'csr quote',
+    'review quote',
+    'missing quote',
+    'inactive',
+    'materials',
+    'custody',
+    'stale csr',
+  ])(
+    'refuses corporate start with %s before recording work or custody',
+    async (kind) => {
+      corporateReviewed();
+      if (kind === 'csr quote') row.repairWorkflow.csr.quoteRevision = 4;
+      if (kind === 'review quote')
+        row.repairInspection.review.quoteRevision = 4;
+      if (kind === 'missing quote')
+        delete row.repairInspection.review.quoteRevision;
+      if (kind === 'inactive')
+        prisma.employee.findFirst.mockResolvedValue(null);
+      if (kind === 'materials')
+        jest
+          .mocked(prerequisites.require)
+          .mockRejectedValue(new Error('materials blocked'));
+      if (kind === 'custody') row.custodianId = 'clerk';
+      if (kind === 'stale csr')
+        row.repairWorkflow.csr.planHash = '0'.repeat(64);
+      const before = structuredClone(row);
+      await expect(
+        service.workflow('tech', 'piece', command('start_refurbishment')),
+      ).rejects.toThrow();
+      expect(row).toEqual(before);
+      expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
+    },
+  );
 
   it('records sent/accepted/resolved separately; CSR ACK cannot move physical custody or silently resolve a decision', async () => {
     const initial = structuredClone(row.repairWorkflow);
@@ -338,12 +467,81 @@ describe('native repair departmental acceptance, original return and factory cus
       inspectionRevision: 3,
       releasedBy: 'tech',
     });
-    expect(sync.cases).not.toHaveBeenCalled();
+    expect(sync.cases).toHaveBeenCalled();
+    expect(row.repairWorkflow.dispositionAuthorization.decision).toBe(
+      'RETURN_ORIGINAL',
+    );
     expect(
       [...events.values()][0].snapshot.repairWorkflow.release.purpose,
     ).toBe('RETURN_UNREPAIRED');
   });
 
+  it('records current explicit SCRAP authorization without moving custody, status or inventory, and prevents repeat recording', async () => {
+    row.repairInspection = inspection('SCRAP');
+    reviewed();
+    source.repairAllowed = false;
+    source.releaseInfo!.confirmedPaymentQuoteRevision = null;
+    const previousStatus = row.status;
+    await service.workflow(
+      'tech',
+      'piece',
+      command('record_scrap_authorization'),
+    );
+    expect(row.status).toBe(previousStatus);
+    expect(row.custodianId).toBe('tech');
+    expect(row.nextUserId).toBeNull();
+    expect(row.repairWorkflow.release).toBeUndefined();
+    expect(row.repairWorkflow.dispositionAuthorization).toMatchObject({
+      decision: 'SCRAP',
+      revision: 2,
+      quoteRevision: 4,
+    });
+    await expect(
+      service.workflow('tech', 'piece', command('record_scrap_authorization')),
+    ).rejects.toThrow('已記錄');
+    const detail = await service.documents('tech', 'company', 'piece');
+    expect(detail.repairPrerequisites.disposition.scrapAuthorization).toEqual({
+      state: 'BLOCKED',
+      reason: 'ALREADY_RECORDED',
+    });
+  });
+  it.each([
+    'missing',
+    'wrong quote',
+    'another customer',
+    'duplicate source',
+    'source failure',
+  ])('blocks original return on %s with no mutation', async (reason) => {
+    reviewed('DECLINE');
+    if (reason === 'missing')
+      Object.assign(source.releaseInfo!, { customerDecisions: [] });
+    if (reason === 'wrong quote')
+      row.repairWorkflow.csr.quoteRevision =
+        row.repairInspection.review.quoteRevision = 3;
+    if (reason === 'another customer')
+      Object.assign(source.releaseInfo!, {
+        customerIdentity: {
+          companyId: 'source-company',
+          caseId: source.id,
+          brand: source.brand,
+          verified: true,
+          verifiedCustomerId: 'b'.repeat(64),
+        },
+      });
+    if (reason === 'duplicate source')
+      sync.cases.mockResolvedValue({ items: [source, source] });
+    if (reason === 'source failure')
+      sync.cases.mockRejectedValue(new Error('source unavailable'));
+    await expect(
+      service.workflow(
+        'tech',
+        'piece',
+        command('return_original', { confirmedItems: true, location: '櫃台' }),
+      ),
+    ).rejects.toThrow();
+    expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
+    expect(mailroom.record).not.toHaveBeenCalled();
+  });
   it('allows a reviewed RETURN plan without fabricating work; a changed inspection or estimate invalidates the old customer decision', async () => {
     row.repairInspection = inspection('RETURN');
     reviewed('APPROVE');
@@ -572,6 +770,7 @@ describe('native repair departmental acceptance, original return and factory cus
       true,
     );
     const data: any = {
+      protocol: 2,
       outcome: 'FACTORY_REPAIRED',
       factoryReference: 'FACTORY-DEMO-001',
       workPerformed: '原廠換主板，本人複驗',
