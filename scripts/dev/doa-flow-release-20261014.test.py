@@ -160,6 +160,7 @@ class FlowReleaseTests(unittest.TestCase):
         self.assertEqual([c['name'] for c in r.containers(specs[r.WMS])], ['web', 'api'])
         self.assertNotIn('ports', r.containers(specs[r.WMS])[1])
         self.assertEqual(r.value(r.containers(specs[r.API])[0], 'AFTER_SALES_TASK_SOURCE_URL'), urls[r.MODULE] + '/after-sales-app')
+        self.assertEqual(r.value(r.containers(specs[r.WEB])[0], 'AFTER_SALES_MODULE_URL'), r.ORIGINS[r.MODULE])
         self.assertEqual(r.value(r.containers(specs[r.API])[0], 'ERP_DEV_MAILROOM_SOURCE_URL'), r.ORIGINS[r.SOURCE])
         self.assertEqual(r.value(r.containers(specs[r.SOURCE])[0], 'NEXTAUTH_URL'), r.ORIGINS[r.SOURCE])
         self.assertEqual(r.value(r.containers(specs[r.MODULE])[0], 'ERP_MODULE_BUILD'), 'true')
@@ -370,6 +371,67 @@ class FlowReleaseTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 r.success_build_receipt(path, checksum, [capture], self.directory / f'not-written-{index}.json')
             self.assertFalse((self.directory / f'not-written-{index}.json').exists())
+
+    def existing_wms_fixture(self):
+        api_tag, web_tag = r.WMS_EXISTING_TAGS['wms-api'], r.WMS_EXISTING_TAGS['wms-web']
+        config = {'steps': [
+            {'name': 'gcr.io/cloud-builders/docker', 'args': ['build', '-f', 'backend/Dockerfile', '-t', api_tag, 'backend']},
+            {'name': 'gcr.io/cloud-builders/docker', 'args': ['build', '-f', 'frontend/Dockerfile.cloudrun', '--build-arg',
+                'VITE_DEPLOY_ENV=dev', '--build-arg', 'VITE_SOURCE_COMMIT=' + r.WMS_SOURCE, '-t', web_tag, 'frontend']}],
+            'images': [api_tag, web_tag]}
+        raw = {'id': r.WMS_EXISTING_BUILD, 'status': 'SUCCESS', 'projectId': r.PROJECT,
+               'name': f'projects/{r.NAMESPACE}/locations/{r.REGION}/builds/{r.WMS_EXISTING_BUILD}',
+               'steps': copy.deepcopy(config['steps']), 'images': config['images'],
+               'results': {'images': [{'name': tag, 'digest': r.WMS_EXISTING_DIGESTS[key]} for key, tag in r.WMS_EXISTING_TAGS.items()]}}
+        rows = [{'path': f'backend/src/synthetic-{i}.js', 'sha256': '0' * 64} for i in range(273)]
+        manifest = {'commit': r.WMS_SOURCE, 'digest': r.WMS_MANIFEST_HASH, 'files': rows}
+        return raw, config, manifest
+
+    def test_reuses_exact_existing_two_container_wms_build_and_combines_four_new_images(self):
+        raw, supplier, wms_manifest = self.existing_wms_fixture()
+        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+            proof = r.existing_wms_proof(raw, supplier, wms_manifest)
+            self.assertEqual(set(proof['images']), {'wms-api', 'wms-web'})
+            path, _, manifest, config = self.prepared_context()
+            context = Path(manifest['buildContext'])
+            config['steps'] = [s for s in config['steps'] if not s['id'].startswith('wms-')]
+            config['images'] = [v for k, v in manifest['images'].items() if not k.startswith('wms-')]
+            (context / 'cloudbuild.json').write_text(json.dumps(config))
+            manifest['images'].update(r.WMS_EXISTING_TAGS)
+            manifest.update(existingWms=proof, wmsManifest=wms_manifest, builtImageKeys=[s['id'] for s in config['steps']])
+            manifest['files'] = r.file_manifest(context)
+            manifest['contextSha256'] = r.sha256(r.canonical(manifest['files']))
+            path.write_text(json.dumps(manifest))
+            checksum = r.sha256(path.read_bytes())
+            new_build = copy.deepcopy(built()['builds'][BUILD_ID])
+            new_build.pop('region')
+            new_build.update(id=BUILD_ID, steps=config['steps'], images=config['images'])
+            new_build['results']['images'] = [row for row in new_build['results']['images'] if row['name'] in config['images']]
+            captured = self.directory / 'four-new-builds.json'
+            r.private_json(captured, {'region': r.REGION, 'description': new_build})
+            receipt = r.success_build_receipt(path, checksum, [captured], self.directory / 'combined.json')
+            self.assertEqual(len(receipt['images']), 6)
+            self.assertEqual(len(receipt['builds']), 2)
+            self.assertEqual(receipt['images']['wms-api']['buildId'], r.WMS_EXISTING_BUILD)
+            self.assertEqual(r.build_images(receipt, PINS)['wms-web'], r.REGISTRY + 'corely-wms-frontend@' + r.WMS_EXISTING_DIGESTS['wms-web'])
+            self.assertNotIn('wms-api', {s['id'] for s in config['steps']})
+            self.assertNotIn('wms-web', {s['id'] for s in config['steps']})
+
+    def test_existing_wms_region_step_source_digest_and_missing_receipt_fail_closed(self):
+        raw, config, manifest = self.existing_wms_fixture()
+        modifiers = [lambda d: d.update(id=BUILD_ID),
+                     lambda d: d.update(name=d['name'].replace('asia-east1', 'global')),
+                     lambda d: d.update(status='QUEUED'),
+                     lambda d: d['steps'][1]['args'].remove('VITE_SOURCE_COMMIT=' + r.WMS_SOURCE),
+                     lambda d: d['results']['images'][0].update(digest='sha256:' + 'f' * 64),
+                     lambda d: d['steps'][0].update(secretEnv=['DO_NOT_READ']),
+                     lambda d: d['results']['images'].pop()]
+        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(manifest['files']))):
+            for change in modifiers:
+                wrong = copy.deepcopy(raw)
+                change(wrong)
+                with self.assertRaises(RuntimeError):
+                    r.existing_wms_proof(wrong, config, manifest)
 
 
 if __name__ == '__main__':

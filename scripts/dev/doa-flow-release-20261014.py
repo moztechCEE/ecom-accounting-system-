@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Prepare five DEV services, offline. No cloud writes, secret access or DB calls.
 
-`prepare-build` exports clean, exact Git sources and the reviewed WMS manifest,
-then writes Docker/Cloud Build recipes. It DOES NOT execute those recipes.
+`prepare-build` exports clean, exact Git sources and checks the reviewed WMS
+manifest/SUCCESS receipt, then writes four new ERP/Source Docker build recipes.
+It reuses the two fixed WMS images and DOES NOT execute any recipe.
 `candidate` consumes SUCCESS build receipts and writes Knative Service JSON
 (JSON is a YAML subset). Existing traffic percentages, foreign tags, container
 names/order, IAM annotations, secret references and runtime settings survive.
@@ -45,6 +46,11 @@ WMS_MANIFEST_HASH = '0b53e545c98bf6978f29f72ad754a3b760d31de1e6db2bab6b626e72d7d
 # Supplier's digest uses its own recipe. Independently pin the canonical rows
 # and verify each byte rather than assuming that recipe's serialization.
 WMS_ROWS_HASH = '24e1370034c65e42b31c6bbe30b2b1df9302ad31051d43946e30c07e636f18ad'
+WMS_EXISTING_BUILD = '818581fb-bf37-4a7b-a7ec-7a223ea441dc'
+WMS_EXISTING_TAGS = {'wms-api': REGISTRY + 'corely-wms-backend:workstation-' + WMS_MANIFEST_HASH[:12],
+                     'wms-web': REGISTRY + 'corely-wms-frontend:dev-' + WMS_MANIFEST_HASH[:12]}
+WMS_EXISTING_DIGESTS = {'wms-api': 'sha256:2045e16a6f9c69945b24a3e8d6335df987d3e9966844fec407e6bbee7ba3e286',
+                        'wms-web': 'sha256:0aacc9d550363b48109ad95931a571638d05af890bacb15d3d6b23f009fc618c'}
 STORAGE_VERSION = '7.19.0'
 ORIGINS = {s: f'https://{s}-sp5g377smq-de.a.run.app' for s in DEV}
 EXISTING_EXTERNAL_REFS = {
@@ -378,11 +384,39 @@ LABEL org.opencontainers.image.revision="{sha}"
 '''
 
 
-def build_prepare(baseline, pins, erp_root, source_root, wms_root, output):
+def existing_wms_proof(raw, config, manifest):
+    require(raw.get('id') == WMS_EXISTING_BUILD and raw.get('status') == 'SUCCESS' and raw.get('projectId') == PROJECT and
+            raw.get('name') == f'projects/{NAMESPACE}/locations/{REGION}/builds/{WMS_EXISTING_BUILD}',
+            'Existing WMS build identity/region/SUCCESS differs')
+    require(not raw.get('secrets') and not raw.get('availableSecrets'), 'Existing WMS receipt contains build secrets')
+    require(manifest.get('commit') == WMS_SOURCE and manifest.get('digest') == WMS_MANIFEST_HASH and
+            len(manifest.get('files', [])) == 273 and sha256(canonical(manifest['files'])) == WMS_ROWS_HASH,
+            'Existing WMS manifest proof differs')
+    expected, actual = config.get('steps', []), raw.get('steps', [])
+    require(len(expected) == len(actual) == 2 and set(config.get('images', [])) == set(WMS_EXISTING_TAGS.values()) and
+            raw.get('images') == config['images'], 'Existing WMS exact two-image recipe required')
+    for declaration, result in zip(expected, actual):
+        require(all(result.get(k) == v for k, v in declaration.items()) and
+                not any(k in result for k in ('env', 'secretEnv', 'script', 'entrypoint')),
+                'Existing WMS build steps differ from supplier recipe')
+    require('VITE_SOURCE_COMMIT=' + WMS_SOURCE in actual[1].get('args', []) and
+            'VITE_DEPLOY_ENV=dev' in actual[1].get('args', []), 'WMS compiled SDK source/DEV arguments differ')
+    images = {}
+    for key, tag in WMS_EXISTING_TAGS.items():
+        rows = [v for v in raw.get('results', {}).get('images', []) if v.get('name') == tag]
+        require(len(rows) == 1 and rows[0].get('digest') == WMS_EXISTING_DIGESTS[key], 'Existing WMS immutable digest differs')
+        images[key] = {'image': REGISTRY + IMAGE_KEYS[key] + '@' + rows[0]['digest'], 'buildId': WMS_EXISTING_BUILD}
+    return {'buildId': WMS_EXISTING_BUILD, 'sourceSha': WMS_SOURCE, 'manifestDigest': WMS_MANIFEST_HASH,
+            'fileRowsSha256': WMS_ROWS_HASH, 'images': images, 'description': {**raw, 'region': REGION},
+            'supplierRecipe': config}
+
+
+def build_prepare(baseline, pins, erp_root, source_root, wms_root, output, existing_wms_path):
     refs = snapshot_guard(baseline)
     clean_checkout(erp_root, pins['erp'])
     clean_checkout(source_root, pins['source'])
     wms = wms_context(wms_root, pins['wms'])
+    existing_wms = existing_wms_proof(read_json(existing_wms_path), read_json(Path(wms_root) / 'cloudbuild.json'), wms)
     dependencies = package_fingerprints(erp_root, {'api': 'backend', 'web': 'frontend'})
     dependencies.update(package_fingerprints(source_root, {'source': ''}))
     dependencies.update(package_fingerprints(Path(wms_root) / 'build-source', {'wms-api': 'backend', 'wms-web': 'frontend'}))
@@ -394,7 +428,6 @@ def build_prepare(baseline, pins, erp_root, source_root, wms_root, output):
     exported = {'api': export_git(erp_root, pins['erp'], context / 'api', 'backend'),
                 'web': export_git(erp_root, pins['erp'], context / 'web', 'frontend'),
                 'source': export_git(source_root, pins['source'], context / 'source')}
-    wms_context(wms_root, pins['wms'], context / 'wms')
     for name, docker in [('api', erp_api_docker(containers(baseline[API])[0]['image'], pins['erp'])),
                          ('web', erp_web_docker(containers(baseline[WEB])[0]['image'], pins['erp']))]:
         # Dockerfile source was exported for evidence; replace it only in this
@@ -405,6 +438,9 @@ def build_prepare(baseline, pins, erp_root, source_root, wms_root, output):
         private_write(docker_path, docker)
     steps, images = [], {}
     for key, repository in IMAGE_KEYS.items():
+        if key.startswith('wms-'):
+            images[key] = WMS_EXISTING_TAGS[key]
+            continue  # The reviewed SUCCESS build already produced these two.
         owner = 'wms' if key.startswith('wms-') else 'source' if key in (SOURCE, MODULE) else 'erp'
         image = REGISTRY + repository + ':doaf-' + pins[owner]
         images[key] = image
@@ -421,7 +457,8 @@ def build_prepare(baseline, pins, erp_root, source_root, wms_root, output):
         # This preparation favors a deterministic sequential build, not fanout.
         steps.append({'id': key, 'name': 'gcr.io/cloud-builders/docker', 'dir': directory, 'args': args,
                       'waitFor': [steps[-1]['id']] if steps else ['-']})
-    private_json(context / 'cloudbuild.json', {'steps': steps, 'images': list(images.values()), 'timeout': '3600s',
+    built_keys = [k for k in images if not k.startswith('wms-')]
+    private_json(context / 'cloudbuild.json', {'steps': steps, 'images': [images[k] for k in built_keys], 'timeout': '3600s',
                                               'options': {'logging': 'CLOUD_LOGGING_ONLY', 'machineType': 'E2_HIGHCPU_8'},
                                               'tags': ['doaf-' + pins['erp'][:12]]})
     # Cloud Build cannot upload the private baseline/receipts stored OUTSIDE
@@ -432,6 +469,7 @@ def build_prepare(baseline, pins, erp_root, source_root, wms_root, output):
               'buildContext': str(context), 'images': images, 'files': files, 'contextSha256': sha256(canonical(files)),
               'exportedSourceFiles': exported,
               'dependencies': dependencies, 'wmsManifest': wms, 'existingReferenceAllowlist': refs,
+              'builtImageKeys': built_keys, 'existingWms': existing_wms,
               'migrationChecksums': {'erp': migration_hashes(erp_root, 'backend/prisma/migrations'),
                                      'source': migration_hashes(source_root, 'prisma/migrations')},
               'baselineFingerprint': sha256(canonical(baseline)), 'createdAt': datetime.now(timezone.utc).isoformat(),
@@ -470,10 +508,16 @@ def verify_build_context(manifest_path, expected_sha256):
     require(set(manifest['images']) == set(IMAGE_KEYS), 'Prepared image matrix changed')
     for key, repository in IMAGE_KEYS.items():
         owner = 'wms' if key.startswith('wms-') else 'source' if key in (SOURCE, MODULE) else 'erp'
-        require(manifest['images'][key] == REGISTRY + repository + ':doaf-' + pins[owner], 'Prepared source tag changed')
+        expected_tag = WMS_EXISTING_TAGS[key] if manifest.get('existingWms') and key.startswith('wms-') else REGISTRY + repository + ':doaf-' + pins[owner]
+        require(manifest['images'][key] == expected_tag, 'Prepared source tag changed')
     config = read_json(context / 'cloudbuild.json')
-    require(config.get('images') == list(manifest['images'].values()) and not config.get('secrets') and not config.get('availableSecrets'),
+    built_keys = manifest.get('builtImageKeys', list(manifest['images']))
+    require(config.get('images') == [manifest['images'][k] for k in built_keys] and not config.get('secrets') and not config.get('availableSecrets'),
             'Unexpected build image list or secret injection')
+    if manifest.get('existingWms'):
+        existing = manifest['existingWms']
+        require(existing_wms_proof(existing['description'], existing['supplierRecipe'], manifest['wmsManifest']) == existing,
+                'Existing WMS evidence changed')
     return manifest, config
 
 
@@ -481,6 +525,10 @@ def success_build_receipt(manifest_path, expected_sha256, build_paths, output):
     manifest, config = verify_build_context(manifest_path, expected_sha256)
     expected_steps = {s['id']: s for s in config['steps']}
     images, builds = {}, {}
+    existing = manifest.get('existingWms')
+    if existing:
+        images.update(existing['images'])
+        builds[existing['buildId']] = existing['description']
     for path in build_paths:
         # Read-only GCloud captures must carry their explicitly selected region.
         # No mutable image, missing regional provenance or secret-bearing build
@@ -497,9 +545,11 @@ def success_build_receipt(manifest_path, expected_sha256, build_paths, output):
             target = expected_steps.get(step.get('id'))
             require(target is not None and all(step.get(k) == v for k, v in target.items()) and
                     not any(k in step for k in ('env', 'secretEnv', 'script', 'entrypoint')), 'Build recipe does not match prepared source')
-        require(set(raw.get('images', [])) <= set(manifest['images'].values()), 'Unprepared build image')
+        require(set(raw.get('images', [])) <= set(config['images']), 'Unprepared build image')
         builds[raw['id']] = {**raw, 'region': wrapper['region']}
         for key, tag in manifest['images'].items():
+            if key not in expected_steps:
+                continue
             if tag not in raw.get('images', []):
                 continue
             require(key in {s['id'] for s in actual_steps}, 'Result has no exact prepared build step')
@@ -508,6 +558,8 @@ def success_build_receipt(manifest_path, expected_sha256, build_paths, output):
             images[key] = {'image': REGISTRY + IMAGE_KEYS[key] + '@' + rows[0]['digest'], 'buildId': raw['id']}
     receipt = {'version': 1, 'project': PROJECT, 'sourcePins': manifest['sourcePins'], 'images': images, 'builds': builds,
                'preparedManifestSha256': expected_sha256, 'preparedContextSha256': manifest['contextSha256']}
+    if existing:
+        receipt['existingWms'] = existing
     build_images(receipt, manifest['sourcePins'])
     private_json(output, receipt)
     return receipt
@@ -528,10 +580,16 @@ def build_images(receipt, pins):
         require(build.get('status') == 'SUCCESS' and build.get('projectId') == PROJECT and build.get('region') == REGION,
                 'Candidate needs an exact successful regional build receipt')
         owner = 'wms' if key.startswith('wms-') else 'source' if key in (SOURCE, MODULE) else 'erp'
-        tag = REGISTRY + IMAGE_KEYS[key] + ':doaf-' + pins[owner]
+        tag = WMS_EXISTING_TAGS[key] if receipt.get('existingWms') and key.startswith('wms-') else REGISTRY + IMAGE_KEYS[key] + ':doaf-' + pins[owner]
         require(tag in build.get('images', []) and any(r.get('name') == tag and r.get('digest') == row['image'].split('@')[-1]
                                                        for r in build.get('results', {}).get('images', [])),
                 'Successful build does not prove the requested source/digest')
+        if receipt.get('existingWms') and key.startswith('wms-'):
+            existing = receipt['existingWms']
+            require(row == existing['images'].get(key) and row['buildId'] == WMS_EXISTING_BUILD and
+                    row['image'].split('@')[-1] == WMS_EXISTING_DIGESTS[key] and existing.get('sourceSha') == pins['wms'] == WMS_SOURCE and
+                    existing.get('manifestDigest') == WMS_MANIFEST_HASH and existing.get('fileRowsSha256') == WMS_ROWS_HASH,
+                    'Existing WMS exact build/source/digest proof differs')
     return {k: v['image'] for k, v in images.items()}
 
 
@@ -585,7 +643,7 @@ def candidate_specs(baseline, pins, images, stage='review', pairing='candidate')
             require(value(c, 'ERP_DEV_MAILROOM_SOURCE_URL') == ORIGINS[SOURCE], 'Mailroom events must keep the canonical normal Source')
         elif name == WEB:
             set_env(c, {'API_URL': pair[API] + '/api/v1', 'WS_URL': pair[API], 'WMS_PORTAL_URL': pair[WMS],
-                        'AFTER_SALES_MODULE_URL': pair[MODULE], 'COPILOT_CANDIDATE_WEB_ORIGIN': urls[WEB]})
+                        'AFTER_SALES_MODULE_URL': ORIGINS[MODULE], 'COPILOT_CANDIDATE_WEB_ORIGIN': urls[WEB]})
         elif name in (SOURCE, MODULE):
             set_env(c, {'ERP_INTEGRATION_API_ORIGIN': pair[API]})
             # Preserve NEXTAUTH and public Source roots. Canonical dispatch
@@ -701,6 +759,9 @@ def main():
             p.add_argument('--images-receipt', type=Path, required=True)
             p.add_argument('--stage', choices=('review', 'final'), default='review')
             p.add_argument('--pairing', choices=('candidate', 'canonical'), default='candidate')
+        else:
+            p.add_argument('--existing-wms-build', type=Path, required=True,
+                           help='Raw regional SUCCESS describe for the pinned supplier build; WMS is reused, not rebuilt')
     fresh = commands.add_parser('verify-fresh')
     fresh.add_argument('--expected', type=Path, required=True)
     fresh.add_argument('--observed', type=Path, required=True)
@@ -733,7 +794,7 @@ def main():
     pins = source_pins(args.erp_sha, args.source_sha, args.wms_sha)
     baseline = read_json(args.baseline)
     if args.command == 'prepare-build':
-        result = build_prepare(baseline, pins, args.erp_root, args.source_root, args.wms_root, args.output)
+        result = build_prepare(baseline, pins, args.erp_root, args.source_root, args.wms_root, args.output, args.existing_wms_build)
     else:
         result = candidate_prepare(baseline, pins, read_json(args.images_receipt), args.erp_root, args.source_root,
                                    args.wms_root, args.output, args.stage, args.pairing)
