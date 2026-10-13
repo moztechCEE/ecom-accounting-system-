@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:e8e7a46191a32e7ac43cc01da269c13350f1211606e89a2b3a07d5f98c2f9038",
+  "sourceVersion": "sha256:76c5102d2502edbf73aa569e2b336cb8fdfabb3f0e2650fd32bd59c4c79dc7a9",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -348,7 +348,7 @@
     },
     {
       "path": "backend/src/modules/integration/after-sales/erp-module.service.ts",
-      "sha256": "4c44bd956eb66ba5750ed7ffcc74bfc82ffa59e8a421d44536f4a8fdc6a92041"
+      "sha256": "e590753b6c84cdb6aebaed70f0cdd67092e2b819fa099e0c97e2e390a7db4dd3"
     },
     {
       "path": "backend/src/modules/integration/wms/wms-handover.module.ts",

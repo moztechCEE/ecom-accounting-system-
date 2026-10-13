@@ -67,6 +67,18 @@ describe('explicit after-sales supervisor actor authorization', () => {
     );
   });
 
+  it('derives a financial actor from explicit module write capability without a fixed ERP role', async () => {
+    roles = ['CUSTOM_FINANCE_ROLE'];
+    permissions = ['after_sales_cases:read', 'after_sales_accounting:read', 'after_sales_accounting:update', 'after_sales_invoices:read', 'after_sales_invoices:update'];
+    const actor = await service.actor(USER, ENTITY);
+    expect(actor.role).toBe('accounting');
+    expect(actor.writeModules).toEqual(['invoices', 'accounting_workbench']);
+    expect(actor.modules).not.toContain('users');
+    expect(actor.writeModules).not.toContain('cases');
+    permissions = permissions.filter(p => p !== 'after_sales_accounting:update');
+    expect((await service.actor(USER, ENTITY)).role).toBe('sales');
+  });
+
   it('derives a source supervisor from all explicit grants without native ERP admin rights', async () => {
     const actor = await service.actor(USER, ENTITY);
     expect(actor.role).toBe('admin');
@@ -90,7 +102,7 @@ describe('explicit after-sales supervisor actor authorization', () => {
     async (missing) => {
       permissions = permissions.filter((permission) => permission !== missing);
       const actor = await service.actor(USER, ENTITY);
-      expect(actor.role).toBe('sales');
+      expect(actor.role).toBe(moduleGrants(permissions, false).write.includes('accounting_workbench') ? 'accounting' : 'sales');
       expect(actor.modules).toEqual(moduleGrants(permissions, false).read);
       expect(actor.writeModules).toEqual(
         moduleGrants(permissions, false).write,

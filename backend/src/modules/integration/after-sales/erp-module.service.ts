@@ -101,7 +101,7 @@ export class ErpAfterSalesModuleService {
     const role =
       privileged || hasSourceAdministrationPermissions(permissions)
         ? 'admin'
-        : roles.includes('ACCOUNTANT')
+        : roles.includes('ACCOUNTANT') || grants.write.includes('accounting_workbench')
           ? 'accounting'
           : roles.includes('CUSTOMER_SERVICE') ||
               roles.includes('DOA_DEV_QA_CSR')
