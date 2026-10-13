@@ -14,6 +14,12 @@ import { MailroomCommandDto } from './mailroom.dto';
 import { type Actor } from './mailroom.contract';
 import { MailroomController } from './mailroom.controller';
 import { MailroomIntakeService } from './mailroom-intake.service';
+import { dispatchDeliveryProjection } from './mailroom-dispatch.contract';
+
+const ITEM_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const RECEIPT_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const HISTORICAL_EVENT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const SOURCE_VERSION = '2026-10-08T00:00:00.000Z';
 
 // Match all production ValidationPipe options in main.ts, including conversion.
 function mainValidationPipe() {
@@ -33,8 +39,8 @@ function fixture(replaced = false) {
     permissions: new Set(['mailroom:read', 'mailroom:update']),
   };
   const row: any = {
-    id: 'piece',
-    receiptId: 'receipt',
+    id: ITEM_ID,
+    receiptId: RECEIPT_ID,
     entityId: 'company',
     version: 7,
     status: 'READY_FOR_DISPATCH',
@@ -51,6 +57,7 @@ function fixture(replaced = false) {
     grade: null,
     disposition: null,
     evidence: [],
+    declared: { id: 'source-line' },
     returnInspection: null,
     repairInspection: { technical: 'private' },
     repairWorkflow: {
@@ -78,7 +85,7 @@ function fixture(replaced = false) {
       release: { purpose: 'REPAIRED', inspectionRevision: 3, note: '複驗完成' },
     },
     receipt: {
-      id: 'receipt',
+      id: RECEIPT_ID,
       entityId: 'company',
       number: 'MR-DEMO',
       category: 'REPAIR',
@@ -152,6 +159,17 @@ function fixture(replaced = false) {
     };
   }
   const actions: any[] = [];
+  const deliveryRows: any[] = [
+    {
+      id: 'historical',
+      eventId: HISTORICAL_EVENT_ID,
+      itemId: ITEM_ID,
+      entityId: 'company',
+      status: 'DELIVERED',
+      target: 'AFTER_SALES',
+      lastError: null,
+    },
+  ];
   const prisma: any = {
     employee: {
       findFirst: jest.fn().mockResolvedValue({ id: 'employee-clerk' }),
@@ -201,17 +219,45 @@ function fixture(replaced = false) {
     },
     notification: { create: jest.fn() },
     mailroomDelivery: {
-      createMany: jest.fn(),
-      findMany: jest
-        .fn()
-        .mockResolvedValue([
-          { id: 'historical', status: 'DELIVERED', target: 'AFTER_SALES' },
-        ]),
-      groupBy: jest
-        .fn()
-        .mockResolvedValue([
-          { target: 'AFTER_SALES', status: 'DELIVERED', _count: 1 },
-        ]),
+      createMany: jest.fn(async ({ data }: any) => {
+        deliveryRows.push(
+          ...structuredClone(data).map((entry: any) => ({
+            ...entry,
+            id: 'delivery-' + deliveryRows.length,
+            status: 'PENDING',
+            lastError: null,
+          })),
+        );
+        return { count: data.length };
+      }),
+      findMany: jest.fn(async ({ where }: any) =>
+        structuredClone(
+          deliveryRows.filter((entry) =>
+            Object.entries(where).every(([key, value]: [string, any]) =>
+              value && typeof value === 'object' && 'in' in value
+                ? value.in.includes(entry[key])
+                : entry[key] === value,
+            ),
+          ),
+        ),
+      ),
+      groupBy: jest.fn(async () => {
+        const groups = new Map<
+          string,
+          { target: string; status: string; _count: number }
+        >();
+        for (const entry of deliveryRows) {
+          const key = entry.target + ':' + entry.status;
+          const group = groups.get(key) || {
+            target: entry.target,
+            status: entry.status,
+            _count: 0,
+          };
+          group._count++;
+          groups.set(key, group);
+        }
+        return [...groups.values()];
+      }),
     },
     afterSalesStockReservation: {
       findFirst: jest.fn().mockImplementation(async () => posted),
@@ -238,13 +284,15 @@ function fixture(replaced = false) {
   prisma.$transaction.mockImplementation((callback: any) => {
     const result = queue.then(async () => {
       const before = structuredClone(row),
-        actionCount = actions.length;
+        actionCount = actions.length,
+        deliveryCount = deliveryRows.length;
       try {
         return await callback(prisma);
       } catch (error) {
         Object.keys(row).forEach((key) => delete row[key]);
         Object.assign(row, before);
         actions.length = actionCount;
+        deliveryRows.length = deliveryCount;
         throw error;
       }
     });
@@ -252,7 +300,20 @@ function fixture(replaced = false) {
     return result;
   });
   const gateway = { sendToUser: jest.fn() };
-  const sync = { cases: jest.fn(), deliverPending: jest.fn() };
+  const source = {
+    id: 'case',
+    number: 'CASE-DEMO',
+    type: 'REPAIR',
+    version: SOURCE_VERSION,
+    status: 'PROCESSING',
+    items: [
+      { id: 'source-line', name: '原件名稱', sku: 'ORIGINAL-SKU', quantity: 1 },
+    ],
+  };
+  const sync = {
+    cases: jest.fn(async () => ({ items: [structuredClone(source)] })),
+    deliverPending: jest.fn(),
+  };
   const stock = { consumeForRepair: jest.fn() };
   const service = new MailroomService(
     prisma,
@@ -277,6 +338,8 @@ function fixture(replaced = false) {
     prisma,
     service,
     actions,
+    deliveryRows,
+    source,
     gateway,
     sync,
     stock,
@@ -300,7 +363,7 @@ describe('native mailroom dispatch transaction', () => {
     const beforeWorkflow = structuredClone(row.repairWorkflow),
       beforeReceipt = structuredClone(row.receipt);
     await expect(service.command('clerk', row.id, input)).resolves.toEqual({
-      id: 'piece',
+      id: ITEM_ID,
       duplicate: false,
     });
     expect(row.status).toBe('DISPATCHED');
@@ -321,9 +384,10 @@ describe('native mailroom dispatch transaction', () => {
         productName: '原件名稱',
         serialNumber: 'ORIGINAL-SN',
       },
+      sourceVersion: SOURCE_VERSION,
       sourceSync: {
-        status: 'PENDING_COMPATIBILITY',
-        reason: 'DISPATCH_CONSUMER_NOT_CONFIGURED',
+        status: 'PENDING',
+        eventId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
       },
     });
     expect(Number.isFinite(Date.parse(shipment.dispatchedAt))).toBe(true);
@@ -338,11 +402,39 @@ describe('native mailroom dispatch transaction', () => {
       outboundShipment: shipment,
     });
     expect(row.location).toBe('寄回區');
-    expect(prisma.mailroomDelivery.createMany).not.toHaveBeenCalled();
+    expect(prisma.mailroomDelivery.createMany).toHaveBeenCalledTimes(1);
+    const outbox = prisma.mailroomDelivery.createMany.mock.calls[0][0].data;
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]).toMatchObject({
+      eventId: shipment.sourceSync.eventId,
+      entityId: 'company',
+      itemId: ITEM_ID,
+      target: 'AFTER_SALES',
+      payload: {
+        schema: 'corely.mailroom.dispatch.v1',
+        eventId: shipment.sourceSync.eventId,
+        sourceCaseId: 'case',
+        sourceNumber: 'CASE-DEMO',
+        sourceVersion: SOURCE_VERSION,
+        itemId: ITEM_ID,
+        receiptId: RECEIPT_ID,
+        version: 8,
+        action: 'dispatch',
+        shipment: {
+          declaredItemId: 'source-line',
+          purpose: 'REPAIRED',
+          quantity: 1,
+          trackingNumber: 'OUT-001',
+        },
+      },
+    });
+    expect(outbox[0].payload).not.toHaveProperty('repairWorkflow');
+    expect(outbox[0].payload).not.toHaveProperty('repairInspection');
     expect(prisma.mailroomReceipt.update).not.toHaveBeenCalled();
     expect(prisma.notification.create).not.toHaveBeenCalled();
     expect(gateway.sendToUser).not.toHaveBeenCalled();
-    expect(sync.cases).not.toHaveBeenCalled();
+    expect(sync.cases).toHaveBeenCalledTimes(2);
+    expect(sync.cases).toHaveBeenCalledWith('company', '', 'case');
     expect(sync.deliverPending).not.toHaveBeenCalled();
   });
   it('shows outgoing logistics on list/detail/Source read projection even when technical documents are redacted', async () => {
@@ -368,17 +460,202 @@ describe('native mailroom dispatch transaction', () => {
     expect(detail.history[0].snapshot).not.toHaveProperty('repairWorkflow');
     expect(detail.deliverySummary).toEqual([
       { target: 'AFTER_SALES', status: 'DELIVERED', count: 1 },
+      { target: 'AFTER_SALES', status: 'PENDING', count: 1 },
     ]);
-    expect(detail.outboundShipment!.sourceSync.status).toBe(
-      'PENDING_COMPATIBILITY',
-    );
+    expect(detail.outboundShipment!.sourceSync.status).toBe('PENDING');
   });
+  it.each([
+    {
+      name: 'exact event delivered',
+      sameEvent: true,
+      target: 'AFTER_SALES',
+      status: 'DELIVERED',
+      lastError: null,
+      expected: 'DELIVERED',
+    },
+    {
+      name: 'exact event failed',
+      sameEvent: true,
+      target: 'AFTER_SALES',
+      status: 'PENDING',
+      lastError: 'synthetic delivery failure',
+      expected: 'FAILED',
+    },
+    {
+      name: 'older delivered event',
+      sameEvent: false,
+      target: 'AFTER_SALES',
+      status: 'DELIVERED',
+      lastError: null,
+      expected: 'PENDING',
+    },
+    {
+      name: 'older failed event',
+      sameEvent: false,
+      target: 'AFTER_SALES',
+      status: 'PENDING',
+      lastError: 'old synthetic failure',
+      expected: 'PENDING',
+    },
+    {
+      name: 'different target delivered',
+      sameEvent: true,
+      target: 'AI_CUSTOMER_SERVICE',
+      status: 'DELIVERED',
+      lastError: null,
+      expected: 'PENDING',
+    },
+  ])(
+    'projects only this dispatch ACK on all reads: $name',
+    async ({ sameEvent, target, status, lastError, expected }) => {
+      const { service, row, input, deliveryRows, prisma } = fixture();
+      await service.command('clerk', row.id, input);
+      const marker = row.repairWorkflow.outboundShipment.sourceSync;
+      const delivery = deliveryRows.find(
+        (entry) => entry.eventId === marker.eventId,
+      );
+      Object.assign(delivery, {
+        eventId: sameEvent ? marker.eventId : HISTORICAL_EVENT_ID,
+        target,
+        status,
+        lastError,
+      });
+      const list = await service.list('clerk', {
+        entityId: 'company',
+        view: 'mailroom',
+      });
+      const detail = await service.detail('clerk', 'company', row.id);
+      const progress = await service.caseProgress('company', 'case');
+      for (const view of [list.items[0], detail, progress.items[0]]) {
+        expect(view.outboundShipment!.sourceSync).toEqual({
+          eventId: marker.eventId,
+          status: expected,
+        });
+      }
+      expect(row.repairWorkflow.outboundShipment.sourceSync).toEqual({
+        eventId: marker.eventId,
+        status: 'PENDING',
+      });
+      expect(prisma.mailroomItem.update).toHaveBeenCalledTimes(1);
+      expect(prisma.mailroomDelivery.createMany).toHaveBeenCalledTimes(1);
+    },
+  );
+  it('pure dispatch projection ignores a historical ACK without mutating the stored marker', async () => {
+    const { service, row, input } = fixture();
+    await service.command('clerk', row.id, input);
+    const workflow = structuredClone(row.repairWorkflow);
+    const projected = dispatchDeliveryProjection(workflow, [
+      {
+        eventId: HISTORICAL_EVENT_ID,
+        target: 'AFTER_SALES',
+        status: 'DELIVERED',
+      },
+    ]);
+    expect(projected!.sourceSync.status).toBe('PENDING');
+    expect(workflow).toEqual(row.repairWorkflow);
+  });
+  it.each([
+    'read-only',
+    'foreign-company',
+    'foreign-item',
+    'nonemployee',
+    'stale',
+    'false-confirmation',
+    'missing-carrier',
+    'forged-location',
+  ])(
+    'rejects %s before Source lookup, with no item/history/outbox or external write',
+    async (problem) => {
+      const {
+        service,
+        row,
+        input,
+        actor,
+        prisma,
+        actions,
+        sync,
+        gateway,
+        stock,
+        deliveryRows,
+      } = fixture();
+      if (problem === 'read-only') actor.permissions.delete('mailroom:update');
+      if (problem === 'foreign-company') input.entityId = 'other-company';
+      if (problem === 'foreign-item') row.entityId = 'other-company';
+      if (problem === 'nonemployee')
+        prisma.employee.findFirst.mockResolvedValue(null);
+      if (problem === 'stale') input.expectedVersion = 6;
+      if (problem === 'false-confirmation') input.confirmedItems = false;
+      if (problem === 'missing-carrier') input.carrier = undefined;
+      if (problem === 'forged-location') input.location = 'forged position';
+      await expect(service.command('clerk', row.id, input)).rejects.toThrow();
+      expect(sync.cases).not.toHaveBeenCalled();
+      expect(row.status).toBe('READY_FOR_DISPATCH');
+      expect(row.version).toBe(7);
+      expect(actions).toHaveLength(0);
+      expect(deliveryRows).toHaveLength(1);
+      expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
+      expect(prisma.mailroomAction.create).not.toHaveBeenCalled();
+      expect(prisma.mailroomDelivery.createMany).not.toHaveBeenCalled();
+      expect(prisma.inventoryTransaction.create).not.toHaveBeenCalled();
+      expect(prisma.notification.create).not.toHaveBeenCalled();
+      expect(gateway.sendToUser).not.toHaveBeenCalled();
+      expect(sync.deliverPending).not.toHaveBeenCalled();
+      expect(stock.consumeForRepair).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    'missing-declared',
+    'different-line',
+    'closed-source',
+    'different-case',
+  ])(
+    'refuses fresh Source mismatch %s rather than enqueueing a dispatch',
+    async (problem) => {
+      const { service, row, input, source, prisma, sync } = fixture();
+      if (problem === 'missing-declared') row.declared = null;
+      if (problem === 'different-line') source.items[0].id = 'other-line';
+      if (problem === 'closed-source') source.status = 'CLOSED';
+      if (problem === 'different-case') source.id = 'other-case';
+      await expect(
+        service.command('clerk', row.id, input),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(sync.cases).toHaveBeenCalledTimes(
+        ['closed-source', 'different-case'].includes(problem) ? 1 : 2,
+      );
+      expect(row.status).toBe('READY_FOR_DISPATCH');
+      expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
+      expect(prisma.mailroomAction.create).not.toHaveBeenCalled();
+      expect(prisma.mailroomDelivery.createMany).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['closed-source', 'different-case', 'revoked-actor'])(
+    'rechecks %s after the physical item lock',
+    async (problem) => {
+      const { service, row, input, source, actor, prisma } = fixture();
+      prisma.$queryRaw.mockImplementation(async () => {
+        if (problem === 'closed-source') source.status = 'CLOSED';
+        if (problem === 'different-case') source.id = 'other-case';
+        if (problem === 'revoked-actor')
+          actor.permissions.delete('mailroom:update');
+        return [];
+      });
+      await expect(
+        service.command('clerk', row.id, input),
+      ).rejects.toBeInstanceOf(
+        problem === 'revoked-actor' ? ForbiddenException : ConflictException,
+      );
+      expect(row.status).toBe('READY_FOR_DISPATCH');
+      expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
+      expect(prisma.mailroomAction.create).not.toHaveBeenCalled();
+      expect(prisma.mailroomDelivery.createMany).not.toHaveBeenCalled();
+    },
+  );
   it('exact retry has one write/history entry and changed-payload retry conflicts', async () => {
-    const { service, row, input, prisma, actions } = fixture();
+    const { service, row, input, prisma, actions, sync } = fixture();
     await service.command('clerk', row.id, input);
     const shipment = structuredClone(row.repairWorkflow.outboundShipment);
     await expect(service.command('clerk', row.id, input)).resolves.toEqual({
-      id: 'piece',
+      id: ITEM_ID,
       duplicate: true,
     });
     await expect(
@@ -390,10 +667,13 @@ describe('native mailroom dispatch transaction', () => {
     expect(row.repairWorkflow.outboundShipment).toEqual(shipment);
     expect(actions).toHaveLength(1);
     expect(prisma.mailroomItem.update).toHaveBeenCalledTimes(1);
+    expect(prisma.mailroomDelivery.createMany).toHaveBeenCalledTimes(1);
+    expect(sync.cases).toHaveBeenCalledTimes(2);
   });
   it('replays still reject revoked update permission and revoked employee binding', async () => {
-    const { service, row, input, actor, prisma, actions } = fixture();
+    const { service, row, input, actor, prisma, actions, sync } = fixture();
     await service.command('clerk', row.id, input);
+    sync.cases.mockClear();
     actor.permissions.delete('mailroom:update');
     await expect(
       service.command('clerk', row.id, input),
@@ -405,6 +685,7 @@ describe('native mailroom dispatch transaction', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(actions).toHaveLength(1);
     expect(prisma.mailroomItem.update).toHaveBeenCalledTimes(1);
+    expect(sync.cases).not.toHaveBeenCalled();
   });
   it('concurrent different requests ship the piece once and reject the stale second request', async () => {
     const { service, row, input, actions } = fixture();
@@ -439,7 +720,7 @@ describe('native mailroom dispatch transaction', () => {
         where: {
           id: 'reservation',
           entityId: 'company',
-          itemId: 'piece',
+          itemId: ITEM_ID,
           status: 'POSTED',
         },
       }),
@@ -448,6 +729,22 @@ describe('native mailroom dispatch transaction', () => {
     expect(prisma.afterSalesStockReservation.update).not.toHaveBeenCalled();
     expect(prisma.afterSalesStockUnit.update).not.toHaveBeenCalled();
     expect(stock.consumeForRepair).not.toHaveBeenCalled();
+    expect(prisma.mailroomDelivery.createMany.mock.calls[0][0].data).toEqual([
+      expect.objectContaining({
+        target: 'AFTER_SALES',
+        payload: expect.objectContaining({
+          shipment: expect.objectContaining({
+            purpose: 'REPLACED',
+            stock: expect.objectContaining({
+              postingId: 'formal-out',
+              referenceType: 'AFTER_SALES_REPLACEMENT',
+              referenceId: 'reservation',
+              externalInventoryPosted: false,
+            }),
+          }),
+        }),
+      }),
+    ]);
   });
   it('blocks unproven replacement shipment without an item/history/outbox write', async () => {
     const { service, row, input, posted, prisma } = fixture(true);
@@ -533,7 +830,7 @@ describe('production-pipe HTTP physical confirmation', () => {
     delete body.confirmedItems;
     if (value !== undefined) body.confirmedItems = value;
     const response = await request(app.getHttpServer())
-      .post('/api/v1/mailroom/items/piece/actions')
+      .post(`/api/v1/mailroom/items/${ITEM_ID}/actions`)
       .send(body);
 
     if (value === true) {
@@ -542,7 +839,7 @@ describe('production-pipe HTTP physical confirmation', () => {
       expect(current.actions).toHaveLength(1);
       expect(command).toHaveBeenCalledWith(
         'clerk',
-        'piece',
+        ITEM_ID,
         expect.objectContaining({ confirmedItems: true, expectedVersion: 7 }),
       );
     } else {
@@ -561,14 +858,14 @@ describe('production-pipe HTTP physical confirmation', () => {
       } else {
         expect(command).toHaveBeenCalledWith(
           'clerk',
-          'piece',
+          ITEM_ID,
           expect.objectContaining({ expectedVersion: 7 }),
         );
         expect(command.mock.calls[0][2].confirmedItems).toBe(value);
       }
     }
     expect(current.gateway.sendToUser).not.toHaveBeenCalled();
-    expect(current.sync.cases).not.toHaveBeenCalled();
+    expect(current.sync.cases).toHaveBeenCalledTimes(value === true ? 2 : 0);
     expect(current.sync.deliverPending).not.toHaveBeenCalled();
   });
 
@@ -589,7 +886,7 @@ describe('production-pipe HTTP physical confirmation', () => {
         current.row.receipt.sourceCaseId = null;
       }
       const response = await request(app.getHttpServer())
-        .post('/api/v1/mailroom/items/piece/actions')
+        .post(`/api/v1/mailroom/items/${ITEM_ID}/actions`)
         .send({
           entityId: 'company',
           requestId: 'acceptance-001',
@@ -602,7 +899,7 @@ describe('production-pipe HTTP physical confirmation', () => {
       expect(current.row.status).toBe(expectedStatus);
       expect(command).toHaveBeenCalledWith(
         'clerk',
-        'piece',
+        ITEM_ID,
         expect.objectContaining({ confirmedItems, expectedVersion: 7 }),
       );
       expect(current.prisma.mailroomItem.update).toHaveBeenCalledTimes(

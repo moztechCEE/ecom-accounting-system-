@@ -2,9 +2,14 @@ import { ConflictException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { MailroomService } from './mailroom.service';
 import { MailroomQuery } from './mailroom.dto';
-import { type Actor } from './mailroom.contract';
+import { type Actor, type SourceCase } from './mailroom.contract';
 import { inspectionPlanHash } from './repair-document.contract';
 import { sentCustomerWorkflow } from './repair-workflow.contract';
+import { repairSourceBindingForItem } from './repair-proposal.contract';
+
+const MINE_ID = 'aaad7cc6-7273-4000-8abc-333333333333';
+const RECEIPT_ID = 'aaad7cc6-7273-4000-8abc-444444444444';
+const CURRENT_SOURCE_VERSION = '2026-10-13T04:00:00.000Z';
 
 const actor = (
   id: string,
@@ -25,7 +30,7 @@ const piece = (
   entityId: 'company',
   status,
   version: 1,
-  productName: id,
+  productName: id === MINE_ID ? 'mine' : id,
   sku: null,
   serialNumber: null,
   location: '收發室',
@@ -40,6 +45,102 @@ const piece = (
   receipt: { category, receivedById: 'clerk', sourceCaseId: null },
   ...overrides,
 });
+
+// Positive physical writes use the modern server-built per-item quote contract.
+function sourceFixture(mine: any): SourceCase {
+  Object.assign(mine, {
+    label: 'SYNTHETIC-REPAIR-001',
+    receiptId: RECEIPT_ID,
+    productId: null,
+    declared: { id: 'source-line' },
+  });
+  Object.assign(mine.receipt, {
+    sourceCaseId: 'source-case',
+    sourceNumber: 'SYNTHETIC-CASE',
+    receivedAt: new Date(CURRENT_SOURCE_VERSION),
+  });
+  if (mine.repairInspection) {
+    Object.assign(mine.repairInspection, {
+      number: 'INS-SYNTHETIC-001',
+      authorId: 'tech',
+      authorName: 'tech',
+      updatedAt: CURRENT_SOURCE_VERSION,
+      submittedAt: CURRENT_SOURCE_VERSION,
+    });
+    mine.repairInspection.data.estimateNote ??= 'SYNTHETIC 檢修建議';
+  }
+  const paid = mine.repairInspection?.data?.feeSuggestion === 'PAID';
+  const source: SourceCase = {
+    id: 'source-case',
+    number: 'SYNTHETIC-CASE',
+    type: 'REPAIR',
+    status: 'INSPECTING',
+    brand: 'MOZTECH',
+    version: CURRENT_SOURCE_VERSION,
+    customerLabel: 'SYNTHETIC',
+    repairAllowed: true,
+    items: [
+      {
+        id: 'source-line',
+        name: 'SYNTHETIC Product',
+        sku: null,
+        serialNumber: null,
+        quantity: 1,
+      },
+    ],
+    releaseInfo: {
+      quoteRevision: 4,
+      customerApprovedQuoteRevision: 4,
+      customerApprovedAt: CURRENT_SOURCE_VERSION,
+      amount: paid ? mine.repairInspection.data.estimateAmount : 0,
+      currency: 'TWD',
+      confirmedPaymentQuoteRevision: paid ? 4 : null,
+      invoiceRequired: paid,
+      invoiceStatus: 'ISSUED',
+      invoiceSatisfied: true,
+      invoiceQuoteRevision: 4,
+      quoteBindings: [],
+    },
+  };
+  if (
+    mine.repairInspection?.status === 'SUBMITTED' &&
+    mine.repairInspection.data?.plan
+  ) {
+    source.releaseInfo!.quoteBindings = [
+      { ...repairSourceBindingForItem(mine, source), quoteRevision: 4 },
+    ];
+  }
+  mine.receipt.sourceSnapshot = structuredClone(source);
+  return source;
+}
+function approveCurrent(mine: any, source: SourceCase) {
+  const sent = sentCustomerWorkflow(
+    mine,
+    actor('tech'),
+    CURRENT_SOURCE_VERSION,
+    4,
+  );
+  mine.repairWorkflow = {
+    ...sent,
+    csr: {
+      ...sent.csr,
+      status: 'RESOLVED',
+      ownerId: 'csr',
+      acceptedAt: CURRENT_SOURCE_VERSION,
+      decision: 'APPROVE',
+      proposalHash: source.releaseInfo!.quoteBindings![0].proposalHash,
+    },
+  };
+  mine.repairInspection.review = {
+    inspectionRevision: mine.repairInspection.revision,
+    actorId: 'csr',
+    name: '客服',
+    confirmedAt: CURRENT_SOURCE_VERSION,
+    decision: 'APPROVE',
+    planHash: inspectionPlanHash(mine.repairInspection),
+    quoteRevision: 4,
+  };
+}
 
 // A small in-memory query adapter exercises the observable access results,
 // including nested AND/OR filters, rather than returning unrestricted mocked rows.
@@ -73,7 +174,7 @@ describe('repair workbench company overview and claim access', () => {
     process.env.MAILROOM_ENABLED = 'true';
     rows = [
       piece('pool'),
-      piece('mine', 'REPAIR', 'INSPECTING', {
+      piece(MINE_ID, 'REPAIR', 'INSPECTING', {
         repairOwnerId: 'tech',
         custodianId: 'tech',
         nextUserId: 'tech',
@@ -136,6 +237,7 @@ describe('repair workbench company overview and claim access', () => {
       mailroomTask: { findMany: jest.fn().mockResolvedValue([]) },
       mailroomReceipt: { update: jest.fn().mockResolvedValue({}) },
       mailroomDelivery: {
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
         findMany: jest.fn().mockResolvedValue([]),
         groupBy: jest.fn().mockResolvedValue([]),
       },
@@ -154,19 +256,17 @@ describe('repair workbench company overview and claim access', () => {
       deliverPending: jest.fn().mockResolvedValue(undefined),
     };
     stock = {
-      consumeForRepair: jest
-        .fn()
-        .mockResolvedValue({
-          reservationId: 'reserve-1',
-          status: 'POSTED',
-          postingId: 'out-1',
-          externalStatus: 'PENDING',
-          quantity: 1,
-          entityId: 'company',
-          itemId: 'mine',
-          unitLabel: 'UNIT-DEMO',
-          replacementSN: 'REPLACEMENT-SN',
-        }),
+      consumeForRepair: jest.fn().mockResolvedValue({
+        reservationId: 'reserve-1',
+        status: 'POSTED',
+        postingId: 'out-1',
+        externalStatus: 'PENDING',
+        quantity: 1,
+        entityId: 'company',
+        itemId: MINE_ID,
+        unitLabel: 'UNIT-DEMO',
+        replacementSN: 'REPLACEMENT-SN',
+      }),
     };
     service = new MailroomService(prisma, {} as any, sync, stock);
     jest.spyOn(service, 'actor').mockImplementation(async (id) => actor(id));
@@ -186,7 +286,7 @@ describe('repair workbench company overview and claim access', () => {
       'all',
       [
         'pool',
-        'mine',
+        MINE_ID,
         'other',
         'customer',
         'handoff',
@@ -195,7 +295,7 @@ describe('repair workbench company overview and claim access', () => {
         'refurbished',
       ],
     ],
-    ['mine', ['mine']],
+    ['mine', [MINE_ID]],
     ['acceptance', ['pool', 'refurbish']],
     ['waiting', ['customer']],
     ['delivery', ['handoff']],
@@ -225,7 +325,7 @@ describe('repair workbench company overview and claim access', () => {
       status: 'INSPECTING',
       page: 2,
     });
-    expect(result.items.map((row: any) => row.id)).toEqual(['mine']);
+    expect(result.items.map((row: any) => row.id)).toEqual([MINE_ID]);
     expect(prisma.mailroomItem.findMany).toHaveBeenLastCalledWith(
       expect.objectContaining({ take: 50, skip: 50 }),
     );
@@ -455,7 +555,9 @@ describe('repair workbench company overview and claim access', () => {
   });
 
   it('requires a submitted inspection before requesting customer handling or starting repair, and keeps factory/return plans outside direct repair', async () => {
-    const mine = rows.find((row) => row.id === 'mine');
+    const mine = rows.find((row) => row.id === MINE_ID);
+    sync.cases.mockResolvedValue({ items: [sourceFixture(mine)] });
+    jest.spyOn(service as any, 'customerService').mockResolvedValue('csr');
     const command = {
       entityId: 'company',
       requestId: 'document-001',
@@ -463,7 +565,7 @@ describe('repair workbench company overview and claim access', () => {
       action: 'await_customer' as const,
       note: '請客服確認方案',
     };
-    await expect(service.command('tech', 'mine', command)).rejects.toThrow(
+    await expect(service.command('tech', MINE_ID, command)).rejects.toThrow(
       '先提交',
     );
     mine.repairInspection = {
@@ -479,22 +581,23 @@ describe('repair workbench company overview and claim access', () => {
         checks: [{ name: '開機', result: 'FAIL', observation: '未啟動' }],
       },
     };
+    sync.cases.mockResolvedValue({ items: [sourceFixture(mine)] });
     await expect(
-      service.command('tech', 'mine', { ...command, action: 'start_repair' }),
+      service.command('tech', MINE_ID, { ...command, action: 'start_repair' }),
     ).rejects.toThrow('不能直接開始維修');
     mine.repairInspection.data.plan = 'RETURN';
     await expect(
-      service.command('tech', 'mine', { ...command, action: 'start_repair' }),
+      service.command('tech', MINE_ID, { ...command, action: 'start_repair' }),
     ).rejects.toThrow('不能直接開始維修');
     await expect(
-      service.command('tech', 'mine', command),
-    ).resolves.toMatchObject({ id: 'mine', duplicate: false });
-    expect(rows.find((row) => row.id === 'mine').status).toBe(
+      service.command('tech', MINE_ID, command),
+    ).resolves.toMatchObject({ id: MINE_ID, duplicate: false });
+    expect(rows.find((row) => row.id === MINE_ID).status).toBe(
       'WAITING_CUSTOMER',
     );
-    expect(rows.find((row) => row.id === 'mine').nextUserId).toBeNull();
+    expect(rows.find((row) => row.id === MINE_ID).nextUserId).toBeNull();
     expect(
-      rows.find((row) => row.id === 'mine').repairWorkflow.csr,
+      rows.find((row) => row.id === MINE_ID).repairWorkflow.csr,
     ).toMatchObject({
       status: 'SENT',
       inspectionRevision: 1,
@@ -522,7 +625,7 @@ describe('repair workbench company overview and claim access', () => {
   ])(
     'starts repair only with current consent/payment from the exact source case and category: $source',
     async ({ source, allowed }) => {
-      const mine = rows.find((row) => row.id === 'mine');
+      const mine = rows.find((row) => row.id === MINE_ID);
       mine.receipt.sourceCaseId = 'source-case';
       mine.repairInspection = {
         revision: 1,
@@ -543,8 +646,12 @@ describe('repair workbench company overview and claim access', () => {
           checks: [{ name: '開機', result: 'FAIL', observation: '未啟動' }],
         },
       };
-      sync.cases.mockResolvedValue({ items: [source] });
-      const operation = service.command('tech', 'mine', {
+      const authoritative = sourceFixture(mine);
+      approveCurrent(mine, authoritative);
+      sync.cases.mockResolvedValue({
+        items: [{ ...authoritative, ...source }],
+      });
+      const operation = service.command('tech', MINE_ID, {
         entityId: 'company',
         requestId: 'start-repair-001',
         expectedVersion: 1,
@@ -552,19 +659,23 @@ describe('repair workbench company overview and claim access', () => {
       });
       if (allowed) {
         await expect(operation).resolves.toMatchObject({
-          id: 'mine',
+          id: MINE_ID,
           duplicate: false,
         });
-        expect(rows.find((row) => row.id === 'mine').status).toBe('REPAIRING');
+        expect(rows.find((row) => row.id === MINE_ID).status).toBe('REPAIRING');
       } else {
-        await expect(operation).rejects.toThrow('必要款項');
+        await expect(operation).rejects.toThrow(
+          source.id === 'source-case' && source.type === 'REPAIR'
+            ? '足額確認收款'
+            : '來源案件已變動',
+        );
         expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
       }
     },
   );
 
   it('binds the assigned CSR decision to the exact submitted inspection revision and records the reviewed document', async () => {
-    const mine = rows.find((row) => row.id === 'mine');
+    const mine = rows.find((row) => row.id === MINE_ID);
     mine.status = 'WAITING_CUSTOMER';
     mine.repairInspection = {
       revision: 2,
@@ -588,7 +699,7 @@ describe('repair workbench company overview and claim access', () => {
       );
     jest.spyOn(service as any, 'customerService').mockResolvedValue('csr');
     await expect(
-      service.command('csr', 'mine', {
+      service.command('csr', MINE_ID, {
         entityId: 'company',
         requestId: 'review-inspection-001',
         expectedVersion: 1,
@@ -596,7 +707,7 @@ describe('repair workbench company overview and claim access', () => {
         note: '顧客同意本版方案，必要款項另由來源放行',
       }),
     ).resolves.toMatchObject({ duplicate: false });
-    const reviewed = rows.find((row) => row.id === 'mine');
+    const reviewed = rows.find((row) => row.id === MINE_ID);
     expect(reviewed.status).toBe('INSPECTING');
     expect(reviewed.repairInspection.review).toEqual({
       inspectionRevision: 2,
@@ -625,9 +736,10 @@ describe('repair workbench company overview and claim access', () => {
   it.each([undefined, { status: 'DRAFT', revision: 1, data: {} }])(
     'returns legacy customer handoffs without submitted inspection to inspection without inventing a CSR release',
     async (document) => {
-      const mine = rows.find((row) => row.id === 'mine');
+      const mine = rows.find((row) => row.id === MINE_ID);
       mine.status = 'WAITING_CUSTOMER';
       mine.repairInspection = document;
+      sync.cases.mockResolvedValue({ items: [sourceFixture(mine)] });
       jest
         .spyOn(service, 'actor')
         .mockImplementation(async (id) =>
@@ -636,18 +748,18 @@ describe('repair workbench company overview and claim access', () => {
             : actor(id),
         );
       jest.spyOn(service as any, 'customerService').mockResolvedValue('csr');
-      await service.command('csr', 'mine', {
+      await service.command('csr', MINE_ID, {
         entityId: 'company',
         requestId: 'legacy-customer-001',
         expectedVersion: 1,
         action: 'resolve_customer',
         note: '請維修師補齊檢修單',
       });
-      const updated = rows.find((row) => row.id === 'mine');
+      const updated = rows.find((row) => row.id === MINE_ID);
       expect(updated.status).toBe('INSPECTING');
       expect(updated.repairInspection?.review).toBeUndefined();
       await expect(
-        service.command('tech', 'mine', {
+        service.command('tech', MINE_ID, {
           entityId: 'company',
           requestId: 'legacy-start-001',
           expectedVersion: 2,
@@ -658,7 +770,7 @@ describe('repair workbench company overview and claim access', () => {
   );
 
   it('rejects malformed submitted inspection on CSR resolution instead of assigning a release', async () => {
-    const mine = rows.find((row) => row.id === 'mine');
+    const mine = rows.find((row) => row.id === MINE_ID);
     mine.status = 'WAITING_CUSTOMER';
     mine.repairInspection = { revision: 1, status: 'SUBMITTED', data: {} };
     jest
@@ -666,7 +778,7 @@ describe('repair workbench company overview and claim access', () => {
       .mockResolvedValue(actor('csr', ['mailroom:read', 'mailroom:review']));
     jest.spyOn(service as any, 'customerService').mockResolvedValue('csr');
     await expect(
-      service.command('csr', 'mine', {
+      service.command('csr', MINE_ID, {
         entityId: 'company',
         requestId: 'invalid-review-001',
         expectedVersion: 1,
@@ -680,11 +792,8 @@ describe('repair workbench company overview and claim access', () => {
   it.each(['FREE', 'PAID'] as const)(
     'requires a current-version CSR review for %s plans even when the source is already released',
     async (feeSuggestion) => {
-      const mine = rows.find((row) => row.id === 'mine');
+      const mine = rows.find((row) => row.id === MINE_ID);
       mine.receipt.sourceCaseId = 'source-case';
-      sync.cases.mockResolvedValue({
-        items: [{ id: 'source-case', type: 'REPAIR', repairAllowed: true }],
-      });
       mine.repairInspection = {
         revision: 2,
         status: 'SUBMITTED',
@@ -700,13 +809,15 @@ describe('repair workbench company overview and claim access', () => {
           checks: [{ name: '開機', result: 'FAIL', observation: '未啟動' }],
         },
       };
+      const source = sourceFixture(mine);
+      sync.cases.mockResolvedValue({ items: [source] });
       const command = {
         entityId: 'company',
         requestId: 'review-required-001',
         expectedVersion: 1,
         action: 'start_repair' as const,
       };
-      await expect(service.command('tech', 'mine', command)).rejects.toThrow(
+      await expect(service.command('tech', MINE_ID, command)).rejects.toThrow(
         '尚未由客服確認',
       );
       mine.repairInspection.review = {
@@ -715,19 +826,20 @@ describe('repair workbench company overview and claim access', () => {
         name: '客服',
         confirmedAt: '2026-10-02T04:00:00.000Z',
       };
-      await expect(service.command('tech', 'mine', command)).rejects.toThrow(
+      await expect(service.command('tech', MINE_ID, command)).rejects.toThrow(
         '尚未由客服確認',
       );
       expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
       mine.repairInspection.review.inspectionRevision = 2;
+      approveCurrent(mine, source);
       await expect(
-        service.command('tech', 'mine', command),
+        service.command('tech', MINE_ID, command),
       ).resolves.toMatchObject({ duplicate: false });
     },
   );
 
   it('a new CSR workflow cannot use an old source quote, a missing versioned source approval or the legacy resolve action to bypass personal acceptance', async () => {
-    const mine = rows.find((row) => row.id === 'mine');
+    const mine = rows.find((row) => row.id === MINE_ID);
     mine.receipt.sourceCaseId = 'source-case';
     mine.repairInspection = {
       revision: 2,
@@ -744,6 +856,7 @@ describe('repair workbench company overview and claim access', () => {
         checks: [{ name: '開機', result: 'FAIL', observation: '未啟動' }],
       },
     };
+    const baseline = sourceFixture(mine);
     const hash = inspectionPlanHash(mine.repairInspection);
     mine.repairWorkflow = sentCustomerWorkflow(
       mine,
@@ -766,10 +879,12 @@ describe('repair workbench company overview and claim access', () => {
       quoteRevision: 4,
     };
     const source = {
+      ...baseline,
       id: 'source-case',
       type: 'REPAIR',
       repairAllowed: true,
       releaseInfo: {
+        ...baseline.releaseInfo,
         quoteRevision: 5,
         customerApprovedQuoteRevision: 5,
         customerApprovedAt: '2026-10-05T00:00:00Z',
@@ -785,12 +900,12 @@ describe('repair workbench company overview and claim access', () => {
       expectedVersion: 1,
       action: 'start_repair' as const,
     };
-    await expect(service.command('tech', 'mine', command)).rejects.toThrow(
+    await expect(service.command('tech', MINE_ID, command)).rejects.toThrow(
       '報價版本',
     );
     sync.cases.mockResolvedValue({ items: [{ ...source, releaseInfo: null }] });
-    await expect(service.command('tech', 'mine', command)).rejects.toThrow(
-      '報價版本',
+    await expect(service.command('tech', MINE_ID, command)).rejects.toThrow(
+      '估價幣別',
     );
     sync.cases.mockResolvedValue({
       items: [
@@ -805,7 +920,7 @@ describe('repair workbench company overview and claim access', () => {
         },
       ],
     });
-    await expect(service.command('tech', 'mine', command)).rejects.toThrow(
+    await expect(service.command('tech', MINE_ID, command)).rejects.toThrow(
       '足額',
     );
     expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
@@ -823,9 +938,9 @@ describe('repair workbench company overview and claim access', () => {
       ],
     });
     await expect(
-      service.command('tech', 'mine', command),
+      service.command('tech', MINE_ID, command),
     ).resolves.toMatchObject({ duplicate: false });
-    expect(rows.find((row) => row.id === 'mine').status).toBe('REPAIRING');
+    expect(rows.find((row) => row.id === MINE_ID).status).toBe('REPAIRING');
   });
 
   it.each([
@@ -834,9 +949,11 @@ describe('repair workbench company overview and claim access', () => {
   ] as const)(
     'does not let %s bypass submitted reports and passing final inspection',
     async (action, status, category) => {
-      const mine = rows.find((row) => row.id === 'mine');
+      const mine = rows.find((row) => row.id === MINE_ID);
       mine.status = status;
       mine.receipt.category = category;
+      if (category === 'REPAIR')
+        sync.cases.mockResolvedValue({ items: [sourceFixture(mine)] });
       const command = {
         entityId: 'company',
         requestId: 'completion-001',
@@ -844,7 +961,7 @@ describe('repair workbench company overview and claim access', () => {
         action,
         note: '處理完成',
       };
-      await expect(service.command('tech', 'mine', command)).rejects.toThrow(
+      await expect(service.command('tech', MINE_ID, command)).rejects.toThrow(
         '先提交',
       );
       mine.repairInspection = {
@@ -860,7 +977,12 @@ describe('repair workbench company overview and claim access', () => {
           checks: [{ name: '開機', result: 'FAIL', observation: '未啟動' }],
         },
       };
-      await expect(service.command('tech', 'mine', command)).rejects.toThrow(
+      if (category === 'REPAIR') {
+        const source = sourceFixture(mine);
+        approveCurrent(mine, source);
+        sync.cases.mockResolvedValue({ items: [source] });
+      }
+      await expect(service.command('tech', MINE_ID, command)).rejects.toThrow(
         '先提交維修單',
       );
       mine.repairReport = {
@@ -876,16 +998,16 @@ describe('repair workbench company overview and claim access', () => {
           checks: [{ name: '開機', result: 'FAIL', observation: '未啟動' }],
         },
       };
-      await expect(service.command('tech', 'mine', command)).rejects.toThrow(
+      await expect(service.command('tech', MINE_ID, command)).rejects.toThrow(
         '複驗通過',
       );
       expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
       mine.repairReport.data.qcResult = 'PASS';
       mine.repairReport.data.checks[0].result = 'PASS';
       await expect(
-        service.command('tech', 'mine', command),
-      ).resolves.toMatchObject({ id: 'mine', duplicate: false });
-      expect(rows.find((row) => row.id === 'mine')).toMatchObject({
+        service.command('tech', MINE_ID, command),
+      ).resolves.toMatchObject({ id: MINE_ID, duplicate: false });
+      expect(rows.find((row) => row.id === MINE_ID)).toMatchObject({
         status: 'WAITING_RETURN_ACCEPTANCE',
         nextUserId: 'clerk',
         custodianId: 'tech',
@@ -894,7 +1016,7 @@ describe('repair workbench company overview and claim access', () => {
   );
 
   it('completes replacement only with the same transaction formal unit posting and preserves external pending honestly; failed release never consumes stock', async () => {
-    const mine = rows.find((row) => row.id === 'mine');
+    const mine = rows.find((row) => row.id === MINE_ID);
     mine.status = 'REPAIRING';
     mine.receipt.sourceCaseId = 'source-case';
     mine.serialNumber = 'ORIGINAL-SN';
@@ -914,6 +1036,7 @@ describe('repair workbench company overview and claim access', () => {
         checks: [{ name: '開機', result: 'FAIL', observation: '未啟動' }],
       },
     };
+    const baseline = sourceFixture(mine);
     mine.repairWorkflow = sentCustomerWorkflow(
       mine,
       actor('tech'),
@@ -955,10 +1078,12 @@ describe('repair workbench company overview and claim access', () => {
       },
     };
     const source = {
+      ...baseline,
       id: 'source-case',
       type: 'REPAIR',
       repairAllowed: false,
       releaseInfo: {
+        ...baseline.releaseInfo,
         quoteRevision: 4,
         customerApprovedQuoteRevision: 4,
         customerApprovedAt: '2026-10-05T00:00:00Z',
@@ -975,7 +1100,7 @@ describe('repair workbench company overview and claim access', () => {
       action: 'complete_repair' as const,
       note: '換機複驗完成',
     };
-    await expect(service.command('tech', 'mine', input)).rejects.toThrow(
+    await expect(service.command('tech', MINE_ID, input)).rejects.toThrow(
       '尚未放行',
     );
     expect(stock.consumeForRepair).not.toHaveBeenCalled();
@@ -985,7 +1110,7 @@ describe('repair workbench company overview and claim access', () => {
     stock.consumeForRepair.mockRejectedValueOnce(
       new ConflictException('預留已失效'),
     );
-    await expect(service.command('tech', 'mine', input)).rejects.toThrow(
+    await expect(service.command('tech', MINE_ID, input)).rejects.toThrow(
       '預留已失效',
     );
     expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
@@ -996,19 +1121,19 @@ describe('repair workbench company overview and claim access', () => {
       externalStatus: 'PENDING',
       quantity: 1,
       entityId: 'other',
-      itemId: 'mine',
+      itemId: MINE_ID,
       unitLabel: 'UNIT-DEMO',
       replacementSN: 'REPLACEMENT-SN',
     });
-    await expect(service.command('tech', 'mine', input)).rejects.toThrow(
+    await expect(service.command('tech', MINE_ID, input)).rejects.toThrow(
       '出庫證明不符',
     );
     expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
-    await service.command('tech', 'mine', input);
+    await service.command('tech', MINE_ID, input);
     expect(stock.consumeForRepair).toHaveBeenLastCalledWith(
       prisma,
       'company',
-      expect.objectContaining({ id: 'mine' }),
+      expect.objectContaining({ id: MINE_ID }),
       'tech',
       'stock-complete-001',
       'REPLACEMENT-SN',
@@ -1016,14 +1141,14 @@ describe('repair workbench company overview and claim access', () => {
       'REFURBISHED',
     );
     expect(
-      rows.find((row) => row.id === 'mine').repairWorkflow.release,
+      rows.find((row) => row.id === MINE_ID).repairWorkflow.release,
     ).toMatchObject({
       purpose: 'REPLACED',
       stock: {
         postingId: 'out-1',
         externalStatus: 'PENDING',
         entityId: 'company',
-        itemId: 'mine',
+        itemId: MINE_ID,
       },
     });
   });

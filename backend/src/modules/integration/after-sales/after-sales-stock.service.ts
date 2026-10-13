@@ -761,6 +761,11 @@ export class AfterSalesStockService {
     return this.db.$transaction(
       async (tx) => {
         await this.authorizeTransaction(tx, userId, input.entityId);
+        // Ordinary warehouse OUT uses this same product/warehouse/snapshot order.
+        // Read qualification capacity only after acquiring the shared stock mutex.
+        await tx.$queryRaw`SELECT id FROM products WHERE id=${input.productId} AND entity_id=${input.entityId} FOR SHARE`;
+        await tx.$queryRaw`SELECT id FROM warehouses WHERE id=${input.warehouseId} AND entity_id=${input.entityId} FOR SHARE`;
+        await tx.$queryRaw`SELECT id FROM inventory_snapshots WHERE entity_id=${input.entityId} AND product_id=${input.productId} AND warehouse_id=${input.warehouseId} FOR UPDATE`;
         const product = await tx.product.findFirst({
           where: { id: input.productId, entityId: input.entityId },
         });
@@ -798,6 +803,8 @@ export class AfterSalesStockService {
           throw new ConflictException(
             '本倉位售後標籤數已達正式庫存數量，請先核對實物',
           );
+        if (input.serialNumber)
+          await tx.$queryRaw`SELECT id FROM inventory_serial_numbers WHERE entity_id=${input.entityId} AND product_id=${input.productId} AND serial_number=${input.serialNumber.trim()} FOR UPDATE`;
         const serial = input.serialNumber
           ? await tx.inventorySerialNumber.findFirst({
               where: {

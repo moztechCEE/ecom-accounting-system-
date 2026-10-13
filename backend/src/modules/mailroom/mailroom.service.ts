@@ -1,5 +1,18 @@
 import { ErpAfterSalesModuleService } from '../integration/after-sales/erp-module.service';
 import {
+  buildRepairProposalEvent,
+  repairSourceBindingForItem,
+  type RepairProposalEvent,
+} from './repair-proposal.contract';
+import {
+  requireCustomerProductDecision,
+  type CustomerProductDecisionProof,
+} from './mailroom-product-decision.contract';
+import {
+  persistProductMismatchFact,
+  voidProductMismatchFactsForIdentity,
+} from './mailroom-product-facts.service';
+import {
   allowedIntakeActions,
   caseIntake,
   caseIntakeSummary,
@@ -32,6 +45,9 @@ import {
   dispatchedPhysicalItem,
   outboundShipment,
   type OutboundShipment,
+  repairDispatchEvent,
+  dispatchDeliveryProjection,
+  dispatchTransition,
 } from './mailroom-dispatch.contract';
 import {
   can,
@@ -53,6 +69,8 @@ import {
   validateInspectionRelease,
   validateInspectionSubmission,
   validateRepairCompletion,
+  inspectionPlanHash,
+  type InspectionDocument,
 } from './repair-document.contract';
 import {
   currentCsrReview,
@@ -107,6 +125,26 @@ const withoutRepairDocuments = <T extends object>(value: T): T => {
   delete result.repairWorkflow;
   return result;
 };
+function inspectionReference(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const doc = value as InspectionDocument;
+  if (
+    typeof doc.number !== 'string' ||
+    !doc.number.trim() ||
+    !Number.isSafeInteger(doc.revision) ||
+    doc.revision < 1 ||
+    !['DRAFT', 'SUBMITTED'].includes(doc.status) ||
+    !doc.data ||
+    typeof doc.data !== 'object'
+  )
+    return null;
+  return {
+    documentId: doc.number,
+    status: doc.status,
+    planVersion: doc.revision,
+    planHash: inspectionPlanHash(doc),
+  };
+}
 function withoutRepairHistoryDocuments(
   value: Prisma.JsonValue,
 ): Prisma.JsonValue {
@@ -452,6 +490,7 @@ export class MailroomService {
     actor: Actor,
     options: { repairOverview?: boolean } = {},
   ) {
+    const dispatchDeliveries = await this.dispatchDeliveries(items);
     const donors = items.filter(
       (item) => item.status === 'STOCKED' && item.receipt.category === 'RETURN',
     );
@@ -590,7 +629,10 @@ export class MailroomService {
           ? physicalCustody({ ...item, receipt })
           : undefined),
       caseIntake: caseIntakeSummary(item.repairWorkflow),
-      outboundShipment: outboundShipment(item.repairWorkflow),
+      outboundShipment: dispatchDeliveryProjection(
+        item.repairWorkflow,
+        dispatchDeliveries.filter((delivery) => delivery.itemId === item.id),
+      ),
       allowedIntakeActions: allowedIntakeActions(
         { ...item, receipt },
         actor,
@@ -765,6 +807,8 @@ export class MailroomService {
       quantity: 1,
       evidenceCount: Array.isArray(item.evidence) ? item.evidence.length : 0,
       returnInspection: item.returnInspection,
+      inspectionRef: inspectionReference(item.repairInspection),
+      evidenceDigest: fingerprint(item.evidence || []),
       outboundShipment: outboundShipment(item.repairWorkflow),
       releasePurpose:
         repairWorkflow(item.repairWorkflow).release?.purpose || null,
@@ -940,9 +984,21 @@ export class MailroomService {
         );
       }
     }
-    // Source/AI consumers do not yet accept DISPATCHED or the outbound schema.
-    // The immutable native action and shipment retain the pending operation;
-    // do not enqueue an unsupported event or claim a successful external sync.
+    if (action === 'dispatch') {
+      const event = repairDispatchEvent(item, actor);
+      await tx.mailroomDelivery.createMany({
+        data: [
+          {
+            eventId: event.eventId,
+            entityId: item.entityId,
+            itemId: item.id,
+            target: 'AFTER_SALES',
+            payload: json(event),
+          },
+        ],
+      });
+    }
+    // Technical progress keeps its old contract. Dispatch has a distinct physical event.
     if (
       item.receipt.sourceCaseId &&
       action !== 'dispatch' &&
@@ -1252,6 +1308,43 @@ export class MailroomService {
       throw new NotFoundException('找不到物件');
     this.canRead(actor, current);
     let identifiedSource: SourceCase | undefined;
+    let dispatchSource: SourceCase | undefined;
+    if (input.action === 'dispatch' && current.receipt.sourceCaseId) {
+      requirePermission(actor, 'mailroom:update');
+      const employee = await this.prisma.employee.findFirst({
+        where: { userId, entityId: input.entityId, isActive: true },
+        select: { id: true },
+      });
+      if (!employee)
+        throw new ForbiddenException('寄出人必須是此公司已綁定帳號的在職員工');
+      const committed = await this.prisma.mailroomAction.findUnique({
+        where: {
+          entityId_actorId_requestId: {
+            entityId: input.entityId,
+            actorId: userId,
+            requestId: input.requestId,
+          },
+        },
+        select: { id: true },
+      });
+      if (!committed) {
+        dispatchTransition(current, input, actor);
+        dispatchSource = (
+          await this.sync.cases(
+            input.entityId,
+            '',
+            current.receipt.sourceCaseId,
+          )
+        ).items[0];
+        if (
+          !dispatchSource ||
+          dispatchSource.id !== current.receipt.sourceCaseId ||
+          dispatchSource.type !== 'REPAIR' ||
+          ['CANCELLED', 'CLOSED', 'COMPLETED'].includes(dispatchSource.status)
+        )
+          throw new ConflictException('售後案件已變動或不允許寄回，請重新確認');
+      }
+    }
     if (
       input.action === 'identify' &&
       ['REPAIR', 'RETURN'].includes(input.targetCategory || '')
@@ -1288,9 +1381,7 @@ export class MailroomService {
     let repairSource: SourceCase | undefined;
     const requireCompletionRelease =
       input.action === 'complete_repair' &&
-      (!!repairWorkflow(current.repairWorkflow).csr ||
-        (current.repairReport as { data?: { outcome?: string } } | null)?.data
-          ?.outcome === 'REPLACED');
+      current.receipt.category === 'REPAIR';
     if (
       (input.action === 'start_repair' || requireCompletionRelease) &&
       current.receipt.sourceCaseId
@@ -1355,483 +1446,705 @@ export class MailroomService {
           throw new BadRequestException('無法確認此售後案件目前的承辦客服');
       }
     }
-    const result = await this.prisma.$transaction(async (tx) => {
-      if (input.action === 'dispatch')
-        await tx.$executeRaw(
-          Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${input.entityId + ':mailroom-dispatch-action:' + userId + ':' + input.requestId}))`,
-        );
-      await tx.$queryRaw(
-        Prisma.sql`SELECT id FROM mailroom_items WHERE id=${id} FOR UPDATE`,
-      );
-      const previous = await tx.mailroomAction.findUnique({
-        where: {
-          entityId_actorId_requestId: {
-            entityId: input.entityId,
-            actorId: userId,
-            requestId: input.requestId,
-          },
-        },
-      });
-      const freshActor = await this.actor(userId, tx);
-      requireEntity(freshActor, input.entityId);
-      let dispatchEmployeeId: string | undefined;
-      if (input.action === 'dispatch') {
-        // Replays still require current permissions and a current company employee.
-        requirePermission(freshActor, 'mailroom:update');
-        const employee = await tx.employee.findFirst({
-          where: { userId, entityId: input.entityId, isActive: true },
-          select: { id: true },
-        });
-        if (!employee)
-          throw new ForbiddenException(
-            '寄出人必須是此公司已綁定帳號的在職員工',
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        if (input.action === 'dispatch')
+          await tx.$executeRaw(
+            Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${input.entityId + ':mailroom-dispatch-action:' + userId + ':' + input.requestId}))`,
           );
-        dispatchEmployeeId = employee.id;
-      }
-      if (input.action === 'claim') {
-        requirePermission(freshActor, 'repair_workbench:update');
-        const employee = await tx.employee.findFirst({
-          where: { userId, entityId: input.entityId, isActive: true },
-          select: { id: true },
-        });
-        if (!employee)
-          throw new BadRequestException(
-            '認領人必須是此公司已綁定帳號的在職員工',
-          );
-      }
-      let clerk: Actor | undefined;
-      if (context) {
-        clerk = await this.actor(context.tabletClerkId, tx);
-        requireEntity(clerk, input.entityId);
-        requirePermission(clerk, 'mailroom:update');
-        if (input.action !== 'accept')
-          throw new ForbiddenException('平板只能執行本人簽收');
-        requirePermission(freshActor, 'repair_workbench:update');
-      }
-      if (previous) {
-        if (previous.requestHash !== hash || previous.itemId !== id)
-          throw new ConflictException('同一操作識別碼的內容不同');
-        return { duplicate: true, notifications: [] };
-      }
-      const item = await tx.mailroomItem.findUniqueOrThrow({
-        where: { id },
-        include: withReceipt,
-      });
-      this.canRead(freshActor, item);
-      if (
-        input.action === 'identify' &&
-        caseIntake(item.repairWorkflow)?.status !== undefined &&
-        caseIntake(item.repairWorkflow)?.status !== 'RESOLVED'
-      )
-        throw new ConflictException('已交客服補建，須由受理客服綁回案件');
-      if (identifiedSource)
-        identifiedSource = await this.reserveSourceCapacity(
-          tx,
-          input.entityId,
-          identifiedSource,
-          [input.sourceItemId],
-          item.id,
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM mailroom_items WHERE id=${id} FOR UPDATE`,
         );
-      if (
-        clerk &&
-        (item.custodianId !== clerk.id ||
-          !['WAITING_REPAIR_ACCEPTANCE', 'PENDING_REFURBISH'].includes(
-            item.status,
-          ))
-      )
-        throw new ForbiddenException('這件物件目前不在此收發人員的交接範圍');
-      if (identifiedSource)
-        await tx.mailroomReceipt.update({
-          where: { id: item.receiptId },
-          data: {
-            customerServiceUserId: await this.customerService(
-              identifiedSource,
-              item.entityId,
-              tx,
-            ),
+        const previous = await tx.mailroomAction.findUnique({
+          where: {
+            entityId_actorId_requestId: {
+              entityId: input.entityId,
+              actorId: userId,
+              requestId: input.requestId,
+            },
           },
         });
-      let reassignedInspection: Prisma.InputJsonValue | undefined;
-      if (refreshCustomerService) {
-        const baseline = item.receipt.sourceSnapshot as unknown as
-          | SourceCase
-          | undefined;
-        // Refresh only staff routing. Original declared items, source version,
-        // customer claim and approval snapshot remain the receipt's original evidence.
-        const sourceForRouting = latestAssignee
-          ? ({
-              ...baseline,
-              assigneeId: latestAssignee.assigneeId ?? null,
-              assigneeEmail: latestAssignee.assigneeEmail ?? null,
-              assigneeName: latestAssignee.assigneeName ?? null,
-            } as SourceCase)
-          : baseline;
-        const customerServiceUserId = await this.customerService(
-          sourceForRouting,
-          item.entityId,
-          tx,
-        );
-        const previousCustomerServiceUserId =
-          item.receipt.customerServiceUserId;
-        await tx.mailroomReceipt.update({
-          where: { id: item.receiptId },
-          data: {
-            customerServiceUserId,
-            ...(latestAssignee
-              ? { sourceSnapshot: json(sourceForRouting) }
-              : {}),
-          },
+        let freshActor = await this.actor(userId, tx);
+        requireEntity(freshActor, input.entityId);
+        let dispatchEmployeeId: string | undefined;
+        if (input.action === 'dispatch') {
+          // Replays still require current permissions and a current company employee.
+          requirePermission(freshActor, 'mailroom:update');
+          const employee = await tx.employee.findFirst({
+            where: { userId, entityId: input.entityId, isActive: true },
+            select: { id: true },
+          });
+          if (!employee)
+            throw new ForbiddenException(
+              '寄出人必須是此公司已綁定帳號的在職員工',
+            );
+          dispatchEmployeeId = employee.id;
+        }
+        if (input.action === 'claim') {
+          requirePermission(freshActor, 'repair_workbench:update');
+          const employee = await tx.employee.findFirst({
+            where: { userId, entityId: input.entityId, isActive: true },
+            select: { id: true },
+          });
+          if (!employee)
+            throw new BadRequestException(
+              '認領人必須是此公司已綁定帳號的在職員工',
+            );
+        }
+        let clerk: Actor | undefined;
+        if (context) {
+          clerk = await this.actor(context.tabletClerkId, tx);
+          requireEntity(clerk, input.entityId);
+          requirePermission(clerk, 'mailroom:update');
+          if (input.action !== 'accept')
+            throw new ForbiddenException('平板只能執行本人簽收');
+          requirePermission(freshActor, 'repair_workbench:update');
+        }
+        if (previous) {
+          if (previous.requestHash !== hash || previous.itemId !== id)
+            throw new ConflictException('同一操作識別碼的內容不同');
+          return { duplicate: true, notifications: [] };
+        }
+        const item = await tx.mailroomItem.findUniqueOrThrow({
+          where: { id },
+          include: withReceipt,
         });
-        item.receipt.customerServiceUserId = customerServiceUserId;
-        if (latestAssignee)
-          item.receipt.sourceSnapshot = json(
-            sourceForRouting,
-          ) as Prisma.JsonValue;
-        const inspection = item.returnInspection as {
-          reviewedAt?: string;
-          reviewedBy?: string;
-        } | null;
+        this.canRead(freshActor, item);
+        if (input.action === 'dispatch') {
+          if (!item.receipt.sourceCaseId)
+            throw new ConflictException('缺少售後寄回案件');
+          dispatchSource = (
+            await this.sync.cases(item.entityId, '', item.receipt.sourceCaseId)
+          ).items[0];
+          if (
+            !dispatchSource ||
+            dispatchSource.id !== item.receipt.sourceCaseId ||
+            dispatchSource.type !== 'REPAIR' ||
+            ['CANCELLED', 'CLOSED', 'COMPLETED'].includes(dispatchSource.status)
+          )
+            throw new ConflictException(
+              '售後案件已變動或不允許寄回，請重新確認',
+            );
+          freshActor = await this.actor(userId, tx);
+          requireEntity(freshActor, input.entityId);
+          requirePermission(freshActor, 'mailroom:update');
+          this.canRead(freshActor, item);
+          const employee = await tx.employee.findFirst({
+            where: { userId, entityId: item.entityId, isActive: true },
+            select: { id: true },
+          });
+          if (!employee)
+            throw new ForbiddenException(
+              '寄出人必須是此公司已綁定帳號的在職員工',
+            );
+          dispatchEmployeeId = employee.id;
+        }
+        let lockedRepairSource: SourceCase | undefined;
         if (
-          item.receipt.category === 'RETURN' &&
-          inspection?.reviewedAt &&
-          previousCustomerServiceUserId !== customerServiceUserId
+          item.receipt.category === 'REPAIR' &&
+          ['start_repair', 'complete_repair', 'await_customer'].includes(
+            input.action,
+          )
         ) {
-          const checks = { ...inspection };
-          delete checks.reviewedAt;
-          delete checks.reviewedBy;
-          reassignedInspection = json(checks);
-          item.returnInspection = reassignedInspection as Prisma.JsonValue;
+          // A wait for physical custody must not retain an earlier customer release.
+          if (!item.receipt.sourceCaseId)
+            throw new ConflictException('來源案件不符或尚未放行');
+          const lockedSource = (
+            await this.sync.cases(item.entityId, '', item.receipt.sourceCaseId)
+          ).items[0];
+          if (
+            !lockedSource ||
+            lockedSource.id !== item.receipt.sourceCaseId ||
+            lockedSource.type !== 'REPAIR' ||
+            ['CANCELLED', 'CLOSED', 'COMPLETED'].includes(lockedSource.status)
+          )
+            throw new ConflictException('來源案件已變動或尚未放行');
+          if (input.action === 'await_customer') latestAssignee = lockedSource;
+          else {
+            repairSource = lockedSource;
+            repairAllowed = lockedSource.repairAllowed === true;
+          }
+          lockedRepairSource = lockedSource;
+          freshActor = await this.actor(userId, tx);
+          requireEntity(freshActor, input.entityId);
+          this.canRead(freshActor, item);
+        }
+        let productDecision: CustomerProductDecisionProof | undefined;
+        let productDecisionSource: SourceCase | undefined;
+        const requiresProductDecision =
+          input.action === 'resolve_mismatch' ||
+          (item.matchResult === 'CONFIRMED_ACTUAL' &&
+            [
+              'accept',
+              'claim',
+              'start_inspection',
+              'await_customer',
+              'start_repair',
+              'complete_repair',
+              'complete_refurbish',
+              'stock',
+              'dispatch',
+            ].includes(input.action));
+        if (requiresProductDecision) {
+          if (input.action === 'resolve_mismatch')
+            requirePermission(freshActor, 'mailroom:review');
+          if (!item.receipt.sourceCaseId)
+            throw new ConflictException('請客服先補配對售後案件');
+          productDecisionSource =
+            lockedRepairSource ||
+            (
+              await this.sync.cases(
+                item.entityId,
+                '',
+                item.receipt.sourceCaseId,
+              )
+            ).items[0];
+          if (
+            !productDecisionSource ||
+            ['CANCELLED', 'CLOSED', 'COMPLETED'].includes(
+              productDecisionSource.status,
+            )
+          )
+            throw new ConflictException('售後案件已變動，請客服重新确认');
+          productDecision = requireCustomerProductDecision(
+            item,
+            productDecisionSource,
+            {
+              devSandbox: process.env.ERP_DEV_SANDBOX === 'true',
+            },
+          );
+          if (input.action === 'resolve_mismatch')
+            latestAssignee = productDecisionSource;
+          freshActor = await this.actor(userId, tx);
+          requireEntity(freshActor, input.entityId);
+          this.canRead(freshActor, item);
         }
         if (
-          ['resolve_mismatch', 'resolve_customer'].includes(input.action) &&
-          customerServiceUserId !== freshActor.id &&
-          !can(freshActor, '*')
+          input.action === 'identify' &&
+          caseIntake(item.repairWorkflow)?.status !== undefined &&
+          caseIntake(item.repairWorkflow)?.status !== 'RESOLVED'
         )
-          throw new ForbiddenException('僅此案件的承辦客服可確認顧客結果');
-      }
-      const documents = item as Item & {
-        repairInspection?: unknown;
-        repairReport?: unknown;
-      };
-      const workflow = repairWorkflow(item.repairWorkflow);
-      if (
-        [
-          'move',
-          'start_inspection',
-          'await_customer',
-          'start_repair',
-          'complete_repair',
-          'complete_refurbish',
-        ].includes(input.action) &&
-        isRepairWorkbenchItem(item) &&
-        physicalCustody(item) !== 'TECHNICIAN'
-      )
-        throw new ConflictException('實物目前在原廠或物流，須先由本人簽收返還');
-      if (input.action === 'resolve_customer' && workflow.csr)
-        throw new BadRequestException(
-          '請先本人接手客服交辦，再以檢修版本與顧客決定回覆',
-        );
-      let reviewedInspection: Prisma.InputJsonValue | undefined;
-      if (
-        input.action === 'resolve_customer' &&
-        (documents.repairInspection as { status?: string } | null)?.status ===
-          'SUBMITTED'
-      ) {
-        const inspection = validateInspectionSubmission(
-          documents.repairInspection,
-        );
-        reviewedInspection = json({
-          ...inspection,
-          review: {
-            inspectionRevision: inspection.revision,
-            actorId: freshActor.id,
-            name: freshActor.name,
-            confirmedAt: new Date().toISOString(),
-          },
-        });
-      }
-      if (['await_customer', 'start_repair'].includes(input.action)) {
-        const inspection = validateInspectionSubmission(
-          documents.repairInspection,
-        );
-        if (
-          input.action === 'start_repair' &&
-          !['REPAIR', 'REPLACE'].includes(inspection.data.plan)
-        )
-          throw new BadRequestException(
-            '送原廠或原件返還方案須由客服安排，不能直接開始維修',
+          throw new ConflictException('已交客服補建，須由受理客服綁回案件');
+        if (identifiedSource)
+          identifiedSource = await this.reserveSourceCapacity(
+            tx,
+            input.entityId,
+            identifiedSource,
+            [input.sourceItemId],
+            item.id,
           );
-        if (input.action === 'start_repair')
-          validateInspectionRelease(documents.repairInspection);
-        if (input.action === 'start_repair' && workflow.csr) {
-          currentCsrReview(item);
-          if (workflow.csr.decision !== 'APPROVE')
-            throw new ConflictException('顧客未同意目前檢修方案');
+        if (
+          clerk &&
+          (item.custodianId !== clerk.id ||
+            !['WAITING_REPAIR_ACCEPTANCE', 'PENDING_REFURBISH'].includes(
+              item.status,
+            ))
+        )
+          throw new ForbiddenException('這件物件目前不在此收發人員的交接範圍');
+        if (identifiedSource)
+          await tx.mailroomReceipt.update({
+            where: { id: item.receiptId },
+            data: {
+              customerServiceUserId: await this.customerService(
+                identifiedSource,
+                item.entityId,
+                tx,
+              ),
+            },
+          });
+        let reassignedInspection: Prisma.InputJsonValue | undefined;
+        if (refreshCustomerService) {
+          const baseline = item.receipt.sourceSnapshot as unknown as
+            | SourceCase
+            | undefined;
+          // Refresh only staff routing. Original declared items, source version,
+          // customer claim and approval snapshot remain the receipt's original evidence.
+          const sourceForRouting = latestAssignee
+            ? ({
+                ...baseline,
+                assigneeId: latestAssignee.assigneeId ?? null,
+                assigneeEmail: latestAssignee.assigneeEmail ?? null,
+                assigneeName: latestAssignee.assigneeName ?? null,
+              } as SourceCase)
+            : baseline;
+          const customerServiceUserId = await this.customerService(
+            sourceForRouting,
+            item.entityId,
+            tx,
+          );
+          const previousCustomerServiceUserId =
+            item.receipt.customerServiceUserId;
+          await tx.mailroomReceipt.update({
+            where: { id: item.receiptId },
+            data: {
+              customerServiceUserId,
+              ...(latestAssignee
+                ? { sourceSnapshot: json(sourceForRouting) }
+                : {}),
+            },
+          });
+          item.receipt.customerServiceUserId = customerServiceUserId;
+          if (latestAssignee)
+            item.receipt.sourceSnapshot = json(
+              sourceForRouting,
+            ) as Prisma.JsonValue;
+          const inspection = item.returnInspection as {
+            reviewedAt?: string;
+            reviewedBy?: string;
+          } | null;
           if (
+            item.receipt.category === 'RETURN' &&
+            inspection?.reviewedAt &&
+            previousCustomerServiceUserId !== customerServiceUserId
+          ) {
+            const checks = { ...inspection };
+            delete checks.reviewedAt;
+            delete checks.reviewedBy;
+            reassignedInspection = json(checks);
+            item.returnInspection = reassignedInspection as Prisma.JsonValue;
+          }
+          if (
+            ['resolve_mismatch', 'resolve_customer'].includes(input.action) &&
+            customerServiceUserId !== freshActor.id &&
+            !can(freshActor, '*')
+          )
+            throw new ForbiddenException('僅此案件的承辦客服可確認顧客結果');
+        }
+        const documents = item as Item & {
+          repairInspection?: unknown;
+          repairReport?: unknown;
+        };
+        const workflow = repairWorkflow(item.repairWorkflow);
+        if (
+          [
+            'move',
+            'start_inspection',
+            'await_customer',
+            'start_repair',
+            'complete_repair',
+            'complete_refurbish',
+          ].includes(input.action) &&
+          isRepairWorkbenchItem(item) &&
+          physicalCustody(item) !== 'TECHNICIAN'
+        )
+          throw new ConflictException(
+            '實物目前在原廠或物流，須先由本人簽收返還',
+          );
+        if (input.action === 'resolve_customer' && workflow.csr)
+          throw new BadRequestException(
+            '請先本人接手客服交辦，再以檢修版本與顧客決定回覆',
+          );
+        let reviewedInspection: Prisma.InputJsonValue | undefined;
+        if (
+          input.action === 'resolve_customer' &&
+          (documents.repairInspection as { status?: string } | null)?.status ===
+            'SUBMITTED'
+        ) {
+          const inspection = validateInspectionSubmission(
+            documents.repairInspection,
+          );
+          reviewedInspection = json({
+            ...inspection,
+            review: {
+              inspectionRevision: inspection.revision,
+              actorId: freshActor.id,
+              name: freshActor.name,
+              confirmedAt: new Date().toISOString(),
+            },
+          });
+        }
+        if (['await_customer', 'start_repair'].includes(input.action)) {
+          const inspection = validateInspectionSubmission(
+            documents.repairInspection,
+          );
+          if (
+            input.action === 'start_repair' &&
+            !['REPAIR', 'REPLACE'].includes(inspection.data.plan)
+          )
+            throw new BadRequestException(
+              '送原廠或原件返還方案須由客服安排，不能直接開始維修',
+            );
+          if (input.action === 'start_repair')
+            validateInspectionRelease(documents.repairInspection);
+          if (
+            input.action === 'start_repair' &&
+            item.receipt.category === 'REPAIR'
+          ) {
+            currentCsrReview(item);
+            if (!workflow.csr || workflow.csr.decision !== 'APPROVE')
+              throw new ConflictException('顧客未同意目前檢修方案');
+            if (
+              !repairSource ||
+              repairSource.id !== item.receipt.sourceCaseId ||
+              repairSource.type !== item.receipt.category
+            )
+              throw new ConflictException('來源案件不符或尚未放行');
+            requireSourceConsent(
+              repairSource,
+              workflow.csr.quoteRevision,
+              true,
+              repairSourceBindingForItem(item, repairSource),
+            );
+          }
+        }
+        if (['complete_repair', 'complete_refurbish'].includes(input.action))
+          validateRepairCompletion(
+            documents.repairInspection,
+            documents.repairReport,
+          );
+        if (
+          input.action === 'complete_repair' &&
+          item.receipt.category === 'REPAIR'
+        ) {
+          if (
+            !repairAllowed ||
             !repairSource ||
             repairSource.id !== item.receipt.sourceCaseId ||
             repairSource.type !== item.receipt.category
           )
-            throw new ConflictException('來源案件不符或尚未放行');
-          requireSourceConsent(repairSource, workflow.csr.quoteRevision, true);
+            throw new ConflictException('目前售後同意與收款尚未放行');
+          if (item.receipt.category === 'REPAIR') {
+            currentCsrReview(item);
+            if (!workflow.csr || workflow.csr.decision !== 'APPROVE')
+              throw new ConflictException('顧客尚未同意此處置');
+            requireSourceConsent(
+              repairSource,
+              workflow.csr.quoteRevision,
+              true,
+              repairSourceBindingForItem(item, repairSource),
+            );
+          }
         }
-      }
-      if (['complete_repair', 'complete_refurbish'].includes(input.action))
-        validateRepairCompletion(
-          documents.repairInspection,
-          documents.repairReport,
+        const { changes, replaceTasks: initialReplaceTasks } = transition(
+          item,
+          input,
+          freshActor,
+          repairAllowed,
         );
-      if (requireCompletionRelease) {
-        if (
-          !repairAllowed ||
-          !repairSource ||
-          repairSource.id !== item.receipt.sourceCaseId ||
-          repairSource.type !== item.receipt.category
-        )
-          throw new ConflictException('目前售後同意與收款尚未放行');
-        if (workflow.csr) {
-          currentCsrReview(item);
-          if (workflow.csr.decision !== 'APPROVE')
-            throw new ConflictException('顧客尚未同意此處置');
-          requireSourceConsent(repairSource, workflow.csr.quoteRevision, true);
-        }
-      }
-      const { changes, replaceTasks } = transition(
-        item,
-        input,
-        freshActor,
-        repairAllowed,
-      );
-      if (input.action === 'dispatch') {
-        let reservation: unknown;
-        let product: unknown;
-        const release = workflow.release;
-        const replacement =
-          release?.purpose === 'REPLACED' ||
-          (item.repairReport as { data?: { outcome?: string } } | null)?.data
-            ?.outcome === 'REPLACED';
-        if (replacement && release?.stock?.reservationId) {
-          // Read the same formal OUT referenced by repair completion; no new stock posting.
-          await tx.$queryRaw(
-            Prisma.sql`SELECT id FROM after_sales_stock_reservations WHERE id=${release.stock.reservationId} AND entity_id=${item.entityId} FOR SHARE`,
-          );
-          const posted = await tx.afterSalesStockReservation.findFirst({
-            where: {
-              id: release.stock.reservationId,
-              entityId: item.entityId,
-              itemId: item.id,
-              status: 'POSTED',
-            },
-            include: {
-              unit: true,
-              outTransaction: {
-                select: {
-                  id: true,
-                  entityId: true,
-                  productId: true,
-                  warehouseId: true,
-                  direction: true,
-                  quantity: true,
-                  referenceType: true,
-                  referenceId: true,
+        let replaceTasks = initialReplaceTasks;
+        if (input.action === 'dispatch') {
+          let reservation: unknown;
+          if (
+            !dispatchSource ||
+            dispatchSource.id !== item.receipt.sourceCaseId ||
+            !dispatchSource.items.some(
+              (line) =>
+                line.id === (item.declared as { id?: string } | null)?.id,
+            )
+          )
+            throw new ConflictException('寄出品項與售後案件不符');
+          let product: unknown;
+          const release = workflow.release;
+          const replacement =
+            release?.purpose === 'REPLACED' ||
+            (item.repairReport as { data?: { outcome?: string } } | null)?.data
+              ?.outcome === 'REPLACED';
+          if (replacement && release?.stock?.reservationId) {
+            // Read the same formal OUT referenced by repair completion; no new stock posting.
+            await tx.$queryRaw(
+              Prisma.sql`SELECT id FROM after_sales_stock_reservations WHERE id=${release.stock.reservationId} AND entity_id=${item.entityId} FOR SHARE`,
+            );
+            const posted = await tx.afterSalesStockReservation.findFirst({
+              where: {
+                id: release.stock.reservationId,
+                entityId: item.entityId,
+                itemId: item.id,
+                status: 'POSTED',
+              },
+              include: {
+                unit: true,
+                outTransaction: {
+                  select: {
+                    id: true,
+                    entityId: true,
+                    productId: true,
+                    warehouseId: true,
+                    direction: true,
+                    quantity: true,
+                    referenceType: true,
+                    referenceId: true,
+                  },
                 },
               },
-            },
-          });
-          reservation = posted;
-          if (posted)
-            product = await tx.product.findFirst({
-              where: { id: posted.unit.productId, entityId: item.entityId },
-              select: { id: true, entityId: true, name: true, sku: true },
             });
+            reservation = posted;
+            if (posted)
+              product = await tx.product.findFirst({
+                where: { id: posted.unit.productId, entityId: item.entityId },
+                select: { id: true, entityId: true, name: true, sku: true },
+              });
+          }
+          const physicalItem = dispatchedPhysicalItem(
+            item,
+            reservation,
+            product,
+          );
+          const shipment: OutboundShipment = {
+            schema: 1,
+            status: 'HANDED_TO_CARRIER',
+            entityId: item.entityId,
+            itemId: item.id,
+            sourceCaseId: item.receipt.sourceCaseId,
+            requestId: input.requestId,
+            fromVersion: item.version,
+            version: item.version + 1,
+            carrier: dispatchText(input.carrier, '寄回物流公司'),
+            trackingNumber: dispatchText(input.trackingNumber, '寄回物流單號'),
+            dispatchedAt: new Date().toISOString(),
+            dispatchedById: freshActor.id,
+            dispatchedByName: freshActor.name,
+            dispatchedByEmployeeId: dispatchEmployeeId!,
+            note: input.note?.trim() || null,
+            sourceVersion: dispatchSource.version,
+            physicalItem,
+            sourceSync: {
+              status: 'PENDING',
+              eventId: randomUUID(),
+            },
+          };
+          changes.repairWorkflow = json({
+            ...workflow,
+            outboundShipment: shipment,
+          });
         }
-        const physicalItem = dispatchedPhysicalItem(item, reservation, product);
-        const shipment: OutboundShipment = {
-          schema: 1,
-          status: 'HANDED_TO_CARRIER',
-          entityId: item.entityId,
-          itemId: item.id,
-          sourceCaseId: item.receipt.sourceCaseId!,
-          requestId: input.requestId,
-          fromVersion: item.version,
-          version: item.version + 1,
-          carrier: dispatchText(input.carrier, '寄回物流公司'),
-          trackingNumber: dispatchText(input.trackingNumber, '寄回物流單號'),
-          dispatchedAt: new Date().toISOString(),
-          dispatchedById: freshActor.id,
-          dispatchedByName: freshActor.name,
-          dispatchedByEmployeeId: dispatchEmployeeId!,
-          note: input.note?.trim() || null,
-          physicalItem,
-          sourceSync: {
-            status: 'PENDING_COMPATIBILITY',
-            reason: 'DISPATCH_CONSUMER_NOT_CONFIGURED',
-          },
-        };
-        changes.repairWorkflow = json({
-          ...workflow,
-          outboundShipment: shipment,
-        });
-      }
-      if (input.action === 'await_customer') {
-        changes.repairWorkflow = json(
-          sentCustomerWorkflow(
+        let proposal: RepairProposalEvent | undefined;
+        if (input.action === 'await_customer') {
+          const now = new Date().toISOString();
+          const sent = sentCustomerWorkflow(
             item,
             freshActor,
-            new Date().toISOString(),
+            now,
             latestAssignee?.releaseInfo?.quoteRevision || null,
-          ),
-        );
-        changes.nextUserId = null;
-      }
-      if (['complete_repair', 'complete_refurbish'].includes(input.action)) {
-        const report = validateRepairCompletion(
-          documents.repairInspection,
-          documents.repairReport,
-        );
-        let stockProof:
-          | Awaited<ReturnType<AfterSalesStockService['consumeForRepair']>>
-          | undefined;
-        if (report.data.outcome === 'REPLACED') {
-          if (
-            item.serialNumber &&
-            report.data.replacementSerial?.trim() === item.serialNumber.trim()
-          )
-            throw new BadRequestException('替換件序號不可與原件相同');
-          if (input.action !== 'complete_repair')
-            throw new BadRequestException('整新作業不可用換機出庫代替');
-          if (!this.stock)
-            throw new ServiceUnavailableException('售後換機正式庫存尚未設定');
-          stockProof = await this.stock.consumeForRepair(
-            tx,
-            item.entityId,
-            item,
-            freshActor.id,
-            input.requestId,
-            report.data.replacementSerial,
-            report.data.replacementSku,
-            report.data.replacementCondition,
           );
-          if (
-            stockProof.status !== 'POSTED' ||
-            stockProof.entityId !== item.entityId ||
-            stockProof.itemId !== item.id ||
-            stockProof.quantity !== 1 ||
-            !stockProof.postingId
-          )
-            throw new ConflictException('正式換機庫存出庫證明不符，不能放行');
+          if (item.receipt.category === 'REPAIR') {
+            if (
+              !latestAssignee ||
+              latestAssignee.id !== item.receipt.sourceCaseId
+            )
+              throw new ConflictException('來源案件不符，不能送出維修提案');
+            proposal = buildRepairProposalEvent({
+              eventId: randomUUID(),
+              occurredAt: now,
+              actor: freshActor,
+              item: {
+                ...item,
+                status: 'WAITING_CUSTOMER',
+                version: item.version + 1,
+                repairWorkflow: sent,
+              },
+              source: latestAssignee,
+            });
+            changes.repairWorkflow = json({
+              ...sent,
+              csr: {
+                ...sent.csr,
+                proposalHash: proposal.proposal.proposalHash,
+              },
+            });
+          } else changes.repairWorkflow = json(sent);
+          changes.nextUserId = null;
         }
-        changes.repairWorkflow = json({
-          ...workflow,
-          release: {
-            purpose: report.data.outcome,
-            inspectionRevision: report.inspectionRevision,
-            releasedAt: new Date().toISOString(),
-            releasedBy: freshActor.id,
-            note: input.note,
-            ...(stockProof ? { stock: stockProof } : {}),
-          },
-        });
-      }
-      if (reassignedInspection && changes.returnInspection === undefined)
-        changes.returnInspection = reassignedInspection;
-      if (reviewedInspection) changes.repairInspection = reviewedInspection;
-      if (input.action === 'identify') {
-        if (
-          (await tx.mailroomItem.count({
-            where: { receiptId: item.receiptId },
-          })) !== 1
-        )
-          throw new BadRequestException(
-            '此待辨識收件不是逐件登記，需先由管理員核對',
+        if (['complete_repair', 'complete_refurbish'].includes(input.action)) {
+          const report = validateRepairCompletion(
+            documents.repairInspection,
+            documents.repairReport,
           );
-        if (!identifiedSource && (input.sourceCaseId || input.sourceItemId))
-          throw new BadRequestException('一般收件不可掛售後案件');
-        await tx.mailroomReceipt.update({
-          where: { id: item.receiptId },
+          let stockProof:
+            | Awaited<ReturnType<AfterSalesStockService['consumeForRepair']>>
+            | undefined;
+          if (report.data.outcome === 'REPLACED') {
+            if (
+              item.serialNumber &&
+              report.data.replacementSerial?.trim() === item.serialNumber.trim()
+            )
+              throw new BadRequestException('替換件序號不可與原件相同');
+            if (input.action !== 'complete_repair')
+              throw new BadRequestException('整新作業不可用換機出庫代替');
+            if (!this.stock)
+              throw new ServiceUnavailableException('售後換機正式庫存尚未設定');
+            stockProof = await this.stock.consumeForRepair(
+              tx,
+              item.entityId,
+              item,
+              freshActor.id,
+              input.requestId,
+              report.data.replacementSerial,
+              report.data.replacementSku,
+              report.data.replacementCondition,
+            );
+            if (
+              stockProof.status !== 'POSTED' ||
+              stockProof.entityId !== item.entityId ||
+              stockProof.itemId !== item.id ||
+              stockProof.quantity !== 1 ||
+              !stockProof.postingId
+            )
+              throw new ConflictException('正式換機庫存出庫證明不符，不能放行');
+          }
+          changes.repairWorkflow = json({
+            ...workflow,
+            release: {
+              purpose: report.data.outcome,
+              inspectionRevision: report.inspectionRevision,
+              releasedAt: new Date().toISOString(),
+              releasedBy: freshActor.id,
+              note: input.note,
+              ...(stockProof ? { stock: stockProof } : {}),
+            },
+          });
+        }
+        if (reassignedInspection && changes.returnInspection === undefined)
+          changes.returnInspection = reassignedInspection;
+        if (reviewedInspection) changes.repairInspection = reviewedInspection;
+        if (input.action === 'identify') {
+          if (
+            (await tx.mailroomItem.count({
+              where: { receiptId: item.receiptId },
+            })) !== 1
+          )
+            throw new BadRequestException(
+              '此待辨識收件不是逐件登記，需先由管理員核對',
+            );
+          if (!identifiedSource && (input.sourceCaseId || input.sourceItemId))
+            throw new BadRequestException('一般收件不可掛售後案件');
+          await tx.mailroomReceipt.update({
+            where: { id: item.receiptId },
+            data: {
+              category: input.targetCategory!,
+              sourceCaseId: identifiedSource?.id || null,
+              sourceNumber: identifiedSource?.number || null,
+              sourceSnapshot: identifiedSource
+                ? json(identifiedSource)
+                : Prisma.DbNull,
+            },
+          });
+          if (identifiedSource)
+            changes.declared = json(
+              identifiedSource.items.find((x) => x.id === input.sourceItemId),
+            );
+        }
+        if (input.nextUserId) {
+          const status =
+            typeof changes.status === 'string' ? changes.status : item.status;
+          await this.target(
+            input.nextUserId,
+            item.entityId,
+            ['WAITING_REPAIR_ACCEPTANCE', 'PENDING_REFURBISH'].includes(status)
+              ? 'repair_workbench:update'
+              : status === 'WAITING_RETURN_ACCEPTANCE'
+                ? 'mailroom:update'
+                : undefined,
+          );
+        }
+        if (
+          ['inspect', 'grade'].includes(input.action) &&
+          input.matchResult === 'MATCH' &&
+          item.matchResult !== 'CONFIRMED_ACTUAL'
+        ) {
+          const declared = item.declared as {
+            sku?: string;
+            serialNumber?: string;
+          } | null;
+          if (
+            (declared?.sku &&
+              declared.sku !==
+                ((input.action === 'grade' ? item.sku : input.sku)?.trim() ||
+                  '')) ||
+            (declared?.serialNumber &&
+              declared.serialNumber !==
+                ((input.action === 'grade'
+                  ? item.serialNumber
+                  : input.serialNumber
+                )?.trim() || ''))
+          )
+            throw new BadRequestException(
+              '實收 SKU／SN 與申報不一致，請列為品項不符',
+            );
+        }
+        if (input.action === 'resolve_mismatch') {
+          if (!productDecision || !productDecisionSource)
+            throw new ConflictException('缺少本件實收產品的顧客確認');
+          changes.repairWorkflow = json({
+            ...repairWorkflow(changes.repairWorkflow || item.repairWorkflow),
+            productDecision,
+          });
+          await persistProductMismatchFact(
+            tx,
+            item,
+            productDecisionSource,
+            productDecision,
+            freshActor.id,
+          );
+        } else if (item.matchResult === 'CONFIRMED_ACTUAL') {
+          const candidate = { ...item, ...changes } as Item;
+          if (await voidProductMismatchFactsForIdentity(tx, item, candidate)) {
+            if (
+              [
+                'stock',
+                'complete_repair',
+                'complete_refurbish',
+                'dispatch',
+              ].includes(input.action)
+            )
+              throw new ConflictException(
+                '實收品項或照片已變更，請先重新取得顧客產品確認',
+              );
+            const nextWorkflow = repairWorkflow(
+              changes.repairWorkflow || item.repairWorkflow,
+            ) as unknown as Record<string, unknown>;
+            delete nextWorkflow.productDecision;
+            changes.repairWorkflow = json(nextWorkflow);
+            changes.matchResult = 'MISMATCH';
+            changes.status = 'MISMATCH';
+            changes.nextUserId = null;
+            replaceTasks = true;
+          }
+        }
+        const updated = await tx.mailroomItem.update({
+          where: { id },
           data: {
-            category: input.targetCategory!,
-            sourceCaseId: identifiedSource?.id || null,
-            sourceNumber: identifiedSource?.number || null,
-            sourceSnapshot: identifiedSource
-              ? json(identifiedSource)
-              : Prisma.DbNull,
-          },
+            ...changes,
+            ...receiptLinkChanges(item, changes, input.action),
+            version: { increment: 1 },
+          } as Prisma.MailroomItemUpdateInput,
+          include: withReceipt,
         });
-        if (identifiedSource)
-          changes.declared = json(
-            identifiedSource.items.find((x) => x.id === input.sourceItemId),
-          );
-      }
-      if (input.nextUserId) {
-        const status =
-          typeof changes.status === 'string' ? changes.status : item.status;
-        await this.target(
-          input.nextUserId,
-          item.entityId,
-          ['WAITING_REPAIR_ACCEPTANCE', 'PENDING_REFURBISH'].includes(status)
-            ? 'repair_workbench:update'
-            : status === 'WAITING_RETURN_ACCEPTANCE'
-              ? 'mailroom:update'
-              : undefined,
+        const notifications = await this.record(
+          tx,
+          freshActor,
+          updated,
+          input.action,
+          input.requestId,
+          hash,
+          item.status,
+          input.note?.trim(),
+          replaceTasks,
+          input.evidence !== undefined,
+          clerk
+            ? {
+                clerkId: clerk.id,
+                clerkName: clerk.name,
+                signerId: freshActor.id,
+              }
+            : undefined,
         );
-      }
-      if (
-        ['inspect', 'grade'].includes(input.action) &&
-        input.matchResult === 'MATCH' &&
-        item.matchResult !== 'CONFIRMED_ACTUAL'
-      ) {
-        const declared = item.declared as {
-          sku?: string;
-          serialNumber?: string;
-        } | null;
-        if (
-          (declared?.sku &&
-            declared.sku !==
-              ((input.action === 'grade' ? item.sku : input.sku)?.trim() ||
-                '')) ||
-          (declared?.serialNumber &&
-            declared.serialNumber !==
-              ((input.action === 'grade'
-                ? item.serialNumber
-                : input.serialNumber
-              )?.trim() || ''))
-        )
-          throw new BadRequestException(
-            '實收 SKU／SN 與申報不一致，請列為品項不符',
-          );
-      }
-      const updated = await tx.mailroomItem.update({
-        where: { id },
-        data: {
-          ...changes,
-          ...receiptLinkChanges(item, changes, input.action),
-          version: { increment: 1 },
-        } as Prisma.MailroomItemUpdateInput,
-        include: withReceipt,
-      });
-      const notifications = await this.record(
-        tx,
-        freshActor,
-        updated,
-        input.action,
-        input.requestId,
-        hash,
-        item.status,
-        input.note?.trim(),
-        replaceTasks,
-        input.evidence !== undefined,
-        clerk
-          ? {
-              clerkId: clerk.id,
-              clerkName: clerk.name,
-              signerId: freshActor.id,
-            }
-          : undefined,
-      );
-      return { duplicate: false, notifications };
-    });
-    // Dispatch is persisted locally while external consumers remain unsupported.
+        if (proposal)
+          await tx.mailroomDelivery.createMany({
+            data: [
+              {
+                eventId: proposal.eventId,
+                entityId: item.entityId,
+                itemId: item.id,
+                target: 'AFTER_SALES',
+                payload: json(proposal),
+              },
+            ],
+          });
+        return { duplicate: false, notifications };
+      },
+      { timeout: 20000 },
+    );
+    // No customer notice is sent here; the saved Source event is retried independently.
     if (input.action !== 'dispatch') this.publish(result.notifications);
     return { id, duplicate: result.duplicate };
   }
@@ -1843,21 +2156,27 @@ export class MailroomService {
       orderBy: { createdAt: 'asc' },
       take: 200,
     });
+    const dispatchDeliveries = await this.dispatchDeliveries(items);
     return {
       sourceCaseId,
       items: items.map((item) => ({
         itemId: item.id,
+        receiptId: item.receiptId,
         version: item.version,
         category: item.receipt.category,
         status: item.status,
         statusLabel: repairStatusLabel(item),
         releasePurpose:
           repairWorkflow(item.repairWorkflow).release?.purpose || null,
-        outboundShipment: outboundShipment(item.repairWorkflow),
+        outboundShipment: dispatchDeliveryProjection(
+          item.repairWorkflow,
+          dispatchDeliveries.filter((delivery) => delivery.itemId === item.id),
+        ),
         physicalCustody: isRepairWorkbenchItem(item)
           ? physicalCustody(item)
           : undefined,
         declared: item.declared,
+        productId: item.productId,
         productName: item.productName,
         sku: item.sku,
         serialNumber: item.serialNumber,
@@ -1866,6 +2185,10 @@ export class MailroomService {
         grade: item.grade,
         disposition: item.disposition,
         conditionNote: item.conditionNote,
+        quantity: 1,
+        evidenceCount: Array.isArray(item.evidence) ? item.evidence.length : 0,
+        evidenceDigest: fingerprint(item.evidence || []),
+        inspectionRef: inspectionReference(item.repairInspection),
         receivedAt: item.receipt.receivedAt,
         updatedAt: item.updatedAt,
         customerDecisionRequired: ['MISMATCH', 'WAITING_CUSTOMER'].includes(
@@ -1875,5 +2198,30 @@ export class MailroomService {
         refundExecuted: false,
       })),
     };
+  }
+  private async dispatchDeliveries(items: Item[]) {
+    const eventIds = items.flatMap((item) => {
+      const shipment = outboundShipment(item.repairWorkflow);
+      return shipment && 'eventId' in shipment.sourceSync
+        ? [shipment.sourceSync.eventId]
+        : [];
+    });
+    return eventIds.length
+      ? this.prisma.mailroomDelivery.findMany({
+          where: {
+            eventId: { in: eventIds },
+            itemId: { in: items.map((item) => item.id) },
+            entityId: { in: [...new Set(items.map((item) => item.entityId))] },
+            target: 'AFTER_SALES',
+          },
+          select: {
+            eventId: true,
+            itemId: true,
+            target: true,
+            status: true,
+            lastError: true,
+          },
+        })
+      : [];
   }
 }

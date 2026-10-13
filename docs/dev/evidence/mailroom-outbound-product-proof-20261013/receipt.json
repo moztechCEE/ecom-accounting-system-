@@ -1,0 +1,199 @@
+{
+  "at": "2026-10-13T06:42:10.937699+00:00",
+  "base": "d3b7ed2c654de1605b6051db75c74789b3a1c068",
+  "supplierRepair": "50ee4618f89e8fb3c5612d838b4c873313b5431d",
+  "parent": "5c2982b6e5b633df01a3278f81f630360a21cf64",
+  "execution": "Root final affected runner, offline mock boundaries; not a DEV business acceptance",
+  "backend": {
+    "suites": 14,
+    "passed": 495,
+    "failed": 0,
+    "pending": 0,
+    "build": "PASS with private schema plus owned fragment",
+    "lintErrors": 0,
+    "existingWarnings": 2
+  },
+  "frontend": {
+    "build": "PASS",
+    "modelTests": 7,
+    "outboundDomTotal": 6,
+    "outboundDomChildScenarios": 5,
+    "syntheticAxiosPosts": 7,
+    "externalRequests": 0,
+    "realSourceErpDbCommands": 0,
+    "lintErrors": 0,
+    "existingWarnings": 3
+  },
+  "sharedInputSurface": {
+    "total": 7,
+    "childScenarios": 6,
+    "externalRequests": 0,
+    "networkWrites": 0,
+    "styleChange": false,
+    "newDeployment": false,
+    "currentDevCssSha256": "34a1932a4b9de701020a7779ba835f93bbd5eec48becfadd6eefaefd2fa34b86"
+  },
+  "sourceFileHashes": [
+    {
+      "path": "backend/prisma/fragments/mailroom-outbound.prisma",
+      "sha256": "412eab7f2c2c1b82d45c688475fc73927755ddca9850cbc75eada7de703ef2a0"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-outbound-stock.service.spec.ts",
+      "sha256": "6789ffdb2fd3be98f609634d80ceb240599295836820b8c4c9d2f6f4b5b1367f"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-outbound-stock.service.ts",
+      "sha256": "d620ec735b6fb551357be8946a470ff1ddef44868db0ba974f4e4001ed359ab0"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-outbound.contract.spec.ts",
+      "sha256": "275199d866965eaa4f7b44f288e023af3f2795133fc69dd5c8d0935b4fd82e51"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-outbound.contract.ts",
+      "sha256": "2389912cd863fec36e5c5dea98bea50b172769ec3d0c40507b0e329e389eb6b3"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-outbound.controller.spec.ts",
+      "sha256": "087b6aaca38f53351e4443707a0043bb79644ad707fa3cdf7fa077854f6504b0"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-outbound.controller.ts",
+      "sha256": "caca3749da61f183f80aa532c57caad809502afd26cb8eacf0c5fd5b843004ad"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-outbound.dto.ts",
+      "sha256": "e8b7510321cd4a4d0cb531f47829bdbedefb5d8d0185ee7d49fcefbd49ec0040"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-outbound.service.spec.ts",
+      "sha256": "62c08a71266051baacdc14443f72ab751075e9be23fd3c954039c409f2d5b62f"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-outbound.service.ts",
+      "sha256": "7623cb39fdeb1208fab8de1ee40dcf80fb2ba366830a46c10b05d0b2b197d334"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-product-decision.contract.spec.ts",
+      "sha256": "eca474d85c1f1f19c53a1065a9195b5b0f81a7acf33cbb4e019ccd17ced1c157"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-product-decision.contract.ts",
+      "sha256": "d993d96b70315a19a23451fa6f6562800e81df09c5db74a573931433b244b573"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-product-decision.service.spec.ts",
+      "sha256": "05e091b0677a19a89e91aab7a54bdafc2df3b51f196154ea4585a18667acaeee"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-product-facts.service.spec.ts",
+      "sha256": "2dc867d463cdd2d23ef4e29fa24b3e8d28cd101ed0a1999bb43dff250ee93ebb"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-product-facts.service.ts",
+      "sha256": "24ff16df04cbdefb9130ab5394082b9f1d5cf75c03e84ace05c844da3c48c3d3"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-repair-closure-hooks.service.spec.ts",
+      "sha256": "6c13bd7d13eb385cae3a13f3e00b7c50043680b580b1c2d3b52d25952336a2de"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-sync.service.ts",
+      "sha256": "021192154a7d4f165c4810218572ab2939b0cc61b4c786407a5f82221c04500f"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-workflow-event.contract.spec.ts",
+      "sha256": "6580418b60486412276c22ef8d59bfc3004305ad0f56186427ea438b808a9901"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-workflow-event.contract.ts",
+      "sha256": "2cfaf47281c2056acee4cd4f33547964622c87c415a1d24bc8fbf1f756933b95"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom.contract.ts",
+      "sha256": "71c8e5678060af1f63698858feef69ca80bc51971d867006702518640f836393"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom.service.ts",
+      "sha256": "a77d0d4a7949a50f5fe3eecaaaf0d79697180ef54ca3675f0f394dea690a2e5d"
+    }
+  ],
+  "suiteResults": [
+    {
+      "file": "modules/mailroom/mailroom-dispatch.service.spec.ts",
+      "status": "passed",
+      "assertions": 43
+    },
+    {
+      "file": "modules/mailroom/mailroom-product-decision.service.spec.ts",
+      "status": "passed",
+      "assertions": 40
+    },
+    {
+      "file": "modules/mailroom/mailroom-product-facts.service.spec.ts",
+      "status": "passed",
+      "assertions": 41
+    },
+    {
+      "file": "modules/mailroom/mailroom-outbound.service.spec.ts",
+      "status": "passed",
+      "assertions": 40
+    },
+    {
+      "file": "modules/mailroom/mailroom-repair-access.service.spec.ts",
+      "status": "passed",
+      "assertions": 33
+    },
+    {
+      "file": "modules/mailroom/mailroom-repair-closure-hooks.service.spec.ts",
+      "status": "passed",
+      "assertions": 28
+    },
+    {
+      "file": "modules/mailroom/mailroom-outbound.controller.spec.ts",
+      "status": "passed",
+      "assertions": 14
+    },
+    {
+      "file": "modules/mailroom/mailroom-outbound-stock.service.spec.ts",
+      "status": "passed",
+      "assertions": 66
+    },
+    {
+      "file": "modules/mailroom/mailroom-sync.service.spec.ts",
+      "status": "passed",
+      "assertions": 24
+    },
+    {
+      "file": "modules/integration/after-sales/after-sales-stock.qualify-lock.spec.ts",
+      "status": "passed",
+      "assertions": 10
+    },
+    {
+      "file": "modules/mailroom/mailroom-product-decision.contract.spec.ts",
+      "status": "passed",
+      "assertions": 79
+    },
+    {
+      "file": "modules/integration/after-sales/after-sales-stock.service.spec.ts",
+      "status": "passed",
+      "assertions": 10
+    },
+    {
+      "file": "modules/mailroom/mailroom-workflow-event.contract.spec.ts",
+      "status": "passed",
+      "assertions": 50
+    },
+    {
+      "file": "modules/mailroom/mailroom-outbound.contract.spec.ts",
+      "status": "passed",
+      "assertions": 17
+    }
+  ],
+  "dbWrites": 0,
+  "deployments": 0,
+  "providerEffects": 0,
+  "sharedSchemaModified": false,
+  "limitation": "Central must append fragment into current schema, review Claw guides, integrate Source consumers and validate fixed merge in DEV. Mock transaction races do not prove PostgreSQL or cross-database atomicity. No KPI scoring or Source proof-revocation consumer."
+}

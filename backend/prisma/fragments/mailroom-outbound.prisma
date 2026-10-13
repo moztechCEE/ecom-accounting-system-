@@ -1,0 +1,77 @@
+// Append these models to the central schema. Existing custody/stock models stay intact.
+model MailroomOutboundOrder {
+  id               String   @id @default(uuid())
+  entityId         String   @map("entity_id")
+  sourceCaseId     String   @map("source_case_id")
+  sourceNumber     String   @map("source_number")
+  caseType         String   @map("case_type")
+  sourceVersion    String   @map("source_version")
+  sourceSnapshot   Json     @map("source_snapshot")
+  items            Json
+  status           String   @default("PENDING_PICK")
+  version          Int      @default(1)
+  location         String?
+  custodianId      String?  @map("custodian_id")
+  nextUserId       String?  @map("next_user_id")
+  preparedById     String?  @map("prepared_by_id")
+  stockRequestId   String?  @map("stock_request_id")
+  outboundShipment Json?    @map("outbound_shipment")
+  createdById      String   @map("created_by_id")
+  requestId        String   @map("request_id")
+  requestHash      String   @map("request_hash")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  actions          MailroomOutboundAction[]
+
+  @@unique([entityId, createdById, requestId])
+  @@index([entityId, status, createdAt])
+  @@index([entityId, sourceCaseId])
+  @@index([nextUserId, status])
+  @@map("mailroom_outbound_orders")
+}
+
+model MailroomOutboundAction {
+  id          String   @id @default(uuid())
+  entityId    String   @map("entity_id")
+  orderId     String   @map("order_id")
+  order       MailroomOutboundOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  actorId     String   @map("actor_id")
+  requestId   String   @map("request_id")
+  requestHash String   @map("request_hash")
+  action      String
+  fromStatus  String?  @map("from_status")
+  toStatus    String   @map("to_status")
+  version     Int
+  snapshot    Json
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([entityId, actorId, requestId])
+  @@unique([orderId, version])
+  @@map("mailroom_outbound_actions")
+}
+
+// Evidence facts only; company performance scores are managed separately.
+model MailroomProductMismatchFact {
+  id                      String   @id @default(uuid())
+  entityId                String   @map("entity_id")
+  itemId                  String   @map("item_id")
+  receiptId               String   @map("receipt_id")
+  sourceCaseId            String   @map("source_case_id")
+  identityHash            String   @map("identity_hash")
+  proofId                 String   @map("proof_id")
+  sourceVersion           String   @map("source_version")
+  caseBrand               String   @map("case_brand")
+  firstReviewErpActorId    String?  @map("first_review_erp_actor_id")
+  reviewedByErpActorId     String   @map("reviewed_by_erp_actor_id")
+  status                  String   @default("ACTIVE")
+  proofSnapshot           Json     @map("proof_snapshot")
+  voidedAt                DateTime? @map("voided_at")
+  voidReason              String?  @map("void_reason")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@unique([entityId, itemId, identityHash], map: "mailroom_product_mismatch_identity_key")
+  @@index([entityId, sourceCaseId, status], map: "mailroom_product_mismatch_source_status_idx")
+  @@index([firstReviewErpActorId, status], map: "mailroom_product_mismatch_first_reviewer_idx")
+  @@map("mailroom_product_mismatch_facts")
+}

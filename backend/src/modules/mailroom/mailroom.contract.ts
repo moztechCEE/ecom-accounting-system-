@@ -105,16 +105,33 @@ export type SourceCase = {
   number: string;
   type: 'REPAIR' | 'RETURN';
   brand: string;
+  caseBrand?: 'MOZTECH' | 'BONSON' | 'WANBO' | null;
+  firstReviewErpActorId?: string | null;
+  customerProductConfirmations?: unknown;
   version: string;
   status: string;
   repairAllowed: boolean;
   releaseInfo?: {
+    customerProductConfirmations?: unknown;
     quoteRevision: number;
     customerApprovedQuoteRevision: number | null;
     customerApprovedAt: string | null;
     amount: number | null;
     currency: string;
     confirmedPaymentQuoteRevision: number | null;
+    invoiceRequired?: boolean;
+    invoiceStatus?: string;
+    invoiceSatisfied?: boolean;
+    invoiceQuoteRevision?: number | null;
+    quotePlanVersion?: number | null;
+    quotePlanHash?: string | null;
+    quoteBindings?: {
+      itemId: string;
+      planVersion: number;
+      planHash: string;
+      proposalHash: string;
+      quoteRevision: number;
+    }[];
   } | null;
   statusLabel?: string;
   customerLabel: string;
