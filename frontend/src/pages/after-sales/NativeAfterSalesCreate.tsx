@@ -7,6 +7,8 @@ import type { NativeCaseType, NativeCreateValues } from './native-workbench-mode
 import { nativeCreateInput, NATIVE_CASE_TYPES } from './native-workbench-model'
 import { clearPendingRegistration, PendingRegistrationError, readPendingRegistration, registrationTokenMatchesActor, savePendingRegistration, withPendingRegistrationLock } from './pending-registration'
 import type { PendingRegistration, RegistrationScope } from './pending-registration'
+import type { ApplicationDraft } from './native-application-model'
+import { operationRequestIntent } from './operation-request-intent'
 
 type Props = {
   entityId: string; options?: NativeOptions; optionsError?: string;
@@ -14,6 +16,7 @@ type Props = {
   onChangeType: () => Promise<boolean>;
   actorId: string; resumeAttempt?: PendingRegistration; onPendingChange: (pending: boolean) => void;
   onOpenSource: (section: string, caseId?: string) => void;
+  applicationDraft?: ApplicationDraft;
 }
 type Values = NativeCreateValues
 
@@ -22,8 +25,8 @@ function errorText(error: unknown) {
   return typeof message === 'string' ? message : Array.isArray(message) ? message.join('；') : '案件未能確認建立，請保留資料並重試'
 }
 
-export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttempt, options, optionsError, onDirtyChange, onCancel, onSaved, onOpenSource, onChangeType, onPendingChange }: Props) {
-  const [selectedType, setSelectedType] = useState<NativeCaseType | undefined>(resumeAttempt?.request.payload.type)
+export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttempt, applicationDraft, options, optionsError, onDirtyChange, onCancel, onSaved, onOpenSource, onChangeType, onPendingChange }: Props) {
+  const [selectedType, setSelectedType] = useState<NativeCaseType | undefined>(resumeAttempt?.request.payload.type || applicationDraft?.type)
   const [form] = Form.useForm<Values>()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState(resumeAttempt ? '案件建立結果尚未確認，請重試確認' : '')
@@ -44,6 +47,7 @@ export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttemp
     form.setFieldsValue({ brand: pending.request.brand, customerKind: pending.request.customerKind, sourceChannel: payload.sourceChannel, contactName: payload.contactName, contactPhone: payload.contactPhone, contactAddress: payload.contactAddress, contactEmail: payload.contactEmail, referenceNumber: payload.referenceNumber, internalNote: payload.internalNote, items: payload.items, serialNumber: String(detail.serialNumber || ''), reshipmentReason: String(detail.reshipmentReason || ''), lossCategory: String(detail.lossCategory || ''), reasonCategory: String(detail.reasonCategory || ''), refundReason: String(detail.refundReason || ''), reason: String(detail.missingContents || detail.faultDescription || detail.reasonNote || detail.issueDescription || payload.internalNote || '') })
   }
   useEffect(() => { if (resumeAttempt) restore(resumeAttempt) }, [resumeAttempt?.requestId])
+  useEffect(() => { if (applicationDraft && !resumeAttempt) { form.setFieldsValue({ ...applicationDraft.values, sourceChannel: applicationDraft.values.sourceChannel || (options?.sourceChannels.length === 1 ? options.sourceChannels[0].value : '') }); onDirtyChange(true) } }, [applicationDraft?.applicationId, resumeAttempt?.requestId, options?.sourceChannels])
   async function create(values: Values) {
     if (!selectedType || !unknownResult && !options?.createTypes.includes(selectedType) || running.current || !entityId || !actorId) return
     running.current = true; setBusy(true); setFailure(''); onPendingChange(true); onDirtyChange(true)
@@ -59,11 +63,12 @@ export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttemp
         assertCurrent()
         const storage = window.localStorage, prior = readPendingRegistration(storage, scope)
         if (prior && (!operation.current || prior.requestId !== operation.current.requestId)) throw new PendingRegistrationError('CONFLICT', '已有待確認案件，請先重試確認', prior)
-        const attempt = unknownResult && operation.current ? operation.current : { schema: 'corely.doa.pending-registration.v1' as const, ...scope, requestId: crypto.randomUUID(), createdAt: new Date().toISOString(), request: { brand: values.brand, customerKind: values.customerKind, payload: nativeCreateInput(selectedType, values) } }
+        const attempt = unknownResult && operation.current ? operation.current : { schema: 'corely.doa.pending-registration.v1' as const, ...scope, requestId: crypto.randomUUID(), createdAt: new Date().toISOString(), request: { brand: values.brand, customerKind: values.customerKind, payload: nativeCreateInput(selectedType, values), ...(applicationDraft ? { verifiedApplicationRef: applicationDraft.verifiedApplicationRef } : {}) } }
         savePendingRegistration(storage, scope, attempt)
         operation.current = attempt; onPendingChange(true); onDirtyChange(true)
         assertCurrent()
         sent = true
+        operationRequestIntent('after_sales.create.request', attempt.requestId)
         const result = await nativeAfterSales.create(attempt.entityId, { requestId: attempt.requestId, ...attempt.request }, { signal: abort.signal, token, expectedActorId: actorId })
         assertCurrent()
         clearPendingRegistration(storage, scope, attempt.requestId)
@@ -92,28 +97,28 @@ export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttemp
     {optionsError && <Alert type="error" showIcon message={optionsError} />}
     {!selectedType ? <>
       <Typography.Title level={3}>新增案件</Typography.Title>
-      <div className="native-after-sales-type-grid">{NATIVE_CASE_TYPES.filter(entry => options?.createTypes.includes(entry.value)).map(entry => <button data-operation-action="erp.nativeaftersalescreate.action.fef6ffb611df" className="native-after-sales-type-choice" type="button" key={entry.value} onClick={() => { setSelectedType(entry.value); form.resetFields(); setFailure('') }}><strong>{entry.label}</strong><span>{entry.description}</span></button>)}</div>
+      <div className="native-after-sales-type-grid">{NATIVE_CASE_TYPES.filter(entry => options?.createTypes.includes(entry.value)).map(entry => <button data-operation-action={`after_sales.type.${entry.value.toLowerCase()}`} className="native-after-sales-type-choice" type="button" key={entry.value} onClick={() => { setSelectedType(entry.value); form.resetFields(); setFailure('') }}><strong>{entry.label}</strong><span>{entry.description}</span></button>)}</div>
       {options && options.createTypes.length === 0 && <Alert type="warning" showIcon message="目前帳號沒有新增案件權限" />}
     </> : <>
-      <div className="native-after-sales-detail-heading"><Typography.Title level={3}>{type?.label}</Typography.Title><Button data-operation-action="erp.nativeaftersalescreate.action.0711ab3ab77d" onClick={() => void (async () => { if (!await onChangeType()) return; setSelectedType(undefined); setFailure('') })()} disabled={busy || unknownResult}>變更類型</Button></div>
+      <div className="native-after-sales-detail-heading"><Typography.Title level={3}>{type?.label}</Typography.Title><Button data-operation-action="erp.nativeaftersalescreate.action.0711ab3ab77d" onClick={() => void (async () => { if (!await onChangeType()) return; setSelectedType(undefined); setFailure('') })()} disabled={busy || unknownResult || !!applicationDraft}>變更類型</Button></div>
       {failure && <Alert type="error" showIcon message={failure} style={{ marginBottom: 16 }} />}
       <Form className="native-after-sales-create-form" form={form} layout="vertical" disabled={busy || unknownResult} initialValues={{ customerKind: 'TO_C', items: [{ quantity: 1 }] }} onValuesChange={() => onDirtyChange(true)} onFinish={values => void create(values)}>
         <div className="native-after-sales-create-fields">
-          <Form.Item name="brand" label="品牌" rules={required('請選擇品牌')}><Select aria-label="案件品牌" placeholder="選擇品牌" options={(options?.brands || []).map(value => ({ value: value.code, label: value.name }))} /></Form.Item>
+          <Form.Item name="brand" label="品牌" rules={required('請選擇品牌')}><Select disabled={!!applicationDraft} aria-label="案件品牌" placeholder="選擇品牌" options={(options?.brands || []).map(value => ({ value: value.code, label: value.name }))} /></Form.Item>
           <Form.Item name="customerKind" label="客戶類型" rules={required('請選擇客戶類型')}><Select aria-label="客戶類型" options={options?.customerKinds || []} /></Form.Item>
           <Form.Item name="sourceChannel" label="進線來源" rules={required('請選擇進線來源')}><Select aria-label="進線來源" placeholder="選擇來源" options={options?.sourceChannels || []} /></Form.Item>
           <Form.Item name="referenceNumber" label="原訂單／參考編號"><Input maxLength={120} /></Form.Item>
-          <Form.Item name="contactName" label="姓名／聯絡人" rules={contactRequired('請填寫姓名')}><Input autoComplete="name" maxLength={100} /></Form.Item>
-          <Form.Item name="contactPhone" label="電話" rules={contactRequired('請填寫電話')}><Input autoComplete="tel" inputMode="tel" maxLength={40} /></Form.Item>
-          <Form.Item name="contactEmail" label="Email" rules={[...contactRequired('請填寫 Email'), { type: 'email', message: '請填寫有效的 Email' }]}><Input type="email" autoComplete="email" maxLength={254} /></Form.Item>
-          <Form.Item name="contactAddress" label="收件／回寄地址" rules={contactRequired('請填寫地址')}><Input autoComplete="street-address" maxLength={500} /></Form.Item>
+          <Form.Item name="contactName" label="姓名／聯絡人" rules={contactRequired('請填寫姓名')}><Input disabled={!!applicationDraft} autoComplete="name" maxLength={100} /></Form.Item>
+          <Form.Item name="contactPhone" label="電話" rules={contactRequired('請填寫電話')}><Input disabled={!!applicationDraft} autoComplete="tel" inputMode="tel" maxLength={40} /></Form.Item>
+          <Form.Item name="contactEmail" label="Email" rules={[...contactRequired('請填寫 Email'), { type: 'email', message: '請填寫有效的 Email' }]}><Input disabled={!!applicationDraft} type="email" autoComplete="email" maxLength={254} /></Form.Item>
+          <Form.Item name="contactAddress" label="收件／回寄地址" rules={contactRequired('請填寫地址')}><Input disabled={!!applicationDraft} autoComplete="street-address" maxLength={500} /></Form.Item>
         </div>
         <Form.List name="items" rules={[{ validator: async (_, values: Values['items']) => { if (!values?.length) throw new Error('請新增至少一個品項') } }]}>{(fields, { add, remove }, { errors }) => <>
-          {fields.map((field, index) => <div className="native-after-sales-create-item" key={field.key}><div className="native-after-sales-heading"><strong>品項 {index + 1}</strong>{fields.length > 1 && <Button data-operation-action="erp.nativeaftersalescreate.action.7efe820259b2" type="text" icon={<DeleteOutlined />} aria-label={`移除品項 ${index + 1}`} onClick={() => remove(field.name)}>移除</Button>}</div><div className="native-after-sales-create-fields">
-            <Form.Item name={[field.name, 'productId']} label="產品／配件" rules={required('請選擇產品')}><NativeProductPicker entityId={entityId} initialProducts={options?.products || []} label={`品項 ${index + 1} 產品`} /></Form.Item>
-            <Form.Item name={[field.name, 'quantity']} label="數量" rules={[{ required: true, message: '請填寫數量' }, { type: 'integer', min: 1, max: 9999, message: '數量須為 1–9999' }]}><InputNumber min={1} max={9999} precision={0} style={{ width: '100%' }} /></Form.Item>
+          {fields.map((field, index) => <div className="native-after-sales-create-item" key={field.key}><div className="native-after-sales-heading"><strong>品項 {index + 1}</strong>{fields.length > 1 && !applicationDraft && <Button data-operation-action="erp.nativeaftersalescreate.action.7efe820259b2" type="text" icon={<DeleteOutlined />} aria-label={`移除品項 ${index + 1}`} onClick={() => remove(field.name)}>移除</Button>}</div><div className="native-after-sales-create-fields">
+            <Form.Item name={[field.name, 'productId']} label="產品／配件" rules={required('請選擇產品')}><NativeProductPicker entityId={entityId} initialProducts={Array.from(new Map([...(options?.products || []), ...(applicationDraft?.products || [])].map(product => [product.id, product])).values())} disabled={!!applicationDraft} label={`品項 ${index + 1} 產品`} /></Form.Item>
+            <Form.Item name={[field.name, 'quantity']} label="數量" rules={[{ required: true, message: '請填寫數量' }, { type: 'integer', min: 1, max: 9999, message: '數量須為 1–9999' }]}><InputNumber disabled={!!applicationDraft} min={1} max={9999} precision={0} style={{ width: '100%' }} /></Form.Item>
           </div></div>)}
-          <Form.ErrorList errors={errors} /><Button data-operation-action="erp.nativeaftersalescreate.action.29a8462cce4d" icon={<PlusOutlined />} onClick={() => add({ quantity: 1 })} disabled={busy || unknownResult}>增加品項</Button>
+          <Form.ErrorList errors={errors} /><Button data-operation-action="erp.nativeaftersalescreate.action.29a8462cce4d" icon={<PlusOutlined />} onClick={() => add({ quantity: 1 })} disabled={busy || unknownResult || !!applicationDraft}>增加品項</Button>
         </>}</Form.List>
         {selectedType === 'REPAIR' && <Form.Item name="serialNumber" label="SN" style={{ marginTop: 16 }}><Input maxLength={120} /></Form.Item>}
         {selectedType === 'RESHIPMENT' && <div className="native-after-sales-create-fields" style={{ marginTop: 16 }}><Form.Item name="reshipmentReason" label="補寄原因" rules={required('請選擇補寄原因')}><Select options={options?.reasonOptions.reshipmentReason || []} /></Form.Item><Form.Item name="lossCategory" label="缺件類別" rules={required('請選擇缺件類別')}><Select options={options?.reasonOptions.lossCategory || []} /></Form.Item></div>}
@@ -127,7 +132,7 @@ export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttemp
   </div>
 }
 
-function NativeProductPicker({ entityId, initialProducts, label, value, onChange }: { entityId: string; initialProducts: NativeProduct[]; label: string; value?: string; onChange?: (value: string) => void }) {
+function NativeProductPicker({ entityId, initialProducts, disabled, label, value, onChange }: { disabled?: boolean; entityId: string; initialProducts: NativeProduct[]; label: string; value?: string; onChange?: (value: string) => void }) {
   const [query, setQuery] = useState('')
   const [result, setResult] = useState<{ entityId: string; query: string; products: NativeProduct[]; error?: string }>()
   const cache = useRef(new Map<string, NativeProduct>())
@@ -153,5 +158,5 @@ function NativeProductPicker({ entityId, initialProducts, label, value, onChange
     const selected = cache.current.get(value)
     if (selected) options.push({ value, label: `${selected.name} · ${selected.sku}` })
   }
-  return <Select value={value} onChange={onChange} showSearch aria-label={label} placeholder="搜尋產品名稱、SKU 或型號" filterOption={false} onSearch={setQuery} loading={Boolean(query.trim()) && !current} options={options} notFoundContent={current?.error ? <span role="alert">{current.error}</span> : query.trim() && !current ? <Spin size="small" /> : '沒有符合的產品'} />
+  return <Select disabled={disabled} value={value} onChange={onChange} showSearch aria-label={label} placeholder="搜尋產品名稱、SKU 或型號" filterOption={false} onSearch={setQuery} loading={Boolean(query.trim()) && !current} options={options} notFoundContent={current?.error ? <span role="alert">{current.error}</span> : query.trim() && !current ? <Spin size="small" /> : '沒有符合的產品'} />
 }

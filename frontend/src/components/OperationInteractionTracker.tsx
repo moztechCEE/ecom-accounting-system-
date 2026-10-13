@@ -108,11 +108,12 @@ export default function OperationInteractionTracker() {
         }, 500);
     };
     const click = (event: MouseEvent) => {
-      const target = (event.target as Element)?.closest<HTMLElement>(
+      const target = event.target instanceof Element ? event.target.closest<HTMLElement>(
         "[data-operation-action]",
-      );
+      ) : null;
       if (!target || target.matches(':disabled,[aria-disabled="true"]')) return;
-      enqueue({ actionId: target.dataset.operationAction!, outcome: "INTENT" });
+      const recordId = target.closest<HTMLElement>('[data-operation-record-id]')?.dataset.operationRecordId;
+      enqueue({ actionId: target.dataset.operationAction!, outcome: "INTENT", ...(recordId && /^[A-Za-z0-9_-]{1,128}$/.test(recordId) ? { recordId } : {}) });
     };
     const custom = (event: Event) => {
       const detail = (event as CustomEvent).detail;
@@ -121,7 +122,7 @@ export default function OperationInteractionTracker() {
         !["INTENT", "CANCELLED", "VALIDATION_BLOCKED"].includes(detail.outcome)
       )
         return;
-      enqueue({ actionId: detail.actionId, outcome: detail.outcome });
+      enqueue({ actionId: detail.actionId, outcome: detail.outcome, ...(typeof detail.recordId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(detail.recordId) ? { recordId: detail.recordId } : {}), ...(typeof detail.requestId === 'string' && /^[a-f0-9-]{36}$/i.test(detail.requestId) ? { requestId: detail.requestId } : {}) });
     };
     document.addEventListener("click", click, true);
     window.addEventListener("operation-interaction", custom);

@@ -1,11 +1,11 @@
-import type { NativeCaseInput } from '../../services/native-after-sales.service'
+import type { NativeCaseInput, NativeApplicationRef } from '../../services/native-after-sales.service'
 
 export type RegistrationScope = { actorId: string; entityId: string }
 export type PendingRegistration = RegistrationScope & {
   schema: 'corely.doa.pending-registration.v1'
   requestId: string
   createdAt: string
-  request: { brand: string; customerKind: string; payload: NativeCaseInput }
+  request: { brand: string; customerKind: string; payload: NativeCaseInput; verifiedApplicationRef?: NativeApplicationRef }
 }
 export type PendingStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
@@ -44,7 +44,11 @@ export function validatePendingRegistration(value: unknown, scope: RegistrationS
   const fail = () => { throw new PendingRegistrationError('INVALID', '待確認建單資料無法讀取，請聯絡管理者') }
   if (!object(value) || !exactKeys(value, ['schema', 'actorId', 'entityId', 'requestId', 'createdAt', 'request']) || value.schema !== 'corely.doa.pending-registration.v1' || value.actorId !== scope.actorId || value.entityId !== scope.entityId || !text(value.requestId, 36) || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(String(value.requestId)) || !text(value.createdAt, 40) || !Number.isFinite(Date.parse(String(value.createdAt)))) return fail()
   const request = value.request
-  if (!object(request) || !exactKeys(request, ['brand', 'customerKind', 'payload']) || !['MOZTECH', 'BONSON', 'MORITEK', 'OTHER'].includes(String(request.brand)) || !['TO_C', 'TO_B'].includes(String(request.customerKind)) || !object(request.payload)) return fail()
+  if (!object(request) || !exactKeys(request, ['brand', 'customerKind', 'payload', 'verifiedApplicationRef']) || !['MOZTECH', 'BONSON', 'MORITEK', 'OTHER'].includes(String(request.brand)) || !['TO_C', 'TO_B'].includes(String(request.customerKind)) || !object(request.payload)) return fail()
+  if (request.verifiedApplicationRef != null) {
+    const ref = request.verifiedApplicationRef
+    if (!object(ref) || !exactKeys(ref, ['id', 'revision', 'reviewHash']) || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(String(ref.id)) || !Number.isInteger(ref.revision) || Number(ref.revision) < 1 || !/^[a-f0-9]{64}$/.test(String(ref.reviewHash))) return fail()
+  }
   const payload = request.payload
   if (!exactKeys(payload, ['type', 'sourceChannel', 'contactName', 'contactPhone', 'contactAddress', 'contactEmail', 'referenceNumber', 'internalNote', 'items', 'detail']) || !TYPES.includes(String(payload.type)) || !text(payload.sourceChannel, 100) || !text(payload.contactName, 100) || !text(payload.contactPhone, 40) || !text(payload.contactAddress, 500) || !text(payload.contactEmail, 254) || payload.referenceNumber != null && !text(payload.referenceNumber, 120) || payload.internalNote != null && !text(payload.internalNote, 6500) || !Array.isArray(payload.items) || payload.items.length < 1 || payload.items.length > 100) return fail()
   if (payload.items.some(item => !object(item) || !exactKeys(item, ['productId', 'quantity']) || !text(item.productId, 160) || !item.productId || !Number.isInteger(item.quantity) || Number(item.quantity) < 1 || Number(item.quantity) > 9999)) return fail()

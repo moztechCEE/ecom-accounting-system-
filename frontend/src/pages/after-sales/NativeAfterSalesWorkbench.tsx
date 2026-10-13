@@ -9,6 +9,8 @@ import type { NativeCaseDetail, NativeCaseList, NativeCaseRow, NativeOptions } f
 import { changeNativeFilter, nativeCaseTypeLabel, nativeFilters, NATIVE_CASE_TYPES } from './native-workbench-model'
 import NativeCaseCommunication from './NativeCaseCommunication'
 import NativeAfterSalesCreate from './NativeAfterSalesCreate'
+import NativeCustomerApplications from './NativeCustomerApplications'
+import { readApplicationPending, type ApplicationDraft } from './native-application-model'
 import { canOpenAfterSalesSection } from './workbench-model'
 import { STATUS } from '../mailroom/model'
 import { CSR_STATUS } from '../repair/repair-model'
@@ -46,6 +48,8 @@ export default function NativeAfterSalesWorkbench({ entityId, onOpenSource, onOp
   const selectedId = params.get('case') || ''
   const [more, setMore] = useState(Boolean(filters.brand || filters.lifecycle !== 'active'))
   const [creating, setCreating] = useState(false)
+  const [fromApplication, setFromApplication] = useState<ApplicationDraft>()
+  const applicationsActive = params.get('workbenchView') === 'applications'
   const [resumeAttempt, setResumeAttempt] = useState<PendingRegistration>()
   const [journalError, setJournalError] = useState('')
   const [refresh, setRefresh] = useState(0)
@@ -71,11 +75,12 @@ export default function NativeAfterSalesWorkbench({ entityId, onOpenSource, onOp
 
   useEffect(() => { setQuery(filters.search || '') }, [filters.search])
   useEffect(() => {
-    setCreating(false); setResumeAttempt(undefined); setJournalError(''); dirty.current = false; pending.current = false; onPendingChange(false); onDirtyChange(false)
+    setCreating(false); setFromApplication(undefined); setResumeAttempt(undefined); setJournalError(''); dirty.current = false; pending.current = false; onPendingChange(false); onDirtyChange(false)
     if (user?.id && entityId) {
       try {
         const saved = readPendingRegistration(window.localStorage, { actorId: user.id, entityId })
         if (saved) { setResumeAttempt(saved); setCreating(true); pending.current = true; dirty.current = true; onPendingChange(true); onDirtyChange(true) }
+        else if (readApplicationPending(localStorage, user.id, entityId)) setParams(current => { const next = new URLSearchParams(current); next.delete('case'); next.set('workbenchView', 'applications'); return next }, { replace: true })
       } catch (error) { setJournalError(error instanceof Error ? error.message : '待確認建單資料無法讀取'); pending.current = true; dirty.current = true; onPendingChange(true); onDirtyChange(true) }
     }
     return () => { onPendingChange(false); onDirtyChange(false) }
@@ -116,13 +121,22 @@ export default function NativeAfterSalesWorkbench({ entityId, onOpenSource, onOp
   const filter = (key: string, value?: string) => setParams(current => changeNativeFilter(current, key, value), { replace: true })
   async function openCase(id?: string) {
     if (!await leaveForm()) return
-    setCreating(false)
-    setParams(current => changeNativeFilter(current, 'case', id))
+    setCreating(false); setFromApplication(undefined)
+    setParams(current => { const next = changeNativeFilter(current, 'case', id); next.delete('workbenchView'); return next })
   }
   async function openCreate() {
     if (!canCreate || !await leaveForm()) return
     setParams(current => changeNativeFilter(current, 'case'))
-    setCreating(true)
+    setFromApplication(undefined); setCreating(true)
+  }
+  async function startApplicationCase(draft: ApplicationDraft) {
+    if (!canCreate || !await leaveForm()) return
+    setFromApplication(draft); setResumeAttempt(undefined); setCreating(true)
+    setParams(current => { const next = changeNativeFilter(current, 'case'); next.delete('workbenchView'); return next })
+  }
+  async function selectWorkbench(view: string) {
+    if (!await leaveForm()) return
+    setParams(current => { const next = new URLSearchParams(current); next.delete('case'); if (view === 'applications') next.set('workbenchView', view); else next.delete('workbenchView'); return next }, { replace: true })
   }
   const changedFilters = Boolean(filters.type || filters.stage || filters.brand || filters.search || filters.lifecycle !== 'active')
   const clearFilters = () => setParams(current => {
@@ -143,8 +157,9 @@ export default function NativeAfterSalesWorkbench({ entityId, onOpenSource, onOp
     </header>
 
     {journalError && <Alert type="error" showIcon message={journalError} style={{ marginBottom: 16 }} />}
+    {!creating && !selectedId && <nav className="native-after-sales-tabs" aria-label="售後工作範圍"><button data-operation-action="after_sales.workbench.cases" type="button" className="native-after-sales-tab" aria-pressed={!applicationsActive} onClick={() => void selectWorkbench('cases')}>售後案件</button><button data-operation-action="after_sales.workbench.applications" type="button" className="native-after-sales-tab" aria-pressed={applicationsActive} onClick={() => void selectWorkbench('applications')}>顧客申請</button></nav>}
 
-    {creating ? <NativeAfterSalesCreate key={scopeKey} actorId={user?.id || ''} entityId={entityId} resumeAttempt={resumeAttempt} options={options} optionsError={optionsError} onPendingChange={markPending} onDirtyChange={markDirty} onChangeType={leaveForm} onCancel={() => void openCase()} onSaved={id => { setResumeAttempt(undefined); markPending(false); markDirty(false); setRefresh(value => value + 1); void openCase(id) }} onOpenSource={onOpenSource} /> : selectedId ? <>
+    {creating ? <NativeAfterSalesCreate key={scopeKey} actorId={user?.id || ''} entityId={entityId} resumeAttempt={resumeAttempt} applicationDraft={fromApplication} options={options} optionsError={optionsError} onPendingChange={markPending} onDirtyChange={markDirty} onChangeType={leaveForm} onCancel={() => void openCase()} onSaved={id => { setResumeAttempt(undefined); setFromApplication(undefined); markPending(false); markDirty(false); setRefresh(value => value + 1); void openCase(id) }} onOpenSource={onOpenSource} /> : applicationsActive && !selectedId ? <NativeCustomerApplications key={scopeKey} entityId={entityId} options={options} onCreate={draft => void startApplicationCase(draft)} onOpenCase={id => void openCase(id)} onPendingChange={markPending} onDirtyChange={markDirty} /> : selectedId ? <>
       <Button data-operation-action="erp.nativeaftersalesworkbench.action.f9361d35dd0e" className="native-after-sales-back" aria-label="返回案件清單" icon={<ArrowLeftOutlined />} onClick={() => void openCase()}>返回案件清單</Button>
       {detailLoading && <div role="status"><Spin /> 載入案件…</div>}
       {detailError && <Alert showIcon type="error" message={detailError} action={<Button data-operation-action="erp.nativeaftersalesworkbench.action.4df72e0a5cc6" onClick={() => setRefresh(value => value + 1)}>重試</Button>} />}
@@ -164,7 +179,7 @@ export default function NativeAfterSalesWorkbench({ entityId, onOpenSource, onOp
         <div className="native-after-sales-filter"><label htmlFor="native-after-sales-brand">品牌</label><Select id="native-after-sales-brand" aria-label="品牌" value={filters.brand || ''} onChange={value => filter('brand', value || undefined)} options={[{ value: '', label: '全部授權品牌' }, ...(options?.brands || []).map(brand => ({ value: brand.code, label: brand.name })), { value: 'UNKNOWN', label: '品牌待核對' }]} /></div>
         <div className="native-after-sales-filter"><label htmlFor="native-after-sales-view">案件清單</label><Select id="native-after-sales-view" aria-label="案件清單" value={filters.lifecycle} onChange={value => filter('view', value)} options={[{ value: 'active', label: '進行中' }, { value: 'closed', label: '已結束' }, { value: 'deleted', label: '刪除清單' }]} /></div>
       </div>}
-      <div className="native-after-sales-shortcuts" aria-label="常用案件篩選">{stageOptions.filter(stage => stage.quick).map(stage => <Button data-operation-action="erp.nativeaftersalesworkbench.action.1c8913931472" key={stage.value} size="small" type={filters.stage === stage.value ? 'primary' : 'default'} aria-pressed={filters.stage === stage.value} onClick={() => filter('stage', filters.stage === stage.value ? undefined : stage.value)}>{stage.label}</Button>)}</div>
+      <div className="native-after-sales-shortcuts" aria-label="常用案件篩選">{stageOptions.filter(stage => stage.quick).map(stage => <Button data-operation-action={`after_sales.stage.${stage.value}`} key={stage.value} size="small" type={filters.stage === stage.value ? 'primary' : 'default'} aria-pressed={filters.stage === stage.value} onClick={() => filter('stage', filters.stage === stage.value ? undefined : stage.value)}>{stage.label}</Button>)}</div>
       <div className="native-after-sales-results"><span aria-live="polite">{lifecycleLabel}{list ? ` · ${list.page.totalCount} 件` : ''}</span>{changedFilters && <Button data-operation-action="erp.nativeaftersalesworkbench.action.8b1a85f8df20" type="link" size="small" onClick={clearFilters}>清除篩選</Button>}</div>
       {listError && <Alert type="error" showIcon message={listError} action={<Button data-operation-action="erp.nativeaftersalesworkbench.action.6c511b09078d" onClick={() => setRefresh(value => value + 1)}>重試</Button>} />}
       {optionsError && !listError && <Alert type="warning" showIcon message={optionsError} />}
@@ -183,7 +198,7 @@ export default function NativeAfterSalesWorkbench({ entityId, onOpenSource, onOp
 
 function NativeCaseListRow({ row, onOpen }: { row: NativeCaseRow; onOpen: () => void }) {
   const taskOwner = row.tasks.find(task => task.actionable && task.owner)?.owner?.name
-  return <article className="native-after-sales-case-row" aria-label={`${row.caseNumber} ${row.contactName || ''}`}>
+  return <article data-operation-record-id={row.id} className="native-after-sales-case-row" aria-label={`${row.caseNumber} ${row.contactName || ''}`}>
     <div className="native-after-sales-case-identity">
       <button data-operation-action="erp.nativeaftersalesworkbench.action.d8371d7464ae" type="button" className="native-after-sales-case-number" onClick={onOpen}>{row.caseNumber}</button>
       <div className="native-after-sales-case-main">{row.contactName || '未提供顧客'}{row.productSummary ? ` · ${row.productSummary}` : ''}</div>
@@ -198,17 +213,17 @@ function NativeCaseListRow({ row, onOpen }: { row: NativeCaseRow; onOpen: () => 
 function NativeDetail({ detail, entityId, options, onReload, onDirtyChange, onPendingChange, onOpenSource, onOpenTask, canOpen }: { detail: NativeCaseDetail; entityId:string; options?:NativeOptions; onReload:()=>void; onDirtyChange:(value:boolean)=>void; onPendingChange:(value:boolean)=>void; onOpenSource: Props['onOpenSource']; onOpenTask: Props['onOpenTask']; canOpen: (section: string) => boolean }) {
   const nextTask = detail.tasks.find(task => task.actionable)
   return <>
-    <header className="native-after-sales-detail-heading"><div><h3 className="native-after-sales-detail-number">{detail.caseNumber}</h3><div className="native-after-sales-case-secondary">{nativeCaseTypeLabel(detail.type)} · {detail.brandName || '品牌待核對'}</div></div><Tag>{detail.workflow.stageLabel || detail.status}</Tag></header>
+    <header data-operation-record-id={detail.id} className="native-after-sales-detail-heading"><div><h3 className="native-after-sales-detail-number">{detail.caseNumber}</h3><div className="native-after-sales-case-secondary">{nativeCaseTypeLabel(detail.type)} · {detail.brandName || '品牌待核對'}</div></div><Tag>{detail.workflow.stageLabel || detail.status}</Tag></header>
     <div className="native-after-sales-detail-identity"><div className="native-after-sales-case-main">{detail.contactName || '未提供顧客'} · {detail.productSummary || '品項待核對'}</div><div className="native-after-sales-case-secondary">{[detail.contactPhone, detail.serialNumber ? `SN ${detail.serialNumber}` : null].filter(Boolean).join(' · ')}</div></div>
     <dl className="native-after-sales-facts"><div><dt>案件負責</dt><dd>{detail.ownerName || detail.workflow.ownerRoleLabel || '待指派'}</dd></div><div><dt>實物保管</dt><dd>{detail.custodySummary || '未提供保管資訊'}</dd></div><div><dt>款項狀態</dt><dd>{detail.paymentSummary || '尚無款項紀錄'}</dd></div></dl>
-    <section className="native-after-sales-step" aria-labelledby="native-after-sales-step-title"><h4 id="native-after-sales-step-title" className="native-after-sales-step-title">{detail.workflow.nextAction || '案件進度'}</h4>
+    <section data-operation-record-id={detail.id} className="native-after-sales-step" aria-labelledby="native-after-sales-step-title"><h4 id="native-after-sales-step-title" className="native-after-sales-step-title">{detail.workflow.nextAction || '案件進度'}</h4>
       {detail.currentStepFields.length > 0 && <Descriptions size="small" column={1} items={detail.currentStepFields.map(field => ({ key: field.key, label: field.label, children: afterSalesFieldValue(field.key, field.value) }))} />}
       {detail.blockers.map((blocker, index) => <Alert key={index} type="warning" showIcon message={blocker} style={{ marginTop: 12 }} />)}
       {detail.tasks.map(task => <div key={task.itemId} className="native-after-sales-case-secondary">{task.label} · {task.status ? STATUS[task.status] || task.status : '待核對'}{task.csr ? ` · ${CSR_STATUS[task.csr.status as keyof typeof CSR_STATUS] || task.csr.status}` : ''}{task.owner ? ` · 交辦負責：${task.owner.name}` : ''}</div>)}
-      <div className="native-after-sales-detail-actions">{nextTask ? <Button data-operation-action="erp.nativeaftersalesworkbench.action.de0b0a2c269b" type="primary" onClick={() => onOpenTask(nextTask.kind, nextTask.itemId)}>{nextTask.kind === 'repair' ? '處理維修交辦' : '處理收發交辦'}</Button> : detail.sourceSection && <Button data-operation-action="erp.nativeaftersalesworkbench.action.5cb31d7fb5d6" type="primary" onClick={() => onOpenSource(detail.sourceSection!, detail.id)}>{detail.primaryActionLabel || '處理此節點'}</Button>}{detail.tasks.filter(task => task !== nextTask).map(task => <Button data-operation-action="erp.nativeaftersalesworkbench.action.d2281c69754f" key={`${task.kind}:${task.itemId}`} onClick={() => onOpenTask(task.kind, task.itemId)}>{task.kind === 'repair' ? '檢視維修交辦' : '檢視收發交辦'}{detail.tasks.length > 1 ? ` · ${task.label}` : ''}</Button>)}</div>
+      <div className="native-after-sales-detail-actions">{nextTask ? <Button data-operation-action={`after_sales.task.${nextTask.kind}`} data-operation-record-id={nextTask.itemId} type="primary" onClick={() => onOpenTask(nextTask.kind, nextTask.itemId)}>{nextTask.kind === 'repair' ? '處理維修交辦' : '處理收發交辦'}</Button> : detail.sourceSection && <Button data-operation-action="erp.nativeaftersalesworkbench.action.5cb31d7fb5d6" type="primary" onClick={() => onOpenSource(detail.sourceSection!, detail.id)}>{detail.primaryActionLabel || '處理此節點'}</Button>}{detail.tasks.filter(task => task !== nextTask).map(task => <Button data-operation-action={`after_sales.task.${task.kind}`} data-operation-record-id={task.itemId} key={`${task.kind}:${task.itemId}`} onClick={() => onOpenTask(task.kind, task.itemId)}>{task.kind === 'repair' ? '檢視維修交辦' : '檢視收發交辦'}{detail.tasks.length > 1 ? ` · ${task.label}` : ''}</Button>)}</div>
     </section>
     <NativeCaseCommunication key={JSON.stringify([entityId, detail.id])} entityId={entityId} detail={detail} options={options} onReload={onReload} onDirtyChange={onDirtyChange} onPendingChange={onPendingChange} />
-    <nav className="native-after-sales-detail-links" aria-label="案件相關作業">{detail.sourceSection && canOpen(detail.sourceSection) && <Button data-operation-action="erp.nativeaftersalesworkbench.action.c6dd1ba7a928" type="link" onClick={() => onOpenSource(detail.sourceSection!, detail.id)}>完整案件作業</Button>}{[['quotes', '報價與顧客確認'], ['customers', '顧客資料與 LINE'], ['invoices', '發票作業'], ['accounting', '收款與退款核對']].filter(([section]) => canOpen(section)).map(([section, label]) => <Button data-operation-action="erp.nativeaftersalesworkbench.action.b2a6a0c84289" key={section} type="link" onClick={() => onOpenSource(section)}>{label}</Button>)}</nav>
+    <nav data-operation-record-id={detail.id} className="native-after-sales-detail-links" aria-label="案件相關作業">{detail.sourceSection && canOpen(detail.sourceSection) && <Button data-operation-action="erp.nativeaftersalesworkbench.action.c6dd1ba7a928" type="link" onClick={() => onOpenSource(detail.sourceSection!, detail.id)}>完整案件作業</Button>}{[['quotes', '報價與顧客確認'], ['customers', '顧客資料與 LINE'], ['invoices', '發票作業'], ['accounting', '收款與退款核對']].filter(([section]) => canOpen(section)).map(([section, label]) => <Button data-operation-action={`after_sales.section.${section}`} key={section} type="link" onClick={() => onOpenSource(section)}>{label}</Button>)}</nav>
     {detail.sections.length > 0 && <Collapse className="native-after-sales-history" ghost items={detail.sections.map(section => ({ key: section.key, label: section.title, children: section.records.map(record => <Descriptions key={record.key} size="small" column={1} items={record.fields.map(field => ({ key: field.key, label: field.label, children: afterSalesFieldValue(field.key, field.value) }))} />) }))} />}
   </>
 }

@@ -25,6 +25,12 @@ const data = {
   source: "corely.aftersales.interactions.v1",
   events: [{ actionId: "source.cases.create", outcome: "INTENT" }],
 };
+test('only explicit opaque record IDs join intent; never raw URL/phone/email fields', () => {
+  const input = { ...data, events: [{ ...data.events[0], recordId: 'case-opaque' }] };
+  assert.equal(sourceInteractionBatch(input)[0].recordId, 'case-opaque');
+  for (const recordId of ['https://private.test?token=secret', 'email@private.test', 'raw customer']) assert.equal(sourceInteractionBatch({ ...input, events: [{ ...input.events[0], recordId }] }).length, 0);
+  assert.equal(sourceInteractionBatch({ ...input, events: [{ ...input.events[0], phone: '0900000000' }] }).length, 0);
+});
 test("only approved current ready sameorigin frame emits interactions", () => {
   const frame = {};
   const event = { source: frame, origin: "https://erp.example", data };

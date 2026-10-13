@@ -42,6 +42,7 @@ import {
 } from "./native-communication-model";
 import "./NativeCaseCommunication.css";
 import NativeLegacyBrandReview from './NativeLegacyBrandReview';
+import { operationRequestIntent } from './operation-request-intent';
 type CommandTransport = {
   command: (
     entityId: string,
@@ -367,6 +368,7 @@ export default function NativeCaseCommunication({
           }
           persisted = true;
           setPending(saved);
+          operationRequestIntent('after_sales.confirmation.request', saved.request.requestId, detail.id);
           const result = await (
             nativeAfterSales as unknown as CommandTransport
           ).command(
@@ -516,7 +518,7 @@ export default function NativeCaseCommunication({
   };
   const disabled = busy || !!pending || unknown || brandPending;
   return (
-    <section className="native-case-communication" aria-label="顧客確認與通知">
+    <section data-operation-record-id={detail.id} className="native-case-communication" aria-label="顧客確認與通知">
       <NativeLegacyBrandReview entityId={entityId} detail={detail} onReload={onReload} onPendingChange={markBrandPending} onDirtyChange={onDirtyChange} />
       {error && (
         <Alert

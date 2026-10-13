@@ -3,6 +3,7 @@ import { Alert, Button, Drawer, Form, Input, Select } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import { nativeAfterSales, type NativeCaseDetail } from '../../services/native-after-sales.service';
 import { registrationTokenMatchesActor } from './pending-registration';
+import { operationRequestIntent } from './operation-request-intent';
 import { clearPendingBrandReview, pendingBrandReviewKey, readPendingBrandReview, savePendingBrandReview, type PendingBrandReview } from './pending-brand-review';
 export default function NativeLegacyBrandReview({ entityId, detail, onReload, onPendingChange, onDirtyChange }: {
   entityId: string; detail: NativeCaseDetail; onReload: () => void; onPendingChange: (v: boolean) => void; onDirtyChange: (v: boolean) => void;
@@ -33,6 +34,7 @@ export default function NativeLegacyBrandReview({ entityId, detail, onReload, on
         }
         setPending(saved); onPendingChange(true); onDirtyChange(true);
         if (!active()) throw new Error('登入狀態已變更，請以相同請求重新核對');
+        operationRequestIntent('after_sales.brand_review.request', saved.request.requestId, detail.id);
         const result = await nativeAfterSales.command(entityId, detail.id, 'brand-review', saved.request, { token, expectedActorId: scope.actorId, signal: controller.signal });
         if (!active()) return;
         if (result.reviewId !== 'brand-review-' + saved.request.requestId || result.caseId !== detail.id || result.brand !== saved.request.brand) throw new Error('品牌確認回執待核對，請以相同請求重試');

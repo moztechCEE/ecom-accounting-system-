@@ -3,6 +3,7 @@ export function sourceInteractionBatch(
 ): {
   actionId: string;
   outcome: "INTENT" | "CANCELLED" | "VALIDATION_BLOCKED";
+  recordId?: string;
 }[] {
   if (!payload || typeof payload !== "object" || Array.isArray(payload))
     return [];
@@ -23,8 +24,9 @@ export function sourceInteractionBatch(
         typeof item !== "object" ||
         Array.isArray(item) ||
         Object.keys(item).some(
-          (key) => !["actionId", "outcome"].includes(key),
+          (key) => !["actionId", "outcome", "recordId"].includes(key),
         ) ||
+        item.recordId !== undefined && (typeof item.recordId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(item.recordId)) ||
         !/^source\.[a-z][a-z0-9_.-]{1,70}$/.test(String(item.actionId)) ||
         !["INTENT", "CANCELLED", "VALIDATION_BLOCKED"].includes(
           String(item.outcome),
@@ -35,6 +37,7 @@ export function sourceInteractionBatch(
   return events.map((item) => ({
     actionId: String(item.actionId),
     outcome: item.outcome as "INTENT" | "CANCELLED" | "VALIDATION_BLOCKED",
+    ...(typeof item.recordId === 'string' ? { recordId: item.recordId } : {}),
   }));
 }
 export function trustedSourceInteractionBatch(
