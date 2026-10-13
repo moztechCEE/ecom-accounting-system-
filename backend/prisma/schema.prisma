@@ -3395,3 +3395,29 @@ model MailroomOutboundAction {
   @@unique([orderId, version])
   @@map("mailroom_outbound_actions")
 }
+
+
+model MailroomProductMismatchFact {
+  id                      String   @id @default(uuid())
+  entityId                String   @map("entity_id")
+  itemId                  String   @map("item_id")
+  receiptId               String   @map("receipt_id")
+  sourceCaseId            String   @map("source_case_id")
+  identityHash            String   @map("identity_hash")
+  proofId                 String   @map("proof_id")
+  sourceVersion           String   @map("source_version")
+  caseBrand               String   @map("case_brand")
+  firstReviewErpActorId    String?  @map("first_review_erp_actor_id")
+  reviewedByErpActorId     String   @map("reviewed_by_erp_actor_id")
+  status                  String   @default("ACTIVE")
+  proofSnapshot           Json     @map("proof_snapshot")
+  voidedAt                DateTime? @map("voided_at")
+  voidReason              String?  @map("void_reason")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@unique([entityId, itemId, identityHash], map: "mailroom_product_mismatch_identity_key")
+  @@index([entityId, sourceCaseId, status], map: "mailroom_product_mismatch_source_status_idx")
+  @@index([firstReviewErpActorId, status], map: "mailroom_product_mismatch_first_reviewer_idx")
+  @@map("mailroom_product_mismatch_facts")
+}
