@@ -1,5 +1,10 @@
 import { BadGatewayException, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { runInNewContext } from 'node:vm';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ErpAfterSalesModuleService } from '../integration/after-sales/erp-module.service';
 import { serviceSignature } from '../integration/after-sales/erp-module.contract';
@@ -10,6 +15,41 @@ const USER = 'synthetic-csr';
 const ENTITY = 'doa-dev-qa-20261002';
 const SECRET = 'synthetic-native-source-shared-secret-32';
 const CONTRACT = 'corely.doa.tasks.v1';
+function nativeSandboxPolicy() {
+  const source = readFileSync(
+    resolve(__dirname, '../../../scripts/dev-sandbox.cjs'),
+    'utf8',
+  );
+  const start = source.indexOf('const nativeAfterSalesBase =');
+  const end = source.indexOf('// Private repair-media SDK calls', start);
+  if (start < 0 || end <= start)
+    throw new Error('Native after-sales sandbox policy was not found');
+  // Evaluate the real predicate without loading its network or process hooks.
+  const policy: unknown = runInNewContext(
+    source.slice(start, end) + '\napprovedNativeAfterSalesFetch;',
+    {
+      process: {
+        env: {
+          AFTER_SALES_MODULE_ENABLED: 'true',
+          AFTER_SALES_MODULE_ENTITY_ID: ENTITY,
+          AFTER_SALES_MODULE_SECRET: SECRET,
+        },
+      },
+      URL,
+      Headers,
+      Buffer,
+      Date,
+      AsyncLocalStorage,
+      createHash,
+      createHmac,
+      timingSafeEqual,
+    },
+    { timeout: 1000 },
+  );
+  if (typeof policy !== 'function')
+    throw new Error('Native after-sales sandbox predicate is not callable');
+  return policy as (url: URL, options: RequestInit) => boolean;
+}
 const handoffRow = (
   id: string,
   csrStatus: string,
@@ -82,6 +122,105 @@ describe('native after-sales task authentication and ownership', () => {
   });
   afterEach(() => {
     global.fetch = originalFetch;
+  });
+  function accountingActor() {
+    read = ['cases', 'repairs', 'invoices', 'accounting_workbench'];
+    write = ['invoices', 'accounting_workbench'];
+    module.actor.mockImplementation(() =>
+      Promise.resolve({
+        userId: USER,
+        entityId: ENTITY,
+        role: 'accounting',
+        modules: read,
+        writeModules: write,
+      }),
+    );
+    mailroom.actor.mockImplementation(() =>
+      Promise.resolve({
+        id: USER,
+        name: '合成會計',
+        entityIds: [ENTITY],
+        permissions: new Set(),
+      }),
+    );
+  }
+  it.each([true, false])(
+    'permits accounting bare list through the actual sandbox signature policy (mailroom=%s)',
+    async (mailroomEnabled) => {
+      accountingActor();
+      service = new AfterSalesTasksService(
+        new ConfigService({
+          ERP_DEV_SANDBOX: 'true',
+          AFTER_SALES_MODULE_SECRET: SECRET,
+          MAILROOM_ENABLED: String(mailroomEnabled),
+        }),
+        module as unknown as ErpAfterSalesModuleService,
+        db as unknown as PrismaService,
+        mailroom as unknown as MailroomService,
+      );
+      const policy = nativeSandboxPolicy();
+      const upstream = jest.fn(() =>
+        Response.json({ contractVersion: CONTRACT, items: [] }),
+      );
+      transport.mockImplementation((url: string, options: RequestInit) => {
+        if (!policy(new URL(url), options))
+          throw new Error('ERP_DEV_EXTERNAL_EFFECT_BLOCKED');
+        return Promise.resolve(upstream());
+      });
+      const result = await service.list(USER, { entityId: ENTITY });
+      expect(result.items).toEqual([]);
+      expect(upstream).toHaveBeenCalledTimes(1);
+      expect(db.mailroomItem.findMany).not.toHaveBeenCalled();
+      const [url, options] = transport.mock.calls[0] as [string, RequestInit];
+      expect(url.endsWith('/cases')).toBe(true);
+      const parsed = new URL(url);
+      expect(parsed.search).toBe('');
+      const headers = new Headers(options.headers);
+      expect(headers.get('x-erp-signature')).toBe(
+        serviceSignature(
+          SECRET,
+          'GET',
+          parsed.pathname.slice('/after-sales-app'.length) + parsed.search,
+          headers.get('x-erp-time')!,
+          ENTITY,
+          USER,
+        ),
+      );
+      headers.set(
+        'x-erp-signature',
+        serviceSignature(
+          SECRET,
+          'GET',
+          '/api/integration/erp/workbench/cases?',
+          headers.get('x-erp-time')!,
+          ENTITY,
+          USER,
+        ),
+      );
+      expect(policy(parsed, { ...options, headers })).toBe(false);
+      expect(write).toEqual(['invoices', 'accounting_workbench']);
+    },
+  );
+  it('denies accounting registration without case write before any transport', async () => {
+    accountingActor();
+    await expect(
+      service.register(USER, {
+        entityId: ENTITY,
+        requestId: '322ae28e-c3fa-4d86-91ae-a04f225b13e2',
+        brand: 'BONSON',
+        customerKind: 'TO_C',
+        payload: { type: 'REPAIR' },
+      }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(transport).not.toHaveBeenCalled();
+  });
+  it('denies accounting list without case read before any transport', async () => {
+    accountingActor();
+    read = ['invoices', 'accounting_workbench'];
+    await expect(service.list(USER, { entityId: ENTITY })).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(transport).not.toHaveBeenCalled();
   });
   it('binds company actor, full module base path and exact search query in the signature', async () => {
     await service.list(USER, {
@@ -214,11 +353,27 @@ describe('native after-sales task authentication and ownership', () => {
       entityId: ENTITY,
       scope: 'mine',
     });
-    const url = new URL(transport.mock.calls[0][0] as string);
+    const [urlValue, options] = transport.mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    const url = new URL(urlValue);
     expect(JSON.parse(url.searchParams.get('erpMineCaseIds')!)).toEqual([
       'own-case',
       'unassigned-case',
     ]);
+    const headers = new Headers(options.headers);
+    expect(headers.get('x-erp-signature')).toBe(
+      serviceSignature(
+        SECRET,
+        'GET',
+        url.pathname.slice('/after-sales-app'.length) + url.search,
+        headers.get('x-erp-time')!,
+        ENTITY,
+        USER,
+      ),
+    );
+    expect(nativeSandboxPolicy()(url, options)).toBe(true);
     expect(
       (
         result.items[0].tasks as {

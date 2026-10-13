@@ -292,10 +292,11 @@ export class AfterSalesTasksService {
         search.set(key, String(query[key]));
     if (signedMineIds.length)
       search.set('erpMineCaseIds', JSON.stringify(signedMineIds));
+    const queryString = search.toString();
     const result = await this.request(
       userId,
       query.entityId,
-      '/cases?' + search.toString(),
+      '/cases' + (queryString ? '?' + queryString : ''),
     );
     if (
       !Array.isArray(result.items) ||
