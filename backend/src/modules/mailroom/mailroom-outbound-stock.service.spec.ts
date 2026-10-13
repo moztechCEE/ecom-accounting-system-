@@ -19,7 +19,15 @@ function fixture() {
   const snapshot: any = { entityId: 'company', productId: 'product-1', warehouseId: 'warehouse-1', qtyOnHand: D(10), qtyAvailable: D(8), qtyAllocated: D(2) };
   const rows: any[] = [], serials: any[] = [], qualified: any[] = [];
   const tx: any = {
-    $queryRaw: jest.fn(async () => [{ id: 'locked-row' }]),
+    $queryRaw: jest.fn(async (sql: TemplateStringsArray) => {
+      if (sql.join('').includes('pg_advisory_xact_lock'))
+        throw new Error('P2010: PostgreSQL void cannot be deserialized');
+      return [{ id: 'locked-row' }];
+    }),
+    $executeRaw: jest.fn(async (sql: TemplateStringsArray) => {
+      expect(sql.join('')).toBe('SELECT pg_advisory_xact_lock(hashtext())');
+      return 0;
+    }),
     user: { findUnique: jest.fn(async ({ where }: any) => where.id === actor.id ? actor : null) },
     product: { findFirst: jest.fn(async ({ where }: any) => products.find(row => matches(row, where)) || null) },
     warehouse: { findFirst: jest.fn(async ({ where }: any) => warehouses.find(row => matches(row, where)) || null) },
@@ -63,6 +71,10 @@ describe('warehouse-only formal outbound stock boundary', () => {
   it.each(['RESHIPMENT', 'PRIVATE_PURCHASE', 'EXCHANGE_RETURN'] as const)('posts a positive OUT for %s and preserves other reservations', async caseType => {
     const f = fixture(), original = { ...input(), caseType };
     const result = await service.issue(f.tx, original);
+    expect(f.tx.$executeRaw.mock.calls.map((args: unknown[]) => args[1])).toEqual([
+      'company:outbound-order:order-1',
+      `company:outbound-request:${REQUEST}`,
+    ]);
     expect(result.duplicate).toBe(false);
     expect(result.items[0]).toMatchObject({ unitId: 'unit-1', sourceCaseItemId: 'source-line', postingId: 'out-1', quantity: 1, externalInventoryPosted: false });
     expect(f.snapshot.qtyOnHand.eq(9)).toBe(true); expect(f.snapshot.qtyAvailable.eq(7)).toBe(true); expect(f.snapshot.qtyAllocated.eq(2)).toBe(true);
@@ -207,6 +219,7 @@ describe('ordinary OUT preserves the required external stock policy', () => {
     const f = fixture();
     await expect(service.issue(f.tx, input())).rejects.toThrow('外部正式庫存確認');
     expect(f.tx.$queryRaw).not.toHaveBeenCalled();
+    expect(f.tx.$executeRaw).not.toHaveBeenCalled();
     expect(f.tx.inventoryTransaction.findMany).not.toHaveBeenCalled();
     expect(f.tx.inventorySnapshot.updateMany).not.toHaveBeenCalled();
     expect(f.tx.inventoryTransaction.create).not.toHaveBeenCalled();

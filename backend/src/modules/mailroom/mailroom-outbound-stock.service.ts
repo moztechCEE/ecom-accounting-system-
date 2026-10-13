@@ -335,7 +335,7 @@ export class MailroomOutboundStockService {
       `${batch.entityId}:outbound-order:${batch.orderId}`,
       `${batch.entityId}:outbound-request:${batch.requestId}`,
     ].sort())
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
     const previous = await this.rows(tx, batch);
     if (previous.length)
       return {
