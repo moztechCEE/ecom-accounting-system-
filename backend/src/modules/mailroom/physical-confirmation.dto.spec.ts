@@ -1,4 +1,8 @@
-import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ValidationPipe,
+} from '@nestjs/common';
 import type { Type, ValidationPipeOptions } from '@nestjs/common';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -253,8 +257,12 @@ function factoryFixture(action: 'send_factory' | 'receive_factory') {
     id: uuid,
     entityId: shared.entityId,
     receiptId: 'SYNTHETIC-RECEIPT',
-    label: 'SYNTHETIC PRODUCT', productName: 'SYNTHETIC PRODUCT', productId: null,
-    sku: 'SYNTHETIC-SKU', serialNumber: 'SYNTHETIC-SN', declared: { id: 'SYNTHETIC-SOURCE-ITEM' },
+    label: 'SYNTHETIC PRODUCT',
+    productName: 'SYNTHETIC PRODUCT',
+    productId: null,
+    sku: 'SYNTHETIC-SKU',
+    serialNumber: 'SYNTHETIC-SN',
+    declared: { id: 'SYNTHETIC-SOURCE-ITEM' },
     version: 7,
     status: action === 'send_factory' ? 'INSPECTING' : 'FACTORY_RETURNING',
     custodianId: actor.id,
@@ -265,7 +273,8 @@ function factoryFixture(action: 'send_factory' | 'receive_factory') {
     repairWorkflow: { schema: 1 } as RepairWorkflow,
     receipt: {
       category: 'REPAIR',
-      sourceCaseId: 'SYNTHETIC-CASE', sourceNumber: 'SYNTHETIC-NUMBER',
+      sourceCaseId: 'SYNTHETIC-CASE',
+      sourceNumber: 'SYNTHETIC-NUMBER',
       receivedById: 'SYNTHETIC-CLERK',
       customerServiceUserId: 'SYNTHETIC-CSR',
     },
@@ -327,26 +336,54 @@ function factoryFixture(action: 'send_factory' | 'receive_factory') {
     publish: jest.fn(),
   };
   const source = {
-    id: row.receipt.sourceCaseId, number: row.receipt.sourceNumber, type: 'REPAIR', brand: 'BONSON',
-    version: inspection.updatedAt, status: 'WAITING_CUSTOMER', customerLabel: 'SYNTHETIC', repairAllowed: true,
-    items: [{ id: 'SYNTHETIC-SOURCE-ITEM', productName: row.productName, sku: row.sku, quantity: 1 }],
-    releaseInfo: { quoteRevision: 4, customerApprovedQuoteRevision: 4, customerApprovedAt: inspection.updatedAt,
-      amount: 0, currency: 'TWD', confirmedPaymentQuoteRevision: null, invoiceRequired: false, invoiceSatisfied: true,
-      quoteBindings: [] as unknown[] },
+    id: row.receipt.sourceCaseId,
+    number: row.receipt.sourceNumber,
+    type: 'REPAIR',
+    brand: 'BONSON',
+    version: inspection.updatedAt,
+    status: 'WAITING_CUSTOMER',
+    customerLabel: 'SYNTHETIC',
+    repairAllowed: true,
+    items: [
+      {
+        id: 'SYNTHETIC-SOURCE-ITEM',
+        productName: row.productName,
+        sku: row.sku,
+        quantity: 1,
+      },
+    ],
+    releaseInfo: {
+      quoteRevision: 4,
+      customerApprovedQuoteRevision: 4,
+      customerApprovedAt: inspection.updatedAt,
+      amount: 0,
+      currency: 'TWD',
+      confirmedPaymentQuoteRevision: null,
+      invoiceRequired: false,
+      invoiceSatisfied: true,
+      quoteBindings: [] as unknown[],
+    },
   };
-  const binding = repairSourceBindingForItem(row, source as unknown as Parameters<typeof repairSourceBindingForItem>[1]);
+  const binding = repairSourceBindingForItem(
+    row,
+    source as unknown as Parameters<typeof repairSourceBindingForItem>[1],
+  );
   source.releaseInfo.quoteBindings = [{ ...binding, quoteRevision: 4 }];
   const sync = { cases: jest.fn().mockResolvedValue({ items: [source] }) };
+  // Isolate physical confirmation from the separately tested evidence producer.
+  const prerequisites = { require: jest.fn().mockResolvedValue(undefined) };
   type Dependencies = ConstructorParameters<typeof RepairWorkbenchService>;
   return {
     row,
     tx,
     mailroom,
     actor,
+    prerequisites,
     service: new RepairWorkbenchService(
       prisma as unknown as Dependencies[0],
       mailroom as unknown as Dependencies[1],
       sync as unknown as Dependencies[2],
+      prerequisites as unknown as Dependencies[3],
     ),
   };
 }
@@ -392,7 +429,57 @@ describe.each(['send_factory', 'receive_factory'] as const)(
           expect(fixture.mailroom.publish).not.toHaveBeenCalled();
           expect(fixture.row.version).toBe(7);
         }
+        if (action === 'send_factory') {
+          expect(fixture.prerequisites.require).toHaveBeenCalledTimes(1);
+          expect(fixture.prerequisites.require).toHaveBeenCalledWith(
+            fixture.row,
+            'START',
+            fixture.tx,
+          );
+        } else {
+          expect(fixture.prerequisites.require).not.toHaveBeenCalled();
+        }
       },
     );
+  },
+);
+
+it.each(['材料尚未備妥或領用責任尚未結清', '必要檢測或設備校正尚未確認'])(
+  'blocks factory shipment when prerequisites reject: %s',
+  async (reason) => {
+    const fixture = factoryFixture('send_factory');
+    const before = structuredClone(fixture.row);
+    fixture.prerequisites.require.mockRejectedValueOnce(
+      new ConflictException(reason),
+    );
+    const input = (await mainValidationPipe().transform(
+      {
+        ...shared,
+        action: 'send_factory',
+        confirmedItems: true,
+        note: 'SYNTHETIC FACTORY HANDOFF',
+        factoryName: 'SYNTHETIC-FACTORY',
+        reference: 'SYNTHETIC-REFERENCE',
+        carrier: 'SYNTHETIC-CARRIER',
+        trackingNumber: 'SYNTHETIC-TRACKING',
+      },
+      { type: 'body', metatype: RepairWorkflowDto },
+    )) as RepairWorkflowDto;
+
+    await expect(
+      fixture.service.workflow(fixture.actor.id, fixture.row.id, input),
+    ).rejects.toThrow(reason);
+
+    expect(fixture.prerequisites.require).toHaveBeenCalledTimes(1);
+    expect(fixture.prerequisites.require).toHaveBeenCalledWith(
+      fixture.row,
+      'START',
+      fixture.tx,
+    );
+    expect(fixture.tx.mailroomItem.update).not.toHaveBeenCalled();
+    expect(fixture.mailroom.record).not.toHaveBeenCalled();
+    expect(fixture.mailroom.publish).not.toHaveBeenCalled();
+    expect(fixture.row).toEqual(before);
+    expect(fixture.row.repairWorkflow.factory).toBeUndefined();
   },
 );

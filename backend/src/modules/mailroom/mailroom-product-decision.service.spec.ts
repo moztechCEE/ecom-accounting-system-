@@ -9,8 +9,15 @@ import { type Actor, type SourceCase } from './mailroom.contract';
 import { type MailroomCommandDto } from './mailroom.dto';
 import { productIdentityHash } from './mailroom-product-decision.contract';
 import { repairSourceBindingForItem } from './repair-proposal.contract';
-import { inspectionPlanHash } from './repair-document.contract';
-import { sentCustomerWorkflow } from './repair-workflow.contract';
+import {
+  inspectionPlanHash,
+  type InspectionDocument,
+} from './repair-document.contract';
+import {
+  repairWorkflow,
+  sentCustomerWorkflow,
+} from './repair-workflow.contract';
+import type { RepairPrerequisitesService } from './repair-prerequisites.service';
 
 const ITEM = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const RECEIPT = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -124,6 +131,7 @@ function fixture(
       },
     ],
   };
+  if (category === 'RETURN') delete source.releaseInfo;
   let state: {
     item: Row;
     facts: Row[];
@@ -408,11 +416,14 @@ function fixture(
       .fn()
       .mockRejectedValue(new Error('unexpected stock receipt')),
   };
+  const prerequisites = { require: jest.fn().mockResolvedValue(undefined) };
   const service = new MailroomService(
     db,
     gateway as any,
     sync as any,
     stock as any,
+    undefined,
+    prerequisites as unknown as RepairPrerequisitesService,
   );
   jest.spyOn(service, 'actor').mockImplementation(async (id) => {
     const value = actors.get(id);
@@ -425,6 +436,7 @@ function fixture(
     sync,
     gateway,
     stock,
+    prerequisites,
     trace,
     source,
     proof,
@@ -467,33 +479,34 @@ function fixture(
       state.item.repairOwnerId = 'tech';
       state.item.custodianId = 'tech';
       state.item.nextUserId = 'tech';
-      if (category === 'REPAIR') {
-        const sent = sentCustomerWorkflow(
-          state.item as any,
-          actors.get('tech')!,
-          TIME,
-          4,
-        );
-        state.item.repairWorkflow = {
-          ...state.item.repairWorkflow,
-          ...sent,
-          csr: {
-            ...sent.csr,
-            status: 'RESOLVED',
-            ownerId: 'csr',
-            decision: 'APPROVE',
-            acceptedAt: TIME,
-          },
-        };
-        state.item.repairInspection.review = {
-          inspectionRevision: 3,
-          actorId: 'csr',
-          name: 'SYNTHETIC CSR',
-          confirmedAt: TIME,
+      const quoteRevision = category === 'REPAIR' ? 4 : null;
+      const sent = sentCustomerWorkflow(
+        state.item as any,
+        actors.get('tech')!,
+        TIME,
+        quoteRevision,
+      );
+      state.item.repairWorkflow = {
+        ...state.item.repairWorkflow,
+        ...sent,
+        csr: {
+          ...sent.csr,
+          status: 'RESOLVED',
+          ownerId: 'csr',
           decision: 'APPROVE',
-          quoteRevision: 4,
-          planHash: inspectionPlanHash(state.item.repairInspection),
-        };
+          acceptedAt: TIME,
+        },
+      };
+      state.item.repairInspection.review = {
+        inspectionRevision: 3,
+        actorId: 'csr',
+        name: 'SYNTHETIC CSR',
+        confirmedAt: TIME,
+        decision: 'APPROVE',
+        quoteRevision,
+        planHash: inspectionPlanHash(state.item.repairInspection),
+      };
+      if (category === 'REPAIR') {
         source.repairAllowed = true;
         source.releaseInfo!.quoteBindings = [
           {
@@ -502,6 +515,26 @@ function fixture(
           },
         ];
       }
+    },
+    refurbishmentStarted() {
+      if (category !== 'RETURN' || state.item.status !== 'REFURBISHING')
+        throw new Error('fixture requires a corporate refurbishment');
+      const inspection = state.item.repairInspection as InspectionDocument;
+      state.item.repairWorkflow = {
+        ...repairWorkflow(state.item.repairWorkflow),
+        workStart: {
+          schema: 'corely.repair.work-start.v1',
+          kind: 'REFURBISHMENT',
+          entityId,
+          itemId: ITEM,
+          inspectionRevision: inspection.revision,
+          planHash: inspectionPlanHash(inspection),
+          ownerId: 'tech',
+          custodianId: 'tech',
+          startedById: 'tech',
+          startedAt: TIME,
+        },
+      };
     },
   };
 }
@@ -913,6 +946,7 @@ describe('fresh product approval gates through the original mailroom command', (
       const f = fixture(action === 'complete_repair' ? 'REPAIR' : 'RETURN');
       f.confirmed(action === 'complete_repair' ? 'REPAIRING' : 'REFURBISHING');
       f.technician(action === 'complete_repair' ? 'REPAIRING' : 'REFURBISHING');
+      if (action === 'complete_refurbish') f.refurbishmentStarted();
       const before = structuredClone(f.state);
       await expect(
         f.service.command(
@@ -925,7 +959,19 @@ describe('fresh product approval gates through the original mailroom command', (
         expect.arrayContaining(['fact.void', 'tx.rollback']),
       );
       expect(f.state).toEqual(before);
+      expect(f.prerequisites.require).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: ITEM,
+          repairInspection: before.item.repairInspection as unknown,
+          repairReport: before.item.repairReport as unknown,
+        }),
+        'COMPLETION',
+        f.db,
+      );
       expect(f.db.mailroomItem.update).not.toHaveBeenCalled();
+      expect(f.stock.consumeForRepair).not.toHaveBeenCalled();
+      expect(f.stock.receiveQualified).not.toHaveBeenCalled();
+      expect(f.gateway.sendToUser).not.toHaveBeenCalled();
       expect(f.state.deliveries).toHaveLength(0);
     },
   );

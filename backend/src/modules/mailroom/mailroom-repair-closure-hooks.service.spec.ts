@@ -4,13 +4,19 @@ import { MailroomService } from './mailroom.service';
 import { type Actor, type SourceCase } from './mailroom.contract';
 import {
   type InspectionDocument,
+  type RepairDocument,
+  type RepairData,
   inspectionPlanHash,
 } from './repair-document.contract';
-import { sentCustomerWorkflow } from './repair-workflow.contract';
+import {
+  sentCustomerWorkflow,
+  type RepairWorkflow,
+} from './repair-workflow.contract';
 import {
   repairSourceBindingForItem,
   validateRepairProposalEvent,
 } from './repair-proposal.contract';
+import { RepairPrerequisitesService } from './repair-prerequisites.service';
 import { type MailroomCommandDto } from './mailroom.dto';
 
 const ITEM = 'aaad7cc6-7273-4000-8abc-333333333333';
@@ -265,11 +271,21 @@ function fixture(fee: 'FREE' | 'PAID' = 'PAID') {
       .fn()
       .mockRejectedValue(new Error('unexpected replacement stock')),
   };
+  // This suite isolates shared transaction ordering; actual registry/material
+  // readiness is exercised by RepairPrerequisitesService's producer-backed spec.
+  const prerequisites = {
+    require: jest.fn((_item: unknown, stage: string) => {
+      trace.push('prerequisites.' + stage);
+      return Promise.resolve(undefined);
+    }),
+  };
   const service = new MailroomService(
     db,
     gateway as any,
     sync as any,
     stock as any,
+    undefined,
+    prerequisites as unknown as RepairPrerequisitesService,
   );
   jest.spyOn(service, 'actor').mockImplementation(async (id) => actor(id));
   jest.spyOn(service as any, 'customerService').mockResolvedValue('csr');
@@ -279,6 +295,7 @@ function fixture(fee: 'FREE' | 'PAID' = 'PAID') {
     sync,
     gateway,
     stock,
+    prerequisites,
     source,
     trace,
     get state() {
@@ -346,6 +363,20 @@ function fixture(fee: 'FREE' | 'PAID' = 'PAID') {
   };
 }
 type Fixture = ReturnType<typeof fixture>;
+type NativeItem = {
+  status: string;
+  receipt: { category: string };
+  repairInspection: InspectionDocument;
+  repairReport: RepairDocument<RepairData>;
+  repairWorkflow: RepairWorkflow;
+};
+const native = (f: Fixture) => f.state.item as NativeItem;
+const writes = (f: Fixture) =>
+  f.db as {
+    mailroomItem: { update: jest.Mock };
+    mailroomAction: { create: jest.Mock };
+    mailroomDelivery: { createMany: jest.Mock };
+  };
 const command = (
   f: Fixture,
   action: MailroomCommandDto['action'],
@@ -462,8 +493,145 @@ describe('shared native Mailroom repair closure hooks', () => {
         action === 'start_repair' ? 'REPAIRING' : 'WAITING_RETURN_ACCEPTANCE',
       );
       expect(f.stock.consumeForRepair).not.toHaveBeenCalled();
+      expect(f.prerequisites.require).toHaveBeenCalledWith(
+        expect.objectContaining({ id: ITEM, entityId: 'company' }),
+        action === 'start_repair' ? 'START' : 'COMPLETION',
+        f.db,
+      );
+      expect(
+        f.trace.indexOf(
+          'prerequisites.' +
+            (action === 'start_repair' ? 'START' : 'COMPLETION'),
+        ),
+      ).toBeLessThan(f.trace.indexOf('item.update'));
     },
   );
+  const corporate = (f: Fixture) => {
+    f.reviewed('REPAIRING');
+    native(f).receipt.category = 'RETURN';
+    f.state.item.status = 'REFURBISHING';
+    native(f).repairWorkflow.csr!.quoteRevision = null;
+    native(f).repairInspection.review!.quoteRevision = null;
+    native(f).repairWorkflow.workStart = {
+      schema: 'corely.repair.work-start.v1',
+      kind: 'REFURBISHMENT',
+      entityId: 'company',
+      itemId: ITEM,
+      inspectionRevision: 3,
+      planHash: inspectionPlanHash(native(f).repairInspection),
+      ownerId: 'tech',
+      custodianId: 'tech',
+      startedById: 'tech',
+      startedAt: TIME,
+    };
+  };
+  it('allows completion from true current corporate work-start proof without borrowing customer Source finance', async () => {
+    const f = fixture();
+    corporate(f);
+    f.sync.cases.mockRejectedValue(new Error('customer source unavailable'));
+    await f.service.command('tech', ITEM, command(f, 'complete_refurbish'));
+    expect(f.prerequisites.require).toHaveBeenCalledWith(
+      expect.objectContaining({ id: ITEM }),
+      'COMPLETION',
+      f.db,
+    );
+    expect(f.state.item.status).toBe('WAITING_RETURN_ACCEPTANCE');
+    expect(native(f).repairWorkflow.release).toMatchObject({
+      purpose: 'REPAIRED',
+    });
+    expect(f.sync.cases).not.toHaveBeenCalled();
+  });
+  it.each([
+    'absent',
+    'stale-hash',
+    'foreign-item',
+    'wrong-person',
+    'future',
+    'non-null-quote',
+  ])(
+    'blocks corporate completion with %s work-start evidence before readiness or any release',
+    async (change) => {
+      const f = fixture();
+      corporate(f);
+      const proof = native(f).repairWorkflow.workStart!;
+      if (change === 'absent') delete native(f).repairWorkflow.workStart;
+      if (change === 'stale-hash') proof.planHash = '0'.repeat(64);
+      if (change === 'foreign-item') proof.itemId = randomUUID();
+      if (change === 'wrong-person') proof.startedById = 'other';
+      if (change === 'future')
+        proof.startedAt = new Date(Date.now() + 86400000).toISOString();
+      if (change === 'non-null-quote') {
+        native(f).repairWorkflow.csr!.quoteRevision = 4;
+        native(f).repairInspection.review!.quoteRevision = 4;
+      }
+      const before = structuredClone(f.state);
+      await expect(
+        f.service.command('tech', ITEM, command(f, 'complete_refurbish')),
+      ).rejects.toThrow(ConflictException);
+      expect(f.state).toEqual(before);
+      expect(f.prerequisites.require).not.toHaveBeenCalled();
+      expect(writes(f).mailroomItem.update).not.toHaveBeenCalled();
+      expect(f.stock.consumeForRepair).not.toHaveBeenCalled();
+      expect(f.gateway.sendToUser).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['start_repair', 'complete_repair', 'complete_refurbish'] as const)(
+    'rejects %s readiness before native mutation, release, OUT, history or outbound delivery',
+    async (action) => {
+      const f = fixture();
+      if (action === 'complete_refurbish') corporate(f);
+      else f.reviewed(action === 'start_repair' ? 'INSPECTING' : 'REPAIRING');
+      f.prerequisites.require.mockRejectedValue(
+        new ConflictException('actual prerequisites blocked'),
+      );
+      const before = structuredClone(f.state);
+      await expect(
+        f.service.command('tech', ITEM, command(f, action)),
+      ).rejects.toThrow('actual prerequisites blocked');
+      expect(f.state).toEqual(before);
+      expect(f.prerequisites.require).toHaveBeenCalledWith(
+        expect.objectContaining({ id: ITEM }),
+        action === 'start_repair' ? 'START' : 'COMPLETION',
+        f.db,
+      );
+      expect(writes(f).mailroomItem.update).not.toHaveBeenCalled();
+      expect(writes(f).mailroomAction.create).not.toHaveBeenCalled();
+      expect(writes(f).mailroomDelivery.createMany).not.toHaveBeenCalled();
+      expect(f.stock.consumeForRepair).not.toHaveBeenCalled();
+      expect(f.gateway.sendToUser).not.toHaveBeenCalled();
+      expect(f.sync.deliverPending).not.toHaveBeenCalled();
+    },
+  );
+  it('rejects replacement completion readiness before formal stock OUT is attempted', async () => {
+    const f = fixture();
+    Object.assign(native(f).repairInspection.data, {
+      plan: 'REPLACE',
+      replacementSku: 'REPLACEMENT-SKU',
+      replacementCondition: 'REFURBISHED',
+    });
+    f.reviewed('REPAIRING');
+    Object.assign(native(f).repairReport.data, {
+      outcome: 'REPLACED',
+      replacementSku: 'REPLACEMENT-SKU',
+      replacementCondition: 'REFURBISHED',
+      replacementSerial: 'REPLACEMENT-SN',
+      replacementSource: '合成合格整新品',
+      originalDisposition: '原件待處置',
+    });
+    f.prerequisites.require.mockRejectedValue(
+      new ConflictException('completion materials not settled'),
+    );
+    const before = structuredClone(f.state);
+    await expect(
+      f.service.command('tech', ITEM, command(f, 'complete_repair')),
+    ).rejects.toThrow('completion materials not settled');
+    expect(f.state).toEqual(before);
+    expect(f.stock.consumeForRepair).not.toHaveBeenCalled();
+    expect(writes(f).mailroomItem.update).not.toHaveBeenCalled();
+    expect(writes(f).mailroomAction.create).not.toHaveBeenCalled();
+    expect(writes(f).mailroomDelivery.createMany).not.toHaveBeenCalled();
+  });
+
   it.each(['FREE', 'PAID'] as const)(
     'blocks legacy no-CSR %s customer repair at both start and completion',
     async (fee) => {
@@ -579,7 +747,13 @@ describe('shared native Mailroom repair closure hooks', () => {
       const input = command(f, action);
       await f.service.command('tech', ITEM, input);
       const reads = f.sync.cases.mock.calls.length,
+        evidenceReads = f.prerequisites.require.mock.calls.length,
         before = structuredClone(f.state);
+      f.prerequisites.require.mockRejectedValue(
+        new ConflictException(
+          'changed prerequisites after committed operation',
+        ),
+      );
       f.sync.cases.mockRejectedValue(new Error('offline Source'));
       await expect(
         f.service.command('tech', ITEM, input),
@@ -588,6 +762,7 @@ describe('shared native Mailroom repair closure hooks', () => {
         f.service.command('tech', ITEM, { ...input, note: 'CHANGED' }),
       ).rejects.toThrow(ConflictException);
       expect(f.sync.cases).toHaveBeenCalledTimes(reads);
+      expect(f.prerequisites.require).toHaveBeenCalledTimes(evidenceReads);
       expect(f.state).toEqual(before);
       expect(f.stock.consumeForRepair).not.toHaveBeenCalled();
     },

@@ -3,13 +3,55 @@ import { validate } from 'class-validator';
 import { MailroomService } from './mailroom.service';
 import { MailroomQuery } from './mailroom.dto';
 import { type Actor, type SourceCase } from './mailroom.contract';
-import { inspectionPlanHash } from './repair-document.contract';
-import { sentCustomerWorkflow } from './repair-workflow.contract';
+import {
+  inspectionPlanHash,
+  type InspectionData,
+  type InspectionDocument,
+  type RepairData,
+} from './repair-document.contract';
+import {
+  sentCustomerWorkflow,
+  type RepairWorkflow,
+} from './repair-workflow.contract';
 import { repairSourceBindingForItem } from './repair-proposal.contract';
+import type { RepairPrerequisitesService } from './repair-prerequisites.service';
+import type { RepairWorkStartProof } from './repair-work-start.contract';
 
 const MINE_ID = 'aaad7cc6-7273-4000-8abc-333333333333';
 const RECEIPT_ID = 'aaad7cc6-7273-4000-8abc-444444444444';
 const CURRENT_SOURCE_VERSION = '2026-10-13T04:00:00.000Z';
+
+type NativeFixture = {
+  id: string;
+  entityId: string;
+  status: string;
+  repairOwnerId: string | null;
+  custodianId: string;
+  receipt: { category: string };
+  repairInspection: Pick<
+    InspectionDocument,
+    'revision' | 'status' | 'review'
+  > & {
+    data: Partial<InspectionData> &
+      Pick<
+        InspectionData,
+        | 'complaint'
+        | 'testConditions'
+        | 'checks'
+        | 'diagnosis'
+        | 'plan'
+        | 'planNote'
+        | 'feeSuggestion'
+      >;
+  };
+  repairReport?: {
+    status: 'SUBMITTED';
+    inspectionRevision: number;
+    data: Partial<RepairData>;
+  };
+  repairWorkflow?: RepairWorkflow;
+};
+const nativeFixture = (value: unknown): NativeFixture => value as NativeFixture;
 
 const actor = (
   id: string,
@@ -142,6 +184,50 @@ function approveCurrent(mine: any, source: SourceCase) {
   };
 }
 
+function approveAndStartRefurbishment(mine: NativeFixture) {
+  const hash = inspectionPlanHash(mine.repairInspection as InspectionDocument);
+  const sent = sentCustomerWorkflow(
+    mine,
+    actor('tech'),
+    CURRENT_SOURCE_VERSION,
+    null,
+  );
+  if (!sent.csr || !mine.repairOwnerId)
+    throw new Error('SYNTHETIC 整新 fixture 缺客服交辦或維修主責');
+  mine.repairInspection.review = {
+    inspectionRevision: mine.repairInspection.revision,
+    actorId: 'csr',
+    name: '客服',
+    confirmedAt: CURRENT_SOURCE_VERSION,
+    decision: 'APPROVE',
+    planHash: hash,
+    quoteRevision: null,
+  };
+  const workStart: RepairWorkStartProof = {
+    schema: 'corely.repair.work-start.v1',
+    kind: 'REFURBISHMENT',
+    entityId: mine.entityId,
+    itemId: mine.id,
+    inspectionRevision: mine.repairInspection.revision,
+    planHash: hash,
+    ownerId: mine.repairOwnerId,
+    custodianId: mine.custodianId,
+    startedById: 'tech',
+    startedAt: CURRENT_SOURCE_VERSION,
+  };
+  mine.repairWorkflow = {
+    ...sent,
+    csr: {
+      ...sent.csr,
+      status: 'RESOLVED',
+      ownerId: 'csr',
+      acceptedAt: CURRENT_SOURCE_VERSION,
+      decision: 'APPROVE',
+    },
+    workStart,
+  };
+}
+
 // A small in-memory query adapter exercises the observable access results,
 // including nested AND/OR filters, rather than returning unrestricted mocked rows.
 function matches(row: any, where: any): boolean {
@@ -168,6 +254,7 @@ describe('repair workbench company overview and claim access', () => {
   let prisma: any;
   let sync: any;
   let stock: any;
+  let prerequisites: { require: jest.Mock };
   let rows: any[];
   const originalEnabled = process.env.MAILROOM_ENABLED;
   beforeEach(() => {
@@ -268,7 +355,15 @@ describe('repair workbench company overview and claim access', () => {
         replacementSN: 'REPLACEMENT-SN',
       }),
     };
-    service = new MailroomService(prisma, {} as any, sync, stock);
+    prerequisites = { require: jest.fn().mockResolvedValue(undefined) };
+    service = new MailroomService(
+      prisma,
+      {} as any,
+      sync,
+      stock,
+      undefined,
+      prerequisites as unknown as RepairPrerequisitesService,
+    );
     jest.spyOn(service, 'actor').mockImplementation(async (id) => actor(id));
     jest
       .spyOn(service as any, 'views')
@@ -981,6 +1076,8 @@ describe('repair workbench company overview and claim access', () => {
         const source = sourceFixture(mine);
         approveCurrent(mine, source);
         sync.cases.mockResolvedValue({ items: [source] });
+      } else {
+        approveAndStartRefurbishment(nativeFixture(mine));
       }
       await expect(service.command('tech', MINE_ID, command)).rejects.toThrow(
         '先提交維修單',
@@ -1012,8 +1109,166 @@ describe('repair workbench company overview and claim access', () => {
         nextUserId: 'clerk',
         custodianId: 'tech',
       });
+      expect(prerequisites.require).toHaveBeenCalledWith(
+        expect.objectContaining({ id: MINE_ID, entityId: 'company' }),
+        'COMPLETION',
+        prisma,
+      );
     },
   );
+
+  it.each([
+    ['start_repair', 'INSPECTING', 'REPAIR', 'REPAIR', 'START'],
+    ['start_repair', 'INSPECTING', 'REPAIR', 'REPLACE', 'START'],
+    ['complete_repair', 'REPAIRING', 'REPAIR', 'REPAIR', 'COMPLETION'],
+    ['complete_repair', 'REPAIRING', 'REPAIR', 'REPLACE', 'COMPLETION'],
+    ['complete_refurbish', 'REFURBISHING', 'RETURN', 'REPAIR', 'COMPLETION'],
+  ] as const)(
+    'blocks %s with %s/%s/%s before native transition, replacement OUT and release when %s prerequisites reject',
+    async (action, status, category, plan, phase) => {
+      const mine = nativeFixture(
+        rows.find((row: unknown) => nativeFixture(row).id === MINE_ID),
+      );
+      mine.status = status;
+      mine.receipt.category = category;
+      mine.repairInspection = {
+        revision: 2,
+        status: 'SUBMITTED',
+        data: {
+          complaint: '故障',
+          testConditions: '原配件',
+          diagnosis: '已確認故障',
+          plan,
+          planNote: '處理已確認故障',
+          feeSuggestion: 'FREE',
+          estimateNote: '保固',
+          checks: [{ name: '開機', result: 'FAIL', observation: '未啟動' }],
+          ...(plan === 'REPLACE'
+            ? {
+                replacementSku: 'DEMO-SKU',
+                replacementCondition: 'REFURBISHED',
+              }
+            : {}),
+        },
+      };
+      mine.repairReport = {
+        status: 'SUBMITTED',
+        inspectionRevision: 2,
+        data: {
+          outcome: plan === 'REPLACE' ? 'REPLACED' : 'REPAIRED',
+          workPerformed: '實際修復並複驗',
+          parts: [],
+          qcResult: 'PASS',
+          qcNotes: '功能正常',
+          deliveredAccessories: '完整',
+          checks: [{ name: '開機', result: 'PASS', observation: '功能正常' }],
+          ...(plan === 'REPLACE'
+            ? {
+                replacementSku: 'DEMO-SKU',
+                replacementSerial: 'REPLACEMENT-SN',
+                replacementCondition: 'REFURBISHED',
+                replacementSource: '實物複驗合格整新品',
+                originalDisposition: '原件待故障品處置',
+                inventoryReference: '待正式庫存出庫證明',
+              }
+            : {}),
+        },
+      };
+      if (category === 'REPAIR') {
+        const source = sourceFixture(mine);
+        approveCurrent(mine, source);
+        (sync as { cases: jest.Mock }).cases.mockResolvedValue({
+          items: [source],
+        });
+      } else {
+        approveAndStartRefurbishment(mine);
+      }
+      const before = structuredClone(mine);
+      prerequisites.require.mockRejectedValueOnce(
+        new ConflictException('SYNTHETIC 檢測或備料尚未完成'),
+      );
+      await expect(
+        service.command('tech', MINE_ID, {
+          entityId: 'company',
+          requestId: 'blocked-prerequisites-001',
+          expectedVersion: 1,
+          action,
+          note: '處理完成',
+        }),
+      ).rejects.toThrow('SYNTHETIC 檢測或備料尚未完成');
+      expect(prerequisites.require).toHaveBeenCalledTimes(1);
+      expect(prerequisites.require).toHaveBeenCalledWith(before, phase, prisma);
+      expect(
+        (stock as { consumeForRepair: jest.Mock }).consumeForRepair,
+      ).not.toHaveBeenCalled();
+      expect(
+        (prisma as { mailroomItem: { update: jest.Mock } }).mailroomItem.update,
+      ).not.toHaveBeenCalled();
+      expect(jest.spyOn(service, 'record')).not.toHaveBeenCalled();
+      expect(jest.spyOn(service, 'publish')).not.toHaveBeenCalled();
+      expect(
+        rows.find((row: unknown) => nativeFixture(row).id === MINE_ID),
+      ).toEqual(before);
+      expect(mine.repairWorkflow?.release).toBeUndefined();
+    },
+  );
+
+  it('does not infer a corporate refurbishment work-start proof from REFURBISHING and a passing report', async () => {
+    const mine = nativeFixture(
+      rows.find((row: unknown) => nativeFixture(row).id === MINE_ID),
+    );
+    mine.status = 'REFURBISHING';
+    mine.receipt.category = 'RETURN';
+    mine.repairInspection = {
+      revision: 1,
+      status: 'SUBMITTED',
+      data: {
+        complaint: '無法開機',
+        testConditions: '原配件',
+        diagnosis: '已確認故障',
+        planNote: '維修',
+        plan: 'REPAIR',
+        feeSuggestion: 'FREE',
+        checks: [{ name: '開機', result: 'FAIL', observation: '未啟動' }],
+      },
+    };
+    approveAndStartRefurbishment(mine);
+    if (mine.repairWorkflow) delete mine.repairWorkflow.workStart;
+    mine.repairReport = {
+      status: 'SUBMITTED',
+      inspectionRevision: 1,
+      data: {
+        outcome: 'REPAIRED',
+        workPerformed: '實際修復',
+        parts: [],
+        qcResult: 'PASS',
+        qcNotes: '功能正常',
+        deliveredAccessories: '完整',
+        checks: [{ name: '開機', result: 'PASS', observation: '功能正常' }],
+      },
+    };
+    const before = structuredClone(mine);
+    await expect(
+      service.command('tech', MINE_ID, {
+        entityId: 'company',
+        requestId: 'missing-refurbishment-start-001',
+        expectedVersion: 1,
+        action: 'complete_refurbish',
+        note: '整新複驗完成',
+      }),
+    ).rejects.toThrow('本版整新尚未由本人確認開工');
+    expect(prerequisites.require).not.toHaveBeenCalled();
+    expect(
+      (stock as { consumeForRepair: jest.Mock }).consumeForRepair,
+    ).not.toHaveBeenCalled();
+    expect(
+      (prisma as { mailroomItem: { update: jest.Mock } }).mailroomItem.update,
+    ).not.toHaveBeenCalled();
+    expect(jest.spyOn(service, 'record')).not.toHaveBeenCalled();
+    expect(
+      rows.find((row: unknown) => nativeFixture(row).id === MINE_ID),
+    ).toEqual(before);
+  });
 
   it('completes replacement only with the same transaction formal unit posting and preserves external pending honestly; failed release never consumes stock', async () => {
     const mine = rows.find((row) => row.id === MINE_ID);
