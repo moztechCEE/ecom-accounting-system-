@@ -42,6 +42,7 @@ export type RepairWorkflow = {
   schema: 1;
   intake?: CaseIntakeState;
   inventoryReceipt?: Record<string, unknown>;
+  materialsReceipt?: unknown;
   outboundShipment?: OutboundShipment;
   csr?: {
     status: 'SENT' | 'ACCEPTED' | 'RESOLVED';
@@ -49,6 +50,7 @@ export type RepairWorkflow = {
     estimateRevision: number;
     quoteRevision: number | null;
     planHash: string;
+    proposalHash?: string;
     sentToUserId: string | null;
     ownerId?: string;
     sentAt: string;
@@ -208,10 +210,18 @@ export function requireWorkflowText(value: unknown, label: string): string {
     throw new BadRequestException('請填寫' + label);
   return value.trim();
 }
+export type RepairSourceBinding = {
+  itemId: string;
+  planVersion: number;
+  planHash: string;
+  proposalHash: string;
+};
+
 export function requireSourceConsent(
   source: SourceCase,
   quoteRevision: number | null | undefined,
   requirePayment: boolean,
+  expectedBinding?: RepairSourceBinding,
 ) {
   if (source.type === 'REPAIR') {
     const info = source.releaseInfo;
@@ -228,6 +238,40 @@ export function requireSourceConsent(
       throw new ConflictException(
         '售後顧客同意或報價版本不符，請由客服重新確認',
       );
+    const release = info as typeof info & {
+      invoiceRequired?: boolean;
+      invoiceStatus?: string;
+      invoiceSatisfied?: boolean;
+      invoiceQuoteRevision?: number | null;
+      quoteBindings?: (RepairSourceBinding & { quoteRevision: number })[];
+    };
+    if (requirePayment && !expectedBinding)
+      throw new ConflictException(
+        '目前檢修方案尚未與售後報價綁定，不能放行維修',
+      );
+    if (expectedBinding) {
+      const bindings = Array.isArray(release.quoteBindings)
+        ? release.quoteBindings.filter(
+            (binding) => binding?.itemId === expectedBinding.itemId,
+          )
+        : [];
+      if (
+        typeof expectedBinding.itemId !== 'string' ||
+        !expectedBinding.itemId.trim() ||
+        !Number.isInteger(expectedBinding.planVersion) ||
+        expectedBinding.planVersion < 1 ||
+        typeof expectedBinding.planHash !== 'string' ||
+        !expectedBinding.planHash.trim() ||
+        typeof expectedBinding.proposalHash !== 'string' ||
+        !expectedBinding.proposalHash.trim() ||
+        bindings.length !== 1 ||
+        bindings[0].planVersion !== expectedBinding.planVersion ||
+        bindings[0].planHash !== expectedBinding.planHash ||
+        bindings[0].proposalHash !== expectedBinding.proposalHash ||
+        bindings[0].quoteRevision !== info.quoteRevision
+      )
+        throw new ConflictException('目前物件的檢修方案與售後報價版本不符');
+    }
     if (
       requirePayment &&
       (!source.repairAllowed ||
@@ -237,6 +281,20 @@ export function requireSourceConsent(
           info.confirmedPaymentQuoteRevision !== info.quoteRevision))
     )
       throw new ConflictException('目前報價尚未足額確認收款，不能放行維修');
+    if (
+      requirePayment &&
+      ((Number(info.amount) > 0 &&
+        typeof release.invoiceRequired !== 'boolean') ||
+        (release.invoiceRequired !== undefined &&
+          typeof release.invoiceRequired !== 'boolean') ||
+        (release.invoiceRequired === true &&
+          (release.invoiceStatus !== 'ISSUED' ||
+            release.invoiceSatisfied !== true ||
+            release.invoiceQuoteRevision !== info.quoteRevision)))
+    )
+      throw new ConflictException(
+        '目前報價的必要發票尚未實際開立，不能放行維修',
+      );
     return info.quoteRevision;
   }
   if (requirePayment && !source.repairAllowed)
