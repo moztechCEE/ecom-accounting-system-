@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:dcca32a428b444dbcdb7dff0641481c004e810d917187fbee07406c87d91f3ec",
+  "sourceVersion": "sha256:8dd1c0f1d22fb2f8b5efd012d6a80c801a74e680e2581a21d976fe76fb2cce59",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
-  "entryCount": 79,
+  "entryCount": 82,
   "groups": [
     "admin",
     "dashboard",
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "585aab256f8741dcab24c7ad8283702a904749921014d327b8667ca55f8fa690",
+  "catalogSha256": "f9b1e87844d0cd181ac0d61f87ee1331264387a2be90f58ea4b754503703aa88",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -33,6 +33,8 @@
       "/admin/access-control",
       "/admin/after-sales-brands",
       "/admin/entities",
+      "/admin/integrations",
+      "/admin/operation-logs",
       "/admin/reimbursement-items",
       "/admin/settings",
       "/ap/expense-review",
@@ -74,6 +76,7 @@
       "/operations/after-sales/repairs",
       "/operations/after-sales/reshipments",
       "/operations/after-sales/settings",
+      "/operations/after-sales/settings/advanced",
       "/operations/after-sales/shipping",
       "/operations/after-sales/users",
       "/operations/after-sales/workbench",
@@ -152,6 +155,7 @@
       "/b2b/requests/:id",
       "/b2b/requests/:id/quote/:version",
       "/operations/after-sales/:section",
+      "/repair-report/:id",
       "/warehouse/:report"
     ],
     "excludedRoutes": [
@@ -196,7 +200,7 @@
     },
     {
       "path": "backend/prisma/schema.prisma",
-      "sha256": "fc37c7a405edcedc0d7d97eb1e3c53ff5d7cae61a4f6d309392230840493e523"
+      "sha256": "d1feea331d3e150ea6e0590035978c7151c38ca0d906c936813e0df666b0404c"
     },
     {
       "path": "backend/src/common/department-access/attendance-selection.ts",
@@ -208,7 +212,11 @@
     },
     {
       "path": "backend/src/common/guards/jwt-auth.guard.ts",
-      "sha256": "1b626668755a7840411d59fbeb5ef4565ae2592dadcc4245711b4d320a994849"
+      "sha256": "314efb050faa1b4f3622b93806ebb444732506b15e28b76cca3838eab9348102"
+    },
+    {
+      "path": "backend/src/main.ts",
+      "sha256": "853900151940a0c172f84b9a02fdeedf74ce8298ed2b15dad89098fc334c9e89"
     },
     {
       "path": "backend/src/modules/accounting/accounting.controller.ts",
@@ -320,7 +328,7 @@
     },
     {
       "path": "backend/src/modules/integration/after-sales/after-sales-stock.service.ts",
-      "sha256": "3ff0f2eac4105e798fc15671f5ac8924fa6dc602492798c98675570f852da90e"
+      "sha256": "d1041ea89d8cddfe5576d2270dc234e066fdf3f44edd2254933347d0f15cd00c"
     },
     {
       "path": "backend/src/modules/integration/after-sales/after-sales.controller.ts",
@@ -332,15 +340,15 @@
     },
     {
       "path": "backend/src/modules/integration/after-sales/erp-module.contract.ts",
-      "sha256": "d4bbfcda0f3426d8ddc616dd4203410ccb7567ea4d80c194a554e6fdf422fc64"
+      "sha256": "e530d38e8a47224c65821a86d50a67a66fb8944be1b6905a663b0d7342e4ded6"
     },
     {
       "path": "backend/src/modules/integration/after-sales/erp-module.controller.ts",
-      "sha256": "74dfcb9c37177dbca0651b2eb1a90d4bbc94717444220085b1f30ad828e9b265"
+      "sha256": "9948c71f2fbf3028d7ac214b37dbea2a2d2c1e4664630c167a8b7c1919e31da8"
     },
     {
       "path": "backend/src/modules/integration/after-sales/erp-module.service.ts",
-      "sha256": "2a78ab5a45bf6212f8d34faca1a61a68e902a1c904979e185133b35eb19ebdd9"
+      "sha256": "4c44bd956eb66ba5750ed7ffcc74bfc82ffa59e8a421d44536f4a8fdc6a92041"
     },
     {
       "path": "backend/src/modules/integration/wms/wms-handover.module.ts",
@@ -351,20 +359,36 @@
       "sha256": "887c129a540aec57da711aa97b3153a0a9aa1950574b3586d310d21606f91ce7"
     },
     {
+      "path": "backend/src/modules/integration/wms/wms-native.contract.ts",
+      "sha256": "074bb0b0fec6b76da2a2f52aededdb426c50a7a170260573b4d74e400149edb0"
+    },
+    {
+      "path": "backend/src/modules/integration/wms/wms-native.controller.ts",
+      "sha256": "5047a68aef553c40502e47891f6f591123f6502c5256e56398e192eee009f5b8"
+    },
+    {
+      "path": "backend/src/modules/integration/wms/wms-native.service.ts",
+      "sha256": "895309ecad0ead1d3335b4615e210a5385c14df358852b56744bf204f2458135"
+    },
+    {
+      "path": "backend/src/modules/integration/wms/wms-portal.module.ts",
+      "sha256": "bf7e6d9f6a187749b110a9097d5e80ff32e2d09e7774d053643abdfb48d00726"
+    },
+    {
       "path": "backend/src/modules/inventory/inventory.controller.ts",
       "sha256": "3f751e5deee28cf0f3a86360b7e3532a5cb5ec8c4a2b3e84b3b76081466077a2"
     },
     {
       "path": "backend/src/modules/mailroom/after-sales-tasks.controller.ts",
-      "sha256": "23de01133a87c894db95fe7fb0597d071c0bf586d52ac2da43f228a814ae8ec6"
+      "sha256": "d3e08b1ee3f9b80d332bf18a64ec04e8c54c5864114983f978275d955c20a1f2"
     },
     {
       "path": "backend/src/modules/mailroom/after-sales-tasks.dto.ts",
-      "sha256": "ca9130822a61ca2ce7170908b8600d992e8d28b04a6f90605a6b6901da738694"
+      "sha256": "6f5c0afa2bec6138e6b477ae9a7f20b21a02d0201febd4f6bb11ecf32f6c310e"
     },
     {
       "path": "backend/src/modules/mailroom/after-sales-tasks.service.ts",
-      "sha256": "e74faa89cfb628a7c69af8bd9d4362d461596c5376bbe4dd292494df0f8a1b9b"
+      "sha256": "7cab1115ad77a0e4dca706c74a71b1acfd845e242c4f2c794e61a44566c18cbe"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-catalog.controller.ts",
@@ -376,7 +400,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-dispatch.contract.ts",
-      "sha256": "c3af2a7db3f3951bbc440e3ba2819aed7f5699523d503814fa610c2fe0c41f61"
+      "sha256": "0d3885f167b97c2d5d26a2349269cd57eedd4509cac56e7b863fda43c1243ce4"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-intake.contract.ts",
@@ -420,7 +444,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-sync.service.ts",
-      "sha256": "9c2a077e932abf8baad97e8412fe5103437313996ebc4d33a3efcc85d5effe1a"
+      "sha256": "021192154a7d4f165c4810218572ab2939b0cc61b4c786407a5f82221c04500f"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-tablet.controller.ts",
@@ -436,7 +460,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom.contract.ts",
-      "sha256": "827a85cbfab46ff4361166d7c023cc4b16abc36d4c13bc7507b8e8667fc5d1a2"
+      "sha256": "71c8e5678060af1f63698858feef69ca80bc51971d867006702518640f836393"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom.controller.ts",
@@ -448,31 +472,55 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom.module.ts",
-      "sha256": "c4006d17ea34636c590130d99fbeac42d38f7be2f27421914978749f7b38559c"
+      "sha256": "91140db996930d1f8705060018414ef03bd266c900aa0a779d86a895dbb735d8"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom.service.ts",
-      "sha256": "93f8598b510bdb7373dd1981441872d8cc78d063260aa52df33dc52ff7ffd48d"
+      "sha256": "7d63dffb6a0ef0bef4ab23fc19a922c99f5d560f17118ee0d73aedc16ffb4633"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-customer-report.service.ts",
+      "sha256": "a1630d9a82f7aae6db3291ae2dd184a712bc22084033356c709255a62f1de126"
     },
     {
       "path": "backend/src/modules/mailroom/repair-document.contract.ts",
-      "sha256": "bff05a37392a11eb0966e56794d6ab79c4a2e21ea877e2fb71abcd546724ab8a"
+      "sha256": "2a1cfa51aa09da544036774651dc6d8aca6de6b63dcbe4cfaa03f1ac367cc417"
     },
     {
       "path": "backend/src/modules/mailroom/repair-document.dto.ts",
-      "sha256": "eb8235e466462882f592e7b657b0590170f6f5a5c3078ad970b19f0dbc080a04"
+      "sha256": "45be3a1a773382b15e9440325c92b28682462052082fad104e1dc3bf894d06ea"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-evidence.controller.ts",
+      "sha256": "91cbeee9d3c76044a51bf8c1b20f6040cc7e1296d572084bcb5f448ac0e797dd"
     },
     {
       "path": "backend/src/modules/mailroom/repair-list.contract.ts",
       "sha256": "352664b79bc5e97f05372032c43ddf00aadc37b93a001daf9ae33e44ea667304"
     },
     {
+      "path": "backend/src/modules/mailroom/repair-materials.service.ts",
+      "sha256": "c6f1a28afc714e8beb1b71ec3c21f263d16f9f5d90639fdf85b033aba078a7dd"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-media.service.ts",
+      "sha256": "4e6794fc345ae056a6882fabf082980703f324ee82cfe22859889de3ed5ef2e3"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-prerequisites.service.ts",
+      "sha256": "81d0c84495570fa81913bcd22b9277dcc3ea7b840da8252c493a5eeccd45e4f6"
+    },
+    {
       "path": "backend/src/modules/mailroom/repair-stock-custody.contract.ts",
       "sha256": "c290d0b5a1072d4e9035d50ea38bed8698fd9e8d86e50cd7ff4ab86212141e8d"
     },
     {
+      "path": "backend/src/modules/mailroom/repair-test-registry.service.ts",
+      "sha256": "2660b963f17f61706e4bb4f8ee9872897e4f6303b8604431ad2bebfe4ca5da78"
+    },
+    {
       "path": "backend/src/modules/mailroom/repair-todo.contract.ts",
-      "sha256": "e9880659b62f4b1bd7374f9731e489981cc98581a14fc9b830816e99d31cbf00"
+      "sha256": "a1bf9bad004aaf65bbc3764f02942f5c3c0a5ae44032b1dc15dd19254cad4b33"
     },
     {
       "path": "backend/src/modules/mailroom/repair-todo.dto.ts",
@@ -480,7 +528,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/repair-todo.service.ts",
-      "sha256": "450c7133d92bef8b2b15a16346bf56bd27e7e23ce299f699d7c3d7831093057d"
+      "sha256": "9bddd6493c2cf1a2f687fba8433bf32211a16b8f45e79ac62b852c9c88f716c7"
     },
     {
       "path": "backend/src/modules/mailroom/repair-workbench.controller.ts",
@@ -488,11 +536,11 @@
     },
     {
       "path": "backend/src/modules/mailroom/repair-workbench.service.ts",
-      "sha256": "3383dba476bcf9d006adf18d5017f2c2f352bb77b7f40d8c524215f3f00ff881"
+      "sha256": "f0b1043b50c7d5e011931247f4ce53e944df1fe19d6266d0cddf46fd37e8088c"
     },
     {
       "path": "backend/src/modules/mailroom/repair-workflow.contract.ts",
-      "sha256": "119e5adfbe6788ccd1979a869ba98624ab5c328fd411171a6f3bea0b2620e127"
+      "sha256": "72b53c31686fb42219945aa80f6e8fc20ee396f105d1f6f7f8d83bed3aabfabf"
     },
     {
       "path": "backend/src/modules/mailroom/repair-workflow.dto.ts",
@@ -501,6 +549,18 @@
     {
       "path": "backend/src/modules/notification/notification.service.ts",
       "sha256": "95d24ea91127557857e245b756c4f8248cb76be8b6b36d6782cfb0f8c4ee1282"
+    },
+    {
+      "path": "backend/src/modules/operations-admin/integration-settings.service.ts",
+      "sha256": "a6c796a1ef20b50e2de4a14e171553c7f28fcad1e23fa0fabf295c7727e890dd"
+    },
+    {
+      "path": "backend/src/modules/operations-admin/operation-logs.service.ts",
+      "sha256": "ca7e3ca371316750920a3343a161167dbb5af53718c3266062ada4c919cac44d"
+    },
+    {
+      "path": "backend/src/modules/operations-admin/operations-admin.controller.ts",
+      "sha256": "534d3714eb8a5060bd48aa958f5e377c877b1168068e0a5e901c76de5433e2e7"
     },
     {
       "path": "backend/src/modules/payroll/payroll.controller.ts",
@@ -600,11 +660,11 @@
     },
     {
       "path": "frontend/server.mjs",
-      "sha256": "bc9fa4cd1960f798ac733a72a4e31b15dd6b81041b37f9584da3f033248d8f70"
+      "sha256": "0a6ee037da9b69090720b30f60910a0c8ef4560430551fb0a33a8fee2ac20366"
     },
     {
       "path": "frontend/src/App.tsx",
-      "sha256": "b66edb72ab6c952de707b846118deb4f2367c2a1b28297a71a069399d58c5849"
+      "sha256": "8eaece76a0f615ad9b296ded168706ad54b9d675c61b0f079aa788a016d92379"
     },
     {
       "path": "frontend/src/components/CommandPalette.tsx",
@@ -619,8 +679,12 @@
       "sha256": "b9de51fc0366c534bf3969d0d2496b69e14b958c167cfef458794f6c5e524566"
     },
     {
+      "path": "frontend/src/components/WarehouseLink.tsx",
+      "sha256": "40622bb781a68e6da8af5b0ac3b19459fc725efa1d0d361d416872d79bf1a091"
+    },
+    {
       "path": "frontend/src/config/navigation.ts",
-      "sha256": "56286c95da1213df4334fdf0433e2fdd87ecab5d4f4f871d15e15045729398a9"
+      "sha256": "ce3ee3f90248b58eecf904aadb919f35f1613fd774efa8f60396d97763794990"
     },
     {
       "path": "frontend/src/config/release.ts",
@@ -628,7 +692,7 @@
     },
     {
       "path": "frontend/src/config/wms-portal.ts",
-      "sha256": "bdc77d5a04bc20b2efbf17e0f203449f4be6cf1c5f4c77d51722cfb14e0736bf"
+      "sha256": "35bd21c52be5f354a2a0e596c84870bbe175fefba8588c61eeae5b8c5494586a"
     },
     {
       "path": "frontend/src/config/workspaces.ts",
@@ -668,7 +732,11 @@
     },
     {
       "path": "frontend/src/pages/after-sales/AfterSalesWorkbenchHub.tsx",
-      "sha256": "0e8362f5d2f506fd767288bdcb7fd113ec1cdc16cedca58b02dc1be323ef5dd0"
+      "sha256": "d8ef51561ce9d64e27574bc5f29c399f9bc438b585184f31d5353958265d1738"
+    },
+    {
+      "path": "frontend/src/pages/after-sales/native-communication-model.ts",
+      "sha256": "0bab47a659eb149bf7cef581b499650f63ab9c8cc4df3a5a451c4436ff45ad0a"
     },
     {
       "path": "frontend/src/pages/after-sales/native-workbench-model.ts",
@@ -676,7 +744,7 @@
     },
     {
       "path": "frontend/src/pages/after-sales/NativeAfterSalesCreate.tsx",
-      "sha256": "ca0f0e88cea233394ed004c13b42928fe7e31d6cf7b51600aaa5d3d535087383"
+      "sha256": "29328c07655dbb999e6cd6473548197f0be5f5ab5b0f36df559f55b6ce498ba0"
     },
     {
       "path": "frontend/src/pages/after-sales/NativeAfterSalesWorkbench.css",
@@ -684,11 +752,15 @@
     },
     {
       "path": "frontend/src/pages/after-sales/NativeAfterSalesWorkbench.tsx",
-      "sha256": "9ec7210092a20be31978b42d1264086cf77c66363718ceb71f30a6fbd3ef6cfb"
+      "sha256": "3ec5ccbd8206c8f3a64d11f530e5cd89d555b2be95942ac57487df6bf5a3a651"
+    },
+    {
+      "path": "frontend/src/pages/after-sales/NativeCaseCommunication.tsx",
+      "sha256": "32adbe59884d372f84a1f98d39db6e207c4ff20e64a0a18a91befe57a01fe19d"
     },
     {
       "path": "frontend/src/pages/after-sales/pending-registration.ts",
-      "sha256": "be5591563867b948eb712154a766d64f198f412615c6c95bbdb4781c4be18671"
+      "sha256": "612ee9cf6b8c94f169d80b0a228df18c838dab0a05deaa2306b3f43830fe1658"
     },
     {
       "path": "frontend/src/pages/after-sales/workbench-model.ts",
@@ -704,7 +776,7 @@
     },
     {
       "path": "frontend/src/pages/AfterSalesModulePage.tsx",
-      "sha256": "e534e7714d7a6c4a8bc5a2a84cbef6c3e928fbfa4a352f1f0447aa5a4bb3fc8d"
+      "sha256": "04bc5ec0ca9ad6223a0aa94da5428ca3a11d5c50395d5ea632f4af5985a190d3"
     },
     {
       "path": "frontend/src/pages/AfterSalesQuotesPage.tsx",
@@ -819,6 +891,10 @@
       "sha256": "f3b84c03bf148a5fb1369e150d4eddea917249084b6f6acd00cb57336badc463"
     },
     {
+      "path": "frontend/src/pages/IntegrationSettingsPage.tsx",
+      "sha256": "ceb924f17cf28bf1da3149e58ae8bad2e2b6a0ebbaeb11022463d702bd875de8"
+    },
+    {
       "path": "frontend/src/pages/JournalEntriesPage.tsx",
       "sha256": "cd0125c8c3ba9af49822939151abfa4026f37e8af22a3a34b38e977eb542fa90"
     },
@@ -864,11 +940,11 @@
     },
     {
       "path": "frontend/src/pages/mailroom/MailroomPage.tsx",
-      "sha256": "fbe863ba002450d34d99fce7e556cc0aa167972b4a75884a323004bb93a2323e"
+      "sha256": "716f25f85454172ef526e27c3d7dc9540a75d792431e99cc2f6d2b7418aae8a4"
     },
     {
       "path": "frontend/src/pages/mailroom/model.ts",
-      "sha256": "15e9bf112dce154ffb68931cf56c6572155f31941cbd465fe1517b07d29c273c"
+      "sha256": "4480806148145627c0a44ae0ae94c7d73b4a6f87fbd31907d2c86fad055315c6"
     },
     {
       "path": "frontend/src/pages/mailroom/receipt-photos.ts",
@@ -927,6 +1003,10 @@
       "sha256": "080da05cb5c1b575f5c86a2f39639436597eba3ee2d3b086958cffe08b42456c"
     },
     {
+      "path": "frontend/src/pages/OperationLogsPage.tsx",
+      "sha256": "12558a2316223a949e35be78a5df88c911eefd6231d6a41e5263ff3b16f31ae5"
+    },
+    {
       "path": "frontend/src/pages/PayrollPage.tsx",
       "sha256": "9f4e739abcabddf7f805e212d6a42cdc38ba9b31fc17a49957e448b23c7e630c"
     },
@@ -963,16 +1043,20 @@
       "sha256": "f39f259408bc144414eab825f3880fb6feb2b403a632da22bcd962f9d9f23c06"
     },
     {
+      "path": "frontend/src/pages/repair/repair-evidence-client.ts",
+      "sha256": "9edd4cca658b45a795fc8fd3f87a31437df65335e23abd8c8d0e6aec9ae8a1ca"
+    },
+    {
       "path": "frontend/src/pages/repair/repair-feedback.tsx",
       "sha256": "9e0742ef0ed4c7ced24846e67c7f60c91306ba215ed58b01342c3a7e17d0bb14"
     },
     {
       "path": "frontend/src/pages/repair/repair-list-model.ts",
-      "sha256": "08954b446d9ec1d94c780a1ade89b9bf9a8276a8b25225a02bf2e7e34c5de601"
+      "sha256": "df5e59d400d04577c3699820f191ec7b84cb23ddd8f3e972d8dcde920b7dfc9c"
     },
     {
       "path": "frontend/src/pages/repair/repair-model.ts",
-      "sha256": "825d681269bb197a2f2389c4769d17a1aa35fe69e98cc7e3f9564d8fa5f21fcc"
+      "sha256": "c71cf1dff4e713c5eea9d62f1551d1dc2bb4ba9e85435bcca48168e716914b7d"
     },
     {
       "path": "frontend/src/pages/repair/repair-navigation.ts",
@@ -980,7 +1064,7 @@
     },
     {
       "path": "frontend/src/pages/repair/repair-readiness.ts",
-      "sha256": "4108c5bfe4615dd1b335ac5a3ac8cf88af1d469d4d340d85747df4b71d586968"
+      "sha256": "01f058b93f671f52ef9e5ad50f559b91be3baa86c3caf104df1b6ab179714734"
     },
     {
       "path": "frontend/src/pages/repair/repair.css",
@@ -992,23 +1076,39 @@
     },
     {
       "path": "frontend/src/pages/repair/RepairDocuments.tsx",
-      "sha256": "7d9e62fc0e3f66b8453cfc6c67ee20de2b6749b0175416d0fd3e3111a9e65323"
+      "sha256": "22061391a9898a9927725c63b1690a7c6c235825502ddceb68d7a7b15dbc80dc"
+    },
+    {
+      "path": "frontend/src/pages/repair/RepairEvidencePanel.tsx",
+      "sha256": "9aba4ba3acda22a450e787cdd6fa9747bd575f51c7951a7717a4b947be099972"
+    },
+    {
+      "path": "frontend/src/pages/repair/RepairPublicReportPage.tsx",
+      "sha256": "fe7596b9ff8dfde61f4afa7184037e50552db7e9c7c8f71a8fddfd292612e450"
     },
     {
       "path": "frontend/src/pages/repair/RepairReadinessPanel.tsx",
-      "sha256": "d5083d34857961a32ef4c288b5f0be257b2d970c7f334c515cef5c2b99ac88b7"
+      "sha256": "fa8187760be83e9594203dc9a99fb6e3be6ac2b75e9694305049be5e05984c80"
     },
     {
       "path": "frontend/src/pages/repair/RepairReplacementStock.tsx",
       "sha256": "c907bafd3688ab2913259c9f1bb6024b9fa26c9212c2882e7d37911dbae6ca8e"
     },
     {
+      "path": "frontend/src/pages/repair/RepairReportPanel.tsx",
+      "sha256": "98e146237e73fc0bef64c5eb00bc941aa0b99208a558b1e6ed37b7e032026963"
+    },
+    {
+      "path": "frontend/src/pages/repair/RepairTestStandardManager.tsx",
+      "sha256": "d8945fbf1b30e0c9b406737cd2d2c5f50593b60b6f69bb04a3f9555f888861b5"
+    },
+    {
       "path": "frontend/src/pages/repair/RepairWorkbenchPage.tsx",
-      "sha256": "285f22d91281f240945cec782d230ec3e642bec362b4f070375b3d5db2a2791d"
+      "sha256": "ef76e904a2f9ce81e9488312ce3ab0a2976a8d713fc18b7eb26f03320ded75f6"
     },
     {
       "path": "frontend/src/pages/repair/RepairWorkflowPanel.tsx",
-      "sha256": "e812edcc4cb1e91a5f34a5fc6c1dc7fed61bd8eaaa949e9230308cd59e227278"
+      "sha256": "e04cc9eeaf71e9cc5f79b115b1cb08002a3ee3c14acd91cacdb784e5bef8f0f2"
     },
     {
       "path": "frontend/src/pages/ReportsPage.tsx",
@@ -1052,7 +1152,7 @@
     },
     {
       "path": "frontend/src/pages/WarehousePortalPage.tsx",
-      "sha256": "c3f762446a7ccc1a718a693449085a4f47c54141a57cf4e3461264280f9e3509"
+      "sha256": "b5c2f2a145aa67f88aefee9d9fc600723f41b3706389404775e788823ffc1feb"
     },
     {
       "path": "frontend/src/pages/WarehouseReportsPage.tsx",
@@ -1060,7 +1160,7 @@
     },
     {
       "path": "frontend/src/pages/WarehouseWorkspacePage.tsx",
-      "sha256": "7c658d776776a6ef77fad15c8340091890ab21728d00ca68f14c2546e7d03ab1"
+      "sha256": "b76312ef7d113f328c323921f6b95d42e8280d5d980e27ce57d3d52b468cfe77"
     },
     {
       "path": "frontend/src/pages/WmsHandoverReconciliationPage.tsx",
@@ -1096,7 +1196,7 @@
     },
     {
       "path": "frontend/src/services/native-after-sales.service.ts",
-      "sha256": "533648c4c97fa5b9e269eb8813cff171d42a975f8f1cf57b6e965fa643f87ae1"
+      "sha256": "5ce25012871c6eea3b8acada2912a9b9d85717e702066d4cb44546814c62682f"
     },
     {
       "path": "frontend/src/services/notification-refresh.ts",
@@ -1121,6 +1221,10 @@
     {
       "path": "frontend/src/services/repair.ts",
       "sha256": "636b3b91bfef9684b8400a0c49243caaec5382b59e76de47d2faaf416460ce9f"
+    },
+    {
+      "path": "frontend/src/services/warehouse-native.ts",
+      "sha256": "24c18e0e91faf2e1d8267151fd58d82e05caa3e18955c9e70c47b686d5de424d"
     },
     {
       "path": "frontend/src/services/wms-reconciliation.service.ts",

@@ -117,6 +117,13 @@ const server = http.createServer(async (req, res) => {
     req.on('aborted', () => forwarded.destroy()); req.pipe(forwarded); return;
   }
 
+  if (requestUrl.pathname === '/version.json') {
+    if (req.method !== 'GET' || requestUrl.search) { res.writeHead(400); res.end(); return; }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ sourceVersion: /^[a-f0-9]{40}$/.test(process.env.SOURCE_VERSION || '') ? process.env.SOURCE_VERSION : 'unknown' }));
+    return;
+  }
+
   if (requestUrl.pathname === '/healthz') {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');

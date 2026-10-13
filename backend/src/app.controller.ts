@@ -36,6 +36,7 @@ export class AppController {
   health() {
     return {
       status: 'ok',
+      sourceVersion: /^[a-f0-9]{40}$/.test(process.env.SOURCE_VERSION || '') ? process.env.SOURCE_VERSION : 'unknown',
     };
   }
 

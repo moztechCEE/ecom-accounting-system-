@@ -133,7 +133,7 @@ function build() {
     for (const route of [entry.path, ...(entry.aliases || [])].filter(Boolean)) {
       assert(route.startsWith('/') && !route.startsWith('//') && !/[\r\n#]/.test(route), `${entry.id}: invalid route`);
       const normalized = normalizeRoute(route);
-      if (normalized.startsWith('/operations/after-sales/')) assert(routeInfo.sourceModuleRoutes.includes(normalized), `${entry.id}: unknown reviewed after-sales section: ${route}`);
+      if (normalized.startsWith('/operations/after-sales/')) assert(routeInfo.sourceModuleRoutes.some(section => normalized === section || (routeInfo.staticRoutes.includes(normalized) && normalized.startsWith(section + '/'))), `${entry.id}: unknown reviewed after-sales section: ${route}`);
       assert(routeExists(normalized, routeInfo.staticRoutes), `${entry.id}: route does not exist: ${route}`);
       covered.add(route);
       covered.add(normalized);
