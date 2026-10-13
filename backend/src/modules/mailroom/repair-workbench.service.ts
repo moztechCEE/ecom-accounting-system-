@@ -30,6 +30,7 @@ import {
   RepairCustomerQueueQuery,
   RepairWorkflowDto,
 } from './repair-workflow.dto';
+import { repairSourceBindingForItem } from './repair-proposal.contract';
 import {
   allowedWorkflowActions,
   currentCsrReview,
@@ -250,7 +251,14 @@ export class RepairWorkbenchService {
           throw new ConflictException('來源案件不存在或類別不符');
         const quoteRevision =
           input.decision === 'APPROVE' && doc.data.plan !== 'RETURN'
-            ? requireSourceConsent(source!, null, false)
+            ? requireSourceConsent(
+                source!,
+                null,
+                false,
+                source!.type === 'REPAIR'
+                  ? repairSourceBindingForItem(row, source!)
+                  : undefined,
+              )
             : workflow.csr!.quoteRevision;
         workflow.csr = {
           ...workflow.csr!,
@@ -315,7 +323,14 @@ export class RepairWorkbenchService {
             throw new ConflictException(
               '售後同意或足額收款尚未放行，不能外送原廠',
             );
-          requireSourceConsent(source, workflow.csr!.quoteRevision, true);
+          requireSourceConsent(
+            source,
+            workflow.csr!.quoteRevision,
+            true,
+            source.type === 'REPAIR'
+              ? repairSourceBindingForItem(row, source)
+              : undefined,
+          );
           this.confirmPhysical(input);
           workflow.factory = {
             stage: 'SENT',
@@ -382,13 +397,26 @@ export class RepairWorkbenchService {
           changes.location = input.location!.trim();
           changes.nextUserId = userId;
         } else if (input.action === 'complete_factory') {
+          const inspection = currentCsrReview(row);
+          if (
+            inspection.data.plan !== 'FACTORY' ||
+            workflow.csr?.decision !== 'APPROVE'
+          )
+            throw new ConflictException('客服尚未同意目前原廠處理方案');
           if (
             !source ||
             source.id !== row.receipt.sourceCaseId ||
             source.type !== row.receipt.category
           )
             throw new ConflictException('售後來源目前無法確認放行');
-          requireSourceConsent(source, workflow.csr!.quoteRevision, true);
+          requireSourceConsent(
+            source,
+            workflow.csr.quoteRevision,
+            true,
+            source.type === 'REPAIR'
+              ? repairSourceBindingForItem(row, source)
+              : undefined,
+          );
           const report = validateFactoryCompletion(
             row.repairInspection,
             row.repairReport,
@@ -456,6 +484,9 @@ export class RepairWorkbenchService {
       throw new ForbiddenException('無檢修文件存取權限');
     requireEntity(actor, entityId);
     const sourceId = detail.receipt.sourceCaseId;
+    let repairProposalBinding: ReturnType<
+      typeof repairSourceBindingForItem
+    > | null = null;
     let release: {
       available: boolean;
       repairAllowed?: boolean;
@@ -466,7 +497,8 @@ export class RepairWorkbenchService {
     } = { available: false, message: '沒有售後來源案件' };
     if (sourceId) {
       try {
-        const source = (await this.sync.cases(entityId, '', sourceId)).items[0];
+        const sources = (await this.sync.cases(entityId, '', sourceId)).items;
+        const source = sources.length === 1 ? sources[0] : undefined;
         release =
           source &&
           source.id === sourceId &&
@@ -481,6 +513,13 @@ export class RepairWorkbenchService {
                   : {}),
               }
             : { available: false, message: '來源案件不存在或不在授權範圍' };
+        if (release.available && source?.type === 'REPAIR') {
+          try {
+            repairProposalBinding = repairSourceBindingForItem(detail, source);
+          } catch {
+            repairProposalBinding = null;
+          }
+        }
       } catch {
         release = {
           available: false,
@@ -491,6 +530,7 @@ export class RepairWorkbenchService {
     return {
       ...detail,
       release,
+      repairProposalBinding,
       allowedWorkflowActions: allowedWorkflowActions(actor, detail),
       physicalCustody: physicalCustody(detail),
       editable:

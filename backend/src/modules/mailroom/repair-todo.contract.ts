@@ -12,6 +12,10 @@ import {
   requireSourceConsent,
   type WorkflowItem,
 } from './repair-workflow.contract';
+import {
+  type RepairProposalItem,
+  repairSourceBindingForItem,
+} from './repair-proposal.contract';
 
 export const REPAIR_TODO_KINDS = [
   'INSPECTION',
@@ -34,10 +38,19 @@ export type RepairTodoItem = WorkflowItem & {
   id: string;
   entityId: string;
   nextUserId: string | null;
+  receiptId?: string;
+  productId?: string | null;
+  version?: number;
+  label?: string;
+  productName?: string;
+  sku?: string | null;
+  serialNumber?: string | null;
+  declared?: unknown;
   receipt: WorkflowItem['receipt'] & {
     entityId: string;
     category: string;
     sourceCaseId: string | null;
+    sourceNumber?: string | null;
   };
 };
 export type RepairTodoDecision =
@@ -78,12 +91,14 @@ export function repairTodoDecision(
         ? { state: 'ready', kind: 'FACTORY_RETURN_RECEIPT' }
         : blocked;
     if (physicalCustody(item) !== 'TECHNICIAN') return blocked;
-    // Editing actual work and QC remains a todo. Its final write independently
-    // checks reports, current customer consent, payment and replacement stock.
-    if (['REPAIRING', 'REFURBISHING'].includes(item.status))
+    const actualWork = ['REPAIRING', 'REFURBISHING'].includes(item.status);
+    // Internal refurbishment has no customer financial release. Customer work
+    // still requires the current source release before counting as actionable.
+    if (actualWork && item.receipt.category !== 'REPAIR')
       return { state: 'ready', kind: 'REPAIR_WORK' };
     const csr = workflow.csr;
-    if (!csr) return { state: 'ready', kind: 'INSPECTION' };
+    if (!csr)
+      return actualWork ? blocked : { state: 'ready', kind: 'INSPECTION' };
     if (csr.status === 'SENT' || csr.status === 'ACCEPTED') return blocked;
     if (csr.status !== 'RESOLVED') return unknown;
     let doc: ReturnType<typeof currentCsrReview>;
@@ -96,11 +111,13 @@ export function repairTodoDecision(
     const actions = allowedWorkflowActions(actor, item);
     if (actions.includes('return_original'))
       return { state: 'ready', kind: 'RETURN_ORIGINAL' };
-    if (actions.includes('complete_factory'))
+    const factoryCompletion = actions.includes('complete_factory');
+    if (factoryCompletion && item.receipt.category !== 'REPAIR')
       return { state: 'ready', kind: 'REPAIR_WORK' };
     if (csr.decision !== 'APPROVE') return unknown;
     let kind: RepairTodoKind;
-    if (doc.data.plan === 'REPAIR') kind = 'START_REPAIR';
+    if (actualWork || factoryCompletion) kind = 'REPAIR_WORK';
+    else if (doc.data.plan === 'REPAIR') kind = 'START_REPAIR';
     else if (doc.data.plan === 'REPLACE') kind = 'START_REPLACEMENT';
     else if (actions.includes('send_factory')) kind = 'SEND_FACTORY';
     else return { state: 'ready', kind: 'INSPECTION' };
@@ -158,11 +175,19 @@ export function repairTodoSourceDecision(
     )
       return unknown;
   }
+  let binding: ReturnType<typeof repairSourceBindingForItem> | undefined;
+  if (current.type === 'REPAIR') {
+    try {
+      binding = repairSourceBindingForItem(item as RepairProposalItem, current);
+    } catch {
+      return unknown;
+    }
+  }
   try {
     currentCsrReview(item);
     const csr = repairWorkflow(item.repairWorkflow).csr;
     if (csr?.decision !== 'APPROVE') return blocked;
-    requireSourceConsent(current, csr.quoteRevision, true);
+    requireSourceConsent(current, csr.quoteRevision, true, binding);
     return { state: 'ready', kind: decision.kind };
   } catch {
     return blocked;

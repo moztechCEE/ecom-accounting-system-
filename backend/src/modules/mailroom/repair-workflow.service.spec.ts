@@ -7,6 +7,7 @@ import {
 } from './repair-document.contract';
 import { sentCustomerWorkflow } from './repair-workflow.contract';
 import { type RepairWorkflowDto } from './repair-workflow.dto';
+import { repairSourceBindingForItem } from './repair-proposal.contract';
 
 const actor = (id: string): Actor => ({
   id,
@@ -62,6 +63,19 @@ describe('native repair departmental acceptance, original return and factory cus
     note: '具體確認紀錄',
     ...fields,
   });
+  const bindCurrentQuote = () =>
+    Object.assign(source.releaseInfo!, {
+      invoiceRequired: true,
+      invoiceStatus: 'ISSUED',
+      invoiceSatisfied: true,
+      invoiceQuoteRevision: 4,
+      quoteBindings: [
+        {
+          ...repairSourceBindingForItem(row, source),
+          quoteRevision: 4,
+        },
+      ],
+    });
   const reviewed = (decision: 'APPROVE' | 'DECLINE' = 'APPROVE') => {
     row.status = 'INSPECTING';
     row.repairWorkflow = {
@@ -84,6 +98,7 @@ describe('native repair departmental acceptance, original return and factory cus
       planHash: inspectionPlanHash(row.repairInspection),
       quoteRevision: 4,
     };
+    bindCurrentQuote();
   };
   const send = () =>
     service.workflow(
@@ -103,12 +118,16 @@ describe('native repair departmental acceptance, original return and factory cus
     row = {
       id: 'piece',
       entityId: 'company',
+      receiptId: 'receipt',
       label: 'DEMO-001',
       version: 5,
       status: 'WAITING_CUSTOMER',
       productName: '示範產品',
       location: '維修桌',
       serialNumber: 'ORIGINAL-SN',
+      productId: 'demo-product',
+      sku: 'DEMO-SKU',
+      declared: { id: 'source-item' },
       repairOwnerId: 'tech',
       custodianId: 'tech',
       nextUserId: null,
@@ -117,6 +136,7 @@ describe('native repair departmental acceptance, original return and factory cus
       receipt: {
         category: 'REPAIR',
         sourceCaseId: 'case',
+        sourceNumber: 'DEMO-CASE',
         receivedById: 'clerk',
         customerServiceUserId: 'csr',
       },
@@ -136,7 +156,15 @@ describe('native repair departmental acceptance, original return and factory cus
       version: 'source-version',
       status: 'REPAIRING',
       customerLabel: '示範',
-      items: [],
+      items: [
+        {
+          id: 'source-item',
+          name: '示範產品',
+          sku: 'DEMO-SKU',
+          serialNumber: 'ORIGINAL-SN',
+          quantity: 1,
+        },
+      ],
       repairAllowed: true,
       releaseInfo: {
         quoteRevision: 4,
@@ -147,6 +175,7 @@ describe('native repair departmental acceptance, original return and factory cus
         confirmedPaymentQuoteRevision: 4,
       },
     };
+    bindCurrentQuote();
     prisma = {
       mailroomItem: {
         findUnique: jest.fn(async () => structuredClone(row)),
@@ -337,6 +366,7 @@ describe('native repair departmental acceptance, original return and factory cus
 
   it('binds CSR approval to the source quote; consent does not stand in for paid release and a new quote blocks old approval', async () => {
     row.repairInspection = inspection('FACTORY');
+    bindCurrentQuote();
     row.repairWorkflow = sentCustomerWorkflow(
       row,
       actor('tech'),
@@ -385,6 +415,90 @@ describe('native repair departmental acceptance, original return and factory cus
     await send();
     expect(row.status).toBe('FACTORY_OUTBOUND');
   });
+
+  it('preserves company RETURN review and factory release without a customer quote or invoice binding', async () => {
+    row.receipt.category = 'RETURN';
+    row.repairInspection = inspection('FACTORY');
+    source.type = 'RETURN';
+    source.releaseInfo = null;
+    row.repairWorkflow = sentCustomerWorkflow(
+      row,
+      actor('tech'),
+      '2026-10-05T00:00:00Z',
+      null,
+    );
+    await service.workflow('csr', 'piece', command('claim_customer'));
+    await service.workflow(
+      'csr',
+      'piece',
+      command('resolve_customer', {
+        inspectionRevision: 3,
+        decision: 'APPROVE',
+      }),
+    );
+    expect(row.repairWorkflow.csr.quoteRevision).toBeNull();
+    source.repairAllowed = false;
+    await expect(send()).rejects.toThrow('尚未放行');
+    source.repairAllowed = true;
+    await send();
+    expect(row.status).toBe('FACTORY_OUTBOUND');
+    row.status = 'INSPECTING';
+    row.repairWorkflow.factory.stage = 'RETURNED';
+    row.repairWorkflow.factory.physicalCustody = 'TECHNICIAN';
+    row.repairReport = {
+      number: 'REP-RETURN',
+      revision: 1,
+      status: 'SUBMITTED',
+      authorId: 'tech',
+      authorName: 'tech',
+      updatedAt: '2026-10-05T00:03:00Z',
+      inspectionRevision: 3,
+      data: {
+        outcome: 'FACTORY_REPAIRED',
+        factoryReference: 'FACTORY-DEMO-001',
+        workPerformed: '原廠修復後複驗',
+        parts: [],
+        laborMinutes: 10,
+        checks: [{ name: '開機', result: 'PASS', observation: '三次啟動正常' }],
+        qcResult: 'PASS',
+        qcNotes: '複驗通過',
+        deliveredAccessories: '配件完整',
+      },
+    };
+    await service.workflow('tech', 'piece', command('complete_factory'));
+    expect(row.repairWorkflow.release.purpose).toBe('FACTORY_REPAIRED');
+    expect(row.status).toBe('WAITING_RETURN_ACCEPTANCE');
+  });
+
+  it.each(['pending invoice', 'another piece', 'changed original SN'])(
+    'blocks factory work on %s without recording a handoff',
+    async (reason) => {
+      row.repairInspection = inspection('FACTORY');
+      reviewed();
+      const info = source.releaseInfo as NonNullable<
+        SourceCase['releaseInfo']
+      > & {
+        invoiceStatus: string;
+        invoiceSatisfied: boolean;
+        quoteBindings: { itemId: string }[];
+      };
+      if (reason === 'pending invoice') {
+        info.invoiceStatus = 'PENDING';
+        info.invoiceSatisfied = false;
+      } else if (reason === 'another piece') {
+        info.quoteBindings[0].itemId = 'another-piece';
+      } else {
+        row.serialNumber = 'CHANGED-ORIGINAL-SN';
+      }
+      await expect(send()).rejects.toThrow(
+        reason === 'pending invoice' ? '必要發票' : '檢修方案',
+      );
+      expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
+      expect(mailroom.record).not.toHaveBeenCalled();
+      expect(row.version).toBe(5);
+      expect(row.status).toBe('INSPECTING');
+    },
+  );
 
   it('tracks factory/carrier custody without pretending the external recipient is an ERP user; only the original technician signs the actual return', async () => {
     row.repairInspection = inspection('FACTORY');
