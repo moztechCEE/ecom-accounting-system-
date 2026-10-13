@@ -219,7 +219,7 @@ export class OperationLogsService {
     const dateField = source === 'INTERACTION' ? 'occurredAt' : 'createdAt';
     const where: any = {
       entityId: query.entityId,
-      [dateField]: { gte: start, lt: end },
+      [dateField]: { gte: start, lte: end },
     };
     if (position)
       where.AND = [
