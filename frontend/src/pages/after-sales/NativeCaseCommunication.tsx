@@ -41,6 +41,7 @@ import {
   type RepairProposal,
 } from "./native-communication-model";
 import "./NativeCaseCommunication.css";
+import NativeLegacyBrandReview from './NativeLegacyBrandReview';
 type CommandTransport = {
   command: (
     entityId: string,
@@ -114,6 +115,10 @@ export default function NativeCaseCommunication({
   const abort = useRef<AbortController | undefined>(undefined);
   const busyRef = useRef(false);
   const [busy, setBusy] = useState(false);
+  const [brandPending, setBrandPending] = useState(false);
+  const pendingStates = useRef({ communication: false, brand: false });
+  const markPending = (value: boolean) => { pendingStates.current.communication = value; onPendingChange(value || pendingStates.current.brand); };
+  const markBrandPending = (value: boolean) => { pendingStates.current.brand = value; setBrandPending(value); onPendingChange(value || pendingStates.current.communication); };
   const [error, setError] = useState("");
   const [pending, setPending] = useState<PendingConfirmation | null>(null);
   const [unknown, setUnknown] = useState(false);
@@ -187,16 +192,17 @@ export default function NativeCaseCommunication({
         setError("顧客確認連結建立結果待確認，請重試確認");
         setPurpose(saved.request.purpose);
         setBindingId(saved.request.binding?.itemId);
-        onPendingChange(true);
+        markPending(true);
       }
     } catch (error) {
       setError(errorText(error));
       setUnknown(true);
-      onPendingChange(true);
+      markPending(true);
     }
     return () => {
       alive.current = false;
       abort.current?.abort();
+      pendingStates.current = { communication: false, brand: false };
       onPendingChange(false);
       onDirtyChange(false);
     };
@@ -212,7 +218,7 @@ export default function NativeCaseCommunication({
       setPending(null);
       setError("");
       setUnknown(false);
-      onPendingChange(false);
+      markPending(false);
       if (receipt.url) setLink({ url: receipt.url, purpose: receipt.purpose });
     } catch (error) {
       setError(errorText(error));
@@ -221,7 +227,7 @@ export default function NativeCaseCommunication({
   useEffect(() => {
     if (unknown && !pending) {
       setUnknown(false);
-      onPendingChange(false);
+      markPending(false);
     }
   }, [communication]);
   const isCurrent = (key: string, token: string) =>
@@ -245,7 +251,7 @@ export default function NativeCaseCommunication({
     suffix: "communications" | "repair-proposals/adopt" | "factory-actions",
     payload: Record<string, unknown>,
   ) => {
-    if (busyRef.current || pending || unknown) return;
+    if (busyRef.current || pending || unknown || brandPending) return;
     const key = scopeKey;
     let token = "";
     try {
@@ -256,12 +262,12 @@ export default function NativeCaseCommunication({
       busyRef.current = true;
       setBusy(true);
       setError("");
-      onPendingChange(true);
+      markPending(true);
       const result = await (
         nativeAfterSales as unknown as CommandTransport
       ).command(entityId, detail.id, suffix, payload, auth);
       if (!isCurrent(key, token)) return;
-      onPendingChange(false);
+      markPending(false);
       onDirtyChange(false);
       setCompose(false);
       setFactoryEdit(undefined);
@@ -292,8 +298,8 @@ export default function NativeCaseCommunication({
         setError(errorText(error));
         if (token) {
           setUnknown(true);
-          onPendingChange(true);
-        } else onPendingChange(false);
+          markPending(true);
+        } else markPending(false);
       }
     } finally {
       if (alive.current && scopeRef.current === key) {
@@ -303,7 +309,7 @@ export default function NativeCaseCommunication({
     }
   };
   const createConfirmation = async () => {
-    if (busyRef.current || !canLine) return;
+    if (busyRef.current || !canLine || brandPending) return;
     const key = scopeKey;
     let saved: PendingConfirmation | null = pending;
     let persisted = !!pending;
@@ -311,7 +317,7 @@ export default function NativeCaseCommunication({
     busyRef.current = true;
     setBusy(true);
     setError("");
-    onPendingChange(true);
+    markPending(true);
     try {
       const auth = authFor();
       token = auth.token;
@@ -380,7 +386,7 @@ export default function NativeCaseCommunication({
           );
           setPending(null);
           setUnknown(false);
-          onPendingChange(false);
+          markPending(false);
           if (typeof result.url === "string" && result.status === "PENDING")
             setLink({ url: result.url, purpose: saved.request.purpose });
           message.success(
@@ -395,7 +401,7 @@ export default function NativeCaseCommunication({
     } catch (error) {
       if (alive.current && scopeRef.current === key) {
         setError(errorText(error));
-        onPendingChange(persisted);
+        markPending(persisted);
         setUnknown(persisted);
       }
     } finally {
@@ -508,9 +514,10 @@ export default function NativeCaseCommunication({
       );
     }
   };
-  const disabled = busy || !!pending || unknown;
+  const disabled = busy || !!pending || unknown || brandPending;
   return (
     <section className="native-case-communication" aria-label="顧客確認與通知">
+      <NativeLegacyBrandReview entityId={entityId} detail={detail} onReload={onReload} onPendingChange={markBrandPending} onDirtyChange={onDirtyChange} />
       {error && (
         <Alert
           type="error"
@@ -569,7 +576,7 @@ export default function NativeCaseCommunication({
             loading={busy}
             disabled={
               !!pending ||
-              unknown ||
+              unknown || brandPending ||
               (["PRODUCT", "DISPOSITION"].includes(purpose) && !bindings.length)
             }
             onClick={() => void createConfirmation()}

@@ -43,6 +43,10 @@ const outcomes: Record<string, string> = {
   ACKNOWLEDGED: "對端已接收",
   FAILED: "失敗",
   UNKNOWN: "結果待確認",
+  DRAFT: "待審核草稿",
+  APPROVED: "已核准，待發送",
+  SENT: "LINE 已接受",
+  SIMULATED: "DEV 模擬完成",
 };
 function downloadBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
@@ -104,7 +108,7 @@ export default function OperationLogsPage() {
     setError("");
     operationsAdmin
       .logs({ ...query, cursor }, controller.signal)
-      .then((data) => setResult({ entityId, data }))
+      .then((data) => { if (!controller.signal.aborted) setResult({ entityId, data }); })
       .catch((error) => {
         if (!controller.signal.aborted) setError(adminError(error));
       })
@@ -112,7 +116,7 @@ export default function OperationLogsPage() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [query, cursor, refresh]);
+  }, [query, cursor, refresh, user?.id]);
   const archive = async () => {
     setBusy(true);
     try {
@@ -220,6 +224,7 @@ export default function OperationLogsPage() {
       )}
       {current?.sourceStatus === "PORTAL_ONLY" ? (
         <Button
+          data-operation-action="operation_logs.wms_portal"
           onClick={() => navigate(current.portalPath || "/warehouse/logs")}
         >
           開啟儲運操作紀錄
@@ -270,9 +275,10 @@ export default function OperationLogsPage() {
           />
           <Space style={{ marginTop: 16 }}>
             {cursor && (
-              <Button onClick={() => setCursor(undefined)}>回到最新</Button>
+              <Button data-operation-action="operation_logs.latest" onClick={() => setCursor(undefined)}>回到最新</Button>
             )}
             <Button
+              data-operation-action="operation_logs.next"
               disabled={!current?.nextCursor}
               onClick={() => setCursor(current?.nextCursor || undefined)}
             >
@@ -298,6 +304,8 @@ export default function OperationLogsPage() {
               ["案件／紀錄", detail.recordId],
               ["品牌", detail.brand],
               ["作業編號", detail.requestId],
+              ["通知編號", detail.notificationId],
+              ["服務回執", detail.providerReceiptId],
               ["異動欄位", detail.changedFieldNames?.join("、")],
               ["前狀態", detail.fromStatus],
               ["後狀態", detail.toStatus],

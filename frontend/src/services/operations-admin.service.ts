@@ -59,6 +59,8 @@ export type LogRow = {
   changedFieldNames: string[];
   fromStatus?: string;
   toStatus?: string;
+  notificationId?: string;
+  providerReceiptId?: string;
 };
 export type LogsResult = {
   items: LogRow[];

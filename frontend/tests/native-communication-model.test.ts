@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { clearPendingBrandReview, readPendingBrandReview, savePendingBrandReview } from '../src/pages/after-sales/pending-brand-review.ts';
 import {
   clearPendingConfirmation,
   notificationStatuses,
@@ -10,6 +11,19 @@ import {
   validatePendingConfirmation,
 } from "../src/pages/after-sales/native-communication-model.ts";
 const scope = { actorId: "actor-a", entityId: "company-a", caseId: "case-a" };
+test('brand review unknown retry preserves exact independent UUID and evidence, isolated from confirmation journal', () => {
+  const store = storage();
+  const value = { ...scope, schema: 'corely.doa.pending-brand-review.v1' as const, request: { operation: 'BIND_LEGACY_BRAND' as const, requestId: 'e187ba12-9733-4d4c-a512-90e773f4d837', expectedUpdatedAt: '2026-10-13T00:00:00.000Z', brand: 'BONSON' as const, proofReference: '產品照片 IMG-reference' } };
+  savePendingBrandReview(store, value); assert.deepEqual(readPendingBrandReview(store, scope), value);
+  assert.equal(readPendingConfirmation(store, scope), null);
+  assert.throws(() => savePendingBrandReview(store, { ...value, request: { ...value.request, brand: 'MOZTECH' } }), /原請求/);
+  assert.equal(readPendingBrandReview(store, { ...scope, actorId: 'other' }), null);
+  clearPendingBrandReview(store, value); assert.equal(readPendingBrandReview(store, scope), null);
+});
+test('brand review cannot dispatch when pending journal storage cannot preserve exact body', () => {
+  const value = { ...scope, schema: 'corely.doa.pending-brand-review.v1' as const, request: { operation: 'BIND_LEGACY_BRAND' as const, requestId: 'e187ba12-9733-4d4c-a512-90e773f4d837', expectedUpdatedAt: '2026-10-13T00:00:00.000Z', brand: 'MOZTECH' as const, proofReference: '檢查照片' } };
+  assert.throws(() => savePendingBrandReview({ getItem: () => null, setItem: () => {} }, value), /尚未送出/);
+});
 const request = {
   ...scope,
   schema: "corely.doa.pending-confirmation.v1" as const,

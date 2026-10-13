@@ -15,6 +15,7 @@ import {
   fieldNames,
   interactionInput,
   logRange,
+  sourceAuditProjection,
 } from './operations-admin.contract';
 export type LogQuery = {
   entityId: string;
@@ -154,21 +155,7 @@ export class OperationLogsService {
         );
         await this.authority(actorId, query.entityId);
         return {
-          items: result.items.map((row: any) => ({
-            id: String(row.id),
-            occurredAt: row.occurredAt,
-            source: 'SOURCE',
-            eventClass: 'BUSINESS',
-            actorId: row.actorId || null,
-            actionId: row.actionId,
-            recordType: row.recordType,
-            recordId: row.recordId,
-            brand: row.brand || null,
-            outcome: row.outcome || 'COMMITTED',
-            changedFieldNames: Array.isArray(row.changedFieldNames)
-              ? row.changedFieldNames.slice(0, 40)
-              : [],
-          })),
+          items: result.items.map(sourceAuditProjection).filter((row: any) => row.id && row.occurredAt),
           nextCursor: result.nextCursor || null,
           sources,
           sourceStatus: 'AVAILABLE',

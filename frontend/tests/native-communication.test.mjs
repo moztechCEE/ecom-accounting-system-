@@ -19,6 +19,7 @@ const actor = "qa-user",
   entity = "fixture-company",
   caseId = "case-repair";
 let createdConfirmations = [];
+let canConfirmBrand = false, brandReviewMode = 'unknown';
 let posts = [],
   errors = [],
   checks = [],
@@ -70,6 +71,7 @@ const detail = () => {
     history: [],
     canEdit: !readonly,
     canCommunicate: !readonly,
+    canConfirmBrand,
     communication: {
       confirmations: createdConfirmations,
       notifications: [
@@ -186,6 +188,13 @@ const routeHandler = async (route) => {
     assert.equal(req.headers().authorization, "Bearer " + token(actor));
     posts.push({ path, payload });
     const command = payload.command;
+    if (command.operation === 'BIND_LEGACY_BRAND') {
+      const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), 'corely.doa.pending-brand-review.v1:qa-user:fixture-company:case-repair');
+      assert.deepEqual(saved.request, command);
+      if (brandReviewMode === 'unknown') return json({ message: '品牌確認結果待確認' }, 503);
+      brand = command.brand; canConfirmBrand = false;
+      return json({ reviewId: 'brand-review-' + command.requestId, caseId, brand });
+    }
     if (command.operation === "CREATE_CONFIRMATION") {
       if (confirmationMode === "unknown")
         return json({ message: "確認連結結果尚未確認" }, 503);
@@ -425,6 +434,24 @@ try {
       readonly = false;
     },
   );
+  await check('legacy brand review keeps UUID on unknown result, including reload after server brand becomes bound', async () => {
+    brand = null; canConfirmBrand = true; await load();
+    await panel().locator('[data-operation-action="after_sales.brand_review.open"]').click();
+    await page.getByRole('combobox', { name: '歷史案件品牌', exact: true }).click(); await page.getByTitle('BONSON', { exact: true }).click();
+    await page.getByLabel('品牌核對依據').fill('SYNTHETIC reviewed physical brand label');
+    await page.locator('[data-operation-action="after_sales.brand_review.confirm"]').click();
+    await page.getByText('品牌確認結果待確認', { exact: true }).waitFor();
+    const before = posts.filter(p => p.payload.command.operation === 'BIND_LEGACY_BRAND').at(-1).payload.command;
+    assert.equal(before.expectedUpdatedAt, '2026-10-13T00:00:00.000Z'); assert.equal(before.brand, 'BONSON');
+    canConfirmBrand = false; await load();
+    await panel().locator('[data-operation-action="after_sales.brand_review.retry"]').waitFor();
+    brandReviewMode = 'success'; await panel().locator('[data-operation-action="after_sales.brand_review.retry"]').click();
+    await page.waitForTimeout(250);
+    const requests = posts.filter(p => p.payload.command.operation === 'BIND_LEGACY_BRAND');
+    assert.deepEqual(requests.at(-1).payload.command, before);
+    assert.equal(await page.evaluate(() => localStorage.getItem('corely.doa.pending-brand-review.v1:qa-user:fixture-company:case-repair')), null);
+    canConfirmBrand = false; brand = 'MOZTECH';
+  });
   await check(
     "factory assignment uses Source account ID then accepts exact revision",
     async () => {

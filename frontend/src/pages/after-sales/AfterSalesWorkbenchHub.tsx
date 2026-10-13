@@ -30,14 +30,14 @@ export default function AfterSalesWorkbenchHub({ user, section, onOpen }: Props)
         <Title level={2} id="after-sales-hub-title" className="after-sales-hub-title">{details.title}</Title>
       </div>
       {home
-        ? <Button type="primary" size="large" icon={<FolderOpenOutlined />} onClick={() => open('cases')}>案件總覽</Button>
-        : canOpenAfterSalesSection(user, 'workbench') && <Button icon={<ArrowLeftOutlined />} onClick={() => open('workbench')}>返回售後工作台</Button>}
+        ? <Button data-operation-action="erp.aftersalesworkbenchhub.action.e402333cec39" type="primary" size="large" icon={<FolderOpenOutlined />} onClick={() => open('cases')}>案件總覽</Button>
+        : canOpenAfterSalesSection(user, 'workbench') && <Button data-operation-action="erp.aftersalesworkbenchhub.action.bf11625efbf0" icon={<ArrowLeftOutlined />} onClick={() => open('workbench')}>返回售後工作台</Button>}
     </header>
 
     {home && <>
       <ul className="after-sales-hub-entries" aria-label="售後案件服務">
         {afterSalesCaseEntries(user).map(entry => <li key={entry.section}>
-          <button type="button" className="after-sales-hub-entry" onClick={() => open(entry.section)}>
+          <button data-operation-action="erp.aftersalesworkbenchhub.action.5aa6f148cd59" type="button" className="after-sales-hub-entry" onClick={() => open(entry.section)}>
             <span className="after-sales-hub-entry-copy">
               <span className="after-sales-hub-entry-title">{entry.title}</span>
             </span>
@@ -46,7 +46,7 @@ export default function AfterSalesWorkbenchHub({ user, section, onOpen }: Props)
         </li>)}
       </ul>
       <nav className="after-sales-hub-support" aria-label="售後相關作業">
-        {afterSalesSupportEntries(user).map(entry => <Button key={entry.section} type="link" onClick={() => open(entry.section)}>{entry.title}</Button>)}
+        {afterSalesSupportEntries(user).map(entry => <Button data-operation-action="erp.aftersalesworkbenchhub.action.900d6a47d8a3" key={entry.section} type="link" onClick={() => open(entry.section)}>{entry.title}</Button>)}
       </nav>
     </>}
   </section>

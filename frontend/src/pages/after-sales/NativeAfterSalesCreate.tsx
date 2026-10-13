@@ -88,14 +88,14 @@ export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttemp
   const contactRequired = (message: string) => selectedType === 'CUSTOMER_ISSUE' ? [] : required(message)
   if (!options && !optionsError) return <div role="status"><Spin /> 載入案件選項…</div>
   return <div className="native-after-sales-create">
-    <Button className="native-after-sales-back" aria-label="返回案件清單" icon={<ArrowLeftOutlined />} onClick={onCancel} disabled={busy || unknownResult}>返回案件清單</Button>
+    <Button data-operation-action="erp.nativeaftersalescreate.action.c7511108cff2" className="native-after-sales-back" aria-label="返回案件清單" icon={<ArrowLeftOutlined />} onClick={onCancel} disabled={busy || unknownResult}>返回案件清單</Button>
     {optionsError && <Alert type="error" showIcon message={optionsError} />}
     {!selectedType ? <>
       <Typography.Title level={3}>新增案件</Typography.Title>
-      <div className="native-after-sales-type-grid">{NATIVE_CASE_TYPES.filter(entry => options?.createTypes.includes(entry.value)).map(entry => <button className="native-after-sales-type-choice" type="button" key={entry.value} onClick={() => { setSelectedType(entry.value); form.resetFields(); setFailure('') }}><strong>{entry.label}</strong><span>{entry.description}</span></button>)}</div>
+      <div className="native-after-sales-type-grid">{NATIVE_CASE_TYPES.filter(entry => options?.createTypes.includes(entry.value)).map(entry => <button data-operation-action="erp.nativeaftersalescreate.action.fef6ffb611df" className="native-after-sales-type-choice" type="button" key={entry.value} onClick={() => { setSelectedType(entry.value); form.resetFields(); setFailure('') }}><strong>{entry.label}</strong><span>{entry.description}</span></button>)}</div>
       {options && options.createTypes.length === 0 && <Alert type="warning" showIcon message="目前帳號沒有新增案件權限" />}
     </> : <>
-      <div className="native-after-sales-detail-heading"><Typography.Title level={3}>{type?.label}</Typography.Title><Button onClick={() => void (async () => { if (!await onChangeType()) return; setSelectedType(undefined); setFailure('') })()} disabled={busy || unknownResult}>變更類型</Button></div>
+      <div className="native-after-sales-detail-heading"><Typography.Title level={3}>{type?.label}</Typography.Title><Button data-operation-action="erp.nativeaftersalescreate.action.0711ab3ab77d" onClick={() => void (async () => { if (!await onChangeType()) return; setSelectedType(undefined); setFailure('') })()} disabled={busy || unknownResult}>變更類型</Button></div>
       {failure && <Alert type="error" showIcon message={failure} style={{ marginBottom: 16 }} />}
       <Form className="native-after-sales-create-form" form={form} layout="vertical" disabled={busy || unknownResult} initialValues={{ customerKind: 'TO_C', items: [{ quantity: 1 }] }} onValuesChange={() => onDirtyChange(true)} onFinish={values => void create(values)}>
         <div className="native-after-sales-create-fields">
@@ -109,11 +109,11 @@ export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttemp
           <Form.Item name="contactAddress" label="收件／回寄地址" rules={contactRequired('請填寫地址')}><Input autoComplete="street-address" maxLength={500} /></Form.Item>
         </div>
         <Form.List name="items" rules={[{ validator: async (_, values: Values['items']) => { if (!values?.length) throw new Error('請新增至少一個品項') } }]}>{(fields, { add, remove }, { errors }) => <>
-          {fields.map((field, index) => <div className="native-after-sales-create-item" key={field.key}><div className="native-after-sales-heading"><strong>品項 {index + 1}</strong>{fields.length > 1 && <Button type="text" icon={<DeleteOutlined />} aria-label={`移除品項 ${index + 1}`} onClick={() => remove(field.name)}>移除</Button>}</div><div className="native-after-sales-create-fields">
+          {fields.map((field, index) => <div className="native-after-sales-create-item" key={field.key}><div className="native-after-sales-heading"><strong>品項 {index + 1}</strong>{fields.length > 1 && <Button data-operation-action="erp.nativeaftersalescreate.action.7efe820259b2" type="text" icon={<DeleteOutlined />} aria-label={`移除品項 ${index + 1}`} onClick={() => remove(field.name)}>移除</Button>}</div><div className="native-after-sales-create-fields">
             <Form.Item name={[field.name, 'productId']} label="產品／配件" rules={required('請選擇產品')}><NativeProductPicker entityId={entityId} initialProducts={options?.products || []} label={`品項 ${index + 1} 產品`} /></Form.Item>
             <Form.Item name={[field.name, 'quantity']} label="數量" rules={[{ required: true, message: '請填寫數量' }, { type: 'integer', min: 1, max: 9999, message: '數量須為 1–9999' }]}><InputNumber min={1} max={9999} precision={0} style={{ width: '100%' }} /></Form.Item>
           </div></div>)}
-          <Form.ErrorList errors={errors} /><Button icon={<PlusOutlined />} onClick={() => add({ quantity: 1 })} disabled={busy || unknownResult}>增加品項</Button>
+          <Form.ErrorList errors={errors} /><Button data-operation-action="erp.nativeaftersalescreate.action.29a8462cce4d" icon={<PlusOutlined />} onClick={() => add({ quantity: 1 })} disabled={busy || unknownResult}>增加品項</Button>
         </>}</Form.List>
         {selectedType === 'REPAIR' && <Form.Item name="serialNumber" label="SN" style={{ marginTop: 16 }}><Input maxLength={120} /></Form.Item>}
         {selectedType === 'RESHIPMENT' && <div className="native-after-sales-create-fields" style={{ marginTop: 16 }}><Form.Item name="reshipmentReason" label="補寄原因" rules={required('請選擇補寄原因')}><Select options={options?.reasonOptions.reshipmentReason || []} /></Form.Item><Form.Item name="lossCategory" label="缺件類別" rules={required('請選擇缺件類別')}><Select options={options?.reasonOptions.lossCategory || []} /></Form.Item></div>}
@@ -121,7 +121,7 @@ export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttemp
         {selectedType === 'REFUND_PICKUP' && <Form.Item name="refundReason" label="退貨原因" rules={required('請選擇退貨原因')} style={{ marginTop: 16 }}><Select options={options?.reasonOptions.refundReason || []} /></Form.Item>}
         <Form.Item name="reason" label={selectedType === 'RESHIPMENT' ? '補寄內容' : selectedType === 'EXCHANGE_RETURN' ? '換貨說明' : selectedType === 'REFUND_PICKUP' ? '退貨說明' : type?.reason} rules={required('請填寫案件內容')} style={{ marginTop: 16 }}><Input.TextArea rows={3} maxLength={4000} showCount /></Form.Item>
         <Form.Item name="internalNote" label="內部備註"><Input.TextArea rows={2} maxLength={2000} showCount /></Form.Item>
-        <Space wrap><Button type="primary" aria-label={unknownResult ? '重試確認' : '建立案件'} htmlType={unknownResult ? 'button' : 'submit'} disabled={busy} loading={busy} onClick={unknownResult ? () => void create(form.getFieldsValue(true)) : undefined}>{unknownResult ? '重試確認' : '建立案件'}</Button><Button onClick={onCancel} disabled={busy || unknownResult}>取消</Button><Button type="link" disabled={busy || unknownResult || !brand} onClick={() => onOpenSource('customers')}>顧客資料與 LINE</Button></Space>
+        <Space wrap><Button data-operation-action="erp.nativeaftersalescreate.action.2cd31d3372c6" type="primary" aria-label={unknownResult ? '重試確認' : '建立案件'} htmlType={unknownResult ? 'button' : 'submit'} disabled={busy} loading={busy} onClick={unknownResult ? () => void create(form.getFieldsValue(true)) : undefined}>{unknownResult ? '重試確認' : '建立案件'}</Button><Button data-operation-action="erp.nativeaftersalescreate.action.e8f9c03cb32d" onClick={onCancel} disabled={busy || unknownResult}>取消</Button><Button data-operation-action="erp.nativeaftersalescreate.action.854d498fa925" type="link" disabled={busy || unknownResult || !brand} onClick={() => onOpenSource('customers')}>顧客資料與 LINE</Button></Space>
       </Form>
     </>}
   </div>

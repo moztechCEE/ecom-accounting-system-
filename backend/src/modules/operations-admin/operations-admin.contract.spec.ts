@@ -7,7 +7,19 @@ import {
   fieldNames,
   interactionInput,
   logRange,
+  sourceAuditProjection,
 } from './operations-admin.contract';
+
+describe('authoritative Source notification projection', () => {
+  it.each(['DRAFT', 'APPROVED', 'SENT', 'SIMULATED', 'FAILED', 'UNKNOWN'])('retains %s without changing it to committed/delivered', (outcome) => {
+    const value = sourceAuditProjection({ id: 'log', occurredAt: new Date().toISOString(), actionId: 'source.notification.result', eventClass: 'NOTIFICATION', recordType: 'CASE', notificationId: 'notice', providerReceiptId: 'DEV-opaque', outcome, payload: { text: 'PRIVATE' }, token: 'private', changedFieldNames: ['status', 'customerEmail', 'lineUserId'] });
+    expect(value.eventClass).toBe('NOTIFICATION'); expect(value.outcome).toBe(outcome); expect(value.notificationId).toBe('notice'); expect(value.providerReceiptId).toBe('DEV-opaque'); expect(value.changedFieldNames).toEqual(['status']); expect(JSON.stringify(value)).not.toContain('PRIVATE'); expect(value).not.toHaveProperty('token');
+  });
+  it('does not infer a successful notification from malformed metadata', () => {
+    const value = sourceAuditProjection({ id: 'log', occurredAt: new Date().toISOString(), actionId: 'source.notification.result', eventClass: 'NOTIFICATION', recordType: 'CASE', outcome: 'SENT', notificationId: 'email@private.test', providerReceiptId: 'https://private.test/path?token=private' });
+    expect(value.outcome).toBe('UNKNOWN'); expect(value.notificationId).toBeNull(); expect(value.providerReceiptId).toBeNull();
+  });
+});
 const connection = {
   category: 'LINE',
   provider: 'LINE',
