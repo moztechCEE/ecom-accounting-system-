@@ -30,7 +30,7 @@ export default function NativeCustomerApplications({ entityId, options, onCreate
     setProducts(new Map((options?.products || []).map(p => [p.id, p])));
   }, [scopeKey, options]);
   useEffect(() => {
-    const abort = new AbortController(); setLoading(true);
+    const abort = new AbortController(); setLoading(true); setList(undefined);
     void nativeAfterSales.applications(entityId, status, cursor, abort.signal).then(data => { if (!abort.signal.aborted) setList(data); }).catch(e => { if (!abort.signal.aborted) setError(errorText(e)); }).finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
   }, [scopeKey, status, cursor, refresh]);
@@ -126,7 +126,7 @@ export default function NativeCustomerApplications({ entityId, options, onCreate
             <Button data-operation-action="after_sales.application.item.add" disabled={fields.length >= 20} icon={<PlusOutlined />} onClick={() => add({ quantity: 1 })}>增加產品</Button>
           </>}</Form.List>
           <Form.Item name="note" label="審核備註" style={{ marginTop: 16 }} rules={[{ required: true, whitespace: true, message: '請填寫審核依據或退回原因' }]}><Input.TextArea rows={2} maxLength={2000} /></Form.Item>
-        </Form> : <><Descriptions column={1} items={['name','phone','address','email','productDescription','faultDescription'].map(k => ({ key: k, label: ({ name: '姓名', phone: '電話', address: '地址', email: 'Email', productDescription: '產品描述', faultDescription: '問題描述' } as any)[k], children: String((selected.submittedData as any)?.[k] || '—') }))} />{selected.reviewNote && <p>審核備註：{selected.reviewNote}</p>}{editable && <Button data-operation-action="after_sales.application.review.reopen" disabled={disabled} onClick={() => setRecheck(true)}>重新核對資料與產品</Button>}</>}
+        </Form> : <><Descriptions column={1} items={['name','phone','address','email','productDescription','faultDescription'].map(k => ({ key: k, label: ({ name: '姓名', phone: '電話', address: '地址', email: 'Email', productDescription: '產品描述', faultDescription: '問題描述' } as any)[k], children: String(((selected.reviewedData as any)?.profile || selected.submittedData)?.[k] || '—') }))} />{selected.reviewNote && <p>審核備註：{selected.reviewNote}</p>}{editable && <Button data-operation-action="after_sales.application.review.reopen" disabled={disabled} onClick={() => setRecheck(true)}>重新核對資料與產品</Button>}</>}
       </>}
     </Drawer>
     <Drawer title="建立顧客填單連結" open={inviteOpen} width="min(420px, 100vw)" maskClosable={!disabled} onClose={() => { if (!disabled) setInviteOpen(false); }} footer={pending ? <Button data-operation-action="after_sales.application.retry" type="primary" loading={busy} onClick={() => void send()}>重試原操作</Button> : <Button data-operation-action="after_sales.application.invite.create" type="primary" disabled={disabled} loading={busy} onClick={() => void inviteForm.validateFields().then(v => send({ operation: 'CREATE_INVITE', brand: v.brand, type: v.type }, null)).catch(() => setError('請選擇品牌與案件類型'))}>建立連結</Button>}>
