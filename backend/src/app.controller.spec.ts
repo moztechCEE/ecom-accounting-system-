@@ -42,7 +42,13 @@ describe('AppController', () => {
     });
 
     it('returns a minimal liveness response', () => {
-      expect(appController.health()).toEqual({ status: 'ok' });
+      const saved = process.env.SOURCE_VERSION;
+      try {
+        process.env.SOURCE_VERSION = 'private-not-a-commit';
+        expect(appController.health()).toEqual({ status: 'ok', sourceVersion: 'unknown' });
+        process.env.SOURCE_VERSION = 'a'.repeat(40);
+        expect(appController.health().sourceVersion).toBe('a'.repeat(40));
+      } finally { if (saved === undefined) delete process.env.SOURCE_VERSION; else process.env.SOURCE_VERSION = saved; }
     });
 
     it('returns ready when the database responds', async () => {
