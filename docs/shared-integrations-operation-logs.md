@@ -33,3 +33,15 @@ ERP tracker 僅收有 `data-operation-action` 的已啟用控制項。Source 透
 - `npm run build --prefix frontend` / `npm run build --prefix backend`。
 
 本地通過不代表部署完成、provider 真實驗證、顧客通知送達或完整業務驗收；DEV 由本次 release owner 提供固定 SHA 與部署回執。
+
+## 原生案件溝通操作
+
+原生案件明細新增顧客確認／LINE 通知／維修提案／工廠問題交辦。顧客確認 CREATE 在送出前保存 actor/company/case 隔離的 UUID 與白名單請求；網路未知結果、重新整理及跨分頁登入切換保留同一次 UUID，不保存簽名連結或登入 token。授權 summary 提供目前有效確認連結；照片透過單張受控 reader 按需預覽。
+
+客服先審核通知草稿，才可發送；顯示 DRAFT、APPROVED、SENDING、FAILED、UNKNOWN、SENT 與 SIMULATED 原始節點。「LINE 已接受」與「DEV 模擬完成」分開，不宣稱消費者送達。UNKNOWN 先核讀案件，不能直接盲重送。QUOTE 顧客回覆的客服審核保留證據；不自動冒充正式報價同意、核款或技師放行。
+
+維修提案按全部目前品項採用，REVIEW/null 金額及 overflow 在 UI 阻擋；最終完整數量／版本／收款／方案 binding 由 Source transaction 再核實。DISPOSITION 綁定每件 item/planVersion/planHash/proposalHash；PRODUCT 使用收發實際品項版本，不假造維修檢測。
+
+工廠交辦指派使用 Source 活躍帳號選單，接手／回覆／核定各帶版本；目前接手人或管理者才顯示後續動作。`caseActivity` URL 只保存展開區塊名稱，重新讀取後維持工作位置，不含顧客資料。
+
+新增 `frontend/tests/native-communication-model.test.ts` 7 項純邊界檢查；`native-communication.test.mjs` 9 個離線 DOM 情境涵蓋 unknown UUID 重開、實際 POST 身分、跨分頁 Web Lock、READONLY、品牌缺失、待審報價不能轉免費、通知審核／發送／模擬及工廠四節點／390px。所有資料為本地虛構 fixture，沒有 DEV 或外部業務效果。

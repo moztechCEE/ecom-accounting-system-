@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { nativeAfterSales } from '../../services/native-after-sales.service'
 import type { NativeCaseDetail, NativeCaseList, NativeCaseRow, NativeOptions } from '../../services/native-after-sales.service'
 import { changeNativeFilter, nativeCaseTypeLabel, nativeFilters, NATIVE_CASE_TYPES } from './native-workbench-model'
+import NativeCaseCommunication from './NativeCaseCommunication'
 import NativeAfterSalesCreate from './NativeAfterSalesCreate'
 import { canOpenAfterSalesSection } from './workbench-model'
 import { STATUS } from '../mailroom/model'
@@ -147,7 +148,7 @@ export default function NativeAfterSalesWorkbench({ entityId, onOpenSource, onOp
       <Button className="native-after-sales-back" aria-label="返回案件清單" icon={<ArrowLeftOutlined />} onClick={() => void openCase()}>返回案件清單</Button>
       {detailLoading && <div role="status"><Spin /> 載入案件…</div>}
       {detailError && <Alert showIcon type="error" message={detailError} action={<Button onClick={() => setRefresh(value => value + 1)}>重試</Button>} />}
-      {detail && <NativeDetail detail={detail} onOpenSource={onOpenSource} onOpenTask={onOpenTask} canOpen={section => canOpenAfterSalesSection(user, section)} />}
+      {detail && <NativeDetail detail={detail} entityId={entityId} options={options} onReload={() => setRefresh(value => value + 1)} onDirtyChange={markDirty} onPendingChange={markPending} onOpenSource={onOpenSource} onOpenTask={onOpenTask} canOpen={section => canOpenAfterSalesSection(user, section)} />}
     </> : <>
       <nav className="native-after-sales-tabs" aria-label="案件責任範圍">
         <button type="button" className="native-after-sales-tab" aria-pressed={filters.scope === 'mine'} onClick={() => filter('scope', 'mine')}>待我處理{list && <span className="native-after-sales-count">{list.summary.mine}</span>}</button>
@@ -194,7 +195,7 @@ function NativeCaseListRow({ row, onOpen }: { row: NativeCaseRow; onOpen: () => 
   </article>
 }
 
-function NativeDetail({ detail, onOpenSource, onOpenTask, canOpen }: { detail: NativeCaseDetail; onOpenSource: Props['onOpenSource']; onOpenTask: Props['onOpenTask']; canOpen: (section: string) => boolean }) {
+function NativeDetail({ detail, entityId, options, onReload, onDirtyChange, onPendingChange, onOpenSource, onOpenTask, canOpen }: { detail: NativeCaseDetail; entityId:string; options?:NativeOptions; onReload:()=>void; onDirtyChange:(value:boolean)=>void; onPendingChange:(value:boolean)=>void; onOpenSource: Props['onOpenSource']; onOpenTask: Props['onOpenTask']; canOpen: (section: string) => boolean }) {
   const nextTask = detail.tasks.find(task => task.actionable)
   return <>
     <header className="native-after-sales-detail-heading"><div><h3 className="native-after-sales-detail-number">{detail.caseNumber}</h3><div className="native-after-sales-case-secondary">{nativeCaseTypeLabel(detail.type)} · {detail.brandName || '品牌待核對'}</div></div><Tag>{detail.workflow.stageLabel || detail.status}</Tag></header>
@@ -206,6 +207,7 @@ function NativeDetail({ detail, onOpenSource, onOpenTask, canOpen }: { detail: N
       {detail.tasks.map(task => <div key={task.itemId} className="native-after-sales-case-secondary">{task.label} · {task.status ? STATUS[task.status] || task.status : '待核對'}{task.csr ? ` · ${CSR_STATUS[task.csr.status as keyof typeof CSR_STATUS] || task.csr.status}` : ''}{task.owner ? ` · 交辦負責：${task.owner.name}` : ''}</div>)}
       <div className="native-after-sales-detail-actions">{nextTask ? <Button type="primary" onClick={() => onOpenTask(nextTask.kind, nextTask.itemId)}>{nextTask.kind === 'repair' ? '處理維修交辦' : '處理收發交辦'}</Button> : detail.sourceSection && <Button type="primary" onClick={() => onOpenSource(detail.sourceSection!, detail.id)}>{detail.primaryActionLabel || '處理此節點'}</Button>}{detail.tasks.filter(task => task !== nextTask).map(task => <Button key={`${task.kind}:${task.itemId}`} onClick={() => onOpenTask(task.kind, task.itemId)}>{task.kind === 'repair' ? '檢視維修交辦' : '檢視收發交辦'}{detail.tasks.length > 1 ? ` · ${task.label}` : ''}</Button>)}</div>
     </section>
+    <NativeCaseCommunication key={JSON.stringify([entityId, detail.id])} entityId={entityId} detail={detail} options={options} onReload={onReload} onDirtyChange={onDirtyChange} onPendingChange={onPendingChange} />
     <nav className="native-after-sales-detail-links" aria-label="案件相關作業">{detail.sourceSection && canOpen(detail.sourceSection) && <Button type="link" onClick={() => onOpenSource(detail.sourceSection!, detail.id)}>完整案件作業</Button>}{[['quotes', '報價與顧客確認'], ['customers', '顧客資料與 LINE'], ['invoices', '發票作業'], ['accounting', '收款與退款核對']].filter(([section]) => canOpen(section)).map(([section, label]) => <Button key={section} type="link" onClick={() => onOpenSource(section)}>{label}</Button>)}</nav>
     {detail.sections.length > 0 && <Collapse className="native-after-sales-history" ghost items={detail.sections.map(section => ({ key: section.key, label: section.title, children: section.records.map(record => <Descriptions key={record.key} size="small" column={1} items={record.fields.map(field => ({ key: field.key, label: field.label, children: afterSalesFieldValue(field.key, field.value) }))} />) }))} />}
   </>

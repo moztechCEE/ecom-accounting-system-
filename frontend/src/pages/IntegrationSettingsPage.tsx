@@ -249,7 +249,7 @@ export default function IntegrationSettingsPage() {
                   {row.enabled
                     ? codes[row.verificationCode || ""] ||
                       status[row.verificationStatus]
-                    : "已停用"}
+                    : "驗證停用"}
                 </Tag>
                 {row.verifiedAt && (
                   <small>
@@ -458,7 +458,7 @@ export default function IntegrationSettingsPage() {
               </Form.Item>
             </>
           )}
-          <Form.Item name="enabled" label="啟用" valuePropName="checked">
+          <Form.Item name="enabled" label="連線驗證" valuePropName="checked">
             <Switch />
           </Form.Item>
         </Form>
