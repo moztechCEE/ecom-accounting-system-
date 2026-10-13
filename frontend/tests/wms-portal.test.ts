@@ -8,16 +8,17 @@ const picker = { roles: ['EMPLOYEE'], permissions: ['wms_tasks:read', 'wms_picki
 const origin = 'https://corely-wms-dev-sp5g377smq-de.a.run.app'
 Object.defineProperty(globalThis, 'window', { value: { __APP_CONFIG__: { devEnvironment: true, wmsPortalUrl: origin } }, configurable: true })
 
-test('all sections lead to WMS routes without ERP credentials', () => {
-  const links = navigationLeaves(workspaceNavigation(admin, 'all')).filter(x => x.externalUrl)
-  assert(!links.some(link => ['/warehouse/picking','/warehouse/packing','/warehouse/completed','/warehouse/team','/warehouse/users'].includes(link.key)))
+test('warehouse links stay inside ERP and preserve authorized source routes', () => {
+  const links = navigationLeaves(workspaceNavigation(admin, 'all')).filter(x => x.key.startsWith('/warehouse'))
+  assert(links.length > 0)
+  assert(!links.some(link => link.externalUrl))
   assert(navigationLeaves(workspaceNavigation(admin, 'all')).some(link=>link.key==='/warehouse' && !link.externalUrl))
   for (const link of links) {
-    assert.equal(new URL(link.externalUrl!).origin, origin)
-    assert(!/token|password|email|entityId/.test(link.externalUrl!))
+    assert(link.key.startsWith('/warehouse'))
+    assert(!/token|password|email/.test(link.key))
   }
-  assert.equal(wmsPortalDestination(admin, '/warehouse/scan-errors')?.externalUrl, origin + '/admin/scan-errors')
-  assert.equal(wmsPortalDestination(picker, '/warehouse/workstation')?.externalUrl, origin + '/tasks')
+  assert.equal(wmsPortalDestination(admin, '/warehouse/scan-errors')?.path, '/admin/scan-errors')
+  assert.equal(wmsPortalDestination(picker, '/warehouse/workstation')?.path, '/tasks')
 })
 test('operators retain only authorized sections and personal pages', () => {
   const links = navigationLeaves(workspaceNavigation(picker, 'warehouse'))

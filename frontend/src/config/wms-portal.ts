@@ -1,7 +1,7 @@
 import type { User } from '../types'
 import { hasAnyPermission, isAdminUser } from '../utils/access'
 
-// Only the named WMS environment is a valid destination. No ERP token is sent.
+// Public module assets come only from the named paired WMS environment.
 export function wmsPortalOrigin(): string {
   const config = typeof window === 'undefined' ? undefined : window.__APP_CONFIG__
   const raw = config?.wmsPortalUrl?.trim()
@@ -39,7 +39,7 @@ export function wmsPortalLinks(user: User | null | undefined) {
   if (!origin || !hasAnyPermission(user, ['wms_tasks:read'])) return []
   return WMS_PORTAL_SECTIONS.filter(section =>
     section.adminOnly ? isAdminUser(user) : hasAnyPermission(user, section.permissions || []),
-  ).map(section => ({ ...section, externalUrl: origin + section.path }))
+  ).map(section => ({ ...section }))
 }
 
 export function wmsPortalDestination(user: User | null | undefined, key: string) {

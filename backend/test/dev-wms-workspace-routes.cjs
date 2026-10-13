@@ -21,7 +21,7 @@ function sandbox(overrides = {}) {
     require(name) {
       if (name === 'node:net') return { Socket };
       if (name === 'node:child_process') return {};
-      if (name === 'node:async_hooks') return require('node:async_hooks');
+      if (name === 'node:async_hooks' || name === 'node:crypto') return require(name);
       if (name === 'node:module') return { syncBuiltinESMExports() {} };
       throw Error(`Unexpected import: ${name}`);
     },

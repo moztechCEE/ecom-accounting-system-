@@ -1,11 +1,8 @@
-import { message } from 'antd'
-import { openWarehouseEntry } from '../services/wms-workspace'
+import { Link, useLocation } from 'react-router-dom'
 import type { NavigationItem } from '../config/navigation'
+import { companyNavigationDestination } from '../config/workspaces'
 
 export default function WarehouseLink({ item, onOpen }: { item: NavigationItem; onOpen?: () => void }) {
-  return <a href={item.key} onClick={event => {
-    event.preventDefault()
-    void openWarehouseEntry(item.key).catch(error => message.error(error.response?.data?.message || error.message || '無法開啟儲運系統'))
-    onOpen?.()
-  }}>{item.label}</a>
+  const { search } = useLocation()
+  return <Link to={companyNavigationDestination(item.key, search)} onClick={onOpen}>{item.label}</Link>
 }
