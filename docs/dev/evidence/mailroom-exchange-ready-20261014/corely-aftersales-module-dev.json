@@ -1,0 +1,39 @@
+{
+  "metadata": {
+    "name": "corely-aftersales-module-dev"
+  },
+  "status": {
+    "conditions": [
+      {
+        "lastTransitionTime": "2026-10-12T16:07:15.332726Z",
+        "status": "True",
+        "type": "Ready"
+      },
+      {
+        "lastTransitionTime": "2026-10-12T15:56:10.260118Z",
+        "status": "True",
+        "type": "ConfigurationsReady"
+      },
+      {
+        "lastTransitionTime": "2026-10-12T16:07:15.287098Z",
+        "status": "True",
+        "type": "RoutesReady"
+      }
+    ],
+    "latestReadyRevisionName": "corely-aftersales-module-dev-native-f56b794401b2-c",
+    "traffic": [
+      {
+        "revisionName": "corely-aftersales-module-dev-mailroom-961a0328ac0f-f",
+        "tag": "aftersales-final",
+        "url": "https://aftersales-final---corely-aftersales-module-dev-sp5g377smq-de.a.run.app"
+      },
+      {
+        "percent": 100,
+        "revisionName": "corely-aftersales-module-dev-native-f56b794401b2-c",
+        "tag": "aftersales-review",
+        "url": "https://aftersales-review---corely-aftersales-module-dev-sp5g377smq-de.a.run.app"
+      }
+    ],
+    "url": "https://corely-aftersales-module-dev-sp5g377smq-de.a.run.app"
+  }
+}

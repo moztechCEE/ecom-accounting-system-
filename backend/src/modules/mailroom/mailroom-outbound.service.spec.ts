@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  BadGatewayException,
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
@@ -19,8 +20,13 @@ import { CreateOutboundDto, OutboundCommandDto } from './mailroom-outbound.dto';
 import {
   MailroomOutboundOrder as SourceOrder,
   DISPATCH_SCHEMA,
+  validateOutboundOrders,
 } from './mailroom-workflow-event.contract';
 import { OutboundUnit } from './mailroom-outbound.contract';
+import {
+  exchangeReadyHash,
+  validateExchangeReadyEvent,
+} from './mailroom-exchange-ready.contract';
 
 const COMPANY = 'company-a';
 const CREATOR = 'csr-a',
@@ -110,6 +116,20 @@ function fixture(source = sourceOrder()) {
     outs: [],
   };
   const trace: string[] = [];
+  const catalog = new Map<string, Row>([
+    [
+      'product-a',
+      {
+        id: 'product-a',
+        entityId: COMPANY,
+        name: 'SYNTHETIC CATALOG NAME',
+        sku: 'SYNTHETIC-SKU',
+        isActive: true,
+        type: 'SIMPLE',
+        hasSerialNumbers: false,
+      },
+    ],
+  ]);
   const actors = new Map<
     string,
     { permissions: Set<string>; entityIds: string[]; name: string }
@@ -285,6 +305,25 @@ function fixture(source = sourceOrder()) {
     mailroomOutboundOrder: orders,
     mailroomOutboundAction: actions,
     mailroomDelivery: deliveries,
+    product: {
+      findFirst: jest.fn(({ where }: { where: Row }) => {
+        trace.push('catalog.read');
+        return Promise.resolve(
+          structuredClone(
+            [...catalog.values()].find((row) => match(row, where)) || null,
+          ),
+        );
+      }),
+      create: jest.fn(() => {
+        throw new Error('catalog must remain readonly');
+      }),
+      update: jest.fn(() => {
+        throw new Error('catalog must remain readonly');
+      }),
+      updateMany: jest.fn(() => {
+        throw new Error('catalog must remain readonly');
+      }),
+    },
     $executeRaw: jest.fn(async () => {
       trace.push('lock');
       if (onLock) {
@@ -364,10 +403,13 @@ function fixture(source = sourceOrder()) {
       async (_entity: string, _search: string, caseId: string) => {
         trace.push('source.read');
         if (sourceReadHook) sourceReadHook();
-        return {
-          items: caseId === source.id ? [structuredClone(source)] : [],
-          nextCursor: null,
-        };
+        return validateOutboundOrders(
+          {
+            items: caseId === source.id ? [structuredClone(source)] : [],
+            nextCursor: null,
+          },
+          caseId,
+        );
       },
     ),
   };
@@ -422,6 +464,7 @@ function fixture(source = sourceOrder()) {
     stock,
     gateway,
     trace,
+    catalog,
     actors,
     employees,
     source,
@@ -498,17 +541,21 @@ function preparation(
     })),
   });
 }
-async function ready(f: Fixture, quantity = 2) {
+async function prepared(f: Fixture, quantity = 2) {
   const input = creation(quantity),
     result = await f.service.create(CREATOR, input);
   const prepare = preparation(f, result.id);
   await f.service.command(PICKER, result.id, prepare);
+  return { id: result.id, input, prepare };
+}
+async function ready(f: Fixture, quantity = 2) {
+  const result = await prepared(f, quantity);
   const accept = command(f, result.id, 'accept', {
     confirmedItems: true,
     location: 'A1',
   });
   await f.service.command(CLERK, result.id, accept);
-  return { id: result.id, input, prepare, accept };
+  return { ...result, accept };
 }
 
 describe('native outbound physical chain using a rollback fixture', () => {
@@ -538,10 +585,17 @@ describe('native outbound physical chain using a rollback fixture', () => {
       await f.service.command(CLERK, result.id, dispatch);
       expect(f.row(result.id).status).toBe('DISPATCHED');
       expect(f.stock.issue).toHaveBeenCalledTimes(1);
-      expect(f.state.deliveries).toHaveLength(2);
-      const ids = f.state.deliveries.map((row) => row.eventId);
+      const dispatches = f.state.deliveries.filter(
+        (row) =>
+          (row.payload as { schema?: unknown }).schema === DISPATCH_SCHEMA,
+      );
+      expect(dispatches).toHaveLength(2);
+      expect(f.state.deliveries).toHaveLength(
+        type === 'EXCHANGE_RETURN' ? 4 : 2,
+      );
+      const ids = dispatches.map((row) => row.eventId as string);
       expect(new Set(ids).size).toBe(2);
-      for (const delivery of f.state.deliveries) {
+      for (const delivery of dispatches) {
         expect(delivery.target).toBe('AFTER_SALES');
         expect(delivery.payload).toMatchObject({
           schema: DISPATCH_SCHEMA,
@@ -1090,6 +1144,384 @@ describe('native outbound physical chain using a rollback fixture', () => {
     expect(delivered).toEqual(deliveredBefore);
     expect(leased).toEqual(leasedBefore);
     expect(f.state.deliveries).toHaveLength(3);
+    expect(f.stock.issue).toHaveBeenCalledTimes(1);
+  });
+  it('enqueues EXCHANGE_READY only after the entire partial order is personally accepted, using company catalog data', async () => {
+    const f = fixture(sourceOrder('EXCHANGE_RETURN', 4));
+    const { id } = await prepared(f, 2);
+    expect(f.state.deliveries).toHaveLength(0);
+    expect(f.row(id).status).toBe('WAITING_MAILROOM_ACCEPTANCE');
+    await f.service.command(
+      CLERK,
+      id,
+      command(f, id, 'accept', { confirmedItems: true, location: 'A1' }),
+    );
+    expect(f.row(id)).toMatchObject({
+      status: 'READY_FOR_DISPATCH',
+      version: 3,
+      custodianId: CLERK,
+      nextUserId: null,
+    });
+    expect(f.state.deliveries).toHaveLength(2);
+    const events = f.state.deliveries.map((delivery) =>
+      validateExchangeReadyEvent(delivery.payload),
+    );
+    const acceptedUnits = f.row(id).items as OutboundUnit[];
+    const prepareRequestId = f.row(id).stockRequestId as string;
+    expect(new Set(events.map((event) => event.eventId)).size).toBe(2);
+    for (const [index, event] of events.entries()) {
+      const delivery = f.state.deliveries[index];
+      expect(delivery.target).toBe('AFTER_SALES');
+      const unit = acceptedUnits.find(
+        (value) => value.unitId === event.itemId,
+      )!;
+      const proof = f.state.outs.find(
+        (value) => value.unitId === event.itemId,
+      )!;
+      expect(event).toMatchObject({
+        schema: 'corely.aftersales.workflow.v1',
+        kind: 'EXCHANGE_READY',
+        sourceCaseId: 'case-a',
+        sourceVersion: VERSION,
+        itemId: unit.unitId,
+        receiptId: id,
+        version: 3,
+        actor: { id: CLERK },
+        replacementRelease: {
+          schema: 'corely.mailroom.exchange-ready.v1',
+          orderId: id,
+          itemId: unit.unitId,
+          sourceCaseItemId: unit.sourceCaseItemId,
+          prepareRequestId,
+          generation: 3,
+          readyAt: event.occurredAt,
+          productName: 'SYNTHETIC CATALOG NAME',
+          sku: 'SYNTHETIC-SKU',
+          serialNumber: null,
+          quantity: 1,
+          stock: {
+            postingId: proof.postingId,
+            referenceType: 'AFTER_SALES_OUTBOUND',
+            referenceId: id,
+            productId: 'product-a',
+            warehouseId: 'warehouse-a',
+            externalInventoryPosted: false,
+          },
+          readyHash: exchangeReadyHash(event),
+        },
+      });
+      expect(JSON.stringify(delivery.payload)).toContain(
+        'SYNTHETIC CATALOG NAME',
+      );
+      expect(delivery.payload).not.toHaveProperty('shipment');
+    }
+    expect(new Set(events.map((event) => event.itemId))).toEqual(
+      new Set(acceptedUnits.map((unit) => unit.unitId)),
+    );
+    expect(f.stock.issue).toHaveBeenCalledTimes(1);
+    expect(f.stock.verify).toHaveBeenCalledWith(
+      f.tx,
+      expect.objectContaining({ orderId: id, caseType: 'EXCHANGE_RETURN' }),
+    );
+    expect(f.state.outs).toHaveLength(2);
+    expect(f.tx.product.findFirst).toHaveBeenCalledTimes(2);
+    expect(f.tx.product.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'product-a', entityId: COMPANY, isActive: true },
+      }),
+    );
+    expect(f.tx.product.create).not.toHaveBeenCalled();
+    expect(f.tx.product.update).not.toHaveBeenCalled();
+    expect(f.tx.product.updateMany).not.toHaveBeenCalled();
+    expect(f.trace.indexOf('delivery.create')).toBeLessThan(
+      f.trace.lastIndexOf('tx.commit'),
+    );
+    expect((await f.service.detail(CLERK, COMPANY, id)).sourceSync.status).toBe(
+      'NOT_DISPATCHED',
+    );
+  });
+  it.each(['RESHIPMENT', 'PRIVATE_PURCHASE'] as const)(
+    'does not enqueue exchange readiness for accepted %s',
+    async (type) => {
+      const f = fixture(sourceOrder(type));
+      await ready(f, 1);
+      expect(f.row(f.state.orders[0].id as string).status).toBe(
+        'READY_FOR_DISPATCH',
+      );
+      expect(f.state.deliveries).toHaveLength(0);
+      expect(f.tx.product.findFirst).not.toHaveBeenCalled();
+    },
+  );
+  it('keeps a REPAIR replacement outside the generic Source orders entry', async () => {
+    const source = sourceOrder();
+    source.type = 'REPAIR' as SourceOrder['type'];
+    const f = fixture(source);
+    await expect(f.service.create(CREATOR, creation())).rejects.toThrow(
+      BadGatewayException,
+    );
+    expect(f.state.orders).toHaveLength(0);
+    expect(f.state.outs).toHaveLength(0);
+    expect(f.state.deliveries).toHaveLength(0);
+    expect(f.db.$transaction).not.toHaveBeenCalled();
+  });
+  it('keeps EXCHANGE_READY IDs, hashes and occurrence times unchanged on an exact UUID retry', async () => {
+    jest.useFakeTimers({ now: new Date('2026-10-14T01:00:00.000Z') });
+    try {
+      const f = fixture(sourceOrder('EXCHANGE_RETURN')),
+        { id } = await prepared(f, 2);
+      const accept = command(f, id, 'accept', {
+        confirmedItems: true,
+        location: 'A1',
+      });
+      await f.service.command(CLERK, id, accept);
+      const before = structuredClone(f.state),
+        counts = {
+          source: f.sync.outboundOrders.mock.calls.length,
+          verify: f.stock.verify.mock.calls.length,
+          catalog: f.tx.product.findFirst.mock.calls.length,
+        };
+      for (const delivery of f.state.deliveries) {
+        const event = validateExchangeReadyEvent(delivery.payload);
+        expect(event).toMatchObject({
+          occurredAt: '2026-10-14T01:00:00.000Z',
+          replacementRelease: {
+            readyAt: '2026-10-14T01:00:00.000Z',
+            readyHash: exchangeReadyHash(event),
+          },
+        });
+      }
+      jest.setSystemTime(new Date('2026-10-14T02:00:00.000Z'));
+      expect(await f.service.command(CLERK, id, accept)).toMatchObject({
+        duplicate: true,
+      });
+      expect(f.state).toEqual(before);
+      expect(f.sync.outboundOrders).toHaveBeenCalledTimes(counts.source);
+      expect(f.stock.verify).toHaveBeenCalledTimes(counts.verify);
+      expect(f.tx.product.findFirst).toHaveBeenCalledTimes(counts.catalog);
+      expect(f.stock.issue).toHaveBeenCalledTimes(1);
+      await expect(
+        f.service.command(CLERK, id, { ...accept, location: 'CHANGED' }),
+      ).rejects.toThrow(ConflictException);
+      expect(f.state).toEqual(before);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+  it.each(['outbox', 'record', 'catalog', 'verify'] as const)(
+    'rolls exchange readiness back on %s failure while retaining the original preparation OUT',
+    async (failure) => {
+      const f = fixture(sourceOrder('EXCHANGE_RETURN')),
+        { id } = await prepared(f, 2);
+      const before = structuredClone(f.state);
+      if (failure === 'outbox') f.fail('delivery');
+      if (failure === 'record') f.fail('action');
+      if (failure === 'catalog')
+        f.tx.product.findFirst.mockRejectedValueOnce(
+          new Error('injected catalog failure'),
+        );
+      if (failure === 'verify')
+        f.stock.verify.mockRejectedValueOnce(
+          new ConflictException('injected proof failure'),
+        );
+      await expect(
+        f.service.command(
+          CLERK,
+          id,
+          command(f, id, 'accept', { confirmedItems: true, location: 'A1' }),
+        ),
+      ).rejects.toThrow();
+      expect(f.state).toEqual(before);
+      expect(f.row(id).status).toBe('WAITING_MAILROOM_ACCEPTANCE');
+      expect(f.state.actions.map((value) => value.action as string)).toEqual([
+        'create',
+        'prepare',
+      ]);
+      expect(f.state.outs).toHaveLength(2);
+      expect(f.stock.issue).toHaveBeenCalledTimes(1);
+      expect(f.state.deliveries).toHaveLength(0);
+      expect(f.trace).toContain('tx.rollback');
+      if (failure === 'record' || failure === 'outbox')
+        expect(f.trace).toContain('delivery.create');
+    },
+  );
+  it.each([
+    'entityId',
+    'orderId',
+    'unitId',
+    'productId',
+    'warehouseId',
+    'sku',
+    'serialNumber',
+    'postingId',
+    'actorId',
+    'requestId',
+    'quantity',
+    'externalInventoryPosted',
+    'requestHash',
+    'referenceType',
+    'sourceCaseId',
+    'caseType',
+    'schema',
+  ] as const)('refuses an exchange OUT proof with wrong %s', async (field) => {
+    const f = fixture(sourceOrder('EXCHANGE_RETURN')),
+      { id } = await prepared(f, 2);
+    const before = structuredClone(f.state),
+      proofs = structuredClone(f.state.outs) as unknown as Row[];
+    proofs[0][field] = ['orderId', 'unitId', 'postingId', 'requestId'].includes(
+      field,
+    )
+      ? randomUUID()
+      : field === 'quantity'
+        ? 2
+        : field === 'externalInventoryPosted'
+          ? true
+          : field === 'requestHash'
+            ? 'A'.repeat(64)
+            : 'SYNTHETIC-WRONG';
+    f.stock.verify.mockResolvedValueOnce(proofs as OutboundStockProof[]);
+    await expect(
+      f.service.command(
+        CLERK,
+        id,
+        command(f, id, 'accept', { confirmedItems: true, location: 'A1' }),
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(f.state).toEqual(before);
+    expect(f.state.deliveries).toHaveLength(0);
+    expect(f.stock.issue).toHaveBeenCalledTimes(1);
+  });
+  it.each(['missing-unit', 'duplicate-unit', 'missing-preparer'] as const)(
+    'requires every prepared unit and its original actor (%s)',
+    async (change) => {
+      const f = fixture(sourceOrder('EXCHANGE_RETURN')),
+        { id } = await prepared(f, 2);
+      if (change === 'missing-preparer') f.row(id).preparedById = null;
+      else {
+        const proofs = structuredClone(f.state.outs);
+        f.stock.verify.mockResolvedValueOnce(
+          change === 'missing-unit' ? [proofs[0]] : [proofs[0], proofs[0]],
+        );
+      }
+      const before = structuredClone(f.state);
+      await expect(
+        f.service.command(
+          CLERK,
+          id,
+          command(f, id, 'accept', { confirmedItems: true, location: 'A1' }),
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(f.state).toEqual(before);
+      expect(f.state.deliveries).toHaveLength(0);
+    },
+  );
+  it.each([
+    'missing',
+    'wrong-company',
+    'wrong-id',
+    'wrong-sku',
+    'inactive',
+  ] as const)(
+    'requires a real active same-company replacement catalog product (%s)',
+    async (change) => {
+      const f = fixture(sourceOrder('EXCHANGE_RETURN')),
+        { id } = await prepared(f, 1);
+      const product = f.catalog.get('product-a')!;
+      if (change === 'missing') f.catalog.clear();
+      if (change === 'wrong-company') product.entityId = 'another-company';
+      if (change === 'wrong-id') product.id = 'another-product';
+      if (change === 'wrong-sku') product.sku = 'OTHER-SKU';
+      if (change === 'inactive') product.isActive = false;
+      const before = structuredClone(f.state);
+      await expect(
+        f.service.command(
+          CLERK,
+          id,
+          command(f, id, 'accept', { confirmedItems: true, location: 'A1' }),
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(f.state).toEqual(before);
+      expect(f.state.deliveries).toHaveLength(0);
+      expect(f.tx.product.update).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['source-version', 'source-gate', 'actor'] as const)(
+    'blocks exchange acceptance when %s changes while awaiting the lock',
+    async (change) => {
+      const f = fixture(sourceOrder('EXCHANGE_RETURN')),
+        { id } = await prepared(f, 2);
+      f.lock(() => {
+        if (change === 'source-version')
+          f.source.version = '2026-10-13T02:00:00.000Z';
+        if (change === 'source-gate') {
+          f.source.dispatchAllowed = false;
+          f.source.blockReason = '放行已撤回';
+        }
+        if (change === 'actor')
+          f.actors.get(CLERK)!.permissions.delete('mailroom:update');
+      });
+      const before = structuredClone(f.state);
+      await expect(
+        f.service.command(
+          CLERK,
+          id,
+          command(f, id, 'accept', { confirmedItems: true, location: 'A1' }),
+        ),
+      ).rejects.toThrow(
+        change === 'actor' ? ForbiddenException : ConflictException,
+      );
+      expect(f.state).toEqual(before);
+      expect(f.state.deliveries).toHaveLength(0);
+      expect(f.stock.verify).not.toHaveBeenCalled();
+    },
+  );
+  it('does not invent external confirmation when the actual stock verifier requires external formal posting', async () => {
+    const f = fixture(sourceOrder('EXCHANGE_RETURN')),
+      { id } = await prepared(f, 1);
+    const before = structuredClone(f.state),
+      previous = process.env.AFTER_SALES_REQUIRE_EXTERNAL_STOCK;
+    process.env.AFTER_SALES_REQUIRE_EXTERNAL_STOCK = 'true';
+    try {
+      const verifier = new MailroomOutboundStockService();
+      f.stock.verify.mockImplementation((tx, input) =>
+        verifier.verify(
+          tx as Parameters<MailroomOutboundStockService['verify']>[0],
+          input,
+        ),
+      );
+      await expect(
+        f.service.command(
+          CLERK,
+          id,
+          command(f, id, 'accept', { confirmedItems: true, location: 'A1' }),
+        ),
+      ).rejects.toThrow('外部正式庫存確認');
+      expect(f.state).toEqual(before);
+      expect(f.state.outs[0].externalInventoryPosted).toBe(false);
+      expect(f.tx.product.findFirst).not.toHaveBeenCalled();
+      expect(f.state.deliveries).toHaveLength(0);
+    } finally {
+      if (previous === undefined)
+        delete process.env.AFTER_SALES_REQUIRE_EXTERNAL_STOCK;
+      else process.env.AFTER_SALES_REQUIRE_EXTERNAL_STOCK = previous;
+    }
+  });
+  it('retains the actual prepared SN in the ready event rather than copying a Source alias', async () => {
+    const f = fixture(sourceOrder('EXCHANGE_RETURN')),
+      { id } = await f.service.create(CREATOR, creation());
+    const input = preparation(f, id);
+    input.items![0].serialNumber = 'SYNTHETIC-ACTUAL-SN';
+    f.catalog.get('product-a')!.hasSerialNumbers = true;
+    await f.service.command(PICKER, id, input);
+    await f.service.command(
+      CLERK,
+      id,
+      command(f, id, 'accept', { confirmedItems: true, location: 'A1' }),
+    );
+    expect(f.state.deliveries).toHaveLength(1);
+    expect(
+      validateExchangeReadyEvent(f.state.deliveries[0].payload)
+        .replacementRelease.serialNumber,
+    ).toBe('SYNTHETIC-ACTUAL-SN');
     expect(f.stock.issue).toHaveBeenCalledTimes(1);
   });
 });

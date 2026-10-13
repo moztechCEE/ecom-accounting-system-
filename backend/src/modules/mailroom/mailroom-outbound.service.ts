@@ -11,6 +11,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationGateway } from '../notification/notification.gateway';
 import { MailroomService } from './mailroom.service';
 import { MailroomSyncService } from './mailroom-sync.service';
+import { buildExchangeReadyEvent } from './mailroom-exchange-ready.contract';
 import {
   MailroomOutboundStockService,
   type OutboundStockProof,
@@ -600,13 +601,79 @@ export class MailroomOutboundService {
             },
           });
         } else if (input.action === 'accept') {
-          await this.stock.verify(tx, this.proofInput(row, units));
+          const verified = await this.stock.verify(
+            tx,
+            this.proofInput(row, units),
+          );
           Object.assign(changes, {
             status: 'READY_FOR_DISPATCH',
             custodianId: userId,
             nextUserId: null,
             location: physicalText(input.location, '寄件存放位置'),
           });
+          if (row.caseType === 'EXCHANGE_RETURN') {
+            const currentSource = requireOutboundSource(
+              source,
+              row.sourceCaseId,
+              row.sourceVersion,
+            );
+            if (
+              verified.length !== units.length ||
+              new Set(verified.map((proof) => proof.unitId)).size !==
+                units.length
+            )
+              throw new ConflictException('換貨準備完成缺少完整逐件出庫證明');
+            const now = new Date().toISOString();
+            const events = [];
+            for (const unit of units) {
+              const proof = verified.find(
+                (proof) => proof.unitId === unit.unitId,
+              );
+              if (!proof)
+                throw new ConflictException('換貨物件缺少正式出庫證明');
+              const product = await tx.product.findFirst({
+                where: {
+                  id: proof.productId,
+                  entityId: row.entityId,
+                  isActive: true,
+                },
+                select: {
+                  id: true,
+                  entityId: true,
+                  name: true,
+                  sku: true,
+                  isActive: true,
+                },
+              });
+              events.push(
+                buildExchangeReadyEvent({
+                  eventId: randomUUID(),
+                  occurredAt: now,
+                  actor: freshActor,
+                  source: currentSource,
+                  order: {
+                    ...row,
+                    status: 'READY_FOR_DISPATCH',
+                    version: row.version + 1,
+                    custodianId: freshActor.id,
+                  },
+                  unit,
+                  proof,
+                  product,
+                }),
+              );
+            }
+            // All pieces are verified before writing any ready event. They remain separate from incoming custody.
+            await tx.mailroomDelivery.createMany({
+              data: events.map((event) => ({
+                eventId: event.eventId,
+                entityId: row.entityId,
+                itemId: event.itemId,
+                target: 'AFTER_SALES',
+                payload: json(event),
+              })),
+            });
+          }
         } else if (input.action === 'dispatch') {
           const proof = await this.stock.verify(
             tx,

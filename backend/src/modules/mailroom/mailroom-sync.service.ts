@@ -12,6 +12,10 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { signRequest, type SourceCase } from './mailroom.contract';
 import { validateRepairProposalEvent } from './repair-proposal.contract';
 import {
+  EXCHANGE_READY_KIND,
+  validateExchangeReadyEvent,
+} from './mailroom-exchange-ready.contract';
+import {
   validateSourceChanges,
   validSourceCursor,
 } from './mailroom-source.contract';
@@ -540,13 +544,21 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
         if (!row) break;
         try {
           const entry = this.connection(row.entity_id, row.target);
-          const payload = row.payload as { eventId: string; schema?: unknown };
+          const payload = row.payload as {
+            eventId: string;
+            schema?: unknown;
+            kind?: unknown;
+          };
           if (payload.schema === DISPATCH_SCHEMA)
             validateDispatchEvent(payload);
           if (payload.schema === REPAIR_PROPOSAL_SCHEMA) {
             if (row.target !== 'AFTER_SALES')
-              throw new BadGatewayException('維修提案只能同步售後系統');
-            validateRepairProposalEvent(payload);
+              throw new BadGatewayException('售後工作事件只能同步售後系統');
+            if (payload.kind === EXCHANGE_READY_KIND) {
+              const event = validateExchangeReadyEvent(payload);
+              if (event.entityId !== row.entity_id)
+                throw new BadGatewayException('換貨備妥事件的公司範圍不符');
+            } else validateRepairProposalEvent(payload);
           }
           const value = await this.request(
             entry,

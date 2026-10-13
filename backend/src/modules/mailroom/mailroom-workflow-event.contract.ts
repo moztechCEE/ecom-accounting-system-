@@ -1,4 +1,8 @@
 import { BadGatewayException } from '@nestjs/common';
+import {
+  EXCHANGE_READY_KIND,
+  validateExchangeReadyEvent,
+} from './mailroom-exchange-ready.contract';
 
 export const DISPATCH_SCHEMA = 'corely.mailroom.dispatch.v1' as const;
 export const REPAIR_PROPOSAL_SCHEMA = 'corely.aftersales.workflow.v1' as const;
@@ -354,6 +358,15 @@ export function assertMailroomDeliveryAck(
       throw new BadGatewayException('寄出事件尚未完成來源套用');
     return { shipmentId: response.shipmentId };
   } else if (payload.schema === REPAIR_PROPOSAL_SCHEMA) {
+    if (payload.kind === EXCHANGE_READY_KIND) {
+      const event = validateExchangeReadyEvent(payload);
+      if (
+        response.sourceCaseId !== event.sourceCaseId ||
+        response.acceptedReadyHash !== event.replacementRelease.readyHash
+      )
+        throw new BadGatewayException('換貨準備回執或內容雜湊不符');
+      return null;
+    }
     if (
       payload.kind !== 'REPAIR_PROPOSAL' ||
       typeof payload.eventId !== 'string' ||

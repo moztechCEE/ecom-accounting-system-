@@ -1,0 +1,39 @@
+{
+  "schema": "corely.aftersales.workflow.v1",
+  "kind": "EXCHANGE_READY",
+  "eventId": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  "entityId": "company",
+  "sourceCaseId": "case-exchange",
+  "sourceNumber": "CASE-EX-001",
+  "sourceVersion": "2026-10-13T10:00:00.000Z",
+  "itemId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "receiptId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "version": 3,
+  "occurredAt": "2026-10-14T00:00:00.000Z",
+  "actor": {
+    "id": "clerk",
+    "name": "收發同仁"
+  },
+  "replacementRelease": {
+    "schema": "corely.mailroom.exchange-ready.v1",
+    "orderId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "itemId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "sourceCaseItemId": "source-line",
+    "prepareRequestId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    "generation": 3,
+    "readyAt": "2026-10-14T00:00:00.000Z",
+    "productName": "正式商品名稱",
+    "sku": "REPLACE-SKU",
+    "serialNumber": "NEW-SN",
+    "quantity": 1,
+    "stock": {
+      "postingId": "OUT-1",
+      "referenceType": "AFTER_SALES_OUTBOUND",
+      "referenceId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "productId": "product-1",
+      "warehouseId": "warehouse-1",
+      "externalInventoryPosted": false
+    },
+    "readyHash": "abce5a39c47c5d2e2dea42782351def6d2f2f94ec7fc3a4f694da6458d158e29"
+  }
+}
