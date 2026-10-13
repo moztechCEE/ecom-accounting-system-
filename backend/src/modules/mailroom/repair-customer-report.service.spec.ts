@@ -36,6 +36,12 @@ describe('customer repair report service with future agreed Source wire and mock
   it('publishes a CSR-reviewed immutable allowlist report with a token fragment, not internal notes or storage identifiers', async () => {
     const f = repairEvidenceFixture();
     const result = await f.report.publish('csr', f.item.id, f.publish());
+    expect(f.tx.$executeRaw.mock.calls[0][0].values).toEqual([
+      EVIDENCE_COMPANY + ':repair-evidence:csr:' + f.publish().requestId,
+    ]);
+    expect(f.tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      f.tx.repairCustomerReport.create.mock.invocationCallOrder[0],
+    );
     expect(result.duplicate).toBe(false);
     expect(new URL(result.shareLink).search).toBe('');
     const token = tokenFrom(result.shareLink);

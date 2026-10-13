@@ -109,7 +109,7 @@ export class RepairMediaService {
     const hash = fingerprint({ action, id, ...body, extra });
     return this.prisma.$transaction(
       async (tx) => {
-        await tx.$queryRaw(
+        await tx.$executeRaw(
           Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${body.entityId + ':repair-evidence:' + userId + ':' + body.requestId}))`,
         );
         await tx.$queryRaw(

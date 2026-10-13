@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import type { PrismaService } from '../../common/prisma/prisma.service';
 import type { MailroomService } from './mailroom.service';
 import type { MailroomSyncService } from './mailroom-sync.service';
@@ -282,9 +282,29 @@ export function repairEvidenceFixture() {
         Promise.resolve(employeeActive ? { id: 'synthetic-employee' } : null),
       ),
     },
-    $queryRaw: jest.fn((_sql: Prisma.Sql) => {
-      void _sql;
+    $queryRaw: jest.fn((sql: Prisma.Sql) => {
+      if (sql.sql.includes('pg_advisory_xact_lock'))
+        throw new Prisma.PrismaClientKnownRequestError(
+          'PostgreSQL void cannot be deserialized',
+          { code: 'P2010', clientVersion: '6.19.0' },
+        );
+      expect(sql.sql).toBe(
+        'SELECT id FROM mailroom_items WHERE id=? FOR UPDATE',
+      );
+      expect(sql.values).toEqual([item.id]);
       return Promise.resolve([]);
+    }),
+    $executeRaw: jest.fn((sql: Prisma.Sql) => {
+      expect(sql.sql).toBe('SELECT pg_advisory_xact_lock(hashtext(?))');
+      expect(sql.values).toHaveLength(1);
+      expect(sql.values[0]).toMatch(
+        new RegExp(
+          '^' +
+            EVIDENCE_COMPANY +
+            ':repair-evidence:[^:]+:[A-Za-z0-9_-]{8,80}$',
+        ),
+      );
+      return Promise.resolve(0);
     }),
   };
   const prisma = {

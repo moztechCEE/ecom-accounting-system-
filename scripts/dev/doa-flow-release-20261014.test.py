@@ -100,6 +100,13 @@ class FlowReleaseTests(unittest.TestCase):
         # macOS /var is an OS symlink; use its canonical private path while
         # still testing user-created symlink rejection explicitly.
         self.directory = Path(self.temp.name).resolve()
+        # Small synthetic source contexts exercise the same approved tuples;
+        # actual manifest counts are independently pinned/read back by Root.
+        profiles = copy.deepcopy(r.SOURCE_REUSE_PROFILES)
+        profiles[(r.SOURCE_EXISTING_SHA, r.SOURCE_EXISTING_BUILD, r.SOURCE_EXISTING_MANIFEST)]['sourceFileCount'] = 3
+        profile_patch = patch.object(r, 'SOURCE_REUSE_PROFILES', profiles)
+        profile_patch.start()
+        self.addCleanup(profile_patch.stop)
         no_external = patch.object(r.subprocess, 'run', side_effect=AssertionError('No process/cloud/DB/build/secret execution permitted'))
         no_external.start()
         self.addCleanup(no_external.stop)
@@ -489,7 +496,7 @@ class FlowReleaseTests(unittest.TestCase):
     def test_source_reuse_rejects_sha_and_manifest_hash_drift(self):
         raw, old, config, files, _ = self.existing_source_fixture()
         for checksum, source_sha in (('0' * 64, r.SOURCE_EXISTING_SHA), (r.SOURCE_EXISTING_MANIFEST, 'b' * 40)):
-            with self.assertRaisesRegex(RuntimeError, 'manifest/SHA'):
+            with self.assertRaisesRegex(RuntimeError, 'tuple is not approved'):
                 r.existing_source_proof(raw, old, config, checksum, source_sha, files)
         changed = copy.deepcopy(old)
         changed['sourcePins']['source'] = 'b' * 40
@@ -541,7 +548,7 @@ class FlowReleaseTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 r.existing_source_proof(wrong, old, config, r.SOURCE_EXISTING_MANIFEST, r.SOURCE_EXISTING_SHA, files)
 
-    def prepare_build_fixture(self, reuse=False):
+    def prepare_build_fixture(self, reuse=False, source_sha=None):
         source_raw, old, old_config, files, content = self.existing_source_fixture()
         wms_raw, wms_config, wms_manifest = self.existing_wms_fixture()
         source_capture = self.directory / 'existing-source.json'
@@ -551,7 +558,7 @@ class FlowReleaseTests(unittest.TestCase):
         r.private_json(source_capture, source_raw)
         r.private_json(wms_capture, wms_raw)
         r.private_json(wms_root / 'cloudbuild.json', wms_config)
-        pins = {**PINS, 'source': r.SOURCE_EXISTING_SHA}
+        pins = {**PINS, 'source': source_sha or r.SOURCE_EXISTING_SHA}
 
         def export(_root, _sha, destination, prefix=''):
             Path(destination).mkdir(parents=True, mode=0o700)
@@ -587,6 +594,19 @@ class FlowReleaseTests(unittest.TestCase):
         with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
             path = Path(manifest['buildContext']).parent / 'build-manifest.private.json'
             self.assertEqual(r.verify_build_context(path, r.sha256(path.read_bytes()))[0], manifest)
+
+    def test_later_source_sha_uses_four_fresh_builds_without_a_reuse_profile(self):
+        later_sha = 'e' * 40
+        manifest, pins, _ = self.prepare_build_fixture(source_sha=later_sha)
+        config = r.read_json(Path(manifest['buildContext']) / 'cloudbuild.json')
+        self.assertEqual(pins['source'], later_sha)
+        self.assertEqual(manifest['builtImageKeys'], [r.API, r.WEB, r.SOURCE, r.MODULE])
+        self.assertNotIn('existingSource', manifest)
+        for step in config['steps'][2:]:
+            self.assertIn('SOURCE_VERSION=' + later_sha, step['args'])
+            self.assertIn(r.REGISTRY + r.IMAGE_KEYS[step['id']] + ':doaf-' + later_sha, step['args'])
+        with self.assertRaisesRegex(RuntimeError, 'tuple is not approved'):
+            r.approved_source_profile(later_sha, r.SOURCE_B667_BUILD, r.SOURCE_B667_MANIFEST)
 
     def source_reuse_prepared_fixture(self):
         manifest, pins, wms_manifest = self.prepare_build_fixture(reuse=True)
@@ -666,6 +686,108 @@ class FlowReleaseTests(unittest.TestCase):
         with patch.object(r, 'git', return_value=('120000 blob ' + 'a' * 40 + '\tDockerfile\0').encode()):
             with self.assertRaisesRegex(RuntimeError, 'Unsafe Source Git blob'):
                 r.git_files(self.directory, r.SOURCE_EXISTING_SHA)
+
+    def b667_source_fixture(self):
+        raw, old, config, files, _ = self.existing_source_fixture()
+        digests = {r.SOURCE: 'sha256:' + 'c' * 64, r.MODULE: 'sha256:' + 'd' * 64}
+        for i in range(501 - len(files)):
+            files.append({'path': f'fixture/source-{i:03}.ts', 'sha256': r.sha256(f'synthetic-{i}'.encode())})
+        old['sourcePins'] = {'erp': '0105950f6ad1f7aa08fc86bcd2851ee4541bdf25', 'source': r.SOURCE_B667_SHA}
+        old['files'] = [{'path': 'source/' + row['path'], 'sha256': row['sha256']} for row in reversed(files)]
+        raw['id'] = r.SOURCE_B667_BUILD
+        raw['name'] = f'projects/{r.NAMESPACE}/locations/{r.REGION}/builds/{r.SOURCE_B667_BUILD}'
+        for step in config['steps']:
+            if step['id'] in (r.SOURCE, r.MODULE):
+                step['args'] = [arg.replace(r.SOURCE_EXISTING_SHA, r.SOURCE_B667_SHA) for arg in step['args']]
+            else:
+                step['args'] = [arg.replace('f' * 40, old['sourcePins']['erp']) for arg in step['args']]
+        config['images'] = [r.REGISTRY + r.IMAGE_KEYS[step['id']] + ':doaf-' +
+                            (r.SOURCE_B667_SHA if step['id'] in (r.SOURCE, r.MODULE) else old['sourcePins']['erp']) for step in config['steps']]
+        raw['images'] = config['images']
+        raw['steps'] = [{**copy.deepcopy(step), 'status': 'SUCCESS'} for step in config['steps']]
+        raw['results']['images'] = [{'name': name, 'digest': digests.get(step['id'], 'sha256:' + 'f' * 64)}
+                                    for name, step in zip(config['images'], config['steps'])]
+        profiles = copy.deepcopy(r.SOURCE_REUSE_PROFILES)
+        profiles[(r.SOURCE_B667_SHA, r.SOURCE_B667_BUILD, r.SOURCE_B667_MANIFEST)]['digests'] = digests
+        return raw, old, config, files, profiles
+
+    def test_only_two_reviewed_source_tuples_allow_reuse_and_cross_mixing_is_rejected(self):
+        profiles = r.SOURCE_REUSE_PROFILES
+        self.assertEqual(set(profiles), {(r.SOURCE_EXISTING_SHA, r.SOURCE_EXISTING_BUILD, r.SOURCE_EXISTING_MANIFEST),
+                                       (r.SOURCE_B667_SHA, r.SOURCE_B667_BUILD, r.SOURCE_B667_MANIFEST)})
+        self.assertEqual(profiles[(r.SOURCE_B667_SHA, r.SOURCE_B667_BUILD, r.SOURCE_B667_MANIFEST)]['sourceFileCount'], 501)
+        for values in ((r.SOURCE_B667_SHA, r.SOURCE_EXISTING_BUILD, r.SOURCE_B667_MANIFEST),
+                       (r.SOURCE_EXISTING_SHA, r.SOURCE_B667_BUILD, r.SOURCE_EXISTING_MANIFEST),
+                       (r.SOURCE_B667_SHA, r.SOURCE_B667_BUILD, r.SOURCE_EXISTING_MANIFEST),
+                       ('a' * 40, r.SOURCE_B667_BUILD, r.SOURCE_B667_MANIFEST),
+                       (r.SOURCE_B667_SHA, r.SOURCE_B667_BUILD, '0' * 64),
+                       (r.SOURCE_B667_SHA, {}, r.SOURCE_B667_MANIFEST)):
+            with self.assertRaisesRegex(RuntimeError, 'tuple is not approved'):
+                r.approved_source_profile(*values)
+
+    def test_new_b667_full_501_file_proof_and_exact_source_pair_are_supported(self):
+        raw, old, config, files, profiles = self.b667_source_fixture()
+        with patch.object(r, 'SOURCE_REUSE_PROFILES', profiles):
+            proof = r.existing_source_proof(raw, old, config, r.SOURCE_B667_MANIFEST, r.SOURCE_B667_SHA, files)
+        self.assertEqual(proof['buildId'], r.SOURCE_B667_BUILD)
+        self.assertEqual(proof['sourceSha'], r.SOURCE_B667_SHA)
+        self.assertEqual(len(proof['sourceFiles']), 501)
+        self.assertEqual(set(proof['images']), {r.SOURCE, r.MODULE})
+        self.assertFalse(proof['previousErpImagesReused'])
+        self.assertEqual(len(proof['originalRecipe']['steps']), 4)
+
+    def test_b667_profile_without_both_root_pinned_success_digests_remains_closed(self):
+        _, _, _, _, profiles = self.b667_source_fixture()
+        for wrong in (None, {r.SOURCE: 'sha256:' + 'c' * 64}, {r.SOURCE: 'sha256:' + 'c' * 64, r.MODULE: None}):
+            altered = copy.deepcopy(profiles)
+            altered[(r.SOURCE_B667_SHA, r.SOURCE_B667_BUILD, r.SOURCE_B667_MANIFEST)]['digests'] = wrong
+            with patch.object(r, 'SOURCE_REUSE_PROFILES', altered), self.assertRaisesRegex(RuntimeError, 'awaits Root-pinned'):
+                r.approved_source_profile(r.SOURCE_B667_SHA, r.SOURCE_B667_BUILD, r.SOURCE_B667_MANIFEST)
+
+    def test_b667_new_profile_still_rejects_failed_old_sha_wrong_recipe_count_or_digest(self):
+        raw, old, config, files, profiles = self.b667_source_fixture()
+        with patch.object(r, 'SOURCE_REUSE_PROFILES', profiles):
+            for change in (lambda d: d.update(status='FAILURE'),
+                           lambda d: d['steps'][2]['args'].append('--wrong-source-context'),
+                           lambda d: d['steps'][3].update(status='QUEUED'),
+                           lambda d: d['results']['images'][3].update(digest=r.SOURCE_EXISTING_DIGESTS[r.MODULE]),
+                           lambda d: d['results']['images'][2].update(name=d['results']['images'][3]['name'])):
+                wrong = copy.deepcopy(raw); change(wrong)
+                with self.assertRaises(RuntimeError):
+                    r.existing_source_proof(wrong, old, config, r.SOURCE_B667_MANIFEST, r.SOURCE_B667_SHA, files)
+            wrong = copy.deepcopy(old); wrong['sourcePins']['source'] = r.SOURCE_EXISTING_SHA
+            with self.assertRaises(RuntimeError):
+                r.existing_source_proof(raw, wrong, config, r.SOURCE_B667_MANIFEST, r.SOURCE_B667_SHA, files)
+            fewer = files[:-1]; wrong = copy.deepcopy(old); wrong['exportedSourceFiles']['source'] = fewer
+            wrong['files'] = [{'path': 'source/' + row['path'], 'sha256': row['sha256']} for row in fewer]
+            with self.assertRaisesRegex(RuntimeError, 'Git blobs'):
+                r.existing_source_proof(raw, wrong, config, r.SOURCE_B667_MANIFEST, r.SOURCE_B667_SHA, fewer)
+
+    def test_b667_pair_combines_only_new_erp_images_and_rejects_its_old_010_erp_results(self):
+        raw, old, config, files, profiles = self.b667_source_fixture()
+        wms_raw, wms_config, wms_manifest = self.existing_wms_fixture()
+        pins = {**PINS, 'source': r.SOURCE_B667_SHA}
+        with patch.object(r, 'SOURCE_REUSE_PROFILES', profiles), patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+            source = r.existing_source_proof(raw, old, config, r.SOURCE_B667_MANIFEST, r.SOURCE_B667_SHA, files)
+            wms = r.existing_wms_proof(wms_raw, wms_config, wms_manifest)
+            receipt = copy.deepcopy(built())
+            receipt['sourcePins'] = pins
+            receipt['images'].update(source['images']); receipt['images'].update(wms['images'])
+            receipt['existingSource'] = source; receipt['existingWms'] = wms
+            receipt['builds'][r.SOURCE_B667_BUILD] = source['description']
+            receipt['builds'][r.WMS_EXISTING_BUILD] = wms['description']
+            new = receipt['builds'][BUILD_ID]
+            new['images'] = [r.REGISTRY + r.IMAGE_KEYS[key] + ':doaf-' + pins['erp'] for key in (r.API, r.WEB)]
+            new['results']['images'] = [row for row in new['results']['images'] if row['name'] in new['images']]
+            self.assertEqual(len(r.build_images(receipt, pins)), 6)
+            self.assertEqual(receipt['images'][r.SOURCE]['buildId'], r.SOURCE_B667_BUILD)
+            stale = copy.deepcopy(receipt)
+            stale['images'][r.API] = {'image': image(r.API, 'f'), 'buildId': r.SOURCE_B667_BUILD}
+            with self.assertRaisesRegex(RuntimeError, 'Previous ERP'):
+                r.build_images(stale, pins)
+            cross = copy.deepcopy(receipt); cross['existingSource']['manifestSha256'] = r.SOURCE_EXISTING_MANIFEST
+            with self.assertRaisesRegex(RuntimeError, 'tuple is not approved'):
+                r.build_images(cross, pins)
 
 
 if __name__ == '__main__':

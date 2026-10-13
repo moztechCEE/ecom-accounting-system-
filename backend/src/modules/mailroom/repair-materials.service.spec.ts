@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { ForbiddenException, ValidationPipe } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { type Actor, type SourceCase } from './mailroom.contract';
+import { fingerprint, type Actor, type SourceCase } from './mailroom.contract';
 import {
   inspectionPlanHash,
   type InspectionDocument,
@@ -309,11 +309,12 @@ function harness() {
       const text = sql.text.replace(/\s+/g, ' ').trim(),
         v = sql.values;
       queryLog.push(text);
-      if (
-        text.includes('pg_advisory_xact_lock') ||
-        text.startsWith('SELECT id FROM')
-      )
-        return [];
+      if (text.includes('pg_advisory_xact_lock'))
+        throw new Prisma.PrismaClientKnownRequestError(
+          'PostgreSQL void cannot be deserialized',
+          { code: 'P2010', clientVersion: '6.19.0' },
+        );
+      if (text.startsWith('SELECT id FROM')) return [];
       if (text.includes('FROM repair_material_operations'))
         return s.operations.filter(
           (x) =>
@@ -334,6 +335,14 @@ function harness() {
       const text = sql.text.replace(/\s+/g, ' ').trim(),
         v = sql.values;
       queryLog.push(text);
+      if (text.includes('pg_advisory_xact_lock')) {
+        expect(sql.sql).toBe(
+          'SELECT pg_advisory_xact_lock(hashtextextended(?,0))',
+        );
+        expect(v).toHaveLength(1);
+        expect(v[0]).toMatch(/^[a-f0-9]{64}$/);
+        return 0;
+      }
       if (text.startsWith('INSERT INTO repair_material_allocations')) {
         s.allocations.push({
           id: v[0],
@@ -431,6 +440,7 @@ function harness() {
     }),
   });
   let queue = Promise.resolve();
+  let lastTransaction: ReturnType<typeof db> | undefined;
   const prisma = {
     $transaction: async <T>(
       work: (tx: ReturnType<typeof db>) => Promise<T>,
@@ -443,7 +453,8 @@ function harness() {
       await previous;
       const draft = clone(state);
       try {
-        const result = await work(db(draft));
+        lastTransaction = db(draft);
+        const result = await work(lastTransaction);
         state = draft;
         return result;
       } finally {
@@ -502,6 +513,11 @@ function harness() {
   });
   return {
     service,
+    database: () => db(state),
+    lastTransaction: () => {
+      if (!lastTransaction) throw new Error('No actual transaction was called');
+      return lastTransaction;
+    },
     source,
     actors,
     sync,
@@ -528,10 +544,38 @@ function harness() {
 }
 
 describe('repair materials real stock producer', () => {
+  it('reproduces Prisma P2010 for a void queryRaw advisory result', () => {
+    const h = harness();
+    let caught: unknown;
+    try {
+      h.database().$queryRaw(
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${'synthetic'},0))`,
+      );
+    } catch (error) {
+      caught = error;
+    }
+    if (!(caught instanceof Prisma.PrismaClientKnownRequestError))
+      throw new Error('Expected the actual Prisma void-result error');
+    expect(caught.code).toBe('P2010');
+    expect(h.state().allocations).toHaveLength(0);
+    expect(h.state().ledgers).toHaveLength(0);
+  });
   it('reserves, personally receives, consumes once and physically returns unused quantity without a second deduction', async () => {
     const h = harness();
     const original = clone(h.state().item);
-    await h.service.allocate(STOCK, ITEM, h.allocateBody());
+    const input = h.allocateBody();
+    await h.service.allocate(STOCK, ITEM, input);
+    const tx = h.lastTransaction();
+    expect(tx.$executeRaw.mock.calls[0][0].values).toEqual([
+      fingerprint({
+        entityId: input.entityId,
+        userId: STOCK,
+        requestId: input.requestId,
+      }),
+    ]);
+    expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.inventorySnapshot.updateMany.mock.invocationCallOrder[0],
+    );
     expect(h.state().stock).toMatchObject({
       qtyOnHand: '10.00',
       qtyAllocated: '2.00',

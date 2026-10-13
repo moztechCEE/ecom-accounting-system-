@@ -58,6 +58,17 @@ SOURCE_EXISTING_BUILD = 'e399c55e-cdc4-4b41-9858-81a39515ebab'
 SOURCE_EXISTING_MANIFEST = '1cfc1c6f611f5c94b4e45018fd026790718d4fa522e7b3543900a5a9bcfdff7f'
 SOURCE_EXISTING_DIGESTS = {SOURCE: 'sha256:4c29269d108ca1183fcc3955e90d3e0dfda29e570df4ae857af52625b8cfa346',
                            MODULE: 'sha256:80ffadaf8e5979d91fa418c4f66d87136121cd2bc84cec46c23d2d8031887a69'}
+SOURCE_B667_SHA = 'b667320582870029aee1e3c9948937f79d925c6f'
+SOURCE_B667_BUILD = '12ee5571-5439-438c-8761-ed304e1edbec'
+SOURCE_B667_MANIFEST = 'c4cda1e921d48e5f8974538a9fd0674a6c3eb09dd02b0ddb85fd748b433f9031'
+# Only this completed, reviewed build's exact Source pair is reusable. Any
+# later Source SHA requires fresh builds; this is not a generic reuse rule.
+SOURCE_B667_DIGESTS = {SOURCE: 'sha256:68c64e9803e2c30c3998774599bf5a4ad3f7a40b66d11ee77cb3fa8b17803eaa',
+                       MODULE: 'sha256:fde3052f02e8ab04f002f9ec990d0a8261329e684e0e3ee4e3170dd8573e4790'}
+SOURCE_REUSE_PROFILES = {
+    (SOURCE_EXISTING_SHA, SOURCE_EXISTING_BUILD, SOURCE_EXISTING_MANIFEST): {'sourceFileCount': 499, 'digests': SOURCE_EXISTING_DIGESTS},
+    (SOURCE_B667_SHA, SOURCE_B667_BUILD, SOURCE_B667_MANIFEST): {'sourceFileCount': 501, 'digests': SOURCE_B667_DIGESTS},
+}
 STORAGE_VERSION = '7.19.0'
 ORIGINS = {s: f'https://{s}-sp5g377smq-de.a.run.app' for s in DEV}
 EXISTING_EXTERNAL_REFS = {
@@ -440,10 +451,24 @@ def source_reuse_options(build, manifest, checksum):
     return build is not None
 
 
+def approved_source_profile(source_sha, build_id, manifest_sha):
+    require(all(isinstance(value, str) for value in (source_sha, build_id, manifest_sha)),
+            'Existing Source source/build/manifest tuple is not approved')
+    profile = SOURCE_REUSE_PROFILES.get((source_sha, build_id, manifest_sha))
+    require(profile is not None, 'Existing Source source/build/manifest tuple is not approved')
+    require(isinstance(profile.get('digests'), dict) and set(profile['digests']) == {SOURCE, MODULE} and
+            all(isinstance(digest, str) and DIGEST.fullmatch(digest) for digest in profile['digests'].values()),
+            'Approved Source profile awaits Root-pinned SUCCESS digest pair')
+    return profile
+
+
 def existing_source_proof(raw, old, config, manifest_sha, current_sha, source_files):
-    require(manifest_sha == SOURCE_EXISTING_MANIFEST and old['sourcePins']['source'] == current_sha == SOURCE_EXISTING_SHA,
+    profile = approved_source_profile(current_sha, raw.get('id'), manifest_sha)
+    build_id = raw['id']
+    require(old['sourcePins']['source'] == current_sha,
             'Existing Source frozen manifest/SHA differs')
-    require(source_files == old.get('exportedSourceFiles', {}).get('source') and source_files,
+    require(source_files == old.get('exportedSourceFiles', {}).get('source') and
+            len(source_files) == profile['sourceFileCount'],
             'Current Source Git blobs differ from existing immutable context')
     context_source_files = [{'path': f['path'][len('source/'):], 'sha256': f['sha256']} for f in old['files'] if f['path'].startswith('source/')]
     # Path.rglob sorting is component based, whereas git tree/string ordering
@@ -451,8 +476,8 @@ def existing_source_proof(raw, old, config, manifest_sha, current_sha, source_fi
     # lists, retaining duplicates so no extra/missing file can be concealed.
     require(sorted(context_source_files, key=lambda f: f['path']) == sorted(source_files, key=lambda f: f['path']),
             'Existing Source Docker/source context differs from exact Git blobs')
-    require(raw.get('id') == SOURCE_EXISTING_BUILD and raw.get('status') == 'SUCCESS' and raw.get('projectId') == PROJECT and
-            raw.get('name') == f'projects/{NAMESPACE}/locations/{REGION}/builds/{SOURCE_EXISTING_BUILD}' and
+    require(raw.get('status') == 'SUCCESS' and raw.get('projectId') == PROJECT and
+            raw.get('name') == f'projects/{NAMESPACE}/locations/{REGION}/builds/{build_id}' and
             not raw.get('secrets') and not raw.get('availableSecrets'), 'Existing Source SUCCESS regional build identity differs')
     expected = {step['id']: step for step in config['steps']}
     actual = {step.get('id'): step for step in raw.get('steps', [])}
@@ -474,12 +499,12 @@ def existing_source_proof(raw, old, config, manifest_sha, current_sha, source_fi
                 'ERP_MODULE_BUILD=' + ('true' if key == MODULE else 'false') in step['args'] and
                 step.get('dir') == 'source' and tag in raw.get('images', []), 'Existing Source normal/module recipe differs')
         rows = [row for row in raw.get('results', {}).get('images', []) if row.get('name') == tag]
-        require(len(rows) == 1 and rows[0].get('digest') == SOURCE_EXISTING_DIGESTS[key], 'Existing Source immutable normal/module digest differs')
+        require(len(rows) == 1 and rows[0].get('digest') == profile['digests'][key], 'Existing Source immutable normal/module digest differs')
         source_steps[key] = step
-        images[key] = {'image': REGISTRY + IMAGE_KEYS[key] + '@' + rows[0]['digest'], 'buildId': SOURCE_EXISTING_BUILD}
+        images[key] = {'image': REGISTRY + IMAGE_KEYS[key] + '@' + rows[0]['digest'], 'buildId': build_id}
     # The previous manifest also contains ERP f22 images; they are NOT reusable
     # for this new ERP source. Only these two Source keys enter the new matrix.
-    return {'buildId': SOURCE_EXISTING_BUILD, 'sourceSha': current_sha, 'manifestSha256': manifest_sha,
+    return {'buildId': build_id, 'sourceSha': current_sha, 'manifestSha256': manifest_sha,
             'sourceFiles': source_files, 'sourceSteps': source_steps, 'originalRecipe': config, 'images': images,
             'description': {**raw, 'region': REGION}, 'previousErpImagesReused': False}
 
@@ -604,9 +629,8 @@ def verify_build_context(manifest_path, expected_sha256):
                 'Existing WMS evidence changed')
     if manifest.get('existingSource'):
         existing = manifest['existingSource']
-        require(existing.get('sourceSha') == manifest['sourcePins']['source'] == SOURCE_EXISTING_SHA and
-                existing.get('manifestSha256') == SOURCE_EXISTING_MANIFEST and
-                existing.get('buildId') == SOURCE_EXISTING_BUILD and existing.get('previousErpImagesReused') is False and
+        approved_source_profile(manifest['sourcePins']['source'], existing.get('buildId'), existing.get('manifestSha256'))
+        require(existing.get('sourceSha') == manifest['sourcePins']['source'] and existing.get('previousErpImagesReused') is False and
                 set(existing.get('images', {})) == {SOURCE, MODULE} and
                 existing.get('sourceFiles') == manifest.get('exportedSourceFiles', {}).get('source'),
                 'Existing Source retained evidence differs')
@@ -686,13 +710,13 @@ def build_images(receipt, pins):
                 'Candidate needs an exact successful regional build receipt')
         if receipt.get('existingSource'):
             existing_source = receipt['existingSource']
+            profile = approved_source_profile(pins['source'], existing_source.get('buildId'), existing_source.get('manifestSha256'))
             if key in (API, WEB):
                 require(row['buildId'] != existing_source['buildId'], 'Previous ERP images cannot be reused from the Source build')
             if key in (SOURCE, MODULE):
-                require(row == existing_source['images'].get(key) and row['buildId'] == SOURCE_EXISTING_BUILD and
-                        row['image'].split('@')[-1] == SOURCE_EXISTING_DIGESTS[key] and
-                        existing_source.get('sourceSha') == pins['source'] == SOURCE_EXISTING_SHA and
-                        existing_source.get('manifestSha256') == SOURCE_EXISTING_MANIFEST and
+                require(row == existing_source['images'].get(key) and row['buildId'] == existing_source['buildId'] and
+                        row['image'].split('@')[-1] == profile['digests'][key] and
+                        existing_source.get('sourceSha') == pins['source'] and
                         existing_source.get('previousErpImagesReused') is False,
                         'Existing Source exact build/source/digest proof differs')
         owner = 'wms' if key.startswith('wms-') else 'source' if key in (SOURCE, MODULE) else 'erp'

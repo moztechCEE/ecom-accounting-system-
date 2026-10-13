@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:883114abb3dae4a966eed16ecb70596a1018ebe92fb5d94d3332b47a90308445",
+  "sourceVersion": "sha256:d0f74a7d645be515d27c14110ef72fb7c1cfb8d303eed33603d12b7a39b90ccf",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -480,7 +480,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/repair-customer-report.service.ts",
-      "sha256": "a1630d9a82f7aae6db3291ae2dd184a712bc22084033356c709255a62f1de126"
+      "sha256": "fbc6f583429074c02d205d3b8d814df51b73e74b0362523d7a3184cbdf8479f0"
     },
     {
       "path": "backend/src/modules/mailroom/repair-document.contract.ts",
@@ -500,11 +500,11 @@
     },
     {
       "path": "backend/src/modules/mailroom/repair-materials.service.ts",
-      "sha256": "c6f1a28afc714e8beb1b71ec3c21f263d16f9f5d90639fdf85b033aba078a7dd"
+      "sha256": "e95de4e041feefcd699ba10713f5941afd517f7cfc7f67c6a75a76dcdfb630e9"
     },
     {
       "path": "backend/src/modules/mailroom/repair-media.service.ts",
-      "sha256": "4e6794fc345ae056a6882fabf082980703f324ee82cfe22859889de3ed5ef2e3"
+      "sha256": "9049deb1507f986525030cf8f98499c922f4cfa2cdb13578aa7ca71e5c13a7cb"
     },
     {
       "path": "backend/src/modules/mailroom/repair-prerequisites.service.ts",

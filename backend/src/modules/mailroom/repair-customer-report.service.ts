@@ -181,7 +181,7 @@ export class RepairCustomerReportService {
     const hash = fingerprint({ action: 'REPORT_PUBLISH', itemId, ...input });
     const result = await this.prisma.$transaction(
       async (tx) => {
-        await tx.$queryRaw(
+        await tx.$executeRaw(
           Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${input.entityId + ':repair-evidence:' + userId + ':' + input.requestId}))`,
         );
         await tx.$queryRaw(
@@ -443,7 +443,7 @@ export class RepairCustomerReportService {
       ...input,
     });
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw(
+      await tx.$executeRaw(
         Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${input.entityId + ':repair-evidence:' + userId + ':' + input.requestId}))`,
       );
       await tx.$queryRaw(

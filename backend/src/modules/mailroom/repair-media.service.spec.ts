@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { type Actor } from './mailroom.contract';
 import {
   EVIDENCE_COMPANY,
@@ -12,6 +13,29 @@ describe('repair media service with mocked transactional rollback and storage', 
   });
   afterEach(() => jest.useRealTimers());
 
+  it('rejects void advisory results through queryRaw and keeps the bound lock on executeRaw', async () => {
+    const f = repairEvidenceFixture(),
+      input = f.upload();
+    let caught: unknown;
+    try {
+      void f.tx.$queryRaw(
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${EVIDENCE_COMPANY + ':repair-evidence:tech:' + input.requestId}))`,
+      );
+    } catch (error) {
+      caught = error;
+    }
+    if (!(caught instanceof Prisma.PrismaClientKnownRequestError))
+      throw new Error('Expected the actual Prisma void-result error');
+    expect(caught.code).toBe('P2010');
+    await f.media.upload('tech', f.item.id, input);
+    expect(f.tx.$executeRaw.mock.calls).toHaveLength(1);
+    expect(f.tx.$executeRaw.mock.calls[0][0].values).toEqual([
+      EVIDENCE_COMPANY + ':repair-evidence:tech:' + input.requestId,
+    ]);
+    expect(f.tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      f.tx.repairMediaAsset.create.mock.invocationCallOrder[0],
+    );
+  });
   it('creates one pending asset for the next document revision, with server identity and no finalized claim', async () => {
     const f = repairEvidenceFixture(),
       input = f.upload();

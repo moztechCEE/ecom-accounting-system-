@@ -285,7 +285,7 @@ export class RepairMaterialsService {
     return this.prisma.$transaction(
       async (tx) => {
         // Serialize even first requests before an operation row exists. Item lock orders all material mutations.
-        await tx.$queryRaw(
+        await tx.$executeRaw(
           Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${fingerprint({ entityId: input.entityId, userId, requestId: input.requestId })},0))`,
         );
         const item = await this.item(tx, input.entityId, itemId, true);
