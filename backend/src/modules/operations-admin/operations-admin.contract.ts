@@ -198,7 +198,7 @@ export function fieldNames(value: unknown): string[] {
 }
 export function sourceAuditProjection(row: Record<string, unknown>) {
   const opaque = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value) ? value : null;
-  const notifications = new Set(['DRAFT', 'APPROVED', 'SENDING', 'SENT', 'SIMULATED', 'FAILED', 'UNKNOWN', 'CANCELLED']);
+  const notifications = new Set(['DRAFT', 'APPROVED', 'RECEIVED', 'HOLD', 'SENDING', 'SENT', 'SIMULATED', 'FAILED', 'UNKNOWN', 'CANCELLED']);
   const interaction = row.eventClass === 'INTERACTION' && ['INTENT','CANCELLED','VALIDATION_BLOCKED'].includes(String(row.outcome));
   const eventClass = interaction ? 'INTERACTION' : row.eventClass === 'NOTIFICATION' && opaque(row.notificationId) && notifications.has(String(row.outcome)) ? 'NOTIFICATION' : 'BUSINESS';
   return {

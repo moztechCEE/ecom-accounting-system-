@@ -131,17 +131,22 @@ function approvedMailroomFetch(url, options) {
      (!url.search && url.pathname === '/api/integration/mailroom/summary' && url.href === mailroomOrigin + url.pathname) ||
      (!url.search && /^\/api\/integration\/mailroom\/cases\/[A-Za-z0-9_-]{1,128}\/attachments(?:\/[A-Za-z0-9_-]{1,128}\/media)?$/.test(url.pathname)));
   const changes = mailroomEnabled && options.method === 'GET' && options.body === undefined && url.pathname === '/api/integration/mailroom/changes';
+  const outbound = options.method === 'GET' && options.body === undefined && url.pathname === '/api/integration/mailroom/outbound-orders';
+  const identity = options.method === 'GET' && options.body === undefined && !url.search && /^\/api\/integration\/mailroom\/cases\/[A-Za-z0-9_-]{1,128}\/customer-identity$/.test(url.pathname);
+  const workflow = mailroomEventsEnabled && options.method === 'POST' && !url.search && url.pathname === '/api/integration/mailroom/workflow-events';
   const event = mailroomEventsEnabled && options.method === 'POST' && !url.search &&
-    url.pathname === '/api/integration/mailroom/events' && typeof options.body === 'string' &&
-    Buffer.byteLength(options.body, 'utf8') < 40 * 1024;
-  if (!read && !event && !changes) return false;
+    (url.pathname === '/api/integration/mailroom/events' || workflow) && typeof options.body === 'string' &&
+    Buffer.byteLength(options.body, 'utf8') <= 65536;
+  if (!read && !event && !changes && !outbound && !identity) return false;
   if (event) {
     let payload;
     try { payload = JSON.parse(options.body); } catch { return false; }
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
-        payload.schema !== 'corely.mailroom.v1' || payload.entityId !== 'doa-dev-qa-20261002' ||
-        !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(payload.eventId || '') ||
-        payload.inventoryPosted !== false || payload.refundExecuted !== false) return false;
+        payload.entityId !== 'doa-dev-qa-20261002' ||
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(payload.eventId || '')) return false;
+    if (workflow ? payload.schema !== 'corely.aftersales.workflow.v1' || !['REPAIR_PROPOSAL','EXCHANGE_READY'].includes(payload.kind) :
+        !['corely.mailroom.v1', 'corely.mailroom.dispatch.v1'].includes(payload.schema)) return false;
+    if (payload.schema === 'corely.mailroom.v1' && (payload.inventoryPosted !== false || payload.refundExecuted !== false)) return false;
   }
   const keys = [...url.searchParams.keys()];
   if (changes) {
@@ -150,6 +155,8 @@ function approvedMailroomFetch(url, options) {
       BigInt(url.searchParams.get('cursor') || '0') > 9223372036854775807n ||
       !/^[0-9]{1,3}$/.test(url.searchParams.get('limit') || '100') ||
       Number(url.searchParams.get('limit') || '100') < 1 || Number(url.searchParams.get('limit') || '100') > 100) return false;
+  } else if (outbound) {
+    if (keys.length > 3 || new Set(keys).size !== keys.length || keys.some(k => !['search','caseId','cursor'].includes(k) || url.searchParams.get(k).length > 128) || (url.searchParams.has('caseId') && url.searchParams.has('cursor'))) return false;
   } else if (keys.length > 3 || new Set(keys).size !== keys.length ||
       keys.some(key => !['search', 'awaiting', 'cursor'].includes(key) || url.searchParams.get(key).length > 128) ||
       (url.searchParams.has('awaiting') && url.searchParams.get('awaiting') !== 'true') ||
@@ -173,11 +180,13 @@ function approvedMailroomFetch(url, options) {
 }
 // Native case registration/read is separate from physical mailroom events and
 // cannot authorize provider, refund, invoice or technician mutation endpoints.
-const nativeAfterSalesOrigin = 'https://corely-aftersales-module-dev-sp5g377smq-de.a.run.app';
+const nativeAfterSalesBase = process.env.AFTER_SALES_TASK_SOURCE_URL || 'https://corely-aftersales-module-dev-sp5g377smq-de.a.run.app/after-sales-app';
+const nativeAfterSalesBaseValid = /^https:\/\/(?:[a-z][a-z0-9-]{0,61}---)?corely-aftersales-module-dev-sp5g377smq-de\.a\.run\.app\/after-sales-app$/.test(nativeAfterSalesBase);
+const nativeAfterSalesOrigin = nativeAfterSalesBaseValid ? new URL(nativeAfterSalesBase).origin : 'https://corely-aftersales-module-dev-sp5g377smq-de.a.run.app';
 const nativeAfterSalesHost = new URL(nativeAfterSalesOrigin).hostname;
 const nativeAfterSalesContext = new AsyncLocalStorage();
 const nativeAfterSalesToken = Symbol('approved-dev-native-after-sales-fetch');
-const nativeAfterSalesEnabled = process.env.AFTER_SALES_MODULE_ENABLED === 'true' &&
+const nativeAfterSalesEnabled = nativeAfterSalesBaseValid && process.env.AFTER_SALES_MODULE_ENABLED === 'true' &&
   process.env.AFTER_SALES_MODULE_ENTITY_ID === 'doa-dev-qa-20261002' &&
   typeof process.env.AFTER_SALES_MODULE_SECRET === 'string' && process.env.AFTER_SALES_MODULE_SECRET.length >= 32;
 function approvedNativeAfterSalesFetch(url, options) {
@@ -190,9 +199,21 @@ function approvedNativeAfterSalesFetch(url, options) {
   const products = options.method === 'GET' && options.body === undefined && url.pathname === prefix + '/options';
   const create = options.method === 'POST' && !url.search && url.pathname === prefix + '/cases' &&
     typeof options.body === 'string' && Buffer.byteLength(options.body, 'utf8') <= 65536;
-  if (!list && !detail && !products && !create) return false;
+  const workflowEnabled = process.env.ERP_DEV_AFTER_SALES_WORKFLOW_ENABLED === 'true';
+  const command = workflowEnabled && options.method === 'POST' && !url.search &&
+    (new RegExp('^' + prefix + '/cases/[A-Za-z0-9_-]{1,128}/(?:communications|repair-proposals/adopt|factory-actions|brand-review)$').test(url.pathname) ||
+     new RegExp('^' + prefix + '/applications(?:/[a-f0-9-]{36})?$').test(url.pathname)) &&
+    typeof options.body === 'string' && Buffer.byteLength(options.body, 'utf8') <= 1048576;
+  const shared = options.method === 'GET' && options.body === undefined &&
+    [prefix + '/audit-logs', prefix + '/integration-status', prefix + '/applications'].includes(url.pathname);
+  const protectedRead = workflowEnabled && options.method === 'GET' && options.body === undefined && !url.search &&
+    (new RegExp('^' + prefix + '/cases/[A-Za-z0-9_-]{1,128}/communications/[A-Za-z0-9_-]{1,128}/photos/[0-3]$').test(url.pathname) ||
+     new RegExp('^' + prefix + '/applications/[a-f0-9-]{36}(?:/photos/[0-3])?$').test(url.pathname));
+  if (!list && !detail && !products && !create && !command && !shared && !protectedRead) return false;
   const keys = [...url.searchParams.keys()];
-  const allowedQuery = products ? ['search'] : ['scope', 'lifecycle', 'type', 'stage', 'brand', 'search', 'page', 'pageSize', 'erpMineCaseIds'];
+  const allowedQuery = products ? ['search'] : url.pathname === prefix + '/audit-logs' ? ['cursor','limit','from','to','caseId','brand','actorId','actionId'] :
+    url.pathname === prefix + '/applications' ? ['status','cursor'] : url.pathname === prefix + '/integration-status' ? [] :
+    ['scope', 'lifecycle', 'type', 'stage', 'brand', 'search', 'page', 'pageSize', 'erpMineCaseIds'];
   if (keys.length > allowedQuery.length || new Set(keys).size !== keys.length || keys.some(k => !allowedQuery.includes(k) ||
       url.searchParams.get(k).length > (k === 'erpMineCaseIds' ? 13200 : 120))) return false;
   if (url.searchParams.has('erpMineCaseIds')) {
@@ -202,7 +223,7 @@ function approvedNativeAfterSalesFetch(url, options) {
   if (create) {
     let value; try { value = JSON.parse(options.body); } catch { return false; }
     if (!value || typeof value !== 'object' || Array.isArray(value) ||
-        Object.keys(value).some(k => !['requestId', 'brand', 'customerKind', 'payload'].includes(k)) ||
+        Object.keys(value).some(k => !['requestId', 'brand', 'customerKind', 'payload', 'verifiedApplicationRef'].includes(k)) ||
         !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value.requestId || '') ||
         !['MOZTECH', 'BONSON', 'MORITEK', 'OTHER'].includes(value.brand) || !['TO_C', 'TO_B'].includes(value.customerKind) ||
         !value.payload || typeof value.payload !== 'object' || Array.isArray(value.payload) ||
@@ -212,14 +233,40 @@ function approvedNativeAfterSalesFetch(url, options) {
   const allowed = ['content-type', 'x-erp-time', 'x-erp-entity', 'x-erp-actor', 'x-erp-signature'];
   if ([...headers.keys()].some(k => !allowed.includes(k)) ||
       (headers.has('content-type') && headers.get('content-type') !== 'application/json') ||
-      (create && headers.get('content-type') !== 'application/json') || headers.get('x-erp-entity') !== 'doa-dev-qa-20261002' ||
+      ((create || command) && headers.get('content-type') !== 'application/json') || headers.get('x-erp-entity') !== 'doa-dev-qa-20261002' ||
       !/^[A-Za-z0-9_-]{1,128}$/.test(headers.get('x-erp-actor') || '') ||
       !/^\d{10}$/.test(headers.get('x-erp-time') || '') || Math.abs(Date.now() / 1000 - Number(headers.get('x-erp-time'))) > 60 ||
       !/^[a-f0-9]{64}$/.test(headers.get('x-erp-signature') || '')) return false;
   const expected = createHmac('sha256', process.env.AFTER_SALES_MODULE_SECRET).update(['erp.aftersales.v1', options.method,
     url.pathname.slice('/after-sales-app'.length) + url.search, headers.get('x-erp-time'), headers.get('x-erp-entity'), headers.get('x-erp-actor'),
-    createHash('sha256').update(create ? options.body : '').digest('hex')].join('\n')).digest();
+    createHash('sha256').update(create || command ? options.body : '').digest('hex')].join('\n')).digest();
   return timingSafeEqual(expected, Buffer.from(headers.get('x-erp-signature'), 'hex'));
+}
+// Private repair-media SDK calls get an isolated context. Enabling this does
+// not authorize arbitrary URLs, other buckets, or direct sockets outside it.
+const repairStorageContext = new AsyncLocalStorage();
+const repairBucket = 'corely-repair-dev-249593319772';
+const repairStorageEnabled = process.env.REPAIR_MEDIA_ENABLED === 'true' && process.env.REPAIR_MEDIA_BUCKET === repairBucket;
+const repairStorageKey = /^repair-media\/doa-dev-qa-20261002\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/i;
+globalThis[Symbol.for('corely.dev.repair-storage.v1')] = async (bucket, key, operation) => {
+  if (!repairStorageEnabled || bucket !== repairBucket || !repairStorageKey.test(key) || typeof operation !== 'function') blocked();
+  return repairStorageContext.run({ bucket, key }, operation);
+};
+function approvedRepairStorageFetch(url, method) {
+  const ctx = repairStorageContext.getStore();
+  if (!repairStorageEnabled || !ctx || url.username || url.password || url.hash) return false;
+  if (url.protocol === 'http:' && ['metadata.google.internal','metadata.google.internal.','169.254.169.254'].includes(url.hostname) && !url.port) {
+    const keys = [...url.searchParams.keys()];
+    if (keys.length && (keys.length !== 1 || keys[0] !== 'scopes' || url.pathname !== '/computeMetadata/v1/instance/service-accounts/default/token'
+      || url.searchParams.get('scopes').split(',').some(scope => !['https://www.googleapis.com/auth/cloud-platform','https://www.googleapis.com/auth/devstorage.full_control','https://www.googleapis.com/auth/devstorage.read_write','https://www.googleapis.com/auth/devstorage.read_only'].includes(scope)))) return false;
+    return method === 'GET' && ['/computeMetadata/v1','/computeMetadata/v1/','/computeMetadata/v1/instance/service-accounts/default/token','/computeMetadata/v1/instance/service-accounts/default/email','/computeMetadata/v1/project/project-id','/computeMetadata/v1/universe/universe-domain'].includes(url.pathname);
+  }
+  if (url.origin !== 'https://storage.googleapis.com') return false;
+  const object = '/storage/v1/b/' + ctx.bucket + '/o/' + encodeURIComponent(ctx.key);
+  if (url.pathname === object) return ['GET','HEAD'].includes(method);
+  return method === 'POST' && url.pathname === '/upload/storage/v1/b/' + ctx.bucket + '/o'
+    && url.searchParams.get('name') === ctx.key && url.searchParams.get('uploadType') === 'resumable'
+    && url.searchParams.get('ifGenerationMatch') === '0';
 }
 const connect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function (...args) {
@@ -235,12 +282,17 @@ net.Socket.prototype.connect = function (...args) {
     Number(first.port) === 443 && first.host === mailroomHost && (!first.servername || first.servername === mailroomHost);
   const nativeAfterSalesConnection = nativeAfterSalesEnabled && nativeAfterSalesContext.getStore() === nativeAfterSalesToken && typeof first === 'object' &&
     Number(first.port) === 443 && first.host === nativeAfterSalesHost && (!first.servername || first.servername === nativeAfterSalesHost);
-  if (!warehouseConnection && !aiConnection && !mailroomConnection && !nativeAfterSalesConnection && (!path || !path.startsWith(`/cloudsql/${process.env.CLOUDSQL_INSTANCE}/.s.PGSQL.`))) blocked();
+  const repairConnection = repairStorageEnabled && repairStorageContext.getStore() && typeof first === 'object' &&
+    ((Number(first.port) === 443 && first.host === 'storage.googleapis.com' && (!first.servername || first.servername === first.host)) ||
+     (Number(first.port) === 80 && ['metadata.google.internal','metadata.google.internal.','169.254.169.254'].includes(first.host)));
+  if (!warehouseConnection && !aiConnection && !mailroomConnection && !nativeAfterSalesConnection && !repairConnection && (!path || !path.startsWith(`/cloudsql/${process.env.CLOUDSQL_INSTANCE}/.s.PGSQL.`))) blocked();
   return connect.apply(this, args);
 };
 const fetch = globalThis.fetch;
 globalThis.fetch = async (input, options = {}) => {
   const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
+  if (approvedRepairStorageFetch(url, options.method || input.method || 'GET'))
+    return fetch(input, { ...options, redirect: 'error' });
   // Snapshot the signed body and headers once before validation and forwarding.
   const mailroomOptions = { method: options.method, redirect: options.redirect, body: options.body,
     headers: new Headers(options.headers), signal: options.signal };

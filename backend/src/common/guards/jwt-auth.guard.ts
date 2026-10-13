@@ -61,6 +61,15 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
           allowed.push('POST /api/v1/b2b/public/quote-access/preview');
           allowed.push('POST /api/v1/b2b/public/quote-access/accept');
         }
+        // This public capability only permits reading immutable published reports.
+        if (
+          process.env.REPAIR_PUBLIC_REPORT_ENABLED === 'true' &&
+          request.method === 'GET' &&
+          /^\/api\/v1\/public\/repair-reports\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\/media\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$/.test(
+            request.path,
+          )
+        )
+          allowed.push(route);
         if (!allowed.includes(route))
           throw new ForbiddenException('DEV 停用公開註冊、回呼與外部作業入口');
       }

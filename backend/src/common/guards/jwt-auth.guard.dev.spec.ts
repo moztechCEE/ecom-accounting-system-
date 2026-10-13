@@ -7,6 +7,7 @@ describe('DEV public entry restrictions', () => {
   const catalogBefore = process.env.B2B_PUBLIC_CATALOG_ENABLED;
   const orderBefore = process.env.B2B_PUBLIC_ORDER_ENABLED;
   const privateQuoteBefore = process.env.B2B_PRIVATE_QUOTE_EMAIL_ENABLED;
+  const reportBefore = process.env.REPAIR_PUBLIC_REPORT_ENABLED;
   afterEach(() => {
     if (before === undefined) delete process.env.ERP_DEV_SANDBOX;
     else process.env.ERP_DEV_SANDBOX = before;
@@ -15,8 +16,12 @@ describe('DEV public entry restrictions', () => {
     else process.env.B2B_PUBLIC_CATALOG_ENABLED = catalogBefore;
     if (orderBefore === undefined) delete process.env.B2B_PUBLIC_ORDER_ENABLED;
     else process.env.B2B_PUBLIC_ORDER_ENABLED = orderBefore;
-    if (privateQuoteBefore === undefined) delete process.env.B2B_PRIVATE_QUOTE_EMAIL_ENABLED;
+    if (privateQuoteBefore === undefined)
+      delete process.env.B2B_PRIVATE_QUOTE_EMAIL_ENABLED;
     else process.env.B2B_PRIVATE_QUOTE_EMAIL_ENABLED = privateQuoteBefore;
+    if (reportBefore === undefined)
+      delete process.env.REPAIR_PUBLIC_REPORT_ENABLED;
+    else process.env.REPAIR_PUBLIC_REPORT_ENABLED = reportBefore;
   });
   function request(method: string, path: string) {
     const context = {
@@ -81,15 +86,22 @@ describe('DEV public entry restrictions', () => {
   it('allows only the two private quote POST endpoints under their separate DEV flag', () => {
     process.env.ERP_DEV_SANDBOX = 'true';
     delete process.env.B2B_PRIVATE_QUOTE_EMAIL_ENABLED;
-    expect(request('POST', '/api/v1/b2b/public/quote-access/preview'))
-      .toThrow(ForbiddenException);
-    expect(request('POST', '/api/v1/b2b/public/quote-access/accept'))
-      .toThrow(ForbiddenException);
+    expect(request('POST', '/api/v1/b2b/public/quote-access/preview')).toThrow(
+      ForbiddenException,
+    );
+    expect(request('POST', '/api/v1/b2b/public/quote-access/accept')).toThrow(
+      ForbiddenException,
+    );
     process.env.B2B_PRIVATE_QUOTE_EMAIL_ENABLED = 'true';
-    expect(request('POST', '/api/v1/b2b/public/quote-access/preview')()).toBe(true);
-    expect(request('POST', '/api/v1/b2b/public/quote-access/accept')()).toBe(true);
-    expect(request('GET', '/api/v1/b2b/public/quote-access/preview'))
-      .toThrow(ForbiddenException);
+    expect(request('POST', '/api/v1/b2b/public/quote-access/preview')()).toBe(
+      true,
+    );
+    expect(request('POST', '/api/v1/b2b/public/quote-access/accept')()).toBe(
+      true,
+    );
+    expect(request('GET', '/api/v1/b2b/public/quote-access/preview')).toThrow(
+      ForbiddenException,
+    );
   });
   it('allows only the exact public order-reference GET route when both flags are enabled', () => {
     process.env.ERP_DEV_SANDBOX = 'true';
@@ -109,5 +121,24 @@ describe('DEV public entry restrictions', () => {
     expect(request('GET', '/api/v1/b2b/public/orders')).toThrow(
       ForbiddenException,
     );
+  });
+  it('allows only exact immutable public report GETs under their own flag', () => {
+    process.env.ERP_DEV_SANDBOX = 'true';
+    const id = 'd508cf64-1d79-49d0-a472-856106604f42';
+    const path = '/api/v1/public/repair-reports/' + id;
+    delete process.env.REPAIR_PUBLIC_REPORT_ENABLED;
+    expect(request('GET', path)).toThrow(ForbiddenException);
+    process.env.REPAIR_PUBLIC_REPORT_ENABLED = 'true';
+    expect(request('GET', path)()).toBe(true);
+    expect(request('GET', path + '/media/' + id)()).toBe(true);
+    for (const invalid of [
+      path + '/publish',
+      path + '/media/not-an-id',
+      path + '/',
+      '/api/v1/public/repair-reports',
+    ])
+      expect(request('GET', invalid)).toThrow(ForbiddenException);
+    for (const method of ['POST', 'PATCH', 'DELETE'])
+      expect(request(method, path)).toThrow(ForbiddenException);
   });
 });

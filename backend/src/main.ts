@@ -52,7 +52,7 @@ async function bootstrap() {
     origin: corsOrigins,
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: 'Content-Type, Accept, Authorization, X-DOA-Actor, X-WMS-Session, X-WMS-Entity, If-None-Match',
+    allowedHeaders: 'Content-Type, Accept, Authorization, X-DOA-Actor, X-WMS-Session, X-WMS-Entity, X-Repair-Report-Token, If-None-Match',
     exposedHeaders: 'Content-Disposition, X-Request-ID, ETag',
   });
 
