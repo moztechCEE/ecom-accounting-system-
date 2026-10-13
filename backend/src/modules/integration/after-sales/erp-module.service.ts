@@ -1,6 +1,8 @@
 import {
   ForbiddenException,
+  BadRequestException,
   Injectable,
+  Optional,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -8,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { createHmac, randomUUID } from 'node:crypto';
 import { AuthService } from '../../auth/auth.service';
 import { EntityAccessService } from '../../../common/entity-access/entity-access.service';
+import { PrismaService } from '../../../common/prisma/prisma.service';
 import {
   hasSourceAdministrationPermissions,
   matchesSignature,
@@ -22,7 +25,44 @@ export class ErpAfterSalesModuleService {
     private readonly config: ConfigService,
     private readonly auth: AuthService,
     private readonly entityAccess: EntityAccessService,
+    @Optional() private readonly prisma?: PrismaService,
   ) {}
+  async products(req: { headers: Record<string, string>; method: string; originalUrl: string }, userId: string, entityId: string) {
+    const actor = await this.inspect(req, userId, entityId);
+    if (!actor.modules.includes('cases') && !actor.modules.includes('products'))
+      throw new ForbiddenException('沒有售後產品選用權限');
+    const url = new URL(req.originalUrl, 'https://erp.invalid');
+    const q = url.searchParams;
+    if (url.pathname !== `/api/v1/after-sales/module/actors/${encodeURIComponent(userId)}/products`
+      || [...q.keys()].some(key => !['entityId', 'search', 'ids', 'limit'].includes(key) || q.getAll(key).length !== 1)
+      || q.get('entityId') !== entityId)
+      throw new BadRequestException('產品查詢條件無效');
+    const search = (q.get('search') || '').trim();
+    const rawLimit = q.get('limit') || '50';
+    if (search.length > 100 || /[\x00-\x1f]/.test(search) || !/^[1-9]\d?$/.test(rawLimit) || Number(rawLimit) > 50)
+      throw new BadRequestException('產品查詢條件無效');
+    let ids: string[] | undefined;
+    if (q.has('ids')) {
+      try { ids = JSON.parse(q.get('ids')!) as string[]; } catch { throw new BadRequestException('產品識別資料無效'); }
+      if (!Array.isArray(ids) || !ids.length || ids.length > 50 || new Set(ids).size !== ids.length
+        || ids.some(id => typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) || search)
+        throw new BadRequestException('產品識別資料無效');
+    }
+    if (!this.prisma) throw new ServiceUnavailableException('產品來源尚未開通');
+    const rows = await this.prisma.product.findMany({
+      where: { entityId, isActive: true, ...(ids ? { id: { in: ids } } : {}),
+        ...(search ? { OR: ['sku', 'name', 'barcode', 'modelNumber'].map(field => ({ [field]: { contains: search, mode: 'insensitive' as const } })) } : {}) },
+      select: { id: true, entityId: true, sku: true, name: true, modelNumber: true, barcode: true, salesPrice: true, updatedAt: true, entity: { select: { baseCurrency: true } } },
+      orderBy: [{ sku: 'asc' }, { id: 'asc' }], take: Math.max(Number(rawLimit), ids?.length || 0) + 1,
+    });
+    const fresh = await this.actor(userId, entityId);
+    if (!fresh.modules.includes('cases') && !fresh.modules.includes('products')) throw new ForbiddenException('產品權限已變動');
+    const limit = Math.max(Number(rawLimit), ids?.length || 0);
+    return { contractVersion: 'corely.erp.products.v1', complete: rows.length <= limit, items: rows.slice(0, limit).map(row => ({
+      id: row.id, entityId: row.entityId, sku: row.sku, name: row.name, model: row.modelNumber, barcode: row.barcode,
+      unitPrice: row.salesPrice.toFixed(2), currency: row.entity.baseCurrency, warrantyMonths: null, updatedAt: row.updatedAt.toISOString(),
+    })) };
+  }
   private settings() {
     const entity = this.config
       .get<string>('AFTER_SALES_MODULE_ENTITY_ID', '')

@@ -60,7 +60,22 @@ export class RegisterAfterSalesCaseDto extends AfterSalesTaskEntityDto {
   @IsIn(['MOZTECH', 'BONSON', 'MORITEK', 'OTHER']) brand!: string;
   @IsIn(['TO_C', 'TO_B']) customerKind!: string;
   @IsObject() payload!: Record<string, unknown>;
+  @IsOptional() @IsObject() verifiedApplicationRef?: { id: string; revision: number; reviewHash: string };
+}
+export class AfterSalesApplicationsQuery extends AfterSalesTaskEntityDto {
+  @IsOptional() @IsIn(['INVITED', 'SUBMITTED', 'REVIEWED', 'REJECTED', 'CONVERTED']) status?: string;
+  @IsOptional() @IsUUID() cursor?: string;
 }
 export class AfterSalesTaskCaseParams {
   @IsString() @Matches(/^[A-Za-z0-9_-]{1,128}$/) id!: string;
+}
+export class AfterSalesApplicationPhotoParams extends AfterSalesTaskCaseParams {
+  @IsIn(['0', '1', '2', '3']) index!: string;
+}
+export class AfterSalesCaseCommandDto extends AfterSalesTaskEntityDto {
+  @IsObject() command!: Record<string, unknown>;
+}
+export class AfterSalesCasePhotoParams extends AfterSalesTaskCaseParams {
+  @IsString() @Matches(/^[A-Za-z0-9_-]{1,128}$/) confirmationId!: string;
+  @IsIn(['0', '1', '2', '3']) index!: string;
 }

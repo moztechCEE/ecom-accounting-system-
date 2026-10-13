@@ -199,14 +199,15 @@ export function fieldNames(value: unknown): string[] {
 export function sourceAuditProjection(row: Record<string, unknown>) {
   const opaque = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value) ? value : null;
   const notifications = new Set(['DRAFT', 'APPROVED', 'SENDING', 'SENT', 'SIMULATED', 'FAILED', 'UNKNOWN', 'CANCELLED']);
-  const eventClass = row.eventClass === 'NOTIFICATION' && opaque(row.notificationId) && notifications.has(String(row.outcome)) ? 'NOTIFICATION' : 'BUSINESS';
+  const interaction = row.eventClass === 'INTERACTION' && ['INTENT','CANCELLED','VALIDATION_BLOCKED'].includes(String(row.outcome));
+  const eventClass = interaction ? 'INTERACTION' : row.eventClass === 'NOTIFICATION' && opaque(row.notificationId) && notifications.has(String(row.outcome)) ? 'NOTIFICATION' : 'BUSINESS';
   return {
     id: opaque(row.id), occurredAt: typeof row.occurredAt === 'string' && Number.isFinite(Date.parse(row.occurredAt)) ? row.occurredAt : null,
     source: 'SOURCE', eventClass, actorId: opaque(row.actorId),
     actionId: typeof row.actionId === 'string' && /^source\.[a-z][a-z0-9_.-]{1,70}$/.test(row.actionId) ? row.actionId : 'source.unknown',
     recordType: typeof row.recordType === 'string' && /^[A-Z_]{1,40}$/.test(row.recordType) ? row.recordType : 'UNKNOWN', recordId: opaque(row.recordId),
     brand: ['MOZTECH', 'BONSON', 'MORITEK', 'OTHER'].includes(String(row.brand)) ? row.brand : null,
-    outcome: eventClass === 'NOTIFICATION' ? row.outcome : row.outcome === 'COMMITTED' ? 'COMMITTED' : 'UNKNOWN',
+    outcome: eventClass === 'NOTIFICATION' || eventClass === 'INTERACTION' ? row.outcome : row.outcome === 'COMMITTED' ? 'COMMITTED' : 'UNKNOWN',
     notificationId: eventClass === 'NOTIFICATION' ? opaque(row.notificationId) : null,
     providerReceiptId: eventClass === 'NOTIFICATION' ? opaque(row.providerReceiptId) : null,
     changedFieldNames: Array.isArray(row.changedFieldNames) ? row.changedFieldNames.filter((key): key is string => typeof key === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,79}$/.test(key) && !/password|secret|token|authorization|signature|cookie|lineUser|subject|email|phone|address|account|screenshot|image|evidence|attachment/i.test(key)).slice(0, 40) : [],

@@ -51,6 +51,7 @@ export class OperationsSourceReader {
       (query.size ? '?' + query.toString() : '');
     const time = String(Math.floor(Date.now() / 1000));
     const response = await fetch(base.replace(/\/$/, '') + path, {
+      method: 'GET',
       redirect: 'error',
       signal: AbortSignal.timeout(20000),
       headers: {

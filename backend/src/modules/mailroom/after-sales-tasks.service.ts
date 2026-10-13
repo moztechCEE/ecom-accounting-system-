@@ -14,7 +14,7 @@ import { ErpAfterSalesModuleService } from '../integration/after-sales/erp-modul
 import { serviceSignature } from '../integration/after-sales/erp-module.contract';
 import { MailroomService } from './mailroom.service';
 import { can, requireEntity } from './mailroom.contract';
-import { repairWorkflow } from './repair-workflow.contract';
+import { physicalCustody, repairWorkflow } from './repair-workflow.contract';
 import {
   AfterSalesOptionsQuery,
   AfterSalesTasksQuery,
@@ -363,15 +363,74 @@ export class AfterSalesTasksService {
     if (result.item?.id !== id)
       throw new BadGatewayException('售後案件詳情識別不符');
     const context = await this.repairContext(userId, entityId, [id]);
-    return { ...result, tasks: context.tasks };
+    const physical = await this.casePhysicalSummary(entityId, id);
+    await this.module.actor(userId, entityId);
+    const sourceHistory = Array.isArray(result.history) ? result.history : [];
+    return {
+      ...result, tasks: context.tasks, ...physical,
+      history: [...sourceHistory, ...physical.physicalHistory]
+        .sort((a, b) => String((b as { occurredAt?: string }).occurredAt || '').localeCompare(String((a as { occurredAt?: string }).occurredAt || '')))
+        .slice(0, 100),
+    };
+  }
+  /** Case-authorized high-level custody; photos and technical documents remain on their guarded routes. */
+  private async casePhysicalSummary(entityId: string, caseId: string) {
+    if (this.config.get('MAILROOM_ENABLED') !== 'true') return { custodySummary: null, physicalHistory: [] };
+    const rows = await this.db.mailroomItem.findMany({
+      where: { entityId, receipt: { entityId, sourceCaseId: caseId } },
+      select: { id: true, productName: true, status: true, location: true, custodianId: true, repairOwnerId: true, repairWorkflow: true, receipt: { select: { customerServiceUserId: true } } },
+      orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }], take: 201,
+    });
+    if (rows.length > 200) return { custodySummary: '實物超過 200 件，請查看收發紀錄', physicalHistory: [] };
+    if (!rows.length) return { custodySummary: null, physicalHistory: [] };
+    const users = await this.db.user.findMany({ where: { id: { in: [...new Set(rows.map(row => row.custodianId))] } }, select: { id: true, name: true } });
+    const names = new Map(users.map(user => [user.id, user.name]));
+    const custodyLabels: Record<string, string> = { TECHNICIAN: '維修室', MAILROOM: '收發室', FACTORY_CARRIER: '送原廠物流', CUSTOMER_CARRIER: '寄回物流', FACTORY: '原廠', INVENTORY: '庫存', LINKED_CASE: '已轉其他案件', UNKNOWN: '保管位置待核對' };
+    const custodySummary = rows.map(row => {
+      const custody = physicalCustody(row);
+      const owner = ['TECHNICIAN', 'MAILROOM'].includes(custody) ? names.get(row.custodianId) : null;
+      return `${row.productName} · ${custodyLabels[custody] || custody}${owner ? '／' + owner : ''}${row.location && ['TECHNICIAN', 'MAILROOM'].includes(custody) ? ' · ' + row.location : ''}`;
+    }).join('；');
+    const actions = await this.db.mailroomAction.findMany({
+      where: { entityId, itemId: { in: rows.map(row => row.id) } },
+      select: { id: true, action: true, toStatus: true, actorName: true, createdAt: true },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 50,
+    });
+    return { custodySummary, physicalHistory: actions.map(action => ({ id: 'erp:' + action.id, type: action.action, title: '收發／維修進度', description: action.toStatus, actorName: action.actorName, occurredAt: action.createdAt.toISOString() })) };
   }
   async register(userId: string, input: RegisterAfterSalesCaseDto) {
-    const { entityId, requestId, brand, customerKind, payload } = input;
+    const { entityId, requestId, brand, customerKind, payload, verifiedApplicationRef } = input;
     return this.request(userId, entityId, '/cases', 'POST', {
       requestId,
       brand,
       customerKind,
       payload,
+      ...(verifiedApplicationRef ? { verifiedApplicationRef } : {}),
     });
+  }
+  async applications(userId: string, entityId: string, status?: string, cursor?: string) {
+    const params = new URLSearchParams(); if (status) params.set('status', status); if (cursor) params.set('cursor', cursor);
+    const query = params.size ? '?' + params.toString() : '';
+    const result = await this.request(userId, entityId, '/applications' + query);
+    if (!Array.isArray(result.items) || result.items.some(row => row.companyId !== entityId)) throw new BadGatewayException('申請公司回應不符');
+    return result;
+  }
+  async application(userId: string, entityId: string, id: string, index?: string) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || (index !== undefined && !['0', '1', '2', '3'].includes(index))) throw new BadRequestException('申請識別資料無效');
+    const result = await this.request(userId, entityId, '/applications/' + id + (index !== undefined ? '/photos/' + index : ''));
+    if (index === undefined && (result.id !== id || result.companyId !== entityId)) throw new BadGatewayException('申請識別回應不符');
+    return result;
+  }
+  async applicationCommand(userId: string, entityId: string, command: Record<string, unknown>, id?: string) {
+    if (id !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new BadRequestException('申請識別資料無效');
+    return this.request(userId, entityId, '/applications' + (id ? '/' + id : ''), 'POST', command);
+  }
+  async command(userId: string, entityId: string, caseId: string, suffix: 'communications' | 'repair-proposals/adopt' | 'factory-actions' | 'brand-review', command: Record<string, unknown>) {
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(caseId)) throw new BadRequestException('案件識別碼不正確');
+    return this.request(userId, entityId, '/cases/' + encodeURIComponent(caseId) + '/' + suffix, 'POST', command);
+  }
+  async photo(userId: string, entityId: string, caseId: string, confirmationId: string, index: string) {
+    if (![caseId, confirmationId].every(id => /^[A-Za-z0-9_-]{1,128}$/.test(id)) || !['0', '1', '2', '3'].includes(index)) throw new BadRequestException('照片識別碼不正確');
+    return this.request(userId, entityId, '/cases/' + encodeURIComponent(caseId) + '/communications/' + encodeURIComponent(confirmationId) + '/photos/' + index);
   }
 }

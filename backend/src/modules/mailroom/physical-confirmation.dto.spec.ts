@@ -12,6 +12,7 @@ import {
 } from './repair-document.contract';
 import { type Actor } from './mailroom.contract';
 import { RepairWorkbenchService } from './repair-workbench.service';
+import { repairSourceBindingForItem } from './repair-proposal.contract';
 import {
   type RepairWorkflow,
   sentCustomerWorkflow,
@@ -251,6 +252,9 @@ function factoryFixture(action: 'send_factory' | 'receive_factory') {
   const row = {
     id: uuid,
     entityId: shared.entityId,
+    receiptId: 'SYNTHETIC-RECEIPT',
+    label: 'SYNTHETIC PRODUCT', productName: 'SYNTHETIC PRODUCT', productId: null,
+    sku: 'SYNTHETIC-SKU', serialNumber: 'SYNTHETIC-SN', declared: { id: 'SYNTHETIC-SOURCE-ITEM' },
     version: 7,
     status: action === 'send_factory' ? 'INSPECTING' : 'FACTORY_RETURNING',
     custodianId: actor.id,
@@ -261,7 +265,7 @@ function factoryFixture(action: 'send_factory' | 'receive_factory') {
     repairWorkflow: { schema: 1 } as RepairWorkflow,
     receipt: {
       category: 'REPAIR',
-      sourceCaseId: 'SYNTHETIC-CASE',
+      sourceCaseId: 'SYNTHETIC-CASE', sourceNumber: 'SYNTHETIC-NUMBER',
       receivedById: 'SYNTHETIC-CLERK',
       customerServiceUserId: 'SYNTHETIC-CSR',
     },
@@ -322,26 +326,17 @@ function factoryFixture(action: 'send_factory' | 'receive_factory') {
     record: jest.fn().mockResolvedValue([]),
     publish: jest.fn(),
   };
-  const sync = {
-    cases: jest.fn().mockResolvedValue({
-      items: [
-        {
-          id: row.receipt.sourceCaseId,
-          type: 'REPAIR',
-          version: 'SYNTHETIC-SOURCE-VERSION',
-          repairAllowed: true,
-          releaseInfo: {
-            quoteRevision: 4,
-            customerApprovedQuoteRevision: 4,
-            customerApprovedAt: inspection.updatedAt,
-            amount: 0,
-            currency: 'TWD',
-            confirmedPaymentQuoteRevision: null,
-          },
-        },
-      ],
-    }),
+  const source = {
+    id: row.receipt.sourceCaseId, number: row.receipt.sourceNumber, type: 'REPAIR', brand: 'BONSON',
+    version: inspection.updatedAt, status: 'WAITING_CUSTOMER', customerLabel: 'SYNTHETIC', repairAllowed: true,
+    items: [{ id: 'SYNTHETIC-SOURCE-ITEM', productName: row.productName, sku: row.sku, quantity: 1 }],
+    releaseInfo: { quoteRevision: 4, customerApprovedQuoteRevision: 4, customerApprovedAt: inspection.updatedAt,
+      amount: 0, currency: 'TWD', confirmedPaymentQuoteRevision: null, invoiceRequired: false, invoiceSatisfied: true,
+      quoteBindings: [] as unknown[] },
   };
+  const binding = repairSourceBindingForItem(row, source as unknown as Parameters<typeof repairSourceBindingForItem>[1]);
+  source.releaseInfo.quoteBindings = [{ ...binding, quoteRevision: 4 }];
+  const sync = { cases: jest.fn().mockResolvedValue({ items: [source] }) };
   type Dependencies = ConstructorParameters<typeof RepairWorkbenchService>;
   return {
     row,

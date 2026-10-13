@@ -67,4 +67,10 @@ export class ErpAfterSalesModuleController {
   ) {
     return this.service.inspect(req, id, entity);
   }
+  @Get('actors/:id/products')
+  @SetMetadata(ERP_AFTER_SALES_SERVICE_AUTH, true)
+  @Header('Cache-Control', 'no-store')
+  products(@Req() req: { headers: Record<string, string>; method: string; originalUrl: string }, @Param('id') id: string, @Query('entityId') entity: string) {
+    return this.service.products(req, id, entity);
+  }
 }
