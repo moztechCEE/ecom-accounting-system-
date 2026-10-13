@@ -21,6 +21,9 @@ import { MailroomSourceMediaService } from './mailroom-source-media.service';
 import { RepairTodoService } from './repair-todo.service';
 import { AfterSalesTasksController } from './after-sales-tasks.controller';
 import { AfterSalesTasksService } from './after-sales-tasks.service';
+import { MailroomOutboundController } from './mailroom-outbound.controller';
+import { MailroomOutboundService } from './mailroom-outbound.service';
+import { MailroomOutboundStockService } from './mailroom-outbound-stock.service';
 @Module({
   imports: [
     NotificationModule,
@@ -36,6 +39,7 @@ import { AfterSalesTasksService } from './after-sales-tasks.service';
     MailroomStorageController,
     MailroomCatalogController,
     MailroomSourceMediaController,
+    MailroomOutboundController,
   ],
   providers: [
     AfterSalesTasksService,
@@ -49,6 +53,8 @@ import { AfterSalesTasksService } from './after-sales-tasks.service';
     MailroomCatalogService,
     MailroomSourceMediaService,
     RepairTodoService,
+    MailroomOutboundService,
+    MailroomOutboundStockService,
   ],
 })
 export class MailroomModule {}

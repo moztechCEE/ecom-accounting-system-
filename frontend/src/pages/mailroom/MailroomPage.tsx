@@ -52,6 +52,7 @@ import RecipientPicker from "./RecipientPicker";
 import { MAILROOM_QUEUES, mailroomNextStep, needsInspectionPhoto, matchesMailroomSearch, canDispatch, matchesDispatchReceipt } from "./mailroom-workflow";
 import ReceiptDrawer from "./ReceiptDrawer";
 import StorageWorkbench from "./StorageWorkbench";
+import OutboundWorkbench from "./OutboundWorkbench";
 import ArrivalSummary from "./ArrivalSummary";
 import RepairDocuments from "../repair/RepairDocuments";
 import { useRepairFeedback } from "../repair/repair-feedback";
@@ -121,7 +122,7 @@ export default function MailroomPage({
     [total, setTotal] = useState(0),
     [page, setPage] = useState(1),
     [search, setSearch] = useState(""),
-    [status, setStatus] = useState<string>(),
+    [status, setStatus] = useState<string | undefined>(mode === "mailroom" && params.get("tab") === "outbound" ? "READY_FOR_DISPATCH" : undefined),
     [loading, setLoading] = useState(false),
     [error, setError] = useState("");
   const [people, setPeople] = useState<Person[]>([]),
@@ -129,22 +130,26 @@ export default function MailroomPage({
     [detailLoading, setDetailLoading] = useState(false),
     [create, setCreate] = useState(false);
   const [createSource, setCreateSource] = useState<Source>(),
-    [listTab, setListTab] = useState("received"),
+    [listTab, setListTab] = useState(mode === "mailroom" && params.get("tab") === "outbound" ? "outbound" : "received"),
     [storageVisited, setStorageVisited] = useState(false),
     [storageReset, setStorageReset] = useState(0),
     [storageRefreshRevision, setStorageRefreshRevision] = useState(0),
     [createCategory, setCreateCategory] = useState(""),
     [arrivalRevision, setArrivalRevision] = useState(0);
   const selectedId = params.get("itemId");
-  const drafts = useRef({ receipt: { dirty: false, busy: false } as MailroomDraftState, detail: { dirty: false, busy: false } as MailroomDraftState, storage: { dirty: false, busy: false } as MailroomDraftState });
+  const outboundOrderId = params.get("outboundOrderId") || undefined;
+  const outboundTarget = params.get("tab") === "outbound" ? outboundOrderId || "outbound" : "";
+  const previousOutboundTarget = useRef(outboundTarget);
+  const drafts = useRef({ receipt: { dirty: false, busy: false } as MailroomDraftState, detail: { dirty: false, busy: false } as MailroomDraftState, storage: { dirty: false, busy: false } as MailroomDraftState, outbound: { dirty: false, busy: false } as MailroomDraftState });
   const dirty = useRef(false);
-  const updateDraft = useCallback((scope: "receipt" | "detail" | "storage", state: MailroomDraftState) => {
+  const updateDraft = useCallback((scope: "receipt" | "detail" | "storage" | "outbound", state: MailroomDraftState) => {
     drafts.current[scope] = state;
     dirty.current = Object.values(drafts.current).some(value => value.dirty || value.busy);
   }, []);
   const updateReceiptDraft = useCallback((state: MailroomDraftState) => updateDraft("receipt", state), [updateDraft]);
   const updateStorageDraft = useCallback((state: MailroomDraftState) => updateDraft("storage", state), [updateDraft]);
   const updateDetailDraft = useCallback((state: MailroomDraftState) => updateDraft("detail", state), [updateDraft]);
+  const updateOutboundDraft = useCallback((state: MailroomDraftState) => updateDraft("outbound", state), [updateDraft]);
   const discardConfirmation = useMemo(() => createMailroomDiscardConfirmation(
     () => ({ dirty: dirty.current, busy: Object.values(drafts.current).some(value => value.busy) }),
     () => new Promise<boolean>(resolve => modal.confirm({
@@ -168,12 +173,17 @@ export default function MailroomPage({
   const guardChange = useCallback((change: () => void) => {
     if (Object.values(drafts.current).some(value => value.busy)) { void confirmDiscard(); return; }
     navigationGate(() => {
-      drafts.current = { receipt: { dirty: false, busy: false }, detail: { dirty: false, busy: false }, storage: { dirty: false, busy: false } };
+      drafts.current = { receipt: { dirty: false, busy: false }, detail: { dirty: false, busy: false }, storage: { dirty: false, busy: false }, outbound: { dirty: false, busy: false } };
       dirty.current = false;
       setStorageReset(value => value + 1);
       change();
     });
   }, [navigationGate, confirmDiscard]);
+  useEffect(() => {
+    if (previousOutboundTarget.current === outboundTarget) return;
+    previousOutboundTarget.current = outboundTarget;
+    if (mode === "mailroom" && outboundTarget) guardChange(() => { setListTab("outbound"); setStatus("READY_FOR_DISPATCH"); setPage(1); setSearch(""); });
+  }, [mode, outboundTarget, guardChange]);
   function startReceipt(category: string, source?: Source) {
     guardChange(() => {
       const next = new URLSearchParams(params); next.delete("itemId"); setParams(next);
@@ -382,13 +392,14 @@ export default function MailroomPage({
         /></div>
       ) : null}
       {mode === "mailroom" && storageVisited && <div hidden={listTab !== "storage"}><StorageWorkbench key={entityId} entityId={entityId} onOpenItem={openItem} onDraftChange={updateStorageDraft} resetDraftRevision={storageReset} refreshRevision={storageRefreshRevision} /></div>}
+      {mode === "mailroom" && listTab === "outbound" && <OutboundWorkbench key={`${entityId}:${user?.id || ""}:${outboundOrderId || ""}`} entityId={entityId} initialOrderId={outboundOrderId} onDraftChange={updateOutboundDraft} resetDraftRevision={storageReset} />}
       {mode !== "mailroom" || ["received", "outbound"].includes(listTab) ? (
         <Card
           className="mailroom-list"
           title={
             <Space>
               {mode === "repair" ? <ToolOutlined /> : <InboxOutlined />}
-              <span>{mode === "mine" ? "交辦與收件紀錄" : listTab === "outbound" ? "寄回顧客" : "物件與進度"}</span>
+              <span>{mode === "mine" ? "交辦與收件紀錄" : listTab === "outbound" ? "維修寄回" : "物件與進度"}</span>
               <Tag>{total} 件</Tag>
             </Space>
           }
@@ -1287,7 +1298,7 @@ function ItemDetail({
           { key: "carrier", label: "寄出物流／單號", children: `${item.outboundShipment.carrier} · ${item.outboundShipment.trackingNumber}` },
           { key: "time", label: "交運時間／人員", children: `${date(item.outboundShipment.dispatchedAt)} · ${item.outboundShipment.dispatchedByName}` },
           { key: "actual", label: item.outboundShipment.physicalItem.kind === "REPLACEMENT" ? "實際寄出的替換品" : "實際寄出的原件", children: `${item.outboundShipment.physicalItem.productName} · SKU ${item.outboundShipment.physicalItem.sku || "未提供"} · SN ${item.outboundShipment.physicalItem.serialNumber || "未提供"}` },
-          { key: "sync", label: "寄出同步", children: <Tag>待串接</Tag> },
+          { key: "sync", label: "寄出同步", children: <Tag>{({ PENDING: "待同步", DELIVERED: "已同步", FAILED: "同步未完成", PENDING_COMPATIBILITY: "待核對歷史寄出" } as Record<string, string>)[item.outboundShipment.sourceSync?.status || ""] || "待核對歷史寄出"}</Tag> },
         ]} />
       </Card>}
       {item.caseIntake && <Descriptions size="small" column={1} style={{ marginTop: 16 }} items={[

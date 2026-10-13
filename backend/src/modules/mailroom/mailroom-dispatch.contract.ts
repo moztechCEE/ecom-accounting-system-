@@ -5,6 +5,11 @@ import {
 } from '@nestjs/common';
 import { type Actor, type Command, type ItemState } from './mailroom.contract';
 import { physicalCustody } from './repair-workflow.contract';
+import {
+  DISPATCH_SCHEMA,
+  validateDispatchEvent,
+  type DispatchPurpose,
+} from './mailroom-workflow-event.contract';
 
 export type OutboundPhysicalItem = {
   kind: 'ORIGINAL' | 'REPLACEMENT';
@@ -39,11 +44,14 @@ export type OutboundShipment = {
   dispatchedByName: string;
   dispatchedByEmployeeId: string;
   note: string | null;
+  sourceVersion?: string;
   physicalItem: OutboundPhysicalItem;
-  sourceSync: {
-    status: 'PENDING_COMPATIBILITY';
-    reason: 'DISPATCH_CONSUMER_NOT_CONFIGURED';
-  };
+  sourceSync:
+    | {
+        status: 'PENDING_COMPATIBILITY';
+        reason: 'DISPATCH_CONSUMER_NOT_CONFIGURED';
+      }
+    | { status: 'PENDING' | 'DELIVERED' | 'FAILED'; eventId: string };
 };
 
 const object = (value: unknown): Record<string, unknown> =>
@@ -87,11 +95,106 @@ export function outboundShipment(value: unknown): OutboundShipment | null {
     record.version !== Number(record.fromVersion) + 1 ||
     !['ORIGINAL', 'REPLACEMENT'].includes(String(physical.kind)) ||
     physical.quantity !== 1 ||
-    sync.status !== 'PENDING_COMPATIBILITY' ||
-    sync.reason !== 'DISPATCH_CONSUMER_NOT_CONFIGURED'
+    !(
+      (sync.status === 'PENDING_COMPATIBILITY' &&
+        sync.reason === 'DISPATCH_CONSUMER_NOT_CONFIGURED') ||
+      (['PENDING', 'DELIVERED', 'FAILED'].includes(String(sync.status)) &&
+        nonempty(sync.eventId) &&
+        nonempty(record.sourceVersion))
+    )
   )
     throw new ConflictException('寄回交物流記錄不完整，請由管理員核對');
   return structuredClone(shipment) as OutboundShipment;
+}
+
+export function repairDispatchEvent(
+  item: ItemState & {
+    receiptId: string;
+    receipt: ItemState['receipt'] & { sourceNumber?: string | null };
+    declared?: unknown;
+  },
+  actor: Actor,
+) {
+  const shipment = outboundShipment(item.repairWorkflow);
+  if (
+    !shipment ||
+    !('eventId' in shipment.sourceSync) ||
+    !shipment.sourceVersion
+  )
+    throw new ConflictException('寄出事件缺少固定來源版次');
+  const declared = object(item.declared);
+  const physical = shipment.physicalItem;
+  const release = object(object(item.repairWorkflow).release);
+  const purpose =
+    release.purpose === 'FACTORY_REPAIRED'
+      ? 'REPAIRED'
+      : (release.purpose as DispatchPurpose);
+  return validateDispatchEvent({
+    schema: DISPATCH_SCHEMA,
+    eventId: shipment.sourceSync.eventId,
+    entityId: item.entityId,
+    sourceCaseId: shipment.sourceCaseId,
+    sourceNumber: item.receipt.sourceNumber || shipment.sourceCaseId,
+    sourceVersion: shipment.sourceVersion,
+    itemId: item.id,
+    receiptId: item.receiptId,
+    version: shipment.version,
+    action: 'dispatch',
+    occurredAt: shipment.dispatchedAt,
+    actor: { id: actor.id, name: actor.name },
+    shipment: {
+      purpose,
+      carrier: shipment.carrier,
+      trackingNumber: shipment.trackingNumber,
+      shippedAt: shipment.dispatchedAt,
+      declaredItemId: declared.id,
+      quantity: 1,
+      productName: physical.productName,
+      sku: physical.sku,
+      serialNumber: physical.serialNumber,
+      originalSerialNumber: item.serialNumber,
+      ...(physical.stock
+        ? {
+            stock: {
+              postingId: physical.stock.postingId,
+              referenceType: 'AFTER_SALES_REPLACEMENT',
+              referenceId: physical.stock.reservationId,
+              productId: physical.stock.productId,
+              warehouseId: physical.stock.warehouseId,
+              externalInventoryPosted: false,
+            },
+          }
+        : {}),
+    },
+  });
+}
+/** Derive this dispatch's ACK; an older receipt ACK is never relevant. */
+export function dispatchDeliveryProjection(
+  workflow: unknown,
+  deliveries: {
+    eventId: string;
+    target: string;
+    status: string;
+    lastError?: string | null;
+  }[],
+) {
+  const shipment = outboundShipment(workflow);
+  if (!shipment || !('eventId' in shipment.sourceSync)) return shipment;
+  const marker = shipment.sourceSync;
+  const delivery = deliveries.find(
+    (value) =>
+      value.eventId === marker.eventId && value.target === 'AFTER_SALES',
+  );
+  shipment.sourceSync = {
+    eventId: marker.eventId,
+    status:
+      delivery?.status === 'DELIVERED'
+        ? 'DELIVERED'
+        : delivery?.lastError
+          ? 'FAILED'
+          : 'PENDING',
+  };
+  return shipment;
 }
 
 /** Keep the native shelf as historical data, never display it as current carrier custody. */

@@ -10,10 +10,19 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { signRequest, type SourceCase } from './mailroom.contract';
+import { validateRepairProposalEvent } from './repair-proposal.contract';
 import {
   validateSourceChanges,
   validSourceCursor,
 } from './mailroom-source.contract';
+import {
+  assertMailroomDeliveryAck,
+  DISPATCH_SCHEMA,
+  REPAIR_PROPOSAL_SCHEMA,
+  validateDispatchEvent,
+  validateOutboundOrders,
+  type MailroomOutboundOrdersPage,
+} from './mailroom-workflow-event.contract';
 type Connection = {
   entityId: string;
   target: 'AFTER_SALES' | 'AI_CUSTOMER_SERVICE';
@@ -280,6 +289,35 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
         typeof result.nextCursor === 'string' ? result.nextCursor : null,
     };
   }
+  async outboundOrders(
+    entityId: string,
+    search = '',
+    caseId?: string,
+    cursor?: string,
+  ): Promise<MailroomOutboundOrdersPage> {
+    if (
+      typeof search !== 'string' ||
+      search.length > 120 ||
+      (caseId !== undefined && !/^[A-Za-z0-9_-]{1,128}$/.test(caseId)) ||
+      (cursor !== undefined && !/^[A-Za-z0-9_-]{1,128}$/.test(cursor)) ||
+      (caseId !== undefined && cursor !== undefined)
+    )
+      throw new ServiceUnavailableException('售後寄件查詢格式不符');
+    const query = new URLSearchParams({ search });
+    if (caseId !== undefined) query.set('caseId', caseId);
+    if (cursor !== undefined) query.set('cursor', cursor);
+    const result = validateOutboundOrders(
+      await this.request(
+        this.connection(entityId, 'AFTER_SALES'),
+        'GET',
+        '/api/integration/mailroom/outbound-orders?' + query.toString(),
+      ),
+      caseId,
+    );
+    if (cursor !== undefined && result.nextCursor === cursor)
+      throw new BadGatewayException('售後寄件游標未前進');
+    return result;
+  }
   async changes(entityId: string, cursor: string) {
     if (!validSourceCursor(cursor))
       throw new ServiceUnavailableException('來源游標格式不符');
@@ -502,23 +540,23 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
         if (!row) break;
         try {
           const entry = this.connection(row.entity_id, row.target);
-          const payload = row.payload as { eventId: string };
+          const payload = row.payload as { eventId: string; schema?: unknown };
+          if (payload.schema === DISPATCH_SCHEMA)
+            validateDispatchEvent(payload);
+          if (payload.schema === REPAIR_PROPOSAL_SCHEMA) {
+            if (row.target !== 'AFTER_SALES')
+              throw new BadGatewayException('維修提案只能同步售後系統');
+            validateRepairProposalEvent(payload);
+          }
           const value = await this.request(
             entry,
             'POST',
-            entry.eventsPath || '/api/integration/mailroom/events',
+            payload.schema === REPAIR_PROPOSAL_SCHEMA
+              ? '/api/integration/mailroom/workflow-events'
+              : entry.eventsPath || '/api/integration/mailroom/events',
             JSON.stringify(payload),
           );
-          const result = value as {
-            accepted?: unknown;
-            eventId?: unknown;
-          } | null;
-          if (
-            !result ||
-            result.accepted !== true ||
-            result.eventId !== payload.eventId
-          )
-            throw new Error('ack_invalid');
+          assertMailroomDeliveryAck(payload, value);
           await this.prisma.mailroomDelivery.updateMany({
             where: { id: row.id, leaseToken: token },
             data: {

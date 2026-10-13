@@ -202,7 +202,7 @@ export type OutboundShipment = {
     sku: string | null; serialNumber: string | null; quantity: 1;
     stock?: { reservationId: string; postingId: string; unitId: string; unitLabel: string; productId: string; warehouseId: string; condition: 'NEW' | 'REFURBISHED'; externalStatus: string };
   };
-  sourceSync: { status: 'PENDING_COMPATIBILITY'; reason: 'DISPATCH_CONSUMER_NOT_CONFIGURED' };
+  sourceSync: { status: 'PENDING_COMPATIBILITY'; reason: 'DISPATCH_CONSUMER_NOT_CONFIGURED' } | { status: 'PENDING' | 'DELIVERED' | 'FAILED'; eventId: string };
 };
 export type Task = { id: string; kind: string; createdAt: string; item: Item };
 export function mailroomEnabled() {
