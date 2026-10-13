@@ -64,6 +64,39 @@ function approvedAccountFetch(url, options) {
     headers.get('content-type') === 'application/json' && Boolean(process.env.WMS_PORTAL_SHARED_SECRET) &&
     headers.get('x-erp-service-key') === process.env.WMS_PORTAL_SHARED_SECRET;
 }
+// Native WMS retains upstream actor/role authorization. No login, account
+// binding, integrations, callback, maintenance or arbitrary host proxy exists.
+function approvedNativeWarehouseFetch(url, options) {
+  if (process.env.WMS_NATIVE_ENABLED !== 'true' || !warehouseAccountEnabled ||
+      url.origin !== warehouseOrigin || url.username || url.password || url.hash ||
+      !options || options.redirect !== 'error') return false;
+  const headers = new Headers(options.headers);
+  const bearer = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test((headers.get('authorization') || '').replace(/^Bearer /, '')) &&
+    (headers.get('authorization') || '').startsWith('Bearer ') && (headers.get('authorization') || '').length <= 8200;
+  const exchange = options.method === 'POST' && url.pathname === '/api/auth/erp/exchange' && !url.search;
+  if (exchange) {
+    if ([...headers.keys()].some(key => !['accept','content-type'].includes(key)) ||
+        headers.get('content-type') !== 'application/json' || typeof options.body !== 'string' || options.body.length > 1024) return false;
+    let input; try { input = JSON.parse(options.body); } catch { return false; }
+    return input && Object.keys(input).length === 2 && /^[a-f0-9]{64}$/.test(input.ticket || '') && /^[a-f0-9]{64}$/.test(input.nonce || '');
+  }
+  const file = options.method === 'GET' && !url.search && /^\/api\/marketplace-files\/[1-9]\d{0,9}\/(?:ecount|ecount-grouped|prepick)$/.test(url.pathname);
+  if (file) return options.body === undefined && [...headers.keys()].every(key => ['cookie','accept'].includes(key)) &&
+    /^wms_marketplace_download=[A-Za-z0-9_.-]{1,8192}$/.test(headers.get('cookie') || '');
+  if (!bearer || [...headers.keys()].some(key => !['authorization','accept','content-type','if-none-match'].includes(key))) return false;
+  const inspection = options.method === 'GET' && url.pathname === '/api/auth/me' && !url.search;
+  const businessPath = /^\/api\/(?:cartons|orders|tasks|comments|order-import-batches|order-reviews|order-change-notices|marketplace-products|marketplace-intakes|marketplace-batch-notices|warehouse-intakes|logistics|admin|analytics|reports|scan-errors|operation-logs|team)(?:\/[A-Za-z0-9_.,:@-]+)*\/?$/;
+  const protectedSegment = /(?:^|\/)(?:auth|integrations?|callbacks?|hooks?|webhooks?|migrations?|seeds?|bootstrap|maintenance|retention|internal|health|ready|readiness|staff|bind|exchange)(?:\/|$)/i;
+  const business = (businessPath.test(url.pathname) || url.pathname === '/api/users/basic') &&
+    !protectedSegment.test(url.pathname) && !url.pathname.includes('//') &&
+    !url.pathname.split('/').some(part => part === '.' || part === '..');
+  if (!inspection && !business || !['GET','HEAD','POST','PUT','PATCH','DELETE'].includes(options.method) || url.href.length > 8192) return false;
+  if (['GET','HEAD'].includes(options.method)) return options.body === undefined && !headers.has('content-type');
+  if (options.body === undefined) return !headers.has('content-type');
+  const bodyBytes = typeof options.body === 'string' ? Buffer.byteLength(options.body, 'utf8') :
+    options.body instanceof Uint8Array ? options.body.byteLength : Infinity;
+  return bodyBytes <= 30 * 1024 * 1024 && /^(?:application\/json|application\/x-www-form-urlencoded|multipart\/form-data)(?:\s*;[^\r\n]*)?$/i.test(headers.get('content-type') || '');
+}
 // This exception is intentionally independent of every other DEV integration.
 // Merely enabling the flag cannot open a socket: only a validated fetch gets the token.
 const aiOrigin = 'https://generativelanguage.googleapis.com';
@@ -225,6 +258,15 @@ globalThis.fetch = async (input, options = {}) => {
       headers: Object.fromEntries(['content-type', 'x-mailroom-key', 'x-mailroom-entity', 'x-mailroom-time', 'x-mailroom-signature']
         .map(key => [key, headers.get(key)])),
       ...(mailroomOptions.method === 'POST' ? { body: mailroomOptions.body } : {}),
+    }));
+  }
+  if ((typeof input === 'string' || input instanceof URL) && approvedNativeWarehouseFetch(url, options)) {
+    const headers = new Headers(options.headers);
+    return warehouseFetchContext.run(warehouseFetchToken, () => fetch(url.href, {
+      method: options.method, redirect: 'error', signal: options.signal,
+      headers: Object.fromEntries(['authorization','accept','content-type','if-none-match','cookie']
+        .filter(key => headers.has(key)).map(key => [key, headers.get(key)])),
+      ...(options.body === undefined ? {} : { body: options.body }),
     }));
   }
   if ((typeof input === 'string' || input instanceof URL) && approvedWorkspaceFetch(url, options)) {

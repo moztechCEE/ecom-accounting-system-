@@ -1359,14 +1359,15 @@
     {
       "id": "warehouse",
       "title": "儲運工作區",
-      "summary": "依角色開放儲運工作站、收貨、揀貨、出貨與報表；WMS 實際交運仍須在 ERP 逐行核銷才正式扣庫。",
+      "summary": "在 ERP 內使用原 WMS 作業工作台，依目前帳號與公司授權操作轉檔、預揀、揀貨與裝箱；正式出庫以原 ECOUNT／ERP 流程的實際紀錄為準。",
       "keywords": [
         "儲運",
         "倉庫",
         "揀貨",
         "出貨",
         "WMS",
-        "工作站"
+        "工作站",
+        "ERP 內嵌工作台"
       ],
       "path": "/warehouse",
       "module": "warehouse",
@@ -1374,14 +1375,15 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台查看可用的作業與功能卡片。",
-          "已設定 WMS 入口時，點選需要的功能並使用目前營運帳號進入授權的 WMS；未連線時只依實際載入內容判讀。",
-          "WMS 完成實際交運並回傳物流與箱件證據後，到「交運待核銷」核對 ERP 銷單並逐行核准正式出庫。"
+          "開啟「儲運工作台」，依已授權角色選擇「開始揀貨」或「開始裝箱」，或從功能導覽選擇其他儲運功能。",
+          "選定功能後，原 WMS 作業畫面會直接顯示在 ERP 內；由原作業清單選擇任務，查閱與操作沿用原 WMS 頁面的資料及流程。",
+          "商城批次維持下載 ECOUNT 銷貨檔、由人員匯入 ECOUNT，再回匯理貨／出貨單核對，列印預揀總表與逐筆明細後作業。若使用 ERP 既有的交運待核銷流程，仍依該流程逐行核准正式出庫；兩種流程不可混用或重複扣庫。"
         ],
         "boundaries": [
-          "ERP 入口與 WMS 內部權限都需通過。各環境只能進入對應的允許來源。",
-          "裝箱完成不等於實際交運，更不等於 ERP 正式出庫；本目錄不保證 WMS 內部步驟或任務已完成。",
-          "兼任主管切換到「儲運工作台」會进入作業工作站；原管理總覽及報表仍由營運管理授權入口使用。網址明確公司優先於瀏覽器記錄。"
+          "ERP 入口、目前公司範圍與原 WMS 內部權限都需通過；各環境只能載入對應的允許來源。",
+          "揀貨、裝箱、實際交運與正式庫存過帳是不同事件；內嵌 WMS 畫面及掃碼核對不會新增一次 ERP／ECOUNT 扣庫，也不代表目的系統已完成過帳。",
+          "兼任主管切換到「儲運工作台」會進入作業工作台；原管理總覽及報表仍由營運管理授權入口使用。網址明確公司優先於瀏覽器記錄。",
+          "作業身分過期、帳號／公司切換或連線中斷時重新連線，再核對原作業紀錄；逾時不代表操作失敗，勿重複送出結果未確認的原操作。"
         ],
         "related": [
           "warehouse-workstation",
@@ -1394,22 +1396,24 @@
       "translations": {
         "en": {
           "title": "Warehouse workspace",
-          "summary": "Access authorized warehouse stations, receiving, picking, dispatch and reports. Actual WMS handover still needs line-by-line ERP reconciliation for final stock posting.",
+          "summary": "Use the original WMS workspace inside ERP with the current account and company grants. Formal stock posting remains governed by the actual records of the existing ECOUNT or ERP workflow.",
           "category": "Warehouse",
           "keywords": [
             "Warehouse workspace",
-            "warehouse"
+            "warehouse",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Open the warehouse workspace to see available work and feature cards.",
-              "When a WMS portal is configured, open the relevant destination using the current operations account; otherwise rely only on actually loaded data.",
-              "After actual WMS handover supplies logistics and package evidence, compare it with the ERP sales order in Handover reconciliation and approve each line for final stock posting."
+              "Open the warehouse workspace and choose Start picking or Start packing according to assigned roles, or select another authorized warehouse function from navigation.",
+              "The selected original WMS screen opens directly inside ERP. Choose a task from the original work list; reads and operations retain the original WMS data and workflows.",
+              "Marketplace batches retain the ECOUNT sales-file download, human ECOUNT import and picking/shipping-file return reconciliation before printing prepick totals and individual orders. The existing ERP handover-reconciliation flow retains its own line-by-line stock approval when used. Do not mix these workflows or deduct stock twice."
             ],
             "boundaries": [
-              "Both ERP entry permissions and WMS permissions apply. Each environment only opens its allowlisted source.",
-              "Packing alone is neither actual handover nor final ERP stock posting. This catalog does not certify completion of internal WMS tasks.",
-              "Managers switching to Warehouse Workspace enter the workstation; authorized management overview and reports remain available through Operations Management. An explicit URL company takes precedence over browser storage."
+              "ERP entry permission, current company scope and original WMS permissions all apply. Each environment loads only its corresponding allowlisted source.",
+              "Picking, packing, physical handover and formal stock posting are distinct events. The embedded WMS UI and barcode checks do not create another ERP/ECOUNT deduction or prove posting in the destination system.",
+              "Managers switching to Warehouse Workspace enter the workstation; authorized management overview and reports remain available through Operations Management. An explicit URL company takes precedence over browser storage.",
+              "If the warehouse session expires, the account/company changes or the connection is interrupted, reconnect and check original work records. A timeout does not prove failure; do not repeat an operation whose result is unconfirmed."
             ],
             "related": [
               "warehouse-workstation",
@@ -1428,7 +1432,15 @@
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
         "frontend/src/pages/WarehouseCenterPage.tsx",
         "frontend/src/pages/WmsHandoverReconciliationPage.tsx",
-        "frontend/src/hooks/useEntityContext.ts"
+        "frontend/src/hooks/useEntityContext.ts",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts",
+        "frontend/src/pages/WarehousePortalPage.tsx"
       ],
       "permissions": [
         "wms_tasks:read"
@@ -2870,11 +2882,13 @@
     },
     {
       "id": "warehouse-workstation",
-      "title": "作業工作站入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「作業工作站」。",
+      "title": "作業工作台",
+      "summary": "在 ERP 內使用已授權的原 WMS「作業工作台」作業畫面。",
       "keywords": [
         "作業工作站入口",
-        "Work station entry"
+        "Work station entry",
+        "作業工作台",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/workstation",
@@ -2882,12 +2896,12 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「作業工作站」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「作業工作站」再開啟，以目前營運帳號進入。"
+          "開啟 ERP「儲運工作台」，依已指派的作業角色選擇「開始揀貨」或「開始裝箱」；其他儲運功能依目前導覽授權選擇。",
+          "選定功能後，原 WMS 作業畫面會直接顯示在 ERP 內。確認帳號、公司與作業清單後依原流程操作；連線失效時重新連線，先核對原紀錄再繼續作業。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。"
         ],
         "related": [
           "warehouse"
@@ -2895,21 +2909,23 @@
       },
       "translations": {
         "en": {
-          "title": "Work station entry",
-          "summary": "Use the authorized ERP entry to open WMS work station.",
+          "title": "Work station",
+          "summary": "Use the authorized original WMS work station screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Work station entry",
-            "warehouse"
+            "warehouse",
+            "Work station",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Work station from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Work station destination and open it using your current operations account."
+              "Open the ERP warehouse workspace and choose Start picking or Start packing according to assigned work roles. Other warehouse functions follow current navigation grants.",
+              "The selected original WMS screen opens directly inside ERP. Verify account, company and work list before following the original workflow. If the connection expires, reconnect and check original records before continuing."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts."
             ],
             "related": [
               "warehouse"
@@ -2923,7 +2939,14 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
-        "frontend/src/pages/WarehousePortalPage.tsx"
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_orders:create",
@@ -2934,11 +2957,13 @@
     },
     {
       "id": "warehouse-picking",
-      "title": "揀貨作業入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「揀貨作業」。",
+      "title": "揀貨作業",
+      "summary": "在 ERP 內使用已授權的原 WMS「揀貨作業」作業畫面。",
       "keywords": [
         "揀貨作業入口",
-        "Picking entry"
+        "Picking entry",
+        "揀貨作業",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/picking",
@@ -2946,12 +2971,12 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「揀貨作業」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「揀貨作業」再開啟，以目前營運帳號進入。"
+          "從 ERP 儲運工作台或功能導覽選擇「揀貨作業」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。"
         ],
         "related": [
           "warehouse"
@@ -2959,21 +2984,23 @@
       },
       "translations": {
         "en": {
-          "title": "Picking entry",
-          "summary": "Use the authorized ERP entry to open WMS picking.",
+          "title": "Picking",
+          "summary": "Use the authorized original WMS picking screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Picking entry",
-            "warehouse"
+            "warehouse",
+            "Picking",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Picking from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Picking destination and open it using your current operations account."
+              "Select Picking from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts."
             ],
             "related": [
               "warehouse"
@@ -2987,7 +3014,14 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
-        "frontend/src/pages/WarehousePortalPage.tsx"
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_picking:execute"
@@ -2996,11 +3030,13 @@
     },
     {
       "id": "warehouse-packing",
-      "title": "裝箱核對入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「裝箱核對」。",
+      "title": "裝箱核對",
+      "summary": "在 ERP 內使用已授權的原 WMS「裝箱核對」作業畫面。",
       "keywords": [
         "裝箱核對入口",
-        "Packing checks entry"
+        "Packing checks entry",
+        "裝箱核對",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/packing",
@@ -3008,12 +3044,12 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「裝箱核對」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「裝箱核對」再開啟，以目前營運帳號進入。"
+          "從 ERP 儲運工作台或功能導覽選擇「裝箱核對」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。"
         ],
         "related": [
           "warehouse"
@@ -3021,21 +3057,23 @@
       },
       "translations": {
         "en": {
-          "title": "Packing checks entry",
-          "summary": "Use the authorized ERP entry to open WMS packing checks.",
+          "title": "Packing checks",
+          "summary": "Use the authorized original WMS packing checks screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Packing checks entry",
-            "warehouse"
+            "warehouse",
+            "Packing checks",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Packing checks from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Packing checks destination and open it using your current operations account."
+              "Select Packing checks from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts."
             ],
             "related": [
               "warehouse"
@@ -3049,7 +3087,14 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
-        "frontend/src/pages/WarehousePortalPage.tsx"
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_packing:execute"
@@ -3058,11 +3103,13 @@
     },
     {
       "id": "warehouse-completed",
-      "title": "完成紀錄入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「完成紀錄」。",
+      "title": "完成紀錄",
+      "summary": "在 ERP 內使用已授權的原 WMS「完成紀錄」作業畫面。",
       "keywords": [
         "完成紀錄入口",
-        "Completed work entry"
+        "Completed work entry",
+        "完成紀錄",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/completed",
@@ -3070,12 +3117,12 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「完成紀錄」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「完成紀錄」再開啟，以目前營運帳號進入。"
+          "從 ERP 儲運工作台或功能導覽選擇「完成紀錄」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。",
           "任務顯示完成不等於承運商已送達、顧客簽收或會計入帳。"
         ],
         "related": [
@@ -3084,21 +3131,23 @@
       },
       "translations": {
         "en": {
-          "title": "Completed work entry",
-          "summary": "Use the authorized ERP entry to open WMS completed work.",
+          "title": "Completed work",
+          "summary": "Use the authorized original WMS completed work screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Completed work entry",
-            "warehouse"
+            "warehouse",
+            "Completed work",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Completed work from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Completed work destination and open it using your current operations account."
+              "Select Completed work from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts.",
               "A completed task does not prove carrier delivery, customer receipt or accounting posting."
             ],
             "related": [
@@ -3113,7 +3162,14 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
-        "frontend/src/pages/WarehousePortalPage.tsx"
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_tasks:read"
@@ -3122,11 +3178,13 @@
     },
     {
       "id": "warehouse-dispatch",
-      "title": "出貨管理入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「出貨管理」。",
+      "title": "出貨管理",
+      "summary": "在 ERP 內使用已授權的原 WMS「出貨管理」作業畫面。",
       "keywords": [
         "出貨管理入口",
-        "Dispatch management entry"
+        "Dispatch management entry",
+        "出貨管理",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/dispatch",
@@ -3134,12 +3192,12 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「出貨管理」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「出貨管理」再開啟，以目前營運帳號進入。"
+          "從 ERP 儲運工作台或功能導覽選擇「出貨管理」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。"
         ],
         "related": [
           "warehouse"
@@ -3147,21 +3205,23 @@
       },
       "translations": {
         "en": {
-          "title": "Dispatch management entry",
-          "summary": "Use the authorized ERP entry to open WMS dispatch management.",
+          "title": "Dispatch management",
+          "summary": "Use the authorized original WMS dispatch management screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Dispatch management entry",
-            "warehouse"
+            "warehouse",
+            "Dispatch management",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Dispatch management from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Dispatch management destination and open it using your current operations account."
+              "Select Dispatch management from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts."
             ],
             "related": [
               "warehouse"
@@ -3175,7 +3235,14 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
-        "frontend/src/pages/WarehousePortalPage.tsx"
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_orders:create"
@@ -3184,11 +3251,13 @@
     },
     {
       "id": "warehouse-marketplace",
-      "title": "通路訂單轉檔入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「通路訂單轉檔」。",
+      "title": "通路訂單轉檔",
+      "summary": "在 ERP 內使用已授權的原 WMS「通路訂單轉檔」作業畫面。",
       "keywords": [
         "通路訂單轉檔入口",
-        "Marketplace conversion entry"
+        "Marketplace conversion entry",
+        "通路訂單轉檔",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/marketplace",
@@ -3196,12 +3265,12 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「通路訂單轉檔」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「通路訂單轉檔」再開啟，以目前營運帳號進入。"
+          "從 ERP 儲運工作台或功能導覽選擇「通路訂單轉檔」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。",
           "轉檔、匯出、正式匯入與 ERP／ECOUNT 過帳是不同階段；需以目的系統回執確認。"
         ],
         "related": [
@@ -3210,21 +3279,23 @@
       },
       "translations": {
         "en": {
-          "title": "Marketplace conversion entry",
-          "summary": "Use the authorized ERP entry to open WMS marketplace conversion.",
+          "title": "Marketplace conversion",
+          "summary": "Use the authorized original WMS marketplace conversion screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Marketplace conversion entry",
-            "warehouse"
+            "warehouse",
+            "Marketplace conversion",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Marketplace conversion from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Marketplace conversion destination and open it using your current operations account."
+              "Select Marketplace conversion from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts.",
               "Conversion, export, formal import and ERP/ECOUNT posting are separate stages; verify the destination receipt."
             ],
             "related": [
@@ -3239,7 +3310,14 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
-        "frontend/src/pages/WarehousePortalPage.tsx"
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_orders:create"
@@ -3248,11 +3326,13 @@
     },
     {
       "id": "warehouse-intakes",
-      "title": "預揀與倉庫放行入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「預揀與倉庫放行」。",
+      "title": "預揀與倉庫放行",
+      "summary": "在 ERP 內使用已授權的原 WMS「預揀與倉庫放行」作業畫面。",
       "keywords": [
         "預揀與倉庫放行入口",
-        "Pre-picking and warehouse release entry"
+        "Pre-picking and warehouse release entry",
+        "預揀與倉庫放行",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/intakes",
@@ -3260,12 +3340,12 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「預揀與倉庫放行」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「預揀與倉庫放行」再開啟，以目前營運帳號進入。"
+          "從 ERP 儲運工作台或功能導覽選擇「預揀與倉庫放行」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。"
         ],
         "related": [
           "warehouse"
@@ -3273,21 +3353,23 @@
       },
       "translations": {
         "en": {
-          "title": "Pre-picking and warehouse release entry",
-          "summary": "Use the authorized ERP entry to open WMS pre-picking and warehouse release.",
+          "title": "Pre-picking and warehouse release",
+          "summary": "Use the authorized original WMS pre-picking and warehouse release screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Pre-picking and warehouse release entry",
-            "warehouse"
+            "warehouse",
+            "Pre-picking and warehouse release",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Pre-picking and warehouse release from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Pre-picking and warehouse release destination and open it using your current operations account."
+              "Select Pre-picking and warehouse release from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts."
             ],
             "related": [
               "warehouse"
@@ -3301,7 +3383,14 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
-        "frontend/src/pages/WarehousePortalPage.tsx"
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_orders:create",
@@ -3312,11 +3401,13 @@
     },
     {
       "id": "warehouse-overview",
-      "title": "儲運分析入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「儲運分析」。",
+      "title": "儲運分析",
+      "summary": "在 ERP 內使用已授權的原 WMS「儲運分析」作業畫面。",
       "keywords": [
         "儲運分析入口",
-        "Warehouse analytics entry"
+        "Warehouse analytics entry",
+        "儲運分析",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/overview",
@@ -3324,12 +3415,12 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「儲運分析」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「儲運分析」再開啟，以目前營運帳號進入。"
+          "從 ERP 儲運工作台或功能導覽選擇「儲運分析」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。"
         ],
         "related": [
           "warehouse"
@@ -3337,21 +3428,23 @@
       },
       "translations": {
         "en": {
-          "title": "Warehouse analytics entry",
-          "summary": "Use the authorized ERP entry to open WMS warehouse analytics.",
+          "title": "Warehouse analytics",
+          "summary": "Use the authorized original WMS warehouse analytics screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Warehouse analytics entry",
-            "warehouse"
+            "warehouse",
+            "Warehouse analytics",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Warehouse analytics from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Warehouse analytics destination and open it using your current operations account."
+              "Select Warehouse analytics from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts."
             ],
             "related": [
               "warehouse"
@@ -3365,7 +3458,14 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
-        "frontend/src/pages/WarehousePortalPage.tsx"
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_overview:read"
@@ -3374,11 +3474,13 @@
     },
     {
       "id": "warehouse-logs",
-      "title": "操作日誌入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「操作日誌」。",
+      "title": "操作日誌",
+      "summary": "在 ERP 內使用已授權的原 WMS「操作日誌」作業畫面。",
       "keywords": [
         "操作日誌入口",
-        "Operation logs entry"
+        "Operation logs entry",
+        "操作日誌",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/logs",
@@ -3386,13 +3488,13 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「操作日誌」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「操作日誌」再開啟，以目前營運帳號進入。",
-          "未配置 WMS 入口且使用 ERP 報表時，依可用的期間與篩選查看紀錄，開啟詳情追溯時間、單號與操作人。"
+          "從 ERP 儲運工作台或功能導覽選擇「操作日誌」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。",
+          "若尚未設定 WMS 來源且使用 ERP 報表，依可用期間與篩選查看已載入紀錄，開啟詳情追溯時間、單號與操作人；來源連線錯誤不能視為零筆資料。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。",
           "資料未載入或來源不可用時，不能視為沒有例外或作業正常。"
         ],
         "related": [
@@ -3401,22 +3503,24 @@
       },
       "translations": {
         "en": {
-          "title": "Operation logs entry",
-          "summary": "Use the authorized ERP entry to open WMS operation logs.",
+          "title": "Operation logs",
+          "summary": "Use the authorized original WMS operation logs screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Operation logs entry",
-            "warehouse"
+            "warehouse",
+            "Operation logs",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Operation logs from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Operation logs destination and open it using your current operations account.",
-              "When the ERP report is used without a WMS portal, filter available periods and inspect record details such as time, order and actor."
+              "Select Operation logs from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing.",
+              "If no WMS source is configured and the ERP report is used, filter the available periods and inspect loaded records for time, order and actor. A source connection error does not mean there are zero records."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts.",
               "Missing data or an unavailable source does not mean there are no exceptions."
             ],
             "related": [
@@ -3433,7 +3537,14 @@
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
         "frontend/src/pages/WarehousePortalPage.tsx",
         "frontend/src/pages/WarehouseReportsPage.tsx",
-        "frontend/src/hooks/useEntityContext.ts"
+        "frontend/src/hooks/useEntityContext.ts",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_logs:read"
@@ -3442,11 +3553,13 @@
     },
     {
       "id": "warehouse-exceptions",
-      "title": "例外總覽入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「例外總覽」。",
+      "title": "例外總覽",
+      "summary": "在 ERP 內使用已授權的原 WMS「例外總覽」作業畫面。",
       "keywords": [
         "例外總覽入口",
-        "Exception overview entry"
+        "Exception overview entry",
+        "例外總覽",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/exceptions",
@@ -3454,13 +3567,13 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「例外總覽」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「例外總覽」再開啟，以目前營運帳號進入。",
-          "未配置 WMS 入口且使用 ERP 報表時，依可用的期間與篩選查看紀錄，開啟詳情追溯時間、單號與操作人。"
+          "從 ERP 儲運工作台或功能導覽選擇「例外總覽」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。",
+          "若尚未設定 WMS 來源且使用 ERP 報表，依可用期間與篩選查看已載入紀錄，開啟詳情追溯時間、單號與操作人；來源連線錯誤不能視為零筆資料。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。",
           "資料未載入或來源不可用時，不能視為沒有例外或作業正常。"
         ],
         "related": [
@@ -3469,22 +3582,24 @@
       },
       "translations": {
         "en": {
-          "title": "Exception overview entry",
-          "summary": "Use the authorized ERP entry to open WMS exception overview.",
+          "title": "Exception overview",
+          "summary": "Use the authorized original WMS exception overview screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Exception overview entry",
-            "warehouse"
+            "warehouse",
+            "Exception overview",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Exception overview from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Exception overview destination and open it using your current operations account.",
-              "When the ERP report is used without a WMS portal, filter available periods and inspect record details such as time, order and actor."
+              "Select Exception overview from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing.",
+              "If no WMS source is configured and the ERP report is used, filter the available periods and inspect loaded records for time, order and actor. A source connection error does not mean there are zero records."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts.",
               "Missing data or an unavailable source does not mean there are no exceptions."
             ],
             "related": [
@@ -3501,7 +3616,14 @@
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
         "frontend/src/pages/WarehousePortalPage.tsx",
         "frontend/src/pages/WarehouseReportsPage.tsx",
-        "frontend/src/hooks/useEntityContext.ts"
+        "frontend/src/hooks/useEntityContext.ts",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_exceptions:read"
@@ -3510,11 +3632,13 @@
     },
     {
       "id": "warehouse-scan-errors",
-      "title": "刷錯分析入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「刷錯分析」。",
+      "title": "刷錯分析",
+      "summary": "在 ERP 內使用已授權的原 WMS「刷錯分析」作業畫面。",
       "keywords": [
         "刷錯分析入口",
-        "Scan error analysis entry"
+        "Scan error analysis entry",
+        "刷錯分析",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/scan-errors",
@@ -3522,13 +3646,13 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「刷錯分析」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「刷錯分析」再開啟，以目前營運帳號進入。",
-          "未配置 WMS 入口且使用 ERP 報表時，依可用的期間與篩選查看紀錄，開啟詳情追溯時間、單號與操作人。"
+          "從 ERP 儲運工作台或功能導覽選擇「刷錯分析」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。",
+          "若尚未設定 WMS 來源且使用 ERP 報表，依可用期間與篩選查看已載入紀錄，開啟詳情追溯時間、單號與操作人；來源連線錯誤不能視為零筆資料。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。",
           "資料未載入或來源不可用時，不能視為沒有例外或作業正常。"
         ],
         "related": [
@@ -3537,22 +3661,24 @@
       },
       "translations": {
         "en": {
-          "title": "Scan error analysis entry",
-          "summary": "Use the authorized ERP entry to open WMS scan error analysis.",
+          "title": "Scan error analysis",
+          "summary": "Use the authorized original WMS scan error analysis screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Scan error analysis entry",
-            "warehouse"
+            "warehouse",
+            "Scan error analysis",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Scan error analysis from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Scan error analysis destination and open it using your current operations account.",
-              "When the ERP report is used without a WMS portal, filter available periods and inspect record details such as time, order and actor."
+              "Select Scan error analysis from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing.",
+              "If no WMS source is configured and the ERP report is used, filter the available periods and inspect loaded records for time, order and actor. A source connection error does not mean there are zero records."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts.",
               "Missing data or an unavailable source does not mean there are no exceptions."
             ],
             "related": [
@@ -3569,7 +3695,14 @@
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
         "frontend/src/pages/WarehousePortalPage.tsx",
         "frontend/src/pages/WarehouseReportsPage.tsx",
-        "frontend/src/hooks/useEntityContext.ts"
+        "frontend/src/hooks/useEntityContext.ts",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_scan_errors:read"
@@ -3578,11 +3711,13 @@
     },
     {
       "id": "warehouse-defects",
-      "title": "新品不良分析入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「新品不良分析」。",
+      "title": "新品不良分析",
+      "summary": "在 ERP 內使用已授權的原 WMS「新品不良分析」作業畫面。",
       "keywords": [
         "新品不良分析入口",
-        "New-product defect analysis entry"
+        "New-product defect analysis entry",
+        "新品不良分析",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/defects",
@@ -3590,13 +3725,13 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「新品不良分析」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「新品不良分析」再開啟，以目前營運帳號進入。",
-          "未配置 WMS 入口且使用 ERP 報表時，依可用的期間與篩選查看紀錄，開啟詳情追溯時間、單號與操作人。"
+          "從 ERP 儲運工作台或功能導覽選擇「新品不良分析」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。",
+          "若尚未設定 WMS 來源且使用 ERP 報表，依可用期間與篩選查看已載入紀錄，開啟詳情追溯時間、單號與操作人；來源連線錯誤不能視為零筆資料。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。",
           "資料未載入或來源不可用時，不能視為沒有例外或作業正常。"
         ],
         "related": [
@@ -3605,22 +3740,24 @@
       },
       "translations": {
         "en": {
-          "title": "New-product defect analysis entry",
-          "summary": "Use the authorized ERP entry to open WMS new-product defect analysis.",
+          "title": "New-product defect analysis",
+          "summary": "Use the authorized original WMS new-product defect analysis screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "New-product defect analysis entry",
-            "warehouse"
+            "warehouse",
+            "New-product defect analysis",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select New-product defect analysis from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the New-product defect analysis destination and open it using your current operations account.",
-              "When the ERP report is used without a WMS portal, filter available periods and inspect record details such as time, order and actor."
+              "Select New-product defect analysis from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing.",
+              "If no WMS source is configured and the ERP report is used, filter the available periods and inspect loaded records for time, order and actor. A source connection error does not mean there are zero records."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts.",
               "Missing data or an unavailable source does not mean there are no exceptions."
             ],
             "related": [
@@ -3637,7 +3774,14 @@
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
         "frontend/src/pages/WarehousePortalPage.tsx",
         "frontend/src/pages/WarehouseReportsPage.tsx",
-        "frontend/src/hooks/useEntityContext.ts"
+        "frontend/src/hooks/useEntityContext.ts",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_defects:read"
@@ -3646,11 +3790,13 @@
     },
     {
       "id": "warehouse-logistics",
-      "title": "物流查詢入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「物流查詢」。",
+      "title": "物流查詢",
+      "summary": "在 ERP 內使用已授權的原 WMS「物流查詢」作業畫面。",
       "keywords": [
         "物流查詢入口",
-        "Logistics lookup entry"
+        "Logistics lookup entry",
+        "物流查詢",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/logistics",
@@ -3658,12 +3804,12 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「物流查詢」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「物流查詢」再開啟，以目前營運帳號進入。"
+          "從 ERP 儲運工作台或功能導覽選擇「物流查詢」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。",
           "此入口不會自動改動物流設定或授權人員；需由目的頁授權人員操作。"
         ],
         "related": [
@@ -3672,21 +3818,23 @@
       },
       "translations": {
         "en": {
-          "title": "Logistics lookup entry",
-          "summary": "Use the authorized ERP entry to open WMS logistics lookup.",
+          "title": "Logistics lookup",
+          "summary": "Use the authorized original WMS logistics lookup screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Logistics lookup entry",
-            "warehouse"
+            "warehouse",
+            "Logistics lookup",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Logistics lookup from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Logistics lookup destination and open it using your current operations account."
+              "Select Logistics lookup from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts.",
               "Opening this entry does not change logistics settings or user access; authorized staff act in the destination."
             ],
             "related": [
@@ -3701,7 +3849,14 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
-        "frontend/src/pages/WarehousePortalPage.tsx"
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "roles": [
         "ADMIN",
@@ -3711,11 +3866,13 @@
     },
     {
       "id": "warehouse-team",
-      "title": "團隊公告入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「團隊公告」。",
+      "title": "團隊公告",
+      "summary": "在 ERP 內使用已授權的原 WMS「團隊公告」作業畫面。",
       "keywords": [
         "團隊公告入口",
-        "Team announcements entry"
+        "Team announcements entry",
+        "團隊公告",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/team",
@@ -3723,12 +3880,12 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「團隊公告」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「團隊公告」再開啟，以目前營運帳號進入。"
+          "從 ERP 儲運工作台或功能導覽選擇「團隊公告」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。"
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。"
         ],
         "related": [
           "warehouse"
@@ -3736,21 +3893,23 @@
       },
       "translations": {
         "en": {
-          "title": "Team announcements entry",
-          "summary": "Use the authorized ERP entry to open WMS team announcements.",
+          "title": "Team announcements",
+          "summary": "Use the authorized original WMS team announcements screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Team announcements entry",
-            "warehouse"
+            "warehouse",
+            "Team announcements",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Team announcements from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Team announcements destination and open it using your current operations account."
+              "Select Team announcements from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution."
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts."
             ],
             "related": [
               "warehouse"
@@ -3764,7 +3923,14 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
-        "frontend/src/pages/WarehousePortalPage.tsx"
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_tasks:read"
@@ -3773,11 +3939,13 @@
     },
     {
       "id": "warehouse-users",
-      "title": "儲運人員入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「儲運人員」。",
+      "title": "儲運人員",
+      "summary": "在 ERP 內使用已授權的原 WMS「儲運人員」作業畫面。",
       "keywords": [
         "儲運人員入口",
-        "Warehouse users entry"
+        "Warehouse users entry",
+        "儲運人員",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/users",
@@ -3785,12 +3953,12 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「儲運人員」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「儲運人員」再開啟，以目前營運帳號進入。"
+          "從 ERP 儲運工作台或功能導覽選擇「儲運人員」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。",
           "此入口不會自動改動物流設定或授權人員；需由目的頁授權人員操作。"
         ],
         "related": [
@@ -3799,21 +3967,23 @@
       },
       "translations": {
         "en": {
-          "title": "Warehouse users entry",
-          "summary": "Use the authorized ERP entry to open WMS warehouse users.",
+          "title": "Warehouse users",
+          "summary": "Use the authorized original WMS warehouse users screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Warehouse users entry",
-            "warehouse"
+            "warehouse",
+            "Warehouse users",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Warehouse users from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Warehouse users destination and open it using your current operations account."
+              "Select Warehouse users from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts.",
               "Opening this entry does not change logistics settings or user access; authorized staff act in the destination."
             ],
             "related": [
@@ -3828,7 +3998,14 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
-        "frontend/src/pages/WarehousePortalPage.tsx"
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "roles": [
         "ADMIN",
@@ -3838,11 +4015,13 @@
     },
     {
       "id": "warehouse-settings",
-      "title": "儲運設定入口",
-      "summary": "使用已授權的 ERP 入口前往 WMS「儲運設定」。",
+      "title": "儲運設定",
+      "summary": "在 ERP 內使用已授權的原 WMS「儲運設定」作業畫面。",
       "keywords": [
         "儲運設定入口",
-        "Warehouse settings entry"
+        "Warehouse settings entry",
+        "儲運設定",
+        "ERP 內嵌工作台"
       ],
       "module": "warehouse",
       "path": "/warehouse/settings",
@@ -3850,12 +4029,12 @@
       "group": "warehouse",
       "sections": {
         "steps": [
-          "從儲運工作台選擇「儲運設定」，或開啟對應的 ERP 功能入口。",
-          "WMS 已連線時，確認目的功能為「儲運設定」再開啟，以目前營運帳號進入。"
+          "從 ERP 儲運工作台或功能導覽選擇「儲運設定」，原 WMS 作業畫面會直接顯示在 ERP 內。",
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
         ],
         "boundaries": [
-          "需要儲運工作台讀取權限與此功能權限，WMS 目的頁仍會重新檢查身份及資料權限。",
-          "這是 ERP 到 WMS 的受控入口說明；本篇沒有宣稱已讀取 WMS 即時資料或可由 AI 代為完成作業。",
+          "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
+          "內嵌畫面沿用原 WMS 的作業與資料規則，不因載入模組新增權限、AI 操作或正式庫存／財務過帳；作業結果須以原紀錄與回執確認。",
           "此入口不會自動改動物流設定或授權人員；需由目的頁授權人員操作。"
         ],
         "related": [
@@ -3864,21 +4043,23 @@
       },
       "translations": {
         "en": {
-          "title": "Warehouse settings entry",
-          "summary": "Use the authorized ERP entry to open WMS warehouse settings.",
+          "title": "Warehouse settings",
+          "summary": "Use the authorized original WMS warehouse settings screen directly inside ERP.",
           "category": "Warehouse",
           "keywords": [
             "Warehouse settings entry",
-            "warehouse"
+            "warehouse",
+            "Warehouse settings",
+            "embedded ERP workbench"
           ],
           "sections": {
             "steps": [
-              "Select Warehouse settings from the warehouse workspace or open its ERP entry point.",
-              "When connected, verify the Warehouse settings destination and open it using your current operations account."
+              "Select Warehouse settings from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
             ],
             "boundaries": [
-              "Warehouse task-read permission and the destination permission are both required; WMS also checks identity and data access.",
-              "This documents the controlled ERP entry into WMS; it does not claim live WMS retrieval or AI execution.",
+              "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
+              "The embedded screen retains original WMS operations and data rules. Loading the module adds no permission, AI operation or formal stock/financial posting; verify operation results against original records and receipts.",
               "Opening this entry does not change logistics settings or user access; authorized staff act in the destination."
             ],
             "related": [
@@ -3893,7 +4074,14 @@
         "frontend/src/config/wms-portal.ts",
         "frontend/src/config/workspaces.ts",
         "frontend/src/pages/WarehouseWorkspacePage.tsx",
-        "frontend/src/pages/WarehousePortalPage.tsx"
+        "frontend/src/pages/WarehousePortalPage.tsx",
+        "frontend/src/components/WarehouseLink.tsx",
+        "frontend/src/services/warehouse-native.ts",
+        "backend/src/main.ts",
+        "backend/src/modules/integration/wms/wms-portal.module.ts",
+        "backend/src/modules/integration/wms/wms-native.contract.ts",
+        "backend/src/modules/integration/wms/wms-native.controller.ts",
+        "backend/src/modules/integration/wms/wms-native.service.ts"
       ],
       "permissions": [
         "wms_tasks:read"
@@ -6348,6 +6536,7 @@
   "legacyContentOverrideReasons": {
     "dashboard": "DashboardPage now shows operational and finance metrics by period, not an AI yesterday briefing. Reviewed 2026-10-08 dedicated workspaces and browser-scoped login preferences; permissions remain separate.",
     "reimbursement-items": "Use the actual starter-library label and configured fields instead of claiming an AI question library.",
-    "after-sales": "Reviewed 2026-10-12 native task-oriented after-sales home, explicit six-type registration, personal/all filters and verified contextual source operations; legacy fallback and authoritative workflows remain."
+    "after-sales": "Reviewed 2026-10-12 native task-oriented after-sales home, explicit six-type registration, personal/all filters and verified contextual source operations; legacy fallback and authoritative workflows remain.",
+    "warehouse": "Reviewed 2026-10-13 original WMS workspace inside ERP; current account/company and original grants remain required. Existing ECOUNT and ERP stock-posting workflows remain distinct and do not gain another deduction from embedding."
   }
 }

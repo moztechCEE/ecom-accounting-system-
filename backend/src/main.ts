@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { raw } from 'express';
+import { WMS_NATIVE_BODY_LIMIT } from './modules/integration/wms/wms-native.contract';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -26,6 +28,10 @@ async function bootstrap() {
 
   // Register parsers once with Nest's rawBody support so webhook HMAC validation
   // uses the original Shopify payload instead of a re-serialized JSON string.
+  // WMS imports and attachments keep their original multipart boundary/bytes.
+  // This parser is scoped to the authenticated native proxy; all other routes
+  // retain their existing body parsers and limits.
+  app.use(prefix + '/wms/native/proxy', raw({ type: 'multipart/form-data', limit: WMS_NATIVE_BODY_LIMIT }));
   app.useBodyParser('json', { limit: '50mb' });
   app.useBodyParser('urlencoded', { extended: true, limit: '50mb' });
 
@@ -46,7 +52,8 @@ async function bootstrap() {
     origin: corsOrigins,
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: 'Content-Type, Accept, Authorization, X-DOA-Actor',
+    allowedHeaders: 'Content-Type, Accept, Authorization, X-DOA-Actor, X-WMS-Session, X-WMS-Entity, If-None-Match',
+    exposedHeaders: 'Content-Disposition, X-Request-ID, ETag',
   });
 
   // Some hosting/CDN setups may send Reporting API (Report-To / NEL) beacons to

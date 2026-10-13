@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:dcca32a428b444dbcdb7dff0641481c004e810d917187fbee07406c87d91f3ec",
+  "sourceVersion": "sha256:0c42e3e8956c6707a0561496c3b847f0b1c283cfde1aaf3928cc849a6f5b88b7",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 79,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "585aab256f8741dcab24c7ad8283702a904749921014d327b8667ca55f8fa690",
+  "catalogSha256": "89ceefbc5733419643fe24b7dc37c211f1e8665837fd93c93b1bfb9bb6c36df1",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -211,6 +211,10 @@
       "sha256": "1b626668755a7840411d59fbeb5ef4565ae2592dadcc4245711b4d320a994849"
     },
     {
+      "path": "backend/src/main.ts",
+      "sha256": "ae034d860da52f9bedfd5634dac6f89a52800d8d672fdb982089d19e8abc75ff"
+    },
+    {
       "path": "backend/src/modules/accounting/accounting.controller.ts",
       "sha256": "64ab5b7368c76d09c376fc4c47936601636add1d177f1ee1ce50a3335994540d"
     },
@@ -349,6 +353,22 @@
     {
       "path": "backend/src/modules/integration/wms/wms-handover.service.ts",
       "sha256": "887c129a540aec57da711aa97b3153a0a9aa1950574b3586d310d21606f91ce7"
+    },
+    {
+      "path": "backend/src/modules/integration/wms/wms-native.contract.ts",
+      "sha256": "074bb0b0fec6b76da2a2f52aededdb426c50a7a170260573b4d74e400149edb0"
+    },
+    {
+      "path": "backend/src/modules/integration/wms/wms-native.controller.ts",
+      "sha256": "5047a68aef553c40502e47891f6f591123f6502c5256e56398e192eee009f5b8"
+    },
+    {
+      "path": "backend/src/modules/integration/wms/wms-native.service.ts",
+      "sha256": "895309ecad0ead1d3335b4615e210a5385c14df358852b56744bf204f2458135"
+    },
+    {
+      "path": "backend/src/modules/integration/wms/wms-portal.module.ts",
+      "sha256": "bf7e6d9f6a187749b110a9097d5e80ff32e2d09e7774d053643abdfb48d00726"
     },
     {
       "path": "backend/src/modules/inventory/inventory.controller.ts",
@@ -619,6 +639,10 @@
       "sha256": "b9de51fc0366c534bf3969d0d2496b69e14b958c167cfef458794f6c5e524566"
     },
     {
+      "path": "frontend/src/components/WarehouseLink.tsx",
+      "sha256": "40622bb781a68e6da8af5b0ac3b19459fc725efa1d0d361d416872d79bf1a091"
+    },
+    {
       "path": "frontend/src/config/navigation.ts",
       "sha256": "56286c95da1213df4334fdf0433e2fdd87ecab5d4f4f871d15e15045729398a9"
     },
@@ -628,7 +652,7 @@
     },
     {
       "path": "frontend/src/config/wms-portal.ts",
-      "sha256": "bdc77d5a04bc20b2efbf17e0f203449f4be6cf1c5f4c77d51722cfb14e0736bf"
+      "sha256": "35bd21c52be5f354a2a0e596c84870bbe175fefba8588c61eeae5b8c5494586a"
     },
     {
       "path": "frontend/src/config/workspaces.ts",
@@ -1052,7 +1076,7 @@
     },
     {
       "path": "frontend/src/pages/WarehousePortalPage.tsx",
-      "sha256": "c3f762446a7ccc1a718a693449085a4f47c54141a57cf4e3461264280f9e3509"
+      "sha256": "b5c2f2a145aa67f88aefee9d9fc600723f41b3706389404775e788823ffc1feb"
     },
     {
       "path": "frontend/src/pages/WarehouseReportsPage.tsx",
@@ -1060,7 +1084,7 @@
     },
     {
       "path": "frontend/src/pages/WarehouseWorkspacePage.tsx",
-      "sha256": "7c658d776776a6ef77fad15c8340091890ab21728d00ca68f14c2546e7d03ab1"
+      "sha256": "b76312ef7d113f328c323921f6b95d42e8280d5d980e27ce57d3d52b468cfe77"
     },
     {
       "path": "frontend/src/pages/WmsHandoverReconciliationPage.tsx",
@@ -1121,6 +1145,10 @@
     {
       "path": "frontend/src/services/repair.ts",
       "sha256": "636b3b91bfef9684b8400a0c49243caaec5382b59e76de47d2faaf416460ce9f"
+    },
+    {
+      "path": "frontend/src/services/warehouse-native.ts",
+      "sha256": "24c18e0e91faf2e1d8267151fd58d82e05caa3e18955c9e70c47b686d5de424d"
     },
     {
       "path": "frontend/src/services/wms-reconciliation.service.ts",

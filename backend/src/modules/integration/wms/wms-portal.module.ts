@@ -6,6 +6,8 @@ import { PrismaService } from '../../../common/prisma/prisma.service';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
+import { WmsNativeController } from './wms-native.controller';
+import { WmsNativeService, WMS_NATIVE_PORTAL } from './wms-native.service';
 
 const roles = { picker: 'wms_picking:execute', packer: 'wms_packing:execute', dispatcher: 'wms_orders:create' } as const;
 type Station = keyof typeof roles;
@@ -181,5 +183,5 @@ export class WmsPortalController {
   @Public() @Post('revoke')
   revoke(@Headers('x-wms-service-key') key: string, @Body() dto: SessionDto) { this.service.authenticateService(key); return this.service.revokeSession(dto.session); }
 }
-@Module({ controllers: [WmsPortalController], providers: [WmsPortalService] })
+@Module({ controllers: [WmsPortalController, WmsNativeController], providers: [WmsPortalService, { provide: WMS_NATIVE_PORTAL, useExisting: WmsPortalService }, WmsNativeService] })
 export class WmsPortalModule {}
