@@ -1,0 +1,376 @@
+#!/usr/bin/env python3
+"""Offline synthetic fixtures: no cloud/secret/DB/build invocation."""
+import copy
+import importlib.util
+import json
+import os
+from pathlib import Path
+import stat
+import tempfile
+import unittest
+from unittest.mock import patch
+
+spec = importlib.util.spec_from_file_location('flowrelease', Path(__file__).with_name('doa-flow-release-20261014.py'))
+r = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(r)
+PINS = r.source_pins('a' * 40, 'b' * 40, r.WMS_SOURCE)
+BUILD_ID = 'aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb'
+
+
+def container(name, image, values=None, refs=None, ingress=False):
+    result = {'image': image, 'env': [{'name': k, 'value': v} for k, v in (values or {}).items()] +
+              [{'name': k, 'valueFrom': {'secretKeyRef': {'name': v[0], 'key': v[1]}}} for k, v in (refs or {}).items()],
+              'resources': {'limits': {'cpu': '1', 'memory': '1Gi'}}, 'args': ['synthetic-runtime-guard'],
+              'startupProbe': {'tcpSocket': {'port': 8080}}}
+    if name:
+        result['name'] = name
+    if ingress:
+        result['ports'] = [{'containerPort': 8080}]
+    return result
+
+
+def image(key, digit='1'):
+    return r.REGISTRY + r.IMAGE_KEYS[key] + '@sha256:' + digit * 64
+
+
+def fixture():
+    values = {r.API: {'ERP_DEV_SANDBOX': 'true', 'DB_NAME': 'erp_dev_20260921', 'DB_USER': 'erp_dev_runtime',
+                     'SEED_ON_STARTUP': 'false', 'RUNTIME_SCHEDULES_ENABLED': 'false', 'CORS_ORIGIN': r.ORIGINS[r.WEB],
+                     'ERP_DEV_MAILROOM_SOURCE_URL': r.ORIGINS[r.SOURCE]},
+              r.WEB: {'ERP_DEV_ENVIRONMENT': 'true', 'API_URL': r.ORIGINS[r.API] + '/api/v1'},
+              r.SOURCE: {'AS_MAILROOM_DEV': 'true', 'APP_ENV': 'development', 'RUNTIME_ENV': 'dev', 'ERP_MODULE_BUILD': 'false',
+                         'NEXT_PUBLIC_ERP_MODULE': 'false', 'ERP_MODULE_ENABLED': 'false', 'NEXTAUTH_URL': r.ORIGINS[r.SOURCE],
+                         'ERP_INTEGRATION_APP_ORIGINS': r.ORIGINS[r.WEB], 'STUB_MODE': 'synthetic'},
+              r.MODULE: {'AS_MAILROOM_DEV': 'true', 'APP_ENV': 'development', 'RUNTIME_ENV': 'dev', 'ERP_MODULE_BUILD': 'true',
+                         'NEXT_PUBLIC_ERP_MODULE': 'true', 'ERP_MODULE_ENABLED': 'true', 'NEXTAUTH_URL': r.ORIGINS[r.MODULE] + '/after-sales-app',
+                         'ERP_INTEGRATION_APP_ORIGINS': r.ORIGINS[r.WEB], 'STUB_MODE': 'synthetic'},
+              r.WMS: {'PGDATABASE': 'corely_wms_dev_20260915', 'PGUSER': 'corely_wms_dev_20260915',
+                      'WMS_ECPAY_CALLBACKS_ENABLED': 'false', 'ERP_PORTAL_ONLY': 'true', 'PGHOST': '/cloudsql/synthetic',
+                      'ERP_PORTAL_ORIGIN': r.ORIGINS[r.WEB]}}
+    refs = {r.API: {'DB_PASSWORD': ('corely-erp-dev-db-password', '1'), 'JWT_SECRET': ('corely-erp-dev-jwt', '1')},
+            r.SOURCE: {'DATABASE_URL': ('moztech-aftersales-dev-database-url', '2')},
+            r.MODULE: {'DATABASE_URL': ('moztech-aftersales-dev-database-url', '2')},
+            r.WMS: {'PGPASSWORD': ('corely-wms-dev-db-password', '1'), 'JWT_SECRET': ('corely-wms-dev-jwt', '1')}}
+    for (name, _, environment_key), reference in r.EXISTING_EXTERNAL_REFS.items():
+        refs[name][environment_key] = reference
+    result = {}
+    for name in r.ALL:
+        named = {r.API: 'corely-erp-api-dev-1', r.WEB: 'corely-erp-dev-1'}.get(name)
+        if name == r.WMS:
+            cs = [container('web', image('wms-web'), ingress=True), container('api', image('wms-api'), values[name], refs[name])]
+        else:
+            img = image(name) if name in r.DEV else 'protected-image:unchanged'
+            cs = [container(named, img, values.get(name), refs.get(name), ingress=True)]
+        template = name + '-serving'
+        traffic = [{'revisionName': template, 'percent': 100, 'tag': 'aftersales-review'},
+                   {'revisionName': name + '-foreign', 'tag': 'unrelated-owner'},
+                   {'revisionName': name + '-old-final', 'tag': 'aftersales-final'}]
+        result[name] = {'apiVersion': 'serving.knative.dev/v1', 'kind': 'Service',
+                        'metadata': {'name': name, 'namespace': r.NAMESPACE, 'uid': 'synthetic-' + name,
+                                     'resourceVersion': 'opaque-CAS-' + name, 'labels': {'owner': 'existing'},
+                                     'annotations': {'run.googleapis.com/ingress': 'all', 'run.googleapis.com/invoker-iam-disabled': 'true'}},
+                        'spec': {'template': {'metadata': {'name': template, 'annotations': {
+                            'run.googleapis.com/container-dependencies': '{"web":["api"]}' if name == r.WMS else '{}',
+                            'run.googleapis.com/cloudsql-instances': 'synthetic-unchanged', 'run.googleapis.com/vpc-access-egress': 'private-ranges-only'}},
+                            'spec': {'serviceAccountName': 'synthetic-dev@moztech-main-db.iam.gserviceaccount.com',
+                                     'containers': cs, 'timeoutSeconds': 300, 'containerConcurrency': 40}}, 'traffic': traffic},
+                        'status': {'url': r.ORIGINS.get(name, 'https://protected.invalid'), 'conditions': [{'type': 'Ready', 'status': 'True'}],
+                                   'latestReadyRevisionName': template, 'latestCreatedRevisionName': template}}
+    return result
+
+
+def built():
+    images, rows = {}, []
+    for key, repository in r.IMAGE_KEYS.items():
+        images[key] = {'image': image(key, '2'), 'buildId': BUILD_ID}
+        owner = 'wms' if key.startswith('wms-') else 'source' if key in (r.SOURCE, r.MODULE) else 'erp'
+        rows.append({'name': r.REGISTRY + repository + ':doaf-' + PINS[owner], 'digest': 'sha256:' + '2' * 64})
+    return {'version': 1, 'project': r.PROJECT, 'sourcePins': PINS, 'images': images,
+            'preparedManifestSha256': 'f' * 64, 'preparedContextSha256': 'e' * 64,
+            'builds': {BUILD_ID: {'status': 'SUCCESS', 'projectId': r.PROJECT, 'region': r.REGION,
+                                 'images': [row['name'] for row in rows], 'results': {'images': rows}}}}
+
+
+class FlowReleaseTests(unittest.TestCase):
+    def setUp(self):
+        self.live = fixture()
+        self.images = r.build_images(built(), PINS)
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        # macOS /var is an OS symlink; use its canonical private path while
+        # still testing user-created symlink rejection explicitly.
+        self.directory = Path(self.temp.name).resolve()
+        no_external = patch.object(r.subprocess, 'run', side_effect=AssertionError('No process/cloud/DB/build/secret execution permitted'))
+        no_external.start()
+        self.addCleanup(no_external.stop)
+
+    def test_actual_dev_identity_and_existing_four_refs_without_invented_wms_label(self):
+        refs = r.snapshot_guard(self.live)
+        self.assertEqual(sum(x['preservedExistingExternalReference'] for x in refs), 4)
+        self.assertNotIn('environment', self.live[r.WMS]['metadata']['labels'])
+        for name in (r.API, r.WEB, r.SOURCE, r.MODULE, r.WMS):
+            wrong = copy.deepcopy(self.live)
+            wrong[name]['metadata']['namespace'] = 'production-project'
+            with self.assertRaises(RuntimeError):
+                r.snapshot_guard(wrong)
+
+    def test_wrong_database_secret_topology_provider_and_unready_fail_closed(self):
+        changes = [
+            lambda d: r.set_env(r.containers(d[r.API])[0], {'DB_NAME': 'erp_production'}),
+            lambda d: r.set_env(r.containers(d[r.WMS])[1], {'PGUSER': 'postgres'}),
+            lambda d: r.set_env(r.containers(d[r.SOURCE])[0], {'LINE_CHANNEL_ACCESS_TOKEN': 'not-a-real-token'}),
+            lambda d: r.set_env(r.containers(d[r.API])[0], {}, {'DB_PASSWORD': {'secretKeyRef': {'name': 'prod-db', 'key': '1'}}}),
+            lambda d: d[r.WMS]['spec']['template']['spec']['containers'].reverse(),
+            lambda d: d[r.API]['status'].update(latestCreatedRevisionName='not-ready'),
+            lambda d: d[r.API]['metadata'].pop('resourceVersion'),
+        ]
+        for modify in changes:
+            wrong = copy.deepcopy(self.live)
+            modify(wrong)
+            with self.subTest(modify=modify), self.assertRaises(RuntimeError):
+                r.snapshot_guard(wrong)
+
+    def test_shared_marketplace_ref_cannot_be_changed_or_silently_removed(self):
+        for identity in r.EXISTING_EXTERNAL_REFS:
+            name, container_name, key = identity
+            wrong = copy.deepcopy(self.live)
+            c = next(c for c in r.containers(wrong[name]) if c.get('name') == container_name)
+            c['env'] = [e for e in c['env'] if e['name'] != key]
+            with self.assertRaisesRegex(RuntimeError, 'four approved'):
+                r.snapshot_guard(wrong)
+            r.set_env(c, {}, {key: {'secretKeyRef': {'name': 'other-dev-secret', 'key': '1'}}})
+            with self.assertRaisesRegex(RuntimeError, 'external reference changed'):
+                r.snapshot_guard(wrong)
+
+    def test_candidate_preserves_traffic_foreign_tags_runtime_iam_and_secret_refs(self):
+        original = copy.deepcopy(self.live)
+        specs, urls = r.candidate_specs(self.live, PINS, self.images)
+        self.assertEqual(self.live, original)
+        self.assertEqual(set(specs), set(r.DEV))
+        for name in r.DEV:
+            spec = specs[name]
+            self.assertEqual(sum(row.get('percent', 0) for row in spec['spec']['traffic']), 100)
+            self.assertEqual(next(x for x in spec['spec']['traffic'] if x.get('tag') == 'unrelated-owner'), original[name]['spec']['traffic'][1])
+            self.assertEqual(spec['metadata']['resourceVersion'], original[name]['metadata']['resourceVersion'])
+            self.assertEqual(spec['metadata']['annotations'], original[name]['metadata']['annotations'])
+            self.assertEqual(spec['spec']['template']['spec']['serviceAccountName'], original[name]['spec']['template']['spec']['serviceAccountName'])
+            self.assertNotIn('status', spec)
+            for c in r.containers(spec):
+                self.assertEqual(r.value(c, 'SOURCE_VERSION'), PINS['wms' if name == r.WMS else 'source' if name in (r.SOURCE, r.MODULE) else 'erp'])
+        self.assertEqual([c['name'] for c in r.containers(specs[r.WMS])], ['web', 'api'])
+        self.assertNotIn('ports', r.containers(specs[r.WMS])[1])
+        self.assertEqual(r.value(r.containers(specs[r.API])[0], 'AFTER_SALES_TASK_SOURCE_URL'), urls[r.MODULE] + '/after-sales-app')
+        self.assertEqual(r.value(r.containers(specs[r.API])[0], 'ERP_DEV_MAILROOM_SOURCE_URL'), r.ORIGINS[r.SOURCE])
+        self.assertEqual(r.value(r.containers(specs[r.SOURCE])[0], 'NEXTAUTH_URL'), r.ORIGINS[r.SOURCE])
+        self.assertEqual(r.value(r.containers(specs[r.MODULE])[0], 'ERP_MODULE_BUILD'), 'true')
+        self.assertEqual(r.value(r.containers(specs[r.SOURCE])[0], 'ERP_MODULE_BUILD'), 'false')
+        self.assertEqual(r.value(r.containers(specs[r.SOURCE])[0], 'STUB_MODE'), 'synthetic')
+        self.assertEqual(r.value(r.containers(specs[r.API])[0], 'REPAIR_REPORT_PUBLIC_ORIGIN'), r.ORIGINS[r.WEB])
+        self.assertEqual(r.env_map(r.containers(specs[r.API])[0])['REPAIR_REPORT_LINK_SECRET']['valueFrom'], r.NEW_SECRET['REPAIR_REPORT_LINK_SECRET'])
+        self.assertTrue(all(not any(e['name'].startswith('REPAIR_') for c in r.containers(specs[s]) for e in c['env']) for s in r.DEV if s != r.API))
+
+    def test_owned_tag_that_currently_carries_traffic_gets_split_not_promoted(self):
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        for name in (r.API, r.WEB, r.SOURCE, r.MODULE):
+            traffic = specs[name]['spec']['traffic']
+            old = next(t for t in traffic if t.get('percent') == 100)
+            self.assertEqual(old, {'revisionName': name + '-serving', 'percent': 100})
+            new = next(t for t in traffic if t.get('tag') == 'aftersales-review')
+            self.assertEqual(new['percent'], 0)
+            self.assertNotEqual(new['revisionName'], old['revisionName'])
+
+    def test_final_and_canonical_pair_are_explicit_only_no_production(self):
+        specs, _ = r.candidate_specs(self.live, PINS, self.images, 'final', 'canonical')
+        self.assertEqual(r.value(r.containers(specs[r.API])[0], 'AFTER_SALES_TASK_SOURCE_URL'), r.ORIGINS[r.MODULE] + '/after-sales-app')
+        self.assertTrue(any(x.get('tag') == 'doa-warehouse-review' for x in specs[r.WMS]['spec']['traffic']))
+        for name in r.PROTECTED:
+            self.assertNotIn(name, specs)
+        with self.assertRaises(RuntimeError):
+            r.candidate_specs(self.live, PINS, self.images, 'foreign-tag')
+        with self.assertRaises(RuntimeError):
+            r.candidate_specs(self.live, PINS, self.images, pairing='production')
+
+    def test_preservation_assertion_rejects_extra_external_capability_or_runtime_change(self):
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        for change in (lambda s: r.set_env(r.containers(s)[0], {'SHOPIFY_SYNC_ENABLED': 'true'}),
+                       lambda s: s['spec']['template']['spec'].update(serviceAccountName='production-admin'),
+                       lambda s: s['spec']['traffic'][0].update(percent=50),
+                       lambda s: s['spec']['template']['metadata']['annotations'].update({'run.googleapis.com/cloudsql-instances': 'different'})):
+            altered = copy.deepcopy(specs[r.API])
+            change(altered)
+            with self.assertRaises(RuntimeError):
+                r.assert_candidate_preserved(self.live[r.API], altered, 'aftersales-review')
+
+    def test_cas_fresh_check_all_nine_services_not_just_deployed_dev_target(self):
+        self.assertEqual(len(r.assert_fresh(self.live, copy.deepcopy(self.live))), 9)
+        for name in r.ALL:
+            changed = copy.deepcopy(self.live)
+            changed[name]['metadata']['resourceVersion'] += '-racing-owner'
+            with self.subTest(name=name), self.assertRaisesRegex(RuntimeError, name):
+                r.assert_fresh(self.live, changed)
+        changed = copy.deepcopy(self.live)
+        changed[r.WMS]['spec']['template']['spec']['timeoutSeconds'] += 1
+        with self.assertRaises(RuntimeError):
+            r.assert_fresh(self.live, changed)
+
+    def test_build_proof_rejects_latest_failed_foreign_sha_missing_and_wrong_digest(self):
+        modifiers = [lambda d: d['images'][r.API].update(image=r.REGISTRY + r.API + ':latest'),
+                     lambda d: d['images'][r.API].update(image=image(r.WEB, '2')),
+                     lambda d: d['builds'][BUILD_ID].update(status='QUEUED'),
+                     lambda d: d['builds'][BUILD_ID].update(projectId='production-other'),
+                     lambda d: d['builds'][BUILD_ID].update(region='global'),
+                     lambda d: d['sourcePins'].update(erp='c' * 40),
+                     lambda d: d['images'].pop('wms-api'),
+                     lambda d: d['builds'][BUILD_ID]['results']['images'][0].update(digest='sha256:' + '3' * 64)]
+        for change in modifiers:
+            wrong = copy.deepcopy(built())
+            change(wrong)
+            with self.assertRaises(RuntimeError):
+                r.build_images(wrong, PINS)
+
+    def test_full_sha_and_clean_exact_sources_required(self):
+        for v in ('latest', 'a' * 7, 'a' * 39, 'A' * 40, '../x'):
+            with self.assertRaises(RuntimeError):
+                r.full_sha(v)
+        with patch.object(r, 'git', side_effect=['a' * 40, ' M other-owner-file']):
+            with self.assertRaisesRegex(RuntimeError, 'completely clean'):
+                r.clean_checkout(self.directory, 'a' * 40)
+        with patch.object(r, 'git', return_value='c' * 40):
+            with self.assertRaisesRegex(RuntimeError, 'exact frozen'):
+                r.clean_checkout(self.directory, 'a' * 40)
+
+    def test_private_outputs_reject_existing_and_symlinked_locations(self):
+        out = r.private_dir(self.directory / 'private')
+        r.private_json(out / 'service.json', {'opaque': 'synthetic-config'})
+        self.assertEqual(stat.S_IMODE(out.stat().st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE((out / 'service.json').stat().st_mode), 0o600)
+        with self.assertRaises(RuntimeError):
+            r.private_json(out / 'service.json', {})
+        linked = self.directory / 'linked'
+        linked.symlink_to(out, target_is_directory=True)
+        with self.assertRaises(RuntimeError):
+            r.private_dir(linked / 'new')
+
+    def test_secret_paths_and_symlinks_are_not_read_or_uploaded_by_git_export(self):
+        fake_sha = 'f' * 40
+        rows = (f'100644 blob {fake_sha}\tbackend/src/a.ts\0' +
+                f'100644 blob {fake_sha}\tbackend/.env.production\0' +
+                f'100644 blob {fake_sha}\tbackend/service-account.json\0').encode()
+        with patch.object(r, 'git', side_effect=[rows, b'synthetic source']) as local:
+            manifest = r.export_git(self.directory, PINS['erp'], self.directory / 'export', 'backend')
+        self.assertEqual([x['path'] for x in manifest], ['src/a.ts'])
+        self.assertEqual(local.call_count, 2)
+        with patch.object(r, 'git', return_value=f'120000 blob {fake_sha}\tbackend/src/link\0'.encode()):
+            with self.assertRaisesRegex(RuntimeError, 'Symlinks'):
+                r.export_git(self.directory, PINS['erp'], self.directory / 'other', 'backend')
+
+    def test_erp_api_recipe_reinstalls_production_dependencies_and_regenerates_client(self):
+        recipe = r.erp_api_docker(image(r.API), PINS['erp'])
+        self.assertEqual(recipe.count('FROM ' + image(r.API)), 2)
+        self.assertIn('npm ci --include=dev', recipe)
+        self.assertIn('npm ci --omit=dev', recipe)
+        self.assertEqual(recipe.count('./node_modules/.bin/prisma generate'), 2)
+        self.assertIn('COPY package.json package-lock.json prisma.config.ts', recipe)
+        self.assertIn('COPY scripts ./scripts', recipe)
+        self.assertIn('COPY --from=builder /app/dist ./dist', recipe)
+        self.assertNotIn('migrate', recipe)
+        self.assertNotIn('seed', recipe)
+        self.assertIn('127.0.0.1:1/unconnected', recipe)
+        with self.assertRaises(RuntimeError):
+            r.erp_api_docker(r.REGISTRY + r.API + ':latest', PINS['erp'])
+
+    def test_wms_exact_file_hashes_missing_extra_and_symlink_refuse(self):
+        folder = self.directory / 'wms'
+        source = folder / 'build-source'
+        source.mkdir(parents=True)
+        rows = []
+        for i in range(273):
+            path = f'backend/src/fixture-{i:03}.js'
+            destination = source / path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(b'synthetic')
+            rows.append({'path': path, 'sha256': r.sha256(b'synthetic')})
+        manifest = {'commit': r.WMS_SOURCE, 'environment': 'dev', 'digest': r.WMS_MANIFEST_HASH, 'files': rows}
+        (folder / 'source-manifest.json').write_text(json.dumps(manifest))
+        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(rows))):
+            self.assertEqual(r.wms_context(folder, r.WMS_SOURCE), manifest)
+            extra = source / '.env'
+            extra.write_bytes(b'do-not-read')
+            with self.assertRaisesRegex(RuntimeError, 'missing/extra'):
+                r.wms_context(folder, r.WMS_SOURCE)
+            extra.unlink()
+            (source / rows[0]['path']).write_bytes(b'changed')
+            with self.assertRaisesRegex(RuntimeError, 'hash differs'):
+                r.wms_context(folder, r.WMS_SOURCE)
+            (source / rows[0]['path']).unlink()
+            (source / rows[0]['path']).symlink_to(source / rows[1]['path'])
+            with self.assertRaisesRegex(RuntimeError, 'Unsafe'):
+                r.wms_context(folder, r.WMS_SOURCE)
+
+    def prepared_context(self):
+        folder = r.private_dir(self.directory / 'prepared')
+        context = folder / 'build-context'
+        context.mkdir(mode=0o700)
+        steps = []
+        images = {}
+        for key, repository in r.IMAGE_KEYS.items():
+            owner = 'wms' if key.startswith('wms-') else 'source' if key in (r.SOURCE, r.MODULE) else 'erp'
+            tag = r.REGISTRY + repository + ':doaf-' + PINS[owner]
+            images[key] = tag
+            steps.append({'id': key, 'name': 'gcr.io/cloud-builders/docker', 'args': ['build', '-t', tag, '.'],
+                          'dir': key, 'waitFor': ['-']})
+        config = {'steps': steps, 'images': list(images.values())}
+        r.private_json(context / 'cloudbuild.json', config)
+        r.private_write(context / 'synthetic-source.ts', 'no credentials')
+        files = r.file_manifest(context)
+        manifest = {'version': 1, 'project': r.PROJECT, 'region': r.REGION, 'mode': 'prepare-only',
+                    'sourcePins': PINS, 'buildContext': str(context), 'files': files, 'images': images,
+                    'contextSha256': r.sha256(r.canonical(files))}
+        path = folder / 'manifest.private.json'
+        r.private_json(path, manifest)
+        return path, r.sha256(path.read_bytes()), manifest, config
+
+    def test_build_context_readback_requires_pinned_checksum_and_exact_files(self):
+        path, checksum, manifest, _ = self.prepared_context()
+        self.assertEqual(r.verify_build_context(path, checksum)[0], manifest)
+        with self.assertRaisesRegex(RuntimeError, 'manifest checksum changed'):
+            r.verify_build_context(path, '0' * 64)
+        source = Path(manifest['buildContext']) / 'synthetic-source.ts'
+        source.write_text('changed after prepare')
+        with self.assertRaisesRegex(RuntimeError, 'context changed'):
+            r.verify_build_context(path, checksum)
+
+    def test_exact_success_recipe_converts_all_six_images_and_never_builds(self):
+        path, checksum, manifest, config = self.prepared_context()
+        raw = copy.deepcopy(built()['builds'][BUILD_ID])
+        raw.pop('region')
+        raw.update(id=BUILD_ID, steps=config['steps'])
+        captured = self.directory / 'cloud-build.private.json'
+        r.private_json(captured, {'region': r.REGION, 'description': raw})
+        output = self.directory / 'images.private.json'
+        receipt = r.success_build_receipt(path, checksum, [captured], output)
+        self.assertEqual(r.build_images(receipt, PINS), self.images)
+        self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
+        self.assertEqual(receipt['preparedContextSha256'], manifest['contextSha256'])
+        self.assertEqual(len(receipt['images']), 6)
+
+    def test_success_build_does_not_accept_changed_steps_or_secret_injection(self):
+        path, checksum, _, config = self.prepared_context()
+        raw = copy.deepcopy(built()['builds'][BUILD_ID])
+        raw.pop('region')
+        raw.update(id=BUILD_ID, steps=config['steps'])
+        for index, change in enumerate((lambda b: b['steps'][0]['args'].append('--unsafe-other-source'),
+                                        lambda b: b['steps'][0].update(secretEnv=['REAL_TOKEN']),
+                                        lambda b: b.update(availableSecrets={'secretManager': []}),
+                                        lambda b: b.update(status='FAILURE'))):
+            wrong = copy.deepcopy(raw)
+            change(wrong)
+            capture = self.directory / f'wrong-build-{index}.json'
+            r.private_json(capture, {'region': r.REGION, 'description': wrong})
+            with self.assertRaises(RuntimeError):
+                r.success_build_receipt(path, checksum, [capture], self.directory / f'not-written-{index}.json')
+            self.assertFalse((self.directory / f'not-written-{index}.json').exists())
+
+
+if __name__ == '__main__':
+    unittest.main()
