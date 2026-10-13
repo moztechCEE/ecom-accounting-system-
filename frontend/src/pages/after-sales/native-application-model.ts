@@ -43,3 +43,14 @@ export function clearApplicationPending(storage: Pick<Storage, 'getItem' | 'remo
   storage.removeItem(applicationPendingKey(value.actorId, value.entityId));
   if (storage.getItem(applicationPendingKey(value.actorId, value.entityId))) throw new Error('申請回執未能保存');
 }
+
+/** Invite capability stays in memory and is returned only by the fresh write-authorized detail endpoint. */
+export function applicationInvite(application: NativeApplication | undefined, canWrite: boolean): { url: string; providerMode: string | null } | null {
+  if (!canWrite || application?.status !== 'INVITED' || application.caseId || !application.inviteUrl || !['MOZTECH','BONSON'].includes(application.brand)) return null;
+  try {
+    const url = new URL(application.inviteUrl), fragment = new URLSearchParams(url.hash.slice(1));
+    if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/customer/apply/' + application.brand.toLowerCase()
+      || url.searchParams.size !== 1 || url.searchParams.get('invite') !== application.id || fragment.size !== 1 || !/^[a-f0-9]{64}$/.test(fragment.get('token') || '')) return null;
+    return { url: url.toString(), providerMode: application.providerMode || null };
+  } catch { return null; }
+}

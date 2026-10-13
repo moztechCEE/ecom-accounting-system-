@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { nativeAfterSales, type NativeApplication, type NativeApplicationList, type NativeOptions, type NativeProduct } from '../../services/native-after-sales.service';
 import { NATIVE_CASE_TYPES, nativeCaseTypeLabel, type NativeCaseType } from './native-workbench-model';
 import { registrationTokenMatchesActor } from './pending-registration';
-import { APPLICATION_STATUS, applicationDraft, applicationPendingKey, clearApplicationPending, readApplicationPending, saveApplicationPending, type ApplicationDraft, type ApplicationPending } from './native-application-model';
+import { APPLICATION_STATUS, applicationDraft, applicationInvite, applicationPendingKey, clearApplicationPending, readApplicationPending, saveApplicationPending, type ApplicationDraft, type ApplicationPending } from './native-application-model';
 import { operationRequestIntent } from './operation-request-intent';
 type Props = { entityId: string; options?: NativeOptions; onCreate: (draft: ApplicationDraft) => void; onOpenCase: (id: string) => void; onPendingChange: (v: boolean) => void; onDirtyChange: (v: boolean) => void };
 const errorText = (e: any) => typeof e?.response?.data?.message === 'string' ? e.response.data.message : e?.message || '申請資料暫時無法確認';
@@ -36,11 +36,12 @@ export default function NativeCustomerApplications({ entityId, options, onCreate
   }, [scopeKey, status, cursor, refresh]);
   async function openApplication(row: NativeApplication) {
     if (pending || busy) return;
-    const key = scopeKey, abort = new AbortController(); controller.current = abort;
-    setError(''); setBusy(true);
+    const key = scopeKey, token = localStorage.getItem('access_token') || '', abort = new AbortController(); controller.current = abort;
+    setError(''); setLink(undefined); setBusy(true);
     try {
+      if (!registrationTokenMatchesActor(token, actorId)) throw new Error('登入狀態已變更，請重新開啟申請');
       const item = await nativeAfterSales.application(entityId, row.id, abort.signal);
-      if (!alive.current || current.current !== key) return;
+      if (!alive.current || current.current !== key || localStorage.getItem('access_token') !== token) return;
       setSelected(item); setRecheck(item.status === 'REJECTED'); reviewForm.resetFields();
       const reviewed = item.reviewedData as any;
       reviewForm.setFieldsValue({ type: reviewed?.type || item.type, profile: reviewed?.profile || item.submittedData, note: '', items: reviewed?.items?.map((p: any) => ({ productId: p.productId, quantity: p.quantity })) || [{ quantity: 1 }] });
@@ -95,6 +96,7 @@ export default function NativeCustomerApplications({ entityId, options, onCreate
     } catch (e) { setError(errorText(e)); }
   }
   const disabled = busy || !!pending;
+  const recoveredInvite = applicationInvite(selected, canWrite);
   return <section className="native-customer-applications" aria-label="顧客售後申請">
     <Space wrap style={{ marginBottom: 16 }}>
       <Select aria-label="申請狀態" value={status} disabled={disabled} onChange={v => { setStatus(v); setCursor(undefined); setError(''); }} options={Object.entries(APPLICATION_STATUS).map(([value, label]) => ({ value, label }))} />
@@ -114,6 +116,7 @@ export default function NativeCustomerApplications({ entityId, options, onCreate
       {error && <Alert type="error" message={error} showIcon />}
       {selected && <>
         <Space wrap style={{ marginBottom: 12 }}><Tag>{selected.brand}</Tag><Tag>{APPLICATION_STATUS[selected.status]}</Tag><span>第 {selected.revision} 版</span></Space>
+        {recoveredInvite && <Space wrap style={{ marginBottom: 16 }}>{recoveredInvite.providerMode === 'DEV_STUB' && <Tag>DEV 模擬登入</Tag>}<Input aria-label="既有顧客填單連結" readOnly value={recoveredInvite.url} style={{ width: 'min(420px, 70vw)' }} /><Button data-operation-action="after_sales.application.invite.recopy" data-operation-record-id={selected.id} disabled={disabled} onClick={() => void navigator.clipboard.writeText(recoveredInvite.url).catch(() => message.error('請手動複製連結'))}>複製邀請連結</Button></Space>}
         {selected.submittedData?.photos?.length ? <Space wrap style={{ marginBottom: 12 }}>{selected.submittedData.photos.map(p => <Button data-operation-action="after_sales.application.photo" key={p.index} onClick={() => void readPhoto(p.index)}>查看照片 {p.index + 1}</Button>)}</Space> : <p className="native-communication-muted">尚無產品照片</p>}
         {(selected.status === 'SUBMITTED' || recheck) ? <Form form={reviewForm} layout="vertical" disabled={disabled || !editable} onValuesChange={() => onDirtyChange(true)}>
           <Form.Item name="type" label="案件類型" rules={[{ required: true }]}><Select aria-label="審核案件類型" options={NATIVE_CASE_TYPES.filter(t => options?.createTypes.includes(t.value)).map(t => ({ value: t.value, label: t.label }))} /></Form.Item>

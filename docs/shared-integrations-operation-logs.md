@@ -62,6 +62,12 @@ Source通知只保留白名單eventClass、狀態、notificationId和opaque prov
 
 邀請及審核在POST前保留各自request UUID與精確內容，未知結果同UUID重試；邀請secret fragment URL不存journal或intent。通過審核只代表申請可建單；使用原NativeCreate journal（同一schema與UUID規則）新增optional verifiedApplicationRef，items仍只有Source productId/quantity。預帶已審contact/brand/products後只補正式訂單所需欄位，直到Source交易回傳正式caseId才顯示案件成立。
 
-目前427個宣告controls（Source338、ERP售後與共用管理89），另有固定nav、department queue、accounting section枚舉作為dynamic target actionId。Table/case上author的opaque recordId可進intent；不讀DOM href、文案、input或query。Native UUID指令另記「request意圖」以和authority result關聯，不把它稱作提交成功。
+目前428個宣告controls（Source338、ERP售後與共用管理90），另有固定nav、department queue、accounting section枚舉作為dynamic target actionId。Table/case上author的opaque recordId可進intent；不讀DOM href、文案、input或query。Native UUID指令另記「request意圖」以和authority result關聯，不把它稱作提交成功。
 
 本批6個offline applications DOM、5個application model、既有10個communication DOM、9個communication model及6個bridge檢查通過。Source增加到7個writer檢查，6個offline emitter檢查通過；Sourcetsc及ERP前端build通過。Developer fixture origins為.invalid，完全攔截網路，未使用DEV登入或provider。
+
+## 兼任權限與邀請連結取回
+
+Source native session 保留 real ERP role 與 Source role，操作依 fresh ERP grant ∩ active Source module permission；GET 額外傳 writeModulePermissions，避免主要職稱或讀取權限顯示可寫按鈕。記錄顧客零元/付費維修同意需 cases + repairs 寫入；客服/維修/收發/財務獨立勾選。Standalone 原有角色規則保留。Native客戶表單不手填LINEsubject，品牌LINELogin驗證後綁定；native產品問題/案件明細隱藏FAQ捷徑，不刪歷史資料。
+
+已建立、未過期的INVITED申請可透過再次授權的明細 reader取回inviteUrl，唯讀/提交後/過期/品牌設定異動不提供。前端顯示同brand+application匹配fragment連結於記憶體，重新開啟可複製；不存local/sessionStorage或intent。6個model及8個offline applications DOM檢查通過（增加invite重開與唯讀不能copy），Source11個auth/hybrid測試及tsc、ERPfrontendbuild通過。沒有DEV寫入、LINE/provider、發票或實體業務效果。

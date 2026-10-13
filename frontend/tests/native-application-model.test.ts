@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applicationDraft, clearApplicationPending, readApplicationPending, saveApplicationPending, type ApplicationPending } from '../src/pages/after-sales/native-application-model.ts';
+import { applicationDraft, applicationInvite, clearApplicationPending, readApplicationPending, saveApplicationPending, type ApplicationPending } from '../src/pages/after-sales/native-application-model.ts';
 import { readPendingRegistration, savePendingRegistration } from '../src/pages/after-sales/pending-registration.ts';
 const id = 'e187ba12-9733-4d4c-a512-90e773f4d837', scope = { actorId: 'actor', entityId: 'company' };
 const reference = { id, revision: 2, reviewHash: 'a'.repeat(64) };
@@ -37,4 +37,14 @@ test('review retry retains revision, reviewed profile and exact ERP product mapp
 test('blocked storage prevents a new invite from being dispatched without durable UUID', () => {
   const value: ApplicationPending = { ...scope, schema: 'corely.doa.pending-application.v1', applicationId: null, type: 'REPAIR', command: { operation: 'CREATE_INVITE', requestId: id, brand: 'MOZTECH', type: 'REPAIR' } };
   assert.throws(() => saveApplicationPending({ getItem: () => null, setItem: () => {} }, value), /尚未送出/);
+});
+
+test('fresh invite recovery is bounded to its same brand and application, never a readonly or converted capability', () => {
+  const invite: any = { ...application, status: 'INVITED', inviteUrl: 'https://source.example.invalid/customer/apply/moztech?invite=' + id + '#token=' + 'a'.repeat(64), providerMode: 'DEV_STUB' };
+  assert.equal(applicationInvite(invite, true)?.url, invite.inviteUrl);
+  assert.equal(applicationInvite(invite, true)?.providerMode, 'DEV_STUB');
+  assert.equal(applicationInvite(invite, false), null);
+  for (const changes of [{ status: 'SUBMITTED' }, { status: 'CONVERTED' }, { caseId: 'case' }, { inviteUrl: null }, { brand: 'BONSON' }, { id: 'other' },
+    { inviteUrl: invite.inviteUrl.replace('https:', 'http:') }, { inviteUrl: invite.inviteUrl.replace('#token=', '&token=') }, { inviteUrl: invite.inviteUrl + '&extra=private' }])
+    assert.equal(applicationInvite({ ...invite, ...changes }, true), null);
 });

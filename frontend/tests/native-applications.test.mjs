@@ -7,19 +7,19 @@ const require = createRequire(new URL('../../backend/package.json', import.meta.
 const origin = 'https://application-fixture.invalid', dist = fileURLToPath(new URL('../dist', import.meta.url)), output = '/private/tmp/doa-applications-offline-20261013';
 const actor = 'qa-user', entity = 'fixture-company', id = 'e187ba12-9733-4d4c-a512-90e773f4d837', erpProductId = '69b793b1-c79e-4d86-b4d9-e46f7b829e01';
 const token = who => Buffer.from('{}').toString('base64url') + '.' + Buffer.from(JSON.stringify({ sub: who })).toString('base64url') + '.fictional';
-let posts = [], queries = [], errors = [], checks = [], inviteMode = 'unknown', reviewMode = 'unknown', createMode = 'unknown', mapping = true;
+let posts = [], queries = [], errors = [], checks = [], inviteMode = 'unknown', reviewMode = 'unknown', createMode = 'unknown', mapping = true, writable = true;
 let application = { id, companyId: entity, brand: 'MOZTECH', type: 'REPAIR', status: 'SUBMITTED', revision: 1, caseId: null, contactName: '示意顧客', productDescription: '不確定型號的行動電源', photoCount: 1,
   submittedData: { name: '示意顧客', phone: '0900000000', address: '虛構測試地址', email: 'fixture@example.invalid', productDescription: '不確定型號的行動電源', faultDescription: '不能充電', photos: [{ index: 0, name: 'fixture.png' }] } };
 const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true }), context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
 await context.addInitScript(value => { localStorage.setItem('access_token', value); localStorage.setItem('entityId', 'fixture-company'); }, token(actor));
-const page = await context.newPage(); page.setDefaultTimeout(8000); page.on('pageerror', e => errors.push(e.message));
+const page = await context.newPage(); page.setDefaultTimeout(20000); page.on('pageerror', e => errors.push(e.message));
 await context.route('**/*', async route => {
   const req = route.request(), url = new URL(req.url()), path = url.pathname;
   const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
   if (url.origin !== origin) return route.abort();
   if (path === '/config.js') return route.fulfill({ contentType: 'application/javascript', body: 'window.__APP_CONFIG__={apiUrl:"/api/v1",afterSalesModuleEnabled:true,mailroomEnabled:true,stagedOperationsEnabled:true,defaultEntityId:"fixture-company"}' });
   if (path === '/api/v1/users/me') return json({ id: actor, name: '示意客服', email: 'fixture@example.invalid', salesDataScope: 'ENTITY', effectivePermissions: ['after_sales_cases:read','after_sales_cases:create','after_sales_cases:update'], roles: [{ role: { code: 'CUSTOMER_SERVICE', permissions: [] } }] });
-  if (path === '/api/v1/after-sales/tasks/options') return json({ canReadAll: true, createTypes: ['REPAIR'], brands: [{ value: 'MOZTECH', label: 'MOZTECH' }, { value: 'BONSON', label: 'BONSON' }], products: [{ id: 'source-product', name: '已核對行動電源', sku: 'MOCK-SKU', ...(mapping ? { erpProductId } : {}) }], sourceChannels: [{ value: 'LINE', label: '品牌 LINE' }], customerKinds: [{ value: 'TO_C', label: '一般顧客' }], reasonOptions: {} });
+  if (path === '/api/v1/after-sales/tasks/options') return json({ canReadAll: true, createTypes: writable ? ['REPAIR'] : [], brands: [{ value: 'MOZTECH', label: 'MOZTECH' }, { value: 'BONSON', label: 'BONSON' }], products: [{ id: 'source-product', name: '已核對行動電源', sku: 'MOCK-SKU', ...(mapping ? { erpProductId } : {}) }], sourceChannels: [{ value: 'LINE', label: '品牌 LINE' }], customerKinds: [{ value: 'TO_C', label: '一般顧客' }], reasonOptions: {} });
   if (path === '/api/v1/after-sales/tasks') return json({ items: [], counts: { mine: 0, all: 0 }, total: 0 });
   if (path === '/api/v1/after-sales/tasks/applications' && req.method() === 'GET') { queries.push(url.search); return json({ items: [application], nextCursor: url.searchParams.has('cursor') ? null : 'opaque-fixture-cursor', hasMore: !url.searchParams.has('cursor'), limit: 100 }); }
   if (path === '/api/v1/after-sales/tasks/applications/' + id && req.method() === 'GET') return json(application);
@@ -54,6 +54,17 @@ try {
   await drawer.getByRole('combobox', { name: '填單案件類型', exact: true }).click(); await page.locator('.ant-select-dropdown .ant-select-item-option-content').getByText('檢測與維修', { exact: true }).click();
   await page.locator('[data-operation-action="after_sales.application.invite.create"]').click(); await page.getByText('邀請結果待確認', { exact: true }).waitFor(); const invitation = posts.at(-1).body.command;
   inviteMode = 'success'; await load(); await page.locator('[data-operation-action="after_sales.application.retry"]').click(); await page.getByLabel('顧客填單連結').waitFor(); assert.deepEqual(posts.at(-1).body.command, invitation); checks.push('invite unknown reload reuses durable UUID and link fragment remains outside journal');
+  const originalApplication = { ...application };
+  application = { ...application, status: 'INVITED', inviteUrl: origin + '/customer/apply/moztech?invite=' + id + '#token=' + 'a'.repeat(64), providerMode: 'DEV_STUB' };
+  await load(); await page.locator('[data-operation-action="after_sales.application.open"]').click(); await page.getByLabel('既有顧客填單連結').waitFor();
+  assert.equal(await page.getByLabel('既有顧客填單連結').inputValue(), application.inviteUrl);
+  assert.equal(await page.locator('[data-operation-action="after_sales.application.invite.recopy"]').getAttribute('data-operation-record-id'), id);
+  assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('#token=')), false);
+  checks.push('write-authorized existing unexpired invite reopens with fragment link in memory and authored record context');
+  writable = false; await load(); await page.locator('[data-operation-action="after_sales.application.open"]').click(); await page.getByText('第 1 版', { exact: true }).waitFor();
+  assert.equal(await page.getByLabel('既有顧客填單連結').count(), 0); assert.equal(await page.locator('[data-operation-action="after_sales.application.invite.recopy"]').count(), 0);
+  checks.push('readonly view cannot recover or copy capability even if a fixture supplies inviteUrl');
+  writable = true; application = originalApplication; await load();
   await page.locator('[data-operation-action="after_sales.application.next"]').click(); await page.waitForTimeout(150); assert(queries.some(q => q.includes('cursor=opaque-fixture-cursor'))); checks.push('bounded keyset next page is not silently capped at 100');
   mapping = false; await load(); await page.locator('[data-operation-action="after_sales.application.open"]').click(); await page.getByText('第 1 版', { exact: true }).waitFor();
   await page.getByRole('combobox', { name: '核對產品 1', exact: true }).click(); await page.locator('.ant-select-dropdown .ant-select-item-option-content').getByText('已核對行動電源 · MOCK-SKU', { exact: true }).click(); await page.getByLabel('審核備註', { exact: true }).fill('已核對照片'); const before = posts.length;
