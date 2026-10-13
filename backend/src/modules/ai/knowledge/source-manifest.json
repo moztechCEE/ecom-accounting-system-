@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:8dd1c0f1d22fb2f8b5efd012d6a80c801a74e680e2581a21d976fe76fb2cce59",
+  "sourceVersion": "sha256:e8e7a46191a32e7ac43cc01da269c13350f1211606e89a2b3a07d5f98c2f9038",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -444,7 +444,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-sync.service.ts",
-      "sha256": "021192154a7d4f165c4810218572ab2939b0cc61b4c786407a5f82221c04500f"
+      "sha256": "b965a3b7f794da5a4608f707857859bb30a25f5dda5c71323d7f56d62daecc81"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-tablet.controller.ts",
