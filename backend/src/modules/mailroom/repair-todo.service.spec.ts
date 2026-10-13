@@ -26,6 +26,7 @@ import {
   repairTodoDecision,
   repairTodoSourceDecision,
 } from './repair-todo.contract';
+import { repairSourceBindingForItem } from './repair-proposal.contract';
 import { RepairTodoService } from './repair-todo.service';
 import type { RepairTodoQuery } from './repair-todo.dto';
 
@@ -90,6 +91,7 @@ function piece(id: string, status = 'INSPECTING') {
     entityId: COMPANY,
     label: 'MR-' + id,
     productName: 'Device ' + id,
+    productId: null,
     sku: 'SKU-' + id,
     serialNumber: 'SN-' + id,
     status,
@@ -98,7 +100,7 @@ function piece(id: string, status = 'INSPECTING') {
     grade: null,
     disposition: null,
     conditionNote: null,
-    declared: null,
+    declared: { id: 'synthetic-source-item' },
     returnInspection: null,
     repairInspection: doc as unknown,
     repairReport: null as unknown,
@@ -150,10 +152,27 @@ function piece(id: string, status = 'INSPECTING') {
   };
 }
 type Piece = ReturnType<typeof piece>;
-function source(id: string): SourceCase {
-  return {
+type SourceReleaseFixture = NonNullable<SourceCase['releaseInfo']> & {
+  invoiceRequired?: boolean;
+  invoiceStatus?: string;
+  invoiceSatisfied?: boolean;
+  invoiceQuoteRevision?: number | null;
+  quoteBindings?: {
+    itemId: string;
+    planVersion: number;
+    planHash: string;
+    proposalHash: string;
+    quoteRevision: number;
+  }[];
+};
+type SourceFixture = SourceCase & { releaseInfo: SourceReleaseFixture };
+function source(
+  id: string,
+  rows = [piece(id.replace(/^source-/, ''))],
+): SourceFixture {
+  const current: SourceFixture = {
     id,
-    number: 'CASE-' + id,
+    number: rows[0]?.receipt.sourceNumber || 'CASE-' + id,
     type: 'REPAIR',
     brand: 'SYNTHETIC',
     version: 'source-current-v9',
@@ -167,6 +186,11 @@ function source(id: string): SourceCase {
       amount: 100,
       currency: 'TWD',
       confirmedPaymentQuoteRevision: 4,
+      invoiceRequired: true,
+      invoiceStatus: 'ISSUED',
+      invoiceSatisfied: true,
+      invoiceQuoteRevision: 4,
+      quoteBindings: [],
     },
     items: [
       {
@@ -174,10 +198,21 @@ function source(id: string): SourceCase {
         name: 'Device',
         sku: null,
         serialNumber: null,
-        quantity: 1,
+        quantity: Math.max(1, rows.length),
       },
     ],
   };
+  current.releaseInfo.quoteBindings = rows.flatMap((row) => {
+    try {
+      return [
+        { ...repairSourceBindingForItem(row, current), quoteRevision: 4 },
+      ];
+    } catch {
+      // Invalid historical pieces have no authoritative proposal to bind.
+      return [];
+    }
+  });
+  return current;
 }
 function workflow(row: Piece) {
   return row.repairWorkflow as {
@@ -347,7 +382,13 @@ function fixture(rows = [piece('ready')]) {
   const sources = new Map<string, unknown>(
     rows.map((row) => [
       row.receipt.sourceCaseId!,
-      source(row.receipt.sourceCaseId!),
+      source(
+        row.receipt.sourceCaseId!,
+        rows.filter(
+          (candidate) =>
+            candidate.receipt.sourceCaseId === row.receipt.sourceCaseId,
+        ),
+      ),
     ]),
   );
   const sync = {
@@ -523,7 +564,11 @@ describe('repair todo native read projection', () => {
     });
     expect(
       repairTodoDecision(actor(), COMPANY, piece('working', 'REPAIRING')),
-    ).toEqual({ state: 'ready', kind: 'REPAIR_WORK' });
+    ).toEqual({
+      state: 'source',
+      kind: 'REPAIR_WORK',
+      sourceId: 'source-working',
+    });
     const refurb = piece('refurb', 'REFURBISHING');
     refurb.receipt.category = 'RETURN';
     expect(repairTodoDecision(actor(), COMPANY, refurb)).toEqual({
@@ -541,7 +586,18 @@ describe('repair todo native read projection', () => {
       inspectionRevision: 3,
     };
     returned.receipt.sourceCaseId = null;
-    expect(repairTodoDecision(actor(), COMPANY, returned)).toEqual({
+    expect(repairTodoDecision(actor(), COMPANY, returned).state).toBe(
+      'unknown',
+    );
+    returned.receipt.sourceCaseId = 'source-returned';
+    expect(
+      repairTodoSourceDecision(
+        actor(),
+        COMPANY,
+        returned,
+        source('source-returned', [returned]),
+      ),
+    ).toEqual({
       state: 'ready',
       kind: 'REPAIR_WORK',
     });
@@ -573,7 +629,7 @@ describe('repair todo native read projection', () => {
         actor(),
         COMPANY,
         row,
-        source(row.receipt.sourceCaseId!),
+        source(row.receipt.sourceCaseId!, [row]),
       );
       expect(result).toEqual({
         state: 'ready',
@@ -644,15 +700,128 @@ describe('repair todo native read projection', () => {
       ).toBe('blocked');
     },
   );
-  it('FREE still requires current consent, but not a payment confirmation for zero amount', () => {
+  it.each([
+    ['missing requirement', { invoiceRequired: undefined }],
+    ['pending invoice', { invoiceStatus: 'PENDING', invoiceSatisfied: false }],
+    ['failed invoice', { invoiceStatus: 'FAILED', invoiceSatisfied: false }],
+    ['stale invoice', { invoiceQuoteRevision: 3 }],
+    ['unproven issued invoice', { invoiceSatisfied: false }],
+    ['missing per-item binding', { quoteBindings: [] }],
+  ] as [string, Partial<SourceReleaseFixture>][])(
+    'does not count work with %s as an actionable todo',
+    async (_name, change) => {
+      const row = piece('financial-gate');
+      const f = fixture([row]);
+      const current = f.sources.get(row.receipt.sourceCaseId!) as SourceFixture;
+      Object.assign(current.releaseInfo, change);
+      expect(await f.list()).toMatchObject({
+        total: 0,
+        countExact: true,
+        unknownCount: 0,
+        queueCounts: { todo: 0 },
+      });
+    },
+  );
+
+  it.each([
+    'itemId',
+    'planVersion',
+    'planHash',
+    'proposalHash',
+    'quoteRevision',
+  ])('does not count another or stale per-item %s binding', async (field) => {
+    const row = piece('binding-gate');
+    const f = fixture([row]);
+    const current = f.sources.get(row.receipt.sourceCaseId!) as SourceFixture;
+    const proof = current.releaseInfo.quoteBindings![0];
+    Object.assign(proof, {
+      [field]: ['planVersion', 'quoteRevision'].includes(field) ? 2 : 'wrong',
+    });
+    expect(await f.list()).toMatchObject({
+      total: 0,
+      countExact: true,
+      queueCounts: { todo: 0 },
+    });
+  });
+
+  it.each(['REPAIRING', 'FACTORY_RETURNED'])(
+    'rechecks source invoice for customer %s work without altering the record',
+    async (stage) => {
+      const row =
+        stage === 'REPAIRING'
+          ? piece('actual-work', 'REPAIRING')
+          : setPlan(piece('actual-work'), 'FACTORY');
+      if (stage === 'FACTORY_RETURNED')
+        workflow(row).factory = {
+          stage: 'RETURNED',
+          physicalCustody: 'TECHNICIAN',
+          inspectionRevision: 3,
+        };
+      const f = fixture([row]);
+      expect(await f.list()).toMatchObject({
+        total: 1,
+        queueCounts: { todo: 1 },
+      });
+      const current = f.sources.get(row.receipt.sourceCaseId!) as SourceFixture;
+      current.releaseInfo.invoiceStatus = 'PENDING';
+      current.releaseInfo.invoiceSatisfied = false;
+      const original = structuredClone(row);
+      expect(await f.list()).toMatchObject({
+        total: 0,
+        queueCounts: { todo: 0 },
+      });
+      expect(row).toEqual(original);
+    },
+  );
+
+  it.each(['serialNumber', 'productId', 'receiptId', 'currency'])(
+    'does not reuse an old proposal after current %s changes without an inspection revision change',
+    async (field) => {
+      const row = piece('identity-gate');
+      const f = fixture([row]);
+      const current = f.sources.get(row.receipt.sourceCaseId!) as SourceFixture;
+      const originalPlanHash = inspectionPlanHash(
+        row.repairInspection as InspectionDocument,
+      );
+      if (field === 'currency') current.releaseInfo.currency = 'USD';
+      else Object.assign(row, { [field]: 'changed-identity' });
+      expect(
+        inspectionPlanHash(row.repairInspection as InspectionDocument),
+      ).toBe(originalPlanHash);
+      expect(await f.list()).toMatchObject({
+        total: 0,
+        countExact: true,
+        queueCounts: { todo: 0 },
+      });
+    },
+  );
+
+  it('keeps a missing current physical identity unknown instead of filling it from a source proof', () => {
+    const row = piece('missing-identity');
+    const current = source(row.receipt.sourceCaseId!, [row]);
+    row.declared = null as unknown as typeof row.declared;
+    expect(repairTodoSourceDecision(actor(), COMPANY, row, current).state).toBe(
+      'unknown',
+    );
+  });
+
+  it('FREE still requires current consent and per-item binding, but no zero-amount payment confirmation', () => {
     const row = piece('free');
     const current = source(row.receipt.sourceCaseId!);
-    current.releaseInfo!.amount = 0;
-    current.releaseInfo!.confirmedPaymentQuoteRevision = null;
+    current.releaseInfo.amount = 0;
+    current.releaseInfo.confirmedPaymentQuoteRevision = null;
+    current.releaseInfo.invoiceRequired = false;
+    current.releaseInfo.invoiceStatus = 'NOT_REQUIRED';
     expect(repairTodoSourceDecision(actor(), COMPANY, row, current).state).toBe(
       'ready',
     );
-    current.releaseInfo!.customerApprovedQuoteRevision = null;
+    const originalBindings = current.releaseInfo.quoteBindings;
+    current.releaseInfo.quoteBindings = [];
+    expect(repairTodoSourceDecision(actor(), COMPANY, row, current).state).toBe(
+      'blocked',
+    );
+    current.releaseInfo.quoteBindings = originalBindings;
+    current.releaseInfo.customerApprovedQuoteRevision = null;
     expect(repairTodoSourceDecision(actor(), COMPANY, row, current).state).toBe(
       'blocked',
     );
@@ -754,8 +923,14 @@ describe('repair todo complete population and bounded fresh source reads', () =>
       piece('blocked-' + i),
     );
     const ready = Array.from({ length: 65 }, (_, i) => piece('ready-' + i));
-    for (const row of ready) row.receipt.sourceCaseId = 'shared-ready-case';
-    for (const row of blocked) row.receipt.sourceCaseId = 'shared-blocked-case';
+    for (const row of ready) {
+      row.receipt.sourceCaseId = 'shared-ready-case';
+      row.receipt.sourceNumber = 'CASE-SHARED-READY';
+    }
+    for (const row of blocked) {
+      row.receipt.sourceCaseId = 'shared-blocked-case';
+      row.receipt.sourceNumber = 'CASE-SHARED-BLOCKED';
+    }
     for (const row of ready.slice(0, 40)) row.productName = 'Find This Device';
     const acceptance = piece('unclaimed', 'WAITING_REPAIR_ACCEPTANCE');
     acceptance.repairOwnerId = null;
@@ -765,7 +940,7 @@ describe('repair todo complete population and bounded fresh source reads', () =>
     sign.custodianId = OTHER;
     const f = fixture([...blocked, ...ready, acceptance, sign]);
     f.sources.set('shared-blocked-case', {
-      ...source('shared-blocked-case'),
+      ...(f.sources.get('shared-blocked-case') as SourceFixture),
       repairAllowed: false,
     });
     const first = await f.list();

@@ -21,6 +21,9 @@ import { type RepairTodoQuery } from './repair-todo.dto';
 const candidateSelect = {
   id: true,
   entityId: true,
+  receiptId: true,
+  productId: true,
+  declared: true,
   status: true,
   version: true,
   repairOwnerId: true,
