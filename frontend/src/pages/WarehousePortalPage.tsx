@@ -79,7 +79,7 @@ export default function WarehousePortalPage() {
           navigate: (next, options) => {
             if (!active()) return
             const current = latest.current
-            const nextKey = nativeHostSection(next, key)
+            const nextKey = nativeHostSection(next, key, session.user.role)
             if (!nextKey || !wmsPortalDestination(current.user, nextKey)) return
             const params = new URLSearchParams()
             params.set('wms', next)

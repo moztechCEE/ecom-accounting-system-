@@ -44,6 +44,31 @@ test('typed warehouse navigation keeps source context and the explicit company o
   for (const path of ['https://evil.invalid/tasks', '//evil.invalid/tasks', '/tasks?token=secret', '/tasks?authorization=secret', '/orders/17', '/order/0', '/order/%31', '/tasks\\evil', '/tasks\u0000']) assert.equal(nativeWorkPath(path), null)
 })
 
+test('plain intake return uses only the verified station role and preserves company in the next session route', () => {
+  for (const [role, expected] of [
+    ['picker', '/warehouse/picking'], ['packer', '/warehouse/packing'],
+    ['admin', '/warehouse'], ['dispatcher', '/warehouse'], ['viewer', '/warehouse'], ['unknown', '/warehouse'], [undefined, '/warehouse'],
+  ] as const) {
+    const path = '/tasks?page=2#work'
+    assert.equal(nativeHostSection(path, '/warehouse/intakes', role), expected)
+    const target = new URL(companyNavigationDestination(`${expected}?wms=${encodeURIComponent(path)}`, '?entityId=warehouse-dev'), location.origin)
+    assert.equal(target.pathname, expected); assert.equal(target.searchParams.get('entityId'), 'warehouse-dev')
+    assert.equal(target.searchParams.get('wms'), path); assert.equal(nativeEntryPath(expected, target.search), path)
+  }
+  for (const role of ['picker', 'packer', 'admin', 'dispatcher', 'viewer', undefined]) {
+    assert.equal(nativeHostSection('/tasks?group=pick', '/warehouse/intakes', role), '/warehouse/picking')
+    assert.equal(nativeHostSection('/tasks?group=pack', '/warehouse/intakes', role), '/warehouse/packing')
+    assert.equal(nativeHostSection('/tasks?view=completed', '/warehouse/intakes', role), '/warehouse/completed')
+    for (const explicit of ['/tasks?group=', '/tasks?group=other', '/tasks?view=', '/tasks?view=active']) {
+      assert.equal(nativeHostSection(explicit, '/warehouse/intakes', role), '/warehouse')
+    }
+    assert.equal(nativeHostSection('/tasks', '/warehouse/marketplace', role), '/warehouse')
+    assert.equal(nativeHostSection('/tasks', '/warehouse/picking', role), '/warehouse/picking')
+    assert.equal(nativeHostSection('/tasks', '/warehouse/packing', role), '/warehouse/packing')
+    assert.equal(nativeHostSection('/order/17', '/warehouse/intakes', role), '/warehouse/intakes')
+  }
+})
+
 test('manifest validation limits entry and styles to immutable local assets with an exact SHA', () => {
   const valid = manifest(); assert.deepEqual(warehouseManifest(valid), valid)
   const parsed = warehouseManifest(valid); parsed.styles.push('/assets/extra.css'); assert.equal(valid.styles.length, 1)

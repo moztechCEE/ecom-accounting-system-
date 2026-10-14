@@ -3341,7 +3341,8 @@
       "sections": {
         "steps": [
           "從 ERP 儲運工作台或功能導覽選擇「預揀與倉庫放行」，原 WMS 作業畫面會直接顯示在 ERP 內。",
-          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。",
+          "完成預揀後返回工作台，已指派的揀貨員或裝箱員會回到自己的作業任務；公司範圍及既有作業權限保持不變。"
         ],
         "boundaries": [
           "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
@@ -3365,7 +3366,8 @@
           "sections": {
             "steps": [
               "Select Pre-picking and warehouse release from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
-              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing.",
+              "After pre-picking, return to the workbench to open the assigned picker or packer station. Company scope and existing operation permissions remain unchanged."
             ],
             "boundaries": [
               "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",

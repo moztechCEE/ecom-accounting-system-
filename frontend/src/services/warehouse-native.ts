@@ -45,7 +45,7 @@ export function nativeWorkPath(value: unknown): string | null {
   } catch { return null }
 }
 
-export function nativeHostSection(path: string, currentKey: string): string | null {
+export function nativeHostSection(path: string, currentKey: string, stationRole?: string): string | null {
   const safe = nativeWorkPath(path)
   if (!safe) return null
   const url = new URL(safe, 'https://warehouse.invalid')
@@ -56,6 +56,10 @@ export function nativeHostSection(path: string, currentKey: string): string | nu
     if (url.searchParams.get('group') === 'pick') return '/warehouse/picking'
     if (url.searchParams.get('group') === 'pack') return '/warehouse/packing'
     if (url.searchParams.get('view') === 'completed') return '/warehouse/completed'
+    if (currentKey === '/warehouse/intakes' && !url.searchParams.has('group') && !url.searchParams.has('view')) {
+      if (stationRole === 'picker') return '/warehouse/picking'
+      if (stationRole === 'packer') return '/warehouse/packing'
+    }
     return ['/warehouse/picking', '/warehouse/packing'].includes(currentKey) ? currentKey : '/warehouse'
   }
   return WMS_PORTAL_SECTIONS.find(section => new URL(section.path, 'https://warehouse.invalid').pathname === url.pathname)?.key || null

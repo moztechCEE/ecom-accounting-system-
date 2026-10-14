@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:9d82919ff180878baf16e937df4cb216e1f312a4b64b961a3a0d444c7406f1c2",
+  "sourceVersion": "sha256:10d016d1d641bbc16f4e5ac92b9443cf14fc9ea35ed928709a2bd325cd86602c",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "11f5e09dc59a14ab5d4139f17dc2f6769df14f60e3c9167ddf2910cead85999e",
+  "catalogSha256": "9544a81040148a2c00375852038bcd424b80075132548a2a0603455b95d38fa4",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -1152,7 +1152,7 @@
     },
     {
       "path": "frontend/src/pages/WarehousePortalPage.tsx",
-      "sha256": "b5c2f2a145aa67f88aefee9d9fc600723f41b3706389404775e788823ffc1feb"
+      "sha256": "c367cb0de3e9f249ebcaa1b8862a8ae86d7dceb182bfee87a4a82fdcb5e4e4fd"
     },
     {
       "path": "frontend/src/pages/WarehouseReportsPage.tsx",
@@ -1224,7 +1224,7 @@
     },
     {
       "path": "frontend/src/services/warehouse-native.ts",
-      "sha256": "24c18e0e91faf2e1d8267151fd58d82e05caa3e18955c9e70c47b686d5de424d"
+      "sha256": "6053a4e355a47573d8205a2e9956f3b1483fb4588487e999e5a2145c3760676d"
     },
     {
       "path": "frontend/src/services/wms-reconciliation.service.ts",
