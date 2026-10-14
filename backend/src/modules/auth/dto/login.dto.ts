@@ -1,5 +1,14 @@
-import { IsEmail, IsOptional, IsString, Matches, MinLength, ValidateIf } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  Matches,
+  Validate,
+  ValidateIf,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform, type TransformFnParams } from 'class-transformer';
+import { LoginPasswordValidator } from './login-password.validator';
 
 export class LoginDto {
   @IsOptional() @IsString() @Matches(/^\d{6}$/) twoFactorToken?: string;
@@ -24,7 +33,12 @@ export class LoginDto {
   platformLoginId?: string;
 
   @ApiProperty({ example: 'SecureP@ssw0rd', description: '密碼' })
+  @Transform(
+    ({ obj }: TransformFnParams): unknown =>
+      (obj as { password?: unknown }).password,
+    { toClassOnly: true },
+  )
   @IsString()
-  @MinLength(8)
+  @Validate(LoginPasswordValidator)
   password!: string;
 }

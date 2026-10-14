@@ -18,6 +18,12 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import {
+  DEV_CLERK_USER_ID,
+  isDevClerkShortPasswordLogin,
+  isValidLoginPassword,
+  normalizeDevClerkEmployeeNo,
+} from './dto/login-password.validator';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 
 /**
@@ -179,9 +185,12 @@ export class AuthService {
    * @returns JWT token 與使用者資訊
    */
   async login(loginDto: LoginDto) {
+    if (!isValidLoginPassword(loginDto)) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
     const { email, password } = loginDto;
     const emailInput = (email ?? '').trim();
-    const employeeNoInput = (loginDto.employeeNo ?? '').trim();
+    const employeeNoInput = normalizeDevClerkEmployeeNo(loginDto);
     const entityIdInput = (loginDto.entityId ?? '').trim();
     const platformLoginIdInput = (loginDto.platformLoginId ?? '').trim();
     const normalizedEmail = emailInput.toLowerCase();
@@ -195,6 +204,10 @@ export class AuthService {
       : await this.usersService.findForAuthByEmail(normalizedEmail);
     if (!user) {
       this.logger.warn(`Login failed: user not found (${loginIdentifier})`);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (isDevClerkShortPasswordLogin(loginDto) && user.id !== DEV_CLERK_USER_ID) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
