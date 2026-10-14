@@ -827,8 +827,14 @@ class FlowReleaseTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 r.existing_source_proof(wrong, old, config, r.SOURCE_EXISTING_MANIFEST, r.SOURCE_EXISTING_SHA, files)
 
-    def prepare_build_fixture(self, reuse=False, source_sha=None):
+    def prepare_build_fixture(self, reuse=False, source_sha=None, e050=False):
         source_raw, old, old_config, files, content = self.existing_source_fixture()
+        manifest_sha = r.SOURCE_EXISTING_MANIFEST
+        if e050:
+            source_raw, old, old_config, files = self.e050_source_fixture()
+            # Keep every exported synthetic blob equal to the retained context.
+            content.update({row['path']: f"synthetic-{i}".encode() for i, row in enumerate(files[3:])})
+            manifest_sha = r.SOURCE_E050_MANIFEST
         wms_raw, wms_config, wms_manifest = self.existing_wms_fixture()
         source_capture = self.directory / 'existing-source.json'
         wms_capture = self.directory / 'existing-wms.json'
@@ -837,7 +843,7 @@ class FlowReleaseTests(unittest.TestCase):
         r.private_json(source_capture, source_raw)
         r.private_json(wms_capture, wms_raw)
         r.private_json(wms_root / 'cloudbuild.json', wms_config)
-        pins = {**PINS, 'source': source_sha or r.SOURCE_EXISTING_SHA}
+        pins = {**PINS, 'source': source_sha or (r.SOURCE_E050_SHA if e050 else r.SOURCE_EXISTING_SHA)}
 
         def export(_root, _sha, destination, prefix=''):
             Path(destination).mkdir(parents=True, mode=0o700)
@@ -855,7 +861,7 @@ class FlowReleaseTests(unittest.TestCase):
         for mocked in patches:
             mocked.start()
         try:
-            options = (source_capture, self.directory / 'frozen-manifest.json', r.SOURCE_EXISTING_MANIFEST) if reuse else ()
+            options = (source_capture, self.directory / 'frozen-manifest.json', manifest_sha) if reuse else ()
             manifest = r.build_prepare(self.live, pins, self.directory, self.directory, wms_root,
                                        self.directory / 'prepared', wms_capture, *options)
         finally:
@@ -990,10 +996,11 @@ class FlowReleaseTests(unittest.TestCase):
         profiles[(r.SOURCE_B667_SHA, r.SOURCE_B667_BUILD, r.SOURCE_B667_MANIFEST)]['digests'] = digests
         return raw, old, config, files, profiles
 
-    def test_only_two_reviewed_source_tuples_allow_reuse_and_cross_mixing_is_rejected(self):
+    def test_only_three_reviewed_source_tuples_allow_reuse_and_cross_mixing_is_rejected(self):
         profiles = r.SOURCE_REUSE_PROFILES
         self.assertEqual(set(profiles), {(r.SOURCE_EXISTING_SHA, r.SOURCE_EXISTING_BUILD, r.SOURCE_EXISTING_MANIFEST),
-                                       (r.SOURCE_B667_SHA, r.SOURCE_B667_BUILD, r.SOURCE_B667_MANIFEST)})
+                                       (r.SOURCE_B667_SHA, r.SOURCE_B667_BUILD, r.SOURCE_B667_MANIFEST),
+                                       (r.SOURCE_E050_SHA, r.SOURCE_E050_BUILD, r.SOURCE_E050_MANIFEST)})
         self.assertEqual(profiles[(r.SOURCE_B667_SHA, r.SOURCE_B667_BUILD, r.SOURCE_B667_MANIFEST)]['sourceFileCount'], 501)
         for values in ((r.SOURCE_B667_SHA, r.SOURCE_EXISTING_BUILD, r.SOURCE_B667_MANIFEST),
                        (r.SOURCE_EXISTING_SHA, r.SOURCE_B667_BUILD, r.SOURCE_EXISTING_MANIFEST),
@@ -1067,6 +1074,124 @@ class FlowReleaseTests(unittest.TestCase):
             cross = copy.deepcopy(receipt); cross['existingSource']['manifestSha256'] = r.SOURCE_EXISTING_MANIFEST
             with self.assertRaisesRegex(RuntimeError, 'tuple is not approved'):
                 r.build_images(cross, pins)
+
+    def e050_source_fixture(self):
+        raw, old, config, files, _ = self.existing_source_fixture()
+        for i in range(513 - len(files)):
+            files.append({'path': f'fixture/source-{i:03}.ts', 'sha256': r.sha256(f'synthetic-{i}'.encode())})
+        old_erp = 'aa7ce96196a14eccf225aeade5c453ef5cb3cbbf'
+        old['sourcePins'] = {'erp': old_erp, 'source': r.SOURCE_E050_SHA}
+        old['contextSha256'] = r.SOURCE_E050_CONTEXT
+        old['files'] = [{'path': 'source/' + row['path'], 'sha256': row['sha256']} for row in reversed(files)]
+        for step in config['steps']:
+            source = step['id'] in (r.SOURCE, r.MODULE)
+            step['args'] = [arg.replace(r.SOURCE_EXISTING_SHA, r.SOURCE_E050_SHA).replace('f' * 40, old_erp)
+                            for arg in step['args']]
+            step['dir'] = 'source' if source else 'api' if step['id'] == r.API else 'web'
+        config['images'] = [r.REGISTRY + r.IMAGE_KEYS[step['id']] + ':doaf-' +
+                            (r.SOURCE_E050_SHA if step['id'] in (r.SOURCE, r.MODULE) else old_erp) for step in config['steps']]
+        config.update(timeout='3600s', options={'logging': 'CLOUD_LOGGING_ONLY', 'machineType': 'E2_HIGHCPU_8'},
+                      tags=['doaf-' + old_erp[:12]])
+        raw.update(id=r.SOURCE_E050_BUILD,
+                   name=f'projects/{r.NAMESPACE}/locations/{r.REGION}/builds/{r.SOURCE_E050_BUILD}',
+                   images=config['images'], steps=[{**copy.deepcopy(step), 'status': 'SUCCESS'} for step in config['steps']])
+        raw['results']['images'] = [{'name': name, 'digest': r.SOURCE_E050_DIGESTS.get(step['id'], 'sha256:' + 'f' * 64)}
+                                    for name, step in zip(config['images'], config['steps'])]
+        return raw, old, config, files
+
+    def test_e050_profile_pins_build14_context_recipe_513_files_and_both_actual_digests(self):
+        profile = r.approved_source_profile('e050e5edcdb6b8648f9378381cb763ff7ac683f8',
+                                            'e9ed49a4-e547-4a1a-91fe-8e91b3158242',
+                                            '8e954d47fd63d0cdf37dee5512f4b465b6239dafbb2ef5a36c1be5b6a48e112b')
+        self.assertEqual(profile, {
+            'sourceFileCount': 513,
+            'digests': {r.SOURCE: 'sha256:65a29a3c558b5ee286aa6b532c48dc26d0edf824921c5752e8acd746eedc77f4',
+                        r.MODULE: 'sha256:9fc7b94f9af8e25556c1d0e03127d798028aaac4d4b7d3b9573825f04b614edf'},
+            'contextSha256': 'd67eaa89d08a6138f3f26d85986282d32737df2d63df4f195245b7e9e1688364',
+            'recipeSha256': 'a6a7ea23684c3c83febfd9d08b9b8094644af887fa295d769379c277ce039b76'})
+        raw, old, config, files = self.e050_source_fixture()
+        proof = r.existing_source_proof(raw, old, config, r.SOURCE_E050_MANIFEST, r.SOURCE_E050_SHA, files)
+        self.assertEqual(len(proof['sourceFiles']), 513)
+        self.assertEqual(set(proof['images']), {r.SOURCE, r.MODULE})
+        self.assertEqual(proof['originalContextSha256'], profile['contextSha256'])
+        self.assertEqual(proof['originalRecipeSha256'], profile['recipeSha256'])
+        self.assertEqual(proof['originalRecipe'], config)
+        self.assertFalse(proof['previousErpImagesReused'])
+
+    def test_e050_cross_build_sha_manifest_combinations_fail_closed(self):
+        for values in ((r.SOURCE_E050_SHA, r.SOURCE_B667_BUILD, r.SOURCE_E050_MANIFEST),
+                       (r.SOURCE_E050_SHA, r.SOURCE_E050_BUILD, r.SOURCE_B667_MANIFEST),
+                       (r.SOURCE_B667_SHA, r.SOURCE_E050_BUILD, r.SOURCE_E050_MANIFEST),
+                       ('b' * 40, r.SOURCE_E050_BUILD, r.SOURCE_E050_MANIFEST),
+                       (r.SOURCE_E050_SHA, BUILD_ID, r.SOURCE_E050_MANIFEST),
+                       (r.SOURCE_E050_SHA, r.SOURCE_E050_BUILD, '0' * 64)):
+            with self.subTest(values=values), self.assertRaisesRegex(RuntimeError, 'tuple is not approved'):
+                r.approved_source_profile(*values)
+
+    def test_e050_wrong_context_full_recipe_or_source_context_cannot_be_reused(self):
+        raw, old, config, files = self.e050_source_fixture()
+        for value in (None, '0' * 64):
+            changed = copy.deepcopy(old); changed['contextSha256'] = value
+            with self.assertRaisesRegex(RuntimeError, 'complete context/recipe'):
+                r.existing_source_proof(raw, changed, config, r.SOURCE_E050_MANIFEST, r.SOURCE_E050_SHA, files)
+        for change in (lambda c: c.update(timeout='7200s'),
+                       lambda c: c['options'].update(machineType='OTHER'),
+                       lambda c: c['steps'][0]['args'].append('--modified-old-ERP'),
+                       lambda c: c['steps'][2]['args'].append('--other-source')):
+            changed_config = copy.deepcopy(config); change(changed_config)
+            changed_raw = copy.deepcopy(raw)
+            changed_raw['steps'] = [{**step, 'status': 'SUCCESS'} for step in changed_config['steps']]
+            with self.assertRaisesRegex(RuntimeError, 'complete context/recipe'):
+                r.existing_source_proof(changed_raw, old, changed_config, r.SOURCE_E050_MANIFEST, r.SOURCE_E050_SHA, files)
+        for change in (lambda m: m['files'][0].update(sha256='0' * 64),
+                       lambda m: m['files'].pop(),
+                       lambda m: m['files'].append(copy.deepcopy(m['files'][0]))):
+            changed = copy.deepcopy(old); change(changed)
+            with self.assertRaisesRegex(RuntimeError, 'context differs'):
+                r.existing_source_proof(raw, changed, config, r.SOURCE_E050_MANIFEST, r.SOURCE_E050_SHA, files)
+        fewer = files[:-1]; changed = copy.deepcopy(old); changed['exportedSourceFiles']['source'] = fewer
+        changed['files'] = [{'path': 'source/' + row['path'], 'sha256': row['sha256']} for row in fewer]
+        with self.assertRaisesRegex(RuntimeError, 'Git blobs'):
+            r.existing_source_proof(raw, changed, config, r.SOURCE_E050_MANIFEST, r.SOURCE_E050_SHA, fewer)
+
+    def test_e050_success_pair_rejects_failed_foreign_or_wrong_digest_results(self):
+        raw, old, config, files = self.e050_source_fixture()
+        for change in (lambda d: d.update(status='QUEUED'), lambda d: d.update(projectId='foreign'),
+                       lambda d: d.update(name=d['name'].replace('asia-east1', 'global')),
+                       lambda d: d['steps'][3].update(status='FAILURE'),
+                       lambda d: d['results']['images'][2].update(digest=r.SOURCE_B667_DIGESTS[r.SOURCE]),
+                       lambda d: d['results']['images'][3].update(digest=r.SOURCE_E050_DIGESTS[r.SOURCE]),
+                       lambda d: d['results']['images'].pop()):
+            changed = copy.deepcopy(raw); change(changed)
+            with self.assertRaises(RuntimeError):
+                r.existing_source_proof(changed, old, config, r.SOURCE_E050_MANIFEST, r.SOURCE_E050_SHA, files)
+
+    def test_e050_prepare_only_builds_two_new_erp_images_and_preserves_all_reuse_proof(self):
+        manifest, pins, wms_manifest = self.prepare_build_fixture(reuse=True, e050=True)
+        self.assertEqual(manifest['builtImageKeys'], [r.API, r.WEB])
+        context = Path(manifest['buildContext'])
+        config = r.read_json(context / 'cloudbuild.json')
+        self.assertEqual([step['id'] for step in config['steps']], [r.API, r.WEB])
+        path = context.parent / 'build-manifest.private.json'
+        raw = {'id': BUILD_ID, 'status': 'SUCCESS', 'projectId': r.PROJECT,
+               'steps': [{**step, 'status': 'SUCCESS'} for step in config['steps']], 'images': config['images'],
+               'results': {'images': [{'name': name, 'digest': 'sha256:' + '2' * 64} for name in config['images']]}}
+        capture = self.directory / 'e050-new-erp-success.json'
+        r.private_json(capture, {'region': r.REGION, 'description': raw})
+        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+            r.verify_build_context(path, r.sha256(path.read_bytes()))
+            receipt = r.success_build_receipt(path, r.sha256(path.read_bytes()), [capture], self.directory / 'e050-six.json')
+            self.assertEqual(len(r.build_images(receipt, pins)), 6)
+            self.assertEqual(set(receipt['builds']), {BUILD_ID, r.SOURCE_E050_BUILD, r.WMS_EXISTING_BUILD})
+            for key in (r.API, r.WEB):
+                stale = copy.deepcopy(receipt)
+                stale['images'][key] = {'image': image(key, 'f'), 'buildId': r.SOURCE_E050_BUILD}
+                with self.assertRaisesRegex(RuntimeError, 'Previous ERP'):
+                    r.build_images(stale, pins)
+            for field in ('originalContextSha256', 'originalRecipeSha256'):
+                altered = copy.deepcopy(receipt); altered['existingSource'][field] = '0' * 64
+                with self.assertRaisesRegex(RuntimeError, 'complete context/recipe'):
+                    r.build_images(altered, pins)
 
 
 if __name__ == '__main__':

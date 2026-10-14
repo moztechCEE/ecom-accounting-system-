@@ -61,13 +61,25 @@ SOURCE_EXISTING_DIGESTS = {SOURCE: 'sha256:4c29269d108ca1183fcc3955e90d3e0dfda29
 SOURCE_B667_SHA = 'b667320582870029aee1e3c9948937f79d925c6f'
 SOURCE_B667_BUILD = '12ee5571-5439-438c-8761-ed304e1edbec'
 SOURCE_B667_MANIFEST = 'c4cda1e921d48e5f8974538a9fd0674a6c3eb09dd02b0ddb85fd748b433f9031'
-# Only this completed, reviewed build's exact Source pair is reusable. Any
-# later Source SHA requires fresh builds; this is not a generic reuse rule.
+# Each completed, reviewed Source pair needs its own exact reuse profile.
+# An unlisted later Source SHA still requires fresh builds.
 SOURCE_B667_DIGESTS = {SOURCE: 'sha256:68c64e9803e2c30c3998774599bf5a4ad3f7a40b66d11ee77cb3fa8b17803eaa',
                        MODULE: 'sha256:fde3052f02e8ab04f002f9ec990d0a8261329e684e0e3ee4e3170dd8573e4790'}
+SOURCE_E050_SHA = 'e050e5edcdb6b8648f9378381cb763ff7ac683f8'
+SOURCE_E050_BUILD = 'e9ed49a4-e547-4a1a-91fe-8e91b3158242'
+SOURCE_E050_MANIFEST = '8e954d47fd63d0cdf37dee5512f4b465b6239dafbb2ef5a36c1be5b6a48e112b'
+SOURCE_E050_CONTEXT = 'd67eaa89d08a6138f3f26d85986282d32737df2d63df4f195245b7e9e1688364'
+SOURCE_E050_RECIPE = 'a6a7ea23684c3c83febfd9d08b9b8094644af887fa295d769379c277ce039b76'
+# Build 14's complete context/recipe is fixed independently of the two Source
+# results. Its aa7 ERP images must still never enter a later ERP candidate.
+SOURCE_E050_DIGESTS = {SOURCE: 'sha256:65a29a3c558b5ee286aa6b532c48dc26d0edf824921c5752e8acd746eedc77f4',
+                       MODULE: 'sha256:9fc7b94f9af8e25556c1d0e03127d798028aaac4d4b7d3b9573825f04b614edf'}
 SOURCE_REUSE_PROFILES = {
     (SOURCE_EXISTING_SHA, SOURCE_EXISTING_BUILD, SOURCE_EXISTING_MANIFEST): {'sourceFileCount': 499, 'digests': SOURCE_EXISTING_DIGESTS},
     (SOURCE_B667_SHA, SOURCE_B667_BUILD, SOURCE_B667_MANIFEST): {'sourceFileCount': 501, 'digests': SOURCE_B667_DIGESTS},
+    (SOURCE_E050_SHA, SOURCE_E050_BUILD, SOURCE_E050_MANIFEST): {
+        'sourceFileCount': 513, 'digests': SOURCE_E050_DIGESTS,
+        'contextSha256': SOURCE_E050_CONTEXT, 'recipeSha256': SOURCE_E050_RECIPE},
 }
 STORAGE_VERSION = '7.19.0'
 ORIGINS = {s: f'https://{s}-sp5g377smq-de.a.run.app' for s in DEV}
@@ -469,6 +481,13 @@ def approved_source_profile(source_sha, build_id, manifest_sha):
 def existing_source_proof(raw, old, config, manifest_sha, current_sha, source_files):
     profile = approved_source_profile(current_sha, raw.get('id'), manifest_sha)
     build_id = raw['id']
+    retained = {}
+    if 'contextSha256' in profile or 'recipeSha256' in profile:
+        require(old.get('contextSha256') == profile.get('contextSha256') and
+                sha256(canonical(config)) == profile.get('recipeSha256'),
+                'Existing Source approved complete context/recipe differs')
+        retained = {'originalContextSha256': profile['contextSha256'],
+                    'originalRecipeSha256': profile['recipeSha256']}
     require(old['sourcePins']['source'] == current_sha,
             'Existing Source frozen manifest/SHA differs')
     require(source_files == old.get('exportedSourceFiles', {}).get('source') and
@@ -506,11 +525,11 @@ def existing_source_proof(raw, old, config, manifest_sha, current_sha, source_fi
         require(len(rows) == 1 and rows[0].get('digest') == profile['digests'][key], 'Existing Source immutable normal/module digest differs')
         source_steps[key] = step
         images[key] = {'image': REGISTRY + IMAGE_KEYS[key] + '@' + rows[0]['digest'], 'buildId': build_id}
-    # The previous manifest also contains ERP f22 images; they are NOT reusable
+    # The previous manifest also contains ERP images; they are NOT reusable
     # for this new ERP source. Only these two Source keys enter the new matrix.
     return {'buildId': build_id, 'sourceSha': current_sha, 'manifestSha256': manifest_sha,
             'sourceFiles': source_files, 'sourceSteps': source_steps, 'originalRecipe': config, 'images': images,
-            'description': {**raw, 'region': REGION}, 'previousErpImagesReused': False}
+            'description': {**raw, 'region': REGION}, 'previousErpImagesReused': False, **retained}
 
 
 def build_prepare(baseline, pins, erp_root, source_root, wms_root, output, existing_wms_path,
@@ -640,6 +659,8 @@ def verify_build_context(manifest_path, expected_sha256):
                 'Existing Source retained evidence differs')
         old_like = {'sourcePins': {'source': existing['sourceSha']}, 'exportedSourceFiles': {'source': existing['sourceFiles']},
                     'files': [{'path': 'source/' + f['path'], 'sha256': f['sha256']} for f in sorted(existing['sourceFiles'], key=lambda f: f['path'])]}
+        if 'originalContextSha256' in existing:
+            old_like['contextSha256'] = existing['originalContextSha256']
         proof = existing_source_proof(existing['description'], old_like, existing['originalRecipe'],
                                        existing['manifestSha256'], manifest['sourcePins']['source'], existing['sourceFiles'])
         require(proof == existing and len(built_keys) == 2 and set(built_keys) == {API, WEB} and
@@ -715,6 +736,11 @@ def build_images(receipt, pins):
         if receipt.get('existingSource'):
             existing_source = receipt['existingSource']
             profile = approved_source_profile(pins['source'], existing_source.get('buildId'), existing_source.get('manifestSha256'))
+            if 'contextSha256' in profile or 'recipeSha256' in profile:
+                require(existing_source.get('originalContextSha256') == profile.get('contextSha256') and
+                        existing_source.get('originalRecipeSha256') == profile.get('recipeSha256') and
+                        sha256(canonical(existing_source.get('originalRecipe'))) == profile.get('recipeSha256'),
+                        'Existing Source approved complete context/recipe differs')
             if key in (API, WEB):
                 require(row['buildId'] != existing_source['buildId'], 'Previous ERP images cannot be reused from the Source build')
             if key in (SOURCE, MODULE):

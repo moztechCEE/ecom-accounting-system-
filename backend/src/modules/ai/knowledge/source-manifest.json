@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:cd7ab3b7996aabbe565846e8395cf30593ee7879fa233efa228fbc0761d3d912",
+  "sourceVersion": "sha256:0b57e938c416e85d4b94c101da84879e8ff559a2388f0a2245cb06e3029b03ac",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "aef094ce265938705362f8e2de6bde480bd25f62538786dd7380490934fd8a07",
+  "catalogSha256": "65f28aec7522f3fda1848ae38b61862bec0d38a8f557911796fde9547301f047",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -257,6 +257,18 @@
     {
       "path": "backend/src/modules/auth/auth.controller.ts",
       "sha256": "171d8792dfe1ee5ff1db5ed83a2d0a19168b8d8681bf5b8f65f949ef1bc23ffd"
+    },
+    {
+      "path": "backend/src/modules/auth/auth.service.ts",
+      "sha256": "15fa294f8d3eab0f8360e5f6eabe6877b4109b251e2328ef5ba9280f4c19f5a8"
+    },
+    {
+      "path": "backend/src/modules/auth/dto/login-password.validator.ts",
+      "sha256": "6032124232ebe3542236ec3f46f1f4a9504374a6e9dcdaacac42d7c8f43fb303"
+    },
+    {
+      "path": "backend/src/modules/auth/dto/login.dto.ts",
+      "sha256": "7861584bd935ca4ac0a54c6b188050e626e8a396a91fb75b514e6faa1e7f9b04"
     },
     {
       "path": "backend/src/modules/b2b/b2b-guest.controller.ts",

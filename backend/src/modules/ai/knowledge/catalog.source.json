@@ -2872,7 +2872,10 @@
         "frontend/src/pages/ForcePasswordChangePage.tsx",
         "frontend/src/pages/LoginPage.tsx",
         "frontend/src/pages/ResetPasswordPage.tsx",
-        "backend/src/modules/auth/auth.controller.ts"
+        "backend/src/modules/auth/auth.controller.ts",
+        "backend/src/modules/auth/auth.service.ts",
+        "backend/src/modules/auth/dto/login.dto.ts",
+        "backend/src/modules/auth/dto/login-password.validator.ts"
       ],
       "aliases": [
         "/auth/change-password",
