@@ -33,6 +33,19 @@ def image(key, digit='1'):
     return r.REGISTRY + r.IMAGE_KEYS[key] + '@sha256:' + digit * 64
 
 
+def wms_rows_patch(rows):
+    # Synthetic legacy rows exercise the unchanged 5c profile independently of
+    # the separately pinned ef manifest and its actual public-context check.
+    return patch.dict(r.WMS_REUSE_PROFILES[r.WMS_SOURCE], {'fileRowsSha256': r.sha256(r.canonical(rows))})
+
+
+def wms_proof_patch(manifest):
+    values = {'fileRowsSha256': r.sha256(r.canonical(manifest['files']))}
+    if manifest['commit'] == r.WMS_EF_SOURCE:
+        values['manifestCanonicalSha256'] = r.sha256(r.canonical(manifest))
+    return patch.dict(r.WMS_REUSE_PROFILES[manifest['commit']], values)
+
+
 def fixture():
     values = {r.API: {'ERP_DEV_SANDBOX': 'true', 'DB_NAME': 'erp_dev_20260921', 'DB_USER': 'erp_dev_runtime',
                      'SEED_ON_STARTUP': 'false', 'RUNTIME_SCHEDULES_ENABLED': 'false', 'CORS_ORIGIN': r.ORIGINS[r.WEB],
@@ -633,7 +646,7 @@ class FlowReleaseTests(unittest.TestCase):
             rows.append({'path': path, 'sha256': r.sha256(b'synthetic')})
         manifest = {'commit': r.WMS_SOURCE, 'environment': 'dev', 'digest': r.WMS_MANIFEST_HASH, 'files': rows}
         (folder / 'source-manifest.json').write_text(json.dumps(manifest))
-        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(rows))):
+        with wms_rows_patch(rows):
             self.assertEqual(r.wms_context(folder, r.WMS_SOURCE), manifest)
             extra = source / '.env'
             extra.write_bytes(b'do-not-read')
@@ -813,24 +826,122 @@ class FlowReleaseTests(unittest.TestCase):
                 r.success_build_receipt(path, checksum, [capture], self.directory / f'not-written-{index}.json')
             self.assertFalse((self.directory / f'not-written-{index}.json').exists())
 
-    def existing_wms_fixture(self):
-        api_tag, web_tag = r.WMS_EXISTING_TAGS['wms-api'], r.WMS_EXISTING_TAGS['wms-web']
+    def existing_wms_fixture(self, source_sha=None):
+        source_sha = r.WMS_SOURCE if source_sha is None else source_sha
+        profile = r.approved_wms_profile(source_sha)
+        api_tag, web_tag = profile['tags']['wms-api'], profile['tags']['wms-web']
         config = {'steps': [
             {'name': 'gcr.io/cloud-builders/docker', 'args': ['build', '-f', 'backend/Dockerfile', '-t', api_tag, 'backend']},
             {'name': 'gcr.io/cloud-builders/docker', 'args': ['build', '-f', 'frontend/Dockerfile.cloudrun', '--build-arg',
-                'VITE_DEPLOY_ENV=dev', '--build-arg', 'VITE_SOURCE_COMMIT=' + r.WMS_SOURCE, '-t', web_tag, 'frontend']}],
+                'VITE_DEPLOY_ENV=dev', '--build-arg', 'VITE_SOURCE_COMMIT=' + source_sha, '-t', web_tag, 'frontend']}],
             'images': [api_tag, web_tag]}
-        raw = {'id': r.WMS_EXISTING_BUILD, 'status': 'SUCCESS', 'projectId': r.PROJECT,
-               'name': f'projects/{r.NAMESPACE}/locations/{r.REGION}/builds/{r.WMS_EXISTING_BUILD}',
+        raw = {'id': profile['buildId'], 'status': 'SUCCESS', 'projectId': r.PROJECT,
+               'name': f'projects/{r.NAMESPACE}/locations/{r.REGION}/builds/{profile["buildId"]}',
                'steps': copy.deepcopy(config['steps']), 'images': config['images'],
-               'results': {'images': [{'name': tag, 'digest': r.WMS_EXISTING_DIGESTS[key]} for key, tag in r.WMS_EXISTING_TAGS.items()]}}
+               'results': {'images': [{'name': tag, 'digest': profile['digests'][key]} for key, tag in profile['tags'].items()]}}
         rows = [{'path': f'backend/src/synthetic-{i}.js', 'sha256': '0' * 64} for i in range(273)]
-        manifest = {'commit': r.WMS_SOURCE, 'digest': r.WMS_MANIFEST_HASH, 'files': rows}
+        manifest = {'commit': source_sha, 'digest': profile['manifestDigest'], 'files': rows}
+        if source_sha == r.WMS_EF_SOURCE:
+            manifest['environment'] = 'dev'
         return raw, config, manifest
+
+    def test_wms_profiles_pin_both_distinct_success_builds_without_replacing_legacy_constants(self):
+        self.assertEqual(set(r.WMS_REUSE_PROFILES), {'5c056d40404cf39dfdb2c8eaf2b2d46768995cfd',
+                                                   'ef264be7a62765ebb6fb18f451182d191a2abc08'})
+        legacy = r.approved_wms_profile(r.WMS_SOURCE)
+        self.assertEqual(legacy, {'manifestDigest': r.WMS_MANIFEST_HASH, 'fileRowsSha256': r.WMS_ROWS_HASH,
+                                 'fileCount': 273, 'buildId': r.WMS_EXISTING_BUILD,
+                                 'tags': r.WMS_EXISTING_TAGS, 'digests': r.WMS_EXISTING_DIGESTS})
+        current = r.approved_wms_profile('ef264be7a62765ebb6fb18f451182d191a2abc08')
+        self.assertEqual(current['buildId'], '21d28906-b2ab-484d-b4d2-1873407682ca')
+        self.assertEqual(current['manifestDigest'], 'a4ca0bfb6ee242e79f737bc8b16ab7404998060d3cd59105fbc242cc5033d6e4')
+        self.assertEqual(current['fileRowsSha256'], current['manifestDigest'])
+        self.assertEqual(current['manifestFileSha256'], '4fa6c3696d3f6147042e6d34553048fbdcb147d627906a8f68cf70aa1bf58766')
+        self.assertEqual(current['recipeFileSha256'], '656e4d4e059497455b2968480973715911ad887556cd098c8776e51c36502c7e')
+        self.assertEqual(current['digests'], {
+            'wms-api': 'sha256:8624864c1596bbfa22ade4e7d1da83becc9f6ded04cbfa259431a029e557358d',
+            'wms-web': 'sha256:af9447e42857c6da3dc8d3ed3ec6b1d0a356dc74fc5bd0b922ae8257265cc8f4'})
+        for unknown in ('f' * 40, '', None, {}):
+            with self.subTest(unknown=unknown), self.assertRaisesRegex(RuntimeError, 'profile is not approved'):
+                r.approved_wms_profile(unknown)
+
+    def test_ef_wms_exact_source_recipe_build_and_digest_pair_are_selected(self):
+        raw, config, manifest = self.existing_wms_fixture(r.WMS_EF_SOURCE)
+        self.assertEqual(r.sha256(r.canonical(config)), 'c11676bd972497e4ee5653e1c858289775e7ee3e07fc6db5d1644410d462230a')
+        with wms_proof_patch(manifest):
+            proof = r.existing_wms_proof(raw, config, manifest, r.WMS_EF_SOURCE)
+        self.assertEqual(proof['sourceSha'], r.WMS_EF_SOURCE)
+        self.assertEqual(proof['buildId'], '21d28906-b2ab-484d-b4d2-1873407682ca')
+        self.assertEqual(proof['images']['wms-api']['image'], r.REGISTRY + 'corely-wms-backend@sha256:8624864c1596bbfa22ade4e7d1da83becc9f6ded04cbfa259431a029e557358d')
+        self.assertEqual(proof['images']['wms-web']['image'], r.REGISTRY + 'corely-wms-frontend@sha256:af9447e42857c6da3dc8d3ed3ec6b1d0a356dc74fc5bd0b922ae8257265cc8f4')
+
+    def test_ef_wms_cannot_borrow_legacy_sdk_build_digests_recipe_or_rows(self):
+        raw, config, manifest = self.existing_wms_fixture(r.WMS_EF_SOURCE)
+        with wms_proof_patch(manifest):
+            for change in (lambda d: d.update(id=r.WMS_EXISTING_BUILD),
+                           lambda d: d.update(status='FAILURE'),
+                           lambda d: d.update(name=d['name'].replace(r.REGION, 'global')),
+                           lambda d: d['results']['images'][0].update(digest=r.WMS_EXISTING_DIGESTS['wms-api']),
+                           lambda d: d['results']['images'].pop()):
+                wrong = copy.deepcopy(raw); change(wrong)
+                with self.subTest(raw=wrong), self.assertRaises(RuntimeError):
+                    r.existing_wms_proof(wrong, config, manifest, r.WMS_EF_SOURCE)
+            for change in (lambda c: c['steps'][1]['args'].__setitem__(6, 'VITE_SOURCE_COMMIT=' + r.WMS_SOURCE),
+                           lambda c: c['steps'][0]['args'].append('--unreviewed'),
+                           lambda c: c['images'].append(r.WMS_EXISTING_TAGS['wms-api'])):
+                wrong_config = copy.deepcopy(config); change(wrong_config)
+                wrong_raw = copy.deepcopy(raw); wrong_raw['steps'] = copy.deepcopy(wrong_config['steps'])
+                wrong_raw['images'] = wrong_config['images']
+                with self.subTest(config=wrong_config), self.assertRaisesRegex(RuntimeError, 'supplier recipe differs'):
+                    r.existing_wms_proof(wrong_raw, wrong_config, manifest, r.WMS_EF_SOURCE)
+            for change in (lambda m: m.update(commit=r.WMS_SOURCE),
+                           lambda m: m.update(digest=r.WMS_MANIFEST_HASH),
+                           lambda m: m['files'].reverse(), lambda m: m['files'].pop(),
+                           lambda m: m['files'].append(copy.deepcopy(m['files'][0])),
+                           lambda m: m['files'][0].update(sha256='1' * 64)):
+                wrong = copy.deepcopy(manifest); change(wrong)
+                with self.subTest(manifest=wrong), self.assertRaises(RuntimeError):
+                    r.existing_wms_proof(raw, config, wrong, r.WMS_EF_SOURCE)
+            with self.assertRaises(RuntimeError):
+                r.existing_wms_proof(raw, config, manifest, r.WMS_SOURCE)
+
+    def test_ef_wms_context_requires_all_273_bytes_and_exact_manifest_and_recipe_files(self):
+        _, config, manifest = self.existing_wms_fixture(r.WMS_EF_SOURCE)
+        folder = self.directory / 'ef-wms'
+        source = folder / 'build-source'
+        for i, row in enumerate(manifest['files']):
+            content = ('synthetic-' + str(i)).encode()
+            row['sha256'] = r.sha256(content)
+            r.private_write(source / row['path'], content)
+        r.private_json(folder / 'source-manifest.json', manifest)
+        r.private_json(folder / 'cloudbuild.json', config)
+        recipe_path, manifest_path = folder / 'cloudbuild.json', folder / 'source-manifest.json'
+        self.assertEqual(r.sha256(recipe_path.read_bytes()), r.approved_wms_profile(r.WMS_EF_SOURCE)['recipeFileSha256'])
+        original = manifest_path.read_bytes()
+        with wms_proof_patch(manifest), patch.dict(r.WMS_REUSE_PROFILES[r.WMS_EF_SOURCE], {'manifestFileSha256': r.sha256(original)}):
+            self.assertEqual(r.wms_context(folder, r.WMS_EF_SOURCE), manifest)
+            extra = source / 'unlisted.js'; extra.write_text('extra')
+            with self.assertRaisesRegex(RuntimeError, 'missing/extra'):
+                r.wms_context(folder, r.WMS_EF_SOURCE)
+            extra.unlink()
+            first = source / manifest['files'][0]['path']; content = first.read_bytes(); first.unlink()
+            with self.assertRaisesRegex(RuntimeError, 'missing/extra'):
+                r.wms_context(folder, r.WMS_EF_SOURCE)
+            first.write_bytes(b'changed')
+            with self.assertRaisesRegex(RuntimeError, 'file hash differs'):
+                r.wms_context(folder, r.WMS_EF_SOURCE)
+            first.write_bytes(content)
+            manifest_path.write_bytes(original + b' ')
+            with self.assertRaisesRegex(RuntimeError, 'manifest file checksum differs'):
+                r.wms_context(folder, r.WMS_EF_SOURCE)
+            manifest_path.write_bytes(original)
+            recipe_path.write_text(json.dumps(config))
+            with self.assertRaisesRegex(RuntimeError, 'recipe checksum differs'):
+                r.wms_context(folder, r.WMS_EF_SOURCE)
 
     def test_reuses_exact_existing_two_container_wms_build_and_combines_four_new_images(self):
         raw, supplier, wms_manifest = self.existing_wms_fixture()
-        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+        with wms_rows_patch(wms_manifest['files']):
             proof = r.existing_wms_proof(raw, supplier, wms_manifest)
             self.assertEqual(set(proof['images']), {'wms-api', 'wms-web'})
             path, _, manifest, config = self.prepared_context()
@@ -867,7 +978,7 @@ class FlowReleaseTests(unittest.TestCase):
                      lambda d: d['results']['images'][0].update(digest='sha256:' + 'f' * 64),
                      lambda d: d['steps'][0].update(secretEnv=['DO_NOT_READ']),
                      lambda d: d['results']['images'].pop()]
-        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(manifest['files']))):
+        with wms_rows_patch(manifest['files']):
             for change in modifiers:
                 wrong = copy.deepcopy(raw)
                 change(wrong)
@@ -975,7 +1086,7 @@ class FlowReleaseTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 r.existing_source_proof(wrong, old, config, r.SOURCE_EXISTING_MANIFEST, r.SOURCE_EXISTING_SHA, files)
 
-    def prepare_build_fixture(self, reuse=False, source_sha=None, e050=False):
+    def prepare_build_fixture(self, reuse=False, source_sha=None, e050=False, wms_fixture=None):
         source_raw, old, old_config, files, content = self.existing_source_fixture()
         manifest_sha = r.SOURCE_EXISTING_MANIFEST
         if e050:
@@ -983,7 +1094,7 @@ class FlowReleaseTests(unittest.TestCase):
             # Keep every exported synthetic blob equal to the retained context.
             content.update({row['path']: f"synthetic-{i}".encode() for i, row in enumerate(files[3:])})
             manifest_sha = r.SOURCE_E050_MANIFEST
-        wms_raw, wms_config, wms_manifest = self.existing_wms_fixture()
+        wms_raw, wms_config, wms_manifest = wms_fixture or self.existing_wms_fixture()
         source_capture = self.directory / 'existing-source.json'
         wms_capture = self.directory / 'existing-wms.json'
         wms_root = self.directory / 'wms'
@@ -991,7 +1102,8 @@ class FlowReleaseTests(unittest.TestCase):
         r.private_json(source_capture, source_raw)
         r.private_json(wms_capture, wms_raw)
         r.private_json(wms_root / 'cloudbuild.json', wms_config)
-        pins = {**PINS, 'source': source_sha or (r.SOURCE_E050_SHA if e050 else r.SOURCE_EXISTING_SHA)}
+        pins = {**PINS, 'source': source_sha or (r.SOURCE_E050_SHA if e050 else r.SOURCE_EXISTING_SHA),
+                'wms': wms_manifest['commit']}
 
         def export(_root, _sha, destination, prefix=''):
             Path(destination).mkdir(parents=True, mode=0o700)
@@ -1002,7 +1114,7 @@ class FlowReleaseTests(unittest.TestCase):
 
         dependencies = {'api': {'storageDeclared': r.STORAGE_VERSION, 'storageResolved': r.STORAGE_VERSION}}
         patches = [patch.object(r, 'clean_checkout'), patch.object(r, 'wms_context', return_value=wms_manifest),
-                   patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))),
+                   wms_proof_patch(wms_manifest),
                    patch.object(r, 'package_fingerprints', return_value=dependencies),
                    patch.object(r, 'migration_hashes', return_value={}), patch.object(r, 'export_git', side_effect=export),
                    patch.object(r, 'git_files', return_value=files), patch.object(r, 'verify_existing_source_context', return_value=(old, old_config))]
@@ -1025,8 +1137,78 @@ class FlowReleaseTests(unittest.TestCase):
         self.assertEqual(len(config['images']), 4)
         self.assertEqual(manifest['reviewedRuntimeBuildBases'], r.ERP_RUNTIME_BUILD_BASES)
         self.assertNotIn('existingSource', manifest)
-        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+        with wms_rows_patch(wms_manifest['files']):
             path = Path(manifest['buildContext']).parent / 'build-manifest.private.json'
+            self.assertEqual(r.verify_build_context(path, r.sha256(path.read_bytes()))[0], manifest)
+
+    def test_ef_prepare_verify_receipt_and_candidate_use_only_the_selected_wms_profile(self):
+        wms_fixture = self.existing_wms_fixture(r.WMS_EF_SOURCE)
+        with wms_proof_patch(wms_fixture[2]):
+            manifest, pins, _ = self.prepare_build_fixture(source_sha='d' * 40, wms_fixture=wms_fixture)
+            context = Path(manifest['buildContext'])
+            path = context.parent / 'build-manifest.private.json'
+            config = r.read_json(context / 'cloudbuild.json')
+            self.assertEqual(manifest['builtImageKeys'], [r.API, r.WEB, r.SOURCE, r.MODULE])
+            self.assertNotIn('existingSource', manifest)
+            self.assertEqual(manifest['images']['wms-web'], r.REGISTRY + 'corely-wms-frontend:dev-a4ca0bfb6ee2')
+            self.assertEqual(r.verify_build_context(path, r.sha256(path.read_bytes()))[0], manifest)
+            raw = {'id': BUILD_ID, 'status': 'SUCCESS', 'projectId': r.PROJECT,
+                   'steps': [{**step, 'status': 'SUCCESS'} for step in config['steps']], 'images': config['images'],
+                   'results': {'images': [{'name': tag, 'digest': 'sha256:' + '2' * 64} for tag in config['images']]}}
+            capture = self.directory / 'ef-four-new.json'
+            r.private_json(capture, {'region': r.REGION, 'description': raw})
+            receipt = r.success_build_receipt(path, r.sha256(path.read_bytes()), [capture], self.directory / 'ef-six.json')
+            images = r.build_images(receipt, pins)
+            specs, _ = r.candidate_specs(self.live, pins, images)
+            self.assertEqual(len(images), 6)
+            self.assertEqual(set(receipt['builds']), {BUILD_ID, '21d28906-b2ab-484d-b4d2-1873407682ca'})
+            self.assertEqual(specs[r.WMS]['spec']['template']['metadata']['labels']['corely-wms-source'], r.WMS_EF_SOURCE)
+            for c in r.containers(specs[r.WMS]):
+                self.assertEqual(r.value(c, 'SOURCE_VERSION'), r.WMS_EF_SOURCE)
+            traffic = specs[r.WMS]['spec']['traffic']
+            self.assertEqual([row for row in traffic if row.get('tag') != 'doa-warehouse-review'],
+                             self.live[r.WMS]['spec']['traffic'])
+            self.assertEqual([row.get('percent') for row in traffic if row.get('tag') == 'doa-warehouse-review'], [0])
+            profile = r.approved_wms_profile(r.WMS_EF_SOURCE)
+            for change in (lambda d: d['existingWms'].update(buildId=r.WMS_EXISTING_BUILD),
+                           lambda d: d['existingWms'].update(sourceSha=r.WMS_SOURCE),
+                           lambda d: d['existingWms'].update(manifestDigest=r.WMS_MANIFEST_HASH),
+                           lambda d: d['existingWms'].update(fileRowsSha256=r.WMS_ROWS_HASH),
+                           lambda d: d['existingWms'].update(recipeFileSha256='0' * 64),
+                           lambda d: d['images']['wms-api'].update(image=r.REGISTRY + 'corely-wms-backend@' + r.WMS_EXISTING_DIGESTS['wms-api']),
+                           lambda d: d['builds'][profile['buildId']]['steps'][1]['args'].__setitem__(6, 'VITE_SOURCE_COMMIT=' + r.WMS_SOURCE)):
+                wrong = copy.deepcopy(receipt); change(wrong)
+                with self.subTest(receipt=wrong), self.assertRaises(RuntimeError):
+                    r.build_images(wrong, pins)
+            wrong = copy.deepcopy(receipt); wrong.pop('existingWms')
+            with self.assertRaisesRegex(RuntimeError, 'reuse proof is required'):
+                r.build_images(wrong, pins)
+            foreign = dict(images); foreign['wms-web'] = image('wms-web', '2')
+            with self.assertRaisesRegex(RuntimeError, 'Candidate WMS digests differ'):
+                r.candidate_specs(self.live, pins, foreign)
+            wrong = copy.deepcopy(manifest); wrong.pop('existingWms')
+            path.write_text(json.dumps(wrong))
+            with self.assertRaisesRegex(RuntimeError, 'reuse proof is required'):
+                r.verify_build_context(path, r.sha256(path.read_bytes()))
+            wrong = copy.deepcopy(manifest); wrong['sourcePins']['wms'] = r.WMS_SOURCE
+            path.write_text(json.dumps(wrong))
+            with self.assertRaises(RuntimeError):
+                r.verify_build_context(path, r.sha256(path.read_bytes()))
+            with self.assertRaisesRegex(RuntimeError, 'profile is not approved'):
+                r.candidate_specs(self.live, {**pins, 'wms': 'f' * 40}, images)
+
+    def test_ef_current_wms_can_reuse_exact_e050_source_without_reusing_its_old_erp_or_wms(self):
+        wms_fixture = self.existing_wms_fixture(r.WMS_EF_SOURCE)
+        with wms_proof_patch(wms_fixture[2]):
+            manifest, pins, _ = self.prepare_build_fixture(reuse=True, e050=True, wms_fixture=wms_fixture)
+            context = Path(manifest['buildContext'])
+            path = context.parent / 'build-manifest.private.json'
+            self.assertEqual(pins['wms'], r.WMS_EF_SOURCE)
+            self.assertEqual(manifest['builtImageKeys'], [r.API, r.WEB])
+            self.assertEqual(manifest['existingSource']['sourceSha'], r.SOURCE_E050_SHA)
+            self.assertEqual(manifest['existingSource']['originalContextSha256'], r.SOURCE_E050_CONTEXT)
+            self.assertFalse(manifest['existingSource']['previousErpImagesReused'])
+            self.assertEqual(manifest['existingWms']['buildId'], '21d28906-b2ab-484d-b4d2-1873407682ca')
             self.assertEqual(r.verify_build_context(path, r.sha256(path.read_bytes()))[0], manifest)
 
     def test_later_source_sha_uses_four_fresh_builds_without_a_reuse_profile(self):
@@ -1060,14 +1242,14 @@ class FlowReleaseTests(unittest.TestCase):
         self.assertEqual(config['steps'][1]['waitFor'], [r.API])
         self.assertEqual(len(config['images']), 2)
         self.assertFalse(manifest['existingSource']['previousErpImagesReused'])
-        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+        with wms_rows_patch(wms_manifest['files']):
             receipt = r.success_build_receipt(path, r.sha256(path.read_bytes()), [capture], self.directory / 'combined-six.json')
         self.assertEqual(len(receipt['images']), 6)
         self.assertEqual(set(receipt['builds']), {BUILD_ID, r.SOURCE_EXISTING_BUILD, r.WMS_EXISTING_BUILD})
         self.assertEqual(receipt['images'][r.API]['buildId'], BUILD_ID)
         self.assertEqual(receipt['images'][r.SOURCE]['buildId'], r.SOURCE_EXISTING_BUILD)
         self.assertEqual(receipt['images'][r.MODULE]['image'].split('@')[-1], r.SOURCE_EXISTING_DIGESTS[r.MODULE])
-        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+        with wms_rows_patch(wms_manifest['files']):
             self.assertEqual(r.build_images(receipt, pins)[r.WEB], image(r.WEB, '2'))
 
     def test_reused_source_manifest_retained_recipe_or_build_keys_tamper_refused(self):
@@ -1079,7 +1261,7 @@ class FlowReleaseTests(unittest.TestCase):
             wrong = copy.deepcopy(manifest)
             change(wrong)
             path.write_text(json.dumps(wrong))
-            with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))), self.assertRaises(RuntimeError):
+            with wms_rows_patch(wms_manifest['files']), self.assertRaises(RuntimeError):
                 r.verify_build_context(path, r.sha256(path.read_bytes()))
 
     def test_reused_source_cannot_be_added_to_new_build_steps(self):
@@ -1090,16 +1272,16 @@ class FlowReleaseTests(unittest.TestCase):
         manifest['files'] = r.file_manifest(context)
         manifest['contextSha256'] = r.sha256(r.canonical(manifest['files']))
         path.write_text(json.dumps(manifest))
-        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))), self.assertRaisesRegex(RuntimeError, 'new build steps'):
+        with wms_rows_patch(wms_manifest['files']), self.assertRaisesRegex(RuntimeError, 'new build steps'):
             r.verify_build_context(path, r.sha256(path.read_bytes()))
 
     def test_reuse_stale_erp_digest_or_missing_source_pair_never_becomes_candidate(self):
         _, pins, wms_manifest, _, capture, path = self.source_reuse_prepared_fixture()
-        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+        with wms_rows_patch(wms_manifest['files']):
             receipt = r.success_build_receipt(path, r.sha256(path.read_bytes()), [capture], self.directory / 'valid-six.json')
         stale = copy.deepcopy(receipt)
         stale['images'][r.API] = {'image': image(r.API, 'f'), 'buildId': r.SOURCE_EXISTING_BUILD}
-        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))), self.assertRaisesRegex(RuntimeError, 'Previous ERP'):
+        with wms_rows_patch(wms_manifest['files']), self.assertRaisesRegex(RuntimeError, 'Previous ERP'):
             r.build_images(stale, pins)
         for change in (lambda d: d['images'].pop(r.MODULE),
                        lambda d: d['sourcePins'].update(source='b' * 40),
@@ -1107,7 +1289,7 @@ class FlowReleaseTests(unittest.TestCase):
                        lambda d: d['builds'][r.SOURCE_EXISTING_BUILD].update(status='FAILURE')):
             wrong = copy.deepcopy(receipt)
             change(wrong)
-            with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))), self.assertRaises(RuntimeError):
+            with wms_rows_patch(wms_manifest['files']), self.assertRaises(RuntimeError):
                 r.build_images(wrong, pins)
 
     def test_source_git_blob_reader_filters_secrets_before_reading_and_rejects_symlink(self):
@@ -1202,7 +1384,7 @@ class FlowReleaseTests(unittest.TestCase):
         raw, old, config, files, profiles = self.b667_source_fixture()
         wms_raw, wms_config, wms_manifest = self.existing_wms_fixture()
         pins = {**PINS, 'source': r.SOURCE_B667_SHA}
-        with patch.object(r, 'SOURCE_REUSE_PROFILES', profiles), patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+        with patch.object(r, 'SOURCE_REUSE_PROFILES', profiles), wms_rows_patch(wms_manifest['files']):
             source = r.existing_source_proof(raw, old, config, r.SOURCE_B667_MANIFEST, r.SOURCE_B667_SHA, files)
             wms = r.existing_wms_proof(wms_raw, wms_config, wms_manifest)
             receipt = copy.deepcopy(built())
@@ -1327,7 +1509,7 @@ class FlowReleaseTests(unittest.TestCase):
                'results': {'images': [{'name': name, 'digest': 'sha256:' + '2' * 64} for name in config['images']]}}
         capture = self.directory / 'e050-new-erp-success.json'
         r.private_json(capture, {'region': r.REGION, 'description': raw})
-        with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
+        with wms_rows_patch(wms_manifest['files']):
             r.verify_build_context(path, r.sha256(path.read_bytes()))
             receipt = r.success_build_receipt(path, r.sha256(path.read_bytes()), [capture], self.directory / 'e050-six.json')
             self.assertEqual(len(r.build_images(receipt, pins)), 6)

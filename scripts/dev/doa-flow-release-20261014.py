@@ -60,6 +60,26 @@ WMS_EXISTING_TAGS = {'wms-api': REGISTRY + 'corely-wms-backend:workstation-' + W
                      'wms-web': REGISTRY + 'corely-wms-frontend:dev-' + WMS_MANIFEST_HASH[:12]}
 WMS_EXISTING_DIGESTS = {'wms-api': 'sha256:2045e16a6f9c69945b24a3e8d6335df987d3e9966844fec407e6bbee7ba3e286',
                         'wms-web': 'sha256:0aacc9d550363b48109ad95931a571638d05af890bacb15d3d6b23f009fc618c'}
+WMS_EF_SOURCE = 'ef264be7a62765ebb6fb18f451182d191a2abc08'
+# Keep the original profile for immutable historical Source contexts. A later
+# WMS source never borrows its SDK, build or image proof from that profile.
+WMS_REUSE_PROFILES = {
+    WMS_SOURCE: {'manifestDigest': WMS_MANIFEST_HASH, 'fileRowsSha256': WMS_ROWS_HASH, 'fileCount': 273,
+                 'buildId': WMS_EXISTING_BUILD, 'tags': WMS_EXISTING_TAGS, 'digests': WMS_EXISTING_DIGESTS},
+    WMS_EF_SOURCE: {
+        'manifestDigest': 'a4ca0bfb6ee242e79f737bc8b16ab7404998060d3cd59105fbc242cc5033d6e4',
+        'fileRowsSha256': 'a4ca0bfb6ee242e79f737bc8b16ab7404998060d3cd59105fbc242cc5033d6e4', 'fileCount': 273,
+        'manifestFileSha256': '4fa6c3696d3f6147042e6d34553048fbdcb147d627906a8f68cf70aa1bf58766',
+        'manifestCanonicalSha256': 'b5c3476cfb667d1cefeae56e06bab00ee277743f5cbb8c99db4099c6ec000aea',
+        'recipeFileSha256': '656e4d4e059497455b2968480973715911ad887556cd098c8776e51c36502c7e',
+        'recipeCanonicalSha256': 'c11676bd972497e4ee5653e1c858289775e7ee3e07fc6db5d1644410d462230a',
+        'buildId': '21d28906-b2ab-484d-b4d2-1873407682ca',
+        'tags': {'wms-api': REGISTRY + 'corely-wms-backend:workstation-a4ca0bfb6ee2',
+                 'wms-web': REGISTRY + 'corely-wms-frontend:dev-a4ca0bfb6ee2'},
+        'digests': {'wms-api': 'sha256:8624864c1596bbfa22ade4e7d1da83becc9f6ded04cbfa259431a029e557358d',
+                    'wms-web': 'sha256:af9447e42857c6da3dc8d3ed3ec6b1d0a356dc74fc5bd0b922ae8257265cc8f4'},
+    },
+}
 SOURCE_EXISTING_SHA = '4592341964ae542e6b9f5a8b578d0deb9acfe7f3'
 SOURCE_EXISTING_BUILD = 'e399c55e-cdc4-4b41-9858-81a39515ebab'
 SOURCE_EXISTING_MANIFEST = '1cfc1c6f611f5c94b4e45018fd026790718d4fa522e7b3543900a5a9bcfdff7f'
@@ -352,14 +372,34 @@ def git_files(root, sha):
     return result
 
 
-def wms_context(root, sha, target=None):
-    full_sha(sha)
-    manifest = read_json(Path(root) / 'source-manifest.json')
-    require(manifest.get('commit') == sha == WMS_SOURCE and manifest.get('environment') == 'dev' and
-            manifest.get('digest') == WMS_MANIFEST_HASH, 'WMS supplier freeze differs')
+def approved_wms_profile(source_sha):
+    require(isinstance(source_sha, str) and source_sha in WMS_REUSE_PROFILES, 'WMS source profile is not approved')
+    return WMS_REUSE_PROFILES[source_sha]
+
+
+def wms_manifest_proof(manifest, sha, profile):
+    require(manifest.get('commit') == sha and manifest.get('digest') == profile['manifestDigest'], 'WMS supplier freeze differs')
     rows = manifest['files']
-    require(isinstance(rows, list) and len(rows) == 273 and len({r['path'] for r in rows}) == len(rows), 'WMS exact 273-file manifest required')
-    require(sha256(canonical(rows)) == WMS_ROWS_HASH, 'WMS manifest row digest differs')
+    require(isinstance(rows, list) and len(rows) == profile['fileCount'] and len({r['path'] for r in rows}) == len(rows),
+            'WMS exact 273-file manifest required')
+    require(sha256(canonical(rows)) == profile['fileRowsSha256'], 'WMS manifest row digest differs')
+    if 'manifestCanonicalSha256' in profile:
+        require(sha256(canonical(manifest)) == profile['manifestCanonicalSha256'], 'WMS complete manifest differs')
+
+
+def wms_context(root, sha, target=None):
+    profile = approved_wms_profile(sha)
+    manifest_path = Path(root) / 'source-manifest.json'
+    manifest = read_json(manifest_path)
+    require(manifest.get('environment') == 'dev', 'WMS supplier environment differs')
+    wms_manifest_proof(manifest, sha, profile)
+    if 'manifestFileSha256' in profile:
+        require(sha256(manifest_path.read_bytes()) == profile['manifestFileSha256'], 'WMS manifest file checksum differs')
+        recipe_path = Path(root) / 'cloudbuild.json'
+        recipe = read_json(recipe_path)
+        require(sha256(recipe_path.read_bytes()) == profile['recipeFileSha256'] and
+                sha256(canonical(recipe)) == profile['recipeCanonicalSha256'], 'WMS supplier recipe checksum differs')
+    rows = manifest['files']
     source = Path(root) / 'build-source'
     actual = {p.relative_to(source).as_posix() for p in source.rglob('*') if p.is_file() or p.is_symlink()}
     require(actual == {r['path'] for r in rows}, 'WMS context contains missing/extra files')
@@ -454,31 +494,42 @@ LABEL org.opencontainers.image.revision="{sha}"
 '''
 
 
-def existing_wms_proof(raw, config, manifest):
-    require(raw.get('id') == WMS_EXISTING_BUILD and raw.get('status') == 'SUCCESS' and raw.get('projectId') == PROJECT and
-            raw.get('name') == f'projects/{NAMESPACE}/locations/{REGION}/builds/{WMS_EXISTING_BUILD}',
+def wms_build_images(raw, config, source_sha):
+    profile = approved_wms_profile(source_sha)
+    build_id = profile['buildId']
+    require(raw.get('id') == build_id and raw.get('status') == 'SUCCESS' and raw.get('projectId') == PROJECT and
+            raw.get('name') == f'projects/{NAMESPACE}/locations/{REGION}/builds/{build_id}',
             'Existing WMS build identity/region/SUCCESS differs')
     require(not raw.get('secrets') and not raw.get('availableSecrets'), 'Existing WMS receipt contains build secrets')
-    require(manifest.get('commit') == WMS_SOURCE and manifest.get('digest') == WMS_MANIFEST_HASH and
-            len(manifest.get('files', [])) == 273 and sha256(canonical(manifest['files'])) == WMS_ROWS_HASH,
-            'Existing WMS manifest proof differs')
+    if 'recipeCanonicalSha256' in profile:
+        require(sha256(canonical(config)) == profile['recipeCanonicalSha256'], 'Existing WMS supplier recipe differs')
     expected, actual = config.get('steps', []), raw.get('steps', [])
-    require(len(expected) == len(actual) == 2 and set(config.get('images', [])) == set(WMS_EXISTING_TAGS.values()) and
+    require(len(expected) == len(actual) == 2 and set(config.get('images', [])) == set(profile['tags'].values()) and
             raw.get('images') == config['images'], 'Existing WMS exact two-image recipe required')
     for declaration, result in zip(expected, actual):
         require(all(result.get(k) == v for k, v in declaration.items()) and
                 not any(k in result for k in ('env', 'secretEnv', 'script', 'entrypoint')),
                 'Existing WMS build steps differ from supplier recipe')
-    require('VITE_SOURCE_COMMIT=' + WMS_SOURCE in actual[1].get('args', []) and
+    require('VITE_SOURCE_COMMIT=' + source_sha in actual[1].get('args', []) and
             'VITE_DEPLOY_ENV=dev' in actual[1].get('args', []), 'WMS compiled SDK source/DEV arguments differ')
     images = {}
-    for key, tag in WMS_EXISTING_TAGS.items():
+    for key, tag in profile['tags'].items():
         rows = [v for v in raw.get('results', {}).get('images', []) if v.get('name') == tag]
-        require(len(rows) == 1 and rows[0].get('digest') == WMS_EXISTING_DIGESTS[key], 'Existing WMS immutable digest differs')
-        images[key] = {'image': REGISTRY + IMAGE_KEYS[key] + '@' + rows[0]['digest'], 'buildId': WMS_EXISTING_BUILD}
-    return {'buildId': WMS_EXISTING_BUILD, 'sourceSha': WMS_SOURCE, 'manifestDigest': WMS_MANIFEST_HASH,
-            'fileRowsSha256': WMS_ROWS_HASH, 'images': images, 'description': {**raw, 'region': REGION},
-            'supplierRecipe': config}
+        require(len(rows) == 1 and rows[0].get('digest') == profile['digests'][key], 'Existing WMS immutable digest differs')
+        images[key] = {'image': REGISTRY + IMAGE_KEYS[key] + '@' + rows[0]['digest'], 'buildId': build_id}
+    return images
+
+
+def existing_wms_proof(raw, config, manifest, source_sha=None):
+    source_sha = manifest.get('commit') if source_sha is None else source_sha
+    profile = approved_wms_profile(source_sha)
+    wms_manifest_proof(manifest, source_sha, profile)
+    images = wms_build_images(raw, config, source_sha)
+    retained = {key: profile[key] for key in ('manifestFileSha256', 'manifestCanonicalSha256', 'recipeFileSha256',
+                                            'recipeCanonicalSha256') if key in profile}
+    return {'buildId': profile['buildId'], 'sourceSha': source_sha, 'manifestDigest': profile['manifestDigest'],
+            'fileRowsSha256': profile['fileRowsSha256'], 'images': images, 'description': {**raw, 'region': REGION},
+            'supplierRecipe': config, **retained}
 
 
 def source_reuse_options(build, manifest, checksum):
@@ -557,8 +608,9 @@ def build_prepare(baseline, pins, erp_root, source_root, wms_root, output, exist
     refs = snapshot_guard(baseline)
     clean_checkout(erp_root, pins['erp'])
     clean_checkout(source_root, pins['source'])
+    wms_profile = approved_wms_profile(pins['wms'])
     wms = wms_context(wms_root, pins['wms'])
-    existing_wms = existing_wms_proof(read_json(existing_wms_path), read_json(Path(wms_root) / 'cloudbuild.json'), wms)
+    existing_wms = existing_wms_proof(read_json(existing_wms_path), read_json(Path(wms_root) / 'cloudbuild.json'), wms, pins['wms'])
     existing_source = None
     if source_reuse_options(existing_source_path, existing_source_manifest, existing_source_manifest_sha):
         captured_source = read_json(existing_source_path)
@@ -588,7 +640,7 @@ def build_prepare(baseline, pins, erp_root, source_root, wms_root, output, exist
     steps, images = [], {}
     for key, repository in IMAGE_KEYS.items():
         if key.startswith('wms-'):
-            images[key] = WMS_EXISTING_TAGS[key]
+            images[key] = wms_profile['tags'][key]
             continue  # The reviewed SUCCESS build already produced these two.
         if existing_source and key in (SOURCE, MODULE):
             images[key] = REGISTRY + repository + ':doaf-' + pins['source']
@@ -655,7 +707,9 @@ def _read_build_context(manifest_path, expected_sha256):
             manifest.get('mode') == 'prepare-only', 'Unexpected prepared build manifest')
     pins = manifest['sourcePins']
     source_pins(pins['erp'], pins['source'], pins['wms'])
-    require(pins['wms'] == WMS_SOURCE, 'WMS source pin changed')
+    wms_profile = approved_wms_profile(pins['wms'])
+    if 'manifestFileSha256' in wms_profile:
+        require(manifest.get('existingWms'), 'Approved WMS reuse proof is required')
     context = Path(manifest['buildContext'])
     require(context.is_absolute() and context.is_dir() and not any(p.is_symlink() for p in (context, *context.parents)), 'Unsafe prepared context')
     files = file_manifest(context)
@@ -663,7 +717,7 @@ def _read_build_context(manifest_path, expected_sha256):
     require(set(manifest['images']) == set(IMAGE_KEYS), 'Prepared image matrix changed')
     for key, repository in IMAGE_KEYS.items():
         owner = 'wms' if key.startswith('wms-') else 'source' if key in (SOURCE, MODULE) else 'erp'
-        expected_tag = WMS_EXISTING_TAGS[key] if manifest.get('existingWms') and key.startswith('wms-') else REGISTRY + repository + ':doaf-' + pins[owner]
+        expected_tag = wms_profile['tags'][key] if manifest.get('existingWms') and key.startswith('wms-') else REGISTRY + repository + ':doaf-' + pins[owner]
         require(manifest['images'][key] == expected_tag, 'Prepared source tag changed')
     config = read_json(context / 'cloudbuild.json')
     built_keys = manifest.get('builtImageKeys', list(manifest['images']))
@@ -671,7 +725,7 @@ def _read_build_context(manifest_path, expected_sha256):
             'Unexpected build image list or secret injection')
     if manifest.get('existingWms'):
         existing = manifest['existingWms']
-        require(existing_wms_proof(existing['description'], existing['supplierRecipe'], manifest['wmsManifest']) == existing,
+        require(existing_wms_proof(existing['description'], existing['supplierRecipe'], manifest['wmsManifest'], pins['wms']) == existing,
                 'Existing WMS evidence changed')
     if manifest.get('existingSource'):
         existing = manifest['existingSource']
@@ -771,6 +825,9 @@ def success_build_receipt(manifest_path, expected_sha256, build_paths, output):
 
 
 def build_images(receipt, pins):
+    wms_profile = approved_wms_profile(pins['wms'])
+    if 'manifestFileSha256' in wms_profile:
+        require(receipt.get('existingWms'), 'Approved WMS reuse proof is required')
     require(receipt.get('version') == 1 and receipt.get('project') == PROJECT and receipt.get('sourcePins') == pins,
             'Build receipt project/source pins differ')
     require(all(isinstance(receipt.get(k), str) and re.fullmatch(r'[a-f0-9]{64}', receipt[k]) for k in
@@ -801,16 +858,23 @@ def build_images(receipt, pins):
                         existing_source.get('previousErpImagesReused') is False,
                         'Existing Source exact build/source/digest proof differs')
         owner = 'wms' if key.startswith('wms-') else 'source' if key in (SOURCE, MODULE) else 'erp'
-        tag = WMS_EXISTING_TAGS[key] if receipt.get('existingWms') and key.startswith('wms-') else REGISTRY + IMAGE_KEYS[key] + ':doaf-' + pins[owner]
+        tag = wms_profile['tags'][key] if receipt.get('existingWms') and key.startswith('wms-') else REGISTRY + IMAGE_KEYS[key] + ':doaf-' + pins[owner]
         require(tag in build.get('images', []) and any(r.get('name') == tag and r.get('digest') == row['image'].split('@')[-1]
                                                        for r in build.get('results', {}).get('images', [])),
                 'Successful build does not prove the requested source/digest')
         if receipt.get('existingWms') and key.startswith('wms-'):
             existing = receipt['existingWms']
-            require(row == existing['images'].get(key) and row['buildId'] == WMS_EXISTING_BUILD and
-                    row['image'].split('@')[-1] == WMS_EXISTING_DIGESTS[key] and existing.get('sourceSha') == pins['wms'] == WMS_SOURCE and
-                    existing.get('manifestDigest') == WMS_MANIFEST_HASH and existing.get('fileRowsSha256') == WMS_ROWS_HASH,
+            require(existing.get('buildId') == wms_profile['buildId'] and existing.get('description') == build and
+                    existing.get('images') == wms_build_images(build, existing['supplierRecipe'], pins['wms']) and
+                    row == existing['images'].get(key) and row['buildId'] == wms_profile['buildId'] and
+                    row['image'].split('@')[-1] == wms_profile['digests'][key] and existing.get('sourceSha') == pins['wms'] and
+                    existing.get('manifestDigest') == wms_profile['manifestDigest'] and existing.get('fileRowsSha256') == wms_profile['fileRowsSha256'],
                     'Existing WMS exact build/source/digest proof differs')
+            if 'recipeCanonicalSha256' in wms_profile:
+                require(all(existing.get(k) == wms_profile[k] for k in ('manifestFileSha256', 'manifestCanonicalSha256',
+                                                                      'recipeFileSha256', 'recipeCanonicalSha256')) and
+                        sha256(canonical(existing.get('supplierRecipe'))) == wms_profile['recipeCanonicalSha256'],
+                        'Existing WMS retained manifest/recipe proof differs')
     return {k: v['image'] for k, v in images.items()}
 
 
@@ -838,10 +902,14 @@ def warehouse_cors_origins(container):
 
 def candidate_specs(baseline, pins, images, stage='review', pairing='candidate'):
     snapshot_guard(baseline)
-    require(source_pins(pins['erp'], pins['source'], pins['wms']) == pins and pins['wms'] == WMS_SOURCE,
+    require(source_pins(pins['erp'], pins['source'], pins['wms']) == pins,
             'Exact frozen source pins required for candidate')
+    wms_profile = approved_wms_profile(pins['wms'])
     require(stage in ('review', 'final') and pairing in ('candidate', 'canonical'), 'Only owned DEV tags/pairings are allowed')
     require(set(images) == set(IMAGE_KEYS), 'Six candidate digests required')
+    if 'manifestFileSha256' in wms_profile:
+        require(all(images[key] == REGISTRY + IMAGE_KEYS[key] + '@' + digest for key, digest in wms_profile['digests'].items()),
+                'Candidate WMS digests differ from the approved source profile')
     tag = 'aftersales-' + stage
     tags = {s: 'doa-warehouse-review' if s == WMS else tag for s in DEV}
     urls = {s: tagged(ORIGINS[s], tags[s]) for s in DEV}
