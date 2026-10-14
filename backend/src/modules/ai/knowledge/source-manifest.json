@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:1c77dc599baf422236bd9ccea3ac7de809736d9eb7941f51c232051492b11355",
+  "sourceVersion": "sha256:9d82919ff180878baf16e937df4cb216e1f312a4b64b961a3a0d444c7406f1c2",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "f9b1e87844d0cd181ac0d61f87ee1331264387a2be90f58ea4b754503703aa88",
+  "catalogSha256": "11f5e09dc59a14ab5d4139f17dc2f6769df14f60e3c9167ddf2910cead85999e",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -444,7 +444,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-sync.service.ts",
-      "sha256": "b965a3b7f794da5a4608f707857859bb30a25f5dda5c71323d7f56d62daecc81"
+      "sha256": "ea2171d25078accf6e0a54d416dc2f99c724728a6b35df45b908235c1066ff8b"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-tablet.controller.ts",
