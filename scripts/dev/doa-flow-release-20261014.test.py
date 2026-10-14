@@ -198,6 +198,153 @@ class FlowReleaseTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             r.candidate_specs(self.live, PINS, self.images, pairing='production')
 
+    def test_repair_adc_project_is_explicit_and_only_added_to_dev_api(self):
+        self.assertEqual(r.REPAIR_VALUES['GOOGLE_CLOUD_PROJECT'], r.PROJECT)
+        original = copy.deepcopy(self.live)
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        self.assertEqual(r.value(r.containers(specs[r.API])[0], 'GOOGLE_CLOUD_PROJECT'), 'moztech-main-db')
+        for name in r.DEV:
+            if name != r.API:
+                self.assertTrue(all('GOOGLE_CLOUD_PROJECT' not in r.env_map(c) for c in r.containers(specs[name])))
+        for name in r.PROTECTED:
+            self.assertEqual(self.live[name], original[name])
+            self.assertNotIn(name, specs)
+        self.assertEqual(self.live, original)
+
+    def test_repair_project_preservation_rejects_missing_wrong_or_secret_reference(self):
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        for setting in (None, 'other-project', '', {'secretKeyRef': {'name': 'other-dev-project', 'key': '1'}}):
+            altered = copy.deepcopy(specs[r.API])
+            c = r.containers(altered)[0]
+            c['env'] = [e for e in c['env'] if e['name'] != 'GOOGLE_CLOUD_PROJECT']
+            if isinstance(setting, dict):
+                r.set_env(c, secrets={'GOOGLE_CLOUD_PROJECT': setting})
+            elif setting is not None:
+                r.set_env(c, {'GOOGLE_CLOUD_PROJECT': setting})
+            with self.subTest(setting=setting), self.assertRaises(RuntimeError):
+                r.assert_candidate_preserved(self.live[r.API], altered, 'aftersales-review')
+
+    def test_repair_project_refuses_conflicting_higher_precedence_adc_alias(self):
+        for setting in ('another-project', {'secretKeyRef': {'name': 'synthetic-dev-project', 'key': '1'}}):
+            baseline = copy.deepcopy(self.live)
+            c = r.containers(baseline[r.API])[0]
+            if isinstance(setting, dict):
+                r.set_env(c, secrets={'GCLOUD_PROJECT': setting})
+            else:
+                r.set_env(c, {'GCLOUD_PROJECT': setting})
+            with self.subTest(setting=setting), self.assertRaisesRegex(RuntimeError, 'higher-precedence'):
+                r.candidate_specs(baseline, PINS, self.images)
+        for setting in ('', r.PROJECT):
+            baseline = copy.deepcopy(self.live)
+            r.set_env(r.containers(baseline[r.API])[0], {'GCLOUD_PROJECT': setting})
+            specs, _ = r.candidate_specs(baseline, PINS, self.images)
+            self.assertEqual(r.value(r.containers(specs[r.API])[0], 'GCLOUD_PROJECT'), setting)
+
+    def test_warehouse_browser_and_native_urls_stay_canonical_for_every_pairing(self):
+        for stage in ('review', 'final'):
+            for pairing in ('candidate', 'canonical'):
+                specs, urls = r.candidate_specs(self.live, PINS, self.images, stage, pairing)
+                api, web = r.containers(specs[r.API])[0], r.containers(specs[r.WEB])[0]
+                for key in ('WMS_PORTAL_SERVICE_URL', 'WMS_WORKSPACE_URL'):
+                    self.assertEqual(r.value(api, key), r.ORIGINS[r.WMS])
+                self.assertEqual(r.value(web, 'WMS_PORTAL_URL'), r.ORIGINS[r.WMS])
+                expected_api = urls[r.API] if pairing == 'candidate' else r.ORIGINS[r.API]
+                self.assertEqual(r.value(web, 'API_URL'), expected_api + '/api/v1')
+                self.assertEqual(r.value(r.containers(specs[r.SOURCE])[0], 'ERP_INTEGRATION_API_ORIGIN'), expected_api)
+                self.assertEqual(r.value(r.containers(specs[r.WMS])[1], 'ERP_PORTAL_API_URL'), expected_api + '/api/v1')
+                self.assertEqual(r.value(api, 'AFTER_SALES_TASK_SOURCE_URL'),
+                                 (urls[r.MODULE] if pairing == 'candidate' else r.ORIGINS[r.MODULE]) + '/after-sales-app')
+
+    def test_warehouse_url_preservation_rejects_tagged_foreign_or_missing_values(self):
+        specs, urls = r.candidate_specs(self.live, PINS, self.images)
+        for name, keys in ((r.API, ('WMS_PORTAL_SERVICE_URL', 'WMS_WORKSPACE_URL')), (r.WEB, ('WMS_PORTAL_URL',))):
+            for key in keys:
+                for value in (None, urls[r.WMS], 'https://foreign.invalid', r.ORIGINS[r.WMS] + '/'):
+                    altered = copy.deepcopy(specs[name])
+                    c = r.containers(altered)[0]
+                    c['env'] = [e for e in c['env'] if e['name'] != key]
+                    if value is not None:
+                        r.set_env(c, {key: value})
+                    with self.subTest(name=name, key=key, value=value), self.assertRaises(RuntimeError):
+                        r.assert_candidate_preserved(self.live[name], altered, 'aftersales-review')
+
+    def test_warehouse_cors_preserves_all_origins_in_order_and_only_appends_self(self):
+        original_origins = ['http://localhost:3000', r.ORIGINS[r.WEB], 'https://existing.invalid']
+        r.set_env(r.containers(self.live[r.WMS])[1], {'CORS_ORIGINS': ', '.join([*original_origins, original_origins[0]])})
+        original = copy.deepcopy(self.live)
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        c = r.containers(specs[r.WMS])[1]
+        self.assertEqual(r.value(c, 'CORS_ORIGINS').split(','), [*original_origins, r.ORIGINS[r.WMS]])
+        self.assertEqual(r.value(c, 'ERP_PORTAL_ORIGIN'), r.ORIGINS[r.WEB])
+        self.assertEqual(r.containers(specs[r.WMS])[0].get('env'),
+                         [{'name': 'SOURCE_VERSION', 'value': PINS['wms']}])
+        self.assertEqual(self.live, original)
+
+    def test_warehouse_cors_existing_self_is_deduplicated_without_reordering(self):
+        origins = [r.ORIGINS[r.WMS], r.ORIGINS[r.WEB], 'http://localhost:3000']
+        r.set_env(r.containers(self.live[r.WMS])[1], {'CORS_ORIGINS': ','.join([origins[0], *origins])})
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        self.assertEqual(r.value(r.containers(specs[r.WMS])[1], 'CORS_ORIGINS'), ','.join(origins))
+        second = r.warehouse_cors_origins(r.containers(specs[r.WMS])[1])
+        self.assertEqual(second, ','.join(origins))
+
+    def test_warehouse_cors_absent_or_empty_adds_only_canonical_self(self):
+        for previous in (None, '', ' , '):
+            baseline = copy.deepcopy(self.live)
+            if previous is not None:
+                r.set_env(r.containers(baseline[r.WMS])[1], {'CORS_ORIGINS': previous})
+            specs, _ = r.candidate_specs(baseline, PINS, self.images)
+            self.assertEqual(r.value(r.containers(specs[r.WMS])[1], 'CORS_ORIGINS'), r.ORIGINS[r.WMS])
+
+    def test_warehouse_cors_literal_guard_never_reads_or_replaces_a_secret_reference(self):
+        r.set_env(r.containers(self.live[r.WMS])[1], secrets={
+            'CORS_ORIGINS': {'secretKeyRef': {'name': 'wms-dev-cors', 'key': '1'}}})
+        with self.assertRaisesRegex(RuntimeError, 'literal'):
+            r.candidate_specs(self.live, PINS, self.images)
+
+    def test_warehouse_cors_preservation_rejects_deleted_extra_wildcard_or_reordered_origins(self):
+        origins = [r.ORIGINS[r.WEB], 'https://existing.invalid']
+        r.set_env(r.containers(self.live[r.WMS])[1], {'CORS_ORIGINS': ','.join(origins)})
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        values = [None, r.ORIGINS[r.WMS], ','.join([*origins, r.ORIGINS[r.WMS], 'https://foreign.invalid']),
+                  ','.join([*origins, r.ORIGINS[r.WMS], '*']), ','.join([*reversed(origins), r.ORIGINS[r.WMS]])]
+        for value in values:
+            altered = copy.deepcopy(specs[r.WMS])
+            c = r.containers(altered)[1]
+            c['env'] = [e for e in c['env'] if e['name'] != 'CORS_ORIGINS']
+            if value is not None:
+                r.set_env(c, {'CORS_ORIGINS': value})
+            with self.subTest(value=value), self.assertRaises(RuntimeError):
+                r.assert_candidate_preserved(self.live[r.WMS], altered, 'doa-warehouse-review')
+
+    def test_warehouse_cors_exception_cannot_change_other_container_or_portal_origin(self):
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        for index, key, value in ((0, 'CORS_ORIGINS', r.ORIGINS[r.WMS]),
+                                  (1, 'ERP_PORTAL_ORIGIN', 'https://foreign.invalid')):
+            altered = copy.deepcopy(specs[r.WMS])
+            r.set_env(r.containers(altered)[index], {key: value})
+            with self.assertRaises(RuntimeError):
+                r.assert_candidate_preserved(self.live[r.WMS], altered, 'doa-warehouse-review')
+
+    def test_warehouse_images_and_source_are_reused_without_changing_other_runtime_or_traffic(self):
+        specs, _ = r.candidate_specs(self.live, PINS, self.images)
+        for c, key in zip(r.containers(specs[r.WMS]), ('wms-web', 'wms-api')):
+            self.assertEqual(c['image'], self.images[key])
+            self.assertEqual(r.value(c, 'SOURCE_VERSION'), r.WMS_SOURCE)
+        before, after = self.live[r.WMS], specs[r.WMS]
+        self.assertEqual(before['spec']['template']['spec']['serviceAccountName'], after['spec']['template']['spec']['serviceAccountName'])
+        self.assertEqual(before['spec']['template']['metadata']['annotations'], after['spec']['template']['metadata']['annotations'])
+        self.assertEqual(before['spec']['traffic'], after['spec']['traffic'][:-1])
+        self.assertEqual(sum(t.get('percent', 0) for t in after['spec']['traffic']), 100)
+
+    def test_configuration_fixes_keep_all_nine_cas_versions_guarded(self):
+        r.candidate_specs(self.live, PINS, self.images)
+        for name in r.ALL:
+            changed = copy.deepcopy(self.live)
+            changed[name]['metadata']['resourceVersion'] += '-concurrent'
+            with self.subTest(name=name), self.assertRaisesRegex(RuntimeError, name):
+                r.assert_fresh(self.live, changed)
+
     def test_source_dev_values_are_exactly_two_and_public_origin_is_normal_source(self):
         self.assertEqual(r.SOURCE_DEV_VALUES, {'DOA_DEV_PROVIDER_MODE': 'stub', 'CUSTOMER_CONFIRMATION_PUBLIC_ORIGIN': r.ORIGINS[r.SOURCE]})
         self.assertNotEqual(r.SOURCE_DEV_VALUES['CUSTOMER_CONFIRMATION_PUBLIC_ORIGIN'], r.ORIGINS[r.MODULE])

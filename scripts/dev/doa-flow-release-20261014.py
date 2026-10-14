@@ -79,6 +79,9 @@ EXISTING_EXTERNAL_REFS = {
     (WMS, 'api', 'WMS_1SHOP_STORES_JSON'): ('ecom-accounting-oneshop-stores-json', '1'),
 }
 REPAIR_VALUES = {
+    # ADC must not try the Cloud SDK subprocess before metadata project lookup.
+    # This is the existing DEV project's identity, not a new credential or IAM grant.
+    'GOOGLE_CLOUD_PROJECT': PROJECT,
     'REPAIR_MEDIA_ENABLED': 'true', 'REPAIR_MEDIA_BUCKET': 'corely-repair-dev-249593319772',
     'REPAIR_MEDIA_UPLOAD_ORIGIN': ORIGINS[WEB], 'REPAIR_PUBLIC_REPORT_ENABLED': 'true',
     'REPAIR_REPORT_PUBLIC_ORIGIN': ORIGINS[WEB], 'ERP_DEV_AFTER_SALES_WORKFLOW_ENABLED': 'true',
@@ -747,6 +750,15 @@ def tagged(origin, tag):
     return origin.replace('https://', 'https://' + tag + '---', 1)
 
 
+def warehouse_cors_origins(container):
+    entry = env_map(container).get('CORS_ORIGINS')
+    require(entry is None or 'value' in entry, 'Existing WMS CORS origins must be a literal value')
+    origins = [origin.strip() for origin in (entry or {}).get('value', '').split(',') if origin.strip()]
+    # Preserve every existing origin in order; the sole new origin is the
+    # canonical WMS service itself, needed by its standalone WebSocket client.
+    return ','.join(dict.fromkeys([*origins, ORIGINS[WMS]]))
+
+
 def candidate_specs(baseline, pins, images, stage='review', pairing='candidate'):
     snapshot_guard(baseline)
     require(source_pins(pins['erp'], pins['source'], pins['wms']) == pins and pins['wms'] == WMS_SOURCE,
@@ -779,18 +791,20 @@ def candidate_specs(baseline, pins, images, stage='review', pairing='candidate')
         c = containers(spec)[0]
         if name == API:
             set_env(c, {**REPAIR_VALUES, 'AFTER_SALES_TASK_SOURCE_URL': pair[MODULE] + '/after-sales-app',
-                        'WMS_PORTAL_SERVICE_URL': pair[WMS], 'WMS_WORKSPACE_URL': pair[WMS],
+                        'WMS_PORTAL_SERVICE_URL': ORIGINS[WMS], 'WMS_WORKSPACE_URL': ORIGINS[WMS],
                         'CORS_ORIGIN': value(c, 'CORS_ORIGIN')}, NEW_SECRET)
             require(value(c, 'ERP_DEV_MAILROOM_SOURCE_URL') == ORIGINS[SOURCE], 'Mailroom events must keep the canonical normal Source')
         elif name == WEB:
-            set_env(c, {'API_URL': pair[API] + '/api/v1', 'WS_URL': pair[API], 'WMS_PORTAL_URL': pair[WMS],
+            set_env(c, {'API_URL': pair[API] + '/api/v1', 'WS_URL': pair[API], 'WMS_PORTAL_URL': ORIGINS[WMS],
                         'AFTER_SALES_MODULE_URL': ORIGINS[MODULE], 'COPILOT_CANDIDATE_WEB_ORIGIN': urls[WEB]})
         elif name in (SOURCE, MODULE):
             set_env(c, {**SOURCE_DEV_VALUES, 'ERP_INTEGRATION_API_ORIGIN': pair[API]})
             # Browser SSO keeps NEXTAUTH. Customer links and canonical dispatch
             # proof use normal Source; module /after-sales-app is transport only.
         elif name == WMS:
-            set_env(containers(spec)[1], {'ERP_PORTAL_API_URL': pair[API] + '/api/v1'})
+            api = containers(spec)[1]
+            set_env(api, {'ERP_PORTAL_API_URL': pair[API] + '/api/v1',
+                          'CORS_ORIGINS': warehouse_cors_origins(api)})
         # Splitting an owned tagged row that carries traffic is necessary:
         # keep its old percentage on the old revision, only repoint its tag.
         traffic = []
@@ -815,6 +829,17 @@ def assert_candidate_preserved(before, after, own_tag):
             after['metadata']['namespace'] == NAMESPACE, 'Candidate preservation requires the same allowlisted DEV service')
     if name in (SOURCE, MODULE):
         need_values(containers(after)[0], SOURCE_DEV_VALUES)
+    elif name == API:
+        need_values(containers(after)[0], {**REPAIR_VALUES, 'WMS_PORTAL_SERVICE_URL': ORIGINS[WMS],
+                                           'WMS_WORKSPACE_URL': ORIGINS[WMS]})
+        # GoogleAuth checks this older alias before GOOGLE_CLOUD_PROJECT.
+        legacy_project = env_map(containers(after)[0]).get('GCLOUD_PROJECT')
+        require(legacy_project is None or legacy_project.get('value') in ('', PROJECT),
+                'Conflicting higher-precedence ADC project identity')
+    elif name == WEB:
+        need_values(containers(after)[0], {'WMS_PORTAL_URL': ORIGINS[WMS]})
+    elif name == WMS:
+        need_values(containers(after)[1], {'CORS_ORIGINS': warehouse_cors_origins(containers(before)[1])})
     require(after['metadata'].get('resourceVersion') == before['metadata']['resourceVersion'], 'CAS version must be retained')
     old = before['spec']['traffic']
     new = after['spec']['traffic']
@@ -848,8 +873,9 @@ def assert_candidate_preserved(before, after, own_tag):
     for original, candidate in zip(containers(b), containers(a)):
         original.pop('image', None)
         candidate.pop('image', None)
+        container_allowed_env = allowed_env | ({'CORS_ORIGINS'} if name == WMS and candidate.get('name') == 'api' else set())
         for c in (original, candidate):
-            c['env'] = [e for e in c.get('env', []) if e['name'] not in allowed_env]
+            c['env'] = [e for e in c.get('env', []) if e['name'] not in container_allowed_env]
     require(a == b, 'Candidate changes a non-allowlisted runtime/IAM/secret setting')
 
 
