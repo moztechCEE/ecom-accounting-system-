@@ -553,7 +553,10 @@ class FlowReleaseTests(unittest.TestCase):
 
     def test_erp_api_recipe_reinstalls_production_dependencies_and_regenerates_client(self):
         recipe = r.erp_api_docker(image(r.API), PINS['erp'])
-        self.assertEqual(recipe.count('FROM ' + image(r.API)), 2)
+        reviewed = r.REGISTRY + r.API + '@sha256:0c712c53a3fee4bb12700d320198e57285daaa0d2961bc75e07c784ea39ea354'
+        self.assertEqual([line for line in recipe.splitlines() if line.startswith('FROM ')],
+                         ['FROM ' + reviewed + ' AS builder', 'FROM ' + reviewed])
+        self.assertNotIn(image(r.API), recipe)
         self.assertIn('npm ci --include=dev', recipe)
         self.assertIn('npm ci --omit=dev', recipe)
         self.assertEqual(recipe.count('./node_modules/.bin/prisma generate'), 2)
@@ -565,6 +568,57 @@ class FlowReleaseTests(unittest.TestCase):
         self.assertIn('127.0.0.1:1/unconnected', recipe)
         with self.assertRaises(RuntimeError):
             r.erp_api_docker(r.REGISTRY + r.API + ':latest', PINS['erp'])
+
+    def test_erp_recipes_keep_fixed_reviewed_runtimes_and_build_the_latest_sources(self):
+        reviewed = {
+            r.API: r.REGISTRY + r.API + '@sha256:0c712c53a3fee4bb12700d320198e57285daaa0d2961bc75e07c784ea39ea354',
+            r.WEB: r.REGISTRY + r.WEB + '@sha256:846c37f6b72c22a7ae0fe46302a7fce01728d32b95ccbe6ed8a80304d29c5e38',
+        }
+        self.assertEqual(r.ERP_RUNTIME_BUILD_BASES, reviewed)
+        latest_sha = '1311dd8673d76642f3f2cc86425612cbf53e5c44'
+        for service, recipe in ((r.API, r.erp_api_docker), (r.WEB, r.erp_web_docker)):
+            # Different current application generations must never become the
+            # next FROM, even though each is a valid immutable DEV image.
+            for digest in ('8' * 64, '9' * 64):
+                current = r.REGISTRY + service + '@sha256:' + digest
+                dockerfile = recipe(current, latest_sha)
+                with self.subTest(service=service, current=current):
+                    self.assertEqual([line for line in dockerfile.splitlines() if line.startswith('FROM ')],
+                                     ['FROM ' + reviewed[service] + ' AS builder', 'FROM ' + reviewed[service]])
+                    self.assertNotIn(current, dockerfile)
+                    self.assertIn('ENV SOURCE_VERSION=' + latest_sha + '\n', dockerfile)
+                    self.assertIn('LABEL org.opencontainers.image.revision="' + latest_sha + '"\n', dockerfile)
+                    self.assertIn('npm run build', dockerfile)
+                    self.assertIn('COPY --from=builder /app/dist ./dist', dockerfile)
+                    self.assertFalse(any(line.startswith(('CMD ', 'ENTRYPOINT ')) for line in dockerfile.splitlines()))
+                    self.assertNotIn('FROM node:', dockerfile)
+                    self.assertNotIn('apt-get', dockerfile)
+            if service == r.API:
+                self.assertIn('COPY src ./src', dockerfile)
+                self.assertIn('COPY prisma ./prisma', dockerfile)
+                self.assertIn('COPY scripts ./scripts', dockerfile)
+                self.assertIn('COPY --from=builder /app/assets ./assets', dockerfile)
+            else:
+                self.assertIn('COPY . .', dockerfile)
+                self.assertIn('COPY server.mjs ./server.mjs', dockerfile)
+
+    def test_both_erp_recipes_reject_tag_production_foreign_and_malformed_current_bases(self):
+        for service, recipe in ((r.API, r.erp_api_docker), (r.WEB, r.erp_web_docker)):
+            invalid = [None, '', r.REGISTRY + service + ':latest',
+                       r.REGISTRY + service + '@sha256:' + 'a' * 63,
+                       r.REGISTRY + service + '@sha256:' + 'g' * 64,
+                       r.REGISTRY + service + '@sha256:' + 'a' * 64 + ':tag',
+                       r.REGISTRY + service + '-foreign@sha256:' + 'a' * 64,
+                       r.REGISTRY + (r.WEB if service == r.API else r.API) + '@sha256:' + 'a' * 64,
+                       r.REGISTRY + ('ecom-accounting-backend' if service == r.API else 'ecom-accounting-frontend') + '@sha256:' + 'a' * 64,
+                       'asia-east1-docker.pkg.dev/foreign/cloud-run/' + service + '@sha256:' + 'a' * 64,
+                       image(service) + '\nFROM foreign:latest']
+            for base in invalid:
+                with self.subTest(service=service, base=base), self.assertRaisesRegex(RuntimeError, 'immutable DEV runtime'):
+                    recipe(base, PINS['erp'])
+            for sha in ('old', 'A' * 40, PINS['erp'] + '\nRUN false'):
+                with self.subTest(service=service, sha=sha), self.assertRaisesRegex(RuntimeError, 'full lowercase'):
+                    recipe(image(service), sha)
 
     def test_wms_exact_file_hashes_missing_extra_and_symlink_refuse(self):
         folder = self.directory / 'wms'
@@ -594,7 +648,7 @@ class FlowReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'Unsafe'):
                 r.wms_context(folder, r.WMS_SOURCE)
 
-    def prepared_context(self):
+    def prepared_context(self, reviewed_runtime=True):
         folder = r.private_dir(self.directory / 'prepared')
         context = folder / 'build-context'
         context.mkdir(mode=0o700)
@@ -605,14 +659,19 @@ class FlowReleaseTests(unittest.TestCase):
             tag = r.REGISTRY + repository + ':doaf-' + PINS[owner]
             images[key] = tag
             steps.append({'id': key, 'name': 'gcr.io/cloud-builders/docker', 'args': ['build', '-t', tag, '.'],
-                          'dir': key, 'waitFor': ['-']})
+                          'dir': {r.API: 'api', r.WEB: 'web'}.get(key, key), 'waitFor': ['-']})
         config = {'steps': steps, 'images': list(images.values())}
         r.private_json(context / 'cloudbuild.json', config)
         r.private_write(context / 'synthetic-source.ts', 'no credentials')
+        if reviewed_runtime:
+            r.private_write(context / 'api' / 'Dockerfile', r.erp_api_docker(image(r.API), PINS['erp']))
+            r.private_write(context / 'web' / 'Dockerfile', r.erp_web_docker(image(r.WEB), PINS['erp']))
         files = r.file_manifest(context)
         manifest = {'version': 1, 'project': r.PROJECT, 'region': r.REGION, 'mode': 'prepare-only',
                     'sourcePins': PINS, 'buildContext': str(context), 'files': files, 'images': images,
                     'contextSha256': r.sha256(r.canonical(files))}
+        if reviewed_runtime:
+            manifest['reviewedRuntimeBuildBases'] = copy.deepcopy(r.ERP_RUNTIME_BUILD_BASES)
         path = folder / 'manifest.private.json'
         r.private_json(path, manifest)
         return path, r.sha256(path.read_bytes()), manifest, config
@@ -633,6 +692,95 @@ class FlowReleaseTests(unittest.TestCase):
         source.write_text('changed after prepare')
         with self.assertRaisesRegex(RuntimeError, 'context changed'):
             r.verify_build_context(path, checksum)
+
+    def refresh_context_manifest(self, path, manifest):
+        manifest['files'] = r.file_manifest(Path(manifest['buildContext']))
+        manifest['contextSha256'] = r.sha256(r.canonical(manifest['files']))
+        path.write_text(json.dumps(manifest))
+        return r.sha256(path.read_bytes())
+
+    def test_verify_context_rejects_runtime_base_marker_changes_even_with_new_checksums(self):
+        path, _, manifest, _ = self.prepared_context()
+        for change in (lambda m: m.pop('reviewedRuntimeBuildBases'),
+                       lambda m: m['reviewedRuntimeBuildBases'].update({r.API: image(r.API)}),
+                       lambda m: m['reviewedRuntimeBuildBases'].update({r.WEB: r.REGISTRY + r.WEB + ':latest'}),
+                       lambda m: m['reviewedRuntimeBuildBases'].update(extra=image(r.API))):
+            wrong = copy.deepcopy(manifest)
+            change(wrong)
+            checksum = self.refresh_context_manifest(path, wrong)
+            with self.assertRaisesRegex(RuntimeError, 'runtime build bases changed or missing'):
+                r.verify_build_context(path, checksum)
+
+    def test_verify_context_rejects_each_stage_base_and_source_revision_tampering_after_rehash(self):
+        path, _, manifest, _ = self.prepared_context()
+        context = Path(manifest['buildContext'])
+        for service, directory in ((r.API, 'api'), (r.WEB, 'web')):
+            dockerfile = context / directory / 'Dockerfile'
+            original = dockerfile.read_text()
+            fixed = r.ERP_RUNTIME_BUILD_BASES[service]
+            replacements = [image(service), r.REGISTRY + service + ':latest',
+                            r.REGISTRY + 'ecom-accounting-backend@sha256:' + 'f' * 64,
+                            'asia-east1-docker.pkg.dev/foreign/cloud-run/' + service + '@sha256:' + 'f' * 64]
+            for old in replacements:
+                for stage in ('builder', 'final'):
+                    before = 'FROM ' + fixed + (' AS builder\n' if stage == 'builder' else '\n')
+                    after = 'FROM ' + old + (' AS builder\n' if stage == 'builder' else '\n')
+                    with self.subTest(service=service, base=old, stage=stage):
+                        dockerfile.write_text(original.replace(before, after, 1))
+                        checksum = self.refresh_context_manifest(path, manifest)
+                        with self.assertRaisesRegex(RuntimeError, 'runtime Dockerfile differs'):
+                            r.verify_build_context(path, checksum)
+            for instruction in ('ENV SOURCE_VERSION=' + PINS['erp'],
+                                'LABEL org.opencontainers.image.revision="' + PINS['erp'] + '"'):
+                with self.subTest(service=service, instruction=instruction):
+                    dockerfile.write_text(original.replace(instruction, instruction.replace(PINS['erp'], 'c' * 40)))
+                    checksum = self.refresh_context_manifest(path, manifest)
+                    with self.assertRaisesRegex(RuntimeError, 'runtime Dockerfile differs'):
+                        r.verify_build_context(path, checksum)
+            dockerfile.write_text(original)
+        checksum = self.refresh_context_manifest(path, manifest)
+        self.assertEqual(r.verify_build_context(path, checksum)[0], manifest)
+
+    def test_verify_context_cannot_redirect_erp_builds_to_an_unreviewed_recipe(self):
+        path, _, manifest, config = self.prepared_context()
+        context = Path(manifest['buildContext'])
+        for service in (r.API, r.WEB):
+            for change in (lambda s: s['args'].extend(['-f', 'old.Dockerfile']),
+                           lambda s: s.update(dir='source'),
+                           lambda s: s.update(name='foreign/builder'),
+                           lambda s: s.update(entrypoint='sh'),
+                           lambda s: s.update(script='docker build -f old.Dockerfile .'),
+                           lambda s: s.update(env=['DOCKER_BUILDKIT=0'])):
+                wrong = copy.deepcopy(config)
+                step = next(step for step in wrong['steps'] if step['id'] == service)
+                change(step)
+                with self.subTest(service=service, step=step):
+                    (context / 'cloudbuild.json').write_text(json.dumps(wrong))
+                    checksum = self.refresh_context_manifest(path, manifest)
+                    with self.assertRaisesRegex(RuntimeError, 'runtime build step differs'):
+                        r.verify_build_context(path, checksum)
+
+    def test_historical_source_context_requires_an_exact_approved_tuple_and_cannot_pass_public_verify(self):
+        path, checksum, manifest, _ = self.prepared_context(reviewed_runtime=False)
+        with self.assertRaisesRegex(RuntimeError, 'runtime build bases changed or missing'):
+            r.verify_build_context(path, checksum)
+        with self.assertRaisesRegex(RuntimeError, 'tuple is not approved'):
+            r.verify_existing_source_context(path, checksum, PINS['source'], r.SOURCE_EXISTING_BUILD)
+        profiles = copy.deepcopy(r.SOURCE_REUSE_PROFILES)
+        profiles[(PINS['source'], r.SOURCE_EXISTING_BUILD, checksum)] = {
+            'sourceFileCount': 3, 'digests': r.SOURCE_EXISTING_DIGESTS}
+        with patch.object(r, 'SOURCE_REUSE_PROFILES', profiles):
+            self.assertEqual(r.verify_existing_source_context(path, checksum, PINS['source'], r.SOURCE_EXISTING_BUILD)[0], manifest)
+            for source, build, digest in ((PINS['source'], r.SOURCE_B667_BUILD, checksum),
+                                          ('c' * 40, r.SOURCE_EXISTING_BUILD, checksum),
+                                          (PINS['source'], r.SOURCE_EXISTING_BUILD, '0' * 64)):
+                with self.subTest(source=source, build=build, checksum=digest), self.assertRaisesRegex(RuntimeError, 'tuple is not approved'):
+                    r.verify_existing_source_context(path, digest, source, build)
+            changed = copy.deepcopy(manifest)
+            changed['sourcePins']['source'] = 'c' * 40
+            path.write_text(json.dumps(changed))
+            with self.assertRaisesRegex(RuntimeError, 'manifest checksum changed'):
+                r.verify_existing_source_context(path, checksum, PINS['source'], r.SOURCE_EXISTING_BUILD)
 
     def test_exact_success_recipe_converts_all_six_images_and_never_builds(self):
         path, checksum, manifest, config = self.prepared_context()
@@ -857,7 +1005,7 @@ class FlowReleaseTests(unittest.TestCase):
                    patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))),
                    patch.object(r, 'package_fingerprints', return_value=dependencies),
                    patch.object(r, 'migration_hashes', return_value={}), patch.object(r, 'export_git', side_effect=export),
-                   patch.object(r, 'git_files', return_value=files), patch.object(r, 'verify_build_context', return_value=(old, old_config))]
+                   patch.object(r, 'git_files', return_value=files), patch.object(r, 'verify_existing_source_context', return_value=(old, old_config))]
         for mocked in patches:
             mocked.start()
         try:
@@ -875,6 +1023,7 @@ class FlowReleaseTests(unittest.TestCase):
         self.assertEqual(manifest['builtImageKeys'], [r.API, r.WEB, r.SOURCE, r.MODULE])
         self.assertEqual([step['id'] for step in config['steps']], manifest['builtImageKeys'])
         self.assertEqual(len(config['images']), 4)
+        self.assertEqual(manifest['reviewedRuntimeBuildBases'], r.ERP_RUNTIME_BUILD_BASES)
         self.assertNotIn('existingSource', manifest)
         with patch.object(r, 'WMS_ROWS_HASH', r.sha256(r.canonical(wms_manifest['files']))):
             path = Path(manifest['buildContext']).parent / 'build-manifest.private.json'

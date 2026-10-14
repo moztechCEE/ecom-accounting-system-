@@ -33,6 +33,13 @@ from datetime import datetime, timezone
 PROJECT, REGION, NAMESPACE = 'moztech-main-db', 'asia-east1', '249593319772'
 REGISTRY = f'{REGION}-docker.pkg.dev/{PROJECT}/cloud-run/'
 API, WEB = 'corely-erp-api-dev', 'corely-erp-dev'
+# Reviewed initial DEV runtimes retain the existing OS/Node/Chromium/Prisma
+# dependencies and CMD. Reusing each newly built application image as FROM
+# would add another generation of layers until Docker's depth limit is hit.
+ERP_RUNTIME_BUILD_BASES = {
+    API: REGISTRY + API + '@sha256:0c712c53a3fee4bb12700d320198e57285daaa0d2961bc75e07c784ea39ea354',
+    WEB: REGISTRY + WEB + '@sha256:846c37f6b72c22a7ae0fe46302a7fce01728d32b95ccbe6ed8a80304d29c5e38',
+}
 SOURCE, MODULE, WMS = 'moztech-after-sales-dev', 'corely-aftersales-module-dev', 'corely-wms-dev'
 DEV = (API, WEB, SOURCE, MODULE, WMS)
 PROTECTED = ('ecom-accounting-backend', 'ecom-accounting-frontend', 'corely-wms', 'moztech-after-sales-system')
@@ -386,8 +393,19 @@ def package_fingerprints(root, prefixes):
     return result
 
 
+def erp_runtime_build_base(current, service):
+    prefix = REGISTRY + service + '@'
+    require(isinstance(current, str) and current.startswith(prefix) and DIGEST.fullmatch(current[len(prefix):]),
+            'ERP immutable DEV runtime base required: ' + service)
+    reviewed = ERP_RUNTIME_BUILD_BASES[service]
+    require(reviewed.startswith(prefix) and DIGEST.fullmatch(reviewed[len(prefix):]),
+            'Reviewed ERP runtime build base is invalid: ' + service)
+    return reviewed
+
+
 def erp_api_docker(base, sha):
-    require(base.startswith(REGISTRY + API + '@sha256:'), 'ERP API immutable DEV base required')
+    base = erp_runtime_build_base(base, API)
+    full_sha(sha)
     dummy = 'postgresql://unconnected:unconnected@127.0.0.1:1/unconnected?schema=public'
     return f'''FROM {base} AS builder
 USER root
@@ -416,6 +434,8 @@ LABEL org.opencontainers.image.revision="{sha}"
 
 
 def erp_web_docker(base, sha):
+    base = erp_runtime_build_base(base, WEB)
+    full_sha(sha)
     return f'''FROM {base} AS builder
 USER root
 WORKDIR /app
@@ -541,8 +561,10 @@ def build_prepare(baseline, pins, erp_root, source_root, wms_root, output, exist
     existing_wms = existing_wms_proof(read_json(existing_wms_path), read_json(Path(wms_root) / 'cloudbuild.json'), wms)
     existing_source = None
     if source_reuse_options(existing_source_path, existing_source_manifest, existing_source_manifest_sha):
-        old, old_config = verify_build_context(existing_source_manifest, existing_source_manifest_sha)
-        existing_source = existing_source_proof(read_json(existing_source_path), old, old_config, existing_source_manifest_sha,
+        captured_source = read_json(existing_source_path)
+        old, old_config = verify_existing_source_context(existing_source_manifest, existing_source_manifest_sha,
+                                                        pins['source'], captured_source.get('id'))
+        existing_source = existing_source_proof(captured_source, old, old_config, existing_source_manifest_sha,
                                                 pins['source'], git_files(source_root, pins['source']))
     dependencies = package_fingerprints(erp_root, {'api': 'backend', 'web': 'frontend'})
     dependencies.update(package_fingerprints(source_root, {'source': ''}))
@@ -597,6 +619,7 @@ def build_prepare(baseline, pins, erp_root, source_root, wms_root, output, exist
     files = file_manifest(context)
     record = {'version': 1, 'mode': 'prepare-only', 'project': PROJECT, 'region': REGION, 'sourcePins': pins,
               'buildContext': str(context), 'images': images, 'files': files, 'contextSha256': sha256(canonical(files)),
+              'reviewedRuntimeBuildBases': copy.deepcopy(ERP_RUNTIME_BUILD_BASES),
               'exportedSourceFiles': exported,
               'dependencies': dependencies, 'wmsManifest': wms, 'existingReferenceAllowlist': refs,
               'builtImageKeys': built_keys, 'existingWms': existing_wms,
@@ -624,7 +647,7 @@ def file_manifest(directory):
     return result
 
 
-def verify_build_context(manifest_path, expected_sha256):
+def _read_build_context(manifest_path, expected_sha256):
     require(isinstance(expected_sha256, str) and re.fullmatch(r'[a-f0-9]{64}', expected_sha256), 'Prepared manifest checksum is required')
     require(sha256(Path(manifest_path).read_bytes()) == expected_sha256, 'Prepared manifest checksum changed')
     manifest = read_json(manifest_path)
@@ -666,6 +689,34 @@ def verify_build_context(manifest_path, expected_sha256):
         require(proof == existing and len(built_keys) == 2 and set(built_keys) == {API, WEB} and
                 len(config['steps']) == 2 and {step.get('id') for step in config['steps']} == {API, WEB},
                 'Reused Source cannot enter new build steps or reuse old ERP')
+    return manifest, config
+
+
+def verify_build_context(manifest_path, expected_sha256):
+    manifest, config = _read_build_context(manifest_path, expected_sha256)
+    require(manifest.get('reviewedRuntimeBuildBases') == ERP_RUNTIME_BUILD_BASES,
+            'Prepared reviewed ERP runtime build bases changed or missing')
+    context = Path(manifest['buildContext'])
+    for service, directory, recipe in ((API, 'api', erp_api_docker), (WEB, 'web', erp_web_docker)):
+        steps = [step for step in config.get('steps', []) if step.get('id') == service]
+        require(len(steps) == 1 and steps[0].get('name') == 'gcr.io/cloud-builders/docker' and
+                steps[0].get('dir') == directory and steps[0].get('args') == ['build', '-t', manifest['images'][service], '.'] and
+                not any(key in steps[0] for key in ('env', 'secretEnv', 'script', 'entrypoint')),
+                'Prepared ERP runtime build step differs: ' + service)
+        dockerfile = context / directory / 'Dockerfile'
+        expected = recipe(ERP_RUNTIME_BUILD_BASES[service], manifest['sourcePins']['erp'])
+        require(dockerfile.is_file() and dockerfile.read_text() == expected,
+                'Prepared reviewed ERP runtime Dockerfile differs: ' + service)
+    return manifest, config
+
+
+def verify_existing_source_context(manifest_path, expected_sha256, source_sha, build_id):
+    # Only the exact already-approved historical Source tuple may read its old
+    # complete context without the new ERP recipe marker. Its ERP images are
+    # never reused; public verify-context always requires the current recipes.
+    approved_source_profile(source_sha, build_id, expected_sha256)
+    manifest, config = _read_build_context(manifest_path, expected_sha256)
+    require(manifest['sourcePins']['source'] == source_sha, 'Existing Source frozen manifest/SHA differs')
     return manifest, config
 
 
