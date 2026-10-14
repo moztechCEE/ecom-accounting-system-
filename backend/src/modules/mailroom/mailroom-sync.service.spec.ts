@@ -1,3 +1,7 @@
+import {
+  BadGatewayException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { signRequest } from './mailroom.contract';
 import { MailroomSyncService } from './mailroom-sync.service';
@@ -180,6 +184,84 @@ describe('Mailroom source search URL signatures', () => {
       '資料格式',
     );
   });
+
+  it.each([
+    ['network', new TypeError('fetch failed: PRIVATE network configuration')],
+    ['timeout', new DOMException('PRIVATE request expired', 'TimeoutError')],
+    [
+      'redirect',
+      new TypeError('unexpected redirect: PRIVATE login or customer data'),
+    ],
+  ])(
+    'returns a readable 503 on GET outbound transport failure without retry, request body or DB writes: %s',
+    async (_kind, failure) => {
+      const query = jest.fn();
+      const transaction = jest.fn();
+      const update = jest.fn();
+      service = new MailroomSyncService({
+        $queryRaw: query,
+        $transaction: transaction,
+        mailroomDelivery: { updateMany: update },
+      } as unknown as PrismaService);
+      fetchMock.mockRejectedValueOnce(failure);
+      const error = await service
+        .outboundOrders(entry.entityId, 'SYNTHETIC', 'case-a')
+        .catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(ServiceUnavailableException);
+      expect((error as ServiceUnavailableException).getStatus()).toBe(503);
+      expect((error as ServiceUnavailableException).getResponse()).toEqual({
+        statusCode: 503,
+        message: '售後寄件來源暫時無法連線，請稍後重新整理',
+        error: 'Service Unavailable',
+      });
+      expect(JSON.stringify(error)).not.toContain('PRIVATE');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [, options] = fetchMock.mock.calls[0] as [URL, RequestInit];
+      expect(options.method).toBe('GET');
+      expect(options.redirect).toBe('error');
+      expect(options.body).toBeUndefined();
+      expect(options.signal).toBeInstanceOf(AbortSignal);
+      expect(capturedRequest().pathname).toBe(
+        '/api/integration/mailroom/outbound-orders',
+      );
+      expect(query).not.toHaveBeenCalled();
+      expect(transaction).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    {
+      ok: false,
+      status: 401,
+      text: jest.fn(() => Promise.resolve('PRIVATE upstream body')),
+    },
+    { ok: true, text: () => Promise.resolve('PRIVATE malformed JSON') },
+    {
+      ok: true,
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            items: [],
+            nextCursor: null,
+            untrustedSnapshot: {},
+          }),
+        ),
+    },
+  ])(
+    'keeps upstream status and JSON/contract validation failures as 502 instead of reporting availability',
+    async (response) => {
+      fetchMock.mockResolvedValueOnce(response as unknown as Response);
+      const error = await service
+        .outboundOrders(entry.entityId)
+        .catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(BadGatewayException);
+      expect((error as BadGatewayException).getStatus()).toBe(502);
+      expect(JSON.stringify(error)).not.toContain('PRIVATE');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      if (!response.ok) expect(response.text).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('Mailroom dispatch delivery acknowledgment', () => {
@@ -379,6 +461,34 @@ describe('Mailroom dispatch delivery acknowledgment', () => {
     expect(query.mock.calls[0][0].values).toEqual(
       expect.arrayContaining([entityId, 'AFTER_SALES']),
     );
+  });
+  it('keeps an unknown POST transport failure pending with the original delivery retry contract', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('PRIVATE unknown POST'));
+    await service.deliverPending();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, options] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body as string)).toEqual(payload);
+    expect(update).toHaveBeenCalledTimes(1);
+    const [{ data }] = update.mock.calls[0] as [
+      {
+        data: {
+          status: string;
+          lastError: string;
+          nextAttemptAt: Date;
+          leaseUntil: null;
+          leaseToken: null;
+          deliveredAt?: Date;
+        };
+      },
+    ];
+    expect(data.status).toBe('PENDING');
+    expect(data.lastError).toBe('傳送或回執失敗，等待重試');
+    expect(data.nextAttemptAt).toBeInstanceOf(Date);
+    expect(data.leaseUntil).toBeNull();
+    expect(data.leaseToken).toBeNull();
+    expect(data.deliveredAt).toBeUndefined();
+    expect(JSON.stringify(update.mock.calls)).not.toContain('PRIVATE');
   });
   it.each([
     { accepted: true, eventId },

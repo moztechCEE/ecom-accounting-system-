@@ -310,14 +310,25 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
     const query = new URLSearchParams({ search });
     if (caseId !== undefined) query.set('caseId', caseId);
     if (cursor !== undefined) query.set('cursor', cursor);
-    const result = validateOutboundOrders(
-      await this.request(
-        this.connection(entityId, 'AFTER_SALES'),
+    const entry = this.connection(entityId, 'AFTER_SALES');
+    let value: unknown;
+    try {
+      value = await this.request(
+        entry,
         'GET',
         '/api/integration/mailroom/outbound-orders?' + query.toString(),
-      ),
-      caseId,
-    );
+      );
+    } catch (error) {
+      if (
+        error instanceof ServiceUnavailableException ||
+        error instanceof BadGatewayException
+      )
+        throw error;
+      throw new ServiceUnavailableException(
+        '售後寄件來源暫時無法連線，請稍後重新整理',
+      );
+    }
+    const result = validateOutboundOrders(value, caseId);
     if (cursor !== undefined && result.nextCursor === cursor)
       throw new BadGatewayException('售後寄件游標未前進');
     return result;
