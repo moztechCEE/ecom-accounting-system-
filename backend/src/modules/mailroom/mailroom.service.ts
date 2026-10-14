@@ -98,6 +98,15 @@ import {
   validateReceiptPayload,
   validateReceiptProduct,
 } from './mailroom-receipt.contract';
+import {
+  repairListProgress,
+  unavailableRepairListProgress,
+  type RepairListProgress,
+} from './repair-list-progress.contract';
+
+export const REPAIR_LIST_SOURCE_CONCURRENCY = 5;
+export const REPAIR_LIST_SOURCE_DEADLINE_MS = 16000;
+export const REPAIR_LIST_SOURCE_TIMEOUT_MS = 8000;
 
 const actorSelect = {
   id: true,
@@ -486,6 +495,7 @@ export class MailroomService {
       total,
       items: await this.views(rows, userId, actor, {
         repairOverview: mode === 'repair',
+        repairProgress: mode === 'repair',
       }),
       page: query.page || 1,
       ...(queueCounts ? { queueCounts } : {}),
@@ -495,7 +505,7 @@ export class MailroomService {
     items: Item[],
     userId: string,
     actor: Actor,
-    options: { repairOverview?: boolean } = {},
+    options: { repairOverview?: boolean; repairProgress?: boolean } = {},
   ) {
     const dispatchDeliveries = await this.dispatchDeliveries(items);
     const donors = items.filter(
@@ -613,6 +623,12 @@ export class MailroomService {
           .then(() => true)
           .catch(() => false),
       );
+    const repairProgress =
+      options.repairOverview &&
+      options.repairProgress &&
+      can(actor, 'repair_workbench:read')
+        ? await this.repairListProgress(items, actor)
+        : new Map<string, RepairListProgress>();
     return items.map(({ evidence, receipt, ...item }) => ({
       ...(canViewRepairDocuments(actor) ? item : withoutRepairDocuments(item)),
       ...(options.repairOverview &&
@@ -620,6 +636,7 @@ export class MailroomService {
       isRepairWorkbenchItem({ ...item, receipt })
         ? { repairOverview: repairOverview({ ...item, evidence, receipt }) }
         : {}),
+      ...(repairProgress.get(item.id) || {}),
       location: dispatchedLocation(item),
       statusLabel:
         custody.get(item.id)?.statusLabel ||
@@ -677,6 +694,128 @@ export class MailroomService {
         sourceSync: sourceSyncSummary(receipt.sourceSnapshot),
       },
     }));
+  }
+  private async repairListProgress(items: Item[], actor: Actor) {
+    const progress = new Map<string, RepairListProgress>();
+    const eligible = items.filter(
+      (item) =>
+        item.receipt.category === 'REPAIR' && isRepairWorkbenchItem(item),
+    );
+    for (const item of eligible)
+      progress.set(item.id, unavailableRepairListProgress());
+    const scoped = eligible.filter((item) => {
+      try {
+        requireEntity(actor, item.entityId);
+        return (
+          item.receipt.entityId === item.entityId &&
+          typeof item.receipt.sourceCaseId === 'string' &&
+          Boolean(item.receipt.sourceCaseId.trim()) &&
+          item.receipt.sourceCaseId.length <= 128
+        );
+      } catch {
+        return false;
+      }
+    });
+    // Only the current 50-row page is projected. Shared Source cases are read once.
+    const rows = scoped.slice(0, 50);
+    const keyFor = (item: Item) =>
+      JSON.stringify([item.entityId, item.receipt.sourceCaseId]);
+    const references = new Map(rows.map((item) => [keyFor(item), item]));
+    const signatures = new Map(
+      rows.map((item) => [
+        item.id,
+        fingerprint({
+          entityId: item.entityId,
+          version: item.version,
+          status: item.status,
+          receiptId: item.receiptId,
+          receipt: {
+            entityId: item.receipt.entityId,
+            category: item.receipt.category,
+            sourceCaseId: item.receipt.sourceCaseId,
+            sourceNumber: item.receipt.sourceNumber,
+          },
+        }),
+      ]),
+    );
+    const sources = new Map<string, SourceCase | undefined>();
+    const pending = [...references.entries()];
+    const deadline = Date.now() + REPAIR_LIST_SOURCE_DEADLINE_MS;
+    let index = 0;
+    const worker = async () => {
+      while (index < pending.length && Date.now() < deadline) {
+        const [key, item] = pending[index++];
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const result = await Promise.race([
+            this.sync.cases(item.entityId, '', item.receipt.sourceCaseId!),
+            new Promise<never>((_resolve, reject) => {
+              timer = setTimeout(
+                () => reject(new Error('repair list source read timed out')),
+                Math.min(
+                  REPAIR_LIST_SOURCE_TIMEOUT_MS,
+                  Math.max(1, deadline - Date.now()),
+                ),
+              );
+            }),
+          ]);
+          sources.set(
+            key,
+            result.items.length === 1 ? result.items[0] : undefined,
+          );
+        } catch {
+          sources.set(key, undefined);
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(REPAIR_LIST_SOURCE_CONCURRENCY, pending.length) },
+        worker,
+      ),
+    );
+    if (!rows.length) return progress;
+    try {
+      // An external wait cannot resurrect a changed native plan, status or link.
+      const current = await this.prisma.mailroomItem.findMany({
+        where: {
+          OR: rows.map((item) => ({
+            id: item.id,
+            entityId: item.entityId,
+            receipt: { entityId: item.entityId, category: 'REPAIR' },
+          })),
+        },
+        select: {
+          id: true,
+          entityId: true,
+          version: true,
+          status: true,
+          receiptId: true,
+          receipt: {
+            select: {
+              entityId: true,
+              category: true,
+              sourceCaseId: true,
+              sourceNumber: true,
+            },
+          },
+        },
+      });
+      const versions = new Map(
+        current.map(({ id, ...value }) => [id, fingerprint(value)]),
+      );
+      for (const item of rows)
+        if (versions.get(item.id) === signatures.get(item.id))
+          progress.set(
+            item.id,
+            repairListProgress(item, sources.get(keyFor(item))),
+          );
+    } catch {
+      // Unavailable native rechecks leave the whole projection unknown.
+    }
+    return progress;
   }
   async repairPhoto(userId: string, entityId: string, id: string) {
     this.enabled();
