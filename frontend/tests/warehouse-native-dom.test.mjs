@@ -42,7 +42,7 @@ const routes=[{path:'/warehouse',element:e(React.Fragment,null,e(Current),e(Ware
 const router=createMemoryRouter(routes,{initialEntries:['/warehouse?entityId=warehouse-A']});
 window.__routeTo=path=>router.navigate(path);window.__routeBack=()=>router.navigate(-1);
 function Harness(){
-const [user,setUser]=useState({id:'operator-A',name:'Synthetic operator',roles:window.__stationRole==='admin'?['ADMIN']:['STAFF'],permissions:window.__stationRole==='admin'?[]:['wms_tasks:read',window.__stationRole==='picker'?'wms_picking:execute':'wms_packing:execute']});
+const [user,setUser]=useState({id:'operator-A',name:'Synthetic operator',roles:window.__stationRole==='admin'?['ADMIN']:window.__stationRole==='superadmin'?['SUPER_ADMIN']:['STAFF'],permissions:['admin','superadmin'].includes(window.__stationRole)?[]:window.__stationRole==='csr'?['wms_tasks:read']:['wms_tasks:read',window.__stationRole==='picker'?'wms_picking:execute':'wms_packing:execute']});
 window.__changeActor=id=>{localStorage.setItem('access_token','erp-token-'+id);setUser({...user,id});};
 return e(FixtureAuth,{value:{user,refreshCurrentUser:async()=>{window.__refreshes++;return user;}}},e(RouterProvider,{router}));
 }
@@ -101,6 +101,9 @@ test('real warehouse host stays in one browser and retires old identity, company
     browser = await chromium.launch({ executablePath, headless: true })
     async function open(query = '') {
       const context = await browser.newContext(), page = await context.newPage(), errors = [], calls = [], deniedNetwork = []
+      let accessCalls = 0, releaseRecovery, recoveryStartedResolve
+      const recoveryStarted = new Promise(resolve => { recoveryStartedResolve = resolve })
+      const recoveryGate = new Promise(resolve => { releaseRecovery = resolve })
       page.setDefaultTimeout(10_000); page.on('pageerror', error => errors.push(error.message))
       await context.route('**/*', async route => {
         const request = route.request(), url = new URL(request.url()), path = url.pathname
@@ -115,12 +118,26 @@ test('real warehouse host stays in one browser and retires old identity, company
           assert.equal(request.method(), 'GET'); return route.continue()
         }
         calls.push({ method: request.method(), path, headers: request.headers(), body: request.postData() ? request.postDataJSON() : null })
-        if (path === '/api/v1/wms/portal/access' && request.method() === 'GET') return json({ roles: ['picker', 'packer', 'dispatcher'] })
+        if (path === '/api/v1/wms/portal/access' && request.method() === 'GET') {
+          accessCalls++
+          const params = new URLSearchParams(query), actor = request.headers().authorization?.replace('Bearer erp-token-', ''), station = params.get('station') || 'admin'
+          if (accessCalls > 1 && params.has('access-denied')) return json({ message: '沒有此儲運公司的存取權限' }, 403)
+          if (accessCalls > 1 && params.has('access-disabled')) return json({ message: '儲運統一登入尚未啟用' }, 503)
+          if (accessCalls > 1 && params.has('access-expired')) return json({ message: 'Unauthorized' }, 401)
+          if (accessCalls > 1 && actor === 'operator-B' && params.has('new-actor-denied')) return json({ message: '沒有此儲運公司的存取權限' }, 403)
+          if (accessCalls === 2 && params.has('hold-recovery')) { recoveryStartedResolve(); await recoveryGate }
+          return json({ userId: accessCalls > 1 && params.has('wrong-actor') ? 'other-actor' : actor,
+            entityId: accessCalls > 1 && params.has('invalid-company') ? 'warehouse-A?admin=true' : 'warehouse-A',
+            admin: ['admin', 'superadmin'].includes(station),
+            permissions: accessCalls > 1 && params.has('grant-removed') ? [] : ['wms_tasks:read', station === 'picker' ? 'wms_picking:execute' : station === 'packer' ? 'wms_packing:execute' : 'wms_orders:create'],
+            roles: station === 'csr' ? [] : ['picker', 'packer', 'dispatcher'] })
+        }
         if (path === '/api/v1/wms/native/session' && request.method() === 'POST') {
           const body = request.postDataJSON(), actor = request.headers().authorization?.replace('Bearer erp-token-', '')
           assert.match(body.nonce, /^[a-f0-9]{64}$/); assert.equal(body.entityId, request.headers()['x-wms-entity'])
-          if (body.entityId !== 'warehouse-A') return json({ message: 'Synthetic warehouse company denied' }, 403)
-          const stationRole = new URLSearchParams(query).get('station') || 'admin'
+          if (new URLSearchParams(query).has('permission-denied')) return json({ message: 'Missing permissions: [wms_orders:create]' }, 403)
+          if (body.entityId !== 'warehouse-A') return json({ message: 'WMS_NATIVE_ENTITY_MISMATCH' }, 403)
+          const selectedStation = new URLSearchParams(query).get('station') || 'admin', stationRole = selectedStation === 'superadmin' ? 'admin' : selectedStation
           return json({ accessToken: 'synthetic.wms.session', destination: body.entry === 'marketplace' ? '/admin/marketplace-converter' : body.entry === 'picking' ? '/tasks?group=pick' : body.entry === 'packing' ? '/tasks?group=pack' : body.entry === 'intakes' ? '/warehouse-intakes' : '/tasks',
             user: { id: 41, role: stationRole, erpSubject: actor, entityId: body.entityId } })
         }
@@ -128,9 +145,10 @@ test('real warehouse host stays in one browser and retires old identity, company
         deniedNetwork.push(request.method() + ' ' + url.href); return route.abort()
       })
       await page.goto(origin + '/__warehouse-native' + query)
-      await page.getByRole('button', { name: '預揀與倉庫放行', exact: true }).waitFor()
+      if (new URLSearchParams(query).get('station') === 'csr') await page.getByText('尚未指派儲運作業權限，請聯絡管理員', { exact: true }).waitFor()
+      else await page.getByRole('button', { name: '預揀與倉庫放行', exact: true }).waitFor()
       assert.deepEqual(errors, []); assert.equal(await page.locator('vite-error-overlay').count(), 0)
-      return { context, page, errors, calls, deniedNetwork }
+      return { context, page, errors, calls, deniedNetwork, recoveryStarted, releaseRecovery }
     }
     const route = page => page.locator('#current-route').innerText()
     const records = page => page.evaluate(() => window.__sdkRecords)
@@ -179,9 +197,108 @@ test('real warehouse host stays in one browser and retires old identity, company
       await page.waitForFunction(() => window.__sdkRecords.length === 2 && window.__sdkRecords[1].actor === 'operator-B')
       assert.equal((await records(page))[0].disposed, true); assert.equal((await records(page))[0].aborted, true)
       const stale = await page.evaluate(async () => { try { await window.__sdkHosts[0].transport({ url: '/api/tasks' }); return 'unexpected' } catch (error) { return error.name } }); assert.equal(stale, 'AbortError')
-      await page.evaluate(() => window.__routeTo('/warehouse/marketplace?entityId=warehouse-B')); await page.getByText('沒有此儲運功能權限，請聯絡管理員', { exact: true }).waitFor()
-      assert.equal((await records(page))[1].disposed, true); assert.equal(result.calls.at(-1).body.entityId, 'warehouse-B')
+      await page.evaluate(() => window.__routeTo('/warehouse/marketplace?entityId=warehouse-B')); await page.getByText('請切換至倉儲公司', { exact: true }).waitFor()
+      assert.equal((await records(page))[1].disposed, true); assert.equal(result.calls.filter(call => call.path.endsWith('/native/session')).at(-1).body.entityId, 'warehouse-B')
       await page.evaluate(() => window.__routeTo('/profile?entityId=warehouse-B')); await page.getByRole('heading', { name: 'Synthetic profile' }).waitFor(); assert.equal(result.calls.filter(call => call.path.includes('/native/proxy/')).length, 0)
+      await healthy(result)
+    })
+    for (const [station, section, workPath] of [['admin', 'marketplace', '/admin/marketplace-converter'], ['superadmin', 'marketplace', '/admin/marketplace-converter'], ['picker', 'picking', '/tasks?group=pick']]) {
+      await t.test(`${station} explicitly switches only to the already authorized warehouse without directory reads`, async () => {
+        const result = await open('?station=' + station), { page } = result
+        const search = '?entityId=warehouse-B&wms=' + encodeURIComponent(workPath) + '&filter=queued'
+        await page.evaluate(path => window.__routeTo(path), '/warehouse/' + section + search)
+        await page.getByText('請切換至倉儲公司', { exact: true }).waitFor()
+        assert.equal((await records(page)).length, 0)
+        assert.equal(await route(page), '/warehouse/' + section + search)
+        await page.getByRole('button', { name: '切換至倉儲公司', exact: true }).click()
+        await page.getByRole('heading', { name: 'SDK 作業 ' + workPath, exact: true }).waitFor()
+        const destination = new URL(await route(page), origin)
+        assert.equal(destination.pathname, '/warehouse/' + section)
+        assert.equal(destination.searchParams.get('entityId'), 'warehouse-A')
+        assert.equal(destination.searchParams.get('wms'), workPath)
+        assert.equal(destination.searchParams.get('filter'), 'queued')
+        const sessions = result.calls.filter(call => call.path.endsWith('/native/session'))
+        assert.deepEqual(sessions.map(call => call.body.entityId), ['warehouse-B', 'warehouse-A'])
+        assert.equal(result.calls.filter(call => call.path === '/api/v1/entities').length, 0)
+        assert.equal(await page.evaluate(() => localStorage.getItem('entityId')), 'warehouse-A')
+        await healthy(result)
+      })
+    }
+    await t.test('denied, disabled, invalid or differently owned recovery metadata never creates a switch target', async () => {
+      for (const [query, section, feedback] of [
+        ['?access-denied', 'marketplace', '沒有此儲運功能權限，請聯絡管理員'],
+        ['?access-disabled', 'marketplace', '無法確認倉儲公司，請重試'],
+        ['?access-expired', 'marketplace', '作業連線已逾時，請重新連線'],
+        ['?wrong-actor', 'marketplace', '無法確認倉儲公司，請重試'],
+        ['?invalid-company', 'marketplace', '無法確認倉儲公司，請重試'],
+        ['?station=picker&grant-removed', 'picking', '無法確認倉儲公司，請重試'],
+      ]) {
+        const result = await open(query), { page } = result
+        await page.evaluate(path => window.__routeTo(path), '/warehouse/' + section + '?entityId=warehouse-B')
+        await page.getByText(feedback, { exact: true }).waitFor()
+        assert.equal(await page.getByRole('button', { name: '切換至倉儲公司', exact: true }).count(), 0)
+        assert.equal((await records(page)).length, 0)
+        assert.equal(result.calls.filter(call => call.path.endsWith('/native/session')).length, 1)
+        assert.equal(result.calls.filter(call => call.path === '/api/v1/entities').length, 0)
+        await healthy(result)
+      }
+    })
+    await t.test('an unauthorized CSR cannot obtain a warehouse-company recovery action by guessing its route', async () => {
+      const result = await open('?station=csr'), { page } = result
+      await page.evaluate(() => window.__routeTo('/warehouse/marketplace?entityId=warehouse-B'))
+      await page.getByText('沒有此儲運功能權限', { exact: true }).waitFor()
+      assert.equal(await page.getByRole('button', { name: '切換至倉儲公司', exact: true }).count(), 0)
+      assert.equal(result.calls.filter(call => call.path.endsWith('/native/session')).length, 0)
+      assert.equal(result.calls.filter(call => call.path === '/api/v1/wms/portal/access').length, 1)
+      await healthy(result)
+    })
+    await t.test('a late recovery response cannot restore a switch action for an old actor or company', async () => {
+      for (const change of ['actor', 'company']) {
+        const result = await open('?hold-recovery&new-actor-denied'), { page } = result
+        await page.evaluate(() => window.__routeTo('/warehouse/marketplace?entityId=warehouse-B'))
+        await result.recoveryStarted
+        if (change === 'actor') {
+          await page.evaluate(() => window.__changeActor('operator-B'))
+          await page.getByText('沒有此儲運功能權限，請聯絡管理員', { exact: true }).waitFor()
+        } else {
+          await page.evaluate(() => window.__routeTo('/warehouse/marketplace?entityId=warehouse-A'))
+          await page.getByRole('heading', { name: 'SDK 作業 /admin/marketplace-converter', exact: true }).waitFor()
+        }
+        result.releaseRecovery()
+        await page.waitForTimeout(100)
+        assert.equal(await page.getByRole('button', { name: '切換至倉儲公司', exact: true }).count(), 0)
+        assert.equal((await records(page)).length, change === 'company' ? 1 : 0)
+        assert.equal(result.calls.filter(call => call.path.endsWith('/native/session')).length, 2)
+        await healthy(result)
+      }
+    })
+    await t.test('company recovery does not normalize a work path belonging to another section', async () => {
+      const result = await open(), { page } = result
+      await page.evaluate(() => window.__routeTo('/warehouse/marketplace?entityId=warehouse-B&wms=%2Fadmin%2Fusers'))
+      await page.getByText('找不到這筆儲運作業', { exact: true }).waitFor()
+      assert.equal(await page.getByRole('button', { name: '切換至倉儲公司', exact: true }).count(), 0)
+      assert.equal(result.calls.filter(call => call.path.endsWith('/native/session')).length, 0)
+      assert.equal(result.calls.filter(call => call.path === '/api/v1/wms/portal/access').length, 1)
+      await healthy(result)
+    })
+    await t.test('a recovery action cannot switch company after its ERP token changes before the click', async () => {
+      const result = await open(), { page } = result
+      await page.evaluate(() => window.__routeTo('/warehouse/marketplace?entityId=warehouse-B'))
+      await page.getByRole('button', { name: '切換至倉儲公司', exact: true }).waitFor()
+      await page.evaluate(() => localStorage.setItem('access_token', 'erp-token-new-login'))
+      await page.getByRole('button', { name: '切換至倉儲公司', exact: true }).click()
+      assert.equal(await route(page), '/warehouse/marketplace?entityId=warehouse-B')
+      assert.equal(result.calls.filter(call => call.path.endsWith('/native/session')).length, 1)
+      assert.equal((await records(page)).length, 0)
+      await healthy(result)
+    })
+    await t.test('an actual permission denial retains its existing feedback and offers no company workaround', async () => {
+      const result = await open('?permission-denied'), { page } = result
+      await page.getByRole('button', { name: '通路訂單轉檔', exact: true }).click()
+      await page.getByText('沒有此儲運功能權限，請聯絡管理員', { exact: true }).waitFor()
+      assert.equal(await page.getByRole('combobox', { name: '公司', exact: true }).count(), 0)
+      assert.equal(result.calls.filter(call => call.path === '/api/v1/entities').length, 0)
+      assert.equal((await records(page)).length, 0)
       await healthy(result)
     })
     await t.test('expiry reconnect creates a fresh auth session without replaying an uncertain business command', async () => {

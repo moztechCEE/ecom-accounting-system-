@@ -9,7 +9,7 @@ const storage = new Map<string, string>([['access_token', 'erp-only-fixture']])
 const location = { origin: 'https://erp.example.invalid', pathname: '/warehouse', href: 'https://erp.example.invalid/warehouse' }
 Object.defineProperty(globalThis, 'window', { configurable: true, value: { __APP_CONFIG__: { apiUrl: 'https://erp.example.invalid/api/v1', devEnvironment: true, wmsPortalUrl: origin }, location } })
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => storage.get(key) || null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) } })
-const { nativeEntryPath, nativeHostSection, nativeWorkPath, warehouseManifest, loadWarehouseModule, nativeTransport, nativeSessionExpired } = await import('../src/services/warehouse-native.ts')
+const { nativeEntryPath, nativeHostSection, nativeWorkPath, warehouseManifest, loadWarehouseModule, nativeTransport, nativeSessionExpired, nativeRecoveryEntity } = await import('../src/services/warehouse-native.ts')
 const { companyNavigationDestination } = await import('../src/config/workspaces.ts')
 
 const session: NativeWarehouseSession = { accessToken: 'warehouse.only.fixture', destination: '/tasks?group=pick', user: { id: 41, role: 'picker', erpSubject: 'erp-fixture-user', entityId: 'warehouse-dev' } }
@@ -20,6 +20,23 @@ const client = (request: (config: AxiosRequestConfig) => Promise<AxiosResponse>,
 const safeHeaders = { Authorization: `Bearer ${session.accessToken}`, 'Content-Type': 'application/json', Accept: 'application/json' }
 const abortError = (error: unknown) => error instanceof Error && error.name === 'AbortError'
 const noErpCredential = (value: unknown) => assert(!JSON.stringify(value).includes(actor.token), 'ERP bearer must remain in the host transport only')
+
+test('company recovery accepts only the bound warehouse of the same server-authorized actor and section', () => {
+  const access = { userId: 'current-actor', entityId: 'warehouse-A', admin: false, permissions: ['wms_tasks:read', 'wms_picking:execute'] }
+  assert.equal(nativeRecoveryEntity(access, '/warehouse/picking', 'current-actor'), 'warehouse-A')
+  assert.equal(nativeRecoveryEntity(access, '/warehouse/intakes', 'current-actor'), 'warehouse-A')
+  assert.equal(nativeRecoveryEntity(access, '/warehouse/marketplace', 'current-actor'), null)
+  assert.equal(nativeRecoveryEntity(access, '/warehouse/packing', 'current-actor'), null)
+  assert.equal(nativeRecoveryEntity({ ...access, admin: true, permissions: [] }, '/warehouse/marketplace', 'current-actor'), 'warehouse-A')
+  for (const value of [null, { ...access, userId: 'another-actor' }, { ...access, entityId: '' }, { ...access, entityId: 'https://other.invalid' },
+    { ...access, entityId: 'warehouse-A?admin=true' }, { ...access, entityId: 'x'.repeat(129) }, { ...access, admin: 'true' },
+    { ...access, permissions: [] }, { ...access, permissions: ['wms_picking:execute'] }, { ...access, permissions: 'wms_tasks:read' }]) {
+    assert.equal(nativeRecoveryEntity(value, '/warehouse/picking', 'current-actor'), null)
+  }
+  assert.equal(nativeRecoveryEntity(access, '/warehouse/users', 'current-actor'), null)
+  assert.equal(nativeRecoveryEntity(access, '/warehouse/picking?entityId=other', 'current-actor'), null)
+  assert.equal(nativeRecoveryEntity({ ...access, admin: true }, 'https://other.invalid/warehouse', 'current-actor'), null)
+})
 
 test('typed warehouse navigation keeps source context and the explicit company on return routes', () => {
   const cases = [

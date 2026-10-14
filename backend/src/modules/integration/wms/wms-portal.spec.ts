@@ -19,6 +19,13 @@ describe('warehouse identity and personal access', () => {
     await expect(service.ticket('staff',{role:'packer',nonce:'a'.repeat(64)})).rejects.toThrow('沒有此儲運功能權限');
     expect(db.$executeRaw).not.toHaveBeenCalled();
   });
+  it('returns the already authorized bound warehouse for administrators without company membership', async () => {
+    for (const code of ['ADMIN', 'SUPER_ADMIN']) {
+      db.user.findUnique.mockResolvedValue({ ...actor([]), entityMemberships: [], roles: [{ role: { code, permissions: [] } }] });
+      await expect(service.access('staff')).resolves.toMatchObject({ userId: 'staff', entityId: 'warehouse', admin: true, roles: ['picker', 'packer', 'dispatcher'] });
+    }
+    expect(db.$executeRaw).not.toHaveBeenCalled();
+  });
   it('blocks removed company access, disabled accounts and password-change accounts',async()=>{
     for(const change of [{entityMemberships:[]},{isActive:false},{mustChangePassword:true}]) {
       db.user.findUnique.mockResolvedValue({...actor(),...change});

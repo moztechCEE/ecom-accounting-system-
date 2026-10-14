@@ -1377,7 +1377,8 @@
         "steps": [
           "開啟「儲運工作台」，依已授權角色選擇「開始揀貨」或「開始裝箱」，或從功能導覽選擇其他儲運功能。",
           "選定功能後，原 WMS 作業畫面會直接顯示在 ERP 內；由原作業清單選擇任務，查閱與操作沿用原 WMS 頁面的資料及流程。",
-          "商城批次維持下載 ECOUNT 銷貨檔、由人員匯入 ECOUNT，再回匯理貨／出貨單核對，列印預揀總表與逐筆明細後作業。若使用 ERP 既有的交運待核銷流程，仍依該流程逐行核准正式出庫；兩種流程不可混用或重複扣庫。"
+          "商城批次維持下載 ECOUNT 銷貨檔、由人員匯入 ECOUNT，再回匯理貨／出貨單核對，列印預揀總表與逐筆明細後作業。若使用 ERP 既有的交運待核銷流程，仍依該流程逐行核准正式出庫；兩種流程不可混用或重複扣庫。",
+          "若顯示「請切換至倉儲公司」，按「切換至倉儲公司」進入目前帳號已授權的倉儲公司；未授權的功能仍須由管理員確認權限。"
         ],
         "boundaries": [
           "ERP 入口、目前公司範圍與原 WMS 內部權限都需通過；各環境只能載入對應的允許來源。",
@@ -1407,7 +1408,8 @@
             "steps": [
               "Open the warehouse workspace and choose Start picking or Start packing according to assigned roles, or select another authorized warehouse function from navigation.",
               "The selected original WMS screen opens directly inside ERP. Choose a task from the original work list; reads and operations retain the original WMS data and workflows.",
-              "Marketplace batches retain the ECOUNT sales-file download, human ECOUNT import and picking/shipping-file return reconciliation before printing prepick totals and individual orders. The existing ERP handover-reconciliation flow retains its own line-by-line stock approval when used. Do not mix these workflows or deduct stock twice."
+              "Marketplace batches retain the ECOUNT sales-file download, human ECOUNT import and picking/shipping-file return reconciliation before printing prepick totals and individual orders. The existing ERP handover-reconciliation flow retains its own line-by-line stock approval when used. Do not mix these workflows or deduct stock twice.",
+              "If Switch to the warehouse company appears, select that action to enter the warehouse company already authorized for the current account. An actual feature permission denial still requires administrator review."
             ],
             "boundaries": [
               "ERP entry permission, current company scope and original WMS permissions all apply. Each environment loads only its corresponding allowlisted source.",

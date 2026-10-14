@@ -31,9 +31,12 @@ export const WMS_NATIVE_BUSINESS_PATH =
   /^\/api\/(?:cartons|orders|tasks|comments|order-import-batches|order-reviews|order-change-notices|marketplace-products|marketplace-intakes|marketplace-batch-notices|warehouse-intakes|logistics|admin|analytics|reports|scan-errors|operation-logs|team)(?:\/[A-Za-z0-9_.,:@-]+)*\/?$/;
 const protectedSegment =
   /(?:^|\/)(?:auth|integrations?|callbacks?|hooks?|webhooks?|migrations?|seeds?|bootstrap|maintenance|retention|internal|health|ready|readiness|staff|bind|exchange)(?:\/|$)/i;
-export function nativeBusinessTarget(raw: string) {
+export function nativeBusinessTarget(raw: string, method?: string) {
   if (raw.length > 8192 || /[\x00-\x20\x7f#\\]/.test(raw))
     throw new BadRequestException('WMS_NATIVE_PATH_INVALID');
+  // The mounted WMS app rechecks only its authenticated caller after startup.
+  // No other auth route, method, query or trailing path is delegated.
+  if (method === 'GET' && raw === '/api/auth/me') return raw;
   const separator = raw.indexOf('?');
   const pathname = separator < 0 ? raw : raw.slice(0, separator);
   if (

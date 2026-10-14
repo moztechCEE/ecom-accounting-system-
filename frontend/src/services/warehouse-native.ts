@@ -32,6 +32,21 @@ const moduleCache = new Map<string, Promise<WarehouseModule>>()
 // merely because the delegated warehouse session expired.
 const nativeApi = axios.create({ baseURL: API_URL, timeout: 30000 })
 
+export function nativeRecoveryEntity(value: unknown, key: string, actorId: string): string | null {
+  const access = value as { userId?: unknown; entityId?: unknown; admin?: unknown; permissions?: unknown }
+  const section = WMS_PORTAL_SECTIONS.find(section => section.key === key)
+  if (!section || !access || access.userId !== actorId || typeof access.entityId !== 'string' ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(access.entityId) || typeof access.admin !== 'boolean' || !Array.isArray(access.permissions)) return null
+  if (!access.admin && (section.adminOnly || !access.permissions.includes('wms_tasks:read') ||
+    !section.permissions?.some(permission => (access.permissions as unknown[]).includes(permission)))) return null
+  return access.entityId
+}
+
+export async function nativeRecoveryRequest(key: string, actor: { userId: string; token: string }, signal: AbortSignal): Promise<string | null> {
+  const { data } = await nativeApi.get('/wms/portal/access', { signal, headers: { Authorization: `Bearer ${actor.token}` } })
+  return nativeRecoveryEntity(data, key, actor.userId)
+}
+
 export function nativeWorkPath(value: unknown): string | null {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.length > 2048 || /[\\\u0000-\u0020\u007f]/.test(value)) return null
   const pathname = value.split(/[?#]/, 1)[0]

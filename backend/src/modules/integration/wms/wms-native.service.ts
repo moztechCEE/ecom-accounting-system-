@@ -234,8 +234,8 @@ export class WmsNativeService {
     input: ProxyRequest,
   ): Promise<NativeReply> {
     const base = this.configuration(entity),
-      target = nativeBusinessTarget(input.target),
-      method = input.method.toUpperCase();
+      method = input.method.toUpperCase(),
+      target = nativeBusinessTarget(input.target, method);
     if (!['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method))
       throw new BadRequestException('WMS_NATIVE_METHOD_INVALID');
     const body = nativeBody(input.body);

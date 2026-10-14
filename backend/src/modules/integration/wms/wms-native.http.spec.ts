@@ -51,6 +51,7 @@ describe('native WMS authenticated HTTP adapter', () => {
     erpSubject: currentActor,
     entityId: currentEntity,
   });
+  const browserOrigin = 'https://corely-erp-dev-sp5g377smq-de.a.run.app';
   beforeAll(async () => {
     const upstream = express();
     upstream.use(raw({ type: 'multipart/form-data', limit: '35mb' }));
@@ -169,6 +170,15 @@ describe('native WMS authenticated HTTP adapter', () => {
       bodyParser: false,
       rawBody: true,
     });
+    // Apply main.ts's existing CORS policy with the approved ERP origin fixture.
+    // This does not add an origin or change runtime configuration.
+    app.enableCors({
+      origin: [browserOrigin],
+      credentials: true,
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+      allowedHeaders: 'Content-Type, Accept, Authorization, X-DOA-Actor, X-WMS-Session, X-WMS-Entity, X-Repair-Report-Token, If-None-Match',
+      exposedHeaders: 'Content-Disposition, X-Request-ID, ETag',
+    });
     app.use(
       '/api/v1/wms/native/proxy',
       raw({ type: 'multipart/form-data', limit: WMS_NATIVE_BODY_LIMIT }),
@@ -203,6 +213,61 @@ describe('native WMS authenticated HTTP adapter', () => {
       .set('Authorization', 'Bearer erp-fixture')
       .set('X-WMS-Session', token)
       .set('X-WMS-Entity', entity);
+  it('keeps caller inspection behind the existing browser origin allowlist and ERP authorization', async () => {
+    const path = '/api/v1/wms/native/proxy/api/auth/me';
+    const preflight = (origin: string) => request(app.getHttpServer()).options(path)
+      .set('Origin', origin).set('Access-Control-Request-Method', 'GET')
+      .set('Access-Control-Request-Headers', 'authorization,x-wms-session,x-wms-entity');
+    const allowed = await preflight(browserOrigin).expect(204);
+    expect(allowed.headers['access-control-allow-origin']).toBe(browserOrigin);
+    const denied = await preflight('https://untrusted.invalid').expect(204);
+    expect(denied.headers['access-control-allow-origin']).toBeUndefined();
+    expect(calls).toHaveLength(0);
+    const unauthenticated = await request(app.getHttpServer()).get(path).set('Origin', 'https://untrusted.invalid').expect(403);
+    expect(unauthenticated.headers['access-control-allow-origin']).toBeUndefined();
+    expect(calls).toHaveLength(0);
+    const response = await auth(request(app.getHttpServer()).get(path)).set('Origin', browserOrigin).expect(200);
+    expect(response.headers['access-control-allow-origin']).toBe(browserOrigin);
+    expect(response.headers['access-control-allow-credentials']).toBe('true');
+  });
+  it('rechecks only the current authenticated WMS caller for the mounted app', async () => {
+    const response = await auth(
+      request(app.getHttpServer()).get('/api/v1/wms/native/proxy/api/auth/me'),
+    ).expect(200);
+    expect(response.body).toEqual({ user: nativeUser() });
+    expect(calls.map((call) => call.path)).toEqual(['/api/auth/me', '/api/auth/me']);
+    expect(calls.every((call) => call.method === 'GET' && call.body === undefined)).toBe(true);
+    expect(calls.every((call) => call.headers.authorization === `Bearer ${token}`)).toBe(true);
+    expect(response.headers['cache-control']).toContain('no-store');
+    expect(response.headers['set-cookie']).toBeUndefined();
+  });
+  it('denies auth mutation, alternate paths, query strings and inspection bodies before upstream reads', async () => {
+    // Superagent normalizes an empty '?' before sending; cover that raw input below.
+    expect(() => nativeBusinessTarget('/api/auth/me?', 'GET')).toThrow();
+    for (const path of ['/api/auth/me?userId=other', '/api/auth/me/', '/api/auth/login', '/api/auth/erp/exchange', '/api/auth/erp/inspect'])
+      await auth(request(app.getHttpServer()).get('/api/v1/wms/native/proxy' + path)).expect(403);
+    for (const method of ['post', 'put', 'patch', 'delete', 'head'] as const)
+      await auth(request(app.getHttpServer())[method]('/api/v1/wms/native/proxy/api/auth/me')).expect(403);
+    await auth(request(app.getHttpServer()).get('/api/v1/wms/native/proxy/api/auth/me'))
+      .send({ userId: 'other' }).expect(400);
+    expect(calls).toHaveLength(0);
+  });
+  it('retains ERP permissions, company, current subject and revocation checks for caller inspection', async () => {
+    const read = () => auth(request(app.getHttpServer()).get('/api/v1/wms/native/proxy/api/auth/me'));
+    await read().set('X-Test-Denied', 'true').expect(403);
+    await read().set('X-WMS-Entity', 'other').expect(403);
+    expect(calls).toHaveLength(0);
+    currentActor = 'different-operator';
+    await read().expect(403);
+    expect(calls).toHaveLength(1);
+    currentActor = 'erp-operator'; currentEntity = 'other';
+    await read().expect(403);
+    expect(calls).toHaveLength(2);
+    currentEntity = entity; enabled = false;
+    await read().expect(401);
+    expect(calls).toHaveLength(3);
+    expect(calls.every((call) => call.path === '/api/auth/me')).toBe(true);
+  });
   it('exchanges only a nonce-bound ERP ticket and rechecks the resulting WMS subject', async () => {
     const response = await auth(
       request(app.getHttpServer()).post('/api/v1/wms/native/session'),

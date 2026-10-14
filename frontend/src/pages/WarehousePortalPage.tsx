@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useEntityContext } from '../hooks/useEntityContext'
 import { companyNavigationDestination } from '../config/workspaces'
 import { wmsPortalDestination, wmsPortalOrigin } from '../config/wms-portal'
-import { loadWarehouseModule, nativeEntryPath, nativeHostSection, nativeSessionRequest, nativeSessionExpired, nativeTransport, type WarehouseHandle } from '../services/warehouse-native'
+import { loadWarehouseModule, nativeEntryPath, nativeHostSection, nativeSessionRequest, nativeSessionExpired, nativeTransport, nativeRecoveryRequest, type WarehouseHandle } from '../services/warehouse-native'
 
 export default function WarehousePortalPage() {
   const { user } = useAuth()
@@ -24,6 +24,7 @@ export default function WarehousePortalPage() {
   const [attempt, setAttempt] = useState(0)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'auth'>('loading')
   const [error, setError] = useState('')
+  const [companyRecovery, setCompanyRecovery] = useState<{ identity: string; switchCompany(): void } | null>(null)
   const key = destination?.key
 
   useEffect(() => {
@@ -57,7 +58,7 @@ export default function WarehousePortalPage() {
     }
     window.addEventListener('storage', storageChanged)
     window.addEventListener('focus', storageChanged)
-    setStatus('loading'); setError('')
+    setStatus('loading'); setError(''); setCompanyRecovery(null)
     const deadline = window.setTimeout(() => {
       if (active()) { dispose(); setStatus('error'); setError('儲運作業連線逾時，請重試') }
     }, 45000)
@@ -94,9 +95,33 @@ export default function WarehousePortalPage() {
         setStatus('ready')
       } catch (cause: any) {
         if (!active()) return
-        dispose()
-        setStatus(cause?.response?.status === 401 ? 'auth' : 'error')
-        setError(cause?.response?.status === 403 ? '沒有此儲運功能權限，請聯絡管理員' : '無法載入儲運作業，請重試')
+        const mismatch = cause?.response?.status === 403 && [cause?.response?.data?.code, cause?.response?.data?.message].includes('WMS_NATIVE_ENTITY_MISMATCH')
+        if (mismatch) {
+          try {
+            const recoveryEntity = await nativeRecoveryRequest(key, actor, controller.signal)
+            if (!active()) return
+            setStatus('error')
+            if (recoveryEntity && recoveryEntity !== entityId) {
+              setError('請切換至倉儲公司')
+              setCompanyRecovery({ identity: startingIdentity, switchCompany: () => {
+                const current = latest.current.location
+                if (!active() || current.pathname !== location.pathname || !nativeEntryPath(key, current.search)) return
+                const params = new URLSearchParams(current.search)
+                params.set('entityId', recoveryEntity)
+                navigate(current.pathname + '?' + params.toString() + current.hash)
+              } })
+            } else setError('無法確認倉儲公司，請重試')
+          } catch (recoveryCause: any) {
+            if (!active()) return
+            dispose()
+            setStatus(recoveryCause?.response?.status === 401 ? 'auth' : 'error')
+            setError(recoveryCause?.response?.status === 401 ? '作業連線已逾時，請重新連線' : recoveryCause?.response?.status === 403 ? '沒有此儲運功能權限，請聯絡管理員' : '無法確認倉儲公司，請重試')
+          }
+        } else {
+          dispose()
+          setStatus(cause?.response?.status === 401 ? 'auth' : 'error')
+          setError(cause?.response?.status === 403 ? '沒有此儲運功能權限，請聯絡管理員' : '無法載入儲運作業，請重試')
+        }
       } finally { window.clearTimeout(deadline) }
     })()
     return () => {
@@ -116,7 +141,8 @@ export default function WarehousePortalPage() {
   if (!token || !entityId) return <Result status="403" title="請重新登入並選擇公司" />
   return <section aria-label={destination.label} style={{ minHeight: 420 }}>
     {status === 'loading' && <div role="status" style={{ display: 'grid', placeItems: 'center', minHeight: 240 }}><Spin tip="載入儲運作業" size="large"><div style={{ width: 160, height: 80 }} /></Spin></div>}
-    {(status === 'error' || status === 'auth') && <Alert type={status === 'auth' ? 'warning' : 'error'} message={error} showIcon action={<Button onClick={() => setAttempt(value => value + 1)}>重新連線</Button>} />}
+    {(status === 'error' || status === 'auth') && <Alert type={status === 'auth' ? 'warning' : 'error'} message={error} showIcon
+      action={companyRecovery?.identity === identity ? <Button onClick={companyRecovery.switchCompany}>切換至倉儲公司</Button> : <Button onClick={() => setAttempt(value => value + 1)}>重新連線</Button>} />}
     <div ref={container} hidden={status !== 'ready'} style={{ width: '100%' }} />
   </section>
 }

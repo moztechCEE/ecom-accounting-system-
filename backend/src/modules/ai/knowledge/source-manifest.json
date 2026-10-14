@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:0b57e938c416e85d4b94c101da84879e8ff559a2388f0a2245cb06e3029b03ac",
+  "sourceVersion": "sha256:0d304d5f28c232f24248a9ff43018d4fd998537b07d29b7785ea48c600c25fa0",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "65f28aec7522f3fda1848ae38b61862bec0d38a8f557911796fde9547301f047",
+  "catalogSha256": "514b73a0ec2d55c3f5556d4472ee1c05e54a50609f6524e9ad40ea1b10c54608",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -372,7 +372,7 @@
     },
     {
       "path": "backend/src/modules/integration/wms/wms-native.contract.ts",
-      "sha256": "074bb0b0fec6b76da2a2f52aededdb426c50a7a170260573b4d74e400149edb0"
+      "sha256": "611e7160047dc486cf8e3c63b870f978f56f9b169728d50e91c6be187a744d23"
     },
     {
       "path": "backend/src/modules/integration/wms/wms-native.controller.ts",
@@ -380,7 +380,7 @@
     },
     {
       "path": "backend/src/modules/integration/wms/wms-native.service.ts",
-      "sha256": "895309ecad0ead1d3335b4615e210a5385c14df358852b56744bf204f2458135"
+      "sha256": "53db16403428727bd4d429ff01516f51a75eb0102b2279504ba853f0e01eb7e8"
     },
     {
       "path": "backend/src/modules/integration/wms/wms-portal.module.ts",
@@ -1168,7 +1168,7 @@
     },
     {
       "path": "frontend/src/pages/WarehousePortalPage.tsx",
-      "sha256": "c367cb0de3e9f249ebcaa1b8862a8ae86d7dceb182bfee87a4a82fdcb5e4e4fd"
+      "sha256": "17259b58d451a3adb605f99d6f8116ae2577f2655535a30065488cf99cfad031"
     },
     {
       "path": "frontend/src/pages/WarehouseReportsPage.tsx",
@@ -1240,7 +1240,7 @@
     },
     {
       "path": "frontend/src/services/warehouse-native.ts",
-      "sha256": "6053a4e355a47573d8205a2e9956f3b1483fb4588487e999e5a2145c3760676d"
+      "sha256": "60554cb7f29a067dd302f479fbdee4e5863b11203b350983c7a2b0a47a06bd35"
     },
     {
       "path": "frontend/src/services/wms-reconciliation.service.ts",
