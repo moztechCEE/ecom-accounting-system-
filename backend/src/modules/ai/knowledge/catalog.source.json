@@ -5003,7 +5003,8 @@
           "原件交回等需要實物確認的動作只接受原始 JSON boolean true；非 boolean 在 DTO 拒絕，false 或缺漏仍由該動作拒絕。其他維修動作不因這項型別修正新增簽收要求，既有權限、本人保管、版次與文件守門維持。",
           "待辦與待認領的紅件數由後端完整原生候選判斷，不以目前頁面50筆、OPEN待辦、PAID字樣或舊快照估計。來源讀取逾時、未核實或被拒時保留未知，不當作0件或空待辦；原生案件查詢不等待待辦統計才顯示。新接口只讀，不增加發票、款項、通知、物流、實物保管或庫存授權，原命令仍逐次核對本人、公司、版次及來源。",
           "檢測標準管理需另開 repair_workbench:manage 權限；未知標準、材料或成本不代表已確認。",
-          "檢修照片與錄影存私人儲存空間；客服本人審核對客摘要後可發布有期限的檢修報告連結，發布不等於已透過 LINE 發送。"
+          "檢修照片與錄影存私人儲存空間；客服本人審核對客摘要後可發布有期限的檢修報告連結，發布不等於已透過 LINE 發送。",
+          "案件查詢的維修件進度以公司範圍內即時售後讀取及本件檢修／正式報價綁定核對；來源逾時、重複、不符或本件等待期間改版時保留待確認，不使用收件快照推定顧客同意、入帳或發票完成。來源的初始第1版空報價只作尚未正式報價資料，不能放行；公司退貨整新、我的待辦與原操作守門不變。"
         ],
         "related": [
           "mailroom-workbench",
@@ -5060,7 +5061,8 @@
               "Original-item handback and other actions requiring physical confirmation accept only raw JSON boolean true. The DTO rejects non-boolean values; the action still rejects false or missing confirmation. Other repair actions gain no new acceptance requirement; existing permission, personal custody, revision and document gates remain authoritative.",
               "Server counts evaluate the full native candidate population, not the current 50 rows, OPEN tasks, a PAID label or old snapshots. Timed-out, unverified or denied source reads remain unknown rather than zero or an empty task queue. Native case lookup can render before task-summary completion. The new endpoint is read only and grants no invoice, payment, notification, logistics, physical-custody or stock authority; original commands still check the person, entity, revision and source each time.",
               "Standard management separately requires repair_workbench:manage; unknown standards, materials and costs do not count as confirmed.",
-              "Evidence uses private storage. The assigned service agent reviews the customer summary before publishing an expiring report link; publishing does not send it through LINE."
+              "Evidence uses private storage. The assigned service agent reviews the customer summary before publishing an expiring report link; publishing does not send it through LINE.",
+              "Repair progress in Case lookup uses a fresh company-scoped after-sales read and the current item inspection/formal-quote binding. Timed-out, duplicate, mismatched or natively revised reads remain unconfirmed; receipt snapshots never establish consent, payment or invoice completion. The initial revision-1 empty quote remains unquoted data without release authority. Company-return refurbishment, My tasks and original action gates are unchanged."
             ],
             "related": [
               "mailroom-workbench",
@@ -5134,7 +5136,8 @@
         "backend/src/modules/mailroom/repair-customer-report.service.ts",
         "frontend/src/pages/repair/RepairTestStandardManager.tsx",
         "frontend/src/pages/repair/RepairEvidencePanel.tsx",
-        "frontend/src/pages/repair/RepairReportPanel.tsx"
+        "frontend/src/pages/repair/RepairReportPanel.tsx",
+        "backend/src/modules/mailroom/repair-list-progress.contract.ts"
       ],
       "permissions": [
         "repair_workbench:read"

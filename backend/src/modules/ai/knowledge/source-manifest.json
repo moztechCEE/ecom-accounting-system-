@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:10d016d1d641bbc16f4e5ac92b9443cf14fc9ea35ed928709a2bd325cd86602c",
+  "sourceVersion": "sha256:6aee23740244c7349f6753cc85012d4b2c08e413f76becf76eef935c7d51ca20",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "9544a81040148a2c00375852038bcd424b80075132548a2a0603455b95d38fa4",
+  "catalogSha256": "2dd332f48cf419d7ebc76c1e49f4315e5c3feadb76fe353e06a77cf3838871ac",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -476,7 +476,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom.service.ts",
-      "sha256": "7d63dffb6a0ef0bef4ab23fc19a922c99f5d560f17118ee0d73aedc16ffb4633"
+      "sha256": "207b124d9abf0e89e1a256b063290962c51b927ea48f57088cf0e74f59522688"
     },
     {
       "path": "backend/src/modules/mailroom/repair-customer-report.service.ts",
@@ -493,6 +493,10 @@
     {
       "path": "backend/src/modules/mailroom/repair-evidence.controller.ts",
       "sha256": "91cbeee9d3c76044a51bf8c1b20f6040cc7e1296d572084bcb5f448ac0e797dd"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-list-progress.contract.ts",
+      "sha256": "b85807adfaba1b6d01b60d838f9c8f6da74880c36e9369c82a09fdcca2e37b47"
     },
     {
       "path": "backend/src/modules/mailroom/repair-list.contract.ts",
