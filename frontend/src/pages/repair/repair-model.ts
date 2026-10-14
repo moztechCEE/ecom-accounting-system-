@@ -44,7 +44,7 @@ export type RepairWorkflowCommand = {
   factoryName?:string;reference?:string;carrier?:string;trackingNumber?:string;
 };
 export type RepairProposalBinding = {itemId:string;planVersion:number;planHash:string;proposalHash:string};
-export type RepairReleaseInfo = {quoteRevision:number;customerApprovedQuoteRevision:number|null;customerApprovedAt:string|null;amount:number|null;currency:string;confirmedPaymentQuoteRevision:number|null;invoiceRequired?:boolean;invoiceStatus?:string;invoiceSatisfied?:boolean;invoiceQuoteRevision?:number|null;quoteBindings?:(RepairProposalBinding & {quoteRevision:number})[];customerIdentity?:{companyId:string;caseId:string;brand:string;verifiedCustomerId:string;verified:boolean}};
+export type RepairReleaseInfo = {quoteRevision:number;customerApprovedQuoteRevision:number|null;customerApprovedAt:string|null;amount:number|null;currency:string;confirmedPaymentQuoteRevision:number|null;invoiceRequired?:boolean;invoiceStatus?:string;invoiceSatisfied?:boolean;invoiceQuoteRevision?:number|null;quotePlanVersion?:number|null;quotePlanHash?:string|null;quoteBindings?:(RepairProposalBinding & {quoteRevision:number})[]|null;customerIdentity?:{companyId:string;caseId:string;brand:string;verifiedCustomerId:string;verified:boolean}};
 export function sourceQuoteConsentCurrent(info?:RepairReleaseInfo|null):info is RepairReleaseInfo {
   return !!info && Number.isInteger(info.quoteRevision) && info.quoteRevision>0 && info.customerApprovedQuoteRevision===info.quoteRevision && !!info.customerApprovedAt && Number.isFinite(Date.parse(info.customerApprovedAt));
 }
