@@ -11,6 +11,8 @@ export function materialPlanPayload(value: unknown): RepairMaterialPlan {
 }
 export type RepairDocumentMediaRef = {mediaId:string;phase:'BEFORE'|'AFTER'|'DIAGNOSTIC';checkKey?:string};
 export type CustomerRepairReportDraft = {findings:string;handling:string;verification:string;mediaIds:string[]};
+export type RepairAssessment = {schema:1;conclusion:'USER_CAUSED'|'PRODUCT_FAULT'|'UNDETERMINED';basis:string;causalExplanation:string;checkKeys:string[];mediaIds:string[]};
+export type RepairAssessmentReview = {schema:1;inspectionRevision:number;planHash:string;reviewerId:string;reviewerName:string;reviewedAt:string;decision:'APPROVE'|'REVISE';note:string};
 export type RepairDocumentV2Fields = {protocol?:2;isUnderWarranty?:boolean;isAccidentalDamage?:boolean;customerVisibleSummary?:string;templateBinding?:RepairTemplateBinding;mediaRefs?:RepairDocumentMediaRef[];customerReportDraft?:CustomerRepairReportDraft};
 export type RepairCheck = { name: string; result: 'PASS'|'FAIL'|'NOT_TESTED'; observation: string;key?:string;measurementValue?:string|boolean;unit?:string;instrumentId?:string;calibrationRecordId?:string;measuredAt?:string };
 export type RepairTemplateView = RepairTemplateBinding & {schema:1;status:'REVIEWED';entityId:string;productId:string;sku:string;checks:{key:string;name:string;requiredForInspection:boolean;requiredForCompletion:boolean;requiresCalibration:boolean;equipmentType?:string;standard:{kind:'OBSERVATION'|'NUMBER'|'BOOLEAN';instruction:string;unit?:string;min?:string;max?:string;expected?:boolean}}[]};
@@ -20,6 +22,7 @@ export type InspectionData = RepairDocumentV2Fields & {
   plan:'REPAIR'|'REPLACE'|'FACTORY'|'RETURN'|'SCRAP';planNote:string;feeSuggestion:'FREE'|'PAID'|'REVIEW';
   estimateAmount?:number;estimateNote:string;replacementCondition?:'NEW'|'REFURBISHED';replacementSku?:string;
   materialPlan?:RepairMaterialPlan;
+  assessment?:RepairAssessment;
 };
 export type RepairData = RepairDocumentV2Fields & {
   outcome:'REPAIRED'|'REPLACED'|'FACTORY_REPAIRED';factoryReference?:string;workPerformed:string;parts:{name:string;sku:string;quantity:number}[];laborMinutes:number;
@@ -30,8 +33,9 @@ export type RepairData = RepairDocumentV2Fields & {
 export type RepairDocument<T=InspectionData|RepairData> = {
   number:string;revision:number;status:'DRAFT'|'SUBMITTED';authorId:string;authorName:string;updatedAt:string;submittedAt?:string;inspectionRevision?:number;review?:{inspectionRevision:number;actorId:string;name:string;confirmedAt:string;planHash?:string;decision?:'APPROVE'|'DECLINE';quoteRevision?:number|null};data:T;
 };
-export type RepairWorkflowAction = 'claim_customer'|'resolve_customer'|'start_refurbishment'|'return_original'|'record_scrap_authorization'|'send_factory'|'accept_factory'|'request_factory_return'|'cancel_factory'|'receive_factory'|'complete_factory';
+export type RepairWorkflowAction = 'claim_customer'|'resolve_customer'|'review_assessment'|'start_refurbishment'|'return_original'|'record_scrap_authorization'|'send_factory'|'accept_factory'|'request_factory_return'|'cancel_factory'|'receive_factory'|'complete_factory';
 export type RepairWorkflow = {
+  assessmentReview?:RepairAssessmentReview;
   csr?: {status:'SENT'|'ACCEPTED'|'RESOLVED';inspectionRevision:number;estimateRevision?:number;quoteRevision?:number|null;planHash?:string;ownerId?:string;ownerName?:string;sentAt?:string;acceptedAt?:string;resolvedAt?:string;decision?:'APPROVE'|'DECLINE';note?:string};
   factory?: {stage:string;physicalCustody:'TECHNICIAN'|'FACTORY_CARRIER'|'FACTORY';factoryName?:string;reference?:string;carrier?:string;trackingNumber?:string;sentAt?:string;acceptedAt?:string;returnedAt?:string;note?:string;cancelled?:boolean;cancelledAt?:string;cancellationNote?:string;acceptanceNote?:string;returnNote?:string;receiptNote?:string};
   release?: {purpose?:'RETURN_UNREPAIRED'|'REPAIRED'|'REPLACED'|'FACTORY_REPAIRED';note?:string;inspectionRevision?:number;releasedAt?:string;stock?:{postingId?:string}};
@@ -139,7 +143,7 @@ export function repairStartReady(item: RepairItem): boolean {
 }
 
 export const WORKFLOW_ACTIONS: Record<RepairWorkflowAction,string> = {
-  claim_customer:'本人接手客服交辦',resolve_customer:'記錄客服方案結果',start_refurbishment:'開始公司整新',return_original:'原件未修退回收發室',record_scrap_authorization:'記錄顧客報廢授權',
+  claim_customer:'本人接手客服交辦',resolve_customer:'記錄客服方案結果',review_assessment:'佐證覆核',start_refurbishment:'開始公司整新',return_original:'原件未修退回收發室',record_scrap_authorization:'記錄顧客報廢授權',
   send_factory:'確認交運送原廠',accept_factory:'記錄原廠已收件',request_factory_return:'登記原廠返還物流',
   cancel_factory:'取消原廠處理（實物尚未返還）',receive_factory:'本人簽收原廠返還件',complete_factory:'原廠處理複驗完成，交回收發室',
 };
