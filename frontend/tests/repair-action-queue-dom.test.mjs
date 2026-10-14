@@ -49,9 +49,9 @@ const active={id:'active',entityId:'action-company',label:'NATIVE-ACTIVE',produc
 const pending=clone(active);pending.id='pending';pending.productName='邦森合成產品・待當版款項確認';
 pending.repairOverview.photoUrl=null;pending.receipt.sourceCaseId='source-pending';pending.receipt.sourceNumber='DEV-ACTION-PENDING';
 pending.repairInspection.status='SUBMITTED';pending.repairInspection.number='DEV-INS-PENDING';
-pending.repairInspection.review={inspectionRevision:3,decision:'APPROVE',planHash:'synthetic-current-plan',quoteRevision:4};
+pending.repairInspection.review={inspectionRevision:3,decision:'APPROVE',planHash:'a'.repeat(64),quoteRevision:4};
 pending.repairWorkflow.csr={status:'RESOLVED',ownerId:'action-csr',ownerName:'合成客服',inspectionRevision:3,estimateRevision:3,
-  quoteRevision:4,planHash:'synthetic-current-plan',decision:'APPROVE',acceptedAt:'2026-10-08T02:00:00Z',resolvedAt:'2026-10-08T03:00:00Z'};
+  quoteRevision:4,planHash:'a'.repeat(64),decision:'APPROVE',acceptedAt:'2026-10-08T02:00:00Z',resolvedAt:'2026-10-08T03:00:00Z'};
 pending.release={available:true,repairAllowed:false,message:'待確認本版款項',releaseInfo:{quoteRevision:4,customerApprovedQuoteRevision:4,
   customerApprovedAt:'2026-10-08T03:00:00Z',amount:399,currency:'TWD',confirmedPaymentQuoteRevision:null}};
 if(scenario==='unapproved'||scenario==='free-unapproved'){pending.release.releaseInfo.customerApprovedQuoteRevision=null;pending.release.releaseInfo.customerApprovedAt=null;}
@@ -69,6 +69,44 @@ if(scenario==='source-quote-stale')pending.release.releaseInfo.quoteRevision=5;
 if(scenario==='source-unavailable')pending.release.available=false;
 if(scenario==='factory')pending.repairInspection.data.plan='FACTORY';
 if(scenario==='return')pending.repairInspection.data.plan='RETURN';
+pending.productId='action-product';
+pending.repairProposalBinding={itemId:'pending',planVersion:3,planHash:'a'.repeat(64),proposalHash:'b'.repeat(64)};
+pending.release.sourceCaseId='source-pending';
+Object.assign(pending.release.releaseInfo,{invoiceRequired:pending.release.releaseInfo.amount>0,invoiceStatus:'ISSUED',invoiceSatisfied:true,invoiceQuoteRevision:4,
+  quoteBindings:[{...pending.repairProposalBinding,quoteRevision:4}]});
+const templateBinding={id:'action-template',revision:1,contentHash:'c'.repeat(64)};
+Object.assign(pending.repairInspection.data,{protocol:2,templateBinding,materialPlan:{mode:'NONE',lines:[]},
+  checks:[{key:'function',name:'合成檢測',result:'PASS',observation:'合成實際檢測紀錄'}]});
+pending.repairPrerequisites={template:{...templateBinding,schema:1,status:'REVIEWED',entityId:'action-company',productId:'action-product',sku:pending.sku,
+  checks:[{key:'function',name:'合成檢測',requiredForInspection:true,requiredForCompletion:true,requiresCalibration:false,standard:{kind:'OBSERVATION',instruction:'合成基準'}}]},
+  templateChecks:{inspection:'READY',completion:'READY'},materials:{start:{state:'READY',requiredCount:0},completion:{state:'READY',requiredCount:0}}};
+const kindBase=clone(pending);
+if(scenario.startsWith('handoff-')){
+  const planHash='a'.repeat(64),proposalHash='b'.repeat(64);
+  pending.status='WAITING_CUSTOMER';pending.statusLabel='客服與顧客確認中';
+  delete pending.repairInspection.review;
+  pending.repairWorkflow.csr={status:'ACCEPTED',inspectionRevision:3,estimateRevision:3,planHash,ownerId:'action-csr',ownerName:'合成客服'};
+  pending.repairProposalBinding={itemId:'pending',planVersion:3,planHash,proposalHash};
+  pending.release.sourceCaseId='source-pending';
+  Object.assign(pending.release.releaseInfo,{customerApprovedQuoteRevision:null,customerApprovedAt:null,confirmedPaymentQuoteRevision:null,
+    invoiceRequired:true,invoiceStatus:'PENDING',invoiceSatisfied:false,invoiceQuoteRevision:null,
+    quoteBindings:[{...pending.repairProposalBinding,quoteRevision:4}]});
+  if(scenario==='handoff-sent'||scenario==='handoff-review'){pending.release.releaseInfo=null;pending.repairProposalBinding=null;}
+  if(scenario==='handoff-sent')pending.repairWorkflow.csr.status='SENT';
+  if(scenario==='handoff-unquoted-sent'||scenario==='handoff-unquoted-review'){
+    pending.repairProposalBinding=null;pending.release.sourceStatus='RECEIVED';
+    pending.release.releaseInfo={quoteRevision:1,amount:null,currency:'TWD',quotePlanVersion:null,quotePlanHash:null,quoteBindings:null,
+      customerApprovedQuoteRevision:null,customerApprovedAt:null,confirmedPaymentQuoteRevision:null,
+      invoiceRequired:false,invoiceStatus:'NOT_REQUIRED',invoiceSatisfied:true,invoiceQuoteRevision:null};
+    if(scenario==='handoff-unquoted-sent')pending.repairWorkflow.csr.status='SENT';
+  }
+  if(['handoff-payment','handoff-invoice','handoff-final'].includes(scenario)){
+    pending.release.releaseInfo.customerApprovedQuoteRevision=4;pending.release.releaseInfo.customerApprovedAt='2026-10-15T00:00:00Z';
+  }
+  if(['handoff-invoice','handoff-final'].includes(scenario))pending.release.releaseInfo.confirmedPaymentQuoteRevision=4;
+  if(scenario==='handoff-final')Object.assign(pending.release.releaseInfo,{invoiceStatus:'ISSUED',invoiceSatisfied:true,invoiceQuoteRevision:4});
+  if(scenario==='handoff-unavailable')pending.release.available=false;
+}
 const acceptance=clone(active);acceptance.id='acceptance';acceptance.productName='合成待認領產品';acceptance.status='WAITING_REPAIR_ACCEPTANCE';
 acceptance.statusLabel='待維修師認領';acceptance.repairOwnerId=null;acceptance.editable=false;acceptance.repairOverview.photoUrl=null;
 acceptance.receipt.sourceNumber='DEV-ACTION-ACCEPTANCE';
@@ -82,7 +120,7 @@ const companyB=clone(active);companyB.id='company-b';companyB.entityId='action-c
 companyB.repairOverview={customerName:'公司乙合成顧客',customerPhone:'0900-000-099',photoUrl:null};
 const documents=Object.fromEntries([active,pending,acceptance,record,delivered,pageTwo,companyB].map(item=>[item.id,item]));
 const kindRows=Object.keys(${JSON.stringify(todoLabels)}).map(kind=>{
-  const row=clone(kind==='INSPECTION'?active:pending);row.id='kind-'+kind;row.productName='合成待辦 '+kind;row.receipt.sourceNumber='DEV-ACTION-'+kind;row.todoKind=kind;row.repairOverview.photoUrl=null;
+  const row=clone(kind==='INSPECTION'?active:kindBase);row.id='kind-'+kind;row.productName='合成待辦 '+kind;row.receipt.sourceNumber='DEV-ACTION-'+kind;row.todoKind=kind;row.repairOverview.photoUrl=null;
   if(row.release){row.release.repairAllowed=true;row.release.releaseInfo.confirmedPaymentQuoteRevision=4;}
   if(kind==='REPAIR_WORK'){row.status='REPAIRING';row.statusLabel='維修中';}
   if(kind==='START_REPLACEMENT'){row.repairInspection.data.plan='REPLACE';row.repairInspection.data.replacementSku='SYNTHETIC-REPLACEMENT';row.repairInspection.data.replacementCondition='REFURBISHED';}
@@ -369,6 +407,24 @@ test('actual three-tab repair workbench preserves native navigation, case access
         if (expected.startsWith('待開始')) assert.equal(await drawer.getByRole('button', { name: scenario === 'replace-ready' ? '開始換機' : '開始維修', exact: true }).isEnabled(), true);
         assert.equal(await page.evaluate(() => window.repairActionFixture.posts.length), 0);
       } finally { await page.close(); }
+    }
+  });
+
+  await t.test('the case and list show waiting stages before final CSR resolution without adding navigation or enabling work', async () => {
+    const stages={sent:'進度待確認',review:'進度待確認','unquoted-sent':'等待客服接手','unquoted-review':'等待客服審核',customer:'等待顧客確認',payment:'等待款項確認',invoice:'等待發票完成',final:'等待客服確認',unavailable:'進度待確認'};
+    for(const [stage,expected] of Object.entries(stages)){
+      const page=await createPage('/operations/repair?entityId=action-company&queue=waiting&itemId=pending',undefined,'handoff-'+stage);
+      try{
+        const drawer=page.locator('.ant-drawer-open');
+        await drawer.locator('.repair-detail-identity').getByText('邦森合成產品・待當版款項確認',{exact:true}).waitFor();
+        const row=page.locator('.repair-case-row').filter({hasText:'DEV-ACTION-PENDING'});
+        assert.equal((await row.locator('.repair-case-progress .ant-tag').innerText()).trim(),expected);
+        assert.equal((await drawer.locator('.repair-detail-summary .ant-tag').first().innerText()).trim(),expected);
+        assert.equal(await page.locator('.repair-workbench-page > .ant-tabs [role="tab"]').count(),3);
+        const start=drawer.getByRole('button',{name:'開始維修',exact:true});
+        assert.equal(await start.count()===0||!await start.isEnabled(),true);
+        assert.equal(await page.evaluate(()=>window.repairActionFixture.posts.length),0);
+      }finally{await page.close();}
     }
   });
 

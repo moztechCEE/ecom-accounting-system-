@@ -32,6 +32,120 @@ function item() {
     repairPrerequisites:{template,templateChecks:{inspection:'READY',completion:'READY'},materials:{start:{state:'READY',reason:'NOT_REQUIRED',requiredCount:0},completion:{state:'READY',reason:'NOT_REQUIRED',requiredCount:0}}},
   };
 }
+function waitingItem() {
+  const value = item();
+  value.status = 'WAITING_CUSTOMER';
+  value.receipt.sourceCaseId = 'source-item'; value.release.sourceCaseId = 'source-item';
+  value.release.repairAllowed = false;
+  value.repairWorkflow.csr.status = 'ACCEPTED';
+  delete value.repairWorkflow.csr.decision; delete value.repairInspection.review;
+  value.release.releaseInfo.customerApprovedQuoteRevision = null;
+  value.release.releaseInfo.customerApprovedAt = null;
+  value.release.releaseInfo.confirmedPaymentQuoteRevision = null;
+  value.release.releaseInfo.invoiceStatus = 'PENDING'; value.release.releaseInfo.invoiceSatisfied = false;
+  value.release.releaseInfo.invoiceQuoteRevision = null;
+  return value;
+}
+function unquotedItem() {
+  const value = waitingItem(); value.release.sourceStatus = 'RECEIVED'; value.repairProposalBinding = null;
+  value.release.releaseInfo = { quoteRevision: 1, amount: null, currency: 'TWD', quotePlanVersion: null, quotePlanHash: null,
+    quoteBindings: null, customerApprovedQuoteRevision: null, customerApprovedAt: null, confirmedPaymentQuoteRevision: null,
+    invoiceRequired: false, invoiceStatus: 'NOT_REQUIRED', invoiceSatisfied: true, invoiceQuoteRevision: null };
+  return value;
+}
+test('waiting progress follows the current quote before final CSR resolution without authorizing repair', () => {
+  const value = waitingItem();
+  const assertProgress = expected => {
+    const before = structuredClone(value);
+    assert.equal(listModel.repairCaseProgress(value), expected);
+    assert(!model.repairStartReady(value));
+    assert.deepEqual(value, before);
+  };
+  assertProgress('等待顧客確認');
+  value.release.releaseInfo.customerApprovedQuoteRevision = 4;
+  value.release.releaseInfo.customerApprovedAt = '2026-10-15T00:00:00Z';
+  assertProgress('等待款項確認');
+  value.release.releaseInfo.confirmedPaymentQuoteRevision = 4;
+  assertProgress('等待發票完成');
+  Object.assign(value.release.releaseInfo, { invoiceStatus: 'ISSUED', invoiceSatisfied: true, invoiceQuoteRevision: 4 });
+  assertProgress('等待客服確認');
+  value.status = 'INSPECTING'; value.repairWorkflow.csr.status = 'RESOLVED'; value.repairWorkflow.csr.decision = 'APPROVE';
+  value.repairInspection.review = { inspectionRevision: 3, decision: 'APPROVE', planHash: hash, quoteRevision: 4 };
+  value.release.repairAllowed = true;
+  assert.equal(listModel.repairCaseProgress(value), '待開始維修');
+  assert(model.repairStartReady(value));
+});
+test('a submitted handoff without a current adopted quote distinguishes CSR acceptance from review', () => {
+  const value = unquotedItem();
+  value.repairWorkflow.csr.status = 'SENT';
+  assert.equal(listModel.repairCaseProgress(value), '等待客服接手');
+  value.repairWorkflow.csr.status = 'ACCEPTED';
+  assert.equal(listModel.repairCaseProgress(value), '等待客服審核');
+  assert(!model.repairStartReady(value));
+});
+test('a foreign or unavailable source cannot look like a known waiting customer or payment state', () => {
+  for (const mutate of [value => { value.release.available = false; }, value => { value.release.sourceCaseId = 'another-source'; }, value => { delete value.release; }]) {
+    const value = waitingItem(); mutate(value);
+    assert.equal(listModel.repairCaseProgress(value), '進度待確認');
+    assert(!model.repairStartReady(value));
+  }
+});
+test('both missing and null quote projections remain unknown without the actual unquoted Source shape', () => {
+  const value = waitingItem(); delete value.release.releaseInfo;
+  assert.equal(listModel.repairCaseProgress(value), '進度待確認');
+  value.release.releaseInfo = null;
+  assert.equal(listModel.repairCaseProgress(value), '進度待確認');
+});
+test('unknown invoice policy or a stale issued invoice cannot claim the final CSR checkpoint', () => {
+  for (const policy of [undefined, null, 'false']) {
+    const value = waitingItem();
+    Object.assign(value.release.releaseInfo, { customerApprovedQuoteRevision: 4, customerApprovedAt: '2026-10-15T00:00:00Z', confirmedPaymentQuoteRevision: 4, invoiceRequired: policy });
+    assert.equal(listModel.repairCaseProgress(value), '進度待確認');
+    assert(!model.repairStartReady(value));
+  }
+  const value = waitingItem();
+  Object.assign(value.release.releaseInfo, { customerApprovedQuoteRevision: 4, customerApprovedAt: '2026-10-15T00:00:00Z', confirmedPaymentQuoteRevision: 4, invoiceStatus: 'ISSUED', invoiceSatisfied: true, invoiceQuoteRevision: 3 });
+  assert.equal(listModel.repairCaseProgress(value), '等待發票完成');
+});
+test('the real Source initial repair placeholder means unquoted, not a zero-price approved repair', () => {
+  const initial = unquotedItem;
+  for (const stage of ['RECEIVED', 'INSPECTING']) for (const bindings of [null, []]) {
+    const value = initial(); value.release.sourceStatus = stage; value.release.releaseInfo.quoteBindings = bindings;
+    assert.equal(listModel.repairCaseProgress(value), '等待客服審核');
+    value.repairWorkflow.csr.status = 'SENT';
+    assert.equal(listModel.repairCaseProgress(value), '等待客服接手');
+    assert(!model.repairStartReady(value));
+  }
+  for (const mutate of [value => { value.release.sourceStatus = 'QUOTED'; }, value => { value.release.repairAllowed = true; },
+    value => { value.release.releaseInfo.amount = 0; }, value => { value.release.releaseInfo.quoteRevision = 2; },
+    value => { delete value.release.releaseInfo.quotePlanVersion; }, value => { delete value.release.releaseInfo.quoteBindings; },
+    value => { value.release.releaseInfo.customerApprovedQuoteRevision = 1; }, value => { value.release.releaseInfo.confirmedPaymentQuoteRevision = 1; },
+    value => { value.release.releaseInfo.invoiceStatus = 'ISSUED'; }]) {
+    const value = initial(); mutate(value);
+    assert.equal(listModel.repairCaseProgress(value), '進度待確認');
+    assert(!model.repairStartReady(value));
+  }
+});
+test('superseded or ambiguous quote bindings cannot advance the waiting progress', () => {
+  const mutations = [
+    value => { value.release.releaseInfo.quoteRevision = 5; },
+    value => { value.release.releaseInfo.quoteBindings[0].itemId = 'another-item'; },
+    value => { value.release.releaseInfo.quoteBindings.push(structuredClone(value.release.releaseInfo.quoteBindings[0])); },
+    value => { value.release.releaseInfo.quoteBindings[0].planVersion = 2; },
+    value => { value.release.releaseInfo.quoteBindings[0].planHash = 'c'.repeat(64); },
+    value => { value.release.releaseInfo.quoteBindings[0].proposalHash = 'c'.repeat(64); },
+    value => { value.repairProposalBinding.itemId = 'another-item'; },
+    value => { value.repairProposalBinding.proposalHash = 'malformed'; },
+    value => { value.release.releaseInfo.amount = -1; },
+  ];
+  for (const mutate of mutations) {
+    const value = waitingItem(); mutate(value);
+    assert.equal(listModel.repairCaseProgress(value), '進度待確認');
+    assert(!model.repairStartReady(value));
+  }
+  const stale = waitingItem(); stale.repairInspection.revision = 4;
+  assert.equal(listModel.repairCaseProgress(stale), '進度待確認');
+});
 test('paid policy and current successful invoice cannot be replaced by a bare issued flag', () => {
   const current = item().release.releaseInfo;
   assert(model.sourceInvoiceCurrent(current));
