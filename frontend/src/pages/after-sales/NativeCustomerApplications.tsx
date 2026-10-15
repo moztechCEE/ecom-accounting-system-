@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Descriptions, Drawer, Form, Image, Input, InputNumber, message, Select, Space, Table, Tag } from 'antd';
+import { Alert, Button, Descriptions, Drawer, Form, Input, InputNumber, message, Select, Space, Table, Tag } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { nativeAfterSales, type NativeApplication, type NativeApplicationList, type NativeOptions, type NativeProduct } from '../../services/native-after-sales.service';
@@ -7,6 +7,7 @@ import { NATIVE_CASE_TYPES, nativeCaseTypeLabel, type NativeCaseType } from './n
 import { registrationTokenMatchesActor } from './pending-registration';
 import { APPLICATION_STATUS, applicationDraft, applicationInvite, applicationPendingKey, clearApplicationPending, readApplicationPending, saveApplicationPending, type ApplicationDraft, type ApplicationPending } from './native-application-model';
 import { operationRequestIntent } from './operation-request-intent';
+import NativeApplicationOriginal from './NativeApplicationOriginal';
 type Props = { entityId: string; options?: NativeOptions; onCreate: (draft: ApplicationDraft) => void; onOpenCase: (id: string) => void; onPendingChange: (v: boolean) => void; onDirtyChange: (v: boolean) => void };
 const errorText = (e: any) => typeof e?.response?.data?.message === 'string' ? e.response.data.message : e?.message || '申請資料暫時無法確認';
 export default function NativeCustomerApplications({ entityId, options, onCreate, onOpenCase, onPendingChange, onDirtyChange }: Props) {
@@ -15,14 +16,13 @@ export default function NativeCustomerApplications({ entityId, options, onCreate
   const alive = useRef(true), running = useRef(false), controller = useRef<AbortController | null>(null);
   const [status, setStatus] = useState('SUBMITTED'), [cursor, setCursor] = useState<string>(), [refresh, setRefresh] = useState(0);
   const [list, setList] = useState<NativeApplicationList>(), [selected, setSelected] = useState<NativeApplication>(), [loading, setLoading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
-  const [inviteOpen, setInviteOpen] = useState(false), [recheck, setRecheck] = useState(false), [link, setLink] = useState<{ url: string; providerMode?: string }>(), [pending, setPending] = useState<ApplicationPending | null>(null), [photo, setPhoto] = useState<{ name: string; dataUrl: string }>();
+  const [inviteOpen, setInviteOpen] = useState(false), [recheck, setRecheck] = useState(false), [link, setLink] = useState<{ url: string; providerMode?: string }>(), [pending, setPending] = useState<ApplicationPending | null>(null);
   const [reviewForm] = Form.useForm(), [inviteForm] = Form.useForm();
   const reviewType = Form.useWatch('type', reviewForm);
   const [products, setProducts] = useState(new Map<string, NativeProduct>());
-  const selectedRef = useRef(selected?.id); selectedRef.current = selected?.id;
   const canWrite = !!options?.createTypes.length, editable = ['SUBMITTED','REVIEWED','REJECTED'].includes(selected?.status || '') && !selected?.caseId && options?.createTypes.includes(selected?.nativeCreateDraft?.type || selected?.type || '');
   useEffect(() => {
-    alive.current = true; setSelected(undefined); setList(undefined); setPhoto(undefined); setLink(undefined); setError(''); setCursor(undefined); running.current = false;
+    alive.current = true; setSelected(undefined); setList(undefined); setLink(undefined); setError(''); setCursor(undefined); running.current = false;
     try { const saved = readApplicationPending(localStorage, actorId, entityId); setPending(saved); onPendingChange(!!saved); if (saved) setError('申請操作結果待確認，請使用原請求重試'); } catch (e) { setError(errorText(e)); onPendingChange(true); }
     return () => { alive.current = false; controller.current?.abort(); onPendingChange(false); onDirtyChange(false); };
   }, [scopeKey]);
@@ -47,11 +47,6 @@ export default function NativeCustomerApplications({ entityId, options, onCreate
       reviewForm.setFieldsValue({ type: reviewed?.type || item.type, profile: reviewed?.profile || item.submittedData, note: '', items: reviewed?.items?.map((p: any) => ({ productId: p.productId, quantity: p.quantity })) || [{ quantity: 1 }] });
     } catch (e) { if (alive.current && current.current === key) setError(errorText(e)); }
     finally { if (alive.current && current.current === key) setBusy(false); }
-  }
-  async function readPhoto(index: number) {
-    if (!selected) return; const id = selected.id, key = scopeKey, token = localStorage.getItem('access_token') || '', abort = new AbortController(); controller.current = abort;
-    try { const result = await nativeAfterSales.applicationPhoto(entityId, id, index, abort.signal); if (alive.current && current.current === key && selectedRef.current === id && localStorage.getItem('access_token') === token && registrationTokenMatchesActor(token, actorId)) setPhoto(result); }
-    catch (e) { if (alive.current && current.current === key) setError(errorText(e)); }
   }
   async function send(command?: Record<string, unknown>, applicationId: string | null = selected?.id || null) {
     if (running.current || !actorId || !entityId || !pending && !canWrite) return;
@@ -112,12 +107,12 @@ export default function NativeCustomerApplications({ entityId, options, onCreate
       { title: '', width: 100, render: (_, row) => <Button data-operation-action="after_sales.application.open" data-operation-record-id={row.id} disabled={disabled} onClick={() => void openApplication(row)}>{row.status === 'SUBMITTED' ? '審核' : '查看'}</Button> },
     ]} />
     <Space style={{ marginTop: 16 }}>{cursor && <Button data-operation-action="after_sales.application.latest" disabled={disabled} onClick={() => setCursor(undefined)}>回到最新</Button>}<Button data-operation-action="after_sales.application.next" disabled={disabled || !list?.nextCursor} onClick={() => setCursor(list?.nextCursor || undefined)}>下一頁</Button></Space>
-    <Drawer title="顧客售後申請" open={!!selected} width="min(660px, 100vw)" maskClosable={!disabled} onClose={() => { if (!disabled) { setSelected(undefined); setPhoto(undefined); onDirtyChange(false); } }} footer={pending ? <Button data-operation-action="after_sales.application.retry" type="primary" loading={busy} onClick={() => void send()}>重試原操作</Button> : (selected?.status === 'SUBMITTED' || recheck) && editable ? <Space><Button data-operation-action="after_sales.application.review.approve" data-operation-record-id={selected?.id} type="primary" disabled={disabled} loading={busy} onClick={() => void review(true)}>審核完成</Button><Button data-operation-action="after_sales.application.review.reject" data-operation-record-id={selected?.id} disabled={disabled} onClick={() => void review(false)}>退回申請</Button></Space> : selected?.status === 'REVIEWED' ? <Button data-operation-action="after_sales.application.create_case" data-operation-record-id={selected?.id} type="primary" disabled={disabled || !options?.createTypes.includes(selected.nativeCreateDraft?.type || '')} onClick={() => { try { const draft = applicationDraft(selected); setSelected(undefined); onDirtyChange(false); onCreate(draft); } catch (e) { setError(errorText(e)); } }}>帶入資料，建立案件</Button> : selected?.caseId ? <Button data-operation-action="after_sales.application.open_case" onClick={() => onOpenCase(selected.caseId!)}>查看已建立案件</Button> : undefined}>
+    <Drawer title="顧客售後申請" open={!!selected} width="min(660px, 100vw)" maskClosable={!disabled} onClose={() => { if (!disabled) { setSelected(undefined); onDirtyChange(false); } }} footer={pending ? <Button data-operation-action="after_sales.application.retry" type="primary" loading={busy} onClick={() => void send()}>重試原操作</Button> : (selected?.status === 'SUBMITTED' || recheck) && editable ? <Space><Button data-operation-action="after_sales.application.review.approve" data-operation-record-id={selected?.id} type="primary" disabled={disabled} loading={busy} onClick={() => void review(true)}>審核完成</Button><Button data-operation-action="after_sales.application.review.reject" data-operation-record-id={selected?.id} disabled={disabled} onClick={() => void review(false)}>退回申請</Button></Space> : selected?.status === 'REVIEWED' ? <Button data-operation-action="after_sales.application.create_case" data-operation-record-id={selected?.id} type="primary" disabled={disabled || !options?.createTypes.includes(selected.nativeCreateDraft?.type || '')} onClick={() => { try { const draft = applicationDraft(selected); setSelected(undefined); onDirtyChange(false); onCreate(draft); } catch (e) { setError(errorText(e)); } }}>帶入資料，建立案件</Button> : selected?.caseId ? <Button data-operation-action="after_sales.application.open_case" onClick={() => onOpenCase(selected.caseId!)}>查看已建立案件</Button> : undefined}>
       {error && <Alert type="error" message={error} showIcon />}
       {selected && <>
         <Space wrap style={{ marginBottom: 12 }}><Tag>{selected.brand}</Tag><Tag>{APPLICATION_STATUS[selected.status]}</Tag><span>第 {selected.revision} 版</span></Space>
         {recoveredInvite && <Space wrap style={{ marginBottom: 16 }}>{recoveredInvite.providerMode === 'DEV_STUB' && <Tag>DEV 模擬登入</Tag>}<Input aria-label="既有顧客填單連結" readOnly value={recoveredInvite.url} style={{ width: 'min(420px, 70vw)' }} /><Button data-operation-action="after_sales.application.invite.recopy" data-operation-record-id={selected.id} disabled={disabled} onClick={() => void navigator.clipboard.writeText(recoveredInvite.url).catch(() => message.error('請手動複製連結'))}>複製邀請連結</Button></Space>}
-        {selected.submittedData?.photos?.length ? <Space wrap style={{ marginBottom: 12 }}>{selected.submittedData.photos.map(p => <Button data-operation-action="after_sales.application.photo" key={p.index} onClick={() => void readPhoto(p.index)}>查看照片 {p.index + 1}</Button>)}</Space> : <p className="native-communication-muted">尚無產品照片</p>}
+        <NativeApplicationOriginal entityId={entityId} applicationId={selected.id} submitted={selected.submittedData} products={Array.from(products.values())} />
         {(selected.status === 'SUBMITTED' || recheck) ? <Form form={reviewForm} layout="vertical" disabled={disabled || !editable} onValuesChange={() => onDirtyChange(true)}>
           <Form.Item name="type" label="案件類型" rules={[{ required: true }]}><Select aria-label="審核案件類型" options={NATIVE_CASE_TYPES.filter(t => options?.createTypes.includes(t.value)).map(t => ({ value: t.value, label: t.label }))} /></Form.Item>
           <div className="native-after-sales-create-fields">
@@ -136,7 +131,6 @@ export default function NativeCustomerApplications({ entityId, options, onCreate
       {error && <Alert type="error" message={error} showIcon />}
       <Form form={inviteForm} layout="vertical" disabled={disabled}><Form.Item name="brand" label="品牌" rules={[{ required: true }]}><Select aria-label="填單品牌" options={(options?.brands || []).filter(b => ['MOZTECH','BONSON'].includes(b.code)).map(b => ({ value: b.code, label: b.name }))} /></Form.Item><Form.Item name="type" label="案件類型" rules={[{ required: true }]}><Select aria-label="填單案件類型" options={NATIVE_CASE_TYPES.filter(t => options?.createTypes.includes(t.value)).map(t => ({ value: t.value, label: t.label }))} /></Form.Item></Form>
     </Drawer>
-    <Drawer title={photo?.name || '產品照片'} open={!!photo} width="min(660px, 100vw)" onClose={() => setPhoto(undefined)}>{photo && <Image src={photo.dataUrl} alt="顧客提交的產品外觀" preview={false} style={{ maxWidth: '100%' }} />}</Drawer>
   </section>;
 }
 function ApplicationProductPicker({ entityId, initial, label, value, onChange, onFound }: { label: string; entityId: string; initial: NativeProduct[]; value?: string; onChange?: (v: string) => void; onFound: (found: NativeProduct[]) => void }) {

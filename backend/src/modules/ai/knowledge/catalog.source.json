@@ -735,12 +735,14 @@
       "sections": {
         "steps": [
           "在產品與庫存頁確認公司，搜尋或查看 SKU 與產品資料。",
-          "比對產品名稱、規格及庫存快照，需要序號或箱標時進入 SN 與標籤；匯入舊 ERP 庫存前確認目前公司，預覽後若切換公司須重新預覽。"
+          "比對產品名稱、規格及庫存快照，需要序號或箱標時進入 SN 與標籤；匯入舊 ERP 庫存前確認目前公司，預覽後若切換公司須重新預覽。",
+          "在既有產品編輯的「售後顯示」勾選顧客選品公開狀態與明確品牌，可填顧客顯示名稱、產品別名與公開 HTTPS 圖片；未公開或未設定品牌的產品不供顧客售後選品。"
         ],
         "boundaries": [
           "庫存快照不等於實體盤點、預留量或已完成出庫；對外通用庫存調整、預留與釋放入口已關閉，正式銷單出庫須依交運核銷流程。",
           "查詢需要庫存讀取權限；建倉與舊 ERP 匯入需要庫存更新權限，且只能操作授權公司。",
-          "商品清單與明細的成本欄位需另有 product_cost:read；只有庫存讀取權限不能查看成本，Copilot 查詢仍依原授權。"
+          "商品清單與明細的成本欄位需另有 product_cost:read；只有庫存讀取權限不能查看成本，Copilot 查詢仍依原授權。",
+          "售後顯示沿用產品更新與公司權限，只更新受控的 afterSalesPublicDisplay JSON 並保留其他屬性；不另授予庫存、成本或保固操作。未設定圖片顯示無圖狀態，未設定別名不自動補造。顧客選品接口僅傳產品識別、名稱、SKU、型號、條碼、圖片與別名，不傳價格、成本或庫存。"
         ],
         "related": [
           "purchase-orders",
@@ -761,12 +763,14 @@
           "sections": {
             "steps": [
               "Confirm the company and find the SKU or product record.",
-              "Compare name, specification and stock snapshot; use SN and labels for serial or carton work. Confirm the selected company before previewing a legacy ERP stock import, and preview again if the company changes."
+              "Compare name, specification and stock snapshot; use SN and labels for serial or carton work. Confirm the selected company before previewing a legacy ERP stock import, and preview again if the company changes.",
+              "In the existing product editor, use After-sales display to publish explicitly for selected brands, with optional customer-facing name, aliases and a public HTTPS image. Products without publication and explicit brands are excluded from consumer after-sales selection."
             ],
             "boundaries": [
               "A stock snapshot does not prove a physical count, reservation or completed dispatch. Generic HTTP stock adjustment, reservation and release endpoints are closed; final sales stock posting follows handover reconciliation.",
               "Reads require inventory read permission. Warehouse creation and legacy ERP import require inventory update permission within an authorized company.",
-              "Product cost fields in lists and details require product_cost:read. Inventory read alone does not grant cost visibility; Copilot queries remain subject to their own authorization."
+              "Product cost fields in lists and details require product_cost:read. Inventory read alone does not grant cost visibility; Copilot queries remain subject to their own authorization.",
+              "After-sales display uses existing product-update and company permissions, changing controlled afterSalesPublicDisplay JSON while preserving other attributes. It grants no stock, cost or warranty operation. Missing images and aliases remain absent. The consumer catalog returns identity, name, SKU, model, barcode, image and aliases only, with no price, cost or stock."
             ],
             "related": [
               "purchase-orders",
@@ -785,7 +789,11 @@
         "backend/src/modules/product/product.controller.ts",
         "backend/src/modules/inventory/inventory.controller.ts",
         "backend/src/modules/product/sensitive-response.interceptor.ts",
-        "backend/src/modules/ai/ai-copilot-access.service.ts"
+        "backend/src/modules/ai/ai-copilot-access.service.ts",
+        "backend/src/modules/product/product.service.ts",
+        "backend/src/modules/product/after-sales-public-display.contract.ts",
+        "backend/src/modules/integration/after-sales/erp-module.controller.ts",
+        "backend/src/modules/integration/after-sales/erp-module.service.ts"
       ],
       "permissions": [
         "inventory:read"
@@ -5317,7 +5325,8 @@
           "點案件在同頁查看目前節點、顧客及產品。案件承辦、部門交辦接手與實物保管分開；有本人可處理的維修交辦時，開啟對應交辦，核對目前檢修、估價及方案版次再受理或回覆。完整案件作業、報價、顧客、發票與收款退款沿用同一來源主單，不另建立流程或帳本。",
           "接手後記錄顧客同意或拒修結果；方案改版須重新確認。正式對客報價、當版顧客同意與足額同幣入帳依原來源流程；免費方案仍須本版同意。付款確認、發票、通知、維修室與收發室實物狀態分開，付款狀態不表示維修已完成。",
           "收發補建交辦保留在「跨部門交辦」。只有指定客服本人可把未辨識實收件的SENT受理為ACCEPTED；由原案件中心的 /cases/new 表單建案一次，或從本工作台建立同一來源主單，再選目前案件、申報品項及來源版次綁回同一NativeID。建案成功不等於已綁回，成功綁回才為RESOLVED。",
-          "案件詳情的顧客與LINE、收回寄送、款項發票、歷程與備註按需展開；保留原附件、匯入匯出、列印、修改、還原及各節點操作。產品問題回報沿用照片、影片與工廠問題留底；FAQ知識庫不列入本工作台。未保存的內容須先保存或明確放棄才離開。"
+          "案件詳情的顧客與LINE、收回寄送、款項發票、歷程與備註按需展開；保留原附件、匯入匯出、列印、修改、還原及各節點操作。產品問題回報沿用照片、影片與工廠問題留底；FAQ知識庫不列入本工作台。未保存的內容須先保存或明確放棄才離開。",
+          "顧客售後申請的審核頁與帶入建單頁保留原始品名、問題、回寄地址、Email及按需載入的原照片；第二軌申請另對照郵遞區號、條碼、顧客選品與寄回須知確認。客服在既有審核表單核對並修正完整地址、Email與正式ERP對應產品，審核完成後再帶入同一來源案件。"
         ],
         "boundaries": [
           "需啟用售後來源模組並綁定目前作業公司；採既有有效來源帳號，ERP 公司範圍及專用模組權限與來源角色取交集，不自動建立帳號或擴大權限。",
@@ -5348,7 +5357,9 @@
           "目前節點詳情只是讀取；點處理會開啟已核對身份與公司、實際案件及讀寫權限的原案件或現有ERP交辦。原報價、付款、退款、發票、LINE與物流按鈕仍各自核對權限、當版資料與狀態；不增加第二個維修寫入入口。",
           "目前雲端發票的法律開立人為萬博創意科技有限公司，同一既有商戶可供MOZTECH與BONSON案件開立；案件品牌仍留在原案件及稽核紀錄。法律開立人與LINE官方帳號品牌是不同對標，不能因此跨品牌通知。其他新建案件品牌尚未確認商戶時不開票；既有商戶未設定完成亦不把本地生成號碼當作已完成雲端開票。",
           "AI 客服通知維持原品牌、官方帳號與同一 LINE 對話；RECEIVED、HOLD、SENDING 或 UNKNOWN 應核對發送回執，不能視為已送出，亦不能盲目重送。",
-          "待寄件的來源訂單讀取遇到連線、逾時或重新導向失敗時，顯示暫時無法讀取；不能當作沒有訂單或自動重新送出業務操作。上游拒絕、格式或內容不符仍須核對串接，讀取失敗不改案件、出庫、交運或通知狀態。"
+          "待寄件的來源訂單讀取遇到連線、逾時或重新導向失敗時，顯示暫時無法讀取；不能當作沒有訂單或自動重新送出業務操作。上游拒絕、格式或內容不符仍須核對串接，讀取失敗不改案件、出庫、交運或通知狀態。",
+          "顧客原申請與客服修正資料分開；原始 intake 不覆寫，不把顧客候選商品直接當正式案件產品外鍵，不將郵遞區號擴入既有六欄審核profile。未驗證Email明確標示，無圖不造圖；照片仍需同公司與目前帳號的申請讀取權限並按需載入。維修與退貨第二軌邀請僅恢復同品牌、同類型的 /customer/{brand}/repair 或 /customer/{brand}/return，保留舊 /customer/apply/{brand} 相容。帶入資料不等於建案、確認草稿不等於已傳送或顧客已同意。",
+          "顧客公開選品使用獨立 public-catalog machine actor 的短效HMAC查詢，來源須先驗證邀請、LINE身分、公司與品牌；不借用客服帳號或授予員工模組權限。ERP只回明確公開且品牌相符的有效公司產品，最多20筆、搜尋100字、回應256KB，不回價格、成本、庫存或未設定的圖片別名。"
         ],
         "related": [
           "repair-workbench",
@@ -5381,7 +5392,8 @@
               "Open a case to review its current node, customer and products on the same page. Source case ownership, departmental task acceptance and physical custody remain separate. For a current actionable repair handoff, open that task and verify the inspection, estimate and plan revision before accepting or replying. Full case operations, quoting, customers, invoices and payment/refund checks reuse the same source case and ledger.",
               "Record customer approval or decline after accepting a handoff. A changed plan requires new consent. Formal quotations, consent to the current quote and sufficient confirmed funds in the same currency retain the source workflow. Free plans still require current consent. Payment, invoice, notification, technical work and physical custody remain distinct; payment confirmation does not mean a repair is complete.",
               "Mailroom case intake remains under Cross-department handoffs. Only the assigned CSR accepts an unidentified receipt from SENT to ACCEPTED. Create once through the original case center /cases/new form or register the same source case from this home, then select its current declared line and source version and bind the same NativeID. Creating the case does not bind the receipt; successful binding sets RESOLVED.",
-              "Expand customer and LINE, incoming/outgoing logistics, financial records, history and notes when needed. Original attachments, import/export, printing, editing, restoration and node actions remain available. Product issue reports retain photos, videos and factory evidence; FAQ management is excluded from this workbench. Save or explicitly discard unsaved work before leaving."
+              "Expand customer and LINE, incoming/outgoing logistics, financial records, history and notes when needed. Original attachments, import/export, printing, editing, restoration and node actions remain available. Product issue reports retain photos, videos and factory evidence; FAQ management is excluded from this workbench. Save or explicitly discard unsaved work before leaving.",
+              "Application review and case-prefill retain the original product description, issue, return address, email and on-demand photos. Second-track submissions also show postal code, barcode, customer selections and packaging acknowledgment. In the existing review form, CSR verifies and corrects the full address, email and authoritative ERP-mapped items, then prefills the same source case after approval."
             ],
             "boundaries": [
               "The source module must be enabled and bound to the selected company, using an existing active source account. Company-wide ERP access and dedicated module grants intersect with the source role; no account or authority is created automatically.",
@@ -5412,7 +5424,9 @@
               "Current-node details are read-only. Processing opens the original verified case or existing ERP handoff after checking identity, company, actual case and grants. Quotation, payment, refund, invoice, LINE and logistics actions retain their own permissions, revision and state checks. No second technician writer is introduced.",
               "The current cloud-invoice legal issuer is 萬博創意科技有限公司; its existing shared merchant covers MOZTECH and BONSON cases. The case brand remains in the original case and audit records. The legal issuer and LINE official-account brand are separate mappings and do not authorize cross-brand notification. Other native brands need a confirmed merchant profile. An unavailable provider must not fabricate successful cloud invoicing through a locally generated number.",
               "AI notifications retain the case brand, official account and original LINE conversation. RECEIVED, HOLD, SENDING and UNKNOWN require receipt checks and never count as sent or authorize blind retries.",
-              "When reading source orders awaiting dispatch fails because of a connection, timeout or redirect, show that the source is temporarily unavailable; this is neither an empty order list nor permission to replay business commands. Upstream rejection or invalid format or content still requires integration review. A failed read changes no case, inventory posting, dispatch or notification state."
+              "When reading source orders awaiting dispatch fails because of a connection, timeout or redirect, show that the source is temporarily unavailable; this is neither an empty order list nor permission to replay business commands. Upstream rejection or invalid format or content still requires integration review. A failed read changes no case, inventory posting, dispatch or notification state.",
+              "Original customer submissions remain separate from CSR corrections. Never overwrite intake, use customer candidate IDs as formal case-product foreign keys, or extend the strict six-field reviewed profile with postal code. Show unverified email explicitly and leave missing images absent. Photos retain current account/company application-read checks and load on demand. Second-track invite recovery pairs the same brand and type with /customer/{brand}/repair or /customer/{brand}/return while retaining legacy /customer/apply/{brand}. Prefill is not case creation, and a confirmation draft proves neither sending nor customer consent.",
+              "Consumer product lookup uses the separate public-catalog machine actor with short-lived HMAC after Source verifies invite, LINE identity, company and brand. It borrows no CSR account or employee module grant. ERP returns only active company products explicitly published for that brand, bounded to 20 items, 100 search characters and 256KB, without price, cost, stock or invented images and aliases."
             ],
             "related": [
               "repair-workbench",
@@ -5482,7 +5496,11 @@
         "backend/src/modules/mailroom/after-sales-tasks.service.ts",
         "frontend/src/utils/after-sales-display.ts",
         "frontend/src/pages/after-sales/NativeCaseCommunication.tsx",
-        "frontend/src/pages/after-sales/native-communication-model.ts"
+        "frontend/src/pages/after-sales/native-communication-model.ts",
+        "frontend/src/pages/after-sales/NativeCustomerApplications.tsx",
+        "frontend/src/pages/after-sales/NativeApplicationOriginal.tsx",
+        "frontend/src/pages/after-sales/native-application-model.ts",
+        "backend/src/modules/product/after-sales-public-display.contract.ts"
       ],
       "aliases": [
         "/operations/after-sales/workbench?scope=mine&type=REPAIR",

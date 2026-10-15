@@ -3,12 +3,14 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateProductDto, UpdateProductDto } from './dto/create-product.dto';
 import { CreateBomDto } from './dto/create-bom.dto';
 import { ProductType } from '@prisma/client';
+import { validatePublicDisplayAttributes } from './after-sales-public-display.contract';
 
 @Injectable()
 export class ProductService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(entityId: string, dto: CreateProductDto) {
+    const attributes = validatePublicDisplayAttributes(dto.attributes);
     const existing = await this.prisma.product.findUnique({
       where: {
         entityId_sku: {
@@ -23,7 +25,7 @@ export class ProductService {
     }
 
     try {
-      return await this.prisma.product.create({ data: { entityId, ...dto,
+      return await this.prisma.product.create({ data: { entityId, ...dto, attributes,
         ...(dto.attributes?.snLabels?.modelCode?.trim().toUpperCase() === 'NSI' ? { hasSerialNumbers: false } : {}),
       } });
     } catch (e) {
@@ -68,10 +70,11 @@ export class ProductService {
   }
 
   async update(entityId: string, id: string, dto: UpdateProductDto) {
+    const inputAttributes = validatePublicDisplayAttributes(dto.attributes);
     return this.prisma.$transaction(async tx => {
       const rows = await tx.$queryRaw<any[]>`SELECT id,attributes FROM products WHERE id=${id} AND entity_id=${entityId} FOR UPDATE`;
       if (!rows.length) throw new NotFoundException('找不到此公司的產品');
-      const old = rows[0].attributes || {}, attrs = dto.attributes;
+      const old = rows[0].attributes || {}, attrs = inputAttributes;
       const attributes = attrs ? { ...old, ...attrs, ...(attrs.snLabels ? { snLabels: { ...old.snLabels, ...attrs.snLabels } } : {}) } : undefined;
       return tx.product.update({ where: { id }, data: { ...dto, attributes,
         ...(attributes?.snLabels?.modelCode?.trim().toUpperCase() === 'NSI' ? { hasSerialNumbers: false } : {}),

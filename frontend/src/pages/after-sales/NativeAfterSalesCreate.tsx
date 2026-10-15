@@ -8,6 +8,7 @@ import { nativeCreateInput, NATIVE_CASE_TYPES } from './native-workbench-model'
 import { clearPendingRegistration, PendingRegistrationError, readPendingRegistration, registrationTokenMatchesActor, savePendingRegistration, withPendingRegistrationLock } from './pending-registration'
 import type { PendingRegistration, RegistrationScope } from './pending-registration'
 import type { ApplicationDraft } from './native-application-model'
+import NativeApplicationOriginal from './NativeApplicationOriginal'
 import { operationRequestIntent } from './operation-request-intent'
 
 type Props = {
@@ -102,6 +103,7 @@ export default function NativeAfterSalesCreate({ entityId, actorId, resumeAttemp
     </> : <>
       <div className="native-after-sales-detail-heading"><Typography.Title level={3}>{type?.label}</Typography.Title><Button data-operation-action="erp.nativeaftersalescreate.action.0711ab3ab77d" onClick={() => void (async () => { if (!await onChangeType()) return; setSelectedType(undefined); setFailure('') })()} disabled={busy || unknownResult || !!applicationDraft}>變更類型</Button></div>
       {failure && <Alert type="error" showIcon message={failure} style={{ marginBottom: 16 }} />}
+      {applicationDraft && <NativeApplicationOriginal entityId={entityId} applicationId={applicationDraft.applicationId} submitted={applicationDraft.originalSubmission} products={options?.products} />}
       <Form className="native-after-sales-create-form" form={form} layout="vertical" disabled={busy || unknownResult} initialValues={{ customerKind: 'TO_C', items: [{ quantity: 1 }] }} onValuesChange={() => onDirtyChange(true)} onFinish={values => void create(values)}>
         <div className="native-after-sales-create-fields">
           <Form.Item name="brand" label="品牌" rules={required('請選擇品牌')}><Select disabled={!!applicationDraft} aria-label="案件品牌" placeholder="選擇品牌" options={(options?.brands || []).map(value => ({ value: value.code, label: value.name }))} /></Form.Item>

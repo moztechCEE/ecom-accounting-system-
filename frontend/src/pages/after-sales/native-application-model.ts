@@ -1,13 +1,17 @@
-import type { NativeApplication, NativeApplicationRef } from '../../services/native-after-sales.service';
+import type { NativeApplication, NativeApplicationRef, NativeProduct } from '../../services/native-after-sales.service';
 import type { NativeCaseType, NativeCreateValues } from './native-workbench-model';
 import { NATIVE_CASE_TYPES } from './native-workbench-model.ts';
 export const APPLICATION_STATUS: Record<string, string> = { INVITED: '待顧客填寫', SUBMITTED: '待客服審核', REVIEWED: '已審核，待建單', REJECTED: '已退回', CONVERTED: '已建立案件' };
-export type ApplicationDraft = { applicationId: string; type: NativeCaseType; brand: string; verifiedApplicationRef: NativeApplicationRef; values: NativeCreateValues; products: { id: string; name: string; sku: string }[] };
+export function originalIntakeProductLabel(candidate: { id: string; quantity: number }, products: readonly NativeProduct[]): string {
+  const matched = products.find(p => p.erpProductId === candidate.id || p.id === candidate.id);
+  return `${matched ? matched.name + (matched.sku ? ' · ' + matched.sku : '') : '待核對商品（原選品編號：' + candidate.id + '）'} × ${candidate.quantity}`;
+}
+export type ApplicationDraft = { applicationId: string; type: NativeCaseType; brand: string; verifiedApplicationRef: NativeApplicationRef; values: NativeCreateValues; products: { id: string; name: string; sku: string }[]; originalSubmission?: NativeApplication['submittedData'] };
 export function applicationDraft(application: NativeApplication): ApplicationDraft {
   const ref = application.verifiedApplicationRef, draft = application.nativeCreateDraft;
   if (application.status !== 'REVIEWED' || application.caseId || !ref || !/^[a-f0-9-]{36}$/i.test(ref.id) || !Number.isInteger(ref.revision) || ref.revision < 1 || ref.id !== application.id || ref.revision !== application.revision || !/^[a-f0-9]{64}$/.test(ref.reviewHash) || !draft?.items.length || !NATIVE_CASE_TYPES.some(t => t.value === draft.type) || draft.items.some(i => !i.productId || !Number.isInteger(i.quantity) || i.quantity < 1 || i.quantity > 999))
     throw new Error('申請尚未完成產品審核或已建立案件，請更新申請');
-  return { applicationId: application.id, type: draft.type, brand: application.brand, verifiedApplicationRef: ref, products: draft.items.map(item => ({ id: item.productId, name: String((item as any).name || '已審核產品'), sku: String((item as any).sku || '') })),
+  return { applicationId: application.id, type: draft.type, brand: application.brand, verifiedApplicationRef: ref, originalSubmission: application.submittedData, products: draft.items.map(item => ({ id: item.productId, name: String((item as any).name || '已審核產品'), sku: String((item as any).sku || '') })),
     values: { brand: application.brand, customerKind: 'TO_C', sourceChannel: draft.sourceChannel || '', contactName: draft.contactName, contactPhone: draft.contactPhone, contactAddress: draft.contactAddress, contactEmail: draft.contactEmail, reason: String(draft.detail?.faultDescription || draft.detail?.issueDescription || draft.detail?.reasonNote || ''), internalNote: draft.internalNote, items: draft.items.map(({ productId, quantity }) => ({ productId, quantity })) },
   };
 }
@@ -49,7 +53,9 @@ export function applicationInvite(application: NativeApplication | undefined, ca
   if (!canWrite || application?.status !== 'INVITED' || application.caseId || !application.inviteUrl || !['MOZTECH','BONSON'].includes(application.brand)) return null;
   try {
     const url = new URL(application.inviteUrl), fragment = new URLSearchParams(url.hash.slice(1));
-    if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/customer/apply/' + application.brand.toLowerCase()
+    const brand = application.brand.toLowerCase(), paths = ['/customer/apply/' + brand,
+      ...(application.type === 'REPAIR' ? ['/customer/' + brand + '/repair'] : application.type === 'REFUND_PICKUP' ? ['/customer/' + brand + '/return'] : [])];
+    if (url.protocol !== 'https:' || url.username || url.password || !paths.includes(url.pathname)
       || url.searchParams.size !== 1 || url.searchParams.get('invite') !== application.id || fragment.size !== 1 || !/^[a-f0-9]{64}$/.test(fragment.get('token') || '')) return null;
     return { url: url.toString(), providerMode: application.providerMode || null };
   } catch { return null; }

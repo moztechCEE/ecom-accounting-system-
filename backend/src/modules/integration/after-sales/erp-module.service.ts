@@ -11,6 +11,8 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { AuthService } from '../../auth/auth.service';
 import { EntityAccessService } from '../../../common/entity-access/entity-access.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
+import { publishedPublicDisplay } from '../../product/after-sales-public-display.contract';
 import {
   hasSourceAdministrationPermissions,
   matchesSignature,
@@ -27,6 +29,44 @@ export class ErpAfterSalesModuleService {
     private readonly entityAccess: EntityAccessService,
     @Optional() private readonly prisma?: PrismaService,
   ) {}
+  /** Machine-only projection after Source verifies the invite and brand identity. No staff grants or private product fields. */
+  async publicCatalog(req: { headers: Record<string, string>; method: string; originalUrl: string }, entityId: string) {
+    const settings = this.settings(), actor = 'public-catalog', time = req.headers['x-erp-time'];
+    if (entityId !== settings.entity || req.headers['x-erp-entity'] !== entityId || req.headers['x-erp-actor'] !== actor
+      || typeof time !== 'string' || !/^\d{10}$/.test(time) || Math.abs(Date.now() / 1000 - Number(time)) > 60 || req.method !== 'GET'
+      || req.headers['transfer-encoding'] !== undefined || req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0'
+      || !req.originalUrl.startsWith('/api/v1/after-sales/module/public-catalog?')
+      || !matchesSignature(req.headers['x-erp-signature'] || '', serviceSignature(settings.secret, 'GET', req.originalUrl, time, entityId, actor)))
+      throw new UnauthorizedException('售後顯示服務簽章無效');
+    const url = new URL(req.originalUrl, 'https://erp.invalid'), q = url.searchParams;
+    const rawSearch = q.get('search') || '', search = rawSearch.trim(), limit = q.get('limit') || '20', brand = q.get('brand');
+    if (url.pathname !== '/api/v1/after-sales/module/public-catalog' || url.hash || q.get('entityId') !== entityId
+      || [...q.keys()].some(k => !['entityId', 'brand', 'search', 'limit'].includes(k) || q.getAll(k).length !== 1)
+      || !['MOZTECH', 'BONSON'].includes(brand || '') || rawSearch.length > 100 || /[\x00-\x1f]/.test(rawSearch)
+      || !/^[1-9]\d?$/.test(limit) || Number(limit) > 20) throw new BadRequestException('售後顯示查詢條件無效');
+    if (!this.prisma) throw new ServiceUnavailableException('產品來源尚未開通');
+    const term = '%' + search.replace(/[\\%_]/g, '\\$&') + '%';
+    const rows = await this.prisma.$queryRaw<Array<{ id: string; name: string; sku: string; modelNumber: string | null; barcode: string | null; display: unknown }>>(Prisma.sql`
+      SELECT p.id,p.name,p.sku,p.model_number AS "modelNumber",p.barcode,p.attributes->'afterSalesPublicDisplay' AS display
+      FROM products p JOIN entities e ON e.id=p.entity_id
+      WHERE p.entity_id=${entityId} AND p.is_active=true AND e.is_active=true
+        AND p.attributes->'afterSalesPublicDisplay'->'version'='1'::jsonb
+        AND p.attributes->'afterSalesPublicDisplay'->'published'='true'::jsonb
+        AND p.attributes->'afterSalesPublicDisplay'->'brands' @> ${JSON.stringify([brand])}::jsonb
+        AND (${search}='' OR p.name ILIKE ${term} OR p.sku ILIKE ${term} OR p.model_number ILIKE ${term} OR p.barcode ILIKE ${term}
+          OR p.attributes->'afterSalesPublicDisplay'->>'displayName' ILIKE ${term}
+          OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(p.attributes->'afterSalesPublicDisplay'->'aliases')='array'
+            THEN p.attributes->'afterSalesPublicDisplay'->'aliases' ELSE '[]'::jsonb END) a WHERE a ILIKE ${term}))
+      ORDER BY p.sku,p.id LIMIT ${Number(limit) + 1}`);
+    const items = rows.slice(0, Number(limit)).flatMap(row => {
+      const display = publishedPublicDisplay(row.display, brand!);
+      return display ? [{ id: row.id, name: display.displayName || row.name, sku: row.sku, modelNumber: row.modelNumber,
+        barcode: row.barcode, imageUrl: display.imageUrl || null, aliases: display.aliases }] : [];
+    });
+    const result = { contractVersion: 'corely.erp.after-sales-public-catalog.v1', complete: rows.length <= Number(limit), items };
+    if (Buffer.byteLength(JSON.stringify(result)) > 256 * 1024) throw new ServiceUnavailableException('售後顯示資料超出限制');
+    return result;
+  }
   async products(req: { headers: Record<string, string>; method: string; originalUrl: string }, userId: string, entityId: string) {
     const actor = await this.inspect(req, userId, entityId);
     if (!actor.modules.includes('cases') && !actor.modules.includes('products'))

@@ -24,8 +24,9 @@ export type NativeCommunication = { confirmations: Record<string, unknown>[]; no
 export type NativeBrand = { code: string; name: string }
 export type NativeProduct = { id: string; name: string; sku: string; model?: string | null; brand?: string | null; erpProductId?: string; currency?: string; barcode?: string | null; warrantyKnown?: boolean; warrantyMonths?: number | null }
 export type NativeApplicationRef = { id: string; revision: number; reviewHash: string }
+export type NativeApplicationIntake = { version: 2; mode: 'repair' | 'return'; address: { region: string; district: string; postalCode: string; detail: string }; products: { id: string; quantity: number }[]; barcode: string; barcodeUnavailable: boolean; noticeVersion: string; packagingAcknowledged: boolean; emailVerification: { status: 'UNVERIFIED'; verifiedAt: null } }
 export type NativeApplication = { id: string; companyId: string; brand: string; type: string; status: string; revision: number; createdAt: string; updatedAt?: string; caseId?: string | null; contactName: string | null; productDescription: string | null; photoCount: number;
-  submittedData?: { name: string; phone: string; address: string; email: string; productDescription: string; faultDescription: string; photos: { index: number; name: string }[] } | null;
+  submittedData?: { name: string; phone: string; address: string; email: string; productDescription: string; faultDescription: string; photos: { index: number; name: string }[]; intake?: NativeApplicationIntake } | null;
   reviewedData?: Record<string, unknown> | null; reviewNote?: string | null; verifiedApplicationRef?: NativeApplicationRef | null;
   nativeCreateDraft?: NativeCaseInput | null; inviteUrl?: string | null; providerMode?: string | null;
 }

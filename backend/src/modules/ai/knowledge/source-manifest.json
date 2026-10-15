@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:0d304d5f28c232f24248a9ff43018d4fd998537b07d29b7785ea48c600c25fa0",
+  "sourceVersion": "sha256:6e9d0cc1f575466bc302772b9d8d8789a3e6806a5560d1d31597cf0c35ca4e8d",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "514b73a0ec2d55c3f5556d4472ee1c05e54a50609f6524e9ad40ea1b10c54608",
+  "catalogSha256": "e0e19c3148a022ccab7efbb6b380969a231013ce05dcbffe813ca98647ec3a3a",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -260,11 +260,11 @@
     },
     {
       "path": "backend/src/modules/auth/auth.service.ts",
-      "sha256": "15fa294f8d3eab0f8360e5f6eabe6877b4109b251e2328ef5ba9280f4c19f5a8"
+      "sha256": "be82fdec20632a0ab5946afd65e6c9018bc120da251c7ed01c12f4e92f4e0649"
     },
     {
       "path": "backend/src/modules/auth/dto/login-password.validator.ts",
-      "sha256": "6032124232ebe3542236ec3f46f1f4a9504374a6e9dcdaacac42d7c8f43fb303"
+      "sha256": "9c8654b8d580e1190b675823b09eefc97d1af8f570f289b3df176a5b59ebfb9c"
     },
     {
       "path": "backend/src/modules/auth/dto/login.dto.ts",
@@ -356,11 +356,11 @@
     },
     {
       "path": "backend/src/modules/integration/after-sales/erp-module.controller.ts",
-      "sha256": "9948c71f2fbf3028d7ac214b37dbea2a2d2c1e4664630c167a8b7c1919e31da8"
+      "sha256": "4a8ae9ea2f58468a5fc28cdf564d87c6ef8a445fcd0f23ac83e6e70646d64604"
     },
     {
       "path": "backend/src/modules/integration/after-sales/erp-module.service.ts",
-      "sha256": "e590753b6c84cdb6aebaed70f0cdd67092e2b819fa099e0c97e2e390a7db4dd3"
+      "sha256": "13562c524697783cd9bcdea9cbb142ee5bbb628ad4d6d5e97d0de43004236624"
     },
     {
       "path": "backend/src/modules/integration/wms/wms-handover.module.ts",
@@ -595,8 +595,16 @@
       "sha256": "3736a31d7bf44f20a8a13a25401eeba8bf93200296c1541b32ef9278433ac7bd"
     },
     {
+      "path": "backend/src/modules/product/after-sales-public-display.contract.ts",
+      "sha256": "12f6dd257e953c9ebd5d38bf7713f67dc9f328b72ec290cf0ccca1143a442f36"
+    },
+    {
       "path": "backend/src/modules/product/product.controller.ts",
       "sha256": "e5a17fe02187984c7ae9e833f2ed85ed75d6f378cdea6de4d211a27490a7a4ac"
+    },
+    {
+      "path": "backend/src/modules/product/product.service.ts",
+      "sha256": "97008597cfc42b6168918d99dbc6be20752c1a200232959d64b77636a747a7e6"
     },
     {
       "path": "backend/src/modules/product/sensitive-response.interceptor.ts",
@@ -751,6 +759,10 @@
       "sha256": "d8ef51561ce9d64e27574bc5f29c399f9bc438b585184f31d5353958265d1738"
     },
     {
+      "path": "frontend/src/pages/after-sales/native-application-model.ts",
+      "sha256": "fa8b50acd2be555d04ed0a65bca614bce4a5adbb9696379d065cfed765353dd2"
+    },
+    {
       "path": "frontend/src/pages/after-sales/native-communication-model.ts",
       "sha256": "0bab47a659eb149bf7cef581b499650f63ab9c8cc4df3a5a451c4436ff45ad0a"
     },
@@ -760,7 +772,7 @@
     },
     {
       "path": "frontend/src/pages/after-sales/NativeAfterSalesCreate.tsx",
-      "sha256": "29328c07655dbb999e6cd6473548197f0be5f5ab5b0f36df559f55b6ce498ba0"
+      "sha256": "d5031f831ec142c570f8187a9e7c6f02abbbb83a676866dbf168a7973d64f130"
     },
     {
       "path": "frontend/src/pages/after-sales/NativeAfterSalesWorkbench.css",
@@ -771,8 +783,16 @@
       "sha256": "3ec5ccbd8206c8f3a64d11f530e5cd89d555b2be95942ac57487df6bf5a3a651"
     },
     {
+      "path": "frontend/src/pages/after-sales/NativeApplicationOriginal.tsx",
+      "sha256": "3124648c31cdedfacf0f41860a510da1595c30647bab2dc4661c8e5968afd957"
+    },
+    {
       "path": "frontend/src/pages/after-sales/NativeCaseCommunication.tsx",
       "sha256": "32adbe59884d372f84a1f98d39db6e207c4ff20e64a0a18a91befe57a01fe19d"
+    },
+    {
+      "path": "frontend/src/pages/after-sales/NativeCustomerApplications.tsx",
+      "sha256": "dce3f1ebcf9fd40446ab3c81a9ac6f334e8ac3b6327874b5ee96cea7662085e3"
     },
     {
       "path": "frontend/src/pages/after-sales/pending-registration.ts",
@@ -1032,7 +1052,7 @@
     },
     {
       "path": "frontend/src/pages/ProductsPage.tsx",
-      "sha256": "cf2a194d64278e131b387d7e82ab0025e4c30fea28db915159b6f80e5633fbbf"
+      "sha256": "af3c14e63854033f5a14fa8f830694733fd237e955e3114b3dd4cb94f973eba6"
     },
     {
       "path": "frontend/src/pages/ProfilePage.tsx",
@@ -1212,7 +1232,7 @@
     },
     {
       "path": "frontend/src/services/native-after-sales.service.ts",
-      "sha256": "5ce25012871c6eea3b8acada2912a9b9d85717e702066d4cb44546814c62682f"
+      "sha256": "d0c8022dcc2d29c7f8d70d040aaa32aa0775c4a04bf2286225b4cc29d551d7a9"
     },
     {
       "path": "frontend/src/services/notification-refresh.ts",

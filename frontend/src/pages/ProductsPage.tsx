@@ -93,10 +93,10 @@ const ProductsPage: React.FC = () => {
     form.resetFields()
     if (product) {
       const attrs = product.attributes || {}
-      const values: Record<string, unknown> = { ...product, snLabels: attrs.snLabels || {}, attributesList: Object.entries(attrs).filter(([k,v]) => k !== 'snLabels' && typeof v === 'string').map(([key,value]) => ({key,value})) }
+      const values: Record<string, unknown> = { ...product, snLabels: attrs.snLabels || {}, afterSalesPublicDisplay: attrs.afterSalesPublicDisplay || { published: false, brands: [], aliases: [] }, attributesList: Object.entries(attrs).filter(([k,v]) => !['snLabels','afterSalesPublicDisplay'].includes(k) && typeof v === 'string').map(([key,value]) => ({key,value})) }
       for (const k of ['packageLength','packageWidth','packageHeight','weight','grossWeight','netWeight']) values[k] = product[k as keyof Product] == null ? null : Number(product[k as keyof Product])
       form.setFieldsValue(values)
-    } else form.setFieldsValue({ type: 'SIMPLE', hasSerialNumbers: false })
+    } else form.setFieldsValue({ type: 'SIMPLE', hasSerialNumbers: false, afterSalesPublicDisplay: { published: false, brands: [], aliases: [] } })
     setIsModalVisible(true)
   }
   const handleCreate = async (values: any) => {
@@ -104,7 +104,7 @@ const ProductsPage: React.FC = () => {
     setSubmitError(null)
     setSaving(true)
     try {
-      const { attributesList, snLabels, ...rest } = values
+      const { attributesList, snLabels, afterSalesPublicDisplay, ...rest } = values
       const attributes = attributesList?.reduce((acc: any, curr: any) => {
         if (!curr.key) return acc
         if (!canWriteCost && /cost|purchase.?price|supplier.?price/i.test(curr.key)) {
@@ -134,7 +134,10 @@ const ProductsPage: React.FC = () => {
         netWeight: rest.netWeight,
         hsCode: rest.hsCode,
         countryOfOrigin: rest.countryOfOrigin,
-        attributes: { ...attributes, snLabels },
+        attributes: { ...attributes, snLabels, afterSalesPublicDisplay: { version: 1, published: !!afterSalesPublicDisplay?.published,
+          brands: afterSalesPublicDisplay?.brands || [], aliases: afterSalesPublicDisplay?.aliases || [],
+          ...(afterSalesPublicDisplay?.displayName?.trim() ? { displayName: afterSalesPublicDisplay.displayName.trim() } : {}),
+          ...(afterSalesPublicDisplay?.imageUrl?.trim() ? { imageUrl: afterSalesPublicDisplay.imageUrl.trim() } : {}) } },
       }
       if (editing) {
         const { sku: _sku, ...updates } = data
@@ -462,7 +465,13 @@ const ProductsPage: React.FC = () => {
             </Select>
           </Form.Item>
           
-          <Typography.Text strong>變體屬性 (例如: Color: Red)</Typography.Text>
+          <Divider orientation="left">售後顯示</Divider>
+          <Form.Item name={['afterSalesPublicDisplay', 'published']} valuePropName="checked"><Checkbox>顯示於顧客售後選品</Checkbox></Form.Item>
+          <Form.Item name={['afterSalesPublicDisplay', 'brands']} label="適用品牌" dependencies={[[ 'afterSalesPublicDisplay', 'published' ]]} rules={[({ getFieldValue }) => ({ validator: (_, value) => getFieldValue(['afterSalesPublicDisplay', 'published']) && !value?.length ? Promise.reject(new Error('請選擇適用品牌')) : Promise.resolve() })]}><Select mode="multiple" options={['MOZTECH','BONSON'].map(value => ({ value, label: value }))} /></Form.Item>
+          <Form.Item name={['afterSalesPublicDisplay', 'displayName']} label="顧客顯示名稱"><Input maxLength={120} /></Form.Item>
+          <Form.Item name={['afterSalesPublicDisplay', 'aliases']} label="產品別名"><Select mode="tags" maxCount={12} tokenSeparators={['，', ',']} /></Form.Item>
+          <Form.Item name={['afterSalesPublicDisplay', 'imageUrl']} label="公開產品圖片" rules={[{ type: 'url', message: '請填寫有效的 HTTPS 圖片網址' }, { validator: (_, value) => !value || /^https:\/\//.test(value) ? Promise.resolve() : Promise.reject(new Error('圖片需使用 HTTPS')) }]}><Input maxLength={1000} /></Form.Item>
+          <Divider orientation="left">變體屬性</Divider>
           <Form.List name="attributesList">
             {(fields, { add, remove }) => (
               <>

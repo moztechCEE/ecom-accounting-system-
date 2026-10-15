@@ -73,4 +73,10 @@ export class ErpAfterSalesModuleController {
   products(@Req() req: { headers: Record<string, string>; method: string; originalUrl: string }, @Param('id') id: string, @Query('entityId') entity: string) {
     return this.service.products(req, id, entity);
   }
+  @Get('public-catalog')
+  @SetMetadata(ERP_AFTER_SALES_SERVICE_AUTH, true)
+  @Header('Cache-Control', 'no-store')
+  publicCatalog(@Req() req: { headers: Record<string, string>; method: string; originalUrl: string }, @Query('entityId') entity: string) {
+    return this.service.publicCatalog(req, entity);
+  }
 }
