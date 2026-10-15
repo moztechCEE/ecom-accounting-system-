@@ -580,6 +580,45 @@ test('repair precheck read-only view and actual scan/deeplink reader use native 
     assert.equal(await queue.getByText('合成初檢中產品', { exact: true }).count(), 0); assert.equal(await queue.getByText('已收維修件 123 件', { exact: true }).count(), 0);
     assert.deepEqual((await queueGets(page)).map(call => call.params.entityId), [company, companyB]); await noWrites(page); await tabs(page);
   });
+  await t.test('returning to a previously failed company starts a fresh preview without resurrecting its old error or counts', async child => {
+    const page = await open(child, { entry: `/operations/repair?entityId=${company}&queue=acceptance`, queueScenario: 'fail' });
+    let queue = await openQueue(page);
+    await queue.getByRole('alert').filter({ hasText: '合成初檢清單讀取失敗' }).waitFor();
+    await page.evaluate(({ company, companyB }) => {
+      window.precheckReaderApi.queueScenario = 'normal';
+      window.precheckReaderApi.planQueue({ entityId: companyB, page: 1 });
+      window.precheckReaderApi.planQueue({ entityId: company, page: 1 });
+    }, { company, companyB });
+    async function pendingWithoutOldState() {
+      await queue.locator('[aria-label="收發初檢載入中"]').waitFor();
+      assert.equal(await queue.getByRole('alert').count(), 0);
+      assert.equal(await queue.getByText(/已收維修件 \d+ 件|本頁初檢中 \d+ 件|本頁完成待交接 \d+ 件|沒有已收維修件/).count(), 0);
+      assert.equal(await queue.locator('ul:not(.ant-pagination) > li').count(), 0);
+    }
+    await page.evaluate(path => window.precheckReaderRouter.navigate(path), `/operations/repair?entityId=${companyB}&queue=acceptance`);
+    queue = await openQueue(page); await page.waitForFunction(() => window.precheckReaderApi.heldQueues.length === 1);
+    await pendingWithoutOldState();
+    await page.evaluate(path => window.precheckReaderRouter.navigate(path), `/operations/repair?entityId=${company}&queue=acceptance`);
+    queue = await openQueue(page); await page.waitForFunction(() => window.precheckReaderApi.heldQueues.length === 2);
+    await pendingWithoutOldState();
+    await page.evaluate(() => window.precheckReaderApi.releaseQueue(0));
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await pendingWithoutOldState();
+    await page.evaluate(() => {
+      const fresh = window.precheckReaderApi.heldQueues[1].data;
+      fresh.total = 151; fresh.items[0].productName = '合成重新載入甲公司產品';
+      window.precheckReaderApi.releaseQueue(1);
+    });
+    await queue.getByText('已收維修件 151 件', { exact: true }).waitFor();
+    await queue.getByText('合成重新載入甲公司產品', { exact: true }).waitFor();
+    await queue.getByText('本頁初檢中 1 件／本頁完成待交接 1 件', { exact: true }).waitFor();
+    assert.equal(await queue.getByRole('alert').count(), 0);
+    assert.equal(await queue.locator('[aria-label="收發初檢載入中"]').count(), 0);
+    assert.equal(await queue.getByText(/已收維修件 (7|123) 件|乙公司合成已收維修產品|合成初檢中產品/).count(), 0);
+    assert.deepEqual((await queueGets(page)).map(call => call.params.entityId), [company, companyB, company]);
+    await settledQueue(page); await page.screenshot({ path: join(artifactDir, 'received-precheck-revisited-company-after-failure.png'), fullPage: true });
+    await noWrites(page); assert.deepEqual(await photoGets(page), []); await tabs(page);
+  });
   await t.test('a delayed old page2 cannot replace page1 after leaving and returning to the preview', async child => {
     const page = await open(child, { entry: `/operations/repair?entityId=${company}&queue=acceptance` }); let queue = await openQueue(page);
     await queue.getByText('合成初檢中產品', { exact: true }).waitFor();

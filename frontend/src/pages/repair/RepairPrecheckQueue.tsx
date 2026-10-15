@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Empty, Pagination, Space, Spin, Tag, Typography } from 'antd';
 import { Collapse } from 'antd';
 import api from '../../services/api';
@@ -7,7 +7,8 @@ import { repairPrecheckPendingSummary, type RepairItem } from './repair-model';
 import type { RepairListResponse } from './repair-list-model';
 
 const { Text } = Typography;
-type Result = { scope: string; items: RepairItem[]; total: number };
+type Scope = { entityId: string; page: number; refresh: number };
+type Result = { scope: Scope; items: RepairItem[]; total: number };
 function validResult(value: RepairListResponse, entityId: string): boolean {
   return !!value && Number.isSafeInteger(value.total) && value.total >= 0
     && Array.isArray(value.items) && value.items.length <= 50 && value.items.length <= value.total
@@ -35,9 +36,9 @@ export default function RepairPrecheckQueue({ entityId, onOpen }: { entityId: st
   const page = paging.entityId === entityId ? paging.page : 1;
   const generation = useRef(0);
   const [refresh, setRefresh] = useState(0);
-  const scope = JSON.stringify([entityId, page, refresh]);
+  const scope = useMemo(() => ({ entityId, page, refresh }), [entityId, page, refresh]);
   const [result, setResult] = useState<Result>();
-  const [failure, setFailure] = useState<{ scope: string; message: string }>();
+  const [failure, setFailure] = useState<{ scope: Scope; message: string }>();
   useEffect(() => {
     const controller = new AbortController(), request = ++generation.current;
     if (!entityId.trim()) return () => controller.abort();
@@ -46,6 +47,7 @@ export default function RepairPrecheckQueue({ entityId, onOpen }: { entityId: st
     }).then(({ data }) => {
       if (controller.signal.aborted || request !== generation.current) return;
       if (!validResult(data, entityId)) throw new Error('Invalid repair precheck list');
+      setFailure(undefined);
       setResult({ scope, items: data.items, total: data.total });
     }).catch(error => {
       if (!controller.signal.aborted && request === generation.current) setFailure({ scope, message: errorText(error) });
