@@ -19,10 +19,10 @@ import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import {
-  DEV_CLERK_USER_ID,
-  isDevClerkShortPasswordLogin,
+  devFixtureShortPasswordIdentity,
   isValidLoginPassword,
-  normalizeDevClerkEmployeeNo,
+  normalizeDevFixtureEmployeeNo,
+  type DevFixtureEmployeeIdentity,
 } from './dto/login-password.validator';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 
@@ -190,24 +190,29 @@ export class AuthService {
     }
     const { email, password } = loginDto;
     const emailInput = (email ?? '').trim();
-    const employeeNoInput = normalizeDevClerkEmployeeNo(loginDto);
+    const employeeNoInput = normalizeDevFixtureEmployeeNo(loginDto);
     const entityIdInput = (loginDto.entityId ?? '').trim();
     const platformLoginIdInput = (loginDto.platformLoginId ?? '').trim();
     const normalizedEmail = emailInput.toLowerCase();
     const loginIdentifier = emailInput || employeeNoInput || platformLoginIdInput;
+    const expectedFixture = devFixtureShortPasswordIdentity(loginDto);
 
     // 尋找使用者
     const user = platformLoginIdInput
       ? await this.findUserForPlatformAdminLogin(platformLoginIdInput)
       : employeeNoInput
-      ? await this.findUserForEmployeeLogin(entityIdInput, employeeNoInput)
-      : await this.usersService.findForAuthByEmail(normalizedEmail);
+        ? await this.findUserForEmployeeLogin(
+            entityIdInput,
+            employeeNoInput,
+            expectedFixture,
+          )
+        : await this.usersService.findForAuthByEmail(normalizedEmail);
     if (!user) {
       this.logger.warn(`Login failed: user not found (${loginIdentifier})`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (isDevClerkShortPasswordLogin(loginDto) && user.id !== DEV_CLERK_USER_ID) {
+    if (expectedFixture && user.id !== expectedFixture.userId) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -271,7 +276,11 @@ export class AuthService {
     return entities;
   }
 
-  private async findUserForEmployeeLogin(entityId: string, employeeNo: string) {
+  private async findUserForEmployeeLogin(
+    entityId: string,
+    employeeNo: string,
+    expectedFixture?: DevFixtureEmployeeIdentity,
+  ) {
     if (!entityId) {
       throw new UnauthorizedException('Business entity is required');
     }
@@ -281,11 +290,26 @@ export class AuthService {
         entityId,
         employeeNo,
         isActive: true,
+        ...(expectedFixture?.employeeId
+          ? { id: expectedFixture.employeeId, userId: expectedFixture.userId }
+          : {}),
       },
       include: {
         user: true,
       },
     });
+
+    if (
+      expectedFixture?.employeeId &&
+      (!employee ||
+        employee.id !== expectedFixture.employeeId ||
+        employee.userId !== expectedFixture.userId ||
+        employee.entityId !== expectedFixture.entityId ||
+        employee.employeeNo !== expectedFixture.employeeNo ||
+        employee.isActive !== true)
+    ) {
+      return null;
+    }
 
     return employee?.user ?? null;
   }
