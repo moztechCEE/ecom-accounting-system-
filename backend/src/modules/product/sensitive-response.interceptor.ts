@@ -103,12 +103,13 @@ export function containsCostInput(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(containsCostInput);
   if (value === null || typeof value !== 'object') return false;
   return Object.entries(value).some(([key, field]) =>
-    isSensitiveField(key, {
+    // Transformed DTOs materialize omitted class fields as undefined.
+    field !== undefined && (isSensitiveField(key, {
       productCost: false,
       financialMargin: true,
       financialNetProfit: true,
       employeeCompensation: true,
-    }) || containsCostInput(field),
+    }) || containsCostInput(field)),
   );
 }
 

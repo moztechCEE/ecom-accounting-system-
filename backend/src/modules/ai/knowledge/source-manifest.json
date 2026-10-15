@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:6e9d0cc1f575466bc302772b9d8d8789a3e6806a5560d1d31597cf0c35ca4e8d",
+  "sourceVersion": "sha256:fcbc2080677fdb0c76e26765ffb5eec638833aeca493c1a8cadbba373b83efc5",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -608,7 +608,7 @@
     },
     {
       "path": "backend/src/modules/product/sensitive-response.interceptor.ts",
-      "sha256": "5155b1351b0409b876c734d3d44408bbbd15192797b03a665e16d467ee865e67"
+      "sha256": "cafc9e38166de54ce6b5a08c783b8877d2cbbf15576079a65dc42a357adf9666"
     },
     {
       "path": "backend/src/modules/purchase/purchase-b2b-queue.service.ts",
