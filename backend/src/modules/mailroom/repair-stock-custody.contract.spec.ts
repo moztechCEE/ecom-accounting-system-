@@ -401,6 +401,10 @@ describe('consumed native RETURN current-custody projection', () => {
   it('batch decorates list/detail rows with the linked current staff name and keeps all raw historical stock fields', async () => {
     const { donor, unit } = fixture();
     const prisma = {
+      mailroomPrecheckDocument: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       afterSalesStockUnit: { findMany: jest.fn().mockResolvedValue([unit]) },
       user: {
         findMany: jest.fn().mockResolvedValue([
@@ -436,6 +440,10 @@ describe('consumed native RETURN current-custody projection', () => {
   it('reuses existing entity and audience guards before loading any consumed link', async () => {
     const { donor } = fixture();
     const prisma = {
+      mailroomPrecheckDocument: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       afterSalesStockUnit: { findMany: jest.fn() },
       user: { findMany: jest.fn() },
     };
@@ -458,6 +466,10 @@ describe('consumed native RETURN current-custody projection', () => {
       repairReport: { secret: 'TECHNICAL_SECRET' },
     });
     const prisma = {
+      mailroomPrecheckDocument: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       afterSalesStockUnit: { findMany: jest.fn().mockResolvedValue([unit]) },
       user: { findMany: jest.fn().mockResolvedValue([]) },
     };
@@ -480,6 +492,10 @@ describe('consumed native RETURN current-custody projection', () => {
     target.entityId = 'foreign';
     target.custodianId = 'foreign-staff';
     const prisma = {
+      mailroomPrecheckDocument: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       afterSalesStockUnit: { findMany: jest.fn().mockResolvedValue([unit]) },
       user: { findMany: jest.fn().mockResolvedValue([]) },
     };

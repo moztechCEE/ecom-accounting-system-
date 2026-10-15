@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { canDispatch, MAILROOM_QUEUES, mailroomNextStep, matchesDispatchReceipt, matchesMailroomSearch, needsInspectionPhoto } from '../src/pages/mailroom/mailroom-workflow.ts';
+import { canDispatch, MAILROOM_QUEUES, mailroomNextStep, matchesDispatchReceipt, matchesMailroomSearch, needsInspectionPhoto, mismatchInspectionValues } from '../src/pages/mailroom/mailroom-workflow.ts';
 import { currentItemCustody } from '../src/pages/mailroom/item-custody.ts';
 import type { Item } from '../src/pages/mailroom/model.ts';
 
@@ -66,4 +66,12 @@ test('customer carrier custody also follows the formally linked replacement inst
   assert.match(custody.holder, /承運商/);
   assert.notEqual(custody.holder, '舊收發');
   assert(custody.transferred);
+});
+
+
+test('mismatch exception keeps observed identity and only emits MISMATCH without a repair assignee', () => {
+  const values = { productName:'實收不同產品', sku:'ACTUAL-SKU', serialNumber:'ACTUAL-SN', note:'與申報不符', matchResult:'MATCH', nextUserId:'tech', location:'wrong-location' };
+  const body = mismatchInspectionValues(values);
+  assert.deepEqual(body, { productName:'實收不同產品', sku:'ACTUAL-SKU', serialNumber:'ACTUAL-SN', note:'與申報不符', matchResult:'MISMATCH' });
+  assert.equal(values.matchResult,'MATCH');assert.equal('nextUserId' in body,false);assert.equal('location' in body,false);
 });

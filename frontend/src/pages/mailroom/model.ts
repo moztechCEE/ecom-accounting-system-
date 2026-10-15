@@ -1,3 +1,5 @@
+import type { PrecheckSummary } from './initial-inspection-model';
+import type { MailroomPrecheckRecord } from './mailroom-precheck-record';
 export const CATEGORIES: Record<string, string> = {
   REPAIR: "維修品",
   RETURN: "退貨品",
@@ -101,6 +103,8 @@ export type Source = {
 export type Item = {
   id: string;
   caseIntake?: CaseIntake | null;
+  precheck?: PrecheckSummary | null;
+  mailroomPrecheck?: MailroomPrecheckRecord | null;
   allowedIntakeActions?: string[];
   label: string;
   productName: string;
@@ -137,6 +141,7 @@ export type Item = {
   repairOwnerId: string | null;
   mine: boolean;
   evidenceCount: number;
+  evidenceThumbnailUrl?: string | null;
   evidence?: string[];
   declared?: { name: string; sku: string | null; serialNumber: string | null };
   receipt: {

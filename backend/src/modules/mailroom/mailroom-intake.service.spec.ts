@@ -209,6 +209,10 @@ describe('unmatched receipt → CSR acceptance → real source binding, without 
       );
     };
     db = {
+      mailroomPrecheckDocument: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       user: {
         findUnique: jest.fn(async ({ where }: any) =>
           users[where.id]

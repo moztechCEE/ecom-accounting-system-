@@ -134,9 +134,10 @@ export default function StorageWorkbench({ entityId, onOpenItem, onChanged, onDr
       aria-label={`${location.code}，${location.name}，${STORAGE_PURPOSES[purpose]}，${location.items.length} 件${!location.isActive ? "，已停用" : ""}`}
       onClick={() => setSelection({ entityId, kind: "location", id: location.id })}>
       <span className="mailroom-storage-boxes" aria-hidden="true">{Array.from({ length: Math.min(3, location.items.length) }, (_, index) => <span className="mailroom-storage-box" key={index} />)}</span>
-      <span className="mailroom-storage-bin-label"><span className="mailroom-storage-bin-title"><strong>{location.code}</strong><span>{location.items.length} 件</span></span>
-        <span className="mailroom-storage-bin-purpose">{STORAGE_PURPOSES[purpose]}</span>
-        {location.name !== location.code && <small>{location.name}</small>}{!location.isActive && <small>已停用</small>}</span>
+      <span className="mailroom-storage-bin-label"><strong className="mailroom-storage-bin-name" title={location.name}>{location.name}</strong>
+        {location.name !== location.code && <span className="mailroom-storage-bin-code" title={location.code}>{location.code}</span>}
+        <span className="mailroom-storage-bin-meta"><span className="mailroom-storage-bin-purpose">{STORAGE_PURPOSES[purpose]}</span><span className="mailroom-storage-bin-count">{location.items.length}<span> 件</span></span></span>
+        {!location.isActive && <small>已停用</small>}</span>
     </button>;
   }
   function rackGrid(rack: StorageRack) {
@@ -194,7 +195,7 @@ export default function StorageWorkbench({ entityId, onOpenItem, onChanged, onDr
         </Space>
         {!matchingRacks.length ? <Empty description="尚無貨架" /> : view === "立體貨架" ? <div className="mailroom-storage-racks">
           {[...matchingRacks].sort((a, b) => a.layoutY - b.layoutY || a.layoutX - b.layoutX || a.code.localeCompare(b.code)).map(rack => <article className="mailroom-storage-rack" key={rack.id} data-rack-id={rack.id} aria-label={`${rack.code} ${rack.name}`}>
-            <div className="mailroom-storage-rack-heading"><div><strong>{rack.code} · {rack.name}</strong><span className="mailroom-storage-rack-default">預設{STORAGE_PURPOSES[rack.zone]}</span></div><Space size={4}>{!rack.isActive && <Tag>已停用</Tag>}
+            <div className="mailroom-storage-rack-heading"><div><strong title={rack.name}>{rack.name}</strong><span className="mailroom-storage-rack-code" title={rack.code}>{rack.code}</span><span className="mailroom-storage-rack-default">預設{STORAGE_PURPOSES[rack.zone]}</span></div><Space size={4}>{!rack.isActive && <Tag>已停用</Tag>}
               {data.canManage && <Button size="small" icon={<EditOutlined />} aria-label={`編輯貨架 ${rack.code}`} disabled={!canManage || locked} onClick={() => openDialog({ kind: "editRack", rack })} />}</Space></div>{rackGrid(rack)}
           </article>)}
         </div> : <div className="mailroom-storage-floor-scroll" tabIndex={0} aria-label="平面儲位區域"><div className="mailroom-storage-floor" style={{ width: bounds.width, height: bounds.height }}>

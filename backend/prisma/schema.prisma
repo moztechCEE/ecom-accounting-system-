@@ -2358,6 +2358,8 @@ model MailroomReceipt {
 }
 
 model MailroomItem {
+  precheckDocuments MailroomPrecheckDocument[]
+  precheckRequests MailroomPrecheckRequest[]
   repairMaterialAllocations RepairMaterialAllocation[] @relation("RepairMaterialItem")
   stockReservations AfterSalesStockReservation[]
   id                  String   @id @default(uuid())
@@ -3631,4 +3633,79 @@ model RepairEvidenceOperation {
 
   @@unique([entityId, actorId, requestId])
   @@map("repair_evidence_operations")
+}
+
+// Mailroom prechecks are documents, never physical custody or technician inspection.
+model MailroomPrecheckDocument {
+  id          String   @id @default(uuid())
+  entityId    String   @map("entity_id")
+  itemId      String   @map("item_id")
+  item        MailroomItem @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "mailroom_precheck_doc_item_fkey")
+  revision    Int      @default(1)
+  status      String   @default("DRAFT")
+  identityHash String  @map("identity_hash")
+  template    Json?
+  data        Json
+  savedById   String   @map("saved_by_id")
+  savedByName String   @map("saved_by_name")
+  savedAt     DateTime @default(now()) @map("saved_at")
+  submittedById String? @map("submitted_by_id")
+  submittedAt DateTime? @map("submitted_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([entityId, itemId], map: "mailroom_precheck_doc_item_key")
+  @@index([entityId, status, updatedAt], map: "mailroom_precheck_doc_stage_idx")
+  @@map("mailroom_precheck_documents")
+}
+
+model MailroomPrecheckRequest {
+  id          String   @id @default(uuid())
+  entityId    String   @map("entity_id")
+  actorId     String   @map("actor_id")
+  requestId   String   @map("request_id")
+  requestHash String   @map("request_hash")
+  operation   String
+  itemId      String   @map("item_id")
+  item        MailroomItem @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "mailroom_precheck_request_item_fkey")
+  batchId     String?  @map("batch_id")
+  batch       MailroomPrecheckBatch? @relation(fields: [batchId, entityId, actorId], references: [id, entityId, actorId], onDelete: Restrict, onUpdate: Cascade, map: "mailroom_precheck_request_batch_fkey")
+  result      Json
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([entityId, actorId, requestId], map: "mailroom_precheck_request_key")
+  @@index([entityId, itemId, createdAt], map: "mailroom_precheck_request_item_idx")
+  @@map("mailroom_precheck_requests")
+}
+
+model MailroomPrecheckBatch {
+  id          String   @id @default(uuid())
+  entityId    String   @map("entity_id")
+  actorId     String   @map("actor_id")
+  requestId   String   @map("request_id")
+  requestHash String   @map("request_hash")
+  operation   String
+  result      Json
+  recipientSnapshot Json? @map("recipient_snapshot")
+  createdAt   DateTime @default(now()) @map("created_at")
+  requests    MailroomPrecheckRequest[]
+  recipients  MailroomPrecheckBatchRecipient[]
+
+  @@unique([entityId, actorId, requestId], map: "mailroom_precheck_batch_key")
+  @@unique([id, entityId], map: "mailroom_precheck_batch_company_key")
+  @@unique([id, entityId, actorId], map: "mailroom_precheck_batch_owner_key")
+  @@map("mailroom_precheck_batches")
+}
+
+model MailroomPrecheckBatchRecipient {
+  id             String @id @default(uuid())
+  entityId       String @map("entity_id")
+  batchId        String @map("batch_id")
+  batch          MailroomPrecheckBatch @relation(fields: [batchId, entityId], references: [id, entityId], onDelete: Restrict, onUpdate: Cascade, map: "mailroom_precheck_recipient_batch_fkey")
+  userId         String @map("user_id")
+  notificationId String @unique(map: "mailroom_precheck_recipient_notification_key") @map("notification_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([batchId, userId], map: "mailroom_precheck_recipient_key")
+  @@map("mailroom_precheck_batch_recipients")
 }

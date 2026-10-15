@@ -41,7 +41,7 @@ export function mailroomNextStep(item: Item): MailroomStep {
       }
       return item.receipt.category === 'RETURN'
         ? { title: '拍照並完成退貨檢查', description: '核對實收品項、外包裝、產品外觀與配件；記錄分級及照片，再交客服處理。', action: 'grade', tone: 'info' }
-        : { title: '拍照並核對實收產品', description: '比對售後來源品項與實際收到的產品、SKU、SN；相符後指定技師，不符則交客服重新確認。', action: 'inspect', tone: 'info' };
+        : { title: '完成收發初檢', description: '核對實收產品與照片，保存本件檢查結果後交維修部門待認領。', tone: 'info' };
     case 'MISMATCH':
       return { title: '等待客服重新確認', description: '保留實收資料、不符原因與照片；尚未重新確認前不交維修，實物依目前保管紀錄。', tone: 'warning' };
     case 'WAITING_PICKUP':
@@ -89,4 +89,12 @@ export function matchesDispatchReceipt(item: Item, command: {
     && shipment.requestId === command.requestId && shipment.fromVersion === command.expectedVersion
     && shipment.version === command.expectedVersion + 1 && shipment.dispatchedById === userId
     && shipment.carrier === command.carrier.trim() && shipment.trackingNumber === command.trackingNumber.trim();
+}
+
+export function canOpenPrecheck(item: Item): boolean {
+  return ['REPAIR', 'RETURN'].includes(item.receipt.category) && item.status === 'RECEIVED' && item.physicalCustody === 'MAILROOM' && !!item.receipt.sourceCaseId;
+}
+
+export function mismatchInspectionValues(values: { productName: string; sku?: string; serialNumber?: string; note?: string }) {
+  return { productName: values.productName, sku: values.sku, serialNumber: values.serialNumber, note: values.note, matchResult: 'MISMATCH' as const };
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Button, Card, Checkbox, Descriptions, Divider, Drawer, Form, Image, Input, Radio, Select, Space, Steps, Typography } from "antd";
+import { Alert, Button, Card, Checkbox, Descriptions, Divider, Drawer, Form, Image, Input, Radio, Select, Space, Steps, Tag, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import api from "../../services/api";
 import { CATEGORIES, errorText, type Person, type Source } from "./model";
@@ -19,9 +19,13 @@ type Row = { productId?: string; productName: string; sku?: string; barcode?: st
 function sourcePhysicalRows(source: Source): Row[] {
   return source.items.flatMap(item => Array.from({ length: Math.min(item.remainingQuantity ?? item.quantity, 50) }, () => ({ productName: "", sourceItemId: item.id }))).slice(0, 50);
 }
+function sourceShipmentFields(source: Source) {
+  const shipment = source.reverseShipments?.length === 1 ? source.reverseShipments[0] : undefined;
+  return { reverseShipmentId: shipment?.id, carrier: shipment?.carrier || undefined, trackingNumber: shipment?.trackingNumber || undefined };
+}
 export default function ReceiptDrawer({ feedback, guardChange, onDraftChange, initialSource, initialCategory, open, entityId, people, onClose, onCreated }: {
   feedback: RepairMessage; guardChange: (change: () => void) => void; onDraftChange: (state: MailroomDraftState) => void;
-  initialSource?: Source; initialCategory: string; open: boolean; entityId: string; people: Person[]; onClose: () => void; onCreated: (id: string) => void;
+  initialSource?: Source; initialCategory: string; open: boolean; entityId: string; people: Person[]; onClose: () => void; onCreated: (ids: string[]) => void;
 }) {
   const [form] = Form.useForm();
   const [busy, setBusy] = useState(false), [source, setSource] = useState<Source>(), [error, setError] = useState(""), [step, setStep] = useState(0), [uncertain, setUncertain] = useState(false), [freeLocation, setFreeLocation] = useState(false), [photoReading, setPhotoReading] = useState(false);
@@ -35,7 +39,7 @@ export default function ReceiptDrawer({ feedback, guardChange, onDraftChange, in
   useEffect(() => {
     scope.current++;
     if (open) {
-      form.resetFields(); form.setFieldsValue(initialSource ? { category: initialSource.type, sourceCaseId: initialSource.id, items: sourcePhysicalRows(initialSource) } : { category: initialCategory || undefined, items: [{ productName: "" }] });
+      form.resetFields(); form.setFieldsValue(initialSource ? { category: initialSource.type, sourceCaseId: initialSource.id, items: sourcePhysicalRows(initialSource), ...sourceShipmentFields(initialSource) } : { category: initialCategory || undefined, items: [{ productName: "" }] });
       setSource(initialSource); setError(""); setStep(0); setFreeLocation(false); setPhotoReading(false); products.current.clear(); photoBusy.current.clear(); clearDraft();
     } else clearDraft();
   }, [open, entityId, initialCategory, initialSource, form, clearDraft]);
@@ -71,9 +75,9 @@ export default function ReceiptDrawer({ feedback, guardChange, onDraftChange, in
             ...(caseCategory ? { sourceItemId: row.sourceItemId } : {}) })) });
         if (operation.current?.body !== body) operation.current = { body, id: crypto.randomUUID() };
       }
-      const result = await api.post<{ itemIds: string[] }>("/mailroom/receipts", { ...JSON.parse(operation.current!.body), requestId: operation.current!.id });
+      const result = await api.post<{ itemIds: string[] }>("/mailroom/prechecks/receipts", { ...JSON.parse(operation.current!.body), requestId: operation.current!.id });
       if (scope.current !== requestScope) return;
-      feedback.success("已登記收件"); clearDraft(); setWorking(false); onCreated(result.data.itemIds[0]);
+      feedback.success("已登記收件"); clearDraft(); setWorking(false); onCreated(result.data.itemIds);
     } catch (e) {
       if (scope.current !== requestScope) return;
       if (!(e as { errorFields?: unknown }).errorFields) {
@@ -83,21 +87,32 @@ export default function ReceiptDrawer({ feedback, guardChange, onDraftChange, in
       }
     } finally { if (scope.current === requestScope) setWorking(false); }
   }
+  function selectSource(selected: Source) {
+    setSource(selected); products.current.clear();
+    form.setFieldsValue({ category: selected.type, sourceCaseId: selected.id, recipientId: undefined, items: sourcePhysicalRows(selected), ...sourceShipmentFields(selected) });
+    publishDraft();
+  }
   const locked = busy || uncertain || photoReading;
-  return <Drawer title="登記收件" width="min(820px, 100vw)" open={open} onClose={close} forceRender footer={<Space>
+  return <Drawer rootClassName="mailroom-receipt-drawer" title="登記收件" width="min(820px, 100vw)" open={open} onClose={close} forceRender footer={<Space wrap>
     {step > 0 && <Button disabled={locked} onClick={() => setStep(value => value - 1)}>上一步</Button>}
     <Button type="primary" size="large" loading={busy} disabled={!busy && photoReading} onClick={() => void (step === 2 ? submit() : next())}>{uncertain ? "重試原登記" : step === 2 ? "確認並登記收件" : "下一步"}</Button>
     <Button disabled={busy || photoReading} onClick={close}>取消</Button>
   </Space>}>
-    <Steps current={step} size="small" className="mailroom-receipt-steps" items={[{ title: "選擇" }, { title: "拍照" }, { title: "核對資料" }]} />
+    <Steps current={step} size="small" className="mailroom-receipt-steps" items={[{ title: "查找與實收" }, { title: "拍照" }, { title: "核對資料" }]} />
     <Form form={form} layout="vertical" disabled={busy || uncertain} onValuesChange={publishDraft} preserve>
       <div hidden={step !== 0}>
-        <Form.Item name="category" label="收到什麼？" rules={[{ required: true, message: "請選擇收件類型" }]}><Radio.Group className="mailroom-category-options" options={Object.entries(CATEGORIES).map(([value, label]) => ({ value, label: value === "UNMATCHED" ? "找不到售後案件" : label }))} optionType="button" buttonStyle="solid"
-          onChange={() => { setSource(undefined); products.current.clear(); form.setFieldsValue({ sourceCaseId: undefined, recipientId: undefined, items: [{ productName: "" }] }); publishDraft(); }} /></Form.Item>
-        {isCase && <Form.Item name="sourceCaseId" label="對應售後案件" rules={[{ required: true, message: "請選擇售後案件；找不到時改選「找不到售後案件」" }]}>
-          <SourceCasePicker entityId={entityId} active={open && isCase} selectedSource={source} onSelectSource={selected => { setSource(selected); products.current.clear(); form.setFieldsValue({ category: selected.type, items: sourcePhysicalRows(selected) }); publishDraft(); }} />
+        <Form.Item name="sourceCaseId" label="電話、姓名、入件單號或案件" rules={isCase ? [{ required: true, message: "請選擇售後案件；找不到時改選「找不到售後案件」" }] : []}>
+          <SourceCasePicker entityId={entityId} active={open} disabled={locked} selectedSource={source} onSelectSource={selectSource} />
+        </Form.Item>
+        {source && <div className="mailroom-selected-source"><Tag>{CATEGORIES[source.type]}</Tag><Tag>{source.statusLabel || source.status}</Tag><Text>{source.customerLabel}{source.customerPhone ? ` · ${source.customerPhone}` : ""}</Text></div>}
+        <Form.Item name="category" label="收件類型" rules={[{ required: true, message: "請選擇收件類型" }]}><Radio.Group className="mailroom-category-options" options={Object.entries(CATEGORIES).map(([value, label]) => ({ value, label: value === "UNMATCHED" ? "找不到售後案件" : label }))} optionType="button" buttonStyle="solid"
+          onChange={() => { setSource(undefined); products.current.clear(); form.setFieldsValue({ sourceCaseId: undefined, reverseShipmentId: undefined, recipientId: undefined, carrier: undefined, trackingNumber: undefined, items: [{ productName: "" }] }); publishDraft(); }} /></Form.Item>
+        {source && (source.reverseShipments?.length || 0) > 0 && <Form.Item name="reverseShipmentId" label="來源入件物流" rules={[{ required: true, message: "請選擇本次收到的入件物流" }]}>
+          <Select aria-label="選擇來源入件物流" disabled={locked} options={source.reverseShipments!.map(shipment => ({ value: shipment.id, label: [shipment.carrier, shipment.trackingNumber].filter(Boolean).join(" · ") || "未填物流資料" }))} onChange={id => {
+            const shipment = source.reverseShipments?.find(row => row.id === id);
+            form.setFieldsValue({ carrier: shipment?.carrier || undefined, trackingNumber: shipment?.trackingNumber || undefined }); publishDraft();
+          }} />
         </Form.Item>}
-        {source && <div><Text type="secondary">{source.customerLabel}{source.customerPhone ? ` · ${source.customerPhone}` : ""}</Text></div>}
         {source && <SourceCasePhotos key={`${entityId}:${source.id}`} entityId={entityId} caseId={source.id} active={open} />}
         {isCorrespondence && <Form.Item name="recipientId" label="收件部門／同仁" rules={[{ required: true, message: "請選擇收件人" }, { validator: (_, value) => !value || people.some(person => person.id === value) ? Promise.resolve() : Promise.reject(new Error("請重新選擇收件同仁")) }]}><RecipientPicker key={category} people={people} label="收件同仁" disabled={locked} /></Form.Item>}
         {category === "UNMATCHED" && <Text type="secondary">先記錄實收物件與儲位，登記後可交客服補配對。</Text>}
@@ -130,7 +145,7 @@ export default function ReceiptDrawer({ feedback, guardChange, onDraftChange, in
         {step === 0 && <Button block type="dashed" icon={<PlusOutlined />} disabled={locked || fields.length >= 50 || !category || category === "UNMATCHED"} onClick={() => { add({ productName: "" }); publishDraft(); }}>增加一件實物</Button>}
         <Form.ErrorList errors={errors} />
       </>}</Form.List>
-      {step === 2 && <><Divider /><Descriptions column={1} size="small" items={[{ key: "case", label: isCorrespondence ? "收件人" : "對應案件", children: isCorrespondence ? people.find(person => person.id === form.getFieldValue("recipientId"))?.name : source?.number || "待客服配對" }, { key: "place", label: "存放位置", children: form.getFieldValue("location") }, { key: "tracking", label: "入件單號", children: form.getFieldValue("trackingNumber") || "未提供" }]} />{!isCorrespondence && <Text type="secondary">登記後進入品項核對{category === "RETURN" ? "與退貨分級" : ""}，再交接給下一位處理人員。</Text>}</>}
+      {step === 2 && <><Divider /><Descriptions column={1} size="small" items={[{ key: "case", label: isCorrespondence ? "收件人" : "對應案件", children: isCorrespondence ? people.find(person => person.id === form.getFieldValue("recipientId"))?.name : source?.number || "待客服配對" }, { key: "place", label: "存放位置", children: form.getFieldValue("location") }, { key: "tracking", label: "入件單號", children: form.getFieldValue("trackingNumber") || "未提供" }]} /></>}
       {uncertain && <Alert type="warning" message="登記結果尚未確認" description="請重試原登記；照片與請求內容已鎖定，重試不會新增第二筆。" style={{ marginTop: 16 }} />}
       {error && <Alert type="error" message={error} style={{ marginTop: 16 }} />}
     </Form>

@@ -2,6 +2,7 @@ import React from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { Spin } from 'antd'
 import { useAuth } from '../contexts/AuthContext'
+import { itemLoginPath, safeItemReturnTo } from '../utils/mailroom-item-link'
 
 const ProtectedRoute: React.FC = () => {
   const { user, loading } = useAuth()
@@ -16,11 +17,12 @@ const ProtectedRoute: React.FC = () => {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />
+    return <Navigate to={itemLoginPath(location)} replace />
   }
 
   if (user.mustChangePassword && location.pathname !== '/auth/change-password') {
-    return <Navigate to="/auth/change-password" replace />
+    const target = safeItemReturnTo(location.pathname + location.search)
+    return <Navigate to={'/auth/change-password' + (target ? '?' + new URLSearchParams({ returnTo: target }) : '')} replace />
   }
 
   return <Outlet />

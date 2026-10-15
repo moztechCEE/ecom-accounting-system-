@@ -82,6 +82,10 @@ function harness(fixtures = [fixture()]) {
     ),
   };
   const prisma = {
+    mailroomPrecheckDocument: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     mailroomItem: {
       findMany: jest.fn((args: { select?: unknown }) =>
         args.select ? nativeRead() : Promise.resolve(rows),

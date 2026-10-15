@@ -70,6 +70,21 @@ import {
   MailroomQuery,
 } from './mailroom.dto';
 import {
+  loadPrecheckSummaries,
+  precheckContentHash,
+  precheckIdentityHash,
+  requirePrecheckVersion,
+  validatePrecheckData,
+  type PrecheckData,
+  type PrecheckHandoffChild,
+  type PrecheckHandoffResult,
+} from './mailroom-precheck.contract';
+import {
+  resolvePrecheckTemplate,
+  type PrecheckTemplateBinding,
+} from './mailroom-precheck.templates';
+import { recordedPrecheck } from './mailroom-precheck-record.contract';
+import {
   validateInspectionRelease,
   validateInspectionSubmission,
   validateRepairCompletion,
@@ -247,6 +262,331 @@ export class MailroomService {
       throw new BadRequestException('接收人必須是此公司已綁定帳號的在職員工');
     if (permission) requirePermission(actor, permission);
     return actor;
+  }
+  /** A private native first-photo route with exactly the existing item reader. */
+  async nativeReceiptPhoto(userId: string, entityId: string, id: string) {
+    const item = await this.precheckPhotoItem(userId, entityId, id);
+    const photo = nativeRepairPhoto(item.evidence);
+    if (!photo) throw new NotFoundException('找不到實收照片');
+    return photo;
+  }
+  async precheckPhotoItem(userId: string, entityId: string, id: string) {
+    this.enabled();
+    const actor = await this.actor(userId);
+    const item = await this.prisma.mailroomItem.findFirst({
+      where: { id, entityId, receipt: { entityId } },
+      include: withReceipt,
+    });
+    if (!item) throw new NotFoundException('找不到物件照片');
+    this.canRead(actor, item);
+    return item;
+  }
+
+  /** Internal boundary: the caller owns one transaction per immutable child. */
+  async completePrecheckHandoff(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    batch: {
+      id: string;
+      entityId: string;
+      requestId: string;
+      requestHash: string;
+    },
+    input: PrecheckHandoffChild,
+  ): Promise<PrecheckHandoffResult> {
+    const auth = async () => {
+      this.enabled();
+      const actor = await this.actor(userId, tx);
+      requireEntity(actor, batch.entityId);
+      requirePermission(actor, 'mailroom:read');
+      requirePermission(actor, 'mailroom:update');
+      if (
+        !(await tx.employee.findFirst({
+          where: { userId, entityId: batch.entityId, isActive: true },
+          select: { id: true },
+        }))
+      )
+        throw new ForbiddenException('交辦人員必須是此公司的在職員工');
+      return actor;
+    };
+    await auth();
+    const hash = fingerprint({
+      operation: 'HANDOFF',
+      batchId: batch.id,
+      batchRequestId: batch.requestId,
+      entityId: batch.entityId,
+      ...input,
+    });
+    await tx.$executeRaw(
+      Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${batch.entityId + ':mailroom-precheck-request:' + userId + ':' + input.requestId}))`,
+    );
+    await auth();
+    const manifest = await tx.mailroomPrecheckBatch.findUnique({
+      where: { id: batch.id },
+    });
+    const body = manifest?.result as
+      | { input?: { items?: PrecheckHandoffChild[] } }
+      | undefined;
+    if (
+      !manifest ||
+      manifest.entityId !== batch.entityId ||
+      manifest.actorId !== userId ||
+      manifest.requestId !== batch.requestId ||
+      manifest.requestHash !== batch.requestHash ||
+      manifest.operation !== 'HANDOFF' ||
+      !body?.input?.items?.some(
+        (part) => fingerprint(part) === fingerprint(input),
+      )
+    )
+      throw new ConflictException('交辦批次或逐件內容不符');
+    const key = {
+      entityId: batch.entityId,
+      actorId: userId,
+      requestId: input.requestId,
+    };
+    const previous = await tx.mailroomPrecheckRequest.findUnique({
+      where: { entityId_actorId_requestId: key },
+    });
+    if (previous) {
+      if (
+        previous.operation !== 'HANDOFF' ||
+        previous.itemId !== input.itemId ||
+        previous.batchId !== batch.id ||
+        previous.requestHash !== hash
+      )
+        throw new ConflictException('同一操作識別碼的內容不同');
+      return {
+        ...(previous.result as unknown as PrecheckHandoffResult),
+        duplicate: true,
+      };
+    }
+    await tx.$queryRaw(
+      Prisma.sql`SELECT id FROM mailroom_items WHERE id=${input.itemId} AND entity_id=${batch.entityId} FOR UPDATE`,
+    );
+    await tx.$queryRaw(
+      Prisma.sql`SELECT id FROM mailroom_precheck_documents WHERE item_id=${input.itemId} AND entity_id=${batch.entityId} FOR UPDATE`,
+    );
+    const actor = await auth();
+    const item = await tx.mailroomItem.findFirst({
+      where: {
+        id: input.itemId,
+        entityId: batch.entityId,
+        receipt: { entityId: batch.entityId },
+      },
+      include: withReceipt,
+    });
+    if (!item) throw new NotFoundException('找不到售後實物');
+    this.canRead(actor, item);
+    if (item.receipt.category === 'RETURN')
+      throw new ConflictException({
+        code: 'RETURN_REVIEW_REQUIRED',
+        message: '退貨初檢請沿既有分級與客服覆核流程交辦',
+      });
+    requirePrecheckVersion(item, input.expectedVersion);
+    if (
+      item.receipt.category !== 'REPAIR' ||
+      item.custodianId !== actor.id ||
+      item.nextUserId ||
+      item.repairOwnerId ||
+      physicalCustody(item) !== 'MAILROOM'
+    )
+      throw new ConflictException('只有目前收發保管人可將未指派維修件交辦');
+    if (item.matchResult === 'CONFIRMED_ACTUAL')
+      throw new ConflictException({
+        code: 'RECHECK_REQUIRED',
+        message: '本件曾確認實收差異，請沿原核對流程處理',
+      });
+    const intake = caseIntake(item.repairWorkflow);
+    if (
+      (intake && intake.status !== 'RESOLVED') ||
+      repairWorkflow(item.repairWorkflow).csr
+    )
+      throw new ConflictException('客服交辦尚未結束，請沿原案件流程處理');
+    const doc = await tx.mailroomPrecheckDocument.findUnique({
+      where: { entityId_itemId: { entityId: batch.entityId, itemId: item.id } },
+    });
+    if (
+      !doc ||
+      doc.status !== 'READY' ||
+      doc.revision !== input.precheckRevision ||
+      doc.identityHash !== input.identityHash ||
+      precheckIdentityHash(item) !== input.identityHash ||
+      precheckContentHash(doc) !== input.precheckHash
+    )
+      throw new ConflictException('初檢或實收版本已更新，請重新讀取');
+    const storedTemplate = doc.template as PrecheckTemplateBinding | null;
+    const templateBinding = storedTemplate
+      ? {
+          id: storedTemplate.id,
+          revision: storedTemplate.revision,
+          contentHash: storedTemplate.contentHash,
+        }
+      : null;
+    if (item.productId)
+      await tx.$queryRaw(
+        Prisma.sql`SELECT id FROM products WHERE id=${item.productId} AND entity_id=${item.entityId} FOR SHARE`,
+      );
+    const product = item.productId
+      ? await tx.product.findFirst({
+          where: {
+            id: item.productId,
+            entityId: item.entityId,
+            isActive: true,
+          },
+        })
+      : null;
+    const resolution = resolvePrecheckTemplate(
+      item,
+      product,
+      storedTemplate?.id ?? null,
+    );
+    const data = doc.data as unknown as PrecheckData;
+    validatePrecheckData(
+      {
+        ...data,
+        notRequiredReason: data.notRequiredReason ?? undefined,
+        templateBinding,
+        status: 'READY',
+      },
+      resolution,
+    );
+    if (
+      await tx.mailroomAction.findUnique({
+        where: { entityId_actorId_requestId: key },
+      })
+    )
+      throw new ConflictException('操作識別碼已用於其他收發操作');
+    const sources = await this.sync.cases(
+      item.entityId,
+      '',
+      item.receipt.sourceCaseId!,
+    );
+    const source = sources.items.find(
+      (row) => row.id === item.receipt.sourceCaseId,
+    );
+    if (
+      !source ||
+      source.type !== 'REPAIR' ||
+      ['CLOSED', 'CANCELLED', 'CANCELED', 'COMPLETED'].includes(source.status)
+    )
+      throw new ConflictException('售後案件已更新或不允許交辦');
+    const declared = item.declared as {
+      id?: string;
+      name?: string;
+      sku?: string | null;
+      serialNumber?: string | null;
+      quantity?: number;
+    } | null;
+    const line = source.items.find((line) => line.id === declared?.id);
+    if (
+      !declared?.id ||
+      !line ||
+      fingerprint({
+        id: declared.id,
+        name: declared.name,
+        sku: declared.sku ?? null,
+        serialNumber: declared.serialNumber ?? null,
+        quantity: declared.quantity,
+      }) !==
+        fingerprint({
+          id: line.id,
+          name: line.name,
+          sku: line.sku ?? null,
+          serialNumber: line.serialNumber ?? null,
+          quantity: line.quantity,
+        })
+    )
+      throw new ConflictException('售後案件品項已更新，請客服重新核對');
+    if (
+      (declared.sku && declared.sku !== (item.sku?.trim() || '')) ||
+      (declared.serialNumber &&
+        declared.serialNumber !== (item.serialNumber?.trim() || ''))
+    )
+      throw new BadRequestException(
+        '實收 SKU／SN 與申報不一致，請列為品項不符',
+      );
+    const csrId = await this.customerService(source, item.entityId, tx);
+    if (!csrId) throw new ConflictException('售後案件尚未對應有效客服窗口');
+    const freshActor = await auth();
+    const command = {
+      entityId: item.entityId,
+      action: 'inspect' as const,
+      requestId: input.requestId,
+      expectedVersion: input.expectedVersion,
+      productName: item.productName,
+      sku: item.sku ?? undefined,
+      serialNumber: item.serialNumber ?? undefined,
+      matchResult: 'MATCH' as const,
+    };
+    const { changes } = transition(item, command, freshActor);
+    if (precheckIdentityHash({ ...item, ...changes }) !== doc.identityHash)
+      throw new ConflictException('實收資料需重新核對，請沿原核對流程處理');
+    await tx.mailroomReceipt.update({
+      where: { id: item.receiptId },
+      data: { customerServiceUserId: csrId },
+    });
+    const updated = await tx.mailroomItem.update({
+      where: { id: item.id },
+      data: {
+        ...changes,
+        ...receiptLinkChanges(item, changes, 'inspect'),
+        version: { increment: 1 },
+      },
+      include: withReceipt,
+    });
+    await tx.mailroomPrecheckDocument.update({
+      where: { id: doc.id, revision: doc.revision, status: 'READY' },
+      data: {
+        status: 'SUBMITTED',
+        submittedById: freshActor.id,
+        submittedAt: new Date(),
+      },
+    });
+    await this.record(
+      tx,
+      freshActor,
+      updated,
+      'inspect',
+      input.requestId,
+      hash,
+      item.status,
+      undefined,
+      true,
+      false,
+      undefined,
+      {
+        kind: 'PRECHECK_HANDOFF',
+        ref: {
+          id: doc.id,
+          revision: doc.revision,
+          contentHash: input.precheckHash,
+          identityHash: input.identityHash,
+        },
+      },
+    );
+    const action = await tx.mailroomAction.findUnique({
+      where: { entityId_actorId_requestId: key },
+    });
+    if (!action) throw new ConflictException('交辦紀錄未完成');
+    const result: PrecheckHandoffResult = {
+      itemId: item.id,
+      requestId: input.requestId,
+      status: 'APPLIED',
+      duplicate: false,
+      itemVersion: updated.version,
+      actionId: action.id,
+    };
+    await tx.mailroomPrecheckRequest.create({
+      data: {
+        ...key,
+        requestHash: hash,
+        operation: 'HANDOFF',
+        itemId: item.id,
+        batchId: batch.id,
+        result: json(result),
+      },
+    });
+    return result;
   }
   /** Viewing an intake does not grant employee acceptance or Source case-write rights. */
   async intakeQueueReader(userId: string, entityId: string) {
@@ -629,7 +969,12 @@ export class MailroomService {
       can(actor, 'repair_workbench:read')
         ? await this.repairListProgress(items, actor)
         : new Map<string, RepairListProgress>();
+    const prechecks = await loadPrecheckSummaries(this.prisma, items);
     return items.map(({ evidence, receipt, ...item }) => ({
+      precheck: prechecks.get(item.id) ?? null,
+      evidenceThumbnailUrl: nativeRepairPhoto(evidence)
+        ? `/mailroom/prechecks/items/${encodeURIComponent(item.id)}/photo`
+        : null,
       ...(canViewRepairDocuments(actor) ? item : withoutRepairDocuments(item)),
       ...(options.repairOverview &&
       can(actor, 'repair_workbench:read') &&
@@ -889,8 +1234,12 @@ export class MailroomService {
         _count: true,
       }),
     ]);
+    const precheck = await this.prisma.mailroomPrecheckDocument.findUnique({
+      where: { entityId_itemId: { entityId, itemId: id } },
+    });
     return {
       ...(await this.views([item], userId, actor))[0],
+      mailroomPrecheck: recordedPrecheck(item, precheck),
       evidence: item.evidence || [],
       history: canViewRepairDocuments(actor)
         ? history
@@ -975,7 +1324,63 @@ export class MailroomService {
     replaceTasks: boolean,
     evidenceChanged = false,
     tabletHandoff?: { clerkId: string; clerkName: string; signerId: string },
+    internalPolicy?:
+      | { kind: 'PRECHECK_RECEIPT' }
+      | {
+          kind: 'PRECHECK_HANDOFF';
+          ref: {
+            id: string;
+            revision: number;
+            contentHash: string;
+            identityHash: string;
+          };
+        },
   ) {
+    if (
+      internalPolicy?.kind === 'PRECHECK_HANDOFF' &&
+      (action !== 'inspect' ||
+        fromStatus !== 'RECEIVED' ||
+        item.receipt.category !== 'REPAIR' ||
+        item.status !== 'WAITING_REPAIR_ACCEPTANCE' ||
+        item.nextUserId !== null ||
+        !replaceTasks ||
+        evidenceChanged ||
+        tabletHandoff ||
+        item.custodianId !== actor.id ||
+        item.repairOwnerId !== null ||
+        !/^[a-f0-9-]{36}$/i.test(internalPolicy.ref.id) ||
+        !Number.isSafeInteger(internalPolicy.ref.revision) ||
+        internalPolicy.ref.revision < 1 ||
+        !/^[a-f0-9]{64}$/.test(internalPolicy.ref.contentHash) ||
+        !/^[a-f0-9]{64}$/.test(internalPolicy.ref.identityHash))
+    )
+      throw new ConflictException('初檢交辦內部政策不符');
+    if (
+      internalPolicy &&
+      internalPolicy.kind !== 'PRECHECK_HANDOFF' &&
+      (internalPolicy.kind !== 'PRECHECK_RECEIPT' ||
+        action !== 'receive' ||
+        fromStatus !== null ||
+        item.version !== 1 ||
+        !replaceTasks ||
+        tabletHandoff ||
+        item.receipt.entityId !== item.entityId ||
+        item.receipt.receivedById !== actor.id ||
+        item.custodianId !== actor.id ||
+        item.repairOwnerId !== null ||
+        physicalCustody(item) !== 'MAILROOM' ||
+        !['REPAIR', 'RETURN', 'LETTER', 'PARCEL', 'UNMATCHED'].includes(
+          item.receipt.category,
+        ) ||
+        (['LETTER', 'PARCEL'].includes(item.receipt.category)
+          ? item.status !== 'WAITING_PICKUP' ||
+            !item.recipientId ||
+            item.nextUserId !== item.recipientId
+          : item.status !== 'RECEIVED' ||
+            item.nextUserId !== null ||
+            item.recipientId !== null))
+    )
+      throw new ConflictException('初檢收件內部政策不符');
     const entry = await tx.mailroomAction.create({
       data: {
         entityId: item.entityId,
@@ -999,6 +1404,9 @@ export class MailroomService {
           caseIntake: caseIntakeSummary(item.repairWorkflow),
           ...(evidenceChanged ? { evidence: item.evidence || [] } : {}),
           ...(tabletHandoff ? { tabletHandoff } : {}),
+          ...(internalPolicy?.kind === 'PRECHECK_HANDOFF'
+            ? { precheckRef: internalPolicy.ref }
+            : {}),
         }),
       },
     });
@@ -1013,7 +1421,12 @@ export class MailroomService {
       read: boolean;
       createdAt: Date;
     }> = [];
-    if (replaceTasks) {
+    if (internalPolicy?.kind === 'PRECHECK_HANDOFF') {
+      await tx.mailroomTask.updateMany({
+        where: { itemId: item.id, status: 'OPEN' },
+        data: { status: 'COMPLETED', completedAt: new Date() },
+      });
+    } else if (replaceTasks) {
       const recipients = new Map<string, string>();
       if (item.nextUserId && item.status !== 'COLLECTED')
         recipients.set(item.nextUserId, item.status);
@@ -1178,7 +1591,10 @@ export class MailroomService {
         refundExecuted: false,
       };
       await tx.mailroomDelivery.createMany({
-        data: ['AFTER_SALES', 'AI_CUSTOMER_SERVICE'].map((target) => ({
+        data: (internalPolicy
+          ? ['AFTER_SALES']
+          : ['AFTER_SALES', 'AI_CUSTOMER_SERVICE']
+        ).map((target) => ({
           eventId: entry.id,
           entityId: item.entityId,
           itemId: item.id,
@@ -1257,7 +1673,16 @@ export class MailroomService {
     }
     return source;
   }
-  async create(userId: string, input: CreateReceiptDto) {
+  createForPrecheck(userId: string, input: CreateReceiptDto) {
+    return this.create(userId, input, 'PRECHECK_RECEIPT');
+  }
+  async create(
+    userId: string,
+    input: CreateReceiptDto,
+    internalPolicy?: 'PRECHECK_RECEIPT',
+  ) {
+    if (internalPolicy !== undefined && internalPolicy !== 'PRECHECK_RECEIPT')
+      throw new ConflictException('收件內部政策不符');
     this.enabled();
     const actor = await this.actor(userId);
     requirePermission(actor, 'mailroom:create');
@@ -1381,7 +1806,7 @@ export class MailroomService {
         },
       });
       const itemIds: string[] = [];
-      const notifications: any[] = [];
+      const notifications: Awaited<ReturnType<MailroomService['record']>> = [];
       for (let i = 0; i < input.items.length; i++) {
         const row = input.items[i];
         const declared = source?.items.find((x) => x.id === row.sourceItemId);
@@ -1420,12 +1845,23 @@ export class MailroomService {
             undefined,
             true,
             Boolean(row.evidence?.length),
+            undefined,
+            internalPolicy ? { kind: internalPolicy } : undefined,
           )),
         );
       }
       return { id: receipt.id, itemIds, duplicate: false, notifications };
     });
-    this.publish(result.notifications);
+    if (internalPolicy) {
+      if (!result.duplicate)
+        for (const notification of result.notifications) {
+          try {
+            this.gateway.sendToUser(notification.userId, notification);
+          } catch {
+            /* persisted unread notification remains available */
+          }
+        }
+    } else this.publish(result.notifications);
     return {
       id: result.id,
       itemIds: result.itemIds,
@@ -1965,9 +2401,18 @@ export class MailroomService {
             );
           }
         }
-        if (['start_repair', 'complete_repair', 'complete_refurbish'].includes(input.action)) {
-          if (!this.prerequisites) throw new ServiceUnavailableException('維修檢測與備料確認尚未啟用');
-          await this.prerequisites.require(item, input.action === 'start_repair' ? 'START' : 'COMPLETION', tx);
+        if (
+          ['start_repair', 'complete_repair', 'complete_refurbish'].includes(
+            input.action,
+          )
+        ) {
+          if (!this.prerequisites)
+            throw new ServiceUnavailableException('維修檢測與備料確認尚未啟用');
+          await this.prerequisites.require(
+            item,
+            input.action === 'start_repair' ? 'START' : 'COMPLETION',
+            tx,
+          );
         }
         const { changes, replaceTasks: initialReplaceTasks } = transition(
           item,

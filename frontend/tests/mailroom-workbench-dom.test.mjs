@@ -32,11 +32,14 @@ export const API_URL='/offline-api';
 const clone=v=>JSON.parse(JSON.stringify(v));
 const receipt={number:'RECEIPT-1',category:'REPAIR',sourceCaseId:'source',sourceNumber:'DEV-R-1',trackingNumber:'IN-KEEP',carrier:'入件物流',senderLabel:'測試寄件人',receivedAt:'2026-10-08T01:00:00Z'};
 const common={id:'repair',label:'ITEM-1',productName:'合成測試品',sku:'SKU-1',serialNumber:'SN-1',status:'RECEIVED',statusLabel:'已收件，待核對',version:7,matchResult:'PENDING',grade:null,disposition:null,conditionNote:null,location:'收發櫃A',custodianId:'clerk',custodianName:'收發人員',nextUserId:null,nextUserName:null,recipientId:null,repairOwnerId:null,mine:false,evidenceCount:0,evidence:[],physicalCustody:'MAILROOM',declared:{name:'來源測試品',sku:'SKU-1',serialNumber:'SN-1'},receipt,history:[],deliverySummary:[]};
-const state={items:{repair:common,ready:{...clone(common),id:'ready',status:'READY_FOR_DISPATCH',statusLabel:'待安排寄回'},letter:{...clone(common),id:'letter',status:'WAITING_PICKUP',statusLabel:'待同仁簽領',nextUserId:'colleague',nextUserName:'收件同仁',recipientId:'colleague',recipientName:'收件同仁',receipt:{...receipt,category:'LETTER',sourceCaseId:null,sourceNumber:null}},returned:{...clone(common),id:'returned',status:'WAITING_RETURN_ACCEPTANCE',statusLabel:'待收發室簽收',nextUserId:'clerk',nextUserName:'收發人員',custodianId:'tech',custodianName:'技师本人',repairOwnerId:'tech',physicalCustody:'TECHNICIAN'}},calls:[],posts:[],failNext:false,commitThenLose:false,holdNext:false,rejectNext:false};
+const state={items:{repair:common,ready:{...clone(common),id:'ready',label:'ITEM-READY',status:'READY_FOR_DISPATCH',statusLabel:'待安排寄回'},letter:{...clone(common),id:'letter',label:'ITEM-LETTER',status:'WAITING_PICKUP',statusLabel:'待同仁簽領',nextUserId:'colleague',nextUserName:'收件同仁',recipientId:'colleague',recipientName:'收件同仁',receipt:{...receipt,category:'LETTER',sourceCaseId:null,sourceNumber:null}},returned:{...clone(common),id:'returned',label:'ITEM-RETURNED',status:'WAITING_RETURN_ACCEPTANCE',statusLabel:'待收發室簽收',nextUserId:'clerk',nextUserName:'收發人員',custodianId:'tech',custodianName:'技师本人',repairOwnerId:'tech',physicalCustody:'TECHNICIAN'}},calls:[],posts:[],failNext:false,commitThenLose:false,holdNext:false,rejectNext:false};
 window.mailroomFixture=state;
+const initialTemplate={id:'GENERIC_FUNCTIONAL_V1',revision:1,contentHash:'a'.repeat(64),checks:[{key:'power',label:'開機',required:true}]};
+const precheckRead=()=>({itemId:'repair',itemVersion:state.items.repair.version,label:'ITEM-1',category:'REPAIR',stage:state.precheck?.status||'NOT_STARTED',document:state.precheck||null,template:{state:'CONFIGURED',template:initialTemplate,reason:null},selectedTemplate:initialTemplate,availableTemplates:[],capabilities:{canStart:!state.precheck,canSave:!!state.precheck,canMarkReady:!!state.precheck,canHandoff:false,reason:null},custody:{custodianId:'clerk',location:'收發櫃A',storageLocationId:null}});
 const people=[{id:'clerk',name:'收發人員',employeeNo:'M1',department:'行政部',mailroom:true,repair:false},{id:'tech',name:'維修人員',employeeNo:'R1',department:'維修部',mailroom:false,repair:true},{id:'colleague',name:'收件同仁',employeeNo:'C1',department:'客服部',mailroom:false,repair:false}];
 export default {
  async get(path,config={}) {state.calls.push({path,params:clone(config.params||{})});
+  if(path==='/mailroom/prechecks/items/repair')return {data:clone(precheckRead())};
   if(path==='/mailroom/people')return {data:clone(people)};
   if(path==='/mailroom/items')return {data:{items:Object.values(state.items).filter(x=>!config.params?.status||x.status===config.params.status).map(clone),total:config.params?.status?Object.values(state.items).filter(x=>x.status===config.params.status).length:4}};
   if(path.startsWith('/mailroom/items/'))return {data:clone(state.items[path.split('/')[3]])};
@@ -50,7 +53,9 @@ export default {
   if(state.holdNext){state.holdNext=false;await new Promise(resolve=>state.releasePost=resolve);}
   if(state.rejectNext){state.rejectNext=false;throw {response:{status:400,data:{message:'合成伺服器拒絕寄出'}}};}
   if(state.failNext){state.failNext=false;throw {response:{data:{message:'合成回應未知，請重試'}}};}
-  if(path==='/mailroom/receipts'){const item={...clone(common),id:'created',status:'WAITING_PICKUP',statusLabel:'待同仁簽領',recipientId:body.recipientId,recipientName:'收件同仁',nextUserId:body.recipientId,nextUserName:'收件同仁',productName:body.items[0].productName,receipt:{...receipt,...body,sourceCaseId:null,sourceNumber:null}};state.items.created=item;return {data:{itemIds:['created']}};}
+  if(path==='/mailroom/prechecks/receipts'){const item={...clone(common),id:'created',status:'WAITING_PICKUP',statusLabel:'待同仁簽領',recipientId:body.recipientId,recipientName:'收件同仁',nextUserId:body.recipientId,nextUserName:'收件同仁',productName:body.items[0].productName,receipt:{...receipt,...body,sourceCaseId:null,sourceNumber:null}};state.items.created=item;return {data:{itemIds:['created']}};}
+  if(path==='/mailroom/prechecks/start'){state.precheck={revision:1,status:'DRAFT',identityHash:'identity',templateBinding:initialTemplate,checks:[],evidence:[],notRequiredReason:null,savedById:'clerk',savedByName:'收發人員',savedAt:'2026-10-16T00:00:00Z'};return {data:{items:[precheckRead()]}};}
+  if(path==='/mailroom/prechecks/items/repair/save'){state.precheck={...state.precheck,...body,revision:state.precheck.revision+1,savedAt:'2026-10-16T01:00:00Z'};return {data:precheckRead()};}
   const item=state.items[path.split('/')[3]];
   if(body.action==='dispatch'){item.outboundShipment={schema:1,status:'HANDED_TO_CARRIER',entityId:body.entityId,itemId:item.id,sourceCaseId:'source',requestId:body.requestId,fromVersion:body.expectedVersion,version:body.expectedVersion+1,carrier:body.carrier,trackingNumber:body.trackingNumber,dispatchedAt:'2026-10-08T02:00:00Z',dispatchedById:'clerk',dispatchedByName:'收發人員',dispatchedByEmployeeId:'emp-clerk',note:null,physicalItem:{kind:'ORIGINAL',productName:item.productName,sku:item.sku,serialNumber:item.serialNumber,quantity:1},sourceSync:{status:'PENDING_COMPATIBILITY',reason:'DISPATCH_CONSUMER_NOT_CONFIGURED'}};item.status='DISPATCHED';item.statusLabel='已交物流，待顧客收件';item.physicalCustody='CUSTOMER_CARRIER';item.version++;if(state.commitThenLose){state.commitThenLose=false;throw Error('Synthetic lost response after commit');}}
   if(body.action==='accept_return'){item.custodianId='clerk';item.custodianName='收發人員';item.physicalCustody='MAILROOM';item.location=body.location;item.status='READY_FOR_DISPATCH';item.statusLabel='待安排寄回';item.nextUserId=null;item.nextUserName=null;item.version++;}
@@ -105,10 +110,9 @@ test(
         },
       ],
     });
-    t.after(() => server.close());
     await server.listen();
     const browser = await chromium.launch({ executablePath, headless: true });
-    t.after(() => browser.close());
+    t.after(async () => { await browser.close(); await server.close(); });
     const page = await browser.newPage({
       viewport: { width: 1123, height: 972 },
     });
@@ -234,9 +238,10 @@ test(
     assert.equal(await drawer().locator('#items_0_productName').inputValue(), "合成信件");
     await page.evaluate(() => window.mailroomFixture.releasePost());
     await page.waitForFunction(() => window.mailroomFixture.items.created);
-    const letter = await page.evaluate(
-      () => window.mailroomFixture.posts[0].body,
-    );
+    const letterPost = await page.evaluate(() => window.mailroomFixture.posts[0]);
+    assert.equal(letterPost.path, "/mailroom/prechecks/receipts");
+    const letter = letterPost.body;
+    assert.deepEqual(Object.keys(letter).sort(), ["category", "entityId", "items", "location", "recipientId", "requestId", "senderLabel"]);
     assert.equal(letter.recipientId, "colleague");
     assert.equal(letter.senderLabel, "測試公司");
     assert.equal("sku" in letter.items[0], false);
@@ -244,63 +249,33 @@ test(
     assert.equal("department" in letter, false);
     await changeRoute(); await page.getByRole("heading", { name: "其他工作台", exact: true }).waitFor();
     assert.equal(await page.getByRole("dialog").filter({ hasText: "目前收發工作有未保存的修改" }).count(), 0);
+    console.log('offline workbench: initial precheck');
     await go("repair");
-    await drawer()
-      .getByRole("button", { name: "核對實收品項", exact: true })
-      .first()
-      .click();
-    await choose(
-      drawer().locator('input[id="matchResult"]'),
-      "不一致，交客服重新確認",
-    );
-    await drawer().locator('textarea[id="note"]').fill("實收與來源不符");
-    await drawer()
-      .getByRole("button", { name: /確認儲存$/ })
-      .click();
-    await drawer()
-      .getByText(
-        "請附上至少一張實物照片。",
-        { exact: true },
-      )
-      .waitFor();
-    assert.equal(
-      await page.evaluate(() => window.mailroomFixture.posts.length),
-      0,
-    );
-    const photo = await page.evaluate(() => {
-      const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = 2;
-      return canvas.toDataURL("image/png").split(",")[1];
-    });
-    await drawer()
-      .locator('input[type="file"]')
-      .setInputFiles({
-        name: "synthetic-receipt.png",
-        mimeType: "image/png",
-        buffer: Buffer.from(photo, "base64"),
-      });
-    await drawer().getByAltText("待上傳照片 1").waitFor();
-    await closeDrawer(); await discard();
-    await drawer().getByRole("button", { name: "更新存放位置", exact: true }).click(); await discard();
-    assert.equal(await drawer().locator('#note').inputValue(), "實收與來源不符");
-    await drawer().getByAltText("待上傳照片 1").waitFor();
-    await page.evaluate(() => { void window.mailroomRouter.navigate('/operations/mailroom?entityId=company&itemId=ready'); }); await discard();
-    await changeRoute(); await discard();
-    assert.equal(await drawer().locator('#note').inputValue(), "實收與來源不符");
-    await drawer().getByAltText("待上傳照片 1").waitFor();
-    await drawer()
-      .getByRole("button", { name: /確認儲存$/ })
-      .click();
-    await page.waitForFunction(
-      () => window.mailroomFixture.items.repair.status === "MISMATCH",
-    );
-    const inspection = await page.evaluate(
-      () => window.mailroomFixture.posts[0].body,
-    );
-    assert.equal(inspection.expectedVersion, 7);
-    assert.equal(inspection.matchResult, "MISMATCH");
-    assert.equal(inspection.evidence.length, 1);
-    assert.equal("nextUserId" in inspection, false);
+    assert.equal(await drawer().getByRole('button',{name:'核對實收品項',exact:true}).count(),0);
+    await drawer().getByRole('button',{name:'更新存放位置',exact:true}).waitFor();
+    await closeDrawer();await drawer().waitFor({state:'hidden'});
+    await page.getByRole('button',{name:'編輯初檢 ITEM-1',exact:true}).click();
+    const precheck=page.locator('.ant-drawer-content').filter({has:page.getByText('收發初檢',{exact:true})});
+    await precheck.getByRole('button',{name:'建立初檢草稿',exact:true}).click();
+    await precheck.getByRole('combobox',{name:'開機結果',exact:true}).waitFor();
+    await choose(precheck.getByRole('combobox',{name:'開機結果',exact:true}),'正常');
+    await precheck.getByRole('textbox',{name:'開機說明',exact:true}).fill('可開機，已確認實物');
+    console.log('offline workbench: dirty initial-precheck close guard');
+    await precheck.getByRole('button',{name:/關\s*閉/}).click();await discard();
+    assert.equal(await precheck.getByRole('textbox',{name:'開機說明',exact:true}).inputValue(),'可開機，已確認實物');
+    await page.evaluate(()=>{void window.mailroomRouter.navigate('/operations/mailroom?entityId=company&itemId=ready');});await discard();
+    await changeRoute();await discard();
+    console.log('offline workbench: save initial-precheck draft');
+    await precheck.getByRole('button',{name:'儲存草稿',exact:true}).click();
+    await page.waitForFunction(()=>window.mailroomFixture.precheck?.revision===2);
+    const inspection=await page.evaluate(()=>window.mailroomFixture.posts.find(post=>post.path.endsWith('/save')).body);
+    assert.equal(inspection.expectedVersion,7);assert.equal(inspection.expectedRevision,1);assert.equal(inspection.status,'DRAFT');
+    assert.equal(inspection.checks[0].result,'NORMAL');assert.equal(inspection.checks[0].note,'可開機，已確認實物');
+    for(const key of ['nextUserId','custodianId','location','action'])assert.equal(key in inspection,false);
+    await precheck.getByText(/收發人員 · v2 ·/).waitFor();
+    await precheck.getByRole('button',{name:/關\s*閉/}).click();await precheck.waitFor({state:'hidden'});
+    const native=await page.evaluate(()=>window.mailroomFixture.items.repair);assert.equal(native.status,'RECEIVED');assert.equal(native.version,7);assert.equal(native.custodianId,'clerk');
+    console.log('offline workbench: physical return acceptance');
     await go("returned");
     await drawer().getByText("技师本人", { exact: true }).waitFor();
     assert.equal(
@@ -334,6 +309,7 @@ test(
       .getByRole("button", { name: "登記實際寄出", exact: true })
       .first()
       .waitFor();
+    console.log('offline workbench: outbound dispatch');
     await go("ready");
     await page.evaluate(() => { void window.mailroomRouter.navigate('/operations/mailroom?entityId=company&itemId=ready&probe=1'); });
     await drawer()
@@ -407,7 +383,7 @@ test(
       .getByText("承運商持有（寄回顧客途中）", { exact: true })
       .waitFor();
     await drawer()
-      .locator(".mailroom-dispatch-record").getByText("待串接", { exact: true })
+      .locator(".mailroom-dispatch-record").getByText("待核對歷史寄出", { exact: true })
       .waitFor();
     assert.equal(
       await drawer()
@@ -455,6 +431,7 @@ test(
     assert.equal(await page.getByRole("dialog").filter({ hasText: "目前收發工作有未保存的修改" }).count(), 0);
 
     // Stale pending requests survive leaving, and never turn into a new key or automatic send.
+    console.log('offline workbench: outbound dispatch');
     await go("ready");
     await page.evaluate(command => {
       sessionStorage.setItem('corely.mailroom.dispatch.v1:company:clerk:ready', JSON.stringify({ schema: 1, entityId: 'company', userId: 'clerk', itemId: 'ready', command }));
@@ -480,3 +457,52 @@ test(
     assert.deepEqual(errors, []);
   },
 );
+
+test('mismatch exception uses the original inspect command and preserves actual identity, evidence and CSR routing', { skip: !executablePath && 'No existing browser', timeout: 60000 }, async t => {
+  const cacheDir=mkdtempSync(join(tmpdir(),'corely-mailroom-mismatch-')),virtual='\0mailroom-mismatch-fixture';
+  const mismatchApi=mockApi.replace('window.mailroomFixture=state;', `state.invalidCsr=true;state.notifications=[];state.items.repair.sku='ACTUAL-DIFFERENT-SKU';state.items.repair.serialNumber='ACTUAL-DIFFERENT-SN';window.mailroomFixture=state;`).replace("if(body.action==='inspect'){", `if(body.action==='inspect'){
+    if(state.invalidCsr)throw {response:{status:400,data:{message:'無法確認此售後案件目前的承辦客服'}}};
+    if(body.matchResult!=='MISMATCH')throw Error('Mismatch-only entry cannot submit MATCH');
+    item.receipt.customerServiceUserId='csr';item.nextUserId=null;
+    item.history.push({id:'action-mismatch',actorName:'收發人員',action:'inspect',toStatus:'MISMATCH',version:item.version+1,note:body.note,createdAt:'2026-10-16T00:00:00Z'});
+    item.deliverySummary=[{target:'AFTER_SALES',status:'PENDING',count:1},{target:'AI_CUSTOMER_SERVICE',status:'PENDING',count:1}];
+    state.notifications.push({userId:'csr',category:'mailroom',data:{itemId:item.id,entityId:body.entityId}});`);
+  const server=await createServer({root,cacheDir,configFile:false,server:{host:'127.0.0.1',port:0,hmr:false},plugins:[react(),{
+    name:'offline-native-mismatch-exception',resolveId(id){if(id==='virtual:mailroom-mismatch-fixture')return virtual;},
+    load(id){
+      if(id===virtual)return fixture;
+      if(id.endsWith('/src/services/api.ts'))return mismatchApi;
+      if(id.endsWith('/src/contexts/AuthContext.tsx'))return `const user={id:'clerk',roles:[],permissions:['mailroom:read','mailroom:update','mailroom:create']};export const useAuth=()=>({user});`;
+      if(id.endsWith('/src/services/websocket.service.ts'))return 'export const webSocketService={subscribe:()=>()=>{}};';
+    },configureServer(vite){vite.middlewares.use(async(req,res,next)=>{
+      if(!req.url?.startsWith('/__mismatch-exception'))return next();
+      try{res.setHeader('Content-Type','text/html');res.end(await vite.transformIndexHtml('/__mismatch-exception','<html><body style="margin:0"><div id="root"></div><script type="module" src="/@id/virtual:mailroom-mismatch-fixture"></script></body></html>'));}catch(error){next(error);}
+    });},
+  }]});
+  await server.listen();const origin=`http://127.0.0.1:${server.httpServer.address().port}`;
+  const browser=await chromium.launch({executablePath,headless:true});t.after(async()=>{await browser.close();await server.close();rmSync(cacheDir,{recursive:true,force:true});});
+  const page=await browser.newPage({viewport:{width:1280,height:1000}});page.setDefaultTimeout(7000);
+  const errors=[],external=[],httpWrites=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.route('**/*',route=>{const request=route.request();if(new URL(request.url()).origin!==origin){external.push(request.url());return route.abort();}if(request.method()!=='GET'){httpWrites.push(request.url());return route.abort();}return route.continue();});
+  await page.goto(origin+'/__mismatch-exception?item=repair');
+  const drawer=page.locator('.ant-drawer-content').filter({has:page.getByText('物件進度與交接',{exact:true})});
+  await drawer.getByRole('button',{name:'收發初檢',exact:true}).waitFor();
+  const entry=drawer.getByRole('button',{name:'回報品項差異',exact:true});assert.doesNotMatch(await entry.getAttribute('class'),/ant-btn-primary|ant-btn-variant-solid/);await entry.click();
+  assert.equal(await drawer.locator('#matchResult').isDisabled(),true);assert.equal(await drawer.getByText('一致，通知維修簽收',{exact:true}).count(),0);assert.equal(await drawer.locator('#nextUserId').count(),0);
+  assert.equal(await drawer.locator('#sku').inputValue(),'ACTUAL-DIFFERENT-SKU');assert.equal(await drawer.locator('#serialNumber').inputValue(),'ACTUAL-DIFFERENT-SN');
+  const save=drawer.getByRole('button',{name:/確認儲存$/});await save.click();await drawer.getByText('請填寫處理結果',{exact:true}).waitFor();
+  await drawer.locator('#note').fill('實收 SKU 與 SN 和來源申報不同');await save.click();await drawer.getByText('請附上至少一張實物照片。',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>window.mailroomFixture.posts.length),0);
+  const png=Buffer.from(await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=2;return canvas.toDataURL('image/png').split(',')[1];}),'base64');
+  await drawer.locator('.mailroom-action input[type="file"]').setInputFiles({name:'synthetic-mismatch.png',mimeType:'image/png',buffer:png});await drawer.getByAltText('待上傳照片 1',{exact:true}).waitFor();
+  await save.click();await drawer.getByText('無法確認此售後案件目前的承辦客服',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>window.mailroomFixture.items.repair.status),'RECEIVED');
+  assert.equal(await drawer.locator('#note').inputValue(),'實收 SKU 與 SN 和來源申報不同');await drawer.getByAltText('待上傳照片 1',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.mailroomFixture.invalidCsr=false;});await save.click();await drawer.getByText('品項不符，待客服確認',{exact:true}).waitFor();
+  const state=await page.evaluate(()=>({posts:window.mailroomFixture.posts,item:window.mailroomFixture.items.repair,notifications:window.mailroomFixture.notifications}));
+  assert.equal(state.posts.length,2);assert.deepEqual(state.posts[0],state.posts[1]);const command=state.posts[1];assert.equal(command.path,'/mailroom/items/repair/actions');
+  assert.deepEqual(Object.keys(command.body).sort(),['action','entityId','evidence','expectedVersion','matchResult','note','productName','requestId','serialNumber','sku'].sort());
+  assert.equal(command.body.action,'inspect');assert.equal(command.body.matchResult,'MISMATCH');assert.equal(command.body.expectedVersion,7);assert.equal(command.body.sku,'ACTUAL-DIFFERENT-SKU');assert.equal(command.body.serialNumber,'ACTUAL-DIFFERENT-SN');assert.equal(command.body.evidence.length,1);
+  assert.equal(state.item.status,'MISMATCH');assert.equal(state.item.version,8);assert.equal(state.item.location,'收發櫃A');assert.equal(state.item.custodianId,'clerk');assert.equal(state.item.physicalCustody,'MAILROOM');assert.equal(state.item.nextUserId,null);assert.equal(state.item.receipt.customerServiceUserId,'csr');
+  assert.equal(state.item.declared.sku,'SKU-1');assert.equal(state.item.declared.serialNumber,'SN-1');assert.equal(state.item.history.at(-1).action,'inspect');assert.deepEqual(state.item.deliverySummary.map(row=>row.target),['AFTER_SALES','AI_CUSTOMER_SERVICE']);assert.equal(state.notifications.length,1);assert.equal(state.notifications[0].userId,'csr');
+  assert.equal(await drawer.getByRole('button',{name:'回報品項差異',exact:true}).count(),0);assert.equal(await page.evaluate(()=>window.mailroomFixture.calls.some(call=>call.path.startsWith('/mailroom/prechecks'))),false);
+  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);assert.deepEqual(httpWrites,[]);t.diagnostic(JSON.stringify({offlineMock:true,posts:state.posts.length,action:command.body.action,matchResult:command.body.matchResult,nativeStatus:state.item.status,errors,external,httpWrites}));
+});

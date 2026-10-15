@@ -26,6 +26,10 @@ import {
   repairOverview,
   repairPhoto,
 } from './repair-list.contract';
+import {
+  precheckIdentityHash,
+  type PrecheckItem,
+} from './mailroom-precheck.contract';
 
 const COMPANY = 'synthetic-company';
 const USER = 'synthetic-technician';
@@ -176,7 +180,13 @@ function fixture() {
     deliveryCreate: forbiddenWrite(),
     inventoryCreate: forbiddenWrite(),
     notify: forbiddenWrite(),
-    sync: forbiddenWrite(),
+  };
+  // Source progress is a scoped GET, not a business writer. The immutable
+  // 470a baseline already calls this reader for the six queue membership cases.
+  const reads = {
+    cases: jest
+      .fn<Promise<{ items: never[] }>, [string, string?, string?, unknown?]>()
+      .mockResolvedValue({ items: [] }),
   };
   const prisma = {
     user: {
@@ -242,6 +252,7 @@ function fixture() {
       update: writes.itemUpdate,
     },
     afterSalesStockUnit: { findMany: jest.fn().mockResolvedValue([]) },
+    mailroomPrecheckDocument: { findMany: jest.fn().mockResolvedValue([]) },
     mailroomReceipt: { update: writes.receiptUpdate },
     mailroomAction: { create: writes.actionCreate },
     mailroomTask: { updateMany: writes.taskUpdate },
@@ -253,7 +264,7 @@ function fixture() {
   const service = new MailroomService(
     prisma as unknown as Dependencies[0],
     { sendToUser: writes.notify } as unknown as Dependencies[1],
-    { cases: writes.sync } as unknown as Dependencies[2],
+    { cases: reads.cases } as unknown as Dependencies[2],
   );
   const list = (query: Partial<MailroomQuery> = {}) =>
     service.list(USER, {
@@ -263,7 +274,7 @@ function fixture() {
     });
   const photo = (id = 'mine', entityId = COMPANY) =>
     service.repairPhoto(USER, entityId, id);
-  return { service, prisma, rows, state, writes, list, photo };
+  return { service, prisma, rows, state, writes, reads, list, photo };
 }
 
 const EXPECTED_COUNTS = {
@@ -302,6 +313,68 @@ const MEMBERSHIP = {
 
 describe('repair list totals, native identity and authorized photo', () => {
   const originalEnabled = process.env.MAILROOM_ENABLED;
+  it('projects only precheck metadata and a private native thumbnail without exposing draft contents', async () => {
+    process.env.MAILROOM_ENABLED = 'true';
+    const f = fixture(),
+      native = f.rows.find((row) => row.id === 'pool')!;
+    Object.assign(native, {
+      receiptId: native.receipt.id,
+      productId: null,
+      declared: null,
+    });
+    f.prisma.mailroomPrecheckDocument.findMany.mockResolvedValue([
+      {
+        id: 'precheck-pool',
+        entityId: COMPANY,
+        itemId: native.id,
+        revision: 3,
+        status: 'SUBMITTED',
+        identityHash: precheckIdentityHash(native as unknown as PrecheckItem),
+        template: null,
+        savedById: 'clerk',
+        savedByName: 'SYNTHETIC EDITOR',
+        savedAt: new Date('2026-10-16T00:00:00Z'),
+        submittedById: 'clerk',
+        submittedAt: new Date('2026-10-16T00:00:00Z'),
+        data: {
+          checks: [{ note: 'PRIVATE_PRECHECK_NOTE' }],
+          evidence: ['PRIVATE_PRECHECK_PHOTO'],
+        },
+      },
+    ]);
+    const result = await f.list({ repairScope: 'acceptance' });
+    expect(result.items[0].precheck).toMatchObject({
+      stage: 'SUBMITTED',
+      revision: 3,
+      savedByName: 'SYNTHETIC EDITOR',
+    });
+    expect(result.items[0].evidenceThumbnailUrl).toBe(
+      '/mailroom/prechecks/items/pool/photo',
+    );
+    expect(JSON.stringify(result)).not.toMatch(
+      /PRIVATE_PRECHECK_NOTE|PRIVATE_PRECHECK_PHOTO|FINANCE_SECRET|PRIVATE_ATTACHMENT|sourceSnapshot/,
+    );
+    expect(f.prisma.mailroomPrecheckDocument.findMany).toHaveBeenCalledWith({
+      select: {
+        itemId: true,
+        revision: true,
+        status: true,
+        identityHash: true,
+        savedById: true,
+        savedByName: true,
+        savedAt: true,
+        submittedAt: true,
+      },
+      where: {
+        OR: expect.arrayContaining([
+          { entityId: COMPANY, itemId: 'pool' },
+        ]) as unknown[],
+      },
+    });
+    native.evidence = ['https://example.invalid/remote.png'];
+    const withoutPhoto = await f.list({ repairScope: 'acceptance' });
+    expect(withoutPhoto.items[0].evidenceThumbnailUrl).toBeNull();
+  });
   beforeEach(() => {
     process.env.MAILROOM_ENABLED = 'true';
   });
@@ -318,6 +391,8 @@ describe('repair list totals, native identity and authorized photo', () => {
       expect(result.items.map((item) => item.id)).toEqual(MEMBERSHIP[scope]);
       expect(result.total).toBe(MEMBERSHIP[scope].length);
       expect(result.queueCounts).toEqual(EXPECTED_COUNTS);
+      for (const call of f.reads.cases.mock.calls)
+        expect(call[0]).toBe(COMPANY);
       for (const write of Object.values(f.writes))
         expect(write).not.toHaveBeenCalled();
     },

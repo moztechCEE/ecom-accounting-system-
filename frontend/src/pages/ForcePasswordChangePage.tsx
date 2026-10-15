@@ -1,16 +1,18 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Alert, Button, Form, Input, Typography, message } from 'antd'
 import { MailOutlined, LockOutlined } from '@ant-design/icons'
 import { motion } from 'framer-motion'
 import BrandMark from '../components/BrandMark'
 import { authService } from '../services/auth.service'
 import { useAuth } from '../contexts/AuthContext'
+import { itemLoginPath } from '../utils/mailroom-item-link'
 
 const { Title, Text } = Typography
 
 const ForcePasswordChangePage: React.FC = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { refreshCurrentUser, logout } = useAuth()
   const [loading, setLoading] = React.useState(false)
   const [form] = Form.useForm()
@@ -35,8 +37,9 @@ const ForcePasswordChangePage: React.FC = () => {
       })
       await refreshCurrentUser()
       message.success('密碼已更新，請重新使用新密碼登入')
-      if (await logout()) navigate('/login', { replace: true })
-    } catch (error: any) {
+      if (await logout()) navigate(itemLoginPath(location), { replace: true })
+    } catch (caught: unknown) {
+      const error = caught as { response?: { data?: { message?: string } }; message?: string }
       const errorMsg =
         error?.response?.data?.message ||
         error?.message ||

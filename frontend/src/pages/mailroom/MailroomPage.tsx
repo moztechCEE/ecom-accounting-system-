@@ -49,8 +49,11 @@ import {
 } from "./model";
 import TabletAcceptance from "./TabletAcceptance";
 import RecipientPicker from "./RecipientPicker";
-import { MAILROOM_QUEUES, mailroomNextStep, needsInspectionPhoto, matchesMailroomSearch, canDispatch, matchesDispatchReceipt } from "./mailroom-workflow";
+import { MAILROOM_QUEUES, mailroomNextStep, needsInspectionPhoto, matchesMailroomSearch, canDispatch, matchesDispatchReceipt, canOpenPrecheck, mismatchInspectionValues } from "./mailroom-workflow";
 import ReceiptDrawer from "./ReceiptDrawer";
+import ReceivingItemList from "./ReceivingItemList";
+import InitialInspectionDrawer from "./InitialInspectionDrawer";
+import MailroomLabelPrint from "./MailroomLabelPrint";
 import StorageWorkbench from "./StorageWorkbench";
 import OutboundWorkbench from "./OutboundWorkbench";
 import ArrivalSummary from "./ArrivalSummary";
@@ -136,19 +139,23 @@ export default function MailroomPage({
     [storageRefreshRevision, setStorageRefreshRevision] = useState(0),
     [createCategory, setCreateCategory] = useState(""),
     [arrivalRevision, setArrivalRevision] = useState(0);
+  const [receivingSelection, setReceivingSelection] = useState<string[]>([]), [inspectionIds, setInspectionIds] = useState<string[]>([]), [inspectionOpen, setInspectionOpen] = useState(false), [createdItemIds, setCreatedItemIds] = useState<string[]>([]);
   const selectedId = params.get("itemId");
   const outboundOrderId = params.get("outboundOrderId") || undefined;
   const outboundTarget = params.get("tab") === "outbound" ? outboundOrderId || "outbound" : "";
   const previousOutboundTarget = useRef(outboundTarget);
-  const drafts = useRef({ receipt: { dirty: false, busy: false } as MailroomDraftState, detail: { dirty: false, busy: false } as MailroomDraftState, storage: { dirty: false, busy: false } as MailroomDraftState, outbound: { dirty: false, busy: false } as MailroomDraftState });
+  const drafts = useRef({ labelSelection: { dirty: false, busy: false } as MailroomDraftState, labelCreated: { dirty: false, busy: false } as MailroomDraftState, inspection: { dirty: false, busy: false } as MailroomDraftState, receipt: { dirty: false, busy: false } as MailroomDraftState, detail: { dirty: false, busy: false } as MailroomDraftState, storage: { dirty: false, busy: false } as MailroomDraftState, outbound: { dirty: false, busy: false } as MailroomDraftState });
   const dirty = useRef(false);
-  const updateDraft = useCallback((scope: "receipt" | "detail" | "storage" | "outbound", state: MailroomDraftState) => {
+  const updateDraft = useCallback((scope: "receipt" | "detail" | "storage" | "outbound" | "inspection" | "labelSelection" | "labelCreated", state: MailroomDraftState) => {
     drafts.current[scope] = state;
     dirty.current = Object.values(drafts.current).some(value => value.dirty || value.busy);
   }, []);
   const updateReceiptDraft = useCallback((state: MailroomDraftState) => updateDraft("receipt", state), [updateDraft]);
   const updateStorageDraft = useCallback((state: MailroomDraftState) => updateDraft("storage", state), [updateDraft]);
   const updateDetailDraft = useCallback((state: MailroomDraftState) => updateDraft("detail", state), [updateDraft]);
+  const updateSelectedLabelBusy = useCallback((busy: boolean) => updateDraft("labelSelection", { dirty: false, busy }), [updateDraft]);
+  const updateCreatedLabelBusy = useCallback((busy: boolean) => updateDraft("labelCreated", { dirty: false, busy }), [updateDraft]);
+  const updateInspectionDraft = useCallback((state: MailroomDraftState) => updateDraft("inspection", state), [updateDraft]);
   const updateOutboundDraft = useCallback((state: MailroomDraftState) => updateDraft("outbound", state), [updateDraft]);
   const discardConfirmation = useMemo(() => createMailroomDiscardConfirmation(
     () => ({ dirty: dirty.current, busy: Object.values(drafts.current).some(value => value.busy) }),
@@ -165,7 +172,7 @@ export default function MailroomPage({
     () => message.info("正在保存或讀取照片，請稍候。"),
   ), [modal, message]);
   const confirmDiscard = useCallback(async () => {
-    if (drafts.current.storage.uncertain || drafts.current.receipt.uncertain) { message.info("請先重試原操作，確認保存結果後再離開。"); return false; }
+    if (drafts.current.storage.uncertain || drafts.current.receipt.uncertain || drafts.current.inspection.uncertain) { message.info("請先重試原操作，確認保存結果後再離開。"); return false; }
     return discardConfirmation();
   }, [discardConfirmation, message]);
   useRepairNavigationGuard(dirty, confirmDiscard);
@@ -173,7 +180,7 @@ export default function MailroomPage({
   const guardChange = useCallback((change: () => void) => {
     if (Object.values(drafts.current).some(value => value.busy)) { void confirmDiscard(); return; }
     navigationGate(() => {
-      drafts.current = { receipt: { dirty: false, busy: false }, detail: { dirty: false, busy: false }, storage: { dirty: false, busy: false }, outbound: { dirty: false, busy: false } };
+      drafts.current = { labelSelection: { dirty: false, busy: false }, labelCreated: { dirty: false, busy: false }, inspection: { dirty: false, busy: false }, receipt: { dirty: false, busy: false }, detail: { dirty: false, busy: false }, storage: { dirty: false, busy: false }, outbound: { dirty: false, busy: false } };
       dirty.current = false;
       setStorageReset(value => value + 1);
       change();
@@ -184,13 +191,16 @@ export default function MailroomPage({
     previousOutboundTarget.current = outboundTarget;
     if (mode === "mailroom" && outboundTarget) guardChange(() => { setListTab("outbound"); setStatus("READY_FOR_DISPATCH"); setPage(1); setSearch(""); });
   }, [mode, outboundTarget, guardChange]);
+  useEffect(() => { setRows([]); setReceivingSelection([]); setInspectionOpen(false); setInspectionIds([]); setCreatedItemIds([]); }, [entityId]);
+  useEffect(() => { setReceivingSelection([]); }, [page, status, search]);
+  function openInspection(ids: string[]) { guardChange(() => { setCreate(false); const next = new URLSearchParams(params); next.delete("itemId"); setParams(next); setInspectionIds(ids); setInspectionOpen(true); }); }
   function startReceipt(category: string, source?: Source) {
     guardChange(() => {
       const next = new URLSearchParams(params); next.delete("itemId"); setParams(next);
       setCreateSource(source); setCreateCategory(category); setCreate(true);
     });
   }
-  useEffect(() => { if (selectedId) setCreate(false); }, [selectedId]);
+  useEffect(() => { if (selectedId) { setCreate(false); setInspectionOpen(false); } }, [selectedId]);
   const enabled = mailroomEnabled();
   const canMail = hasPermission(user, "mailroom:update"),
     canRepair = hasPermission(user, "repair_workbench:update"),
@@ -435,7 +445,13 @@ export default function MailroomPage({
               }}
             />
           </div>
-          <Table<Item>
+          {mode === "mailroom" && listTab === "received" ? <>
+            <Space wrap className="mailroom-receiving-actions">
+              {receivingSelection.length > 0 && <><Text>已選 {receivingSelection.length} 件</Text><Button disabled={!canMail || receivingSelection.some(id => !rows.some(row => row.id === id && canOpenPrecheck(row)))} onClick={() => openInspection(receivingSelection)}>批次初檢</Button><MailroomLabelPrint entityId={entityId} itemIds={receivingSelection} onBusyChange={updateSelectedLabelBusy} /></>}
+              {!!createdItemIds.length && <span className="mailroom-receipt-labels"><Text>剛收 {createdItemIds.length} 件</Text><MailroomLabelPrint entityId={entityId} itemIds={createdItemIds} onBusyChange={updateCreatedLabelBusy} /></span>}
+            </Space>
+            <ReceivingItemList entityId={entityId} items={visible} total={total} page={page} loading={loading} selectedIds={receivingSelection} onSelect={setReceivingSelection} onPage={setPage} onOpen={openItem} onInspect={openInspection} canEdit={canMail} />
+          </> : <Table<Item>
             rowKey="id"
             loading={loading}
             dataSource={visible}
@@ -543,7 +559,7 @@ export default function MailroomPage({
                 ),
               },
             ]}
-          />
+          />}
         </Card>
       ) : null}
       <Drawer
@@ -568,6 +584,7 @@ export default function MailroomPage({
               canRepair={canRepair}
               canReview={canReview}
               canAdmin={isAdminUser(user)}
+              onInspect={() => openInspection([detail.id])}
               onSaved={async () => {
                 await Promise.all([loadDetail(), refresh()]);
                 setStorageRefreshRevision(value => value + 1);
@@ -578,6 +595,7 @@ export default function MailroomPage({
           ) : null}
         </Spin>
       </Drawer>
+      <InitialInspectionDrawer key={entityId + ":inspection"} entityId={entityId} itemIds={inspectionIds} open={inspectionOpen} feedback={message} guardChange={guardChange} onDraftChange={updateInspectionDraft} onClose={() => setInspectionOpen(false)} onSaved={() => { void refresh(); }} />
       <ReceiptDrawer
         key={entityId + ":" + mode}
         feedback={message}
@@ -589,13 +607,14 @@ export default function MailroomPage({
         entityId={entityId}
         people={people}
         onClose={() => setCreate(false)}
-        onCreated={(id) => {
+        onCreated={(ids) => {
+          setCreatedItemIds(ids);
           setCreate(false);
           void refresh();
           setStorageRefreshRevision(value => value + 1);
           setArrivalRevision((value) => value + 1);
           setListTab("received");
-          openItem(id);
+          if (ids.length === 1) openItem(ids[0]);
         }}
       />
     </div>
@@ -894,6 +913,7 @@ function ItemDetail({
   canRepair,
   canReview,
   canAdmin,
+  onInspect,
   onSaved,
 }: {
   feedback: RepairMessage;
@@ -907,6 +927,7 @@ function ItemDetail({
   canRepair: boolean;
   canReview: boolean;
   canAdmin: boolean;
+  onInspect: () => void;
   onSaved: () => Promise<void>;
 }) {
   const message = feedback;
@@ -989,12 +1010,8 @@ function ItemDetail({
     item.status === "RECEIVED"
   )
     actions.push("identify");
-  if (
-    canMail &&
-    item.status === "RECEIVED" &&
-    item.receipt.category === "REPAIR"
-  )
-    actions.push("inspect");
+
+  if (canMail && item.status === "RECEIVED" && item.receipt.category === "REPAIR" && item.receipt.sourceCaseId) actions.push("inspect");
   if (
     canMail &&
     [
@@ -1083,7 +1100,6 @@ function ItemDetail({
     identifyGeneral ||
     (action === "resolve_mismatch" && item.receipt.category !== "RETURN") ||
     action === "assign" ||
-    (action === "inspect" && match === "MATCH") ||
     (action === "grade" && match === "MATCH" && ["B", "C"].includes(grade));
   const targetPeople = people.filter((p) =>
     identifyGeneral || (action === "assign" && item.status === "WAITING_PICKUP")
@@ -1107,6 +1123,7 @@ function ItemDetail({
       sku: item.sku || "",
       serialNumber: item.serialNumber || "",
       location: item.location,
+      ...(value === "inspect" ? { matchResult: "MISMATCH" } : {}),
       ...(value === "grade" && item.returnInspection
         ? {
             returnInspection: {
@@ -1132,7 +1149,7 @@ function ItemDetail({
         return;
       }
       const body = JSON.stringify({
-        ...(action === "send_intake" ? { csrUserId: values.csrUserId, note: values.note } : action === "dispatch" ? { carrier: values.carrier.trim(), trackingNumber: values.trackingNumber.trim(), confirmedItems: values.confirmedItems, note: values.note?.trim() } : values),
+        ...(action === "send_intake" ? { csrUserId: values.csrUserId, note: values.note } : action === "dispatch" ? { carrier: values.carrier.trim(), trackingNumber: values.trackingNumber.trim(), confirmedItems: values.confirmedItems, note: values.note?.trim() } : action === "inspect" ? mismatchInspectionValues(values) : values),
         entityId,
         action,
         expectedVersion: item.version,
@@ -1378,9 +1395,10 @@ function ItemDetail({
           </Space>
         </Image.PreviewGroup>
       ) : null}
-      {(actions.length || canTablet) ? <Divider orientation="left">更新進度</Divider> : null}
-      {actions.length || canTablet ? (
+      {(actions.length || canTablet || (canMail && canOpenPrecheck(item))) ? <Divider orientation="left">更新進度</Divider> : null}
+      {actions.length || canTablet || (canMail && canOpenPrecheck(item)) ? (
         <Space wrap>
+          {canMail && canOpenPrecheck(item) && <Button type="primary" size="large" disabled={busy} onClick={onInspect}>收發初檢</Button>}
           {canTablet ? (
             <Button
               type="primary"
@@ -1399,13 +1417,13 @@ function ItemDetail({
               key={value}
               disabled={busy}
               type={
-                action === value || (!action && index === 0)
+                value !== "inspect" && (action === value || (!action && index === 0))
                   ? "primary"
                   : "default"
               }
               onClick={() => choose(value)}
             >
-              {ACTIONS[value]}
+              {value === "inspect" ? "回報品項差異" : ACTIONS[value]}
             </Button>
           ))}
         </Space>
@@ -1418,7 +1436,7 @@ function ItemDetail({
         onSaved={onSaved}
       />
       {action ? (
-        <Card size="small" title={ACTIONS[action]} className="mailroom-action">
+        <Card size="small" title={action === "inspect" ? "回報品項差異" : ACTIONS[action]} className="mailroom-action">
           <Form
             form={form}
             disabled={busy || uncertain}
@@ -1522,14 +1540,9 @@ function ItemDetail({
                 rules={[{ required: true, message: "請核對後選擇" }]}
               >
                 <Select
-                  options={[
-                    {
-                      value: "MATCH",
-                      label:
-                        action === "grade"
-                          ? "一致，完成退貨檢查"
-                          : "一致，通知維修簽收",
-                    },
+                  disabled={action === "inspect"}
+                  options={action === "inspect" ? [{ value: "MISMATCH", label: "不一致，交客服重新確認" }] : [
+                    { value: "MATCH", label: "一致，完成退貨檢查" },
                     { value: "MISMATCH", label: "不一致，交客服重新確認" },
                   ]}
                 />

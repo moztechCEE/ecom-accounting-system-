@@ -292,6 +292,10 @@ describe('repair workbench company overview and claim access', () => {
       }),
     ];
     prisma = {
+      mailroomPrecheckDocument: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       mailroomItem: {
         findMany: jest.fn(async ({ where }: any) =>
           rows.filter((row) => matches(row, where)),

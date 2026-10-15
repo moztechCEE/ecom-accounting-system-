@@ -18,6 +18,20 @@ const executablePath = [
   "/usr/bin/chromium",
 ].find(existsSync);
 const root = fileURLToPath(new URL("../", import.meta.url));
+const receiptRoute = "/mailroom/prechecks/receipts";
+const resultsPath = process.env.MAILROOM_RECEIPT_RESULTS_PATH || "/tmp/mailroom-receipt-flow-dom-results-20261008.json";
+function assertReceiptPosts(commands, expectedKeys) {
+  const allowedKeys = new Set(["entityId", "category", "sourceCaseId", "sourceVersion", "recipientId", "carrier", "trackingNumber", "senderLabel", "location", "storageLocationId", "items", "requestId"]);
+  const allowedItemKeys = new Set(["productName", "productId", "sku", "barcode", "serialNumber", "evidence", "sourceItemId"]);
+  for (const { path, body } of commands) {
+    assert.equal(path, receiptRoute);
+    assert.deepEqual(Object.keys(body).filter(key => !allowedKeys.has(key)), [], "Receipt commands cannot add client policy or API mode fields");
+    for (const key of ["entityId", "category", "location", "items", "requestId"]) assert.ok(Object.hasOwn(body, key), "Missing receipt field: " + key);
+    if (expectedKeys) assert.deepEqual(Object.keys(body).sort(), [...expectedKeys].sort());
+    assert.match(body.requestId, /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i);
+    for (const item of body.items) assert.deepEqual(Object.keys(item).filter(key => !allowedItemKeys.has(key)), [], "Receipt items cannot add client policy or API mode fields");
+  }
+}
 function uniformPng(width, height) {
   function chunk(type, data) {
     const body = Buffer.concat([Buffer.from(type), data]);
@@ -41,7 +55,7 @@ import {createRoot} from 'react-dom/client';
 import {createMemoryRouter,RouterProvider} from 'react-router-dom';
 import MailroomPage from '/src/pages/mailroom/MailroomPage.tsx';
 window.__APP_CONFIG__={mailroomEnabled:true};
-const router=createMemoryRouter([{path:'/operations/mailroom',element:React.createElement(MailroomPage)},{path:'/other',element:React.createElement('h2',null,'其他工作台')}],{initialEntries:['/operations/mailroom?entityId=company']});
+const router=createMemoryRouter([{path:'/operations/mailroom',element:React.createElement('main',{style:{padding:'16px 12px'}},React.createElement(MailroomPage))},{path:'/other',element:React.createElement('h2',null,'其他工作台')}],{initialEntries:['/operations/mailroom?entityId=company']});
 window.receiptRouter=router;
 createRoot(document.getElementById('root')).render(React.createElement(RouterProvider,{router}));
 `;
@@ -65,21 +79,22 @@ export default {
  if(path==='/mailroom/people')return {data:clone(people)};
  if(path==='/mailroom/items')return {data:{items:Object.values(state.items).map(clone),total:Object.keys(state.items).length}};
  if(path.startsWith('/mailroom/items/'))return {data:clone(state.items[path.split('/')[3]])};
+ if(/^\\/mailroom\\/prechecks\\/items\\/[^/]+\\/photo$/.test(path)){const data=state.items[path.split('/')[4]].evidence[0],encoded=data.split(',')[1];return {data:new Blob([Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))],{type:'image/png'})};}
  if(path==='/mailroom/tasks')return {data:[]};
  if(path==='/mailroom/storage')return {data:{racks:[{id:'rack',code:'A',name:'收件貨架',zone:'RECEIVING',isActive:true},{id:'paused-rack',code:'P',name:'停用貨架',zone:'RECEIVING',isActive:false}],locations:[{id:'bin',rackId:'rack',code:'A1',name:'A1',isActive:true},{id:'inactive-bin',rackId:'rack',code:'A2',name:'停用格',isActive:false},{id:'paused-bin',rackId:'paused-rack',code:'P1',name:'P1',isActive:true}],unassigned:[],counts:{stored:0,unassigned:0},canManage:true}};
- if(path==='/mailroom/source-cases') {const search=(params.search||'').toLowerCase();return {data:{items:clone(state.sources.filter(s=>!search||[s.number,s.customerLabel,s.customerPhone].some(v=>v.toLowerCase().includes(search)))),nextCursor:null}};}
+ if(path==='/mailroom/source-cases') {const search=(params.search||'').toLowerCase();return {data:{items:clone(state.sources.filter(s=>!search||[s.number,s.customerLabel,s.customerPhone,...(s.reverseShipments||[]).map(shipment=>shipment.trackingNumber||'')].some(v=>v.toLowerCase().includes(search)))),nextCursor:null}};}
  if(path==='/mailroom/product-options'){const search=(params.search||'').toLowerCase();return {data:{items:clone(state.products.filter(p=>!search||[p.name,p.sku,p.barcode].some(v=>v.toLowerCase().includes(search))))}};}
  if(/^\\/mailroom\\/source-cases\\/[^/]+\\/attachments$/.test(path))return {data:{items:[{id:'image',fileName:path.split('/')[3]+'-案件照片.png',contentType:'image/png',scope:'CASE'}]}};
  if(path.endsWith('/media')){const binary=atob(state.mediaBase64);return {data:new Blob([Uint8Array.from(binary,c=>c.charCodeAt(0))],{type:'image/png'})};}
  throw Error('Unexpected GET '+path);
  },
- async post(path,body){state.posts.push({path,body:clone(body)});if(path!=='/mailroom/receipts')throw Error('Unexpected POST '+path);
+ async post(path,body){state.posts.push({path,body:clone(body)});if(path!=='/mailroom/prechecks/receipts')throw Error('Unexpected POST '+path);
  const known=state.committed[body.requestId];if(known){if(JSON.stringify(known.body)!==JSON.stringify(body))throw Error('Changed retry body');return {data:{itemIds:known.ids,duplicate:true}};}
- const id='created-'+(++state.created);const correspondence=['LETTER','PARCEL'].includes(body.category);const row=body.items[0];
- state.items[id]={id,label:'MR-SYNTHETIC',...row,status:correspondence?'WAITING_PICKUP':'RECEIVED',statusLabel:correspondence?'待同仁簽領':'已收到，待核對',matchResult:'PENDING',version:1,location:body.location,storageLocationId:body.storageLocationId,custodianId:'clerk',custodianName:'收發人員',nextUserId:body.recipientId||null,recipientId:body.recipientId||null,recipientName:correspondence?'收件同仁':null,nextUserName:correspondence?'收件同仁':null,repairOwnerId:null,physicalCustody:'MAILROOM',evidence:row.evidence||[],evidenceCount:row.evidence?.length||0,declared:null,history:[],deliverySummary:[],receipt:{...body,number:'MR-SYNTHETIC',sourceNumber:body.sourceCaseId?'DEV-R-1':null,receivedAt:'2026-10-08T00:00:00Z'},allowedIntakeActions:body.category==='UNMATCHED'?['send_intake']:[]};
- state.committed[body.requestId]={body:clone(body),ids:[id]};
+ const batch=++state.created;const correspondence=['LETTER','PARCEL'].includes(body.category);const ids=body.items.map((row,index)=>index===0?'created-'+batch:'created-'+batch+'-'+(index+1));
+ body.items.forEach((row,index)=>{const id=ids[index];state.items[id]={id,label:'MR-SYNTHETIC-'+(index+1),...row,status:correspondence?'WAITING_PICKUP':'RECEIVED',statusLabel:correspondence?'待同仁簽領':'已收到，待核對',matchResult:'PENDING',version:1,location:body.location,storageLocationId:body.storageLocationId,custodianId:'clerk',custodianName:'收發人員',nextUserId:body.recipientId||null,recipientId:body.recipientId||null,recipientName:correspondence?'收件同仁':null,nextUserName:correspondence?'收件同仁':null,repairOwnerId:null,physicalCustody:'MAILROOM',evidence:row.evidence||[],evidenceCount:row.evidence?.length||0,evidenceThumbnailUrl:!correspondence&&row.evidence?.length?'/mailroom/prechecks/items/'+id+'/photo':null,declared:null,history:[],deliverySummary:[],receipt:{...body,number:'MR-SYNTHETIC',sourceNumber:body.sourceCaseId?'DEV-R-1':null,receivedAt:'2026-10-08T00:00:00Z'},allowedIntakeActions:body.category==='UNMATCHED'?['send_intake']:[]};});
+ state.committed[body.requestId]={body:clone(body),ids};
  if(state.commitThenLose){state.commitThenLose=false;throw Error('合成已提交但回應遺失');}
- return {data:{itemIds:[id],duplicate:false}};
+ return {data:{itemIds:ids,duplicate:false}};
  }
 };
 `;
@@ -123,7 +138,7 @@ test(
                 response.end(
                   await vite.transformIndexHtml(
                     "/__receipt-flow",
-                    '<html><head><meta name="viewport" content="width=device-width,initial-scale=1" /></head><body><div id="root"></div><script type="module" src="/@id/virtual:mailroom-receipt-flow-fixture"></script></body></html>',
+                    '<html><head><meta name="viewport" content="width=device-width,initial-scale=1" /></head><body style="margin:0"><div id="root"></div><script type="module" src="/@id/virtual:mailroom-receipt-flow-fixture"></script></body></html>',
                   ),
                 );
               } catch (error) {
@@ -145,7 +160,7 @@ test(
     async function scene(name, run, viewport = { width: 1280, height: 970 }) {
       if (
         process.env.MAILROOM_RECEIPT_SCENE &&
-        !name.includes(process.env.MAILROOM_RECEIPT_SCENE)
+        !process.env.MAILROOM_RECEIPT_SCENE.split("|").some(filter => name.includes(filter))
       )
         return;
       await t.test(name, { timeout: 120000 }, async (child) => {
@@ -192,6 +207,7 @@ test(
           const state = await page.evaluate(() => ({
             gets: window.receiptFixture?.calls.length || 0,
             posts: window.receiptFixture?.posts.length || 0,
+            postContracts: (window.receiptFixture?.posts || []).map(({ path, body }) => ({ path, rootKeys: Object.keys(body).sort(), itemKeys: body.items.map(item => Object.keys(item).sort()), requestId: body.requestId, entityId: body.entityId, category: body.category, itemCount: body.items.length })),
             pending: Object.keys(window.receiptFixture?.pending || {}),
             plans: window.receiptFixture?.plans.length || 0,
             readers: window.receiptFixture?.photoReaders.length || 0,
@@ -262,10 +278,12 @@ test(
           drawer.getByRole("button", { name: "下一步", exact: true }).click();
         const posts = () => page.evaluate(() => window.receiptFixture.posts);
         async function selectSource(label = "DEV-R-1") {
-          await choose(
-            drawer.getByRole("combobox", { name: "搜尋售後案件", exact: true }),
-            label,
-          );
+          const previous = await page.evaluate(label => window.receiptFixture.calls.filter(call => call.path === '/mailroom/source-cases' && call.params.search === label).length, label);
+          const input = drawer.getByRole('combobox', { name: '搜尋售後案件', exact: true });
+          await input.press('ArrowDown'); await input.fill(label);
+          await page.waitForFunction(({label,previous}) => window.receiptFixture.calls.filter(call => call.path === '/mailroom/source-cases' && call.params.search === label).length > previous, {label,previous});
+          await dropdown().getByText(label, {exact:true}).click();
+          await page.locator('.ant-select-dropdown:visible').waitFor({state:'hidden'});
         }
         async function selectProduct(index = 0, label = "實收產品") {
           await choose(
@@ -304,7 +322,7 @@ test(
           await drawer
             .locator(".mailroom-receipt-item")
             .nth(index)
-            .locator('input[type="file"]')
+            .locator('input[type="file"][aria-label="加入實收照片"]')
             .setInputFiles({
               name: "synthetic.png",
               mimeType: "image/png",
@@ -330,6 +348,7 @@ test(
           tinyPhoto,
           upload,
         });
+        assertReceiptPosts(await posts());
         assert.deepEqual(errors, []);
         assert.deepEqual(external, []);
         assert.deepEqual(httpPosts, []);
@@ -348,6 +367,41 @@ test(
         completed = true;
       });
     }
+
+    await scene(
+      "smart-first lookup accepts phone name tracking and case, requires shipment selection and retains all unit IDs",
+      async ({page,drawer,dropdown,selectProduct,selectBin,next,upload,posts}) => {
+        await page.evaluate(()=>{const state=window.receiptFixture;state.sources=[{...state.source('source','REPAIR',2),statusLabel:'待收件',reverseShipments:[{id:'shipment-a',carrier:'物流甲',trackingNumber:'IN-A',status:'IN_TRANSIT',receivedAt:null,shippedAt:null},{id:'shipment-b',carrier:'物流乙',trackingNumber:'IN-B',status:'IN_TRANSIT',receivedAt:null,shippedAt:null}]}];});
+        const lookup=drawer.getByRole('combobox',{name:'搜尋售後案件',exact:true});
+        for(const query of ['0900000000','合成顧客','IN-B','DEV-R-1']) {
+          await lookup.fill(query);await dropdown().getByText('DEV-R-1',{exact:true}).waitFor();
+          await page.waitForFunction(query=>window.receiptFixture.calls.some(call=>call.path==='/mailroom/source-cases'&&call.params.search===query),query);
+        }
+        await dropdown().getByText('DEV-R-1',{exact:true}).click();
+        await drawer.getByText('待收件',{exact:true}).waitFor();
+        assert.equal(await drawer.locator('.mailroom-category-options input[value="REPAIR"]').isChecked(),true);
+        assert.equal(await drawer.locator('#carrier').inputValue(),'');assert.equal(await drawer.locator('#trackingNumber').inputValue(),'');
+        assert.equal(await drawer.locator('.mailroom-receipt-item').count(),2);
+        await selectProduct(0);await selectProduct(1);await selectBin();await next();
+        await drawer.getByText('請選擇本次收到的入件物流',{exact:true}).waitFor();assert.deepEqual(await posts(),[]);
+        await drawer.getByRole('combobox',{name:'選擇來源入件物流',exact:true}).press('ArrowDown');await dropdown().getByText('物流乙 · IN-B',{exact:true}).click();
+        assert.equal(await drawer.locator('#carrier').inputValue(),'物流乙');assert.equal(await drawer.locator('#trackingNumber').inputValue(),'IN-B');
+        await next();await upload(0);await upload(1);await next();await drawer.getByRole('button',{name:'確認並登記收件',exact:true}).click();
+        await page.getByText('剛收 2 件',{exact:true}).waitFor();
+        const commands=await posts();assert.equal(commands.length,1);assertReceiptPosts(commands,["entityId","category","sourceCaseId","sourceVersion","carrier","trackingNumber","location","storageLocationId","items","requestId"]);assert.equal(commands[0].body.items.length,2);
+        assert.equal(commands[0].body.carrier,'物流乙');assert.equal(commands[0].body.trackingNumber,'IN-B');assert.equal('status' in commands[0].body,false);assert.equal('reverseShipmentId' in commands[0].body,false);
+        assert.deepEqual(await page.evaluate(()=>window.receiptFixture.committed[window.receiptFixture.posts[0].body.requestId].ids),['created-1','created-1-2']);
+        assert.equal(await page.locator('.mailroom-receiving-row').count(),2);
+        await drawer.waitFor({state:'hidden'});
+        await page.locator('.mailroom-receiving-photo img').nth(1).waitFor();
+        await page.screenshot({path:'/tmp/corely-mailroom-smart-intake-offline-desktop-20261016.png',fullPage:true});
+        await page.setViewportSize({width:320,height:740});
+        const geometry=await page.evaluate(()=>({viewport:innerWidth,documentWidth:document.documentElement.scrollWidth,bodyWidth:document.body.scrollWidth}));
+        writeFileSync('/tmp/corely-mailroom-smart-intake-offline-320-20261016.json',JSON.stringify(geometry,null,2));
+        await page.screenshot({path:'/tmp/corely-mailroom-smart-intake-offline-320-20261016.png',fullPage:true});
+        assert.ok(geometry.documentWidth<=geometry.viewport,'Receiving list overflows: '+JSON.stringify(geometry));
+      },
+    );
 
     await scene(
       "known repair selects actual catalog product without copying declared SKU/SN, then saves exactly once",
@@ -414,7 +468,7 @@ test(
         await page.waitForFunction(() => window.receiptFixture.created === 1);
         const requests = await posts();
         assert.equal(requests.length, 1);
-        assert.equal(requests[0].path, "/mailroom/receipts");
+        assertReceiptPosts(requests, ["entityId", "category", "sourceCaseId", "sourceVersion", "location", "storageLocationId", "items", "requestId"]);
         assert.equal(requests[0].body.sourceCaseId, "source");
         assert.equal(requests[0].body.sourceVersion, "2026-10-08T00:00:00Z");
         assert.equal(requests[0].body.storageLocationId, "bin");
@@ -489,7 +543,10 @@ test(
           .getByRole("button", { name: "確認並登記收件", exact: true })
           .click();
         await page.waitForFunction(() => window.receiptFixture.created === 1);
-        const body = (await posts())[0].body;
+        const requests = await posts();
+        assert.equal(requests.length, 1);
+        assertReceiptPosts(requests, ["entityId", "category", "recipientId", "senderLabel", "location", "items", "requestId"]);
+        const body = requests[0].body;
         assert.equal(body.recipientId, "colleague");
         assert.equal(body.senderLabel, "合成寄件公司");
         assert.equal(body.location, "信件暫存桌");
@@ -526,7 +583,7 @@ test(
         await page.evaluate(() => {
           window.__holdFileReads = true;
         });
-        await drawer.locator('input[type="file"]').setInputFiles({
+        await drawer.locator('input[type="file"][aria-label="加入實收照片"]').setInputFiles({
           name: "synthetic.png",
           mimeType: "image/png",
           buffer: await tinyPhoto(),
@@ -593,6 +650,8 @@ test(
           () => window.receiptFixture.posts.length === 2,
         );
         const requests = await posts();
+        assert.equal(requests.length, 2);
+        assertReceiptPosts(requests, ["entityId", "category", "location", "storageLocationId", "items", "requestId"]);
         assert.deepEqual(requests[0].body, requests[1].body);
         assert.equal(requests[0].body.category, "UNMATCHED");
         assert.equal("sourceCaseId" in requests[0].body, false);
@@ -608,7 +667,7 @@ test(
     );
 
     await scene(
-      "return receipt requires evidence and is usable at 390px without changing inspection status",
+      "return receipt requires evidence and is usable at 320px without changing inspection status",
       async ({
         page,
         drawer,
@@ -639,7 +698,7 @@ test(
           await upload(0, undefined, photo);
         assert.equal(
           await drawer
-            .getByRole("button", { name: /拍照／選擇照片$/ })
+            .getByRole("button", { name: "拍攝實收照片", exact: true })
             .isDisabled(),
           true,
         );
@@ -648,12 +707,18 @@ test(
           path: "/tmp/mailroom-receipt-summary-390-20261008.png",
         });
         const geometry = await drawer.boundingBox();
-        assert.ok(geometry.x >= 0 && geometry.x + geometry.width <= 391);
+        assert.ok(geometry.x >= 0 && geometry.x + geometry.width <= 321);
+        const geometry320=await page.evaluate(()=>({viewport:innerWidth,width:document.documentElement.scrollWidth,overflow:[...document.querySelectorAll('body *')].filter(element=>{const box=element.getBoundingClientRect();return box.width>0&&box.right>innerWidth+1;}).slice(-20).map(element=>({tag:element.tagName,className:element.className,text:element.textContent?.slice(0,70),right:element.getBoundingClientRect().right,width:element.getBoundingClientRect().width,scroll:element.scrollWidth}))}));
+        writeFileSync('/tmp/corely-mailroom-receipt-summary-320-geometry-20261016.json',JSON.stringify(geometry320,null,2));
+        assert.ok(geometry320.width<=geometry320.viewport,JSON.stringify(geometry320));
         await drawer
           .getByRole("button", { name: "確認並登記收件", exact: true })
           .click();
         await page.waitForFunction(() => window.receiptFixture.created === 1);
-        const body = (await posts())[0].body;
+        const requests = await posts();
+        assert.equal(requests.length, 1);
+        assertReceiptPosts(requests, ["entityId", "category", "sourceCaseId", "sourceVersion", "location", "storageLocationId", "items", "requestId"]);
+        const body = requests[0].body;
         assert.equal(body.category, "RETURN");
         assert.equal(body.items[0].evidence.length, 4);
         const item = await page.evaluate(
@@ -662,7 +727,7 @@ test(
         assert.equal(item.status, "RECEIVED");
         assert.equal(item.matchResult, "PENDING");
       },
-      { width: 390, height: 844 },
+      { width: 320, height: 740 },
     );
 
     await scene(
@@ -720,7 +785,7 @@ test(
           window.__holdFileReads = true;
         });
         await drawer
-          .locator('input[type="file"]')
+          .locator('input[type="file"][aria-label="加入實收照片"]')
           .setInputFiles({
             name: "synthetic-real-camera.png",
             mimeType: "image/png",
@@ -737,7 +802,7 @@ test(
         );
         assert.equal(
           await drawer
-            .getByRole("button", { name: /拍照／選擇照片$/ })
+            .getByRole("button", { name: "拍攝實收照片", exact: true })
             .isDisabled(),
           true,
         );
@@ -803,7 +868,7 @@ test(
         await upload(0, undefined, 4);
         assert.equal(
           await drawer
-            .getByRole("button", { name: /拍照／選擇照片$/ })
+            .getByRole("button", { name: "拍攝實收照片", exact: true })
             .isDisabled(),
           true,
         );
@@ -844,7 +909,7 @@ test(
         });
         const tooManyPixels = uniformPng(5000, 5000);
         assert.equal(tooManyPixels.length, 24372);
-        await drawer.locator('input[type="file"]').setInputFiles({ name: "synthetic-small-25mp.png", mimeType: "image/png", buffer: tooManyPixels });
+        await drawer.locator('input[type="file"][aria-label="加入實收照片"]').setInputFiles({ name: "synthetic-small-25mp.png", mimeType: "image/png", buffer: tooManyPixels });
         await drawer.getByText("照片尺寸過大，請使用 2,000 萬像素以下照片", { exact: true }).waitFor();
         assert.equal(await drawer.getByAltText(/^實收照片/).count(), 0);
         assert.equal(await drawer.getByRole("button", { name: "下一步", exact: true }).isDisabled(), false);
@@ -906,7 +971,7 @@ test(
         await drawer
           .locator(".mailroom-receipt-item")
           .nth(0)
-          .locator('input[type="file"]')
+          .locator('input[type="file"][aria-label="加入實收照片"]')
           .setInputFiles({
             name: "overflow.png",
             mimeType: "image/png",
@@ -1234,6 +1299,7 @@ test(
               call.params.entityId === "other-company",
           ),
         );
+        assert.deepEqual(await page.evaluate(() => window.receiptFixture.posts), []);
         await page.evaluate(() => {
           const state = window.receiptFixture;
           state.releases.metadata();
@@ -1277,7 +1343,7 @@ test(
     );
 
     writeFileSync(
-      "/tmp/mailroom-receipt-flow-dom-results-20261008.json",
+      resultsPath,
       JSON.stringify(summaries, null, 2),
     );
   },

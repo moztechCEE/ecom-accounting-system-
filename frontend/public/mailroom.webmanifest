@@ -1,0 +1,15 @@
+{
+  "id": "/operations/mailroom",
+  "name": "Corely 收發室",
+  "short_name": "收發室",
+  "lang": "zh-TW",
+  "start_url": "/operations/mailroom",
+  "scope": "/operations/",
+  "display": "standalone",
+  "background_color": "#f5f7f5",
+  "theme_color": "#162d38",
+  "icons": [
+    { "src": "/brand/mailroom-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/mailroom-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

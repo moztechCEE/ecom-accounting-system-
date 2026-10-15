@@ -12,6 +12,7 @@ type Props = {
   onChange?: (id: string) => void;
   entityId: string;
   active: boolean;
+  disabled?: boolean;
   selectedSource?: Source;
   onSelectSource: (source: Source) => void;
 };
@@ -22,6 +23,7 @@ export default function SourceCasePicker({
   onChange,
   entityId,
   active,
+  disabled,
   selectedSource,
   onSelectSource,
 }: Props) {
@@ -110,7 +112,8 @@ export default function SourceCasePicker({
           id={id}
           className="mailroom-source-select"
           aria-label="搜尋售後案件"
-          placeholder="案件、入件單號、電話、姓名或產品"
+          placeholder="電話、姓名、入件單號或案件"
+          disabled={disabled}
           showSearch
           filterOption={false}
           searchValue={query}
@@ -147,6 +150,7 @@ export default function SourceCasePicker({
               <div>
                 <strong>{data.source.number}</strong>
                 <Tag>{CATEGORIES[data.source.type]}</Tag>
+                <Tag>{data.source.statusLabel || data.source.status}</Tag>
               </div>
               <Typography.Text type="secondary">
                 {data.source.customerLabel}{data.source.customerPhone ? ` · ${data.source.customerPhone}` : ""}
@@ -197,7 +201,7 @@ export default function SourceCasePicker({
             </>
           )}
         />
-        <Button className="mailroom-source-recent" onClick={recent}>
+        <Button className="mailroom-source-recent" onClick={recent} disabled={disabled}>
           最近案件
         </Button>
       </div>
@@ -208,7 +212,7 @@ export default function SourceCasePicker({
           message="售後案件搜尋暫時無法更新"
           description={failure}
           action={
-            <Button size="small" onClick={recent}>
+            <Button size="small" onClick={recent} disabled={disabled}>
               重試
             </Button>
           }

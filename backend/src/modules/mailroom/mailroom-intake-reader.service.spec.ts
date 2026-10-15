@@ -118,6 +118,10 @@ describe('intake reads use fresh company/review rights independently of employee
       item('accepted-other', 'other', 'other'),
     ];
     db = {
+      mailroomPrecheckDocument: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       user: {
         findUnique: jest.fn(async ({ where }: any) => users[where.id] || null),
         findMany: jest.fn(async () =>

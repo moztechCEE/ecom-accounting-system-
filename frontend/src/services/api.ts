@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { itemLoginPath } from '../utils/mailroom-item-link'
 
 declare global {
   interface Window {
@@ -95,7 +96,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token')
       if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
+        window.location.href = itemLoginPath(window.location)
       }
     }
     return Promise.reject(error)

@@ -1,5 +1,5 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Form, Input, Button, message, Typography, Checkbox, Modal, Select } from 'antd'
 import { ApartmentOutlined, UserOutlined, LockOutlined } from '@ant-design/icons'
 import { motion, useReducedMotion } from 'framer-motion'
@@ -9,6 +9,7 @@ import { LoginRequest } from '../types'
 import BrandMark from '../components/BrandMark'
 import { loginDestination } from '../utils/login-destination'
 import { PRODUCT } from '../config/product'
+import { safeItemReturnTo } from '../utils/mailroom-item-link'
 
 const { Title, Text } = Typography
 const PLATFORM_ADMIN_LOGIN_IDS = new Set([
@@ -19,6 +20,7 @@ const PLATFORM_ADMIN_LOGIN_IDS = new Set([
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
   const [needsTwoFactor, setNeedsTwoFactor] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
@@ -58,8 +60,12 @@ const LoginPage: React.FC = () => {
     try {
       const currentUser = await login(cleanValues)
       message.success('登入成功')
-      navigate(loginDestination(currentUser))
-    } catch (error: any) {
+      const target = safeItemReturnTo(new URLSearchParams(location.search).get('returnTo'), localStorage.getItem('entityId') || undefined)
+      navigate(currentUser.mustChangePassword
+        ? '/auth/change-password' + (target ? '?' + new URLSearchParams({ returnTo: target }) : '')
+        : target || loginDestination(currentUser))
+    } catch (caught: unknown) {
+      const error = caught as { response?: { data?: { code?: string; message?: string }; status?: number }; request?: unknown; message: string }
       if (error.response?.data?.code === 'TWO_FACTOR_REQUIRED') setNeedsTwoFactor(true)
       let errorMsg = '登入失敗'
       
@@ -85,7 +91,8 @@ const LoginPage: React.FC = () => {
       message.success('若該帳號存在，系統會寄出重設密碼通知。若未收到信，請洽管理員確認郵件設定。')
       setForgotOpen(false)
       forgotForm.resetFields()
-    } catch (error: any) {
+    } catch (caught: unknown) {
+      const error = caught as { errorFields?: unknown; response?: { data?: { message?: string } }; message?: string }
       if (error?.errorFields) {
         return
       }

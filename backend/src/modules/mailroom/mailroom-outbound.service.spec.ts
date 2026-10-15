@@ -358,6 +358,10 @@ function fixture(source = sourceOrder()) {
     },
   };
   const db = {
+    mailroomPrecheckDocument: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     ...tx,
     user: {
       findMany: jest.fn(async ({ where }: Row) =>

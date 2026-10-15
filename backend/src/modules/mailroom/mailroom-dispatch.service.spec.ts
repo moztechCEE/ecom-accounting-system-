@@ -171,6 +171,10 @@ function fixture(replaced = false) {
     },
   ];
   const prisma: any = {
+    mailroomPrecheckDocument: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     employee: {
       findFirst: jest.fn().mockResolvedValue({ id: 'employee-clerk' }),
     },

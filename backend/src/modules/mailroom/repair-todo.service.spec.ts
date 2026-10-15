@@ -383,6 +383,10 @@ function fixture(rows = [piece('ready')], withPrerequisiteReader = true) {
     sendEvent: forbiddenWrite(),
   };
   const prisma = {
+    mailroomPrecheckDocument: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     user: {
       findUnique: jest.fn(() =>
         Promise.resolve({

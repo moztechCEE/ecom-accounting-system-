@@ -36,6 +36,8 @@ import { AfterSalesTasksService } from './after-sales-tasks.service';
 import { MailroomOutboundController } from './mailroom-outbound.controller';
 import { MailroomOutboundService } from './mailroom-outbound.service';
 import { MailroomOutboundStockService } from './mailroom-outbound-stock.service';
+import { MailroomPrecheckController } from './mailroom-precheck.controller';
+import { MailroomPrecheckService } from './mailroom-precheck.service';
 @Module({
   imports: [
     NotificationModule,
@@ -44,6 +46,7 @@ import { MailroomOutboundStockService } from './mailroom-outbound-stock.service'
     AfterSalesIntegrationModule,
   ],
   controllers: [
+    MailroomPrecheckController,
     RepairTestRegistryController,
     RepairMaterialsController,
     RepairEvidenceController,
@@ -58,6 +61,7 @@ import { MailroomOutboundStockService } from './mailroom-outbound-stock.service'
     MailroomOutboundController,
   ],
   providers: [
+    MailroomPrecheckService,
     RepairTestRegistryService,
     RepairMaterialsService,
     RepairPrerequisitesService,
