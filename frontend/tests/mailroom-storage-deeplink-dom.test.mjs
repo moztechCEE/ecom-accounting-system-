@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -18,7 +18,7 @@ import {createMemoryRouter,RouterProvider} from 'react-router-dom';
 import MailroomPage from '/src/pages/mailroom/MailroomPage.tsx';
 window.__APP_CONFIG__={mailroomEnabled:true};
 const mode=new URLSearchParams(location.search).get('fixtureMode')||'mailroom';
-const router=createMemoryRouter([{path:'/operations/mailroom',element:React.createElement(MailroomPage,{mode})},{path:'/other',element:React.createElement('h2',null,'其他工作台')}],{initialEntries:['/operations/mailroom'+location.search]});
+const router=createMemoryRouter([{path:'/operations/mailroom',element:React.createElement('main',{id:'fixture-operations-content',style:{padding:'16px 12px'}},React.createElement(MailroomPage,{mode}))},{path:'/other',element:React.createElement('h2',null,'其他工作台')}],{initialEntries:['/operations/mailroom'+location.search]});
 window.deeplinkRouter=router;
 createRoot(document.getElementById('root')).render(React.createElement(RouterProvider,{router}));
 `;
@@ -55,14 +55,14 @@ test('actual mailroom storage deeplink loads directly and preserves other initia
     },
     configureServer(vite){vite.middlewares.use(async(req,res,next)=>{
       if(!req.url?.startsWith('/__storage-deeplink'))return next();
-      try{res.setHeader('Content-Type','text/html');res.end(await vite.transformIndexHtml('/__storage-deeplink','<html><head><meta name="viewport" content="width=device-width,initial-scale=1" /></head><body><div id="root"></div><script type="module" src="/@id/virtual:storage-deeplink-fixture"></script></body></html>'));}catch(error){next(error);}
+      try{res.setHeader('Content-Type','text/html');res.end(await vite.transformIndexHtml('/__storage-deeplink','<html><head><meta name="viewport" content="width=device-width,initial-scale=1" /></head><body style="margin:0"><div id="root"></div><script type="module" src="/@id/virtual:storage-deeplink-fixture"></script></body></html>'));}catch(error){next(error);}
     });},
   }]});
   await server.listen();t.after(async()=>{await server.close();rmSync(cacheDir,{recursive:true,force:true});});
   const origin=`http://127.0.0.1:${server.httpServer.address().port}`;
   const browser=await chromium.launch({executablePath,headless:true});t.after(()=>browser.close());
-  async function open(child,query='?entityId=company-a') {
-    const page=await browser.newPage({viewport:{width:1280,height:1000}});page.setDefaultTimeout(8000);
+  async function open(child,query='?entityId=company-a',viewport={width:1280,height:1000}) {
+    const page=await browser.newPage({viewport});page.setDefaultTimeout(8000);
     const errors=[],external=[],httpWrites=[];
     page.on('pageerror',error=>errors.push(error.message));
     await page.route('**/*',route=>{
@@ -94,6 +94,25 @@ test('actual mailroom storage deeplink loads directly and preserves other initia
     assert.equal(await page.evaluate(()=>window.deeplinkFixture.calls.some(call=>call.path==='/mailroom/outbound/orders')),false);
     await page.waitForFunction(()=>[...document.querySelectorAll('.ant-spin-container')].every(element=>getComputedStyle(element).opacity==='1'));
     await page.screenshot({path:'/tmp/corely-mailroom-storage-deeplink-desktop-20261016.png',fullPage:true});
+  });
+  await t.test('storage URL at 320px fits inside the actual 12px content padding without hiding overflow',async child=>{
+    const page=await open(child,'?entityId=company-a&tab=storage',{width:320,height:740});
+    await selected(page,'儲位管理');const target=page.getByRole('button',{name:'A1，A1，收件，0 件',exact:true});await target.waitFor();
+    await page.waitForFunction(()=>[...document.querySelectorAll('.ant-spin-container')].every(element=>getComputedStyle(element).opacity==='1'));
+    const geometry=await page.evaluate(()=>{
+      const parent=document.getElementById('fixture-operations-content'),mailroom=document.querySelector('.mailroom-page'),tabs=mailroom.querySelector('.ant-tabs');
+      return {viewport:innerWidth,documentWidth:document.documentElement.scrollWidth,bodyWidth:document.body.scrollWidth,paddingLeft:getComputedStyle(parent).paddingLeft,paddingRight:getComputedStyle(parent).paddingRight,parentWidth:parent.getBoundingClientRect().width,mailroomWidth:mailroom.getBoundingClientRect().width,tabsRight:tabs.getBoundingClientRect().right,gridColumns:getComputedStyle(mailroom).gridTemplateColumns,outerOverflow:[document.documentElement,document.body,parent,mailroom].map(element=>getComputedStyle(element).overflowX)};
+    });
+    child.diagnostic(JSON.stringify(geometry));
+    const artifact='/tmp/corely-mailroom-storage-mobile-'+(process.env.MAILROOM_MOBILE_STAGE||'current')+'-20261016';
+    writeFileSync(artifact+'.json',JSON.stringify(geometry,null,2)+'\n');await page.screenshot({path:artifact+'.png',fullPage:true});
+    assert.equal(geometry.paddingLeft,'12px');assert.equal(geometry.paddingRight,'12px');
+    assert.ok(geometry.outerOverflow.every(value=>!['hidden','clip'].includes(value)),'Outer containers must expose layout overflow instead of masking it');
+    assert.ok(geometry.documentWidth<=geometry.viewport,'Document overflows at 320px: '+JSON.stringify(geometry));
+    assert.ok(geometry.bodyWidth<=geometry.viewport,'Body overflows at 320px');
+    assert.ok(geometry.tabsRight<=geometry.viewport-12,'Tabs stay inside the actual content padding');
+    await target.scrollIntoViewIfNeeded();await target.click({trial:true});await target.focus();await target.press('Enter');
+    await page.locator('.ant-drawer-title').filter({hasText:'A1 · A1'}).waitFor();await page.getByRole('button',{name:'Close',exact:true}).click();
   });
   await t.test('default received tab loads storage only after selection and retains the real draft navigation guard',async child=>{
     const page=await open(child);await selected(page,'收件與交接');await page.getByText('物件與進度',{exact:true}).waitFor();

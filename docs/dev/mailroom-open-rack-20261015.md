@@ -1,5 +1,19 @@
 # 收發室四層開放貨架 DEV 候選
 
+## 2026-10-16 真實 DEV 手機寬度回歸修正
+
+本次從固定 `3cadd79a152c569f20819803ab401662d33cd05b` 建立新隔離分支 `codex/mailroom-open-rack-mobile-20261016`；舊分支與工作樹凍結。DOA 已將該版 API 發布，Web 僅 candidate Ready，Web MAIN 仍保留 `95e037ecd7935584001d4c66663beafc128484fe`。purpose migration 已由 DOA APPLIED／VERIFIED，本次不重套 DDL。
+
+Root 在 DOA 限定租約內，以獨立空白瀏覽器、正常收發人員帳密登入實際 candidate，確認儲位深連結、舊貨架讀取及新增預設四層／每層一位置後取消。320px 寬度檢查未通過：document scrollWidth 338px，比 viewport 多 18px。另經核准讀取舊 MAIN 得到 332px，多 12px；兩者不能視為同一結果，也不能把舊版缺陷當新候選接受。
+
+唯讀 DOM 幾何實驗指出，`.mailroom-page` 的自動 grid track 在父頁左右各 12px padding 下仍取 320px，將 Tabs 推到右側 332px，連同貨架深度使頁寬達 338px。以 `grid-template-columns: minmax(0, 1fr)` 限制單欄可縮後，實際候選瀏覽器實驗回到 320px；僅裁切貨架 overflow 仍有 332px，不採用遮藏內容的作法。
+
+產品修正限定為 `.mailroom-page` 新增上述單一 CSS 屬性，沒有重排流程、隱藏控制項或更改 auth／資料／用途契約。既有 real MailroomPage 離線 DOM 測試新增父頁 padding 12px、320px viewport 的回歸，先以舊 CSS 留下失敗幾何，再以單行修正驗證。Claw 中英操作文字重新審閱，既有說明仍適用；來源 manifest 依實際 CSS 重生。
+
+前端實跑保留 RED：只新增的手機子例失敗，原五個場景成功；GREEN 為 7/7、skip 0（六個子例加 parent），document/body 320px、grid track 296px、Tabs right 308px，html/body/parent/page overflow 皆 visible。前端正式 build 成功，限定 lint 0 errors／三個既有 ref-cleanup warnings。沒有重跑未變的 storage 13/13，亦不把先前測試計入本輪數量。
+
+這是局部版面修正與離線回歸，不代表新版本已部署或實機驗收。DOA 仍為唯一 Cloud／DB／業務 QA writer；待新成對 images Ready 後才重新取得正常帳號唯讀 UI 租約，通過後由 DOA 決定 Web MAIN 推進與新合成四層貨架 QA。原維修案、舊貨架、兩筆在途申請與 AI 等待狀態保持原狀。
+
 ## 2026-10-16 最新 DEV 整合候選
 
 本次從現役 ERP `95e037ecd7935584001d4c66663beafc128484fe` 建立 `codex/mailroom-open-rack-95e-20261016`，僅重套原 `17845fc1eb502cd6dc658c1130383925c79baf17` 相對 ba0 的 16 個貨架 owned paths。保留最新顧客申請、產品展示、費用欄位守門與 auth；Claw 僅更新 mailroom-workbench 的中英文內容，再於共同基底重新產生 generated 與 manifest。以下舊版測試與組合紀錄保留為歷史；本次實跑與獨立審查另有固定版回執，不將舊 PASS 當新接受。
@@ -49,4 +63,4 @@ DOA 為本批唯一 Cloud／DB／業務 QA writer；本台僅本地整合、mock
 
 貨架 slice 不編輯 auth；新隔離組合保留已部署 ba0 的原 DEV121 實作，DEV123／DEV121 已完成的單次身分變更不重做。原 REPAIR `CASE-20261013-235435-b5e96784eef6`／`MR-20261014-71F4585E-1` 已由 DOA 在現役 ba0＋Source0a，沿原 quote2、c168 inline DEV_STUB 模擬、當版同意與首筆 REPAIR 測試款票、合成維修／QC、交回與本人 accept_return 完成至 READY_FOR_DISPATCH v12，不寄出。本台只讀去敏完成回執，沒有執行該業務；新貨架用途不是返回接受前提，不能重播已完成步驟或以原 c168 補 AI 真接收。
 
-本批沒有 canonical browser 操作、DB apply、真實通知、款項、退款、物流或 ECOUNT 動作；一般人員主站 session 保留給 human。所有截圖與 DOM 測試為隔離合成 fixture，不冒稱線上 DEV 或實物驗收。
+以上原7e／ba0隔離組合沒有 canonical browser 操作、DB apply、真實通知、款項、退款、物流或 ECOUNT 動作；當時截圖與 DOM 測試為隔離合成 fixture，不冒稱線上 DEV 或實物驗收。2026-10-16 新增的實際候選與基底唯讀 UI 證據另列於本文件首節；一般人員主站 session 仍保留給 human。

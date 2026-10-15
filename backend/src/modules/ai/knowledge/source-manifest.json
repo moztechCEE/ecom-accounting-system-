@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:275b89304b354f8251dc8290fdcc4ba448f919317dd366184cf42dcbc033ba27",
+  "sourceVersion": "sha256:3b781f486d11aebbffe6a049e2f4afb71029c72220921ac0394bf95552518941",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -976,7 +976,7 @@
     },
     {
       "path": "frontend/src/pages/mailroom/mailroom.css",
-      "sha256": "340d195dd16b84678cfcb1e345680092ecce499171c7d9aadc8de09b9f850919"
+      "sha256": "ec1fafb3e1330f233b6af09a51720156d6539f95f134da466fba4642bc3eb0c5"
     },
     {
       "path": "frontend/src/pages/mailroom/MailroomPage.tsx",
