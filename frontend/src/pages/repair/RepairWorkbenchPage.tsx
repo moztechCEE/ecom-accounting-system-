@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Badge, Button, Card, Checkbox, Collapse, Descriptions, Drawer, Empty, Input, Pagination, Select, Space, Spin, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
-import { FilterOutlined, ReloadOutlined, ToolOutlined } from '@ant-design/icons';
+import { Alert, Badge, Button, Card, Checkbox, Collapse, Descriptions, Drawer, Empty, Input, Pagination, Popover, Select, Space, Spin, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
+import { FilterOutlined, ReloadOutlined, ScanOutlined, ToolOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,13 +9,15 @@ import api from '../../services/api';
 import { repairService } from '../../services/repair';
 import { webSocketService } from '../../services/websocket.service';
 import { ACTIONS, STATUS, errorText, mailroomEnabled, type Source } from '../mailroom/model';
-import { PLANS, REPAIR_STATUS, WORKFLOW_ACTIONS, sourceQuoteConsentCurrent, sourceWorkStartCurrent, inspectionReviewCurrent, type RepairItem } from './repair-model';
+import MailroomItemScan from '../mailroom/MailroomItemScan';
+import { PLANS, REPAIR_STATUS, WORKFLOW_ACTIONS, sourceQuoteConsentCurrent, sourceWorkStartCurrent, inspectionReviewCurrent, repairPrecheckView, type RepairItem } from './repair-model';
 import { repairNextStepActions, repairDispositionRoute } from './repair-nextstep';
 import RepairDocuments from './RepairDocuments';
 import RepairCaseList from './RepairCaseList';
 import { REPAIR_WORKBENCH_TABS, REPAIR_QUERY_FILTERS, repairListScope, repairWorkbenchTab, repairQueueCount, repairCaseProgress, type RepairListScope, type RepairWorkbenchTab, type RepairListResponse, type RepairQueueCounts } from './repair-list-model';
 import RepairWorkflowPanel from './RepairWorkflowPanel';
 import RepairReadinessPanel from './RepairReadinessPanel';
+import RepairPrecheckReadOnly from './RepairPrecheckReadOnly';
 import RepairTestStandardManager from './RepairTestStandardManager';
 import { useRepairNavigationGuard } from './repair-navigation';
 import { useRepairFeedback } from './repair-feedback';
@@ -48,6 +50,8 @@ export default function RepairWorkbenchPage() {
   const queue = repairListScope(params.get('queue'));
   const tab = repairWorkbenchTab(queue);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const scanTrigger = useRef<HTMLButtonElement|HTMLAnchorElement|null>(null);
   const entityId = params.get('entityId') || localStorage.getItem('entityId') || '';
   const selectedId = params.get('itemId');
   const enabled = mailroomEnabled();
@@ -136,6 +140,13 @@ export default function RepairWorkbenchPage() {
     if (id) next.set('itemId', id);else next.delete('itemId');
     setParams(next);
   }
+  async function openScanned(target: {itemId:string;entityId:string}) {
+    if (target.entityId !== entityId) return;
+    if (detailDirty.current) {if (!await confirmDiscard()) return;detailDirty.current=false;}
+    const next = new URLSearchParams(params);
+    next.set('entityId',entityId);next.set('itemId',target.itemId);next.set('queue','all');
+    setPagination({queue:'all',page:1});setScanOpen(false);scanTrigger.current?.focus();setParams(next);
+  }
   async function changeQueue(nextQueue: RepairListScope) {
     if (detailDirty.current) {if (!await confirmDiscard()) return;detailDirty.current=false;}
     const next = new URLSearchParams(params);
@@ -159,6 +170,9 @@ export default function RepairWorkbenchPage() {
     {failure && <Alert type="error" showIcon message={failure} style={{marginBottom:16}} />}
     <Card className="repair-workbench-list" title={REPAIR_WORKBENCH_TABS[tab]} extra={<Space className="repair-query-tools">
       <Input.Search className="repair-workbench-search" placeholder="搜尋案件" allowClear onSearch={value=>{setPagination({queue,page:1});setSearch(value);}} />
+      <Popover trigger="click" placement="bottom" open={scanOpen} onOpenChange={setScanOpen} content={<div style={{width:260,maxWidth:'calc(100vw - 48px)'}}><MailroomItemScan key={entityId} entityId={entityId} onOpen={target=>void openScanned(target)} /></div>}>
+        <Button ref={node=>{scanTrigger.current=node;}} icon={<ScanOutlined />}>掃描</Button>
+      </Popover>
       {tab === 'all' && <Button aria-label="篩選" icon={<FilterOutlined />} aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(value=>!value)}>篩選</Button>}
     </Space>}>
       {tab === 'all' && filtersOpen && <Select className="repair-query-filter" aria-label="案件分類" value={queue} options={Object.entries(REPAIR_QUERY_FILTERS).map(([value,label])=>({value,label}))} onChange={value=>void changeQueue(value as RepairListScope)} />}
@@ -172,7 +186,7 @@ export default function RepairWorkbenchPage() {
     <Drawer rootClassName="repair-workbench-drawer" width="min(1180px, 100vw)" open={!!selectedId} title={<div className="repair-detail-identity"><Text type="secondary">{detail?.receipt.sourceNumber || detail?.label || '維修案件'}</Text><Title level={3}>{detail?.productName || '載入案件…'}</Title></div>} onClose={()=>void open()} destroyOnHidden>
       <Spin spinning={detailBusy}>{detail ? <>
         {changed && <Alert type="info" showIcon message="案件已更新" action={<Button onClick={()=>void loadDetail(true)}>重新載入</Button>} style={{marginBottom:16}} />}
-        <RepairDetail confirmDiscard={confirmDiscard} feedback={message} key={`${detail.id}:${detail.version}`} item={detail} entityId={entityId} onDirtyChange={dirty=>{detailDirty.current=dirty;}} onSaved={async()=>{detailDirty.current=false;await loadDetail();await refresh(true);}} />
+        <RepairDetail confirmDiscard={confirmDiscard} feedback={message} key={`${detail.id}:${detail.version}`} item={detail} readerExpectedItemId={selectedId || ''} entityId={entityId} onDirtyChange={dirty=>{detailDirty.current=dirty;}} onSaved={async()=>{detailDirty.current=false;await loadDetail();await refresh(true);}} />
       </> : !detailBusy && <Empty description="請重新載入案件" />}</Spin>
     </Drawer>
   </div>;
@@ -209,7 +223,7 @@ function ArrivalPreview({entityId}:{entityId:string}) {
     {cursor&&<Button style={{marginTop:12}} loading={busy} onClick={()=>void load(cursor)}>載入更多</Button>}
   </Card>;
 }
-function RepairDetail({item,entityId,onSaved,onDirtyChange,feedback,confirmDiscard}:{item:RepairItem;entityId:string;onSaved:()=>Promise<void>;onDirtyChange:(dirty:boolean)=>void;feedback:RepairMessage;confirmDiscard:()=>Promise<boolean>}) {
+function RepairDetail({item,readerExpectedItemId,entityId,onSaved,onDirtyChange,feedback,confirmDiscard}:{item:RepairItem;readerExpectedItemId:string;entityId:string;onSaved:()=>Promise<void>;onDirtyChange:(dirty:boolean)=>void;feedback:RepairMessage;confirmDiscard:()=>Promise<boolean>}) {
   const message = feedback;
   const {user}=useAuth();
   const custody=currentItemCustody(item);
@@ -291,6 +305,7 @@ function RepairDetail({item,entityId,onSaved,onDirtyChange,feedback,confirmDisca
       </aside>
     </div>
     <Collapse className="repair-case-details" items={[
+      {key:'precheck',label:'收發初檢',children:item.id===readerExpectedItemId ? <RepairPrecheckReadOnly entityId={entityId} itemId={readerExpectedItemId} record={repairPrecheckView(item.mailroomPrecheck,entityId,readerExpectedItemId)} /> : null},
       {key:'details',label:'案件資料與實物保管',forceRender:true,children:<>    <Descriptions bordered size="small" column={{xs:1,sm:2}} items={[
       {key:'sku',label:'SKU',children:item.sku || '未提供'}, {key:'sn',label:'原件 SN',children:item.serialNumber || '未提供'},
       {key:'custodian',label:'目前實物保管',children:custody.holder},{key:'location',label:'目前實物位置',children:custody.location},

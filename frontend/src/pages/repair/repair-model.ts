@@ -1,5 +1,6 @@
 import type { Item } from '../mailroom/model';
 import type { PhysicalCustody } from '../mailroom/model';
+import type { MailroomPrecheckRecord } from '../mailroom/mailroom-precheck-record';
 export type { PhysicalCustody } from '../mailroom/model';
 export { CUSTODY } from '../mailroom/item-custody';
 export type RepairTemplateBinding = {id:string;revision:number;contentHash:string};
@@ -99,8 +100,61 @@ export function refurbishmentStartReady(item:RepairItem):boolean {
   return ['INSPECTING','REPAIR_RECEIVED','REFURBISHING'].includes(item.status) && item.allowedWorkflowActions?.includes('start_refurbishment')===true
     && !sourceWorkStartCurrent(item) && companyCsrCurrent(item) && sourceMaterialsCurrent(item,'START') && sourceTemplateCurrent(item,'INSPECTION');
 }
+export type RepairPrecheckPhoto = NonNullable<MailroomPrecheckRecord['recorded']>['photos'][number];
+export type RepairPrecheckView =
+  | {state:'NOT_STARTED'|'PENDING'|'STALE'|'UNAVAILABLE'}
+  | {
+    state:'SUBMITTED';revision:number;recordedBy:string;recordedAt:string;submittedAt:string;
+    templateTitle?:string;templateRevision?:number;
+    checks:{key:string;label:string;result:'NORMAL'|'ABNORMAL'|'NOT_TESTED'|'NOT_APPLICABLE';note?:string;photoIds:string[]}[];
+    photos:RepairPrecheckPhoto[];notRequiredReason?:string|null;
+  };
+const precheckHash = (value:unknown):value is string => typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
+const precheckText = (value:unknown):value is string => typeof value==='string' && !!value.trim();
+const precheckTime = (value:unknown):value is string => precheckText(value) && Number.isFinite(Date.parse(value));
+const precheckRevision = (value:unknown):value is number => Number.isSafeInteger(value) && Number(value)>0;
+export function repairPrecheckPhotoUrl(photo:RepairPrecheckPhoto,itemId:string,revision:number):string|null {
+  if (!photo || !precheckHash(photo.id) || !precheckHash(photo.digest) || !precheckRevision(revision)) return null;
+  const expected=`/mailroom/prechecks/items/${encodeURIComponent(itemId)}/recorded-photos/${photo.id}?revision=${revision}`;
+  return photo.url===expected ? expected : null;
+}
+export function repairPrecheckView(value:unknown,entityId:string,itemId:string):RepairPrecheckView {
+  const unavailable:RepairPrecheckView={state:'UNAVAILABLE'};
+  if (!value || typeof value!=='object') return unavailable;
+  const row=value as MailroomPrecheckRecord;
+  if (row.schema!==1 || row.entityId!==entityId || row.itemId!==itemId) return unavailable;
+  if (row.stage!=='SUBMITTED') {
+    if (row.recorded!==null) return unavailable;
+    if (row.stage==='NOT_STARTED' && row.revision===0) return {state:'NOT_STARTED'};
+    if (!precheckRevision(row.revision)) return unavailable;
+    if (row.stage==='DRAFT' || row.stage==='READY') return {state:'PENDING'};
+    return row.stage==='STALE' ? {state:'STALE'} : unavailable;
+  }
+  const record=row.recorded;
+  if (!record || !precheckRevision(row.revision) || record.revision!==row.revision || !precheckText(record.id)
+    || !precheckText(record.savedByName) || !precheckTime(record.savedAt) || !precheckTime(record.submittedAt)
+    || row.savedByName!==record.savedByName || row.savedAt!==record.savedAt || row.submittedAt!==record.submittedAt
+    || !Array.isArray(record.photos) || record.photos.length>4 || !Array.isArray(record.checks) || record.checks.length>100
+    || !(record.notRequiredReason===null || precheckText(record.notRequiredReason))) return unavailable;
+  if (record.template!==null && (!record.template || !precheckText(record.template.id) || !precheckRevision(record.template.revision)
+    || !precheckHash(record.template.contentHash) || !precheckText(record.template.title))) return unavailable;
+  if (!record.checks.length && !precheckText(record.notRequiredReason)) return unavailable;
+  if (record.photos.some(photo=>!repairPrecheckPhotoUrl(photo,itemId,record.revision))) return unavailable;
+  const photoIds=new Set(record.photos.map(photo=>photo.id));
+  if (photoIds.size!==record.photos.length || new Set(record.checks.map(check=>check?.key)).size!==record.checks.length
+    || record.checks.some(check=>!check || !precheckText(check.key) || !precheckText(check.label)
+      || !['NORMAL','ABNORMAL','NOT_TESTED','NOT_APPLICABLE'].includes(check.result)
+      || !(check.note===null || typeof check.note==='string') || !Array.isArray(check.photoIds)
+      || new Set(check.photoIds).size!==check.photoIds.length || check.photoIds.some(id=>!photoIds.has(id)))) return unavailable;
+  return {
+    state:'SUBMITTED',revision:record.revision,recordedBy:record.savedByName,recordedAt:record.savedAt,submittedAt:record.submittedAt,
+    ...(record.template ? {templateTitle:record.template.title,templateRevision:record.template.revision} : {}),
+    checks:record.checks.map(check=>({...check,note:check.note ?? undefined})),photos:record.photos,notRequiredReason:record.notRequiredReason,
+  };
+}
 export type RepairItem = Item & {
   entityId?:string;
+  mailroomPrecheck?:MailroomPrecheckRecord;
   repairWorkflow?:RepairWorkflow|null;
   allowedWorkflowActions?:RepairWorkflowAction[];
   physicalCustody?:PhysicalCustody;
