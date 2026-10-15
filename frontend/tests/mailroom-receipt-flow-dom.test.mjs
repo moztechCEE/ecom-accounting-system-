@@ -66,7 +66,7 @@ export default {
  if(path==='/mailroom/items')return {data:{items:Object.values(state.items).map(clone),total:Object.keys(state.items).length}};
  if(path.startsWith('/mailroom/items/'))return {data:clone(state.items[path.split('/')[3]])};
  if(path==='/mailroom/tasks')return {data:[]};
- if(path==='/mailroom/storage')return {data:{racks:[{id:'rack',code:'A',name:'收件貨架',zone:'INBOUND',isActive:true},{id:'paused-rack',code:'P',name:'停用貨架',zone:'INBOUND',isActive:false}],locations:[{id:'bin',rackId:'rack',code:'A1',name:'A1',isActive:true},{id:'inactive-bin',rackId:'rack',code:'A2',name:'停用格',isActive:false},{id:'paused-bin',rackId:'paused-rack',code:'P1',name:'P1',isActive:true}],unassigned:[],counts:{stored:0,unassigned:0},canManage:true}};
+ if(path==='/mailroom/storage')return {data:{racks:[{id:'rack',code:'A',name:'收件貨架',zone:'RECEIVING',isActive:true},{id:'paused-rack',code:'P',name:'停用貨架',zone:'RECEIVING',isActive:false}],locations:[{id:'bin',rackId:'rack',code:'A1',name:'A1',isActive:true},{id:'inactive-bin',rackId:'rack',code:'A2',name:'停用格',isActive:false},{id:'paused-bin',rackId:'paused-rack',code:'P1',name:'P1',isActive:true}],unassigned:[],counts:{stored:0,unassigned:0},canManage:true}};
  if(path==='/mailroom/source-cases') {const search=(params.search||'').toLowerCase();return {data:{items:clone(state.sources.filter(s=>!search||[s.number,s.customerLabel,s.customerPhone].some(v=>v.toLowerCase().includes(search)))),nextCursor:null}};}
  if(path==='/mailroom/product-options'){const search=(params.search||'').toLowerCase();return {data:{items:clone(state.products.filter(p=>!search||[p.name,p.sku,p.barcode].some(v=>v.toLowerCase().includes(search))))}};}
  if(/^\\/mailroom\\/source-cases\\/[^/]+\\/attachments$/.test(path))return {data:{items:[{id:'image',fileName:path.split('/')[3]+'-案件照片.png',contentType:'image/png',scope:'CASE'}]}};
@@ -280,7 +280,7 @@ test(
             .getByRole("combobox", { name: "選擇收件儲位", exact: true })
             .press("ArrowDown");
           assert.doesNotMatch(await dropdown().innerText(), /停用格|P1/);
-          await dropdown().getByText("A1", { exact: true }).click();
+          await dropdown().getByText("A1 · 收件", { exact: true }).click();
           await page
             .locator(".ant-select-dropdown:visible")
             .waitFor({ state: "hidden" });

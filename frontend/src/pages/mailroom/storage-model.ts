@@ -13,7 +13,7 @@ export type StorageRack = {
 };
 export type StorageLocation = {
   id: string; code: string; name: string; rackId: string; level: number; slot: number;
-  version: number; isActive: boolean; items: StorageItem[];
+  purpose?: StorageZone | null; version: number; isActive: boolean; items: StorageItem[];
 };
 export type StorageSnapshot = {
   racks: StorageRack[]; locations: StorageLocation[]; unassigned: StorageItem[];
@@ -21,6 +21,18 @@ export type StorageSnapshot = {
 };
 export type StorageOperation = { path: string; body: Readonly<Record<string, unknown>> };
 export const STORAGE_ZONES: Record<StorageZone, string> = { RECEIVING: "收件區", OUTBOUND: "待寄區" };
+export const STORAGE_PURPOSES: Record<StorageZone, string> = { RECEIVING: "收件", OUTBOUND: "待寄" };
+export function storageEffectivePurpose(location: Pick<StorageLocation, "purpose">, rack: Pick<StorageRack, "zone">): StorageZone {
+  return location.purpose ?? rack.zone;
+}
+export function storageLevelLocations(locations: StorageLocation[], rackId: string, level: number): StorageLocation[] {
+  return locations.filter(location => location.rackId === rackId && location.level === level)
+    .sort((a, b) => a.slot - b.slot || a.code.localeCompare(b.code, "zh-Hant", { numeric: true }));
+}
+export function storageNextSlot(locations: StorageLocation[], rack: StorageRack, level: number): number | undefined {
+  const occupied = new Set(storageLevelLocations(locations, rack.id, level).map(location => location.slot));
+  return Array.from({ length: rack.columns }, (_, index) => index + 1).find(slot => !occupied.has(slot));
+}
 export function storageItemMatches(item: StorageItem, query: string): boolean {
   const needle = query.trim().toLocaleLowerCase();
   return !needle || [item.productName, item.sku, item.serialNumber, item.sourceNumber,
@@ -35,7 +47,7 @@ export function storageLocationOptions(snapshot: StorageSnapshot): { value: stri
   const activeRacks = new Map(snapshot.racks.filter(rack => rack.isActive).map(rack => [rack.id, rack]));
   return snapshot.locations.filter(location => location.isActive && activeRacks.has(location.rackId))
     .sort((a, b) => a.code.localeCompare(b.code, "zh-Hant", { numeric: true }))
-    .map(location => ({ value: location.id, label: `${STORAGE_ZONES[activeRacks.get(location.rackId)!.zone]} · ${location.code} · ${location.name}` }));
+    .map(location => ({ value: location.id, label: `${STORAGE_ZONES[storageEffectivePurpose(location, activeRacks.get(location.rackId)!)]} · ${location.code} · ${location.name}` }));
 }
 export function storageFloorBounds(racks: StorageRack[]) {
   const minX = Math.min(0, ...racks.map(rack => rack.layoutX));

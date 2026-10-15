@@ -2436,6 +2436,7 @@ model MailroomStorageLocation {
   name        String
   level       Int
   slot        Int
+  purpose     String?
   version     Int      @default(1)
   isActive    Boolean  @default(true) @map("is_active")
   commandKeys String[] @default([]) @map("command_keys")

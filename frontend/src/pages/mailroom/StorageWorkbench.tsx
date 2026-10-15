@@ -5,7 +5,7 @@ import api from "../../services/api";
 import { STATUS } from "./model";
 import { mailroomDraftFingerprint } from "./mailroom-draft";
 import type { MailroomDraftState } from "./mailroom-draft";
-import { STORAGE_ZONES, storageFailure, storageFloorBounds, storageItemMatches, storageLocationMatches, storageLocationOptions, storageOutcomeUnknown, storageRequestId } from "./storage-model";
+import { STORAGE_PURPOSES, storageEffectivePurpose, storageFailure, storageFloorBounds, storageItemMatches, storageLevelLocations, storageLocationMatches, storageLocationOptions, storageNextSlot, storageOutcomeUnknown, storageRequestId } from "./storage-model";
 import type { StorageItem, StorageLocation, StorageOperation, StorageRack, StorageSnapshot } from "./storage-model";
 import "./storage.css";
 
@@ -76,11 +76,11 @@ export default function StorageWorkbench({ entityId, onOpenItem, onChanged, onDr
     operation.current = undefined; unknown.current = false; setFailure(""); setUncertain(false);
     form.resetFields();
     const nextX = Math.min(10000, Math.max(-320, ...(data?.racks || []).map(rack => rack.layoutX)) + 320);
-    form.setFieldsValue(next.kind === "createRack" ? { zone: "RECEIVING", rows: 2, columns: 4, layoutX: nextX, layoutY: 0, ...initial }
+    form.setFieldsValue(next.kind === "createRack" ? { zone: "RECEIVING", rows: 4, columns: 1, layoutX: nextX, layoutY: 0, ...initial }
       : next.kind === "editRack" ? { ...next.rack, ...initial }
-      : next.kind === "editLocation" ? { ...next.location, ...initial }
+      : next.kind === "editLocation" ? { ...next.location, purpose: next.location?.purpose ?? "INHERIT", ...initial }
       : next.kind === "move" ? { storageLocationId: undefined, ...initial }
-      : { rackId: next.rack?.id, level: 1, slot: 1, ...initial });
+      : { rackId: next.rack?.id, level: 1, slot: 1, purpose: "INHERIT", ...initial });
     setDialog({ ...next, entityId });
     draftDialog.current = true; baseline.current = mailroomDraftFingerprint(form.getFieldsValue(true)); publishDraft();
   }
@@ -94,9 +94,11 @@ export default function StorageWorkbench({ entityId, onOpenItem, onChanged, onDr
       expectedVersion: target.rack!.version, name: String(values.name).trim(), zone: values.zone,
       rows: values.rows, columns: values.columns, layoutX: values.layoutX, layoutY: values.layoutY, isActive: values.isActive } };
     if (target.kind === "createLocation") return { path: "/mailroom/storage/locations", body: { ...common,
-      rackId: values.rackId, code: String(values.code).trim(), name: String(values.name).trim(), level: values.level, slot: values.slot } };
+      rackId: values.rackId, code: String(values.code).trim(), name: String(values.name).trim(), level: values.level, slot: values.slot,
+      purpose: values.purpose === "INHERIT" ? null : values.purpose } };
     if (target.kind === "editLocation") return { path: `/mailroom/storage/locations/${encodeURIComponent(target.location!.id)}/update`, body: { ...common,
-      expectedVersion: target.location!.version, name: String(values.name).trim(), isActive: values.isActive } };
+      expectedVersion: target.location!.version, name: String(values.name).trim(), isActive: values.isActive,
+      purpose: values.purpose === "INHERIT" ? null : values.purpose } };
     return { path: `/mailroom/storage/items/${encodeURIComponent(target.item!.id)}/move`, body: { ...common,
       expectedVersion: target.item!.version, storageLocationId: values.storageLocationId || null,
       ...(!values.storageLocationId ? { location: String(values.location || "").trim() } : {}) } };
@@ -124,24 +126,38 @@ export default function StorageWorkbench({ entityId, onOpenItem, onChanged, onDr
       }
     } finally { working.current = false; if (mounted.current) { setBusy(false); publishDraft(); } }
   }
-  function bin(rack: StorageRack, level: number, slot: number) {
-    const location = binLocations.find(location => location.rackId === rack.id && location.level === level && location.slot === slot);
-    if (!location) return canManage && rack.isActive
-      ? <button key={`${level}:${slot}`} className="mailroom-storage-empty-cell" aria-label={`${rack.code} 第 ${level} 層第 ${slot} 格新增儲位`} disabled={locked}
-          onClick={() => openDialog({ kind: "createLocation", rack }, { level, slot })}><PlusOutlined /></button>
-      : <div key={`${level}:${slot}`} className="mailroom-storage-empty-cell" aria-hidden="true" />;
+  function bin(rack: StorageRack, location: StorageLocation) {
     const match = visibleQuery && storageLocationMatches(location, rack, visibleQuery);
-    return <button key={location.id} className={`mailroom-storage-bin${match ? " is-match" : ""}${!location.isActive ? " is-inactive" : ""}${selectedLocation?.id === location.id ? " is-selected" : ""}`}
-      aria-label={`${location.code}，${location.name}，${location.items.length} 件${!location.isActive ? "，已停用" : ""}`}
+    const purpose = storageEffectivePurpose(location, rack);
+    return <button key={location.id} className={`mailroom-storage-bin${match ? " is-match" : ""}${visibleQuery && !match ? " is-dimmed" : ""}${purpose === "OUTBOUND" ? " is-outbound" : ""}${!location.isActive ? " is-inactive" : ""}${selectedLocation?.id === location.id ? " is-selected" : ""}`}
+      data-location-id={location.id} data-slot={location.slot} data-purpose={purpose}
+      aria-label={`${location.code}，${location.name}，${STORAGE_PURPOSES[purpose]}，${location.items.length} 件${!location.isActive ? "，已停用" : ""}`}
       onClick={() => setSelection({ entityId, kind: "location", id: location.id })}>
-      <strong>{location.code}</strong><span>{location.items.length ? `${location.items.length} 件` : "空位"}</span>
-      <small>{location.name}</small>{location.items[0] && <small>{location.items[0].productName}{location.items.length > 1 ? ` 等 ${location.items.length} 件` : ""}</small>}
-      {!location.isActive && <small>已停用</small>}
+      <span className="mailroom-storage-boxes" aria-hidden="true">{Array.from({ length: Math.min(3, location.items.length) }, (_, index) => <span className="mailroom-storage-box" key={index} />)}</span>
+      <span className="mailroom-storage-bin-label"><span className="mailroom-storage-bin-title"><strong>{location.code}</strong><span>{location.items.length} 件</span></span>
+        <span className="mailroom-storage-bin-purpose">{STORAGE_PURPOSES[purpose]}</span>
+        {location.name !== location.code && <small>{location.name}</small>}{!location.isActive && <small>已停用</small>}</span>
     </button>;
   }
   function rackGrid(rack: StorageRack) {
-    return <div className="mailroom-storage-rack-grid" style={{ gridTemplateColumns: `repeat(${rack.columns}, minmax(64px, 1fr))` }}>
-      {Array.from({ length: rack.rows }, (_, index) => rack.rows - index).flatMap(level => Array.from({ length: rack.columns }, (_, slot) => bin(rack, level, slot + 1)))}
+    return <div className="mailroom-storage-rack-frame" aria-label={`${rack.code} 貨架層板`}>
+      <span className="mailroom-storage-post is-back-left" aria-hidden="true" /><span className="mailroom-storage-post is-back-right" aria-hidden="true" />
+      <div className="mailroom-storage-rack-grid">
+        {Array.from({ length: rack.rows }, (_, index) => rack.rows - index).map(level => {
+          const locations = storageLevelLocations(binLocations, rack.id, level);
+          const nextSlot = storageNextSlot(data?.locations || [], rack, level);
+          return <div className="mailroom-storage-shelf" key={level} data-level={level}>
+            <div className="mailroom-storage-shelf-locations">{locations.map(location => bin(rack, location))}
+              {canManage && rack.isActive && nextSlot !== undefined && <button className="mailroom-storage-add-location" aria-label={`${rack.code} 第 ${level} 層新增儲位`} disabled={locked}
+                onClick={() => openDialog({ kind: "createLocation", rack }, { level, slot: nextSlot })}><PlusOutlined aria-hidden="true" /><span>新增儲位</span></button>}
+              {canManage && rack.isActive && nextSlot === undefined && rack.columns < 8 && <button className="mailroom-storage-add-location" aria-label={`${rack.code} 第 ${level} 層調整儲位上限`} disabled={locked}
+                onClick={() => openDialog({ kind: "editRack", rack })}><span>調整儲位上限</span></button>}
+              {!locations.length && !(canManage && rack.isActive && nextSlot !== undefined) && <span className="mailroom-storage-shelf-empty">尚無儲位</span>}
+            </div><span className="mailroom-storage-shelf-beam"><span>{level} 層</span></span>
+          </div>;
+        })}
+      </div><span className="mailroom-storage-post is-front-left" aria-hidden="true" /><span className="mailroom-storage-post is-front-right" aria-hidden="true" />
+      <span className="mailroom-storage-rack-foot is-left" aria-hidden="true" /><span className="mailroom-storage-rack-foot is-right" aria-hidden="true" />
     </div>;
   }
   function items(itemsToShow: StorageItem[]) {
@@ -155,6 +171,9 @@ export default function StorageWorkbench({ entityId, onOpenItem, onChanged, onDr
   }
   const bounds = storageFloorBounds(matchingRacks);
   const moveDestination = Form.useWatch("storageLocationId", form);
+  const formRackId = Form.useWatch("rackId", form);
+  const formRack = data?.racks.find(rack => rack.id === formRackId);
+  const rackLocations = data?.locations.filter(location => location.rackId === activeDialog?.rack?.id) || [];
   return <section className="mailroom-storage" aria-label="儲位管理">
     <div className="mailroom-storage-toolbar">
       <Input className="mailroom-storage-search" aria-label="搜尋儲位或物品" prefix={<SearchOutlined />} allowClear value={query} maxLength={100}
@@ -173,22 +192,18 @@ export default function StorageWorkbench({ entityId, onOpenItem, onChanged, onDr
           {data.canManage && <Switch size="small" checked={showInactive} onChange={setShowInactive} checkedChildren="含停用" unCheckedChildren="僅啟用" aria-label="顯示停用儲位" />}
           {data.canManage && <Button disabled={!canManage || locked || !data.racks.some(rack => rack.isActive)} onClick={() => openDialog({ kind: "createLocation" })}>新增儲位</Button>}
         </Space>
-        {!matchingRacks.length ? <Empty description="尚無貨架" /> : view === "立體貨架" ? <>
-          {(["RECEIVING", "OUTBOUND"] as const).map(zone => {
-            const racks = matchingRacks.filter(rack => rack.zone === zone).sort((a, b) => a.layoutY - b.layoutY || a.layoutX - b.layoutX || a.code.localeCompare(b.code));
-            return racks.length ? <div className="mailroom-storage-zone" key={zone}><h3>{STORAGE_ZONES[zone]}</h3><div className="mailroom-storage-racks">
-              {racks.map(rack => <article className="mailroom-storage-rack" key={rack.id} aria-label={`${rack.code} ${rack.name}`}>
-                <div className="mailroom-storage-rack-heading"><strong>{rack.code} · {rack.name}</strong><Space size={4}>{!rack.isActive && <Tag>已停用</Tag>}
-                  {data.canManage && <Button size="small" icon={<EditOutlined />} aria-label={`編輯貨架 ${rack.code}`} disabled={!canManage || locked} onClick={() => openDialog({ kind: "editRack", rack })} />}</Space></div>{rackGrid(rack)}
-              </article>)}</div></div> : null;
-          })}
-        </> : <div className="mailroom-storage-floor-scroll" tabIndex={0} aria-label="平面儲位區域"><div className="mailroom-storage-floor" style={{ width: bounds.width, height: bounds.height }}>
+        {!matchingRacks.length ? <Empty description="尚無貨架" /> : view === "立體貨架" ? <div className="mailroom-storage-racks">
+          {[...matchingRacks].sort((a, b) => a.layoutY - b.layoutY || a.layoutX - b.layoutX || a.code.localeCompare(b.code)).map(rack => <article className="mailroom-storage-rack" key={rack.id} data-rack-id={rack.id} aria-label={`${rack.code} ${rack.name}`}>
+            <div className="mailroom-storage-rack-heading"><div><strong>{rack.code} · {rack.name}</strong><span className="mailroom-storage-rack-default">預設{STORAGE_PURPOSES[rack.zone]}</span></div><Space size={4}>{!rack.isActive && <Tag>已停用</Tag>}
+              {data.canManage && <Button size="small" icon={<EditOutlined />} aria-label={`編輯貨架 ${rack.code}`} disabled={!canManage || locked} onClick={() => openDialog({ kind: "editRack", rack })} />}</Space></div>{rackGrid(rack)}
+          </article>)}
+        </div> : <div className="mailroom-storage-floor-scroll" tabIndex={0} aria-label="平面儲位區域"><div className="mailroom-storage-floor" style={{ width: bounds.width, height: bounds.height }}>
           {matchingRacks.map(rack => {
             const locations = data.locations.filter(location => location.rackId === rack.id);
             const highlighted = visibleQuery && locations.some(location => storageLocationMatches(location, rack, visibleQuery));
             return <button key={rack.id} className={`mailroom-storage-floor-rack${rack.zone === "OUTBOUND" ? " is-outbound" : ""}${highlighted ? " is-match" : ""}`}
               style={{ left: rack.layoutX - bounds.minX + 24, top: rack.layoutY - bounds.minY + 24 }} onClick={() => setSelection({ entityId, kind: "rack", id: rack.id })}>
-              <strong>{rack.code} · {rack.name}</strong><span>{STORAGE_ZONES[rack.zone]} · {locations.reduce((sum, location) => sum + location.items.length, 0)} 件</span><span>{locations.filter(location => location.isActive).length} 個儲位</span>
+              <strong>{rack.code} · {rack.name}</strong><span>預設{STORAGE_PURPOSES[rack.zone]} · {locations.reduce((sum, location) => sum + location.items.length, 0)} 件</span><span>{locations.filter(location => location.isActive).length} 個儲位</span>
             </button>;
           })}
         </div></div>}
@@ -201,9 +216,9 @@ export default function StorageWorkbench({ entityId, onOpenItem, onChanged, onDr
     </Spin>
     <Drawer title={selectedLocation ? `${selectedLocation.code} · ${selectedLocation.name}` : selectedRack ? `${selectedRack.code} · ${selectedRack.name}` : "未配儲位"}
       width="min(600px, 100vw)" open={Boolean(selected)} onClose={() => setSelection(undefined)}>
-      {selectedLocation ? <><div className="mailroom-storage-location-summary"><Tag>{selectedLocation.items.length} 件</Tag>{!selectedLocation.isActive && <Tag>已停用</Tag>}
+      {selectedLocation ? <><div className="mailroom-storage-location-summary"><Space wrap><Tag>{selectedLocation.items.length} 件</Tag>{data?.racks.find(rack => rack.id === selectedLocation.rackId) && <Tag>{STORAGE_PURPOSES[storageEffectivePurpose(selectedLocation, data.racks.find(rack => rack.id === selectedLocation.rackId)!)]}</Tag>}{!selectedLocation.isActive && <Tag>已停用</Tag>}</Space>
         {data?.canManage && <Button icon={<EditOutlined aria-hidden="true" />} disabled={!canManage || locked} onClick={() => openDialog({ kind: "editLocation", location: selectedLocation })}>編輯儲位</Button>}</div>{items(selectedLocation.items)}</>
-        : selectedRack ? <><div className="mailroom-storage-location-summary"><Tag>{STORAGE_ZONES[selectedRack.zone]}</Tag>{data?.canManage && <Button disabled={!canManage || locked} onClick={() => openDialog({ kind: "editRack", rack: selectedRack })}>編輯貨架</Button>}</div>{rackGrid(selectedRack)}</>
+        : selectedRack ? <><div className="mailroom-storage-location-summary"><Tag>預設{STORAGE_PURPOSES[selectedRack.zone]}</Tag>{data?.canManage && <Button disabled={!canManage || locked} onClick={() => openDialog({ kind: "editRack", rack: selectedRack })}>編輯貨架</Button>}</div>{rackGrid(selectedRack)}</>
         : selected?.kind === "unassigned" ? items(visibleQuery ? unassigned : data?.unassigned || []) : <Empty description="儲位已更新，請重新選擇" />}
     </Drawer>
     <Modal title={activeDialog ? DIALOG_TITLES[activeDialog.kind] : "儲位"} open={Boolean(activeDialog)} destroyOnHidden={false} forceRender zIndex={1200}
@@ -214,18 +229,19 @@ export default function StorageWorkbench({ entityId, onOpenItem, onChanged, onDr
         {activeDialog && ["createRack", "editRack"].includes(activeDialog.kind) ? <>
           {activeDialog.kind === "createRack" ? <Form.Item name="code" label="貨架編碼" rules={[{ required: true }, { pattern: /^[A-Za-z0-9][A-Za-z0-9_-]{0,15}$/, message: "請使用英文、數字、底線或連字號" }]}><Input aria-label="貨架編碼" maxLength={16} placeholder="例如 A" /></Form.Item> : <Tag>{activeDialog.rack?.code}</Tag>}
           <Form.Item name="name" label="貨架名稱" rules={[{ required: true, whitespace: true }]}><Input aria-label="貨架名稱" maxLength={80} /></Form.Item>
-          <Form.Item name="zone" label="區域" rules={[{ required: true }]}><Select aria-label="區域" options={Object.entries(STORAGE_ZONES).map(([value, label]) => ({ value, label }))} /></Form.Item>
-          <div className="mailroom-storage-form-grid"><Form.Item name="rows" label="層數" rules={[{ required: true }]}><InputNumber aria-label="層數" min={1} max={8} precision={0} style={{ width: "100%" }} /></Form.Item>
-            <Form.Item name="columns" label="每層格數" rules={[{ required: true }]}><InputNumber aria-label="每層格數" min={1} max={8} precision={0} style={{ width: "100%" }} /></Form.Item>
+          <Form.Item name="zone" label="預設用途" rules={[{ required: true }]}><Select aria-label="預設用途" options={Object.entries(STORAGE_PURPOSES).map(([value, label]) => ({ value, label }))} /></Form.Item>
+          <div className="mailroom-storage-form-grid"><Form.Item name="rows" label="層數" rules={[{ required: true }]}><InputNumber aria-label="層數" min={Math.max(1, ...rackLocations.map(location => location.level))} max={8} precision={0} style={{ width: "100%" }} /></Form.Item>
+            <Form.Item name="columns" label={activeDialog.kind === "createRack" ? "每層初始儲位數" : "每層最多儲位"} rules={[{ required: true }]}><InputNumber aria-label={activeDialog.kind === "createRack" ? "每層初始儲位數" : "每層最多儲位"} min={Math.max(1, ...rackLocations.map(location => location.slot))} max={8} precision={0} style={{ width: "100%" }} /></Form.Item>
             <Form.Item name="layoutX" label="平面位置 X" rules={[{ required: true }]}><InputNumber aria-label="平面位置 X" min={-10000} max={10000} precision={0} style={{ width: "100%" }} /></Form.Item>
             <Form.Item name="layoutY" label="平面位置 Y" rules={[{ required: true }]}><InputNumber aria-label="平面位置 Y" min={-10000} max={10000} precision={0} style={{ width: "100%" }} /></Form.Item></div>
           {activeDialog.kind === "editRack" && <Form.Item name="isActive" label="啟用" valuePropName="checked"><Switch /></Form.Item>}
         </> : activeDialog && ["createLocation", "editLocation"].includes(activeDialog.kind) ? <>
-          {activeDialog.kind === "createLocation" ? <><Form.Item name="rackId" label="貨架" rules={[{ required: true }]}><Select options={data?.racks.filter(rack => rack.isActive).map(rack => ({ value: rack.id, label: `${rack.code} · ${rack.name}` }))} /></Form.Item>
-            <Form.Item name="code" label="儲位編碼" rules={[{ required: true }, { pattern: /^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$/, message: "請使用英文、數字、底線或連字號" }]}><Input maxLength={24} placeholder="例如 A5" /></Form.Item></> : <Tag>{activeDialog.location?.code}</Tag>}
-          <Form.Item name="name" label="儲位名稱" rules={[{ required: true, whitespace: true }]}><Input maxLength={80} /></Form.Item>
-          {activeDialog.kind === "createLocation" ? <div className="mailroom-storage-form-grid"><Form.Item name="level" label="層" rules={[{ required: true }]}><InputNumber min={1} max={8} precision={0} style={{ width: "100%" }} /></Form.Item>
-            <Form.Item name="slot" label="格" rules={[{ required: true }]}><InputNumber min={1} max={8} precision={0} style={{ width: "100%" }} /></Form.Item></div> : <Form.Item name="isActive" label="啟用" valuePropName="checked"><Switch /></Form.Item>}
+          {activeDialog.kind === "createLocation" ? <><Form.Item name="rackId" label="貨架" rules={[{ required: true }]}><Select aria-label="貨架" options={data?.racks.filter(rack => rack.isActive).map(rack => ({ value: rack.id, label: `${rack.code} · ${rack.name}` }))} /></Form.Item>
+            <Form.Item name="code" label="儲位編碼" rules={[{ required: true }, { pattern: /^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$/, message: "請使用英文、數字、底線或連字號" }]}><Input aria-label="儲位編碼" maxLength={24} placeholder="例如 A5" /></Form.Item></> : <Tag>{activeDialog.location?.code}</Tag>}
+          <Form.Item name="name" label="儲位名稱" rules={[{ required: true, whitespace: true }]}><Input aria-label="儲位名稱" maxLength={80} /></Form.Item>
+          <Form.Item name="purpose" label="儲位用途" rules={[{ required: true }]}><Select aria-label="儲位用途" options={[{ value: "INHERIT", label: "繼承貨架預設" }, ...Object.entries(STORAGE_PURPOSES).map(([value, label]) => ({ value, label }))]} /></Form.Item>
+          {activeDialog.kind === "createLocation" ? <div className="mailroom-storage-form-grid"><Form.Item name="level" label="層" rules={[{ required: true }]}><InputNumber aria-label="層" min={1} max={formRack?.rows || 8} precision={0} style={{ width: "100%" }} /></Form.Item>
+            <Form.Item name="slot" label="位置序號" rules={[{ required: true }]}><InputNumber aria-label="位置序號" min={1} max={formRack?.columns || 8} precision={0} style={{ width: "100%" }} /></Form.Item></div> : <Form.Item name="isActive" label="啟用" valuePropName="checked"><Switch /></Form.Item>}
         </> : activeDialog?.kind === "move" ? <>
           <div className="mailroom-storage-item-meta" style={{ marginBottom: 16 }}>{activeDialog.item?.productName} · {activeDialog.item?.location}</div>
           <Form.Item name="storageLocationId" label="移往儲位"><Select aria-label="移往儲位" allowClear showSearch optionFilterProp="label" placeholder="選擇儲位" options={data ? storageLocationOptions(data) : []} /></Form.Item>
