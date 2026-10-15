@@ -101,8 +101,10 @@ export function refurbishmentStartReady(item:RepairItem):boolean {
     && !sourceWorkStartCurrent(item) && companyCsrCurrent(item) && sourceMaterialsCurrent(item,'START') && sourceTemplateCurrent(item,'INSPECTION');
 }
 export type RepairPrecheckPhoto = NonNullable<MailroomPrecheckRecord['recorded']>['photos'][number];
+export type RepairPrecheckPendingSummary = {stage:'DRAFT'|'READY';revision:number;recordedBy:string;recordedAt:string};
 export type RepairPrecheckView =
-  | {state:'NOT_STARTED'|'PENDING'|'STALE'|'UNAVAILABLE'}
+  | {state:'NOT_STARTED'|'STALE'|'UNAVAILABLE'}
+  | ({state:'PENDING'} & RepairPrecheckPendingSummary)
   | {
     state:'SUBMITTED';revision:number;recordedBy:string;recordedAt:string;submittedAt:string;
     templateTitle?:string;templateRevision?:number;
@@ -113,6 +115,12 @@ const precheckHash = (value:unknown):value is string => typeof value==='string' 
 const precheckText = (value:unknown):value is string => typeof value==='string' && !!value.trim();
 const precheckTime = (value:unknown):value is string => precheckText(value) && Number.isFinite(Date.parse(value));
 const precheckRevision = (value:unknown):value is number => Number.isSafeInteger(value) && Number(value)>0;
+export function repairPrecheckPendingSummary(value:unknown):RepairPrecheckPendingSummary|null {
+  if (!value || typeof value!=='object') return null;
+  const row=value as {stage?:unknown;revision?:unknown;savedByName?:unknown;savedAt?:unknown};
+  if ((row.stage!=='DRAFT' && row.stage!=='READY') || !precheckRevision(row.revision) || !precheckText(row.savedByName) || !precheckTime(row.savedAt)) return null;
+  return {stage:row.stage,revision:row.revision,recordedBy:row.savedByName,recordedAt:row.savedAt};
+}
 export function repairPrecheckPhotoUrl(photo:RepairPrecheckPhoto,itemId:string,revision:number):string|null {
   if (!photo || !precheckHash(photo.id) || !precheckHash(photo.digest) || !precheckRevision(revision)) return null;
   const expected=`/mailroom/prechecks/items/${encodeURIComponent(itemId)}/recorded-photos/${photo.id}?revision=${revision}`;
@@ -127,7 +135,10 @@ export function repairPrecheckView(value:unknown,entityId:string,itemId:string):
     if (row.recorded!==null) return unavailable;
     if (row.stage==='NOT_STARTED' && row.revision===0) return {state:'NOT_STARTED'};
     if (!precheckRevision(row.revision)) return unavailable;
-    if (row.stage==='DRAFT' || row.stage==='READY') return {state:'PENDING'};
+    if (row.stage==='DRAFT' || row.stage==='READY') {
+      const summary=repairPrecheckPendingSummary(row);
+      return summary ? {state:'PENDING',...summary} : unavailable;
+    }
     return row.stage==='STALE' ? {state:'STALE'} : unavailable;
   }
   const record=row.recorded;
@@ -155,6 +166,7 @@ export function repairPrecheckView(value:unknown,entityId:string,itemId:string):
 export type RepairItem = Item & {
   entityId?:string;
   mailroomPrecheck?:MailroomPrecheckRecord;
+  precheck?:unknown;
   repairWorkflow?:RepairWorkflow|null;
   allowedWorkflowActions?:RepairWorkflowAction[];
   physicalCustody?:PhysicalCustody;

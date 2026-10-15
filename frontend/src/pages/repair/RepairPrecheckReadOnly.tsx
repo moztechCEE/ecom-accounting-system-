@@ -6,7 +6,15 @@ import { repairPrecheckPhotoUrl, type RepairPrecheckPhoto, type RepairPrecheckVi
 const RESULTS = { NORMAL:'正常', ABNORMAL:'異常', NOT_TESTED:'未測試', NOT_APPLICABLE:'不適用' } as const;
 const date = (value:string) => new Date(value).toLocaleString('zh-TW');
 export default function RepairPrecheckReadOnly({record,entityId,itemId}:{record:RepairPrecheckView;entityId:string;itemId:string}) {
-  if (record.state !== 'SUBMITTED') return <Typography.Text type="secondary">{{NOT_STARTED:'尚未初檢',PENDING:'尚未交辦初檢',STALE:'初檢紀錄待更新',UNAVAILABLE:'初檢紀錄暫無法取得'}[record.state]}</Typography.Text>;
+  if (record.state==='PENDING') return <section aria-label="收發初檢進度">
+    <Tag>{record.stage==='DRAFT'?'收發初檢中':'初檢完成待交接'}</Tag>
+    <Descriptions size="small" column={{xs:1,sm:2}} items={[
+      {key:'revision',label:'版次',children:`v${record.revision}`},
+      {key:'author',label:'記錄人',children:record.recordedBy},
+      {key:'recordedAt',label:'記錄時間',children:date(record.recordedAt)},
+    ]} />
+  </section>;
+  if (record.state !== 'SUBMITTED') return <Typography.Text type="secondary">{{NOT_STARTED:'尚未初檢',STALE:'初檢紀錄待更新',UNAVAILABLE:'初檢紀錄暫無法取得'}[record.state]}</Typography.Text>;
   return <section aria-label="收發初檢紀錄" style={{minWidth:0,overflowWrap:'anywhere'}}>
     <Descriptions size="small" column={{xs:1,sm:2}} items={[
       {key:'revision',label:'版次',children:`v${record.revision}`},

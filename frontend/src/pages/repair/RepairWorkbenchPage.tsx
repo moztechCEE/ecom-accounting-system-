@@ -18,6 +18,7 @@ import { REPAIR_WORKBENCH_TABS, REPAIR_QUERY_FILTERS, repairListScope, repairWor
 import RepairWorkflowPanel from './RepairWorkflowPanel';
 import RepairReadinessPanel from './RepairReadinessPanel';
 import RepairPrecheckReadOnly from './RepairPrecheckReadOnly';
+import RepairPrecheckQueue from './RepairPrecheckQueue';
 import RepairTestStandardManager from './RepairTestStandardManager';
 import { useRepairNavigationGuard } from './repair-navigation';
 import { useRepairFeedback } from './repair-feedback';
@@ -142,6 +143,7 @@ export default function RepairWorkbenchPage() {
   }
   async function openScanned(target: {itemId:string;entityId:string}) {
     if (target.entityId !== entityId) return;
+    if (target.itemId===selectedId) {setScanOpen(false);scanTrigger.current?.focus();return;}
     if (detailDirty.current) {if (!await confirmDiscard()) return;detailDirty.current=false;}
     const next = new URLSearchParams(params);
     next.set('entityId',entityId);next.set('itemId',target.itemId);next.set('queue','all');
@@ -165,7 +167,10 @@ export default function RepairWorkbenchPage() {
       const count=key === 'all' ? undefined : repairQueueCount(queueCounts,key as RepairWorkbenchTab);
       return {key,label:<span className="repair-tab-label"><span>{label}</span>{count !== undefined && count > 0 && <Badge count={count} overflowCount={Infinity} title={`${count} 件`} aria-label={`${count} 件`} />}</span>};
     })} />
-    {tab === 'acceptance' && <Collapse className="repair-arrival-preview" items={[{key:'arrival',label:'待到貨／在途案件',forceRender:true,children:<ArrivalPreview entityId={entityId} />}]} />}
+    {tab === 'acceptance' && <>
+      <Collapse className="repair-arrival-preview" items={[{key:'arrival',label:'待到貨／在途案件',forceRender:true,children:<ArrivalPreview entityId={entityId} />}]} />
+      <RepairPrecheckQueue entityId={entityId} onOpen={id=>void open(id)} />
+    </>}
     {todoMessage && !failure && <Alert type="warning" showIcon message={todoMessage} style={{marginBottom:16}} />}
     {failure && <Alert type="error" showIcon message={failure} style={{marginBottom:16}} />}
     <Card className="repair-workbench-list" title={REPAIR_WORKBENCH_TABS[tab]} extra={<Space className="repair-query-tools">

@@ -20,7 +20,9 @@ const itemId = '11111111-1111-4111-8111-111111111111';
 const otherId = '22222222-2222-4222-8222-222222222222';
 const deniedId = '33333333-3333-4333-8333-333333333333';
 const company = 'precheck-company';
+const companyB = 'precheck-company-b';
 const title = '墨子合成維修產品・原案件';
+const draftSecret = 'DO_NOT_RENDER_DRAFT_SECRET';
 const photoIds = ['a'.repeat(64), 'b'.repeat(64)];
 const photoPath = (photoId, revision = 7, id = itemId) => `/mailroom/prechecks/items/${id}/recorded-photos/${photoId}?revision=${revision}`;
 const precheckContract = {
@@ -37,6 +39,7 @@ const precheckContract = {
   },
 };
 const measuredFiles = ['src/pages/repair/RepairPrecheckReadOnly.tsx', 'src/pages/repair/RepairWorkbenchPage.tsx',
+  'src/pages/repair/RepairPrecheckQueue.tsx',
   'src/pages/repair/repair-model.ts', 'src/pages/mailroom/mailroom-precheck-record.ts',
   'src/pages/mailroom/MailroomItemScan.tsx', 'src/utils/mailroom-item-link.ts'];
 const hashes = () => Object.fromEntries(measuredFiles.map(path => [path, createHash('sha256').update(readFileSync(join(root, path))).digest('hex')]));
@@ -72,7 +75,10 @@ const clone=value=>structuredClone(value);
 const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
 const blob=mode=>new Blob([Uint8Array.from(atob(png),character=>character.charCodeAt(0))],{type:mode==='mime'?'text/html':'image/png'});
 const photoMode=new URL(location.href).searchParams.get('photoMode')||'png';
-window.precheckReaderApi={gets:[],posts:[],created:[],revoked:[],aborts:[],held:[],heldDetails:[],holdDetails:false,readerRenders:[],detailRenders:[],photoMode,formalProps:[],
+const queueScenario=new URL(location.href).searchParams.get('queueScenario')||'normal';
+window.precheckReaderApi={gets:[],posts:[],created:[],revoked:[],aborts:[],held:[],heldDetails:[],holdDetails:false,readerRenders:[],detailRenders:[],photoMode,formalProps:[],queueScenario,queuePlans:[],heldQueues:[],
+planQueue(match,mode='hold'){this.queuePlans.push({match,mode});},
+releaseQueue(index){const pending=this.heldQueues[index];if(!pending)throw Error('Missing held queue '+index);pending.resolve({data:clone(pending.data)});},
 releasePhoto(index,mode='png'){const pending=this.held[index];if(!pending)throw Error('Missing held photo '+index);pending.resolve({data:blob(mode)});},
 releaseDetail(index){const pending=this.heldDetails[index];if(!pending)throw Error('Missing held detail '+index);pending.resolve({data:clone(pending.data)});}};
 const record={id:'${itemId}',entityId:'${company}',label:'SYNTHETIC-NATIVE-ITEM',productName:${JSON.stringify(title)},
@@ -82,7 +88,20 @@ physicalCustody:'MAILROOM',editable:false,allowedWorkflowActions:[],matchResult:
 repairOverview:{customerName:'合成顧客',customerPhone:'0900-000-000',photoUrl:null},
 receipt:{number:'SYNTHETIC-MR-ORIGINAL',category:'REPAIR',sourceCaseId:'synthetic-source',sourceNumber:'SYNTHETIC-ORIGINAL-CASE',customerServiceUserId:'synthetic-csr'},
 repairInspection:null,repairReport:null,repairWorkflow:{},history:[],deliverySummary:[],mailroomPrecheck:${JSON.stringify(precheckContract)}};
+if(new URL(location.href).searchParams.get('editable')==='1')Object.assign(record,{status:'INSPECTING',statusLabel:'檢測中',repairOwnerId:'synthetic-technician',custodianId:'synthetic-technician',editable:true,physicalCustody:'TECHNICIAN'});
 const encoded=new URL(location.href).searchParams.get('payload');if(encoded)record.mailroomPrecheck=JSON.parse(encoded).value;
+const queueRow=(id,name,stage,entityId='${company}')=>({...clone(record),id,entityId,status:'RECEIVED',productName:name,
+receipt:{...clone(record.receipt),sourceNumber:'SYNTHETIC-PREVIEW-'+id.slice(0,8)},
+precheck:{stage,revision:stage==='NOT_STARTED'?0:3,savedById:stage==='NOT_STARTED'?null:'synthetic-clerk',savedByName:stage==='NOT_STARTED'?null:entityId==='${companyB}'?'合成乙公司初檢人':'合成待交接初檢人',savedAt:stage==='NOT_STARTED'?null:'2026-10-16T01:02:03.000Z',submittedAt:null,
+draft:{note:'${draftSecret}'},checks:[{label:'${draftSecret}'}],photos:['${draftSecret}']}});
+function queueResult(params){
+ if(params.entityId==='${companyB}')return {items:[queueRow('${otherId}','乙公司合成已收維修產品','DRAFT','${companyB}')],total:7,queueCounts:{all:9876,todo:4321}};
+ if(params.page===2)return {items:[queueRow('${otherId}','合成第二頁待交接產品','READY')],total:123,queueCounts:{all:9876,todo:4321}};
+ const rows=[queueRow('${itemId}','合成初檢中產品','DRAFT'),queueRow('${otherId}','合成完成待交接產品','READY'),queueRow('66666666-6666-4666-8666-666666666666','合成尚未初檢產品','NOT_STARTED')];
+ rows[2].receipt.category='RETURN';rows[2].repairOwnerId='synthetic-technician';rows[2].productName='合成已認領整新初檢產品';
+ if(window.precheckReaderApi.queueScenario==='unknown')delete rows[2].precheck;
+ return {items:rows,total:123,queueCounts:{all:9876,todo:4321}};
+}
 export const API_URL='/offline-precheck-reader';
 export default {
 async get(path,options={}){const params=clone(options.params||{}),state=window.precheckReaderApi;
@@ -91,6 +110,12 @@ if(photo){if(options.signal)options.signal.addEventListener('abort',()=>state.ab
 if(state.photoMode==='403')throw Object.assign(Error('合成照片無存取權'),{response:{status:403,data:{message:'合成照片無存取權'}}});
 if(state.photoMode==='hold')return await new Promise(resolve=>state.held.push({path,signal:options.signal,resolve}));
 return {data:blob(state.photoMode)};}
+if(path==='/mailroom/items'&&params.status==='RECEIVED'){
+const data=queueResult(params),index=state.queuePlans.findIndex(plan=>Object.entries(plan.match).every(([key,value])=>params[key]===value));
+if(index>=0){const plan=state.queuePlans.splice(index,1)[0];if(plan.mode==='fail')throw Object.assign(Error('合成初檢清單讀取失敗'),{response:{status:503,data:{message:'合成初檢清單讀取失敗'}}});return await new Promise(resolve=>state.heldQueues.push({resolve,data,params}));}
+if(state.queueScenario==='fail')throw Object.assign(Error('合成初檢清單讀取失敗'),{response:{status:503,data:{message:'合成初檢清單讀取失敗'}}});
+if(state.queueScenario==='hold-a'&&params.entityId==='${company}')return await new Promise(resolve=>state.heldQueues.push({resolve,data,params}));
+return {data};}
 if(path==='/mailroom/items'||path==='/repair-workbench/todo')return {data:{items:[],total:0,queueCounts:{todo:0,acceptance:0,all:0},countExact:true,unknownCount:0}};
 if(path==='/mailroom/source-cases')return {data:{items:[],nextCursor:null}};
 const match=path.match(/^\\/repair-workbench\\/items\\/([^/]+)\\/documents$/);
@@ -120,11 +145,15 @@ test('repair precheck read-only view and actual scan/deeplink reader use native 
         if (id.endsWith('/src/contexts/AuthContext.tsx')) return `export const useAuth=()=>({user:{id:'synthetic-technician',roles:[],permissions:['repair_workbench:read','repair_workbench:update']}});`;
         if (id.endsWith('/src/services/api.ts')) return api;
         if (id.endsWith('/src/services/websocket.service.ts')) return `export const webSocketService={subscribe:()=>()=>{}};`;
+        // Capture the component's genuine callback for dirty-state cases while
+        // the drawer mask covers the background. Those cases are not claimed
+        // to be reachable by pointer scanning through the mask.
+        if (id.endsWith('/src/pages/mailroom/MailroomItemScan.tsx')) return `import React,{useLayoutEffect} from 'react';import Actual from '/src/pages/mailroom/MailroomItemScan.tsx?scanActual';export default function ObservedScan(props){useLayoutEffect(()=>{window.precheckReaderApi.openScanned=props.onOpen;});return React.createElement(Actual,props);}`;
         // An observer only: the actual child, adapter and DOM are unchanged. The
         // layout-effect receipt records each committed render before passive
         // detail loading can clear old state; it grants no permission or data.
         if (id.endsWith('/src/pages/repair/RepairPrecheckReadOnly.tsx')) return `import React,{useLayoutEffect} from 'react';import Actual from '/src/pages/repair/RepairPrecheckReadOnly.tsx?precheckActual';export default function Observed(props){useLayoutEffect(()=>{const search=window.precheckReaderRouter?.state.location.search;if(!search)return;window.precheckReaderApi.readerRenders.push({selectedItemId:new URLSearchParams(search).get('itemId'),expectedItemId:props.itemId,state:props.record.state,recordedBy:props.record.recordedBy||null,regionText:document.querySelector('[aria-label="收發初檢紀錄"]')?.textContent||null});});return React.createElement(Actual,props);}`;
-        if (id.endsWith('/src/pages/repair/RepairDocuments.tsx')) return `import React,{useLayoutEffect} from 'react';export default function IsolatedDocuments({item}){window.precheckReaderApi.formalProps.push({itemId:item.id,inspection:structuredClone(item.repairInspection),report:structuredClone(item.repairReport)});useLayoutEffect(()=>{window.precheckReaderApi.detailRenders.push({selectedItemId:new URLSearchParams(window.precheckReaderRouter.state.location.search).get('itemId'),renderedItemId:item.id,regionText:document.querySelector('[aria-label="收發初檢紀錄"]')?.textContent||null});});return React.createElement('input',{'aria-label':'合成正式檢修欄位',readOnly:true,value:item.repairInspection?.data?.diagnosis||''});}`;
+        if (id.endsWith('/src/pages/repair/RepairDocuments.tsx')) return `import React,{useLayoutEffect,useState} from 'react';export default function IsolatedDocuments({item,onDirtyChange}){const[value,setValue]=useState(item.repairInspection?.data?.diagnosis||'');window.precheckReaderApi.formalProps.push({itemId:item.id,inspection:structuredClone(item.repairInspection),report:structuredClone(item.repairReport)});useLayoutEffect(()=>{window.precheckReaderApi.detailRenders.push({selectedItemId:new URLSearchParams(window.precheckReaderRouter.state.location.search).get('itemId'),renderedItemId:item.id,regionText:document.querySelector('[aria-label="收發初檢紀錄"]')?.textContent||null});});return React.createElement('input',{'aria-label':'合成正式檢修欄位',value,onChange:event=>{setValue(event.target.value);onDirtyChange(true);}});}`;
         if (['RepairWorkflowPanel.tsx', 'RepairReadinessPanel.tsx', 'RepairTestStandardManager.tsx'].some(name => id.endsWith('/src/pages/repair/' + name))) {
           return `import React from 'react';export default function IsolatedChild(){return null;}`;
         }
@@ -157,7 +186,7 @@ test('repair precheck read-only view and actual scan/deeplink reader use native 
   await server.listen(); browser = await chromium.launch({ executablePath, headless: true });
   const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
   async function open(child, options = {}) {
-    const { mode = 'page', entry = `/operations/repair?entityId=${company}`, width = 1280, photoMode = 'png' } = options;
+    const { mode = 'page', entry = `/operations/repair?entityId=${company}`, width = 1280, photoMode = 'png', queueScenario = 'normal', editable = false } = options;
     const page = await browser.newPage({ viewport: { width, height: 1000 }, timezoneId: 'Asia/Taipei' }); pages.push(page);
     const pageNumber = pages.length;
     child.after(async () => {
@@ -173,7 +202,7 @@ test('repair precheck read-only view and actual scan/deeplink reader use native 
       return route.continue();
     });
     const payload = 'raw' in options ? '&payload=' + encodeURIComponent(JSON.stringify({ value: options.raw })) : '';
-    await page.goto(`${origin}/__repair-precheck-reader?mode=${mode}&entry=${encodeURIComponent(entry)}&photoMode=${photoMode}${payload}`);
+    await page.goto(`${origin}/__repair-precheck-reader?mode=${mode}&entry=${encodeURIComponent(entry)}&photoMode=${photoMode}&queueScenario=${queueScenario}&editable=${editable ? 1 : 0}${payload}`);
     await page.locator(mode === 'pure' ? '.pure-shell' : '.repair-tab-label').first().waitFor();
     return page;
   }
@@ -208,10 +237,25 @@ test('repair precheck read-only view and actual scan/deeplink reader use native 
     });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   }
-  async function noFacts(page) {
-    assert.equal(await page.locator('[aria-label="收發初檢紀錄"],.pure-shell .ant-descriptions,.pure-shell li,.pure-shell img').count(), 0);
-    for (const value of ['合成初檢記錄人', '合成螢幕異常', 'v7']) assert.equal(await page.getByText(value, { exact: true }).count(), 0);
+  async function noFacts(page, safeMetadata = false) {
+    assert.equal(await page.locator('.pure-shell li,.pure-shell img,[aria-label="初檢照片"]').count(), 0);
+    for (const value of ['合成螢幕異常', '合成通電檢查', '合成電源觀察', draftSecret]) assert.equal(await page.getByText(value, { exact: true }).count(), 0);
+    if (!safeMetadata) for (const value of ['合成初檢記錄人', 'v7']) assert.equal(await page.getByText(value, { exact: true }).count(), 0);
     assert.deepEqual(await photoGets(page), []); await noWrites(page);
+  }
+  async function openQueue(page) {
+    const queue = page.getByRole('region', { name: '收發初檢預覽', exact: true }); await queue.waitFor();
+    if (await queue.locator('.ant-collapse-header').getAttribute('aria-expanded') !== 'true') await queue.getByText('收發初檢', { exact: true }).click();
+    return queue;
+  }
+  const queueGets = page => page.evaluate(() => window.precheckReaderApi.gets.filter(call => call.path === '/mailroom/items' && call.params.status === 'RECEIVED'));
+  async function settledQueue(page) {
+    await page.waitForFunction(() => {
+      const content = document.querySelector('[aria-label="收發初檢預覽"] .ant-collapse-content'), box = content?.querySelector('.ant-collapse-content-box');
+      return content && box && content.getBoundingClientRect().height >= box.getBoundingClientRect().height
+        && content.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running');
+    });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   }
 
   await t.test('submitted view shows four true results, exact metadata and only its dedicated evidence', async child => {
@@ -231,10 +275,16 @@ test('repair precheck read-only view and actual scan/deeplink reader use native 
     assert.equal(await page.getByText('DO_NOT_RENDER_GENERAL_CASE_PHOTO').count(), 0);
     await page.screenshot({ path: join(artifactDir, 'precheck-submitted-desktop.png'), fullPage: true });
   });
-  await t.test('non-submitted states never leak metadata, check facts or photos even when fields remain in the object', async child => {
-    for (const [stage, label] of Object.entries({ NOT_STARTED: '尚未初檢', DRAFT: '尚未交辦初檢', READY: '尚未交辦初檢', STALE: '初檢紀錄待更新' })) {
-      const raw = { ...structuredClone(precheckContract), stage, revision: stage === 'NOT_STARTED' ? 0 : 7, recorded: null, submittedAt: null };
-      const page = await open(child, { mode: 'pure', raw }); await page.getByText(label, { exact: true }).waitFor(); await noFacts(page);
+  await t.test('pending stages show only safe summary metadata while all non-submitted states hide draft facts and photos', async child => {
+    for (const [stage, label] of Object.entries({ NOT_STARTED: '尚未初檢', DRAFT: '收發初檢中', READY: '初檢完成待交接', STALE: '初檢紀錄待更新' })) {
+      const pending = ['DRAFT', 'READY'].includes(stage);
+      const raw = { ...structuredClone(precheckContract), stage, revision: stage === 'NOT_STARTED' ? 0 : 7, recorded: null, submittedAt: null, draft: { diagnosis: draftSecret }, photos: [draftSecret] };
+      const page = await open(child, { mode: 'pure', raw }); await page.getByText(label, { exact: true }).waitFor(); await noFacts(page, pending);
+      if (pending) {
+        await page.getByText('合成初檢記錄人', { exact: true }).waitFor(); await page.getByText('v7', { exact: true }).waitFor();
+        const date = await page.evaluate(() => new Date('2026-10-16T01:02:03.000Z').toLocaleString('zh-TW'));
+        await page.getByText(date, { exact: true }).waitFor();
+      }
       await page.close();
     }
     for (const raw of [undefined, null]) { const page = await open(child, { mode: 'pure', raw }); await page.getByText('初檢紀錄暫無法取得', { exact: true }).waitFor(); await noFacts(page); await page.close(); }
@@ -260,6 +310,9 @@ test('repair precheck read-only view and actual scan/deeplink reader use native 
     add('invalid result', raw => { raw.recorded.checks[0].result = 'MAYBE'; });
     add('empty checks without reason', raw => { raw.recorded.checks = []; });
     add('draft cannot carry submitted record', raw => { raw.stage = 'DRAFT'; });
+    add('pending revision missing', raw => { raw.stage = 'DRAFT'; raw.recorded = null; delete raw.revision; });
+    add('pending recorder missing', raw => { raw.stage = 'DRAFT'; raw.recorded = null; raw.savedByName = null; });
+    add('pending time invalid', raw => { raw.stage = 'READY'; raw.recorded = null; raw.savedAt = 'not-a-time'; });
     add('unsafe photo ID', raw => { raw.recorded.photos[0].id = 'not-a-photo'; });
     add('unsafe digest', raw => { raw.recorded.photos[0].digest = 'not-a-digest'; });
     add('foreign origin', raw => { raw.recorded.photos[0].url = 'https://foreign.invalid' + raw.recorded.photos[0].url; });
@@ -294,12 +347,14 @@ test('repair precheck read-only view and actual scan/deeplink reader use native 
     assert.equal(await page.getByRole('region', { name: '收發初檢紀錄' }).count(), 0); await noWrites(page);
   });
   await t.test('detail pending, not-started, stale and missing projections show no saved facts or photo reads', async child => {
-    for (const [stage, label] of [['DRAFT', '尚未交辦初檢'], ['READY', '尚未交辦初檢'], ['NOT_STARTED', '尚未初檢'], ['STALE', '初檢紀錄待更新'], ['MISSING', '初檢紀錄暫無法取得']]) {
+    for (const [stage, label] of [['DRAFT', '收發初檢中'], ['READY', '初檢完成待交接'], ['NOT_STARTED', '尚未初檢'], ['STALE', '初檢紀錄待更新'], ['MISSING', '初檢紀錄暫無法取得']]) {
       const raw = stage === 'MISSING' ? undefined : { ...structuredClone(precheckContract), stage, revision: stage === 'NOT_STARTED' ? 0 : 7, submittedAt: null, recorded: null };
       const page = await open(child, { entry: `/operations/repair?entityId=${company}&itemId=${itemId}&queue=all`, raw });
       await page.getByRole('heading', { name: title, exact: true }).waitFor(); await settledDrawer(page);
       await page.locator('.repair-case-details').getByText('收發初檢', { exact: true }).click(); await page.getByText(label, { exact: true }).waitFor();
-      assert.equal(await page.getByRole('region', { name: '收發初檢紀錄' }).count(), 0); assert.equal(await page.getByText('合成初檢記錄人', { exact: true }).count(), 0);
+      if (['DRAFT', 'READY'].includes(stage)) await page.getByText('合成初檢記錄人', { exact: true }).waitFor();
+      else assert.equal(await page.getByText('合成初檢記錄人', { exact: true }).count(), 0);
+      assert.equal(await page.getByText('合成螢幕異常', { exact: true }).count(), 0); assert.equal(await page.locator('[aria-label="初檢照片"]').count(), 0);
       assert.deepEqual(await photoGets(page), []); await noWrites(page); await page.close();
     }
   });
@@ -447,6 +502,108 @@ test('repair precheck read-only view and actual scan/deeplink reader use native 
     await page.evaluate(path => window.precheckReaderRouter.navigate(path), `/operations/repair?entityId=${company}&itemId=${deniedId}&queue=all`);
     await page.getByText('合成案件無存取權', { exact: true }).waitFor(); await page.getByText('請重新載入案件', { exact: true }).waitFor();
     assert.equal(await page.locator('.repair-detail').count(), 0); assert.equal(await page.getByRole('button', { name: '認領案件', exact: true }).count(), 0); await noWrites(page);
+  });
+  await t.test('genuine scan callback preserves same-item dirty edits and requires discard before a different item', async child => {
+    const page = await open(child, { entry: `/operations/repair?entityId=${company}&queue=acceptance`, editable: true });
+    await scanButton(page).click(); await page.getByLabel('掃描物件標籤', { exact: true }).waitFor();
+    await page.evaluate(path => window.precheckReaderRouter.navigate(path), `/operations/repair?entityId=${company}&queue=acceptance&itemId=${itemId}`);
+    await page.getByRole('heading', { name: title, exact: true }).waitFor(); await settledDrawer(page);
+    const field = page.getByLabel('合成正式檢修欄位'); await field.fill('合成尚未保存的技師檢修內容');
+    const originalSearch = await page.evaluate(() => window.precheckReaderRouter.state.location.search);
+    await page.evaluate(target => window.precheckReaderApi.openScanned(target), { entityId: company, itemId, path: `/operations/repair?entityId=${company}&itemId=${itemId}&queue=all` });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.getByText('尚有未儲存的修改', { exact: true }).count(), 0);
+    assert.equal(await field.inputValue(), '合成尚未保存的技師檢修內容');
+    assert.equal(await page.evaluate(() => window.precheckReaderRouter.state.location.search), originalSearch);
+    await page.locator('.repair-workbench-drawer').getByRole('button', { name: 'Close', exact: true }).click();
+    await page.locator('.ant-modal-confirm-title').filter({ hasText: '尚有未儲存的修改' }).waitFor();
+    await page.getByRole('button', { name: '繼續編輯', exact: true }).click();
+    await page.locator('.ant-modal-confirm').waitFor({ state: 'hidden' });
+    assert.equal(await field.inputValue(), '合成尚未保存的技師檢修內容');
+    const different = { entityId: company, itemId: otherId, path: `/operations/repair?entityId=${company}&itemId=${otherId}&queue=all` };
+    await page.evaluate(target => window.precheckReaderApi.openScanned(target), different);
+    await page.locator('.ant-modal-confirm-title').filter({ hasText: '尚有未儲存的修改' }).waitFor();
+    await page.getByRole('button', { name: '繼續編輯', exact: true }).click();
+    await page.locator('.ant-modal-confirm').waitFor({ state: 'hidden' });
+    assert.equal(await field.inputValue(), '合成尚未保存的技師檢修內容');
+    assert.equal(await page.evaluate(() => window.precheckReaderRouter.state.location.search), originalSearch);
+    await page.evaluate(target => window.precheckReaderApi.openScanned(target), different);
+    await page.locator('.ant-modal-confirm-title').filter({ hasText: '尚有未儲存的修改' }).waitFor();
+    await page.getByRole('button', { name: '放棄修改', exact: true }).click();
+    await page.getByRole('heading', { name: '墨子合成另一原案件', exact: true }).waitFor();
+    assert.equal(await page.getByLabel('合成正式檢修欄位').inputValue(), '');
+    const params = new URLSearchParams(await page.evaluate(() => window.precheckReaderRouter.state.location.search));
+    assert.equal(params.get('itemId'), otherId); assert.equal(params.get('queue'), 'all'); await noWrites(page); await tabs(page);
+  });
+  await t.test('received preview uses the exact query, response total, page-local counts and fixed50 pagination before opening the native case', async child => {
+    const page = await open(child, { entry: `/operations/repair?entityId=${company}&queue=acceptance` }); const queue = await openQueue(page);
+    await queue.getByText('已收維修件 123 件', { exact: true }).waitFor();
+    await queue.getByText('本頁初檢中 1 件／本頁完成待交接 1 件', { exact: true }).waitFor();
+    assert.equal(await queue.locator('ul:not(.ant-pagination) > li').count(), 3);
+    await queue.getByText('合成已認領整新初檢產品', { exact: true }).waitFor();
+    assert.equal(await queue.getByText('待初檢', { exact: true }).count(), 1); assert.equal(await queue.getByText(draftSecret, { exact: true }).count(), 0);
+    assert.deepEqual(await queueGets(page), [{ path: '/mailroom/items', params: { entityId: company, view: 'repair', repairScope: 'all', status: 'RECEIVED', page: 1 } }]);
+    assert.equal(await queue.getByText(/9876|4321/).count(), 0);
+    await queue.locator('.ant-pagination-item-3').waitFor(); assert.equal(await queue.locator('.ant-pagination-item-4').count(), 0);
+    assert.equal(await queue.locator('.ant-pagination-options').count(), 0);
+    await queue.locator('.ant-pagination-item-2').click(); await queue.getByText('合成第二頁待交接產品', { exact: true }).waitFor();
+    await queue.getByText('本頁初檢中 0 件／本頁完成待交接 1 件', { exact: true }).waitFor();
+    assert.deepEqual((await queueGets(page)).at(-1), { path: '/mailroom/items', params: { entityId: company, view: 'repair', repairScope: 'all', status: 'RECEIVED', page: 2 } });
+    await queue.locator('.ant-pagination-item-1').click(); await queue.getByText('合成初檢中產品', { exact: true }).waitFor();
+    await queue.getByRole('button', { name: /^開啟案件：合成初檢中產品/ }).click();
+    await page.getByRole('heading', { name: title, exact: true }).waitFor(); await settledDrawer(page);
+    await page.getByRole('button', { name: '認領案件', exact: true }).waitFor();
+    assert.equal(new URLSearchParams(await page.evaluate(() => window.precheckReaderRouter.state.location.search)).get('itemId'), itemId);
+    const details = (await page.evaluate(() => window.precheckReaderApi.gets)).filter(call => call.path.endsWith('/documents'));
+    assert.deepEqual(details, [{ path: `/repair-workbench/items/${itemId}/documents`, params: { entityId: company } }]);
+    assert.deepEqual(await photoGets(page), []); await noWrites(page); await tabs(page);
+  });
+  await t.test('preview unknown summaries and read failures never fabricate precise counts or zero total', async child => {
+    const unknown = await open(child, { entry: `/operations/repair?entityId=${company}&queue=acceptance`, queueScenario: 'unknown' });
+    const unknownQueue = await openQueue(unknown); await unknownQueue.getByText('已收維修件 123 件', { exact: true }).waitFor();
+    await unknownQueue.getByText('本頁初檢進度未確認', { exact: true }).waitFor(); await unknownQueue.getByText('初檢進度未確認', { exact: true }).waitFor();
+    assert.equal(await unknownQueue.getByText(/本頁初檢中 \d+ 件|本頁完成待交接 \d+ 件/).count(), 0); assert.deepEqual(await photoGets(unknown), []); await noWrites(unknown); await unknown.close();
+    const failed = await open(child, { entry: `/operations/repair?entityId=${company}&queue=acceptance`, queueScenario: 'fail' });
+    const failedQueue = await openQueue(failed); await failedQueue.getByRole('alert').filter({ hasText: '合成初檢清單讀取失敗' }).waitFor();
+    assert.equal(await failedQueue.getByText(/已收維修件 0 件|本頁初檢中 \d+ 件|沒有已收維修件/).count(), 0);
+    await failed.evaluate(() => { window.precheckReaderApi.queueScenario = 'normal'; });
+    await failedQueue.getByRole('button', { name: '重新整理', exact: true }).click(); await failedQueue.getByText('已收維修件 123 件', { exact: true }).waitFor();
+    await noWrites(failed); assert.deepEqual(await photoGets(failed), []);
+  });
+  await t.test('late preview responses from the previous company cannot overwrite current company rows or totals', async child => {
+    const page = await open(child, { entry: `/operations/repair?entityId=${company}&queue=acceptance`, queueScenario: 'hold-a' });
+    await openQueue(page); await page.waitForFunction(() => window.precheckReaderApi.heldQueues.length === 1);
+    await page.evaluate(path => window.precheckReaderRouter.navigate(path), `/operations/repair?entityId=${companyB}&queue=acceptance`);
+    const queue = await openQueue(page); await queue.getByText('乙公司合成已收維修產品', { exact: true }).waitFor(); await queue.getByText('已收維修件 7 件', { exact: true }).waitFor();
+    await page.evaluate(() => window.precheckReaderApi.releaseQueue(0));
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await queue.getByText('合成初檢中產品', { exact: true }).count(), 0); assert.equal(await queue.getByText('已收維修件 123 件', { exact: true }).count(), 0);
+    assert.deepEqual((await queueGets(page)).map(call => call.params.entityId), [company, companyB]); await noWrites(page); await tabs(page);
+  });
+  await t.test('a delayed old page2 cannot replace page1 after leaving and returning to the preview', async child => {
+    const page = await open(child, { entry: `/operations/repair?entityId=${company}&queue=acceptance` }); let queue = await openQueue(page);
+    await queue.getByText('合成初檢中產品', { exact: true }).waitFor();
+    await page.evaluate(() => window.precheckReaderApi.planQueue({ entityId: 'precheck-company', page: 2 }));
+    await queue.locator('.ant-pagination-item-2').click(); await page.waitForFunction(() => window.precheckReaderApi.heldQueues.length === 1);
+    await page.getByRole('tab', { name: '案件查詢', exact: true }).click();
+    await page.getByRole('tab', { name: /待認領與簽收/ }).click(); queue = await openQueue(page);
+    await queue.getByText('合成初檢中產品', { exact: true }).waitFor();
+    await page.evaluate(() => window.precheckReaderApi.releaseQueue(0)); await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await queue.getByText('合成第二頁待交接產品', { exact: true }).count(), 0);
+    assert.equal(await queue.locator('.ant-pagination-item-active').innerText(), '1');
+    assert.deepEqual((await queueGets(page)).map(call => call.params.page), [1, 2, 1]); await noWrites(page);
+  });
+  await t.test('expanded received previews fit desktop and 320/390px without hiding overflow or exposing draft content', async child => {
+    for (const width of [1280, 320, 390]) {
+      const page = await open(child, { entry: `/operations/repair?entityId=${company}&queue=acceptance`, width }); const queue = await openQueue(page);
+      await queue.getByText('合成初檢中產品', { exact: true }).waitFor(); await settledQueue(page);
+      const dimensions = await page.evaluate(() => ({ width: innerWidth, documentWidth: document.documentElement.scrollWidth, bodyWidth: document.body.scrollWidth,
+        overflowX: [document.documentElement, document.body, document.querySelector('.fixture-shell')].map(element => getComputedStyle(element).overflowX) }));
+      geometry.push({ kind: 'received-precheck-preview', ...dimensions }); assert.ok(dimensions.documentWidth <= width && dimensions.bodyWidth <= width, JSON.stringify(dimensions));
+      assert.ok(dimensions.overflowX.every(value => !['hidden', 'clip'].includes(value)));
+      assert.equal(await queue.getByText(draftSecret, { exact: true }).count(), 0); assert.deepEqual(await photoGets(page), []); await noWrites(page); await tabs(page);
+      await page.screenshot({ path: join(artifactDir, `received-precheck-preview-${width}.png`), fullPage: true }); await page.close();
+    }
   });
   await t.test('desktop and 320/390px layouts keep the real scan control, three entry tabs and read-only record within the viewport', async child => {
     for (const width of [1280, 320, 390]) {
