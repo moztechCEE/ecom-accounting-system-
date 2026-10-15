@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:8a9a9f54d8bf0f8b38613e4b859ef7a8f8668361a1ac6c772cfe1f5f7a88cad5",
+  "sourceVersion": "sha256:275b89304b354f8251dc8290fdcc4ba448f919317dd366184cf42dcbc033ba27",
   "reviewedBaseCommit": "74e8d2e852960a15ff05741058827859187db6d8",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "4e52063ef9869c5062b2f18e3d589ce910d59a5468f4e205cc90d1ae39f1ac3d",
+  "catalogSha256": "a9d1a92c7e5fbde138eeb0eec59b9a03a8d08ede68c40ca079078c131811f01e",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -980,7 +980,7 @@
     },
     {
       "path": "frontend/src/pages/mailroom/MailroomPage.tsx",
-      "sha256": "716f25f85454172ef526e27c3d7dc9540a75d792431e99cc2f6d2b7418aae8a4"
+      "sha256": "dbee98861b61c7608c6f7ace51d9159cbc20c2dff2e10cdb39dd3ad7432b2643"
     },
     {
       "path": "frontend/src/pages/mailroom/model.ts",

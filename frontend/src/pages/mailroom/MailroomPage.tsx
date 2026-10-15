@@ -130,8 +130,8 @@ export default function MailroomPage({
     [detailLoading, setDetailLoading] = useState(false),
     [create, setCreate] = useState(false);
   const [createSource, setCreateSource] = useState<Source>(),
-    [listTab, setListTab] = useState(mode === "mailroom" && params.get("tab") === "outbound" ? "outbound" : "received"),
-    [storageVisited, setStorageVisited] = useState(false),
+    [listTab, setListTab] = useState(mode === "mailroom" && params.get("tab") === "outbound" ? "outbound" : mode === "mailroom" && params.get("tab") === "storage" ? "storage" : "received"),
+    [storageVisited, setStorageVisited] = useState(mode === "mailroom" && params.get("tab") === "storage"),
     [storageReset, setStorageReset] = useState(0),
     [storageRefreshRevision, setStorageRefreshRevision] = useState(0),
     [createCategory, setCreateCategory] = useState(""),
