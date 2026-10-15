@@ -2,6 +2,8 @@
 
 基底：ERP `0855802642216e579a86809b0712dee034e7b303`。分支：`codex/mailroom-open-rack-20261015`。此文件描述隔離候選及驗證；不是 DEV 部署、實際儲位配置或原維修案簽收收據。
 
+後續隔離組合：`codex/mailroom-open-rack-ba0-20261015` 合併已固定貨架 `7e53303cfe9b9eb5bae0f55937411a3f27ec6ca3` 與已部署登入修正 `ba0f38fe60f0f8c44d72be8862e3067de6e98c7d`，保留前者 storage 與後者 auth 的原 blob。重新審閱中英「首次登入與密碼變更」指南，原首次改密碼／重設步驟與新密碼八碼規則不變；更新當版 source hashes。舊7e分支與工作樹保持凍結。此組合仍僅離線準備，下一批發布 lease 待中央顧客申請新 canonical 再指定，不能自行部署或用ba0覆蓋後來的新功能。
+
 ## 操作行為
 
 人類確認實體為一座四層貨架，沒有實體分格；儲位是每層自行配置的標示位置。新建預設四層、每層一個初始儲位。既有貨架的層數、ID、code、位置及歷程不強制改寫。
@@ -22,6 +24,10 @@
 
 ## 已執行驗證
 
+7e＋ba0 隔離組合由 Root 親執行：獨立前後端 `npm ci --ignore-scripts`（lock 未改）、本地 Prisma generate、前後端正式 build、knowledge 20/20、82 中英指南／106 routes／275 source hashes drift check、diff check 均通過。當版 knowledge sourceVersion 為 `fe525db32d292d8294e0d101101e1fbaf6e88608aa7b77dd1be20eda88c23b9e`。Prisma 首次因隔離樹未設 DATABASE_URL 而未執行；改用不可連線的本機 port1 offline placeholder 後 codegen 成功，沒有 migration 或 DB 呼叫。auth 四檔與 ba0、storage／schema／migration／pickers／測試與7e的逐範圍 diff 均空；不重跑已完成的原案或把純組合當新 DEV 接受。
+
+下列專項測試與 strict TSC 數量屬原7e slice的既有執行證據，未冒稱在此組合重新跑完全部套件：
+
 - 後端實作者：storage service＋DTO 兩 suites 104/104 PASS；Prisma generate／validate、限定 ESLint／格式檢查 PASS，使用本分支獨立依賴，未改 lock。
 - 前端實作者：storage 專用 13/13 PASS，含 mixed purpose／null 繼承、320px 每個 target 實點、鍵盤 drawer、搜尋、公司切換／draft／unknown exact retry；正常四層 fixture 最後 2/2 PASS；受影響 known repair 收件場景 2/2 PASS。計數含 test runner 的 parent/subtest，不視為相同數量的獨立業務案例。
 - 前端最後 build PASS；限定 lint 0 error，原 ReceiptLocationPicker ref-cleanup warning 保留。
@@ -35,6 +41,6 @@
 
 此批不自行套 DDL、build Cloud images、部署或改 shared DEV；由 DOA 唯一 writer 與最新批准 ERP 組合後成對 review。新 Prisma service 讀 purpose 前必須套相應 migration，舊 reader 可忽略新欄，但混合舊 writer 沒有新增用途 guard，發布窗口要協調。candidate 的正常登入、權限、儲位 API／畫面、原案件只讀兼容及流量／版本由中央另留收據。
 
-不改 auth；DEV121 由維修視窗獨立 auth 候選處理，DEV123 已完成的變更不重做。原 REPAIR `CASE-20261013-235435-b5e96784eef6`／`MR-20261014-71F4585E-1` 後續仍沿原 quote2、通知 c168、當版同意與首筆 REPAIR 款票、維修／QC、交回與本人 accept_return。接受返回不要求此新貨架用途，不以儲位開發阻擋原案。
+貨架 slice 不編輯 auth；新隔離組合保留已部署 ba0 的原 DEV121 實作，DEV123／DEV121 已完成的單次身分變更不重做。原 REPAIR `CASE-20261013-235435-b5e96784eef6`／`MR-20261014-71F4585E-1` 已由 DOA 在現役 ba0＋Source0a，沿原 quote2、c168 inline DEV_STUB 模擬、當版同意與首筆 REPAIR 測試款票、合成維修／QC、交回與本人 accept_return 完成至 READY_FOR_DISPATCH v12，不寄出。本台只讀去敏完成回執，沒有執行該業務；新貨架用途不是返回接受前提，不能重播已完成步驟或以原 c168 補 AI 真接收。
 
 本批沒有 canonical browser 操作、DB apply、真實通知、款項、退款、物流或 ECOUNT 動作；一般人員主站 session 保留給 human。所有截圖與 DOM 測試為隔離合成 fixture，不冒稱線上 DEV 或實物驗收。
