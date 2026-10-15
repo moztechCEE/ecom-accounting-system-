@@ -27,6 +27,7 @@ import {
   MoveStorageItemDto,
   StorageQueryDto,
   StorageRequestDto,
+  StoragePurpose,
   UpdateStorageLocationDto,
   UpdateStorageRackDto,
 } from './mailroom-storage.dto';
@@ -82,13 +83,15 @@ const rackView = (rack: MailroomStorageRack) => ({
   version: rack.version,
   isActive: rack.isActive,
 });
-const locationView = (location: MailroomStorageLocation) => ({
+const locationView = (location: MailroomStorageLocation, rackZone: string) => ({
   id: location.id,
   code: location.code,
   name: location.name,
   rackId: location.rackId,
   level: location.level,
   slot: location.slot,
+  purpose: location.purpose ?? null,
+  effectivePurpose: location.purpose ?? rackZone,
   version: location.version,
   isActive: location.isActive,
 });
@@ -161,6 +164,12 @@ export class MailroomStorageService {
   private zone(value: string) {
     if (!['RECEIVING', 'OUTBOUND'].includes(value))
       throw new BadRequestException('請選擇收件區或待寄區');
+    return value;
+  }
+  private purpose(value: unknown): StoragePurpose | null {
+    if (value === null) return null;
+    if (value !== 'RECEIVING' && value !== 'OUTBOUND')
+      throw new BadRequestException('請選擇收件、待寄或繼承貨架用途');
     return value;
   }
   private version(expected: number, actual: number) {
@@ -307,6 +316,7 @@ export class MailroomStorageService {
     const locationById = new Map(
       locations.map((location) => [location.id, location]),
     );
+    const rackById = new Map(racks.map((rack) => [rack.id, rack]));
     const term = query.search?.trim().toLocaleLowerCase() || '';
     const visible = current.filter(
       (item) =>
@@ -329,7 +339,7 @@ export class MailroomStorageService {
     return {
       racks: racks.map(rackView),
       locations: locations.map((location) => ({
-        ...locationView(location),
+        ...locationView(location, rackById.get(location.rackId)!.zone),
         items: visible
           .filter((item) => item.storageLocationId === location.id)
           .map(short),
@@ -396,7 +406,7 @@ export class MailroomStorageService {
               slot,
             },
           });
-          locations.push(locationView(location));
+          locations.push(locationView(location, rack.zone));
         }
       }
       const response = { rack: rackView(rack), locations, duplicate: false };
@@ -425,12 +435,28 @@ export class MailroomStorageService {
       });
       const rows = this.dimension(input.rows ?? rack.rows),
         columns = this.dimension(input.columns ?? rack.columns);
+      const zone = this.zone(input.zone ?? rack.zone);
       if (
         locations.some(
           (location) => location.level > rows || location.slot > columns,
         )
       )
         throw new ConflictException('縮小貨架會移除現有儲位');
+      if (
+        zone !== rack.zone &&
+        (
+          await this.occupants(
+            tx,
+            input.entityId,
+            locations
+              .filter((location) => location.purpose == null)
+              .map((location) => location.id),
+          )
+        ).length
+      )
+        throw new ConflictException(
+          '繼承用途的儲位仍有物品，請先移位再變更用途',
+        );
       if (
         input.isActive === false &&
         (
@@ -445,7 +471,7 @@ export class MailroomStorageService {
       const updated = {
         ...rack,
         name: input.name === undefined ? rack.name : this.name(input.name),
-        zone: this.zone(input.zone ?? rack.zone),
+        zone,
         rows,
         columns,
         layoutX: this.coordinate(input.layoutX ?? rack.layoutX),
@@ -484,6 +510,9 @@ export class MailroomStorageService {
       name = this.name(input.name),
       level = this.dimension(input.level),
       slot = this.dimension(input.slot);
+    const purpose =
+      input.purpose === undefined ? null : this.purpose(input.purpose);
+    // Hash the original body: omitted purpose must retain pre-purpose replay keys.
     const hash = fingerprint({ operation: 'create_location', ...input });
     return this.mutate(userId, input, async (tx) => {
       const previous = await this.replay(tx, userId, input, hash);
@@ -502,9 +531,13 @@ export class MailroomStorageService {
           name,
           level,
           slot,
+          purpose,
         },
       });
-      const response = { location: locationView(location), duplicate: false };
+      const response = {
+        location: locationView(location, rack.zone),
+        duplicate: false,
+      };
       await tx.mailroomStorageLocation.update({
         where: { id: location.id },
         data: this.log(
@@ -522,6 +555,7 @@ export class MailroomStorageService {
     id: string,
     input: UpdateStorageLocationDto,
   ) {
+    // Do not insert null/default purpose into the original request fingerprint.
     const hash = fingerprint({ operation: 'update_location', id, ...input });
     return this.mutate(userId, input, async (tx) => {
       const previous = await this.replay(tx, userId, input, hash);
@@ -547,17 +581,31 @@ export class MailroomStorageService {
         throw new ConflictException('請先啟用貨架');
       if (!isActive && (await this.occupants(tx, input.entityId, [id])).length)
         throw new ConflictException('儲位仍有物品，請先移位或完成交接');
+      const purpose =
+        input.purpose === undefined
+          ? (location.purpose ?? null)
+          : this.purpose(input.purpose);
+      if (
+        (purpose ?? rack.zone) !== (location.purpose ?? rack.zone) &&
+        (await this.occupants(tx, input.entityId, [id])).length
+      )
+        throw new ConflictException('儲位仍有物品，請先移位再變更用途');
       const updated = {
         ...location,
         name: input.name === undefined ? location.name : this.name(input.name),
+        purpose,
         isActive,
         version: location.version + 1,
       };
-      const response = { location: locationView(updated), duplicate: false };
+      const response = {
+        location: locationView(updated, rack.zone),
+        duplicate: false,
+      };
       await tx.mailroomStorageLocation.update({
         where: { id },
         data: {
           name: updated.name,
+          purpose,
           isActive,
           version: updated.version,
           ...this.log(

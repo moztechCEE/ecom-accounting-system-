@@ -13,6 +13,8 @@ import {
   Min,
 } from 'class-validator';
 
+export type StoragePurpose = 'RECEIVING' | 'OUTBOUND';
+
 export class StorageQueryDto {
   @IsString() @IsNotEmpty() @MaxLength(128) entityId!: string;
   @IsOptional() @IsString() @MaxLength(100) search?: string;
@@ -75,6 +77,10 @@ export class CreateStorageLocationDto extends StorageRequestDto {
   @IsString() @IsNotEmpty() @MaxLength(80) name!: string;
   @Type(() => Number) @IsInt() @Min(1) @Max(8) level!: number;
   @Type(() => Number) @IsInt() @Min(1) @Max(8) slot!: number;
+  @IsOptional()
+  @Transform(({ obj, key }) => (obj as Record<string, unknown>)[key])
+  @IsIn(['RECEIVING', 'OUTBOUND'])
+  purpose?: StoragePurpose | null;
 }
 export class UpdateStorageLocationDto extends StorageRequestDto {
   @Type(() => Number)
@@ -83,6 +89,10 @@ export class UpdateStorageLocationDto extends StorageRequestDto {
   @Max(2147483646)
   expectedVersion!: number;
   @IsOptional() @IsString() @IsNotEmpty() @MaxLength(80) name?: string;
+  @IsOptional()
+  @Transform(({ obj, key }) => (obj as Record<string, unknown>)[key])
+  @IsIn(['RECEIVING', 'OUTBOUND'])
+  purpose?: StoragePurpose | null;
   @IsOptional()
   @Transform(({ obj, key }) => (obj as Record<string, unknown>)[key])
   @IsBoolean()

@@ -232,10 +232,10 @@ function OutboundLocationPicker({ entityId, value, onChange, disabled }: { entit
   const [options, setOptions] = useState<{ value: string; label: string }[]>([]), [failure, setFailure] = useState(''), [loading, setLoading] = useState(true)
   useEffect(() => {
     const abort = new AbortController()
-    void api.get<{ racks: { id: string; name: string; zone: string; isActive: boolean }[]; locations: { rackId: string; code: string; name: string; isActive: boolean }[] }>('/mailroom/storage', { params: { entityId }, signal: abort.signal }).then(response => {
+    void api.get<{ racks: { id: string; name: string; zone: string; isActive: boolean }[]; locations: { rackId: string; code: string; name: string; isActive: boolean; purpose?: string | null }[] }>('/mailroom/storage', { params: { entityId }, signal: abort.signal }).then(response => {
       if (abort.signal.aborted) return
-      const racks = new Map(response.data.racks.filter(rack => rack.isActive && rack.zone === 'OUTBOUND').map(rack => [rack.id, rack]))
-      setOptions(response.data.locations.filter(location => location.isActive && racks.has(location.rackId)).map(location => ({ value: location.code, label: `${location.code} · ${racks.get(location.rackId)!.name}${location.name !== location.code ? ' · ' + location.name : ''}` })))
+      const racks = new Map(response.data.racks.filter(rack => rack.isActive).map(rack => [rack.id, rack]))
+      setOptions(response.data.locations.filter(location => location.isActive && racks.has(location.rackId) && (location.purpose ?? racks.get(location.rackId)!.zone) === 'OUTBOUND').map(location => ({ value: location.code, label: `${location.code} · ${racks.get(location.rackId)!.name}${location.name !== location.code ? ' · ' + location.name : ''}` })))
     }).catch(e => { if (!abort.signal.aborted) setFailure(errorText(e)) }).finally(() => { if (!abort.signal.aborted) setLoading(false) })
     return () => abort.abort()
   }, [entityId])

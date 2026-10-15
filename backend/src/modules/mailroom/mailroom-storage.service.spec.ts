@@ -3,7 +3,7 @@ import { ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import { Actor } from './mailroom.contract';
+import { Actor, fingerprint } from './mailroom.contract';
 import { MailroomStorageService } from './mailroom-storage.service';
 import {
   CreateStorageRackDto,
@@ -155,6 +155,7 @@ describe('mailroom storage keeps location separate from custody and inventory', 
         name: 'A1',
         level: 1,
         slot: 1,
+        purpose: null,
         version: 1,
         isActive: true,
         commandKeys: [],
@@ -166,7 +167,7 @@ describe('mailroom storage keeps location separate from custody and inventory', 
     mailroom = { enabled: jest.fn(), actor: jest.fn(async () => currentActor) };
     db = {
       mailroomStorageRack: table(() => racks, { layoutX: 0, layoutY: 0 }),
-      mailroomStorageLocation: table(() => locations),
+      mailroomStorageLocation: table(() => locations, { purpose: null }),
       mailroomItem: table(() => items),
       mailroomAction: {
         findUnique: jest.fn(
@@ -327,6 +328,15 @@ describe('mailroom storage keeps location separate from custody and inventory', 
     expect(repeated).toEqual({ ...first, duplicate: true });
     expect(db.mailroomStorageRack.create).toHaveBeenCalledTimes(1);
     expect(db.mailroomStorageLocation.create).toHaveBeenCalledTimes(4);
+    expect(locations.slice(1).every((row) => row.purpose === null)).toBe(true);
+    expect(first).toMatchObject({
+      locations: expect.arrayContaining([
+        expect.objectContaining({
+          purpose: null,
+          effectivePurpose: 'OUTBOUND',
+        }),
+      ]),
+    });
   });
   it('rejects reusing a committed setting key for different content or target', async () => {
     await service.createRack('clerk', rackRequest());
@@ -761,4 +771,341 @@ describe('mailroom storage keeps location separate from custody and inventory', 
       ).some((error) => error.property === 'rows'),
     ).toBe(true);
   });
+  it('projects inherited and overridden purposes within the same physical rack', async () => {
+    locations.push({
+      ...locations[0],
+      id: 'location-b',
+      code: 'A2',
+      slot: 2,
+      purpose: 'OUTBOUND',
+    });
+    const before = structuredClone(items);
+    const result = await service.list('clerk', { entityId: 'company-a' });
+    expect(
+      result.locations.map(({ id, purpose, effectivePurpose }) => ({
+        id,
+        purpose,
+        effectivePurpose,
+      })),
+    ).toEqual([
+      { id: 'location-a', purpose: null, effectivePurpose: 'RECEIVING' },
+      { id: 'location-b', purpose: 'OUTBOUND', effectivePurpose: 'OUTBOUND' },
+    ]);
+    expect(items).toEqual(before);
+    expect(db.mailroomItem.update).not.toHaveBeenCalled();
+  });
+  it.each([null, 'RECEIVING', 'OUTBOUND'] as const)(
+    'creates a location with explicit purpose %s without changing goods',
+    async (purpose) => {
+      const before = structuredClone(items);
+      const result = await service.createLocation('clerk', {
+        entityId: 'company-a',
+        requestId: 'purpose-create-01',
+        rackId: 'rack-a',
+        code: 'A2',
+        name: '第二位置',
+        level: 1,
+        slot: 2,
+        purpose,
+      });
+      expect(result).toMatchObject({
+        location: { purpose, effectivePurpose: purpose ?? 'RECEIVING' },
+      });
+      expect(locations[1].purpose).toBe(purpose);
+      expect(items).toEqual(before);
+      expect(db.mailroomItem.update).not.toHaveBeenCalled();
+      expect(actions).toEqual([]);
+    },
+  );
+  it.each(['create', 'update'] as const)(
+    'replays the exact pre-purpose %s body and saved response before new guards',
+    async (kind) => {
+      const input =
+        kind === 'create'
+          ? {
+              entityId: 'company-a',
+              requestId: 'legacy-purpose-01',
+              rackId: 'rack-a',
+              code: 'A1',
+              name: 'A1',
+              level: 1,
+              slot: 1,
+            }
+          : {
+              entityId: 'company-a',
+              requestId: 'legacy-purpose-01',
+              expectedVersion: 1,
+              name: '舊名稱',
+            };
+      const hash = fingerprint(
+        kind === 'create'
+          ? { operation: 'create_location', ...input }
+          : { operation: 'update_location', id: 'location-a', ...input },
+      );
+      const oldResponse = {
+        location: { id: 'location-a', code: 'A1', name: '舊回執' },
+        duplicate: false,
+      };
+      locations[0].commandKeys = ['clerk:legacy-purpose-01'];
+      locations[0].commands = {
+        'clerk:legacy-purpose-01': { hash, response: oldResponse },
+      };
+      locations[0].version = 5;
+      locations[0].purpose = 'OUTBOUND';
+      racks[0].zone = 'OUTBOUND';
+      racks[0].isActive = false;
+      const result =
+        kind === 'create'
+          ? await service.createLocation(
+              'clerk',
+              input as Parameters<MailroomStorageService['createLocation']>[1],
+            )
+          : await service.updateLocation(
+              'clerk',
+              'location-a',
+              input as UpdateStorageLocationDto,
+            );
+      expect(result).toEqual({ ...oldResponse, duplicate: true });
+      expect(result).not.toHaveProperty('location.purpose');
+      expect(db.mailroomStorageLocation.create).not.toHaveBeenCalled();
+      expect(db.mailroomStorageLocation.update).not.toHaveBeenCalled();
+      expect(db.$queryRaw).not.toHaveBeenCalled();
+    },
+  );
+  it('omitted and undefined purpose retain the same update hash and preserve an override', async () => {
+    locations[0].purpose = 'OUTBOUND';
+    const input = {
+      entityId: 'company-a',
+      requestId: 'omitted-purpose-01',
+      expectedVersion: 1,
+      name: '名稱',
+    };
+    const first = await service.updateLocation('clerk', 'location-a', input);
+    expect(locations[0].purpose).toBe('OUTBOUND');
+    expect(
+      await service.updateLocation('clerk', 'location-a', {
+        ...input,
+        purpose: undefined,
+      }),
+    ).toEqual({ ...first, duplicate: true });
+    expect(db.mailroomStorageLocation.update).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    [undefined, null],
+    [null, 'RECEIVING'],
+    ['RECEIVING', 'OUTBOUND'],
+  ] as const)(
+    'rejects same request identity changed from %s to %s even when effective use agrees',
+    async (firstPurpose, secondPurpose) => {
+      items = [];
+      const input = {
+        entityId: 'company-a',
+        requestId: 'same-purpose-key-01',
+        expectedVersion: 1,
+        ...(firstPurpose === undefined ? {} : { purpose: firstPurpose }),
+      };
+      await service.updateLocation('clerk', 'location-a', input);
+      await expect(
+        service.updateLocation('clerk', 'location-a', {
+          ...input,
+          purpose: secondPurpose,
+        }),
+      ).rejects.toThrow('內容不同');
+      expect(db.mailroomStorageLocation.update).toHaveBeenCalledTimes(1);
+    },
+  );
+  it.each([
+    [null, 'RECEIVING'],
+    ['RECEIVING', null],
+  ] as const)(
+    'allows occupied %s to %s when effective purpose does not change',
+    async (beforePurpose, purpose) => {
+      locations[0].purpose = beforePurpose;
+      const before = structuredClone(items);
+      await service.updateLocation('clerk', 'location-a', {
+        entityId: 'company-a',
+        requestId: 'same-effective-01',
+        expectedVersion: 1,
+        purpose,
+      });
+      expect(locations[0].purpose).toBe(purpose);
+      expect(items).toEqual(before);
+      expect(db.mailroomItem.update).not.toHaveBeenCalled();
+      expect(actions).toEqual([]);
+    },
+  );
+  it.each([
+    [null, 'OUTBOUND'],
+    ['OUTBOUND', null],
+    ['OUTBOUND', 'RECEIVING'],
+  ] as const)(
+    'rejects occupied effective-use change %s to %s without configuration or custody writes',
+    async (beforePurpose, purpose) => {
+      locations[0].purpose = beforePurpose;
+      const before = structuredClone(items);
+      await expect(
+        service.updateLocation('clerk', 'location-a', {
+          entityId: 'company-a',
+          requestId: 'occupied-purpose-01',
+          expectedVersion: 1,
+          purpose,
+        }),
+      ).rejects.toThrow('先移位再變更用途');
+      expect(locations[0].purpose).toBe(beforePurpose);
+      expect(db.mailroomStorageLocation.update).not.toHaveBeenCalled();
+      expect(db.mailroomItem.update).not.toHaveBeenCalled();
+      expect(items).toEqual(before);
+    },
+  );
+  it('uses fresh location state after the row lock for the purpose guard', async () => {
+    db.$queryRaw.mockImplementation(async (sql: Prisma.Sql) => {
+      if (sql.sql.includes('mailroom_storage_locations'))
+        locations[0].purpose = 'OUTBOUND';
+      return [];
+    });
+    await expect(
+      service.updateLocation('clerk', 'location-a', {
+        entityId: 'company-a',
+        requestId: 'fresh-purpose-01',
+        expectedVersion: 1,
+        purpose: null,
+      }),
+    ).rejects.toThrow('先移位再變更用途');
+    expect(db.mailroomStorageLocation.update).not.toHaveBeenCalled();
+  });
+  it('changes and clears purpose on an empty location without changing its identity', async () => {
+    items = [];
+    const original = {
+      id: locations[0].id,
+      code: locations[0].code,
+      rackId: locations[0].rackId,
+      level: locations[0].level,
+      slot: locations[0].slot,
+    };
+    await service.updateLocation('clerk', 'location-a', {
+      entityId: 'company-a',
+      requestId: 'empty-purpose-01',
+      expectedVersion: 1,
+      purpose: 'OUTBOUND',
+    });
+    await service.updateLocation('clerk', 'location-a', {
+      entityId: 'company-a',
+      requestId: 'empty-purpose-02',
+      expectedVersion: 2,
+      purpose: null,
+    });
+    expect(locations[0]).toMatchObject({
+      ...original,
+      purpose: null,
+      version: 3,
+    });
+    expect(db.mailroomItem.update).not.toHaveBeenCalled();
+  });
+  it.each(['DISPATCHED', 'REPAIRING'])(
+    'does not treat historical %s references as occupants when changing purpose',
+    async (status) => {
+      items[0].status = status;
+      if (status === 'REPAIRING')
+        Object.assign(items[0], {
+          repairOwnerId: 'technician',
+          custodianId: 'technician',
+        });
+      await service.updateLocation('clerk', 'location-a', {
+        entityId: 'company-a',
+        requestId: 'historical-purpose-01',
+        expectedVersion: 1,
+        purpose: 'OUTBOUND',
+      });
+      expect(locations[0].purpose).toBe('OUTBOUND');
+      expect(db.mailroomItem.update).not.toHaveBeenCalled();
+    },
+  );
+  it('rejects rack default changes only for inherited currently occupied locations', async () => {
+    const before = structuredClone(items);
+    await expect(
+      service.updateRack('clerk', 'rack-a', {
+        entityId: 'company-a',
+        requestId: 'rack-purpose-01',
+        expectedVersion: 1,
+        zone: 'OUTBOUND',
+      }),
+    ).rejects.toThrow('繼承用途');
+    expect(db.mailroomStorageRack.update).not.toHaveBeenCalled();
+    expect(items).toEqual(before);
+    locations[0].purpose = 'RECEIVING';
+    await service.updateRack('clerk', 'rack-a', {
+      entityId: 'company-a',
+      requestId: 'rack-purpose-02',
+      expectedVersion: 1,
+      zone: 'OUTBOUND',
+    });
+    expect(racks[0].zone).toBe('OUTBOUND');
+    expect(
+      (await service.list('clerk', { entityId: 'company-a' })).locations[0],
+    ).toMatchObject({ purpose: 'RECEIVING', effectivePurpose: 'RECEIVING' });
+    expect(db.mailroomItem.update).not.toHaveBeenCalled();
+    expect(actions).toEqual([]);
+  });
+  it('a second inherited occupied location blocks a rack change even when another occupied location overrides it', async () => {
+    locations[0].purpose = 'OUTBOUND';
+    locations.push({
+      ...locations[0],
+      id: 'location-b',
+      code: 'A2',
+      slot: 2,
+      purpose: null,
+    });
+    items.push(
+      item('piece-b', { storageLocationId: 'location-b', location: 'A2' }),
+    );
+    await expect(
+      service.updateRack('clerk', 'rack-a', {
+        entityId: 'company-a',
+        requestId: 'mixed-rack-use-01',
+        expectedVersion: 1,
+        zone: 'OUTBOUND',
+      }),
+    ).rejects.toThrow('繼承用途');
+    expect(racks[0].zone).toBe('RECEIVING');
+    expect(db.mailroomStorageRack.update).not.toHaveBeenCalled();
+  });
+  it('replays an old successful rack-zone command before checking newly inherited occupants', async () => {
+    const input = {
+      entityId: 'company-a',
+      requestId: 'old-rack-use-01',
+      expectedVersion: 1,
+      zone: 'OUTBOUND' as const,
+    };
+    const response = {
+      rack: { id: 'rack-a', zone: 'OUTBOUND' },
+      duplicate: false,
+    };
+    racks[0].commandKeys = ['clerk:old-rack-use-01'];
+    racks[0].commands = {
+      'clerk:old-rack-use-01': {
+        hash: fingerprint({ operation: 'update_rack', id: 'rack-a', ...input }),
+        response,
+      },
+    };
+    expect(await service.updateRack('clerk', 'rack-a', input)).toEqual({
+      ...response,
+      duplicate: true,
+    });
+    expect(db.mailroomStorageRack.update).not.toHaveBeenCalled();
+    expect(db.mailroomItem.findMany).not.toHaveBeenCalled();
+  });
+  it.each(['', 'INBOUND', false, 1, {}, []])(
+    'rejects invalid purpose %p in direct service calls',
+    async (purpose) => {
+      await expect(
+        service.updateLocation('clerk', 'location-a', {
+          entityId: 'company-a',
+          requestId: 'invalid-purpose-01',
+          expectedVersion: 1,
+          purpose,
+        } as unknown as UpdateStorageLocationDto),
+      ).rejects.toThrow('請選擇收件');
+      expect(db.mailroomStorageLocation.update).not.toHaveBeenCalled();
+    },
+  );
 });

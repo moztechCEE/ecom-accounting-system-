@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Select } from "antd";
 import api from "../../services/api";
 import { errorText } from "./model";
-type Location = { id: string; code: string; name: string; rackId: string; isActive: boolean };
-type Rack = { id: string; code: string; name: string; isActive: boolean; zone: string };
+import { STORAGE_PURPOSES, storageEffectivePurpose } from "./storage-model";
+import type { StorageZone } from "./storage-model";
+type Location = { id: string; code: string; name: string; rackId: string; isActive: boolean; purpose?: StorageZone | null };
+type Rack = { id: string; code: string; name: string; isActive: boolean; zone: StorageZone };
 export default function ReceiptLocationPicker({ entityId, active, value, onChange, disabled }: {
   entityId: string; active: boolean; value?: string; onChange?: (id: string, code: string) => void; disabled?: boolean;
 }) {
@@ -20,7 +22,7 @@ export default function ReceiptLocationPicker({ entityId, active, value, onChang
     return () => { controller.abort(); generation.current++; };
   }, [entityId, active, revision]);
   return <><Select aria-label="選擇收件儲位" value={value} loading={loading} showSearch optionFilterProp="label" disabled={disabled} placeholder="選擇儲位，例如 A1" style={{ width: "100%" }}
-    options={racks.filter(rack => rack.isActive).map(rack => ({ label: `${rack.name}（${rack.zone === "OUTBOUND" ? "寄件區" : "收件區"}）`, options: locations.filter(location => location.isActive && location.rackId === rack.id).map(location => ({ value: location.id, label: `${location.code}${location.name && location.name !== location.code ? ` · ${location.name}` : ""}` })) }))}
+    options={racks.filter(rack => rack.isActive).map(rack => ({ label: rack.name, options: locations.filter(location => location.isActive && location.rackId === rack.id).map(location => ({ value: location.id, label: `${location.code}${location.name && location.name !== location.code ? ` · ${location.name}` : ""} · ${STORAGE_PURPOSES[storageEffectivePurpose(location, rack)]}` })) }))}
     onChange={id => { const location = locations.find(row => row.id === id); if (location) onChange?.(id, location.code); }} />
     {failure && <Alert type="warning" message="儲位暫時無法載入" description={failure} action={<Button onClick={() => setRevision(n => n + 1)}>重試</Button>} />}</>;
 }
