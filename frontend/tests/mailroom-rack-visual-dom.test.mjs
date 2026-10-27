@@ -21,10 +21,10 @@ createRoot(document.getElementById('root')).render(React.createElement('main',{i
 `;
 const api = `
 export const API_URL='/offline-api';
-const dense=new URLSearchParams(location.search).has('dense'),readOnly=new URLSearchParams(location.search).has('readOnly');
-const rack={id:'rack-a',code:'QA_STORAGE_1016',name:'收發室一號貨架',zone:'RECEIVING',rows:4,columns:8,layoutX:0,layoutY:0,version:6,isActive:true};
+const dense=new URLSearchParams(location.search).has('dense'),readOnly=new URLSearchParams(location.search).has('readOnly'),single=new URLSearchParams(location.search).has('single');
+const rack={id:'rack-a',code:'QA_STORAGE_1016',name:'收發室一號貨架',zone:'RECEIVING',rows:single?1:4,columns:8,layoutX:0,layoutY:0,version:6,isActive:true};
 const item={id:'item-one',productName:'行動電源',sku:'P-01',serialNumber:'SN100',sourceNumber:'R-100',receiptId:'receipt-one',receiptNumber:'MR-100',category:'REPAIR',storageLocationId:'loc-4-1',status:'RECEIVED',location:'QA-RECEIVING-A4-01-20261016',custodianId:'clerk',custodianName:'收發人員',version:4,canMove:false};
-const counts=dense?[8,1,3,2]:[2,1,3,2];
+const counts=single?[1]:dense?[8,1,3,2]:[2,1,3,2];
 const names={1:'待寄配件',2:'待寄產品',3:'一般收件',4:'維修待點收'};
 const locations=counts.flatMap((count,index)=>Array.from({length:count},(_,slot)=>{
   const level=index+1,purpose=slot===1||(dense&&level===1&&slot===7)?'OUTBOUND':null,amount=(level+slot)%4;
@@ -56,11 +56,11 @@ test('open rack visual hierarchy keeps real identity, mixed purposes and mobile 
     page.on('pageerror',error=>errors.push(error.message));
     await page.route('**/*',route=>{const request=route.request();if(new URL(request.url()).origin!==origin){external.push(request.url());return route.abort();}if(request.method()!=='GET'){writes.push(request.method()+' '+request.url());return route.abort();}return route.continue();});
     child.after(async()=>{assert.deepEqual(errors,[]);assert.deepEqual(external,[]);assert.deepEqual(writes,[]);assert.deepEqual(await page.evaluate(()=>window.rackVisualFixture.posts),[]);assert.deepEqual(await page.evaluate(()=>window.rackVisualFixture.unexpected),[]);await page.close();});
-    await page.goto(origin+'/__rack-visual'+query);await page.locator('[data-location-id="loc-4-1"]').waitFor();
+    await page.goto(origin+'/__rack-visual'+query);await page.locator('.mailroom-storage-bin').first().waitFor();
     await page.waitForFunction(()=>[...document.querySelectorAll('.ant-spin-container')].every(element=>getComputedStyle(element).opacity==='1'));
     return page;
   }
-  async function screenshot(page,name){await page.screenshot({path:'/tmp/corely-mailroom-rack-polish-'+name+'-20261016.png',fullPage:true});}
+  async function screenshot(page,name){await page.screenshot({path:'/tmp/corely-mailroom-rack-depth-20261027-'+name+'.png',fullPage:true});}
   async function closeDrawer(page){await page.getByRole('button',{name:'Close',exact:true}).click();await page.locator('.ant-drawer-content').waitFor({state:'hidden'});}
   async function geometry(page){return page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth,body:document.body.scrollWidth,outerOverflow:[document.documentElement,document.body,document.getElementById('rack-visual-content'),document.querySelector('.mailroom-page')].map(element=>getComputedStyle(element).overflowX),shelves:[...document.querySelectorAll('.mailroom-storage-shelf-locations')].map(element=>({width:element.clientWidth,scrollWidth:element.scrollWidth,overflow:getComputedStyle(element).overflowX}))}));}
 
@@ -93,7 +93,20 @@ test('open rack visual hierarchy keeps real identity, mixed purposes and mobile 
     await target.press('Enter');
     await page.locator('.ant-drawer-title').filter({hasText:'QA-RECEIVING-A3-03-20261016 · 一般收件3'}).waitFor();await closeDrawer(page);
     const bounds=await target.boundingBox();assert.ok(bounds.x>=12&&bounds.x+bounds.width<=308,'The complete keyboard target remains inside the content width');assert.ok(bounds.width>=44&&bounds.height>=44);
-    writeFileSync('/tmp/corely-mailroom-rack-polish-mobile-geometry-20261016.json',JSON.stringify(info,null,2)+'\n');
+    writeFileSync('/tmp/corely-mailroom-rack-depth-20261027-mobile-geometry.json',JSON.stringify(info,null,2)+'\n');
+  });
+  await t.test('single-level receiving rack remains open and usable at desktop and 320px',async child=>{
+    const page=await open(child,'?single=1',{width:1192,height:780});const rack=page.locator('[data-rack-id="rack-a"]');
+    assert.equal(await rack.locator('.mailroom-storage-shelf').count(),1);
+    assert.equal(await rack.locator('[data-level="1"] .mailroom-storage-bin').count(),1);
+    await screenshot(page,'single-desktop');
+    await page.setViewportSize({width:320,height:820});
+    assert.equal((await geometry(page)).document,320);
+    const target=rack.locator('[data-location-id="loc-1-1"]');
+    await target.focus();await target.press('Enter');
+    await page.locator('.ant-drawer-title').filter({hasText:'QA-RECEIVING-A1-01-20261016 · 待寄配件1'}).waitFor();
+    await closeDrawer(page);await screenshot(page,'single-mobile');
+    const bounds=await target.boundingBox();assert.ok(bounds.x>=12&&bounds.x+bounds.width<=308);
   });
   await t.test('eight locations keep stable identity and full long names reachable on readonly mobile',async child=>{
     const page=await open(child,'?dense=1&readOnly=1',{width:320,height:820});

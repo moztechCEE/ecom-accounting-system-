@@ -143,6 +143,7 @@ export default function StorageWorkbench({ entityId, onOpenItem, onChanged, onDr
   function rackGrid(rack: StorageRack) {
     return <div className="mailroom-storage-rack-frame" aria-label={`${rack.code} 貨架層板`}>
       <span className="mailroom-storage-post is-back-left" aria-hidden="true" /><span className="mailroom-storage-post is-back-right" aria-hidden="true" />
+      <span className="mailroom-storage-rack-cap" aria-hidden="true" />
       <div className="mailroom-storage-rack-grid">
         {Array.from({ length: rack.rows }, (_, index) => rack.rows - index).map(level => {
           const locations = storageLevelLocations(binLocations, rack.id, level);

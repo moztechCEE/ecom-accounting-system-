@@ -9,21 +9,29 @@
 .mailroom-storage-rack-heading strong{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:17px;line-height:26px;font-weight:600;color:#283539}
 .mailroom-storage-rack-code{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#69767a}
 .mailroom-storage-rack-default{font-size:12px;color:#63716f;background:#f0f4f2;padding:2px 7px;border-radius:4px;white-space:nowrap}
-.mailroom-storage-rack-frame{position:relative;isolation:isolate;padding:20px 29px 24px 17px;margin:0 4px 16px;min-width:0}
-.mailroom-storage-rack-frame::before{content:"";position:absolute;inset:0 6px 26px 30px;background:linear-gradient(135deg,#e8edeb70,#f5f7f500 70%);z-index:-3;pointer-events:none}
-.mailroom-storage-rack-frame::after{content:"";position:absolute;left:2%;right:1%;bottom:4px;height:12px;border-radius:50%;background:#263a3020;filter:blur(8px);z-index:-4;pointer-events:none}
-.mailroom-storage-post{position:absolute;top:14px;bottom:14px;width:6px;background:linear-gradient(90deg,#899593,#b9c2bf 60%,#8a9793);border:1px solid #8c9993;border-radius:2px;pointer-events:none}
-.mailroom-storage-post.is-back-left{left:30px;top:0;bottom:28px;background:#c3ccc7;border-color:#b7c1bb;z-index:-2}
-.mailroom-storage-post.is-back-right{right:6px;top:0;bottom:28px;background:#c3ccc7;border-color:#b7c1bb;z-index:-2}
-.mailroom-storage-post.is-front-left{left:12px;z-index:2}
-.mailroom-storage-post.is-front-right{right:24px;z-index:2}
+/* Front post centers anchor every beam; depth offsets extend the same corners to the rear posts. */
+.mailroom-storage-rack-frame{--rack-inset:10px;--rack-post-width:10px;--rack-depth-x:26px;--rack-depth-y:18px;--rack-beam-height:12px;--rack-front-left:calc(var(--rack-inset) + var(--rack-post-width)/2);--rack-front-right:calc(var(--rack-inset) + var(--rack-depth-x) + var(--rack-post-width)/2);position:relative;isolation:isolate;padding:calc(var(--rack-depth-y) + var(--rack-beam-height)) var(--rack-front-right) 34px var(--rack-front-left);margin:0 4px 16px;min-width:0}
+.mailroom-storage-rack-frame::before{content:"";position:absolute;left:calc(var(--rack-front-left) + var(--rack-depth-x));right:var(--rack-inset);top:0;bottom:calc(22px + var(--rack-depth-y));background:linear-gradient(115deg,#dce6eb3b,#eaf0f41a 70%);border-left:1px solid #a9bdc324;z-index:-3;pointer-events:none}
+.mailroom-storage-rack-frame::after{content:"";position:absolute;left:var(--rack-inset);right:var(--rack-inset);bottom:9px;height:15px;border-radius:50%;background:#324c5d26;filter:blur(9px);z-index:-4;pointer-events:none}
+.mailroom-storage-post{position:absolute;width:var(--rack-post-width);border:1px solid #6f8791;border-radius:2px;background:linear-gradient(90deg,#b3c5cb 0%,#e6eef0 24%,#a5bac3 52%,#7f99a5 82%,#b2c3ca 100%);box-shadow:1px 0 1px #ffffff80 inset,-1px 0 1px #5e778a2b inset;pointer-events:none}
+.mailroom-storage-post.is-back-left,.mailroom-storage-post.is-back-right{top:0;bottom:calc(22px + var(--rack-depth-y));border-color:#a3b5bd;background:linear-gradient(90deg,#bdcbd0,#d7e1e5 45%,#a4b8c2);z-index:-2}
+.mailroom-storage-post.is-back-left{left:calc(var(--rack-inset) + var(--rack-depth-x))}
+.mailroom-storage-post.is-back-right{right:var(--rack-inset)}
+.mailroom-storage-post.is-front-left,.mailroom-storage-post.is-front-right{top:var(--rack-depth-y);bottom:22px;z-index:3}
+.mailroom-storage-post.is-front-left{left:var(--rack-inset)}
+.mailroom-storage-post.is-front-right{right:calc(var(--rack-inset) + var(--rack-depth-x))}
+.mailroom-storage-post.is-front-left::after,.mailroom-storage-post.is-front-right::after{content:"";position:absolute;left:3px;top:17px;bottom:14px;width:2px;background:repeating-linear-gradient(180deg,#607e8952 0 3px,transparent 3px 14px)}
+.mailroom-storage-rack-cap{position:absolute;left:var(--rack-front-left);right:var(--rack-front-right);top:var(--rack-depth-y);height:var(--rack-beam-height);border-top:1px solid #bacbd1;border-bottom:1px solid #728f9e;background:linear-gradient(#b5c9d2,#91acba);box-shadow:0 3px 5px #41586d1a;z-index:2;pointer-events:none}
+.mailroom-storage-rack-cap::before{content:"";position:absolute;left:0;right:calc(-1 * var(--rack-depth-x));bottom:100%;height:var(--rack-depth-y);background:linear-gradient(170deg,#f0f5f6,#d3e0e6 70%,#c4d4db);clip-path:polygon(0 100%,var(--rack-depth-x) 0,100% 0,calc(100% - var(--rack-depth-x)) 100%)}
+.mailroom-storage-rack-cap::after{content:"";position:absolute;left:100%;top:calc(-1 * var(--rack-depth-y));width:var(--rack-depth-x);height:calc(var(--rack-depth-y) + var(--rack-beam-height));background:linear-gradient(130deg,#b4c8d1,#809eae);clip-path:polygon(0 var(--rack-depth-y),100% 0,100% var(--rack-beam-height),0 100%)}
 .mailroom-storage-rack-grid{position:relative;min-width:0}
-.mailroom-storage-rack-grid::before{content:"";position:absolute;left:-2px;right:-2px;top:-18px;height:18px;background:linear-gradient(180deg,#e8ece9,#d4dcd6);clip-path:polygon(0 100%,18px 0,100% 0,calc(100% - 18px) 100%);border-bottom:2px solid #a1aea6;pointer-events:none}
-.mailroom-storage-shelf{position:relative;min-width:0;padding:4px 1px 24px;min-height:158px}
-.mailroom-storage-shelf::before{content:"";position:absolute;left:-2px;right:-2px;bottom:9px;height:22px;background:linear-gradient(176deg,#eef1ec,#cdd7cd);clip-path:polygon(0 100%,18px 0,100% 0,calc(100% - 18px) 100%);z-index:-1;pointer-events:none}
-.mailroom-storage-shelf::after{content:"";position:absolute;right:-2px;bottom:0;width:18px;height:31px;background:#a5b2a7;clip-path:polygon(0 22px,100% 0,100% 9px,0 100%);z-index:1;pointer-events:none}
-.mailroom-storage-shelf-beam{position:absolute;left:-2px;right:16px;bottom:0;height:10px;border-top:1px solid #b2beb4;border-bottom:1px solid #8a9b8e;background:linear-gradient(#c8d2c8,#b5c3b6);z-index:1;pointer-events:none}
-.mailroom-storage-shelf-beam>span{position:absolute;left:7px;top:-4px;padding:0 5px;border-radius:3px;background:#e5ebe4;font-size:12px;line-height:18px;font-weight:600;color:#4f6455;letter-spacing:.5px}
+.mailroom-storage-rack-grid::before{content:"";position:absolute;left:0;top:0;bottom:var(--rack-beam-height);width:var(--rack-depth-x);background:linear-gradient(90deg,#8da8b51c,#b4c7cf06);clip-path:polygon(0 0,100% 0,100% calc(100% - var(--rack-depth-y)),0 100%);z-index:-2;pointer-events:none}
+.mailroom-storage-rack-grid::after{content:"";position:absolute;left:100%;top:calc(-1 * var(--rack-depth-y));bottom:0;width:var(--rack-depth-x);background:linear-gradient(90deg,#8ba6b421,#bdd0d70d);clip-path:polygon(0 var(--rack-depth-y),100% 0,100% calc(100% - var(--rack-depth-y)),0 100%);z-index:-2;pointer-events:none}
+.mailroom-storage-shelf{position:relative;min-width:0;padding:8px 0 calc(var(--rack-beam-height) + 8px);min-height:174px}
+.mailroom-storage-shelf::before{content:"";position:absolute;left:0;right:calc(-1 * var(--rack-depth-x));bottom:var(--rack-beam-height);height:var(--rack-depth-y);background:linear-gradient(174deg,#e3edf1,#d1dfe6 65%,#b7cbd5);clip-path:polygon(0 100%,var(--rack-depth-x) 0,100% 0,calc(100% - var(--rack-depth-x)) 100%);z-index:-1;pointer-events:none}
+.mailroom-storage-shelf::after{content:"";position:absolute;left:100%;bottom:0;width:var(--rack-depth-x);height:calc(var(--rack-depth-y) + var(--rack-beam-height));background:linear-gradient(130deg,#a9c0cb,#7f9eaf);clip-path:polygon(0 var(--rack-depth-y),100% 0,100% var(--rack-beam-height),0 100%);z-index:1;pointer-events:none}
+.mailroom-storage-shelf-beam{position:absolute;left:0;right:0;bottom:0;height:var(--rack-beam-height);border-top:1px solid #c0d0d8;border-bottom:1px solid #748e9c;background:linear-gradient(#b7cdd7,#94afbe);box-shadow:0 5px 7px -4px #3f596c55;z-index:1;pointer-events:none}
+.mailroom-storage-shelf-beam>span{position:absolute;left:12px;top:-3px;padding:0 6px;border:1px solid #cad7dc;border-radius:3px;background:#e7eef1;font-size:12px;line-height:18px;font-weight:600;color:#4c6572;letter-spacing:.5px;box-shadow:0 1px 1px #657d8926}
 .mailroom-storage-shelf-locations{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;min-height:130px;min-width:0;padding:8px 8px 10px;isolation:isolate}
 .mailroom-storage-bin{position:relative;flex:1 0 128px;min-width:0;max-width:172px;min-height:118px;border:1px solid transparent;background:transparent;border-radius:8px;padding:5px 4px 0;display:flex;flex-direction:column;justify-content:flex-end;gap:8px;text-align:left;color:#2d3b36;cursor:pointer}
 .mailroom-storage-bin:hover{background:#eef4ef;border-color:#c1d2c3}
@@ -54,9 +62,9 @@
 .mailroom-storage-add-location:hover{background:#f1f7f0;border-color:#759b7d}
 .mailroom-storage-add-location:disabled{cursor:default;opacity:.5}
 .mailroom-storage-shelf-empty{font-size:12px;color:#7b8b7e;align-self:center;padding:20px 10px}
-.mailroom-storage-rack-foot{position:absolute;bottom:11px;width:21px;height:5px;border:1px solid #8b9a90;border-radius:2px;background:#a0aea3;box-shadow:2px 2px 3px #263b2c13;z-index:3;pointer-events:none}
-.mailroom-storage-rack-foot.is-left{left:5px}
-.mailroom-storage-rack-foot.is-right{right:17px}
+.mailroom-storage-rack-foot{position:absolute;bottom:17px;width:26px;height:6px;border:1px solid #7f96a2;border-radius:2px;background:linear-gradient(#c2d1d8,#8da6b3);box-shadow:2px 2px 2px #243d511f;z-index:4;pointer-events:none}
+.mailroom-storage-rack-foot.is-left{left:calc(var(--rack-front-left) - 13px)}
+.mailroom-storage-rack-foot.is-right{right:calc(var(--rack-front-right) - 13px)}
 .mailroom-storage-floor-scroll{overflow:auto;border:1px solid #e1e6eb;border-radius:8px;background:#f4f6f8;max-height:560px}
 .mailroom-storage-floor{position:relative;background-image:linear-gradient(#dfe5eb 1px,transparent 1px),linear-gradient(90deg,#dfe5eb 1px,transparent 1px);background-size:40px 40px}
 .mailroom-storage-floor-rack{position:absolute;width:270px;min-height:150px;border:2px solid #b8c9db;border-radius:8px;background:#fff;display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:18px;text-align:left;cursor:pointer;box-shadow:5px 5px 0 #d1dae3}
@@ -83,16 +91,10 @@
 .mailroom-storage-rack-heading{margin-bottom:16px}
 .mailroom-storage-rack-heading>div:first-child{gap:4px 8px}
 .mailroom-storage-rack-heading strong{font-size:16px}
-.mailroom-storage-rack-frame{padding:16px 22px 24px 11px;margin-inline:0}
-.mailroom-storage-post{width:5px}
-.mailroom-storage-post.is-back-left{left:23px}
-.mailroom-storage-post.is-front-left{left:7px}
-.mailroom-storage-post.is-back-right{right:5px}
-.mailroom-storage-post.is-front-right{right:18px}
-.mailroom-storage-rack-foot.is-left{left:1px}
-.mailroom-storage-rack-foot.is-right{right:12px}
-.mailroom-storage-shelf{padding-bottom:23px}
-.mailroom-storage-shelf-locations{gap:9px;padding-inline:7px}
+.mailroom-storage-rack-frame{--rack-inset:7px;--rack-post-width:8px;--rack-depth-x:20px;--rack-depth-y:14px;--rack-beam-height:11px;margin-inline:0}
+.mailroom-storage-post.is-front-left::after,.mailroom-storage-post.is-front-right::after{left:2px}
+.mailroom-storage-shelf{min-height:166px}
+.mailroom-storage-shelf-locations{gap:9px;padding-inline:12px}
 .mailroom-storage-bin{flex:1 1 112px;max-width:calc(50% - 5px)}
 .mailroom-storage-bin-label{padding:7px}
 .mailroom-storage-bin-name{font-size:13px;line-height:18px}

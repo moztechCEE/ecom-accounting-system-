@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:30c38cb0b35a68dcf61ff78881d14c00ba28ba0b94a31785bc8361d6623a046a",
+  "sourceVersion": "sha256:ff871faa1dad25bc27bc7d520269b173064b7510e2d07b248886eaaebe9d3f58",
   "reviewedBaseCommit": "470a5b499ce7a7af4b57117446395ded6b422bec",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "a0e014cb5cf7aafee5d03e523941e4078eb028035f57b17b32f1599a3019b1dd",
+  "catalogSha256": "253e877035341af91ff48d18090c5c896f2e89b7ac8fe0914d25cb9a8a6a9687",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -1196,11 +1196,11 @@
     },
     {
       "path": "frontend/src/pages/mailroom/storage.css",
-      "sha256": "ea3544a7bf0e9d9a9a9567ffad2e64fd14e40501f932551b22ee7f3cf5954b40"
+      "sha256": "dc1effeada8c4091afac88432de7ed053298e65390841e6d07575634c54e9f13"
     },
     {
       "path": "frontend/src/pages/mailroom/StorageWorkbench.tsx",
-      "sha256": "808a80ff5785e92fdce0c0c66fb387ebcf62667742f1b28d5d064084c8cf8a06"
+      "sha256": "64da8152a0e9df611853d8591fe76c77833b57820541f2ab205136962f009437"
     },
     {
       "path": "frontend/src/pages/mailroom/TabletAcceptance.tsx",
