@@ -265,9 +265,10 @@ test(
         async function choose(control, label) {
           await control.press("ArrowDown");
           await dropdown().getByText(label, { exact: true }).click();
-          await page
-            .locator(".ant-select-dropdown:visible")
-            .waitFor({ state: "hidden" });
+          await Promise.all(
+            (await page.locator(".ant-select-dropdown:visible").elementHandles())
+              .map(element => element.waitForElementState("hidden")),
+          );
         }
         const category = (label) =>
           drawer

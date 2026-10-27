@@ -1,0 +1,60 @@
+// Additive DEV direct-print capability and immutable print-job receipts.
+model MailroomPrintDevice {
+  id             String   @id @default(uuid())
+  entityId       String   @map("entity_id")
+  registeredById String   @map("registered_by_id")
+  name           String
+  pairHash       String?  @unique(map: "mailroom_print_device_pair_key") @map("pair_hash")
+  pairExpiresAt  DateTime? @map("pair_expires_at")
+  tokenHash      String?  @unique(map: "mailroom_print_device_token_key") @map("token_hash")
+  tokenExpiresAt DateTime? @map("token_expires_at")
+  pairedAt       DateTime? @map("paired_at")
+  revokedAt      DateTime? @map("revoked_at")
+  lastSeenAt     DateTime? @map("last_seen_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  jobs           MailroomPrintJob[]
+
+  @@unique([id, entityId], map: "mailroom_print_device_company_key")
+  @@index([entityId, registeredById], map: "mailroom_print_device_owner_idx")
+  @@map("mailroom_print_devices")
+}
+
+model MailroomPrintJob {
+  id            String   @id @default(uuid())
+  entityId      String   @map("entity_id")
+  createdById   String   @map("created_by_id")
+  deviceId      String   @map("device_id")
+  device        MailroomPrintDevice @relation(fields: [deviceId, entityId], references: [id, entityId], onDelete: Restrict, onUpdate: Cascade, map: "mailroom_print_job_device_fkey")
+  requestId     String   @map("request_id")
+  requestHash   String   @map("request_hash")
+  itemIds       String[] @map("item_ids")
+  itemSetHash   String   @map("item_set_hash")
+  itemVersions  Json     @map("item_versions")
+  pdfBytes      Bytes?   @map("pdf_bytes")
+  pdfSha256     String   @map("pdf_sha256")
+  pdfSize       Int      @map("pdf_size")
+  pages         Int
+  profile       String
+  status        String   @default("QUEUED")
+  expiresAt     DateTime @map("expires_at")
+  claimedAt     DateTime? @map("claimed_at")
+  submittingAt  DateTime? @map("submitting_at")
+  finishedAt    DateTime? @map("finished_at")
+  cupsJobId     String?  @map("cups_job_id")
+  errorCode     String?  @map("error_code")
+  // Retained for UNKNOWN; only explicit reprintOf can release it atomically.
+  activeKey     String?  @unique(map: "mailroom_print_job_active_key") @map("active_key")
+  reprintOf     String?  @map("reprint_of")
+  previous      MailroomPrintJob? @relation("MailroomPrintReprint", fields: [reprintOf, entityId], references: [id, entityId], onDelete: Restrict, onUpdate: Cascade, map: "mailroom_print_job_reprint_fkey")
+  reprints      MailroomPrintJob[] @relation("MailroomPrintReprint")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([id, entityId], map: "mailroom_print_job_company_key")
+  @@unique([entityId, createdById, requestId], map: "mailroom_print_job_request_key")
+  @@index([deviceId, status, createdAt], map: "mailroom_print_job_claim_idx")
+  @@index([entityId, expiresAt], map: "mailroom_print_job_expiry_idx")
+  @@index([itemIds], type: Gin, map: "mailroom_print_job_items_idx")
+  @@map("mailroom_print_jobs")
+}

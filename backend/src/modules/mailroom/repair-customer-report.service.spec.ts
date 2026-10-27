@@ -3,9 +3,11 @@ import { type Actor } from './mailroom.contract';
 import {
   EVIDENCE_COMPANY,
   EVIDENCE_TIME,
-  repairEvidenceFixture,
+  repairEvidenceFixture as baseRepairEvidenceFixture,
 } from './repair-evidence.test.fixture';
 
+const repairEvidenceFixture = () =>
+  baseRepairEvidenceFixture({ fairAssessment: true });
 const tokenFrom = (shareLink: string) =>
   new URLSearchParams(new URL(shareLink).hash.slice(1)).get('token')!;
 const protectedEnv = [

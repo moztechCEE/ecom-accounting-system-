@@ -3,7 +3,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import type { PrismaService } from '../../common/prisma/prisma.service';
 import type { MailroomService } from './mailroom.service';
 import type { MailroomSyncService } from './mailroom-sync.service';
-import { type Actor, type SourceCase } from './mailroom.contract';
+import { fingerprint, type Actor, type SourceCase } from './mailroom.contract';
 import {
   type InspectionDocument,
   type RepairData,
@@ -56,12 +56,25 @@ export const EVIDENCE_TIME = '2026-10-13T04:00:00.000Z';
 
 function matches(row: Row, where: Row) {
   return Object.entries(where).every(([key, expected]) => {
+    if (key === 'AND' || key === 'OR') {
+      const parts = (Array.isArray(expected) ? expected : [expected]) as Row[];
+      return key === 'AND'
+        ? parts.every((part) => matches(row, part))
+        : parts.some((part) => matches(row, part));
+    }
     if (
       expected !== null &&
       typeof expected === 'object' &&
       !(expected instanceof Date)
     ) {
       const filter = expected as Row;
+      if (Array.isArray(filter.path)) {
+        const saved = filter.path.reduce<unknown>((current, part) => {
+          if (!current || typeof current !== 'object') return undefined;
+          return (current as Row)[String(part)];
+        }, row[key]);
+        return fingerprint(saved) === fingerprint(filter.equals);
+      }
       if ('gt' in filter)
         return row[key] instanceof Date && row[key] > (filter.gt as Date);
       if ('in' in filter) return (filter.in as unknown[]).includes(row[key]);
@@ -71,10 +84,13 @@ function matches(row: Row, where: Row) {
 }
 
 /** In-memory rollback emulates transactional state; it proves neither PostgreSQL locking nor provider behavior. */
-export function repairEvidenceFixture() {
+export function repairEvidenceFixture(
+  options: { fairAssessment?: boolean } = {},
+) {
   const assets: Row[] = [],
     reports: Row[] = [],
-    operations: Row[] = [];
+    operations: Row[] = [],
+    submissions: Row[] = [];
   const permissions = new Map<string, Set<string>>([
     ['tech', new Set(['repair_workbench:read', 'repair_workbench:update'])],
     ['csr', new Set(['mailroom:review', 'repair_workbench:read'])],
@@ -157,6 +173,55 @@ export function repairEvidenceFixture() {
     repairReport: null,
     repairWorkflow: { schema: 1 },
   };
+  const recordSubmission = (version: number) => {
+    const doc = item.repairInspection;
+    item.repairWorkflow.assessmentPolicy = {
+      schema: 1,
+      inspectionRevision: doc.revision,
+      planHash: inspectionPlanHash(doc),
+    };
+    const snapshot = structuredClone(item);
+    snapshot.version = version;
+    snapshot.repairWorkflow = {
+      schema: 1,
+      assessmentPolicy: structuredClone(item.repairWorkflow.assessmentPolicy),
+    };
+    delete snapshot.repairInspection.review;
+    submissions.push({
+      id: 'synthetic-submit-action-' + doc.revision,
+      entityId: item.entityId,
+      itemId: item.id,
+      action: 'submit_repair_inspection',
+      actorId: doc.authorId,
+      actorName: doc.authorName,
+      requestId: 'synthetic-original-submit-' + doc.revision,
+      requestHash: fingerprint({ revision: doc.revision, data: doc.data }),
+      version,
+      fromStatus: 'INSPECTING',
+      toStatus: 'INSPECTING',
+      createdAt: new Date(doc.submittedAt!),
+      snapshot,
+    });
+  };
+  if (options.fairAssessment) {
+    item.repairInspection.data.templateBinding = {
+      id: 'synthetic-report-template',
+      revision: 1,
+      contentHash: fingerprint({
+        fixture: 'synthetic-observation-template',
+      }),
+    };
+    item.repairInspection.data.causeStatus = 'UNKNOWN';
+    item.repairInspection.data.assessment = {
+      schema: 1,
+      conclusion: 'UNDETERMINED',
+      basis: '',
+      causalExplanation: item.repairInspection.data.diagnosis,
+      checkKeys: [],
+      mediaIds: [],
+    };
+    recordSubmission(5);
+  }
   // FUTURE AGREED WIRE fixture only: current Source feed has no authoritative parent identity yet.
   // These unit positives do not assert actual Source serializer parity or cross-service acceptance.
   const source: FutureSourceWire = {
@@ -272,6 +337,8 @@ export function repairEvidenceFixture() {
     })),
     repairCustomerReport: delegate(reports),
     repairEvidenceOperation: delegate(operations),
+    mailroomAction: delegate(submissions),
+    mailroomDelivery: delegate([]),
     mailroomItem: {
       findUnique: jest.fn(({ where }: { where: { id: string } }) =>
         Promise.resolve(where.id === item.id ? structuredClone(item) : null),
@@ -430,6 +497,7 @@ export function repairEvidenceFixture() {
     expiresInDays: 7,
   });
   const complete = (outcome: RepairData['outcome'] = 'REPAIRED') => {
+    const originalPlanHash = inspectionPlanHash(item.repairInspection);
     if (outcome === 'REPLACED') {
       item.repairInspection.data.plan = 'REPLACE';
       item.repairInspection.data.replacementSku = 'SYNTHETIC-REPLACEMENT';
@@ -437,6 +505,16 @@ export function repairEvidenceFixture() {
     }
     if (outcome === 'FACTORY_REPAIRED')
       item.repairInspection.data.plan = 'FACTORY';
+    if (
+      options.fairAssessment &&
+      inspectionPlanHash(item.repairInspection) !== originalPlanHash
+    ) {
+      item.repairInspection.revision++;
+      item.version++;
+      item.repairInspection.updatedAt = '2026-10-13T03:01:00.000Z';
+      item.repairInspection.submittedAt = '2026-10-13T03:01:00.000Z';
+      recordSubmission(item.version);
+    }
     refresh();
     item.status = 'WAITING_RETURN_ACCEPTANCE';
     item.repairReport = {
@@ -530,6 +608,7 @@ export function repairEvidenceFixture() {
     assets,
     reports,
     operations,
+    submissions,
     tx,
     prisma,
     actor,

@@ -54,19 +54,42 @@ function inspection(plan: InspectionDocument['data']['plan'] = 'REPAIR') {
     authorId: USER,
     authorName: 'Synthetic Technician',
     updatedAt: '2026-10-08T00:00:00Z',
+    submittedAt: '2026-10-08T00:00:00Z',
     data: {
+      protocol: 2,
       complaint: 'Synthetic fault',
       reproduction: 'YES',
       testConditions: 'Offline conditions',
       checks: [
-        { name: 'Power', result: 'PASS', observation: 'Offline result' },
+        {
+          key: 'power',
+          name: 'Power',
+          result: 'PASS',
+          observation: 'Offline result',
+        },
       ],
       diagnosis: 'Synthetic diagnosis',
-      causeStatus: 'CONFIRMED',
+      causeStatus: 'UNKNOWN',
+      assessment: {
+        schema: 1,
+        conclusion: 'UNDETERMINED',
+        basis: '',
+        causalExplanation: 'Synthetic diagnosis',
+        checkKeys: [],
+        mediaIds: [],
+      },
       plan,
       planNote: 'Synthetic plan',
       feeSuggestion: 'FREE',
       estimateNote: '',
+      materialPlan: { mode: 'NONE', lines: [] },
+      templateBinding: {
+        id: 'synthetic-todo-template',
+        revision: 1,
+        contentHash: fingerprint({
+          fixture: 'synthetic-observation-template',
+        }),
+      },
       ...(plan === 'REPLACE'
         ? {
             replacementCondition: 'REFURBISHED',
@@ -109,6 +132,11 @@ function piece(id: string, status = 'INSPECTING') {
     repairReport: null as unknown,
     repairWorkflow: {
       schema: 1,
+      assessmentPolicy: {
+        schema: 1,
+        inspectionRevision: doc.revision,
+        planHash: inspectionPlanHash(doc),
+      },
       csr: {
         status: 'RESOLVED',
         inspectionRevision: doc.revision,
@@ -256,6 +284,13 @@ function workflow(row: Piece) {
 function setPlan(row: Piece, plan: InspectionDocument['data']['plan']) {
   const doc = inspection(plan);
   row.repairInspection = doc;
+  Object.assign(workflow(row), {
+    assessmentPolicy: {
+      schema: 1,
+      inspectionRevision: doc.revision,
+      planHash: inspectionPlanHash(doc),
+    },
+  });
   workflow(row).csr!.planHash = inspectionPlanHash(doc);
   return row;
 }
@@ -325,6 +360,13 @@ function matches(row: unknown, where: unknown): boolean {
     }
     const condition = record(value);
     if (condition) {
+      if (Array.isArray(condition.path)) {
+        const saved = condition.path.reduce<unknown>(
+          (current, part) => record(current)?.[String(part)],
+          object[key],
+        );
+        return fingerprint(saved) === fingerprint(condition.equals);
+      }
       if (Array.isArray(condition.in))
         return condition.in.includes(object[key]);
       if ('not' in condition) return object[key] !== condition.not;
@@ -359,6 +401,38 @@ function selectedProjection(
 }
 const fixtures: { writes: Record<string, jest.Mock> }[] = [];
 function fixture(rows = [piece('ready')], withPrerequisiteReader = true) {
+  // Persist once at fixture construction; later current-item mutations cannot
+  // rewrite the original server submission used by the real assessment guard.
+  const submissions = rows.map((row) => {
+    const snapshot = structuredClone(row);
+    snapshot.version = 5;
+    const savedWorkflow = record(snapshot.repairWorkflow);
+    snapshot.repairWorkflow = {
+      schema: 1,
+      ...(savedWorkflow?.assessmentPolicy
+        ? { assessmentPolicy: savedWorkflow.assessmentPolicy }
+        : {}),
+    };
+    const doc = snapshot.repairInspection as InspectionDocument;
+    delete doc.review;
+    snapshot.status =
+      row.receipt.category === 'RETURN' ? 'REFURBISHING' : 'INSPECTING';
+    return {
+      id: 'synthetic-submit-action-' + row.id,
+      entityId: row.entityId,
+      itemId: row.id,
+      action: 'submit_repair_inspection',
+      actorId: doc.authorId,
+      actorName: doc.authorName,
+      requestId: 'synthetic-original-submit-' + row.id,
+      requestHash: fingerprint({ revision: doc.revision, data: doc.data }),
+      version: snapshot.version,
+      fromStatus: snapshot.status,
+      toStatus: snapshot.status,
+      createdAt: new Date(doc.submittedAt!),
+      snapshot,
+    };
+  });
   const state = {
     active: true,
     mustChangePassword: false,
@@ -456,7 +530,18 @@ function fixture(rows = [piece('ready')], withPrerequisiteReader = true) {
       update: writes.itemUpdate,
     },
     mailroomReceipt: { update: writes.receiptUpdate },
-    mailroomAction: { create: writes.actionCreate },
+    mailroomAction: {
+      create: writes.actionCreate,
+      findMany: jest.fn(({ where, take }: { where: unknown; take?: number }) =>
+        Promise.resolve(
+          structuredClone(
+            submissions
+              .filter((row) => matches(row, where))
+              .slice(0, take ?? submissions.length),
+          ),
+        ),
+      ),
+    },
     mailroomTask: { updateMany: writes.taskUpdate },
     mailroomDelivery: { createMany: writes.deliveryCreate },
     afterSalesStockUnit: { findMany: jest.fn().mockResolvedValue([]) },

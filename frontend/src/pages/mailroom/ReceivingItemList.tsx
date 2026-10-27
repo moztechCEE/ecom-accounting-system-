@@ -5,6 +5,8 @@ import api from '../../services/api';
 import { CATEGORIES, STATUS, type Item } from './model';
 import { canOpenPrecheck } from './mailroom-workflow';
 import { PRECHECK_STAGES } from './initial-inspection-model';
+import MailroomLabelPrint from './MailroomLabelPrint';
+import type { DirectLabelPrint } from './mailroom-label';
 
 function photoLoader(entityId: string) {
   const cache = new Map<string, Blob>();
@@ -46,20 +48,28 @@ function ItemThumbnail({ item, entityId, loadPhoto, onOpen }: { item: Item; enti
   const src = snapshot?.scope === scope ? snapshot.src : undefined;
   return <button ref={ref} type="button" className="mailroom-receiving-photo" aria-label={`查看 ${item.label}，${item.evidenceCount} 張實收照片`} onClick={onOpen}>{src ? <img src={src} alt={`${item.label} 實收照片`} /> : <PictureOutlined aria-hidden />}</button>;
 }
-export default function ReceivingItemList({ entityId, items, total, page, loading, selectedIds, onSelect, onPage, onOpen, onInspect, canEdit }: {
+export default function ReceivingItemList({ entityId, items, total, page, loading, selectedIds, onSelect, onPage, onOpen, onInspect, canEdit, onDirectPrint, onLabelBusyChange, pendingActionLabel }: {
   entityId: string; items: Item[]; total: number; page: number; loading: boolean; selectedIds: string[];
   onSelect: (ids: string[]) => void; onPage: (page: number) => void; onOpen: (id: string) => void; onInspect: (ids: string[]) => void; canEdit: boolean;
+  onDirectPrint?: DirectLabelPrint; onLabelBusyChange?: (busy: boolean) => void; pendingActionLabel?: string;
 }) {
   const loadPhoto = useMemo(() => photoLoader(entityId), [entityId]);
+  const printing = useRef(new Set<string>()), labelBusy = useRef(onLabelBusyChange);
+  useEffect(() => { labelBusy.current = onLabelBusyChange; }, [onLabelBusyChange]);
+  function updateLabelBusy(id: string, busy: boolean) {
+    if (busy) printing.current.add(id); else printing.current.delete(id);
+    labelBusy.current?.(printing.current.size > 0);
+  }
+  useEffect(() => () => { printing.current.clear(); labelBusy.current?.(false); }, []);
   const allSelected = items.length > 0 && items.every(item => selectedIds.includes(item.id));
   return <Spin spinning={loading}><div className="mailroom-receiving-list" aria-label="收件實物列表">
-    {!!items.length && <div className="mailroom-receiving-head"><Checkbox aria-label="選取本頁實物" checked={allSelected} indeterminate={!allSelected && items.some(item => selectedIds.includes(item.id))} onChange={event => onSelect(event.target.checked ? items.map(item => item.id) : [])} /><span>照片</span><span>案件／實物</span><span>進度／類型</span><span>編輯</span></div>}
+    {!!items.length && <div className="mailroom-receiving-head"><Checkbox aria-label="選取本頁實物" checked={allSelected} indeterminate={!allSelected && items.some(item => selectedIds.includes(item.id))} onChange={event => onSelect(event.target.checked ? items.map(item => item.id) : [])} /><span>照片</span><span>案件／實物</span><span>進度／類型</span><span>操作</span></div>}
     {items.map(item => <div className="mailroom-receiving-row" key={item.id}>
       <Checkbox aria-label={`選取 ${item.label}`} checked={selectedIds.includes(item.id)} onChange={event => onSelect(event.target.checked ? [...selectedIds, item.id] : selectedIds.filter(id => id !== item.id))} />
       <ItemThumbnail item={item} entityId={entityId} loadPhoto={loadPhoto} onOpen={() => onOpen(item.id)} />
       <div className="mailroom-receiving-identity"><Button type="link" className="mailroom-item-link" onClick={() => onOpen(item.id)}>{item.productName}</Button><div>{item.receipt.sourceNumber || item.receipt.senderLabel || '待客服配對'}</div><Typography.Text type="secondary">{item.label}{item.serialNumber ? ` · SN ${item.serialNumber}` : ''}</Typography.Text></div>
       <div className="mailroom-receiving-stage"><Tag>{item.statusLabel || STATUS[item.status] || item.status}</Tag><Tag>{CATEGORIES[item.receipt.category] || item.receipt.category}</Tag>{item.precheck && <div><Typography.Text type="secondary">{PRECHECK_STAGES[item.precheck.stage] || item.precheck.stage}{item.precheck.savedByName ? ` · ${item.precheck.savedByName} · v${item.precheck.revision}` : ''}</Typography.Text></div>}</div>
-      <Button className="mailroom-receiving-edit" icon={<EditOutlined aria-hidden />} aria-label={`編輯初檢 ${item.label}`} title="編輯初檢" disabled={!canEdit || !canOpenPrecheck(item)} onClick={() => onInspect([item.id])} />
+      <div className="mailroom-receiving-row-actions"><Button className="mailroom-receiving-edit" icon={<EditOutlined aria-hidden />} aria-label={`編輯初檢 ${item.label}`} title="編輯初檢" disabled={!canEdit || !canOpenPrecheck(item)} onClick={() => onInspect([item.id])} /><MailroomLabelPrint entityId={entityId} itemIds={[item.id]} directDisabled={!canEdit} iconOnly ariaLabel={`列印物件標籤 ${item.label}`} onDirectPrint={onDirectPrint} pendingActionLabel={pendingActionLabel} onBusyChange={busy => updateLabelBusy(item.id, busy)} /></div>
     </div>)}
     {!items.length && <Empty description="目前沒有符合條件的收件" />}
     <Space className="mailroom-receiving-pagination"><Pagination current={page} pageSize={50} total={total} showSizeChanger={false} onChange={onPage} /></Space>

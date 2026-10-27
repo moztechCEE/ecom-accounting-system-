@@ -4,7 +4,11 @@ import { validate } from 'class-validator';
 import { RepairWorkbenchService } from './repair-workbench.service';
 import { SaveInspectionDto, SaveRepairDto } from './repair-document.dto';
 import { RepairPrerequisitesService } from './repair-prerequisites.service';
-import { type Actor, type SourceCase } from './mailroom.contract';
+import { fingerprint, type Actor, type SourceCase } from './mailroom.contract';
+import {
+  repairTemplateHash,
+  type RepairTestTemplate,
+} from './repair-template.contract';
 import { type PrismaService } from '../../common/prisma/prisma.service';
 import { type MailroomService } from './mailroom.service';
 import { type MailroomSyncService } from './mailroom-sync.service';
@@ -27,13 +31,61 @@ const actor = (
   permissions: new Set(permissions),
   entityIds,
 });
+// Synthetic observation fixture only; no product engineering thresholds.
+const template: RepairTestTemplate = {
+  schema: 1,
+  status: 'REVIEWED',
+  id: 'synthetic-service-template',
+  revision: 1,
+  entityId: 'company',
+  productId: 'synthetic-product',
+  sku: 'SYNTHETIC-SKU',
+  reviewedById: 'synthetic-standard-reviewer',
+  reviewedAt: '2026-10-01T00:00:00Z',
+  checks: [
+    {
+      key: 'power',
+      name: '開機',
+      requiredForInspection: true,
+      requiredForCompletion: true,
+      requiresCalibration: false,
+      standard: {
+        kind: 'OBSERVATION',
+        instruction: 'Synthetic observed startup result',
+      },
+    },
+  ],
+  contentHash: '',
+};
+template.contentHash = repairTemplateHash(template);
+const templateBinding = {
+  id: template.id,
+  revision: template.revision,
+  contentHash: template.contentHash,
+};
 const inspectionData = {
   protocol: 2 as const,
   materialPlan: { mode: 'NONE' as const, lines: [] },
   complaint: '無法開機',
   reproduction: 'YES' as const,
   testConditions: '原廠電源與配件',
-  checks: [{ name: '開機', result: 'FAIL' as const, observation: '無法啟動' }],
+  checks: [
+    {
+      key: 'power',
+      name: '開機',
+      result: 'FAIL' as const,
+      observation: '無法啟動',
+    },
+  ],
+  templateBinding,
+  assessment: {
+    schema: 1 as const,
+    conclusion: 'PRODUCT_FAULT' as const,
+    basis: 'Synthetic observed failure using the original supply',
+    causalExplanation: '電源模組故障',
+    checkKeys: ['power'],
+    mediaIds: [],
+  },
   diagnosis: '電源模組故障',
   causeStatus: 'CONFIRMED' as const,
   plan: 'REPAIR' as const,
@@ -48,6 +100,14 @@ const emptyInspectionData = {
   reproduction: 'NOT_TESTED' as const,
   testConditions: '',
   checks: [],
+  assessment: {
+    schema: 1 as const,
+    conclusion: 'UNDETERMINED' as const,
+    basis: '',
+    causalExplanation: '',
+    checkKeys: [],
+    mediaIds: [],
+  },
   diagnosis: '',
   causeStatus: 'UNKNOWN' as const,
   plan: 'REPAIR' as const,
@@ -89,6 +149,33 @@ const repairInput = (
   ...overrides,
 });
 
+type CapturedFixture = {
+  id: string;
+  entityId: string;
+  version: number;
+  repairInspection: InspectionDocument | null;
+  repairReport?: unknown;
+};
+type CapturedAction = {
+  entityId: string;
+  itemId: string;
+  actorId: string;
+  actorName?: string;
+  requestId: string;
+  version: number;
+  requestHash: string;
+  action: string;
+  snapshot: CapturedFixture;
+};
+type SubmissionQuery = {
+  where: {
+    entityId: string;
+    itemId: string;
+    action: string;
+    snapshot: { equals: number };
+  };
+};
+
 describe('RepairWorkbenchService document authorization, versions and release context', () => {
   let service: RepairWorkbenchService;
   let prisma: any;
@@ -96,10 +183,14 @@ describe('RepairWorkbenchService document authorization, versions and release co
   let sync: any;
   let row: any;
   let events: Map<string, any>;
+  let seededSubmissions: CapturedAction[];
   beforeEach(() => {
     row = {
       id: 'piece',
       entityId: 'company',
+      receiptId: 'synthetic-receipt',
+      productId: template.productId,
+      sku: template.sku,
       label: 'DEMO-001',
       version: 5,
       status: 'INSPECTING',
@@ -110,6 +201,7 @@ describe('RepairWorkbenchService document authorization, versions and release co
       receipt: { category: 'REPAIR', sourceCaseId: 'source-case' },
     };
     events = new Map();
+    seededSubmissions = [];
     prisma = {
       mailroomItem: {
         findUnique: jest.fn(async () => structuredClone(row)),
@@ -123,6 +215,23 @@ describe('RepairWorkbenchService document authorization, versions and release co
         }),
       },
       mailroomAction: {
+        findMany: jest.fn(({ where }: SubmissionQuery) =>
+          Promise.resolve(
+            structuredClone(
+              [
+                ...seededSubmissions,
+                ...([...events.values()] as unknown as CapturedAction[]),
+              ].filter(
+                (record) =>
+                  record.entityId === where.entityId &&
+                  record.itemId === where.itemId &&
+                  record.action === where.action &&
+                  record.snapshot.repairInspection?.revision ===
+                    where.snapshot.equals,
+              ),
+            ),
+          ),
+        ),
         findUnique: jest.fn(async ({ where }: any) => {
           const key = where.entityId_actorId_requestId;
           return (
@@ -146,20 +255,22 @@ describe('RepairWorkbenchService document authorization, versions and release co
       record: jest.fn(
         async (
           _tx: any,
-          writer: any,
-          updated: any,
+          writer: Actor,
+          updated: CapturedFixture,
           action: string,
           requestId: string,
           hash: string,
         ) => {
           events.set(`${updated.entityId}:${writer.id}:${requestId}`, {
+            entityId: updated.entityId,
             itemId: updated.id,
+            actorId: writer.id,
+            actorName: writer.name,
+            requestId,
+            version: updated.version,
             requestHash: hash,
             action,
-            snapshot: {
-              repairInspection: updated.repairInspection,
-              repairReport: updated.repairReport,
-            },
+            snapshot: structuredClone(updated),
           });
           return [{ userId: 'tech', id: 'notice' }];
         },
@@ -179,7 +290,17 @@ describe('RepairWorkbenchService document authorization, versions and release co
       }),
     };
     service = new RepairWorkbenchService(prisma, mailroom, sync, {
-      recordValidation: jest.fn().mockResolvedValue(undefined),
+      recordValidation: jest.fn().mockResolvedValue({
+        state: 'KNOWN',
+        template,
+        context: {
+          entityId: 'company',
+          productId: template.productId,
+          sku: template.sku,
+          binding: templateBinding,
+        },
+        calibrations: [],
+      }),
       forItem: jest.fn().mockResolvedValue({
         materials: {
           start: { state: 'READY' },
@@ -236,6 +357,7 @@ describe('RepairWorkbenchService document authorization, versions and release co
   function csrReview(
     category: 'REPAIR' | 'RETURN',
     sourceCaseId: string | null,
+    plan: 'REPAIR' | 'FACTORY' = 'REPAIR',
   ) {
     const doc: InspectionDocument = {
       number: 'INS-COMPANY-RETURN',
@@ -244,12 +366,32 @@ describe('RepairWorkbenchService document authorization, versions and release co
       authorId: 'tech',
       authorName: 'tech',
       updatedAt: '2026-10-14T00:00:00Z',
-      data: structuredClone(inspectionData),
+      submittedAt: '2026-10-14T00:00:00Z',
+      data: { ...structuredClone(inspectionData), plan },
     };
     Object.assign(csrRow(), {
       status: 'WAITING_CUSTOMER',
       receipt: { category, sourceCaseId, customerServiceUserId: 'csr' },
       repairInspection: doc,
+    });
+    csrRow().repairWorkflow = {
+      schema: 1,
+      assessmentPolicy: {
+        schema: 1,
+        inspectionRevision: doc.revision,
+        planHash: inspectionPlanHash(doc),
+      },
+    };
+    const captured = csrRow();
+    seededSubmissions.push({
+      entityId: captured.entityId,
+      itemId: captured.id,
+      actorId: doc.authorId,
+      requestId: 'synthetic-seed-inspection',
+      requestHash: fingerprint(doc),
+      action: 'submit_repair_inspection',
+      version: captured.version,
+      snapshot: structuredClone(captured),
     });
     const workflow = sentCustomerWorkflow(
       csrRow(),
@@ -378,9 +520,17 @@ describe('RepairWorkbenchService document authorization, versions and release co
     await expect(
       service.workflow('csr', 'piece', { ...command, inspectionRevision: 2 }),
     ).rejects.toThrow('版本');
-    csrRow().repairInspection.data.planNote = 'new plan after handoff';
+    csrRow().repairWorkflow.csr.planHash = fingerprint('stale-plan');
     await expect(service.workflow('csr', 'piece', command)).rejects.toThrow(
       '版本',
+    );
+    csrRow().repairWorkflow.csr.planHash = inspectionPlanHash(
+      csrRow().repairInspection,
+    );
+    csrRow().repairInspection.data.planNote =
+      'changed document after immutable submission';
+    await expect(service.workflow('csr', 'piece', command)).rejects.toThrow(
+      '本版原因判定或覆核證據尚未確認',
     );
     csrRow().repairInspection.data.planNote = inspectionData.planNote;
     employeeStub().mockResolvedValue(null);
@@ -389,7 +539,7 @@ describe('RepairWorkbenchService document authorization, versions and release co
     );
     expect(updateStub()).not.toHaveBeenCalled();
     expect(recordStub()).not.toHaveBeenCalled();
-    expect(sourceStub()).toHaveBeenCalledTimes(2);
+    expect(sourceStub()).toHaveBeenCalledTimes(3);
   });
 
   it('keeps unlinked RETURN unsupported and rejects missing or wrong fresh Source before approval', async () => {
@@ -434,11 +584,7 @@ describe('RepairWorkbenchService document authorization, versions and release co
   });
 
   it('keeps factory dispatch Source-backed after linked RETURN review', async () => {
-    const command = csrReview('RETURN', 'source-case');
-    csrRow().repairInspection.data.plan = 'FACTORY';
-    csrRow().repairWorkflow.csr.planHash = inspectionPlanHash(
-      csrRow().repairInspection,
-    );
+    const command = csrReview('RETURN', 'source-case', 'FACTORY');
     await service.workflow('csr', 'piece', command);
     actorStub().mockResolvedValue(actor());
     sourceStub().mockResolvedValue({ items: [] });
@@ -701,7 +847,14 @@ describe('RepairWorkbenchService document authorization, versions and release co
     await expect(
       service.save('tech', 'piece', 'inspection', {
         ...input,
-        data: { ...input.data, diagnosis: '另一诊断' },
+        data: {
+          ...input.data,
+          diagnosis: '另一诊断',
+          assessment: {
+            ...inspectionData.assessment,
+            causalExplanation: '另一诊断',
+          },
+        },
       }),
     ).rejects.toThrow('操作識別碼');
     await expect(
@@ -732,7 +885,14 @@ describe('RepairWorkbenchService document authorization, versions and release co
       inspectionInput({
         requestId: 'inspection-request-002',
         expectedVersion: 6,
-        data: { ...inspectionData, diagnosis: '補充確認故障原因' },
+        data: {
+          ...inspectionData,
+          diagnosis: '補充確認故障原因',
+          assessment: {
+            ...inspectionData.assessment,
+            causalExplanation: '補充確認故障原因',
+          },
+        },
       }),
     );
     expect(row.repairInspection.revision).toBe(2);

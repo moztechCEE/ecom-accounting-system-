@@ -1,3 +1,4 @@
+import { requireAssessmentRelease } from './repair-assessment-release';
 import { RepairPrerequisitesService } from './repair-prerequisites.service';
 import { requireRefurbishmentWorkStart } from './repair-work-start.contract';
 import { ErpAfterSalesModuleService } from '../integration/after-sales/erp-module.service';
@@ -2406,6 +2407,7 @@ export class MailroomService {
             input.action,
           )
         ) {
+          await requireAssessmentRelease(item, tx, { source: repairSource });
           if (!this.prerequisites)
             throw new ServiceUnavailableException('維修檢測與備料確認尚未啟用');
           await this.prerequisites.require(

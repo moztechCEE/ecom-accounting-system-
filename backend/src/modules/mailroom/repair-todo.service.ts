@@ -1,3 +1,4 @@
+import { assessmentReleaseForItem } from './repair-assessment-release';
 import { Injectable, Optional } from '@nestjs/common';
 import { type Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -65,6 +66,10 @@ const START_KINDS = new Set<RepairTodoKind>([
   'SEND_FACTORY',
   'START_REFURBISHMENT',
 ]);
+const ASSESSMENT_KINDS = new Set<RepairTodoKind>([
+  ...START_KINDS,
+  'REPAIR_WORK',
+]);
 type StartGate = 'READY' | 'BLOCKED' | 'UNKNOWN';
 
 @Injectable()
@@ -76,22 +81,41 @@ export class RepairTodoService {
     @Optional() private readonly prerequisites?: RepairPrerequisitesService,
   ) {}
 
-  private async startGates(
+  private async positiveGates(
     rows: TodoRow[],
     where: Prisma.MailroomItemWhereInput,
     deadline: number,
+    sources: Map<string, SourceCase | undefined>,
+    startIds: Set<string>,
   ) {
     const gates = new Map<string, StartGate>();
     const reader = this.prerequisites;
-    if (!reader || !rows.length) return gates;
+    if (!rows.length) return gates;
     let index = 0;
     const worker = async () => {
       while (index < rows.length && Date.now() < deadline) {
         const row = rows[index++];
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
-          const current = await Promise.race([
-            reader.forItem(row),
+          const current: StartGate = await Promise.race([
+            (async (): Promise<StartGate> => {
+              const assessment = await assessmentReleaseForItem(
+                row,
+                this.prisma,
+                { source: sources.get(row.receipt.sourceCaseId || '') },
+              );
+              if (assessment.state !== 'READY') return assessment.state;
+              if (!startIds.has(row.id)) return 'READY';
+              if (!reader) return 'UNKNOWN';
+              const current = await reader.forItem(row);
+              const material = current?.materials?.start?.state;
+              const inspection = current?.templateChecks?.inspection;
+              return material === 'READY' && inspection === 'READY'
+                ? 'READY'
+                : material === 'BLOCKED' || inspection === 'BLOCKED'
+                  ? 'BLOCKED'
+                  : 'UNKNOWN';
+            })(),
             new Promise<never>((_resolve, reject) => {
               timer = setTimeout(
                 () =>
@@ -103,16 +127,7 @@ export class RepairTodoService {
               );
             }),
           ]);
-          const material = current?.materials?.start?.state;
-          const inspection = current?.templateChecks?.inspection;
-          gates.set(
-            row.id,
-            material === 'READY' && inspection === 'READY'
-              ? 'READY'
-              : material === 'BLOCKED' || inspection === 'BLOCKED'
-                ? 'BLOCKED'
-                : 'UNKNOWN',
-          );
+          gates.set(row.id, current);
         } catch {
           gates.set(row.id, 'UNKNOWN');
         } finally {
@@ -156,12 +171,12 @@ export class RepairTodoService {
     return gates;
   }
 
-  private withStartGate(
+  private withPositiveGate(
     row: TodoRow,
     decision: RepairTodoDecision,
     gates: Map<string, StartGate>,
   ): RepairTodoDecision {
-    if (decision.state !== 'ready' || !START_KINDS.has(decision.kind))
+    if (decision.state !== 'ready' || !ASSESSMENT_KINDS.has(decision.kind))
       return decision;
     const gate = gates.get(row.id);
     return gate === 'READY'
@@ -297,12 +312,25 @@ export class RepairTodoService {
           )
         : candidate;
     };
-    const startRows = [...currentRows.values()].filter((row) => {
+    const positiveRows = [...currentRows.values()].filter((row) => {
       const decision = decisionFor(row);
-      return decision.state === 'ready' && START_KINDS.has(decision.kind);
+      return decision.state === 'ready' && ASSESSMENT_KINDS.has(decision.kind);
     });
-    const initialGates = await this.startGates(startRows, where, deadline);
-    if (startRows.length) {
+    const initialGates = await this.positiveGates(
+      positiveRows,
+      where,
+      deadline,
+      sources,
+      new Set(
+        positiveRows
+          .filter((row) => {
+            const d = decisionFor(row);
+            return d.state === 'ready' && START_KINDS.has(d.kind);
+          })
+          .map((row) => row.id),
+      ),
+    );
+    if (positiveRows.length) {
       freshActor = await this.mailroom.actor(userId);
       requireEntity(freshActor, query.entityId);
       requirePermission(freshActor, 'repair_workbench:read');
@@ -312,7 +340,11 @@ export class RepairTodoService {
     for (const previous of rows) {
       const row = currentRows.get(previous.id);
       if (!row) continue;
-      const decision = this.withStartGate(row, decisionFor(row), initialGates);
+      const decision = this.withPositiveGate(
+        row,
+        decisionFor(row),
+        initialGates,
+      );
       if (decision.state === 'ready') ready.push({ row, kind: decision.kind });
       else if (decision.state === 'unknown') unknownCount++;
     }
@@ -347,16 +379,27 @@ export class RepairTodoService {
       const native = new Map(hydrated.map((row) => [row.id, row]));
       const displayRows: typeof hydrated = [];
       const kinds = new Map<string, RepairTodoKind>();
-      const displayStartRows = hydrated.filter((row) => {
+      const displayPositiveRows = hydrated.filter((row) => {
         const decision = decisionFor(row);
-        return decision.state === 'ready' && START_KINDS.has(decision.kind);
+        return (
+          decision.state === 'ready' && ASSESSMENT_KINDS.has(decision.kind)
+        );
       });
-      const displayGates = await this.startGates(
-        displayStartRows,
+      const displayGates = await this.positiveGates(
+        displayPositiveRows,
         where,
         deadline,
+        sources,
+        new Set(
+          displayPositiveRows
+            .filter((row) => {
+              const d = decisionFor(row);
+              return d.state === 'ready' && START_KINDS.has(d.kind);
+            })
+            .map((row) => row.id),
+        ),
       );
-      if (displayStartRows.length) {
+      if (displayPositiveRows.length) {
         freshActor = await this.mailroom.actor(userId);
         requireEntity(freshActor, query.entityId);
         requirePermission(freshActor, 'repair_workbench:read');
@@ -377,7 +420,7 @@ export class RepairTodoService {
             : candidate;
         const decision =
           full && rawDecision
-            ? this.withStartGate(full, rawDecision, displayGates)
+            ? this.withPositiveGate(full, rawDecision, displayGates)
             : rawDecision;
         if (
           !full ||

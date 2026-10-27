@@ -1,7 +1,9 @@
 .mailroom-label-preview{display:flex;flex-wrap:wrap;gap:16px;padding:12px 0;justify-content:center}
-.mailroom-label-preview .mailroom-physical-label{width:50mm;height:30mm;padding:2mm;box-sizing:border-box;display:grid;grid-template-columns:20mm 1fr;gap:2mm;align-items:center;background:white;color:#111;border:1px solid #e2e7ec;border-radius:3px;overflow:hidden}
+.mailroom-label-preview .mailroom-physical-label{width:50mm;height:30mm;padding:1.5mm;box-sizing:border-box;display:grid;grid-template-columns:20mm minmax(0,1fr);grid-template-rows:5.5mm 20mm;column-gap:1.5mm;row-gap:1mm;background:white;color:#111;outline:1px solid #e2e7ec;border-radius:3px;overflow:hidden;font-family:Arial,"Noto Sans TC",sans-serif}
+.mailroom-label-preview .mailroom-label-case{grid-column:1/-1;font-size:7pt;line-height:1.1;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.mailroom-label-preview .mailroom-label-qr{align-self:end}
 .mailroom-label-preview .mailroom-label-qr svg{display:block;width:20mm;height:20mm}
-.mailroom-label-preview .mailroom-label-copy{min-width:0;overflow-wrap:anywhere;line-height:1.2}
-.mailroom-label-preview .mailroom-label-number{font-size:7pt;margin-bottom:1mm}
-.mailroom-label-preview .mailroom-label-copy strong{font-size:8pt;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
-.mailroom-label-preview .mailroom-label-unit{font-size:6pt;margin-top:1mm;font-family:monospace}
+.mailroom-label-preview .mailroom-label-copy{min-width:0;overflow:hidden;overflow-wrap:anywhere;line-height:1.2;font-size:7pt;writing-mode:horizontal-tb}
+.mailroom-label-preview .mailroom-label-name{font-size:7.5pt;font-weight:700;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.mailroom-label-preview .mailroom-label-phone{margin:.6mm 0;font-size:6.5pt}
+.mailroom-label-preview .mailroom-label-issue{font-size:6.5pt;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}

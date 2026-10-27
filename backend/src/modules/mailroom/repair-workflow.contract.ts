@@ -18,9 +18,14 @@ import {
 } from './repair-document.contract';
 import { type RepairDispositionProof } from './repair-disposition.contract';
 import type { RepairWorkStartProof } from './repair-work-start.contract';
+import {
+  validateInspectionAssessmentShape,
+  type AssessmentReview,
+} from './repair-assessment.contract';
 
 export const REPAIR_WORKFLOW_ACTIONS = [
   'claim_customer',
+  'review_assessment',
   'resolve_customer',
   'return_original',
   'record_scrap_authorization',
@@ -47,6 +52,12 @@ export type RepairWorkflow = {
   intake?: CaseIntakeState;
   inventoryReceipt?: Record<string, unknown>;
   materialsReceipt?: unknown;
+  assessmentPolicy?: {
+    schema: 1;
+    inspectionRevision: number;
+    planHash: string;
+  };
+  assessmentReview?: AssessmentReview;
   dispositionAuthorization?: RepairDispositionProof;
   workStart?: RepairWorkStartProof;
   outboundShipment?: OutboundShipment;
@@ -325,8 +336,32 @@ export function allowedWorkflowActions(
       (!csr.sentToUserId || csr.sentToUserId === actor.id || can(actor, '*'))
     )
       return ['claim_customer'];
-    if (csr.status === 'ACCEPTED' && csr.ownerId === actor.id)
-      return ['resolve_customer'];
+    if (csr.status === 'ACCEPTED' && csr.ownerId === actor.id) {
+      const actions: RepairWorkflowAction[] = ['resolve_customer'];
+      try {
+        const doc = validateInspectionSubmission(item.repairInspection);
+        const assessment = validateInspectionAssessmentShape(
+          doc.data.assessment,
+        );
+        const policy = workflow.assessmentPolicy;
+        const hash = inspectionPlanHash(doc);
+        if (
+          assessment.conclusion === 'USER_CAUSED' &&
+          doc.authorId !== actor.id &&
+          item.repairOwnerId !== actor.id &&
+          policy?.schema === 1 &&
+          policy.inspectionRevision === doc.revision &&
+          policy.planHash === hash &&
+          csr.inspectionRevision === doc.revision &&
+          csr.estimateRevision === doc.revision &&
+          csr.planHash === hash
+        )
+          actions.unshift('review_assessment');
+      } catch {
+        // Unknown current policy/evidence never advertises independent review.
+      }
+      return actions;
+    }
   }
   if (
     !can(actor, 'repair_workbench:update') ||

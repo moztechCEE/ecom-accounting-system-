@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:cce47df114f318344ef016172d7bbc6bf271c3ce6b39fede56a241d39841a07d",
+  "sourceVersion": "sha256:11694fcfce81f5add44de66b1186c8e9b3573e4cdb9aac8945170ee121ac2f45",
   "reviewedBaseCommit": "470a5b499ce7a7af4b57117446395ded6b422bec",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "867ac3faf7b3623c4972891c94525423d22a98a5e86f5c14d76f6ebb770a62cd",
+  "catalogSha256": "a69231e6af96875b28e5c3ca5d74ece8f77a12815d546b043a7c53e8a47b2562",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -207,8 +207,12 @@
       "sha256": "ab51e3ce104ef7e3bd27648d6b72751d2e25dd35508996fc995f88a20dd46c67"
     },
     {
+      "path": "backend/prisma/migrations/20261027080000_mailroom_direct_print/migration.sql",
+      "sha256": "fcdb358cf8b03d61bc0783c045ec300ea594cd1ce2f38e414704a056d7d5f45e"
+    },
+    {
       "path": "backend/prisma/schema.prisma",
-      "sha256": "708fc98949d5ea79d08a0aabc0376cfbeaf785f68a4877ec7c992edb35c71c39"
+      "sha256": "c7a8e16c759e410afec93f3f37fa1938747ef12cf4bccabf5527820c05921211"
     },
     {
       "path": "backend/src/common/department-access/attendance-selection.ts",
@@ -277,6 +281,10 @@
     {
       "path": "backend/src/modules/auth/dto/login.dto.ts",
       "sha256": "7861584bd935ca4ac0a54c6b188050e626e8a396a91fb75b514e6faa1e7f9b04"
+    },
+    {
+      "path": "backend/src/modules/b2b/b2b-auth.guard.ts",
+      "sha256": "71898b4f294bf6d68d0f01a5ad527180f858fe34b99398c0fa6723340b52edfa"
     },
     {
       "path": "backend/src/modules/b2b/b2b-guest.controller.ts",
@@ -431,6 +439,26 @@
       "sha256": "dabdf0d90f052950a4b87ba3d2c91c15fcba243869edcec8af95822d6fccae16"
     },
     {
+      "path": "backend/src/modules/mailroom/mailroom-label.contract.ts",
+      "sha256": "a91e508eab4c7c4c7cc155a12aecc9f58ef30deeb2edf5aaeaf93140aeea71fa"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-label.controller.ts",
+      "sha256": "51ce2f751339f8b5cb43ceb5e82e0a2ee7f347c7c17199d74b5a26fc70bcf05b"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-label.dto.ts",
+      "sha256": "34fcd166e2f424c965c7c9e092f5513221f685826eb0f4d64b677d2ee5803851"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-label.export.ts",
+      "sha256": "f51505dc5baca67453e69c29de78f0e561db073c5a45d99282bb02c0848f4b43"
+    },
+    {
+      "path": "backend/src/modules/mailroom/mailroom-label.service.ts",
+      "sha256": "d799fc05b0b41e37caa3261d2b4159903cdfb9f208bdd7249165fed78f80dd2a"
+    },
+    {
       "path": "backend/src/modules/mailroom/mailroom-precheck-record.contract.ts",
       "sha256": "e26dacd478dd35fed71f7cb842d3a9bfd0757a1e11bbe9ee4f19ea29e6149c83"
     },
@@ -488,7 +516,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-sync.service.ts",
-      "sha256": "ea2171d25078accf6e0a54d416dc2f99c724728a6b35df45b908235c1066ff8b"
+      "sha256": "152ea44fbfd6293430884bd4e53ae9192e4263dd86e931f90aecb225b9df7fce"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-tablet.controller.ts",
@@ -503,8 +531,12 @@
       "sha256": "dc0db379192a50695b96a17ad57f178054b3ab93ef19fdd8202be74985ba12a7"
     },
     {
+      "path": "backend/src/modules/mailroom/mailroom.auth.ts",
+      "sha256": "0f30ad91295e115c1b5e440ff5f85fc8eff87bf04b22c746520f6e43d3caac4a"
+    },
+    {
       "path": "backend/src/modules/mailroom/mailroom.contract.ts",
-      "sha256": "1329e30a549ec4b5e9099760bdeb48ce1f25723daae6a1afb35847494410af42"
+      "sha256": "da2eb134af972926bca8e275334b4544f81450cfc00ae20a55f90ebd59cc8266"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom.controller.ts",
@@ -516,23 +548,63 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom.module.ts",
-      "sha256": "69008192528685132b851793e9dda0648ad3e0161e47e6a9e25623ea5b7a6243"
+      "sha256": "5009a26838008ec1d6b381b1f78ffa271f9f82963c86e1fe30424960486d675b"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom.service.ts",
-      "sha256": "434b6b29f86e58bcda13ce279cbd2b6348ba90d418df97d40ded1e706a19a384"
+      "sha256": "fdc5ce64d00a75823dfff504bd6f6cf92ede496383604e9d63010dcf881d96a5"
+    },
+    {
+      "path": "backend/src/modules/mailroom/printing/mailroom-print.auth.ts",
+      "sha256": "2e4e60ff8c1559c49363ff71fa3acd72d7434e878650a5dfed7ab24ebef685fc"
+    },
+    {
+      "path": "backend/src/modules/mailroom/printing/mailroom-print.contract.ts",
+      "sha256": "f20be00a4d55386746842054ddcb1ce006f6f7143a281046177c02b2b8de6a0e"
+    },
+    {
+      "path": "backend/src/modules/mailroom/printing/mailroom-print.controller.ts",
+      "sha256": "21c312d3b873f4679e051b3ed27aedf9c412df47d67b03deb6f6981147662aa4"
+    },
+    {
+      "path": "backend/src/modules/mailroom/printing/mailroom-print.dto.ts",
+      "sha256": "7286ba04e2136267281c2fd9f738d70ca4480d1d0d701ff7100b9d50a181998d"
+    },
+    {
+      "path": "backend/src/modules/mailroom/printing/mailroom-print.service.ts",
+      "sha256": "f1a449261e2dd47bd3e65137ecbaa46784f269d9e2b7636c7803f150c8938487"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-assessment-reader.contract.ts",
+      "sha256": "2821ccfd3bea7144b7c67f6cdf1f476deadec6a844a752027324e7f8dad9c6ba"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-assessment-reader.controller.ts",
+      "sha256": "317a857ad8bdfc72bd5ed765300d2a0f93e6e7f81e183f39f88162e9b30f84d8"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-assessment-reader.service.ts",
+      "sha256": "572e5175a66963fbfb59ca0e603a552dfd21ef4e8c5fe4583d2464083c869081"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-assessment-release.ts",
+      "sha256": "8eea814ccadad5f1cbdafc089ec1d7ea5864671ff8657b048280e5070a7e3010"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-assessment.contract.ts",
+      "sha256": "8a48a3ffc92466eb1fb9ccf2b39d135fbc9b8506b50f1db4965e68fdb8921311"
     },
     {
       "path": "backend/src/modules/mailroom/repair-customer-report.service.ts",
-      "sha256": "fbc6f583429074c02d205d3b8d814df51b73e74b0362523d7a3184cbdf8479f0"
+      "sha256": "216011cb1c6ef42436f82e5e1deb32cdc81afdb70b53248ed325dfabb06b18b5"
     },
     {
       "path": "backend/src/modules/mailroom/repair-document.contract.ts",
-      "sha256": "2a1cfa51aa09da544036774651dc6d8aca6de6b63dcbe4cfaa03f1ac367cc417"
+      "sha256": "7c260d5c1cf00f811d6206ffd06ddf53cd1a73646d3b5979165b0131f67037b1"
     },
     {
       "path": "backend/src/modules/mailroom/repair-document.dto.ts",
-      "sha256": "45be3a1a773382b15e9440325c92b28682462052082fad104e1dc3bf894d06ea"
+      "sha256": "9e17434e3e8a9c561f65ebab3ba88113ae7f3838973e08555e15472746b40f8d"
     },
     {
       "path": "backend/src/modules/mailroom/repair-evidence.controller.ts",
@@ -556,7 +628,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/repair-prerequisites.service.ts",
-      "sha256": "88687b06aa374ad9f9484ba6555fbe661d3b535d4f7f6438bfd4d15c321d581f"
+      "sha256": "c49d65a804cb60f93088b1d7fab3f07e09395faba51fa921e86d61888a4e359a"
     },
     {
       "path": "backend/src/modules/mailroom/repair-stock-custody.contract.ts",
@@ -576,7 +648,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/repair-todo.service.ts",
-      "sha256": "9bddd6493c2cf1a2f687fba8433bf32211a16b8f45e79ac62b852c9c88f716c7"
+      "sha256": "93cc8b34fe794da75aa71900046a359b000183fc8ba3d657a6f28b52feec100d"
     },
     {
       "path": "backend/src/modules/mailroom/repair-workbench.controller.ts",
@@ -584,11 +656,11 @@
     },
     {
       "path": "backend/src/modules/mailroom/repair-workbench.service.ts",
-      "sha256": "f0b1043b50c7d5e011931247f4ce53e944df1fe19d6266d0cddf46fd37e8088c"
+      "sha256": "2da656accb7521513d7a4c3c7509803a462026562f8563fa43520c884f22851a"
     },
     {
       "path": "backend/src/modules/mailroom/repair-workflow.contract.ts",
-      "sha256": "72b53c31686fb42219945aa80f6e8fc20ee396f105d1f6f7f8d83bed3aabfabf"
+      "sha256": "23e65851a59e12ef837fc5a9c1d7e83e9579f21c5e19ec4d299a63332ada10f9"
     },
     {
       "path": "backend/src/modules/mailroom/repair-workflow.dto.ts",
@@ -709,6 +781,10 @@
     {
       "path": "backend/src/modules/vendor/vendor.controller.ts",
       "sha256": "edbc2a1adc3fc0fa13a4fc086fa350e01ba62248a2b80dcd8426b557ff6a1003"
+    },
+    {
+      "path": "docs/copilot/mailroom-label-print.md",
+      "sha256": "f0919a12afa7d601ad7f6b84d64a146400352e40f374c697593e552619a06760"
     },
     {
       "path": "frontend/index.html",
@@ -1016,11 +1092,11 @@
     },
     {
       "path": "frontend/src/pages/mailroom/mailroom-label.css",
-      "sha256": "304c4639b23ad34fb56b9b8703c1ff01922cf590cc1b2955f0a8b6efc7739c84"
+      "sha256": "4f5dbcd11d50ea4db4627978cbf34734a38066b4ee9ba5867c137888b3400077"
     },
     {
       "path": "frontend/src/pages/mailroom/mailroom-label.ts",
-      "sha256": "377c3c20248fae57605df2a2450e8ff604a80183b001577ea7ebbc8997144d1d"
+      "sha256": "44571ff23df6dc7203dc5b3cce24a503a7e357796d37d11df76ec92e033fabbe"
     },
     {
       "path": "frontend/src/pages/mailroom/mailroom-precheck-record.ts",
@@ -1032,7 +1108,7 @@
     },
     {
       "path": "frontend/src/pages/mailroom/mailroom.css",
-      "sha256": "9593a9e00d431615e1141fcf6337ff02b92a0e625476c7e0559563cbd54467b0"
+      "sha256": "e70b52da95797c03d47d339ba6a209b69c670d9f288350fe161ce9c9889e1202"
     },
     {
       "path": "frontend/src/pages/mailroom/MailroomItemScan.tsx",
@@ -1040,11 +1116,15 @@
     },
     {
       "path": "frontend/src/pages/mailroom/MailroomLabelPrint.tsx",
-      "sha256": "ad755515ef71bb3ce82194b3abe4663834b85554bebf23af75df3fc189f7c073"
+      "sha256": "290fc1df5378c182cd8308c803c6df55476709d08546d4dfe3a650207a37d3c9"
     },
     {
       "path": "frontend/src/pages/mailroom/MailroomPage.tsx",
-      "sha256": "2242dcbaf681d5fd5bc0e02e5808668684ac6d129deb4b919aee463582c2373a"
+      "sha256": "70c2e07ecd696185ce447004b2f5302e4bbdc6e7c34aa9ab9c602aec09532929"
+    },
+    {
+      "path": "frontend/src/pages/mailroom/MailroomPrinterSettings.tsx",
+      "sha256": "d330c087a263165de8127b46037eedf9771dff8744a201476f100127d440b4fa"
     },
     {
       "path": "frontend/src/pages/mailroom/model.ts",
@@ -1080,7 +1160,7 @@
     },
     {
       "path": "frontend/src/pages/mailroom/ReceivingItemList.tsx",
-      "sha256": "758f26f258d230fa553a023d84366515f7ff177c96b243e403128c107ea9dd9f"
+      "sha256": "7509c2d8cc054bbd2cab0101bdc6ef7991f8bd030e4ed299fcb606f1a1c00bcd"
     },
     {
       "path": "frontend/src/pages/mailroom/recipient-options.ts",
@@ -1156,7 +1236,7 @@
     },
     {
       "path": "frontend/src/pages/repair/CustomerRepairQueue.tsx",
-      "sha256": "aea40d4894cac0d7aa06bdada46dc0a54a10e5ff42dd3efe982f69b041176085"
+      "sha256": "aa0f8a7a3a426d9d8145bc8605e8a0b88331cdbdfa0934ffde7e00865c60c344"
     },
     {
       "path": "frontend/src/pages/repair/repair-evidence-client.ts",
@@ -1172,7 +1252,7 @@
     },
     {
       "path": "frontend/src/pages/repair/repair-model.ts",
-      "sha256": "412cad8e4cfd1da78719aa38ec01cfe6c6d8f505596978e46a446432a78661b3"
+      "sha256": "7d9a9d2b97e60a3bbaefd87f42a314d9772b9c2ee7afc334e5f2abd1d9af986a"
     },
     {
       "path": "frontend/src/pages/repair/repair-navigation.ts",
@@ -1192,7 +1272,7 @@
     },
     {
       "path": "frontend/src/pages/repair/RepairDocuments.tsx",
-      "sha256": "22061391a9898a9927725c63b1690a7c6c235825502ddceb68d7a7b15dbc80dc"
+      "sha256": "10dc865844add0c122271a2d302232945a56ac869b17be4bc3ce6d676c603b6d"
     },
     {
       "path": "frontend/src/pages/repair/RepairEvidencePanel.tsx",
@@ -1228,7 +1308,7 @@
     },
     {
       "path": "frontend/src/pages/repair/RepairWorkbenchPage.tsx",
-      "sha256": "31b4e81bcd882f354e7b63635ca2ff7067b90246e7897a9ec52772bcdbc3df00"
+      "sha256": "ef33fb6f32407c2abe08267fe3dff7d88ef0beae5b69351353e02194aef67066"
     },
     {
       "path": "frontend/src/pages/repair/RepairWorkflowPanel.tsx",
@@ -1321,6 +1401,10 @@
     {
       "path": "frontend/src/services/mailroom-intake.ts",
       "sha256": "4bcea76dd636251122debfba4eef5a8d065a085b7f2337ab1e68bc99fb413dbb"
+    },
+    {
+      "path": "frontend/src/services/mailroom-print.ts",
+      "sha256": "fa43e4bb97976cce6c62f0de3562648d8fa6ebe95e1184f261905f6b1528666a"
     },
     {
       "path": "frontend/src/services/mailroom-pwa.ts",

@@ -5,6 +5,11 @@ import {
   type RepairMaterialPlan,
 } from './repair-material.contract';
 import type { RepairTemplateBinding } from './repair-template.contract';
+import {
+  validateInspectionAssessmentShape,
+  accidentalDamageFromAssessment,
+  type InspectionAssessment,
+} from './repair-assessment.contract';
 
 export type RepairDocumentMediaRef = {
   mediaId: string;
@@ -40,6 +45,7 @@ export type RepairCheck = {
   measuredAt?: string;
 };
 export type InspectionData = RepairDocumentV2Fields & {
+  assessment?: InspectionAssessment;
   complaint: string;
   reproduction: 'YES' | 'INTERMITTENT' | 'NO' | 'NOT_TESTED';
   testConditions: string;
@@ -181,8 +187,23 @@ export function validateDocumentV2(
       ))
   )
     throw new BadRequestException('顧客報告草稿或選用媒體不完整');
-  if (kind === 'inspection')
-    validateMaterialPlan((data as InspectionData).materialPlan);
+  if (kind === 'inspection') {
+    const inspection = data as InspectionData;
+    if (inspection.assessment !== undefined) {
+      const assessment = validateInspectionAssessmentShape(
+        inspection.assessment,
+      );
+      const accidental = accidentalDamageFromAssessment(assessment);
+      if (
+        inspection.isAccidentalDamage !== undefined &&
+        inspection.isAccidentalDamage !== accidental
+      )
+        throw new BadRequestException('人為損壞欄位與本版原因判定不符');
+      if (assessment.causalExplanation !== inspection.diagnosis)
+        throw new BadRequestException('因果說明與檢修診斷不一致');
+    }
+    validateMaterialPlan(inspection.materialPlan);
+  }
   return data;
 }
 

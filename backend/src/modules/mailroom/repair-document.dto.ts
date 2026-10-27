@@ -129,7 +129,41 @@ export class RepairPartDto {
   @Max(100000)
   quantity!: number;
 }
+export class InspectionAssessmentDto {
+  @Transform(rawInputValue, { toClassOnly: true })
+  @IsIn([1])
+  schema!: 1;
+  @Transform(rawInputValue, { toClassOnly: true })
+  @IsIn(['USER_CAUSED', 'PRODUCT_FAULT', 'UNDETERMINED'])
+  conclusion!: 'USER_CAUSED' | 'PRODUCT_FAULT' | 'UNDETERMINED';
+  @Transform(rawInputValue, { toClassOnly: true })
+  @IsString()
+  @MaxLength(2000)
+  basis!: string;
+  @Transform(rawInputValue, { toClassOnly: true })
+  @IsString()
+  @MaxLength(2000)
+  causalExplanation!: string;
+  @Transform(rawInputValue, { toClassOnly: true })
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  @MaxLength(128, { each: true })
+  checkKeys!: string[];
+  @Transform(rawInputValue, { toClassOnly: true })
+  @IsArray()
+  @ArrayMaxSize(12)
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  @MaxLength(128, { each: true })
+  mediaIds!: string[];
+}
 export class InspectionDataDto extends RepairDocumentV2Dto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => InspectionAssessmentDto)
+  assessment?: InspectionAssessmentDto;
   @IsString() @MaxLength(2000) complaint!: string;
   @IsIn(['YES', 'INTERMITTENT', 'NO', 'NOT_TESTED']) reproduction!:
     | 'YES'

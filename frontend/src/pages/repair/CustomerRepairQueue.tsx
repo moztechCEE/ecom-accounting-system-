@@ -36,12 +36,18 @@ export default function CustomerRepairQueue({entityId,onDirtyChange,initialItemI
     catch(error){if(request===generation.current)setFailure(errorText(error));}
     finally{if(request===generation.current)setBusy(false);}
   },[entityId,permitted,page,search]);
-  const loadDetail=useCallback(async()=>{
+  const loadDetail=useCallback(async(afterSave=false,minimumVersion?:number)=>{
     const request=++detailGeneration.current;setDetail(undefined);setChanged(false);
-    if(!selected||!permitted||!entityId){setDetailBusy(false);return;}
+    if(!selected||!permitted||!entityId){setDetailBusy(false);return false;}
     setDetailBusy(true);
-    try{const data=await repairService.documents(entityId,selected);if(request===detailGeneration.current)setDetail({entityId,item:data});}
-    catch(error){if(request===detailGeneration.current)message.error(errorText(error));}
+    try{
+      const data=await repairService.documents(entityId,selected);
+      if(request!==detailGeneration.current)return false;
+      if(!data || data.id!==selected || data.entityId!==entityId || !Number.isInteger(data.version) || data.version<1 || minimumVersion!==undefined && data.version<minimumVersion)
+        throw new Error('案件資料尚未更新，請重新載入');
+      setDetail({entityId,item:data});return true;
+    }
+    catch(error){if(request===detailGeneration.current)message.error(afterSave?'回覆已儲存，案件重新載入失敗。':errorText(error));return false;}
     finally{if(request===detailGeneration.current)setDetailBusy(false);}
   },[selected,permitted,entityId,message]);
   useEffect(()=>{
@@ -69,30 +75,56 @@ export default function CustomerRepairQueue({entityId,onDirtyChange,initialItemI
     <Drawer rootClassName="repair-workbench-drawer" title="客服維修交辦" width={940} open={!!selected} onClose={()=>void select()} destroyOnHidden>
       <Spin spinning={detailBusy}>{item?<>
         {changed&&<Alert type="warning" showIcon message="案件有新進度，請核對最新檢修版次" action={<Button onClick={()=>void(async()=>{if(dirty.current&&!await confirmDiscard())return;setDirty(false);await loadDetail();})()}>重新載入</Button>} style={{marginBottom:16}} />}
-        <CustomerReview feedback={message} key={`${item.id}:${item.version}`} item={item} entityId={entityId} userId={user?.id || ''} onDirty={setDirty} onSaved={async()=>{setDirty(false);await loadDetail();await load(true);}} />
+        <CustomerReview feedback={message} key={`${item.id}:${item.version}`} item={item} entityId={entityId} userId={user?.id || ''} onDirty={setDirty} confirmDiscard={confirmDiscard} onSaved={async()=>{setDirty(false);const refreshed=await loadDetail(true,item.version+1);await load(true);if(!refreshed)throw new Error('案件重新載入失敗');}} />
       </>:!detailBusy&&<Empty description="請重新開啟交辦" />}</Spin>
     </Drawer>
   </Card>;
 }
-function CustomerReview({item,entityId,userId,onDirty,onSaved,feedback}:{item:RepairItem;entityId:string;userId:string;onDirty:(dirty:boolean)=>void;onSaved:()=>Promise<void>;feedback:RepairMessage}) {
+type CustomerAction='claim_customer'|'resolve_customer'|'review_assessment';
+type ReviewFields={decision:'APPROVE'|'DECLINE';note:string};
+type DraftKind='solution'|'assessment'|'documents';
+function CustomerReview({item,entityId,userId,onDirty,onSaved,feedback,confirmDiscard}:{item:RepairItem;entityId:string;userId:string;onDirty:(dirty:boolean)=>void;onSaved:()=>Promise<void>;feedback:RepairMessage;confirmDiscard:()=>Promise<boolean>}) {
   const message=feedback;
-  const [form]=Form.useForm<{decision:'APPROVE'|'DECLINE';note:string}>();const [busy,setBusy]=useState(false);const [failure,setFailure]=useState('');
+  const [form]=Form.useForm<ReviewFields>();const [assessmentForm]=Form.useForm<ReviewFields>();
+  const [busy,setBusy]=useState<CustomerAction|null>(null);const [failure,setFailure]=useState('');
   const running=useRef(false);const operation=useRef<{body:string;requestId:string}|null>(null);
+  const drafts=useRef({solution:false,assessment:false,documents:false});
+  const setDraftDirty=(kind:DraftKind,value=true)=>{drafts.current[kind]=value;onDirty(Object.values(drafts.current).some(Boolean));};
   const custody=currentItemCustody(item);
   const csr=item.repairWorkflow?.csr;
+  const inspection=item.repairInspection;
+  const assessment=inspection?.data.assessment;
+  const viewer=typeof userId==='string'?userId.trim():'';
+  const author=typeof inspection?.authorId==='string'?inspection.authorId.trim():'';
+  const owner=typeof item.repairOwnerId==='string'?item.repairOwnerId.trim():'';
+  const csrOwner=typeof csr?.ownerId==='string'?csr.ownerId.trim():'';
+  const exception=inspection?.status==='SUBMITTED' && assessment?.schema===1 && assessment.conclusion==='USER_CAUSED'
+    && typeof assessment.basis==='string' && !!assessment.basis.trim() && typeof assessment.causalExplanation==='string' && !!assessment.causalExplanation.trim()
+    && Array.isArray(assessment.checkKeys) && assessment.checkKeys.length>0 && assessment.checkKeys.every(key=>typeof key==='string' && !!key.trim()) && new Set(assessment.checkKeys).size===assessment.checkKeys.length
+    && Array.isArray(assessment.mediaIds) && assessment.mediaIds.every(id=>typeof id==='string' && !!id.trim()) && new Set(assessment.mediaIds).size===assessment.mediaIds.length
+    && inspection.data.causeStatus==='CONFIRMED' && inspection.data.isAccidentalDamage===true;
+  const canReview=exception && !!inspection && item.entityId===entityId && item.status==='WAITING_CUSTOMER' && Array.isArray(item.allowedWorkflowActions) && item.allowedWorkflowActions.includes('review_assessment')
+    && !!viewer && !!author && !!owner && viewer!==author && viewer!==owner && csr?.status==='ACCEPTED' && csrOwner===viewer
+    && Number.isInteger(inspection.revision) && inspection.revision>0 && csr.inspectionRevision===inspection.revision && csr.estimateRevision===inspection.revision
+    && typeof csr.planHash==='string' && /^[a-f0-9]{64}$/.test(csr.planHash);
   const quoteRevision=item.release?.releaseInfo?.quoteRevision;
   const customerQuoteRequired=item.receipt.category==='REPAIR';
   const canApprove=customerQuoteRequired?sourceQuoteConsentCurrent(item.release?.releaseInfo):!!item.receipt.sourceCaseId&&item.release?.available===true;
   const canClaim=item.allowedWorkflowActions?.includes('claim_customer')===true;
   const canResolve=item.allowedWorkflowActions?.includes('resolve_customer')===true && csr?.status==='ACCEPTED' && csr.ownerId===userId;
-  async function act(action:'claim_customer'|'resolve_customer',values?:{decision:'APPROVE'|'DECLINE';note:string}) {
-    if(running.current || action==='claim_customer'&&!canClaim || action==='resolve_customer'&&!canResolve)return;
-    running.current=true;setBusy(true);setFailure('');let saved=false;
+  async function act(action:CustomerAction,values?:ReviewFields) {
+    if(running.current || action==='claim_customer'&&!canClaim || action==='resolve_customer'&&!canResolve || action==='review_assessment'&&!canReview)return;
+    if(action!=='claim_customer' && (!values || !['APPROVE','DECLINE'].includes(values.decision) || typeof values.note!=='string' || !values.note.trim()))return;
+    running.current=true;setBusy(action);setFailure('');let saved=false;
     try{
-      const payload:Omit<RepairWorkflowCommand,'requestId'>={entityId,expectedVersion:item.version,action,...(values?{inspectionRevision:item.repairInspection?.revision,decision:values.decision,note:values.note.trim()}: {})};
+      const otherDraft=action==='review_assessment'?drafts.current.solution || drafts.current.documents:action==='resolve_customer'?drafts.current.assessment || drafts.current.documents:Object.values(drafts.current).some(Boolean);
+      if(otherDraft&&!await confirmDiscard())return;
+      const payload:Omit<RepairWorkflowCommand,'requestId'>={entityId,expectedVersion:item.version,action,...(values?{inspectionRevision:inspection?.revision,decision:values.decision,note:values.note.trim()}: {})};
       const body=JSON.stringify(payload);if(operation.current?.body!==body)operation.current={body,requestId:crypto.randomUUID()};
-      await repairService.workflow(item.id,{...payload,requestId:operation.current.requestId});saved=true;onDirty(false);await onSaved();message.success(action==='claim_customer'?'已接手交辦':'已儲存方案回覆');
-    }catch(error){setFailure(saved?'回覆已保存，但重新載入失敗。請重新開啟案件核對。':errorText(error));}finally{running.current=false;setBusy(false);}
+      await repairService.workflow(item.id,{...payload,requestId:operation.current.requestId});saved=true;
+      drafts.current={solution:false,assessment:false,documents:false};onDirty(false);await onSaved();
+      message.success(action==='claim_customer'?'已接手交辦':action==='review_assessment'?'已儲存覆核':'已儲存方案回覆');
+    }catch(error){setFailure(saved?'回覆已保存，但重新載入失敗。請重新開啟案件核對。':errorText(error));}finally{running.current=false;setBusy(null);}
   }
   return <Space direction="vertical" size={16} style={{width:'100%'}}>
     <Descriptions bordered size="small" column={1} items={[
@@ -103,14 +135,21 @@ function CustomerReview({item,entityId,userId,onDirty,onSaved,feedback}:{item:Re
       ...(custody.transferred?[{key:'linked',label:'換機出庫',children:[custody.notice,custody.reference,custody.status].filter(Boolean).join(' · ')}]:[]),
     ]} />
     {failure&&<Alert type="error" showIcon message={failure} />}
-    {canClaim&&<Button type="primary" loading={busy} onClick={()=>void act('claim_customer')}>接手交辦</Button>}
+    {canClaim&&<Button type="primary" loading={busy==='claim_customer'} disabled={!!busy} onClick={()=>void act('claim_customer')}>接手交辦</Button>}
     {canResolve&&customerQuoteRequired&&!sourceQuoteConsentCurrent(item.release?.releaseInfo)&&<Alert type="warning" showIcon message={quoteRevision==null?'尚未建立報價':`報價 v${quoteRevision} 尚未取得顧客同意`} />}
     {canResolve&&!customerQuoteRequired&&!canApprove&&<Alert type="warning" showIcon message="售後來源暫無法確認" />}
-    {canResolve&&<Form name={`customer-repair-review-${item.id}`} form={form} layout="vertical" onValuesChange={()=>onDirty(true)} onFinish={values=>void act('resolve_customer',values)} disabled={busy}>
+    {canResolve&&<Form name={`customer-repair-review-${item.id}`} form={form} layout="vertical" onValuesChange={()=>setDraftDirty('solution')} onFinish={values=>void act('resolve_customer',values)} disabled={!!busy}>
       <Form.Item name="decision" label={`檢修 v${item.repairInspection?.revision} 方案結果`} rules={[{required:true,message:'請選擇此版方案結果'}]}><Radio.Group options={[{value:'APPROVE',label:customerQuoteRequired?'同意方案':'核准整新方案',disabled:!canApprove},{value:'DECLINE',label:customerQuoteRequired?'拒修':'不進行整新'}]} /></Form.Item>
       <Form.Item name="note" label="回覆依據" rules={[{required:true,whitespace:true,message:'請記錄方案審核與確認依據'}]}><Input.TextArea rows={3} maxLength={2000} showCount /></Form.Item>
-      <Button type="primary" htmlType="submit" loading={busy}>儲存回覆</Button>
+      <Button type="primary" htmlType="submit" loading={busy==='resolve_customer'} disabled={!!busy}>儲存回覆</Button>
     </Form>}
-    <RepairDocuments feedback={message} item={item} entityId={entityId} onSaved={()=>void onSaved()} />
+    <RepairDocuments feedback={message} item={item} entityId={entityId} onSaved={onSaved} onDirtyChange={value=>setDraftDirty('documents',value)} onBeforeSave={async()=>!(drafts.current.solution || drafts.current.assessment) || await confirmDiscard()} />
+    {canReview&&<Card size="small" title="佐證覆核" style={{width:'100%'}}>
+      <Form name={`customer-repair-assessment-${item.id}`} form={assessmentForm} layout="vertical" onValuesChange={()=>setDraftDirty('assessment')} onFinish={values=>void act('review_assessment',values)} disabled={!!busy}>
+        <Form.Item name="decision" label="結果" rules={[{required:true,message:'請選覆核結果'}]}><Radio.Group options={[{value:'APPROVE',label:'通過'},{value:'DECLINE',label:'退回補充'}]} /></Form.Item>
+        <Form.Item name="note" label="覆核紀錄" rules={[{required:true,whitespace:true,message:'請填覆核紀錄'}]}><Input.TextArea rows={2} maxLength={2000} showCount /></Form.Item>
+        <Button type="primary" htmlType="submit" loading={busy==='review_assessment'} disabled={!!busy}>儲存覆核</Button>
+      </Form>
+    </Card>}
   </Space>;
 }

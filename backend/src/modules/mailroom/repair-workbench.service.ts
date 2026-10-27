@@ -1,4 +1,8 @@
 import {
+  assessmentReleaseForItem,
+  requireAssessmentRelease,
+} from './repair-assessment-release';
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -10,6 +14,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { MailroomService } from './mailroom.service';
 import { MailroomSyncService } from './mailroom-sync.service';
+import { evidenceDatabase } from './repair-evidence.persistence';
 import {
   can,
   fingerprint,
@@ -22,6 +27,7 @@ import { SaveInspectionDto, SaveRepairDto } from './repair-document.dto';
 import {
   RepairDocument,
   type InspectionData,
+  type InspectionDocument,
   inspectionPlanHash,
   validateFactoryCompletion,
   validateInspectionData,
@@ -34,6 +40,12 @@ import { materialReadiness } from './repair-material.contract';
 import { repairSourceCaseBrand } from './repair-source-brand.contract';
 import { RepairPrerequisitesService } from './repair-prerequisites.service';
 import { RepairMediaService } from './repair-media.service';
+import {
+  accidentalDamageFromAssessment,
+  validateAssessmentReview,
+  validateInspectionAssessmentShape,
+  validateSubmittedInspectionAssessment,
+} from './repair-assessment.contract';
 import { requireRefurbishmentWorkStart } from './repair-work-start.contract';
 import {
   RepairCustomerQueueQuery,
@@ -139,9 +151,11 @@ export class RepairWorkbenchService {
   }
   async workflow(userId: string, id: string, input: RepairWorkflowDto) {
     this.mailroom.enabled();
-    const csrAction = ['claim_customer', 'resolve_customer'].includes(
-      input.action,
-    );
+    const csrAction = [
+      'claim_customer',
+      'review_assessment',
+      'resolve_customer',
+    ].includes(input.action);
     const permission = csrAction
       ? 'mailroom:review'
       : 'repair_workbench:update';
@@ -222,6 +236,13 @@ export class RepairWorkbenchService {
         requireEntity(finalActor, input.entityId);
         requirePermission(finalActor, permission);
       }
+      if (
+        ['start_refurbishment', 'send_factory', 'complete_factory'].includes(
+          input.action,
+        ) ||
+        (input.action === 'resolve_customer' && input.decision === 'APPROVE')
+      )
+        await requireAssessmentRelease(row, tx, { source });
       const now = new Date().toISOString();
       const note = ['claim_customer', 'start_refurbishment'].includes(
         input.action,
@@ -229,6 +250,7 @@ export class RepairWorkbenchService {
         ? input.note?.trim()
         : requireWorkflowText(input.note, '處理說明');
       const changes: Prisma.MailroomItemUpdateInput = {};
+      let recordActor = fresh;
       if (input.action === 'claim_customer') {
         const doc = validateInspectionSubmission(row.repairInspection);
         if (
@@ -244,6 +266,157 @@ export class RepairWorkbenchService {
         };
         // An ACK changes the responsible CSR, never the physical holder.
         changes.nextUserId = userId;
+      } else if (input.action === 'review_assessment') {
+        const doc = validateInspectionSubmission(row.repairInspection);
+        const planHash = inspectionPlanHash(doc);
+        const policy = workflow.assessmentPolicy;
+        if (
+          row.status !== 'WAITING_CUSTOMER' ||
+          workflow.csr?.status !== 'ACCEPTED' ||
+          workflow.csr.ownerId !== userId ||
+          (input.decision !== 'APPROVE' && input.decision !== 'DECLINE') ||
+          input.inspectionRevision !== doc.revision ||
+          workflow.csr.inspectionRevision !== doc.revision ||
+          workflow.csr.estimateRevision !== doc.revision ||
+          workflow.csr.planHash !== planHash ||
+          policy?.schema !== 1 ||
+          policy.inspectionRevision !== doc.revision ||
+          policy.planHash !== planHash
+        )
+          throw new ConflictException('請先接手並確認目前檢修原因版本');
+        if (
+          !row.repairOwnerId ||
+          doc.authorId === userId ||
+          row.repairOwnerId === userId
+        )
+          throw new ForbiddenException('原因判定須由另一位客服覆核');
+        const repairOwnerId = row.repairOwnerId;
+        const shape = validateInspectionAssessmentShape(doc.data.assessment);
+        if (shape.conclusion !== 'USER_CAUSED')
+          throw new ConflictException('此件沒有待覆核的使用或外力原因判定');
+        if (shape.causalExplanation !== doc.data.diagnosis)
+          throw new BadRequestException('因果說明與檢修診斷不一致');
+        if (!this.prerequisites)
+          throw new ConflictException('檢修證據服務尚未就緒');
+        const resolution = await this.prerequisites.recordValidation(
+          row,
+          'inspection',
+          doc.data,
+          tx,
+        );
+        const finalized = doc.data.mediaRefs?.length
+          ? await this.media?.attach(
+              tx,
+              row,
+              'inspection',
+              doc.revision,
+              doc.data.mediaRefs,
+            )
+          : [];
+        validateDocumentMediaReferences(
+          doc.data.mediaRefs,
+          {
+            entityId: row.entityId,
+            itemId: row.id,
+            kind: 'inspection',
+            documentRevision: doc.revision,
+          },
+          finalized || [],
+        );
+        validateSubmittedInspectionAssessment(shape, {
+          causeStatus: doc.data.causeStatus,
+          checks: doc.data.checks,
+          mediaRefs: doc.data.mediaRefs,
+          isAccidentalDamage: doc.data.isAccidentalDamage,
+          template: resolution.template,
+          templateContext: resolution.context,
+          calibrations: resolution.calibrations,
+          now: new Date(now),
+        });
+        const employeeSelect = {
+          id: true,
+          userId: true,
+          entityId: true,
+          isActive: true,
+        } as const;
+        const [authorEmployee, ownerEmployee] = await Promise.all([
+          tx.employee.findFirst({
+            where: { userId: doc.authorId, entityId: row.entityId },
+            select: employeeSelect,
+          }),
+          tx.employee.findFirst({
+            where: { userId: repairOwnerId, entityId: row.entityId },
+            select: employeeSelect,
+          }),
+        ]);
+        const finalActor = await this.mailroom.actor(userId, tx);
+        requireEntity(finalActor, row.entityId);
+        requirePermission(finalActor, 'mailroom:review');
+        const reviewerEmployee = await tx.employee.findFirst({
+          where: { userId, entityId: row.entityId, isActive: true },
+          select: employeeSelect,
+        });
+        if (
+          !authorEmployee ||
+          authorEmployee.userId !== doc.authorId ||
+          authorEmployee.entityId !== row.entityId ||
+          !ownerEmployee ||
+          ownerEmployee.userId !== repairOwnerId ||
+          ownerEmployee.entityId !== row.entityId ||
+          !reviewerEmployee ||
+          reviewerEmployee.userId !== userId ||
+          reviewerEmployee.entityId !== row.entityId ||
+          reviewerEmployee.isActive !== true
+        )
+          throw new ForbiddenException('原因覆核人員身份尚未確認');
+        recordActor = finalActor;
+        const reviewedAt = new Date().toISOString();
+        workflow.assessmentReview = validateAssessmentReview(
+          {
+            schema: 1,
+            inspectionRevision: doc.revision,
+            planHash,
+            reviewerId: userId,
+            reviewerName: finalActor.name,
+            reviewedAt,
+            decision: input.decision === 'APPROVE' ? 'APPROVE' : 'REVISE',
+            note,
+          },
+          {
+            entityId: row.entityId,
+            inspectionRevision: doc.revision,
+            planHash,
+            authorId: doc.authorId,
+            repairOwnerId,
+            reviewer: {
+              id: finalActor.id,
+              entityId: reviewerEmployee.entityId,
+              isActiveEmployee: reviewerEmployee.isActive,
+              canReview: can(finalActor, 'mailroom:review'),
+            },
+            reviewerEmployeeId: reviewerEmployee.id,
+            authorEmployeeId: authorEmployee.id,
+            repairOwnerEmployeeId: ownerEmployee.id,
+            now: new Date(reviewedAt),
+          },
+        );
+        if (input.decision === 'DECLINE') {
+          await evidenceDatabase(tx).repairCustomerReport.updateMany({
+            where: {
+              entityId: row.entityId,
+              itemId: row.id,
+              inspectionRevision: doc.revision,
+              status: 'PUBLISHED',
+            },
+            data: {
+              status: 'REVOKED',
+              revokedAt: new Date(reviewedAt),
+              revokedById: userId,
+            },
+          });
+          changes.status = 'INSPECTING';
+          changes.nextUserId = repairOwnerId;
+        }
       } else if (input.action === 'resolve_customer') {
         const doc = validateInspectionSubmission(row.repairInspection);
         if (
@@ -545,7 +718,7 @@ export class RepairWorkbenchService {
       });
       const notifications = await this.mailroom.record(
         tx,
-        fresh,
+        recordActor,
         updated,
         input.action,
         input.requestId,
@@ -641,6 +814,7 @@ export class RepairWorkbenchService {
       releaseInfo?: SourceCase['releaseInfo'];
       message?: string;
     } = { available: false, message: '沒有售後來源案件' };
+    let assessmentSource: SourceCase | undefined;
     if (sourceId) {
       try {
         const sources = (await this.sync.cases(entityId, '', sourceId)).items;
@@ -667,6 +841,7 @@ export class RepairWorkbenchService {
                   : {}),
               }
             : { available: false, message: '來源案件不存在或不在授權範圍' };
+        if (release.available) assessmentSource = source;
         if (release.available && source?.type === 'REPAIR') {
           try {
             repairProposalBinding = repairSourceBindingForItem(detail, source);
@@ -785,11 +960,17 @@ export class RepairWorkbenchService {
         mediaAssets = [];
       }
     }
+    const assessmentRelease = await assessmentReleaseForItem(
+      evidenceRow,
+      this.prisma,
+      { source: assessmentSource },
+    );
     return {
       ...detail,
       release,
       repairProposalBinding,
       repairPrerequisites: {
+        assessmentRelease,
         workStart: (() => {
           if (evidenceRow.receipt.category !== 'RETURN')
             return { state: 'UNKNOWN', reason: 'NOT_APPLICABLE' };
@@ -805,7 +986,12 @@ export class RepairWorkbenchService {
         mediaAssets,
         disposition,
       },
-      allowedWorkflowActions: allowedWorkflowActions(actor, detail),
+      allowedWorkflowActions: allowedWorkflowActions(actor, detail).filter(
+        (action) =>
+          !['start_refurbishment', 'send_factory', 'complete_factory'].includes(
+            action,
+          ) || assessmentRelease.state === 'READY',
+      ),
       physicalCustody: physicalCustody(detail),
       editable:
         (actor.permissions.has('*') ||
@@ -868,10 +1054,24 @@ export class RepairWorkbenchService {
       if (row.version !== input.expectedVersion)
         throw new ConflictException('案件已更新，請重新載入後再儲存');
       requireTechnicianCustody(fresh, row);
+      const newAssessment =
+        kind === 'inspection'
+          ? validateInspectionAssessmentShape(
+              (input.data as InspectionData).assessment,
+            )
+          : undefined;
+      let resolution:
+        | Awaited<ReturnType<RepairPrerequisitesService['recordValidation']>>
+        | undefined;
       if (input.status === 'SUBMITTED') {
         if (!this.prerequisites)
           throw new ConflictException('檢修證據服務尚未就緒');
-        await this.prerequisites.recordValidation(row, kind, input.data, tx);
+        resolution = await this.prerequisites.recordValidation(
+          row,
+          kind,
+          input.data,
+          tx,
+        );
       }
       if (input.status === 'SUBMITTED' && kind === 'inspection') {
         for (const line of (input as SaveInspectionDto).data.materialPlan
@@ -999,6 +1199,31 @@ export class RepairWorkbenchService {
         finalized || [],
       );
       const now = new Date().toISOString();
+      let documentData = input.data;
+      if (kind === 'inspection' && newAssessment) {
+        const inspectionData = input.data as InspectionData;
+        if (input.status === 'SUBMITTED') {
+          if (!resolution || !inspectionData.templateBinding)
+            throw new ConflictException('請先確認此機種的檢測標準');
+          if (newAssessment.causalExplanation !== inspectionData.diagnosis)
+            throw new BadRequestException('因果說明與檢修診斷不一致');
+          validateSubmittedInspectionAssessment(newAssessment, {
+            causeStatus: inspectionData.causeStatus,
+            checks: inspectionData.checks,
+            mediaRefs: inspectionData.mediaRefs,
+            isAccidentalDamage: inspectionData.isAccidentalDamage,
+            template: resolution.template,
+            templateContext: resolution.context,
+            calibrations: resolution.calibrations,
+            now: new Date(now),
+          });
+        }
+        documentData = {
+          ...inspectionData,
+          assessment: newAssessment,
+          isAccidentalDamage: accidentalDamageFromAssessment(newAssessment),
+        };
+      }
       const doc = {
         number: (kind === 'inspection' ? 'INS-' : 'REP-') + row.label,
         revision: (old?.revision || 0) + 1,
@@ -1014,7 +1239,7 @@ export class RepairWorkbenchService {
                 (row.repairInspection as RepairDocument | null)?.revision,
             }
           : {}),
-        data: input.data,
+        data: documentData,
       };
       const updated = await tx.mailroomItem.update({
         where: { id },
@@ -1025,6 +1250,12 @@ export class RepairWorkbenchService {
                 repairWorkflow: JSON.parse(
                   JSON.stringify({
                     ...repairWorkflow(row.repairWorkflow),
+                    assessmentPolicy: {
+                      schema: 1,
+                      inspectionRevision: doc.revision,
+                      planHash: inspectionPlanHash(doc as InspectionDocument),
+                    },
+                    assessmentReview: undefined,
                     csr: undefined,
                     release: undefined,
                     dispositionAuthorization: undefined,

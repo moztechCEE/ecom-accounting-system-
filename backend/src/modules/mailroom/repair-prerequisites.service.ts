@@ -1,4 +1,9 @@
-import { ConflictException, Inject, Injectable, forwardRef } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  forwardRef,
+} from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import {
   type InspectionData,
@@ -76,6 +81,10 @@ export class RepairPrerequisitesService {
       'RECORD',
       resolution.calibrations,
     );
+    return {
+      ...resolution,
+      context: { ...resolution.context, binding: data.templateBinding },
+    };
   }
   async forItem(item: ReadItem, tx?: Prisma.TransactionClient) {
     const [materials, inspectionResolution, completionResolution] =

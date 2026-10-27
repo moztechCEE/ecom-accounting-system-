@@ -334,7 +334,29 @@ describe('actual registry and material evidence at repair prerequisite boundarie
     });
     await expect(
       f.service.recordValidation(f.item, 'repair', f.report.data, f.tx),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({
+      state: 'KNOWN',
+      reason: 'REVIEWED',
+      template: f.replacement,
+      context: {
+        entityId: 'company',
+        productId: 'replacement-product',
+        sku: 'REPLACEMENT-SKU',
+        binding: binding(f.replacement),
+      },
+      calibrations: [
+        {
+          id: 'calibration',
+          entityId: 'company',
+          instrumentId: 'meter',
+          equipmentType: 'synthetic-meter',
+          proofReference: 'Actual synthetic calibration certificate',
+          status: 'VALID',
+          validFrom: '2026-10-01T00:00:00.000Z',
+          validUntil: '2026-10-31T00:00:00.000Z',
+        },
+      ],
+    });
     f.report.data.templateBinding = binding(f.original);
     expect(
       (await f.service.forItem(f.item, f.tx)).templateChecks.completion,
@@ -432,7 +454,29 @@ describe('actual registry and material evidence at repair prerequisite boundarie
       const before = structuredClone(f.report.data);
       await expect(
         f.service.recordValidation(f.item, 'repair', f.report.data, f.tx),
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual({
+        state: 'KNOWN',
+        reason: 'REVIEWED',
+        template: f.original,
+        context: {
+          entityId: 'company',
+          productId: 'original-product',
+          sku: 'ORIGINAL-SKU',
+          binding: binding(f.original),
+        },
+        calibrations: [
+          {
+            id: 'calibration',
+            entityId: 'company',
+            instrumentId: 'meter',
+            equipmentType: 'synthetic-meter',
+            proofReference: 'Actual synthetic calibration certificate',
+            status: 'VALID',
+            validFrom: '2026-10-01T00:00:00.000Z',
+            validUntil: '2026-10-31T00:00:00.000Z',
+          },
+        ],
+      });
       expect(f.report.data).toEqual(before);
       expect(
         (await f.service.forItem(f.item, f.tx)).templateChecks.completion,

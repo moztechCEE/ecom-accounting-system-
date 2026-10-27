@@ -1,13 +1,21 @@
 import { ForbiddenException } from '@nestjs/common';
 import { RepairWorkbenchService } from './repair-workbench.service';
-import { type Actor, type SourceCase } from './mailroom.contract';
+import { fingerprint, type Actor, type SourceCase } from './mailroom.contract';
+import {
+  repairTemplateHash,
+  type RepairTestTemplate,
+} from './repair-template.contract';
 import {
   type InspectionDocument,
   inspectionPlanHash,
 } from './repair-document.contract';
 import { sentCustomerWorkflow } from './repair-workflow.contract';
 import { type RepairWorkflowDto } from './repair-workflow.dto';
-import { repairSourceBindingForItem } from './repair-proposal.contract';
+import {
+  repairSourceBindingForItem,
+  type RepairProposalItem,
+} from './repair-proposal.contract';
+import type { RepairWorkflow } from './repair-workflow.contract';
 import { RepairPrerequisitesService } from './repair-prerequisites.service';
 
 const actor = (id: string): Actor => ({
@@ -20,6 +28,38 @@ const actor = (id: string): Actor => ({
       : ['repair_workbench:read', 'repair_workbench:update'],
   ),
 });
+// Synthetic observation fixture, separate from formal model standards.
+const template: RepairTestTemplate = {
+  schema: 1,
+  status: 'REVIEWED',
+  id: 'synthetic-workflow-template',
+  revision: 1,
+  entityId: 'company',
+  productId: 'demo-product',
+  sku: 'DEMO-SKU',
+  reviewedById: 'synthetic-standard-reviewer',
+  reviewedAt: '2026-10-01T00:00:00Z',
+  checks: [
+    {
+      key: 'power',
+      name: '開機',
+      requiredForInspection: true,
+      requiredForCompletion: true,
+      requiresCalibration: false,
+      standard: {
+        kind: 'OBSERVATION',
+        instruction: 'Synthetic observed startup result',
+      },
+    },
+  ],
+  contentHash: '',
+};
+template.contentHash = repairTemplateHash(template);
+const templateBinding = {
+  id: template.id,
+  revision: template.revision,
+  contentHash: template.contentHash,
+};
 const inspection = (
   plan: 'REPAIR' | 'FACTORY' | 'RETURN' | 'SCRAP' = 'REPAIR',
 ): InspectionDocument => ({
@@ -29,13 +69,25 @@ const inspection = (
   authorId: 'tech',
   authorName: 'tech',
   updatedAt: '2026-10-05T00:00:00Z',
+  submittedAt: '2026-10-05T00:00:00Z',
   data: {
     protocol: 2,
     materialPlan: { mode: 'NONE', lines: [] },
     complaint: '無法開機',
     reproduction: 'YES',
     testConditions: '原廠電源',
-    checks: [{ name: '開機', result: 'FAIL', observation: '無法啟動' }],
+    checks: [
+      { key: 'power', name: '開機', result: 'FAIL', observation: '無法啟動' },
+    ],
+    templateBinding,
+    assessment: {
+      schema: 1,
+      conclusion: 'PRODUCT_FAULT',
+      basis: 'Synthetic failure observed with original power supply',
+      causalExplanation: '主板故障',
+      checkKeys: ['power'],
+      mediaIds: [],
+    },
     diagnosis: '主板故障',
     causeStatus: 'CONFIRMED',
     plan,
@@ -46,6 +98,30 @@ const inspection = (
   },
 });
 
+type WorkflowFixture = RepairProposalItem & {
+  repairInspection: InspectionDocument;
+  repairWorkflow: RepairWorkflow;
+};
+type CapturedAction = {
+  entityId: string;
+  itemId: string;
+  actorId: string;
+  actorName?: string;
+  requestId: string;
+  version: number;
+  requestHash: string;
+  action: string;
+  snapshot: WorkflowFixture;
+};
+type SubmissionQuery = {
+  where: {
+    entityId: string;
+    itemId: string;
+    action: string;
+    snapshot: { equals: number };
+  };
+};
+
 describe('native repair departmental acceptance, original return and factory custody', () => {
   let service: RepairWorkbenchService;
   let prisma: any;
@@ -54,6 +130,39 @@ describe('native repair departmental acceptance, original return and factory cus
   let row: any;
   let source: SourceCase;
   let events: Map<string, any>;
+  let seededSubmissions: CapturedAction[];
+  const seedInitialInspection = () => {
+    const current = row as unknown as WorkflowFixture;
+    const doc = current.repairInspection;
+    current.repairWorkflow = {
+      ...current.repairWorkflow,
+      assessmentPolicy: {
+        schema: 1,
+        inspectionRevision: doc.revision,
+        planHash: inspectionPlanHash(doc),
+      },
+    };
+    const snapshot = structuredClone(current);
+    const existing = seededSubmissions.find(
+      (record) => record.snapshot.repairInspection.revision === doc.revision,
+    );
+    if (
+      existing &&
+      fingerprint(existing.snapshot.repairInspection) === fingerprint(doc) &&
+      existing.snapshot.receipt.category === current.receipt.category
+    )
+      return;
+    seededSubmissions.push({
+      entityId: current.entityId,
+      itemId: current.id,
+      actorId: doc.authorId,
+      requestId: `synthetic-submission-${seededSubmissions.length}`,
+      requestHash: fingerprint(snapshot),
+      action: 'submit_repair_inspection',
+      version: current.version,
+      snapshot,
+    });
+  };
   let sequence: number;
   let prerequisites: RepairPrerequisitesService;
   const command = (
@@ -112,31 +221,47 @@ describe('native repair departmental acceptance, original return and factory cus
     });
   };
   const reviewed = (decision: 'APPROVE' | 'DECLINE' = 'APPROVE') => {
-    row.status = 'INSPECTING';
-    row.repairWorkflow = {
-      ...sentCustomerWorkflow(row, actor('tech'), '2026-10-05T00:00:00Z', 4),
+    const current = row as unknown as WorkflowFixture;
+    current.status = 'INSPECTING';
+    const quoteRevision = current.receipt.category === 'REPAIR' ? 4 : null;
+    current.repairWorkflow = {
+      ...sentCustomerWorkflow(
+        current,
+        actor('tech'),
+        '2026-10-05T00:00:00Z',
+        quoteRevision,
+      ),
       csr: {
-        ...sentCustomerWorkflow(row, actor('tech'), '2026-10-05T00:00:00Z', 4)
-          .csr,
+        ...sentCustomerWorkflow(
+          current,
+          actor('tech'),
+          '2026-10-05T00:00:00Z',
+          quoteRevision,
+        ).csr,
         status: 'RESOLVED',
         ownerId: 'csr',
         acceptedAt: '2026-10-05T00:01:00Z',
         decision,
       },
     };
-    row.repairInspection.review = {
+    current.repairInspection.review = {
       inspectionRevision: 3,
       actorId: 'csr',
       name: 'csr',
       confirmedAt: '2026-10-05T00:02:00Z',
       decision,
-      planHash: inspectionPlanHash(row.repairInspection),
-      quoteRevision: 4,
+      planHash: inspectionPlanHash(current.repairInspection),
+      quoteRevision,
     };
-    bindCurrentQuote();
-    bindDisposition(
-      row.repairInspection.data.plan === 'SCRAP' ? 'SCRAP' : 'RETURN_ORIGINAL',
-    );
+    if (current.receipt.category === 'REPAIR') {
+      bindCurrentQuote();
+      bindDisposition(
+        current.repairInspection.data.plan === 'SCRAP'
+          ? 'SCRAP'
+          : 'RETURN_ORIGINAL',
+      );
+    }
+    seedInitialInspection();
   };
   const send = () =>
     service.workflow(
@@ -186,6 +311,7 @@ describe('native repair departmental acceptance, original return and factory cus
       4,
     );
     events = new Map();
+    seededSubmissions = [];
     source = {
       id: 'case',
       number: 'DEMO-CASE',
@@ -230,6 +356,23 @@ describe('native repair departmental acceptance, original return and factory cus
         }),
       },
       mailroomAction: {
+        findMany: jest.fn(({ where }: SubmissionQuery) =>
+          Promise.resolve(
+            structuredClone(
+              [
+                ...seededSubmissions,
+                ...([...events.values()] as unknown as CapturedAction[]),
+              ].filter(
+                (record) =>
+                  record.entityId === where.entityId &&
+                  record.itemId === where.itemId &&
+                  record.action === where.action &&
+                  record.snapshot.repairInspection?.revision ===
+                    where.snapshot.equals,
+              ),
+            ),
+          ),
+        ),
         findUnique: jest.fn(async ({ where }: any) => {
           const key = where.entityId_actorId_requestId;
           return (
@@ -259,13 +402,18 @@ describe('native repair departmental acceptance, original return and factory cus
         async (
           _tx: any,
           writer: Actor,
-          updated: any,
+          updated: WorkflowFixture,
           action: string,
           requestId: string,
           hash: string,
         ) => {
           events.set(`${updated.entityId}:${writer.id}:${requestId}`, {
+            entityId: updated.entityId,
             itemId: updated.id,
+            actorId: writer.id,
+            actorName: writer.name,
+            requestId,
+            version: updated.version,
             requestHash: hash,
             action,
             snapshot: structuredClone(updated),
@@ -280,7 +428,17 @@ describe('native repair departmental acceptance, original return and factory cus
     };
     prerequisites = {
       require: jest.fn().mockResolvedValue({}),
-      recordValidation: jest.fn().mockResolvedValue({}),
+      recordValidation: jest.fn().mockResolvedValue({
+        state: 'KNOWN',
+        template,
+        context: {
+          entityId: 'company',
+          productId: template.productId,
+          sku: template.sku,
+          binding: templateBinding,
+        },
+        calibrations: [],
+      }),
       forItem: jest.fn().mockResolvedValue({
         materials: {
           start: { state: 'READY', reason: 'NOT_REQUIRED', requiredCount: 0 },
@@ -301,8 +459,8 @@ describe('native repair departmental acceptance, original return and factory cus
   });
 
   const corporateReviewed = () => {
-    reviewed();
     row.receipt.category = 'RETURN';
+    reviewed();
     row.status = 'REFURBISHING';
     row.repairInspection.review.quoteRevision = null;
     row.repairWorkflow.csr.quoteRevision = null;
@@ -571,6 +729,7 @@ describe('native repair departmental acceptance, original return and factory cus
       '2026-10-05T00:00:00Z',
       4,
     );
+    seedInitialInspection();
     await service.workflow('csr', 'piece', command('claim_customer'));
     source.releaseInfo!.customerApprovedQuoteRevision = 3;
     await expect(
@@ -625,6 +784,7 @@ describe('native repair departmental acceptance, original return and factory cus
       '2026-10-05T00:00:00Z',
       null,
     );
+    seedInitialInspection();
     await service.workflow('csr', 'piece', command('claim_customer'));
     await service.workflow(
       'csr',
@@ -921,12 +1081,20 @@ describe('native repair departmental acceptance, original return and factory cus
   it('a submitted inspection revision clears stale CSR consent and release but retains factory custody evidence in immutable history', async () => {
     reviewed();
     const old = structuredClone(row.repairWorkflow);
+    const current = row as unknown as WorkflowFixture;
     await service.save('tech', 'piece', 'inspection', {
       entityId: 'company',
       requestId: 'inspection-revised-001',
       expectedVersion: row.version,
       status: 'SUBMITTED',
-      data: { ...row.repairInspection.data, diagnosis: '第二個故障點' },
+      data: {
+        ...current.repairInspection.data,
+        diagnosis: '第二個故障點',
+        assessment: {
+          ...current.repairInspection.data.assessment!,
+          causalExplanation: '第二個故障點',
+        },
+      },
     });
     expect(row.repairInspection.revision).toBe(4);
     expect(row.repairInspection.review).toBeUndefined();

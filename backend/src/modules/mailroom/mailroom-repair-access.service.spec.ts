@@ -2,7 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { MailroomService } from './mailroom.service';
 import { MailroomQuery } from './mailroom.dto';
-import { type Actor, type SourceCase } from './mailroom.contract';
+import { fingerprint, type Actor, type SourceCase } from './mailroom.contract';
 import {
   inspectionPlanHash,
   type InspectionData,
@@ -16,6 +16,10 @@ import {
 import { repairSourceBindingForItem } from './repair-proposal.contract';
 import type { RepairPrerequisitesService } from './repair-prerequisites.service';
 import type { RepairWorkStartProof } from './repair-work-start.contract';
+import {
+  repairTemplateHash,
+  type RepairTestTemplate,
+} from './repair-template.contract';
 
 const MINE_ID = 'aaad7cc6-7273-4000-8abc-333333333333';
 const RECEIPT_ID = 'aaad7cc6-7273-4000-8abc-444444444444';
@@ -88,6 +92,141 @@ const piece = (
   ...overrides,
 });
 
+// Explicit synthetic submission records are captured during fixture setup, never
+// reconstructed by the authority reader from whatever the current row contains.
+const syntheticTemplate: RepairTestTemplate = {
+  schema: 1,
+  status: 'REVIEWED',
+  id: 'synthetic-access-template',
+  revision: 1,
+  entityId: 'company',
+  productId: 'synthetic-product',
+  sku: 'SYNTHETIC-SKU',
+  reviewedById: 'synthetic-standard-reviewer',
+  reviewedAt: '2026-10-01T00:00:00Z',
+  checks: [
+    {
+      key: 'power',
+      name: '開機',
+      requiredForInspection: true,
+      requiredForCompletion: true,
+      requiresCalibration: false,
+      standard: {
+        kind: 'OBSERVATION',
+        instruction: 'Synthetic observed startup result',
+      },
+    },
+  ],
+  contentHash: '',
+};
+syntheticTemplate.contentHash = repairTemplateHash(syntheticTemplate);
+type AssessmentFixture = {
+  id: string;
+  entityId: string;
+  version: number;
+  repairInspection?: InspectionDocument;
+  repairWorkflow?: RepairWorkflow;
+  receipt: {
+    category: string;
+    sourceCaseId?: string | null;
+    sourceNumber?: string | null;
+  };
+};
+type SubmittedFixture = AssessmentFixture & {
+  repairInspection: InspectionDocument;
+};
+type SubmissionRecord = {
+  entityId: string;
+  itemId: string;
+  actorId: string;
+  action: string;
+  requestId: string;
+  requestHash: string;
+  version: number;
+  snapshot: SubmittedFixture;
+};
+type SubmissionQuery = {
+  where: {
+    entityId: string;
+    itemId: string;
+    action: string;
+    snapshot: { equals: number };
+  };
+};
+let immutableSubmissions: SubmissionRecord[] = [];
+function prepareSubmittedFixture(value: unknown) {
+  const mine = value as AssessmentFixture;
+  const doc = mine.repairInspection;
+  if (doc?.status !== 'SUBMITTED' || !doc.data?.plan) return;
+  Object.assign(mine, {
+    label: 'SYNTHETIC-REPAIR-001',
+    receiptId: RECEIPT_ID,
+    productId: syntheticTemplate.productId,
+    sku: syntheticTemplate.sku,
+  });
+  Object.assign(doc, {
+    number: 'INS-SYNTHETIC-001',
+    authorId: 'tech',
+    authorName: 'tech',
+    updatedAt: CURRENT_SOURCE_VERSION,
+    submittedAt: CURRENT_SOURCE_VERSION,
+  });
+  Object.assign(doc.data, {
+    protocol: 2,
+    materialPlan: { mode: 'NONE', lines: [] },
+    causeStatus: 'CONFIRMED',
+    templateBinding: {
+      id: syntheticTemplate.id,
+      revision: syntheticTemplate.revision,
+      contentHash: syntheticTemplate.contentHash,
+    },
+    estimateNote: doc.data.estimateNote ?? 'SYNTHETIC 檢修建議',
+    assessment: {
+      schema: 1,
+      conclusion: 'PRODUCT_FAULT',
+      basis: 'Synthetic observed failure with the original accessories',
+      causalExplanation: doc.data.diagnosis,
+      checkKeys: ['power'],
+      mediaIds: [],
+    },
+  });
+  doc.data.checks = doc.data.checks.map((check, index) => ({
+    ...check,
+    key: index === 0 ? 'power' : `synthetic-check-${index}`,
+  }));
+  mine.repairWorkflow = {
+    ...mine.repairWorkflow,
+    schema: 1,
+    assessmentPolicy: {
+      schema: 1,
+      inspectionRevision: doc.revision,
+      planHash: inspectionPlanHash(doc),
+    },
+  };
+  const snapshot = structuredClone(mine as SubmittedFixture);
+  const existing = immutableSubmissions.find(
+    (record) =>
+      record.itemId === mine.id &&
+      record.snapshot.repairInspection.revision === doc.revision,
+  );
+  if (
+    existing &&
+    fingerprint(existing.snapshot.repairInspection) === fingerprint(doc) &&
+    fingerprint(existing.snapshot.receipt) === fingerprint(mine.receipt)
+  )
+    return;
+  immutableSubmissions.push({
+    entityId: mine.entityId,
+    itemId: mine.id,
+    actorId: doc.authorId,
+    action: 'submit_repair_inspection',
+    requestId: `synthetic-submission-${immutableSubmissions.length}`,
+    requestHash: fingerprint(snapshot),
+    version: mine.version,
+    snapshot,
+  });
+}
+
 // Positive physical writes use the modern server-built per-item quote contract.
 function sourceFixture(mine: any): SourceCase {
   Object.assign(mine, {
@@ -111,6 +250,7 @@ function sourceFixture(mine: any): SourceCase {
     });
     mine.repairInspection.data.estimateNote ??= 'SYNTHETIC 檢修建議';
   }
+  prepareSubmittedFixture(mine);
   const paid = mine.repairInspection?.data?.feeSuggestion === 'PAID';
   const source: SourceCase = {
     id: 'source-case',
@@ -185,6 +325,7 @@ function approveCurrent(mine: any, source: SourceCase) {
 }
 
 function approveAndStartRefurbishment(mine: NativeFixture) {
+  prepareSubmittedFixture(mine);
   const hash = inspectionPlanHash(mine.repairInspection as InspectionDocument);
   const sent = sentCustomerWorkflow(
     mine,
@@ -259,6 +400,7 @@ describe('repair workbench company overview and claim access', () => {
   const originalEnabled = process.env.MAILROOM_ENABLED;
   beforeEach(() => {
     process.env.MAILROOM_ENABLED = 'true';
+    immutableSubmissions = [];
     rows = [
       piece('pool'),
       piece(MINE_ID, 'REPAIR', 'INSPECTING', {
@@ -322,7 +464,20 @@ describe('repair workbench company overview and claim access', () => {
       },
       mailroomAction: {
         findUnique: jest.fn().mockResolvedValue(null),
-        findMany: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn(({ where }: SubmissionQuery) =>
+          Promise.resolve(
+            structuredClone(
+              immutableSubmissions.filter(
+                (record) =>
+                  record.entityId === where.entityId &&
+                  record.itemId === where.itemId &&
+                  record.action === where.action &&
+                  record.snapshot.repairInspection.revision ===
+                    where.snapshot.equals,
+              ),
+            ),
+          ),
+        ),
       },
       user: { findMany: jest.fn().mockResolvedValue([]) },
       mailroomTask: { findMany: jest.fn().mockResolvedValue([]) },

@@ -43,6 +43,7 @@ import {
 } from './repair-evidence.persistence';
 import { RepairMediaService } from './repair-media.service';
 import { repairSourceCaseBrand } from './repair-source-brand.contract';
+import { requireAssessmentRelease } from './repair-assessment-release';
 
 type Item = Prisma.MailroomItemGetPayload<{ include: { receipt: true } }>;
 type Identity = {
@@ -231,6 +232,7 @@ export class RepairCustomerReportService {
         const source = await this.source(item);
         if (['CANCELLED', 'CLOSED', 'COMPLETED'].includes(source.status))
           throw new ConflictException('案件已結束，不能發布新報告');
+        await requireAssessmentRelease(item, tx, { source });
         const identity = currentIdentity(source),
           binding = repairSourceBindingForItem(item, source);
         const quoteRevision = source.releaseInfo?.quoteRevision;
@@ -499,10 +501,32 @@ export class RepairCustomerReportService {
       !/^[A-Za-z0-9_-]{43}$/.test(token)
     )
       throw new NotFoundException('報告已撤回或無法讀取');
-    const db = evidenceDatabase(this.prisma),
-      report = await db.repairCustomerReport.findFirst({
-        where: { id: reportId, status: 'PUBLISHED' },
-      });
+    return this.prisma.$transaction(
+      (tx) => this.accessCurrent(tx, reportId, token),
+      { timeout: 15000 },
+    );
+  }
+  private async accessCurrent(
+    tx: Prisma.TransactionClient,
+    reportId: string,
+    token: string,
+  ) {
+    const db = evidenceDatabase(tx);
+    const candidate = await db.repairCustomerReport.findFirst({
+      where: { id: reportId, status: 'PUBLISHED' },
+    });
+    if (!candidate) throw new NotFoundException('報告已撤回或無法讀取');
+    await tx.$queryRaw(
+      Prisma.sql`SELECT id FROM mailroom_items WHERE id=${candidate.itemId} FOR UPDATE`,
+    );
+    const report = await db.repairCustomerReport.findFirst({
+      where: {
+        id: reportId,
+        entityId: candidate.entityId,
+        itemId: candidate.itemId,
+        status: 'PUBLISHED',
+      },
+    });
     if (
       !report ||
       report.expiresAt <= new Date() ||
@@ -515,7 +539,7 @@ export class RepairCustomerReportService {
       throw new NotFoundException('報告已撤回或無法讀取');
     if (digest(reportToken(report)) !== report.tokenHash)
       throw new NotFoundException('報告連結已更新');
-    const item = await this.prisma.mailroomItem.findUnique({
+    const item = await tx.mailroomItem.findUnique({
       where: { id: report.itemId },
       include: { receipt: true },
     });
@@ -541,6 +565,14 @@ export class RepairCustomerReportService {
     const source = await this.source(item);
     if (source.status === 'CANCELLED')
       throw new NotFoundException('報告已撤回或無法讀取');
+    try {
+      await requireAssessmentRelease(item, tx, {
+        source,
+        purpose: 'PUBLIC_REPORT_READ',
+      });
+    } catch {
+      throw new NotFoundException('報告已更新或無法讀取');
+    }
     const identity = currentIdentity(source);
     if (
       repairSourceCaseBrand(source) !== report.sourceBrand ||
@@ -584,6 +616,7 @@ export class RepairCustomerReportService {
         throw new NotFoundException('報告影像已撤回');
     return report;
   }
+
   async publicView(reportId: string, token: string | undefined) {
     const report = await this.access(reportId, token),
       db = evidenceDatabase(this.prisma);

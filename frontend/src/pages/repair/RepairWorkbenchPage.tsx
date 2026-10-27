@@ -247,7 +247,7 @@ function RepairDetail({item,readerExpectedItemId,entityId,onSaved,onDirtyChange,
   const standardsChanged=useRef(false);
   const closingStandards=useRef(false);
   const standardsTrigger=useRef<HTMLButtonElement|HTMLAnchorElement|null>(null);
-  const [workflowOpen,setWorkflowOpen]=useState<string[]>(()=>item.allowedWorkflowActions?.some(action=>!['claim_customer','resolve_customer'].includes(action))?['workflow']:[]);
+  const [workflowOpen,setWorkflowOpen]=useState<string[]>(()=>item.allowedWorkflowActions?.some(action=>!['claim_customer','resolve_customer','review_assessment'].includes(action))?['workflow']:[]);
   const documentsDirty=useRef(false);
   const workflowDirty=useRef(false);
   const actionDirty=useRef(false);
@@ -303,7 +303,7 @@ function RepairDetail({item,readerExpectedItemId,entityId,onSaved,onDirtyChange,
     {actions.length>0&&<Card size="small" title="案件操作">
       {waiting&&item.nextUserId===user?.id&&<Space direction="vertical" style={{width:'100%',marginBottom:14}}><Text>簽收人：{user?.name}</Text><Input value={location} maxLength={160} onChange={event=>{setLocation(event.target.value);actionDirty.current=true;publishDirty();}} placeholder="存放位置" aria-label="存放位置" /><Checkbox checked={confirmed} onChange={event=>{setConfirmed(event.target.checked);actionDirty.current=true;publishDirty();}}>已收到並核對實物與配件</Checkbox></Space>}
       {own&&<Input.TextArea value={note} maxLength={2000} rows={2} onChange={event=>{setNote(event.target.value);actionDirty.current=true;publishDirty();}} placeholder={noteLabel} aria-label={noteLabel} style={{marginBottom:12}} />}
-      <Space wrap>{actions.map(action=><Tooltip key={action.name} title={action.disabled && !busy ? action.reason : undefined}><span><Button type={action===primaryAction && !(workflowOpen.includes('workflow') && item.allowedWorkflowActions?.some(value=>!['claim_customer','resolve_customer'].includes(value)))?'primary':'default'} loading={busy} disabled={action.disabled || busy || workflowBusy} onClick={()=>void act(action.name)}>{action.label}</Button></span></Tooltip>)}</Space>
+      <Space wrap>{actions.map(action=><Tooltip key={action.name} title={action.disabled && !busy ? action.reason : undefined}><span><Button type={action===primaryAction && !(workflowOpen.includes('workflow') && item.allowedWorkflowActions?.some(value=>!['claim_customer','resolve_customer','review_assessment'].includes(value)))?'primary':'default'} loading={busy} disabled={action.disabled || busy || workflowBusy} onClick={()=>void act(action.name)}>{action.label}</Button></span></Tooltip>)}</Space>
     </Card>}
         <Collapse activeKey={workflowOpen} onChange={keys=>{if(!workflowBusy)setWorkflowOpen(Array.isArray(keys)?keys:[keys]);}} items={[{key:'workflow',label:item.receipt.category==='RETURN'?'公司整新作業':repairDispositionRoute(item)?'原件處置':'原件與原廠作業',collapsible:workflowBusy?'disabled':undefined,forceRender:true,children:<>    <RepairWorkflowPanel key={`workflow:${standardsEpoch}`} feedback={message} item={item} entityId={entityId} canUpdate={canUpdate && item.repairOwnerId===user?.id && !busy} onSaved={onSaved} onFailure={setWorkflowFailure} onBusyChange={setWorkflowBusy} onDirtyChange={dirty=>{workflowDirty.current=dirty;publishDirty();}} onBeforeAction={async()=>!(documentsDirty.current || actionDirty.current) || await confirmDiscard()} />
 </>}]} />

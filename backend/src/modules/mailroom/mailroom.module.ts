@@ -1,3 +1,5 @@
+import { RepairAssessmentReaderController } from './repair-assessment-reader.controller';
+import { RepairAssessmentReaderService } from './repair-assessment-reader.service';
 import { RepairTestRegistryController } from './repair-test-registry.controller';
 import { RepairMaterialsController } from './repair-materials.controller';
 import {
@@ -38,6 +40,12 @@ import { MailroomOutboundService } from './mailroom-outbound.service';
 import { MailroomOutboundStockService } from './mailroom-outbound-stock.service';
 import { MailroomPrecheckController } from './mailroom-precheck.controller';
 import { MailroomPrecheckService } from './mailroom-precheck.service';
+import { MailroomPrintController } from './printing/mailroom-print.controller';
+import { MailroomPrintService } from './printing/mailroom-print.service';
+import { MailroomPrintDeviceGuard } from './printing/mailroom-print.auth';
+import { MailroomLabelController } from './mailroom-label.controller';
+import { MailroomLabelService } from './mailroom-label.service';
+import { MailroomLabelExport } from './mailroom-label.export';
 @Module({
   imports: [
     NotificationModule,
@@ -46,7 +54,10 @@ import { MailroomPrecheckService } from './mailroom-precheck.service';
     AfterSalesIntegrationModule,
   ],
   controllers: [
+    MailroomPrintController,
+    MailroomLabelController,
     MailroomPrecheckController,
+    RepairAssessmentReaderController,
     RepairTestRegistryController,
     RepairMaterialsController,
     RepairEvidenceController,
@@ -61,7 +72,12 @@ import { MailroomPrecheckService } from './mailroom-precheck.service';
     MailroomOutboundController,
   ],
   providers: [
+    MailroomPrintService,
+    MailroomPrintDeviceGuard,
+    MailroomLabelService,
+    MailroomLabelExport,
     MailroomPrecheckService,
+    RepairAssessmentReaderService,
     RepairTestRegistryService,
     RepairMaterialsService,
     RepairPrerequisitesService,
@@ -82,5 +98,6 @@ import { MailroomPrecheckService } from './mailroom-precheck.service';
     MailroomOutboundService,
     MailroomOutboundStockService,
   ],
+  exports: [MailroomPrintDeviceGuard],
 })
 export class MailroomModule {}
