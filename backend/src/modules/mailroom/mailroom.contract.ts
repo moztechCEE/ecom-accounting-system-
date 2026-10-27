@@ -136,6 +136,7 @@ export type SourceCase = {
   statusLabel?: string;
   customerLabel: string;
   customerPhone?: string | null;
+  customerIssue?: string | null;
   reverseShipments?: {
     id: string;
     carrier: string;

@@ -1,9 +1,37 @@
-import { physicalItemLink } from '../../utils/mailroom-item-link'
-import type { Item } from './model'
+import { safeItemReturnTo } from '../../utils/mailroom-item-link.ts'
 
-export type PhysicalLabel = { id: string; unit: string; number: string; numberKind: string; product: string; link: string }
-export function physicalLabel(item: Item, entityId: string, origin: string): PhysicalLabel {
-  return { id: item.id, unit: item.label, number: item.receipt.sourceNumber || item.receipt.number,
-    numberKind: item.receipt.sourceNumber ? '案件' : '收件', product: item.productName,
-    link: physicalItemLink(origin, entityId, item.id) }
+export type MailroomLabelData = {
+  id: string; unit: string; caseNumber: string | null; customerName: string | null;
+  customerPhone: string | null; customerIssue: string | null; productName: string;
+  qrLink: string; version: number;
 }
+export type PhysicalLabel = {
+  id: string; customerName: string; customerPhone: string; caseNumber: string;
+  customerIssue: string; link: string;
+}
+export type DirectLabelPrint = (request: {
+  entityId: string; itemIds: string[]; requestId: string; signal: AbortSignal;
+}) => Promise<{ status: 'accepted'; jobId: string; message?: string } | { status: 'unknown'; message?: string }>
+export class MailroomPrintBlockedError extends Error {
+  name = 'MailroomPrintBlockedError'
+}
+
+const text = (value: string | null) => value?.trim() || '未提供'
+export function physicalLabel(data: MailroomLabelData, entityId: string): PhysicalLabel {
+  const url = new URL(data.qrLink)
+  const target = safeItemReturnTo(url.pathname + url.search + url.hash, entityId)
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || !target || new URLSearchParams(url.search).get('itemId') !== data.id) {
+    throw new Error('物件標籤連結不一致，請重新載入')
+  }
+  if (![data.customerName, data.customerPhone, data.caseNumber, data.customerIssue].every(value => value === null || typeof value === 'string')) {
+    throw new Error('物件標籤資料不完整')
+  }
+  const issue = [...text(data.customerIssue)]
+  return {
+    id: data.id, customerName: text(data.customerName), customerPhone: text(data.customerPhone),
+    caseNumber: text(data.caseNumber), customerIssue: issue.length > 160 ? issue.slice(0, 159).join('') + '…' : issue.join(''),
+    link: url.href,
+  }
+}
+
+export const MAILROOM_LABEL_PRINT_STYLE = '@page{size:50mm 30mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;color:#000;background:#fff;font-family:Arial,"Noto Sans TC",sans-serif}.mailroom-physical-label{width:50mm;height:30mm;padding:1.5mm;display:grid;grid-template-columns:20mm minmax(0,1fr);grid-template-rows:5.5mm 20mm;column-gap:1.5mm;row-gap:1mm;overflow:hidden;break-after:page;page-break-after:always}.mailroom-physical-label:last-child{break-after:auto;page-break-after:auto}.mailroom-label-case{grid-column:1/-1;font-size:7pt;line-height:1.1;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.mailroom-label-qr{align-self:end}.mailroom-label-qr svg{display:block;width:20mm;height:20mm}.mailroom-label-copy{min-width:0;overflow:hidden;overflow-wrap:anywhere;line-height:1.2;font-size:7pt;writing-mode:horizontal-tb}.mailroom-label-name{font-size:7.5pt;font-weight:700;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.mailroom-label-phone{margin:.6mm 0;font-size:6.5pt}.mailroom-label-issue{font-size:6.5pt;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}'

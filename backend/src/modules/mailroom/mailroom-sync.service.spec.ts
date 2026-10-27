@@ -110,6 +110,53 @@ describe('Mailroom source search URL signatures', () => {
     expect(received.search).toBe('');
   });
 
+  it('accepts legacy missing and nullable customerIssue and preserves long original Unicode text', async () => {
+    const base = {
+      id: 'case-1',
+      number: 'R-1',
+      type: 'REPAIR',
+      version: 'source-v1',
+      items: [],
+    };
+    const text =
+      '  顧客原文\r\n第二行 😀\t' + '多行文字😀\n'.repeat(4000) + '  ';
+    for (const row of [
+      base,
+      { ...base, customerIssue: null },
+      { ...base, customerIssue: text },
+    ]) {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ item: row }),
+      } as Response);
+      const result = await service.cases(entry.entityId, '', base.id);
+      expect(result.items[0]).toEqual(row);
+    }
+  });
+
+  it.each([{}, [], 1, false])(
+    'rejects malformed customerIssue before returning signed case data: %j',
+    async (customerIssue) => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            item: {
+              id: 'case-1',
+              number: 'R-1',
+              type: 'REPAIR',
+              version: 'source-v1',
+              items: [],
+              customerIssue,
+            },
+          }),
+      } as Response);
+      await expect(service.cases(entry.entityId, '', 'case-1')).rejects.toThrow(
+        BadGatewayException,
+      );
+    },
+  );
+
   it('signs an exact GET changes path with a decimal bigint cursor, and validates before advancing it', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,

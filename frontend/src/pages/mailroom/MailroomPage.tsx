@@ -32,7 +32,8 @@ import { useSearchParams } from "react-router-dom";
 import dayjs from "dayjs";
 import { useAuth } from "../../contexts/AuthContext";
 import { hasPermission, isAdminUser } from "../../utils/access";
-import api from "../../services/api";
+import api, { API_URL } from "../../services/api";
+import { createMailroomDirectPrint } from "../../services/mailroom-print";
 import { webSocketService } from "../../services/websocket.service";
 import {
   ACTIONS,
@@ -54,6 +55,8 @@ import ReceiptDrawer from "./ReceiptDrawer";
 import ReceivingItemList from "./ReceivingItemList";
 import InitialInspectionDrawer from "./InitialInspectionDrawer";
 import MailroomLabelPrint from "./MailroomLabelPrint";
+import type { DirectLabelPrint } from "./mailroom-label";
+import MailroomPrinterSettings from "./MailroomPrinterSettings";
 import StorageWorkbench from "./StorageWorkbench";
 import OutboundWorkbench from "./OutboundWorkbench";
 import ArrivalSummary from "./ArrivalSummary";
@@ -113,14 +116,19 @@ const field = (label: string, name: string, required = false) => (
 );
 export default function MailroomPage({
   mode = "mailroom",
+  onDirectPrint,
 }: {
   mode?: "mailroom" | "repair" | "mine";
+  onDirectPrint?: DirectLabelPrint;
 }) {
   const { modal, message, contextHolder } = useRepairFeedback();
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const entityId =
     params.get("entityId") || localStorage.getItem("entityId") || "";
+  const directLabelPrint = useMemo(() => onDirectPrint || createMailroomDirectPrint({
+    scope: { apiUrl: API_URL, entityId, userId: user?.id || "" }, api, local: localStorage, session: sessionStorage,
+  }), [onDirectPrint, entityId, user?.id]);
   const [rows, setRows] = useState<Item[]>([]),
     [total, setTotal] = useState(0),
     [page, setPage] = useState(1),
@@ -144,9 +152,9 @@ export default function MailroomPage({
   const outboundOrderId = params.get("outboundOrderId") || undefined;
   const outboundTarget = params.get("tab") === "outbound" ? outboundOrderId || "outbound" : "";
   const previousOutboundTarget = useRef(outboundTarget);
-  const drafts = useRef({ labelSelection: { dirty: false, busy: false } as MailroomDraftState, labelCreated: { dirty: false, busy: false } as MailroomDraftState, inspection: { dirty: false, busy: false } as MailroomDraftState, receipt: { dirty: false, busy: false } as MailroomDraftState, detail: { dirty: false, busy: false } as MailroomDraftState, storage: { dirty: false, busy: false } as MailroomDraftState, outbound: { dirty: false, busy: false } as MailroomDraftState });
+  const drafts = useRef({ labelRow: { dirty: false, busy: false } as MailroomDraftState, labelSelection: { dirty: false, busy: false } as MailroomDraftState, labelCreated: { dirty: false, busy: false } as MailroomDraftState, inspection: { dirty: false, busy: false } as MailroomDraftState, receipt: { dirty: false, busy: false } as MailroomDraftState, detail: { dirty: false, busy: false } as MailroomDraftState, storage: { dirty: false, busy: false } as MailroomDraftState, outbound: { dirty: false, busy: false } as MailroomDraftState });
   const dirty = useRef(false);
-  const updateDraft = useCallback((scope: "receipt" | "detail" | "storage" | "outbound" | "inspection" | "labelSelection" | "labelCreated", state: MailroomDraftState) => {
+  const updateDraft = useCallback((scope: "receipt" | "detail" | "storage" | "outbound" | "inspection" | "labelRow" | "labelSelection" | "labelCreated", state: MailroomDraftState) => {
     drafts.current[scope] = state;
     dirty.current = Object.values(drafts.current).some(value => value.dirty || value.busy);
   }, []);
@@ -154,6 +162,7 @@ export default function MailroomPage({
   const updateStorageDraft = useCallback((state: MailroomDraftState) => updateDraft("storage", state), [updateDraft]);
   const updateDetailDraft = useCallback((state: MailroomDraftState) => updateDraft("detail", state), [updateDraft]);
   const updateSelectedLabelBusy = useCallback((busy: boolean) => updateDraft("labelSelection", { dirty: false, busy }), [updateDraft]);
+  const updateRowLabelBusy = useCallback((busy: boolean) => updateDraft("labelRow", { dirty: false, busy }), [updateDraft]);
   const updateCreatedLabelBusy = useCallback((busy: boolean) => updateDraft("labelCreated", { dirty: false, busy }), [updateDraft]);
   const updateInspectionDraft = useCallback((state: MailroomDraftState) => updateDraft("inspection", state), [updateDraft]);
   const updateOutboundDraft = useCallback((state: MailroomDraftState) => updateDraft("outbound", state), [updateDraft]);
@@ -180,7 +189,7 @@ export default function MailroomPage({
   const guardChange = useCallback((change: () => void) => {
     if (Object.values(drafts.current).some(value => value.busy)) { void confirmDiscard(); return; }
     navigationGate(() => {
-      drafts.current = { labelSelection: { dirty: false, busy: false }, labelCreated: { dirty: false, busy: false }, inspection: { dirty: false, busy: false }, receipt: { dirty: false, busy: false }, detail: { dirty: false, busy: false }, storage: { dirty: false, busy: false }, outbound: { dirty: false, busy: false } };
+      drafts.current = { labelRow: { dirty: false, busy: false }, labelSelection: { dirty: false, busy: false }, labelCreated: { dirty: false, busy: false }, inspection: { dirty: false, busy: false }, receipt: { dirty: false, busy: false }, detail: { dirty: false, busy: false }, storage: { dirty: false, busy: false }, outbound: { dirty: false, busy: false } };
       dirty.current = false;
       setStorageReset(value => value + 1);
       change();
@@ -447,10 +456,11 @@ export default function MailroomPage({
           </div>
           {mode === "mailroom" && listTab === "received" ? <>
             <Space wrap className="mailroom-receiving-actions">
-              {receivingSelection.length > 0 && <><Text>已選 {receivingSelection.length} 件</Text><Button disabled={!canMail || receivingSelection.some(id => !rows.some(row => row.id === id && canOpenPrecheck(row)))} onClick={() => openInspection(receivingSelection)}>批次初檢</Button><MailroomLabelPrint entityId={entityId} itemIds={receivingSelection} onBusyChange={updateSelectedLabelBusy} /></>}
-              {!!createdItemIds.length && <span className="mailroom-receipt-labels"><Text>剛收 {createdItemIds.length} 件</Text><MailroomLabelPrint entityId={entityId} itemIds={createdItemIds} onBusyChange={updateCreatedLabelBusy} /></span>}
+              {canMail && <MailroomPrinterSettings key={`${entityId}:${user?.id || ""}`} entityId={entityId} userId={user?.id || ""} />}
+              {receivingSelection.length > 0 && <><Text>已選 {receivingSelection.length} 件</Text><Button disabled={!canMail || receivingSelection.some(id => !rows.some(row => row.id === id && canOpenPrecheck(row)))} onClick={() => openInspection(receivingSelection)}>批次初檢</Button><MailroomLabelPrint key={`${entityId}:${user?.id || ""}`} entityId={entityId} itemIds={receivingSelection} directDisabled={!canMail} onDirectPrint={directLabelPrint} pendingActionLabel={onDirectPrint ? undefined : "查詢列印結果"} onBusyChange={updateSelectedLabelBusy} /></>}
+              {!!createdItemIds.length && <span className="mailroom-receipt-labels"><Text>剛收 {createdItemIds.length} 件</Text><MailroomLabelPrint key={`${entityId}:${user?.id || ""}`} entityId={entityId} itemIds={createdItemIds} directDisabled={!canMail} onDirectPrint={directLabelPrint} pendingActionLabel={onDirectPrint ? undefined : "查詢列印結果"} onBusyChange={updateCreatedLabelBusy} /></span>}
             </Space>
-            <ReceivingItemList entityId={entityId} items={visible} total={total} page={page} loading={loading} selectedIds={receivingSelection} onSelect={setReceivingSelection} onPage={setPage} onOpen={openItem} onInspect={openInspection} canEdit={canMail} />
+            <ReceivingItemList key={`${entityId}:${user?.id || ""}`} entityId={entityId} items={visible} total={total} page={page} loading={loading} selectedIds={receivingSelection} onSelect={setReceivingSelection} onPage={setPage} onOpen={openItem} onInspect={openInspection} canEdit={canMail} onDirectPrint={directLabelPrint} pendingActionLabel={onDirectPrint ? undefined : "查詢列印結果"} onLabelBusyChange={updateRowLabelBusy} />
           </> : <Table<Item>
             rowKey="id"
             loading={loading}

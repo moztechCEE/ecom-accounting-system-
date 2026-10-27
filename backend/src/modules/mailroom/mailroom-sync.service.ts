@@ -229,6 +229,9 @@ export class MailroomSyncService implements OnModuleInit, OnModuleDestroy {
             x.customerPhone !== null &&
             (typeof x.customerPhone !== 'string' ||
               x.customerPhone.length > 100)) ||
+          (x.customerIssue !== undefined &&
+            x.customerIssue !== null &&
+            typeof x.customerIssue !== 'string') ||
           (x.inTransit !== undefined && typeof x.inTransit !== 'boolean') ||
           (x.reverseShipments !== undefined &&
             (!Array.isArray(x.reverseShipments) ||

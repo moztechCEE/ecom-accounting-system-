@@ -38,6 +38,12 @@ import { MailroomOutboundService } from './mailroom-outbound.service';
 import { MailroomOutboundStockService } from './mailroom-outbound-stock.service';
 import { MailroomPrecheckController } from './mailroom-precheck.controller';
 import { MailroomPrecheckService } from './mailroom-precheck.service';
+import { MailroomPrintController } from './printing/mailroom-print.controller';
+import { MailroomPrintService } from './printing/mailroom-print.service';
+import { MailroomPrintDeviceGuard } from './printing/mailroom-print.auth';
+import { MailroomLabelController } from './mailroom-label.controller';
+import { MailroomLabelService } from './mailroom-label.service';
+import { MailroomLabelExport } from './mailroom-label.export';
 @Module({
   imports: [
     NotificationModule,
@@ -46,6 +52,8 @@ import { MailroomPrecheckService } from './mailroom-precheck.service';
     AfterSalesIntegrationModule,
   ],
   controllers: [
+    MailroomPrintController,
+    MailroomLabelController,
     MailroomPrecheckController,
     RepairTestRegistryController,
     RepairMaterialsController,
@@ -61,6 +69,10 @@ import { MailroomPrecheckService } from './mailroom-precheck.service';
     MailroomOutboundController,
   ],
   providers: [
+    MailroomPrintService,
+    MailroomPrintDeviceGuard,
+    MailroomLabelService,
+    MailroomLabelExport,
     MailroomPrecheckService,
     RepairTestRegistryService,
     RepairMaterialsService,
@@ -82,5 +94,6 @@ import { MailroomPrecheckService } from './mailroom-precheck.service';
     MailroomOutboundService,
     MailroomOutboundStockService,
   ],
+  exports: [MailroomPrintDeviceGuard],
 })
 export class MailroomModule {}

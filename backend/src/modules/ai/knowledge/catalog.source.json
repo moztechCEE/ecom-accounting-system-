@@ -4769,7 +4769,7 @@
           "勾選數件後點「批次初檢」，再「建立初檢草稿」，讓同仁知道這批已在初檢中。開始或保存草稿只記初檢文件與操作者，不改保管人、不送維修交接通知。可先測完幾台，再逐件用筆型編輯補填及保存。",
           "初檢依已關聯的實收產品選擇伺服器提供的初檢表；萬能充 Pro 表包含自帶 Type-C 線、Lightning 線、USB-C 輸出、USB-A 輸出及無線充電。各項選正常、異常、未測或不適用。草稿允許未填完；標為可交接前，必要項目不可未測，異常須說明及對應照片，不適用須原因。換表先保存清空結果的草稿。",
           "勾選已保存為可交接的維修件，再一次交維修部門。系統逐件回報成功、拒絕或結果待確認；成功件進既有待認領清單，一批每位合格技師至多一則站內摘要。尚未本人簽收前仍由收發室保管。退貨初檢保留原 AA／A／B／C 分級及客服覆核路徑，不送維修批次。",
-          "收件後可選單件或數件列印小張 50 × 30 mm 物件標籤，每件有獨立 QR、案件／收件編號、品名與單件識別。同案多件仍各有一碼。技師用條碼槍掃描網址或物件識別，可開啟同公司原物件及已提交初檢；未登入先登入，再回原物件。",
+          "收件後，在「全部收件紀錄」每件旁按列印，或勾選數件一起印 50 × 30 mm 小張標籤。貼紙有 QR、姓名、電話、案件號與產品問題，並附品名／實物識別；同案多件各有一碼。過長問題只縮短貼紙顯示，案件原文不變。掃碼仍須登入及具同公司原物件的讀取權。",
           "手機可用瀏覽器提供的加入主畫面功能以獨立視窗開啟。離線只顯示無法連線頁，恢復連線後再操作；不離線保存或排程重送案件、照片與交接。",
           "維修人員可在收發室平板輸入本人員編、密碼及已設定的驗證碼，再勾選實物確認簽收；收發室帳號持續登入。",
           "退貨品必須記錄品項核對、包裝、外觀、配件、AA／A／B／C 與至少一張照片；承辦客服另有接手檢查結果的待辦。",
@@ -4784,7 +4784,8 @@
           "從案件清單查看下一步與接收同仁，進入物件詳情使用可用動作。部門只是篩選，接收人必須是具體同仁；指派或技師認領後仍須本人核對身分及實物簽收，原保管人持有至簽收完成。通知送達與已讀另行追蹤。",
           "技師交回處理品或未修原件後，由指定收發同仁逐件核對並本人 accept_return；WAITING_RETURN_ACCEPTANCE 期間仍由技師保管。只有成為 READY_FOR_DISPATCH 且本人保管的維修件，才登記寄回顧客的物流、單號並勾選已核對且實際交運。換機須核對實際替換品與 SN。",
           "寄出後查看獨立的「寄出紀錄」及承運商保管。「寄出同步：待串接」與「既有進度同步」分開，舊回執不能證明本次寄出已同步。入件單號保留在原收件單。若送出結果未知，先核對本次 requestId、版本、操作者與物流回執；未確認前以首次相同內容與 requestId 重試，不重登寄出。",
-          "未保存欄位或照片在關閉、換件、換動作及切換工作台時先確認；取消保留，明確放棄才離開，保存中不可切換。未知寄出結果獨立保留公司／本人／物件的原請求，重新進入或重新載入後先核對或沿原 body／requestId 明確重試。"
+          "未保存欄位或照片在關閉、換件、換動作及切換工作台時先確認；取消保留，明確放棄才離開，保存中不可切換。未知寄出結果獨立保留公司／本人／物件的原請求，重新進入或重新載入後先核對或沿原 body／requestId 明確重試。",
+          "首次在「印表機」設定配對接著 XP-235B 的 Mac，再選定該印表機；連接程式及 USB 標籤機保持開啟。之後按列印即送至配對電腦，不必每次開預覽或選紙張。預覽與瀏覽器列印另有明確入口。"
         ],
         "boundaries": [
           "工作台需先啟用，操作仍依公司、權限、逐件指派及目前進度限制；售後建案不代表實物已到貨。既有收發讀取不要求客服補建資格。在 sourceCases 待到貨來源清單，單獨維修讀取只顯示 REPAIR，合法客服全類讀取仍需完整補建本人與公司資格；原生 RETURN 整新物件讀取維持原資格。兼任者資格不成立時，只可依重新核實的原維修讀取顯示維修件；寫入本人、公司及接手守門保持獨立。",
@@ -4823,10 +4824,11 @@
           "初檢草稿只供收發作業；維修詳情只顯示節點、編輯人與時間，提交後才顯示該版結果、存檔項目名稱與授權照片。實收身份變更時舊初檢標為待重核，不當作目前結果。相片與正式維修媒體各自保留，不自動升格為正式完工證據。",
           "批次交辦依目前公司、本人權限、保管、實收身份、文件版次及來源狀態逐件核對。拒絕件不隨成功件前進；結果未知保留首次完整內容及批次／單件 requestId 原樣重試，已成功件回原回執，不重建案件或重複通知。已確認實收差異件沿原人工核對流程，不由批次改回一致。",
           "初檢批次僅建立新的既有售後進度待同步紀錄，不執行待送佇列或 AI 發送。待同步不是售後 ACK、AI 接收或真實顧客通知。原案及既有通知不因本功能重跑。",
-          "標籤 QR 只含同源公司與原生物件連結，不含登入憑證、電話或顧客姓名；讀取、登入及強制改密碼規則仍有效。列印開啟系統列印對話框；紙張、驅動與真機可讀性須以所選標籤機另外校對，不宣稱所有手機可直接藍牙列印。",
+          "標籤 QR 只含同源公司與原生物件連結，不含登入憑證、姓名、電話或問題；紙上顧客欄位僅取自已配對原售後案件，缺資料顯示未提供，不以內部備註或技師結論備援。讀取、登入及強制改密碼規則仍有效。直接列印限已校對的 XP-235B USB 設定，不宣稱所有手機可藍牙列印。",
           "貨架採薄層板與前後架柱的立體示意，每層仍是連續開放空間；手機位置標籤可換行。名稱為主、固定編碼為輔，件數依目前實物保管關聯計算；圖上箱體只作示意，不代表容量、固定隔間或精確箱數。",
           "品項差異的次要入口只回報 MISMATCH 並沿既有客服核對流程；不由此將物件設為一致或加入新初檢維修批次。此原有操作的同步與通知規則獨立於新的批次彙整。",
-          "新的登記收件入口沿用原收件核對與操作識別碼，只通知本次新建的信件／包裹領件人；售後收件及初檢交接只建立售後待同步事件，不新增 AI 客服通知，也不主動掃描既有待送佇列。原有背景同步仍依原設定運作，須查看本次事件回執才能確認送達。品項差異等既有命令保留原流程，不能將新入口的通知範圍推及所有操作。"
+          "新的登記收件入口沿用原收件核對與操作識別碼，只通知本次新建的信件／包裹領件人；售後收件及初檢交接只建立售後待同步事件，不新增 AI 客服通知，也不主動掃描既有待送佇列。原有背景同步仍依原設定運作，須查看本次事件回執才能確認送達。品項差異等既有命令保留原流程，不能將新入口的通知範圍推及所有操作。",
+          "配對與送印重驗公司、現行收發權限及在職資格；裝置憑證不取得一般系統登入或業務操作權。列印工作已接收／CUPS 已接收不等於已出紙、已貼標或已簽收。結果未知先查原工作，禁止自動重印、重收或重建案件；列印不改案件節點、付款、開票、庫存及通知。DEV 發布、配對與真實五欄標籤出紙／掃碼仍須獨立驗收。"
         ],
         "related": [
           "repair-workbench",
@@ -4856,7 +4858,7 @@
               "Select several pieces, open Batch preliminary checks and create their drafts to show work in progress. Starting and saving drafts record the document and editor without changing custody or sending repair handoff notifications. Test multiple devices, then use each pencil to complete and save its results.",
               "Choose a server-provided preliminary checklist for the linked actual product. The power-bank Pro preset covers built-in Type-C and Lightning cables, USB-C and USB-A output, and wireless charging. Results are Normal, Abnormal, Not tested or Not applicable. Incomplete drafts are allowed. Ready requires every mandatory check to be tested, abnormal notes and linked photos, and an explanation for Not applicable. Save an empty draft first when changing checklists.",
               "Select saved ready repair pieces and hand them to the repair department together. Each piece reports applied, rejected or unknown. Applied pieces enter the existing claim pool, with at most one internal summary per eligible technician per batch. Custody remains with the mailroom until personal acceptance. Returns retain AA/A/B/C grading and CSR review rather than entering this repair batch.",
-              "After receipt, select one or more pieces to print small 50 by 30 mm labels. Each has its own QR, case or receipt reference, product and unit identity, including distinct codes for multiple pieces in one case. A technician scans the printed URL or item identifier to open the original same-company item and submitted preliminary record. Login returns to that item when needed.",
+              "After receipt, print beside each item in All receipt records, or select several items for 50 by 30 mm labels. Each label has a QR, name, phone, case number and customer issue, with product/unit identity. Multiple pieces in one case retain distinct codes. Long text is shortened only on the label; the original case text remains intact. Scanning still requires login and same-company item access.",
               "Use the browser’s Add to Home Screen feature where supported to open a standalone workbench. Offline mode only shows a connection page; resume operations after reconnecting. It never stores or queues cases, photos or handoffs for offline replay.",
               "On the mailroom tablet, the assigned technician enters their employee number, password and configured verification code, then confirms physical receipt. The clerk stays signed in.",
               "Returns require an item match, packaging, appearance, accessories, AA/A/B/C grade and at least one photo. Responsible customer service receives a separate inspection acknowledgment task.",
@@ -4871,7 +4873,8 @@
               "Read the next step and recipient in the item list, then use the available actions in item detail. A department is a filter; select a specific person. Assignment or technician claim still requires personal identity and physical acceptance. Custody stays with the current holder until acceptance; notification delivery and reading are tracked separately.",
               "When a technician returns a processed item or an unrepaired original, the assigned mailroom person checks each piece and personally performs accept_return. The technician retains custody during WAITING_RETURN_ACCEPTANCE. Only a REPAIR item in READY_FOR_DISPATCH with the clerk's current custody can record its outbound carrier/tracking and confirmation of actual handover. For replacements, verify the actual replacement product and serial number.",
               "After dispatch, review the separate Outbound record and carrier custody. Dispatch synchronization: integration pending is separate from Existing progress synchronization; prior acknowledgements do not prove this dispatch was synchronized. Incoming tracking stays on the original receipt. If the submission result is unknown, reconcile the current requestId, version, actor and logistics receipt; retry only the original body and requestId until confirmed, without registering another dispatch.",
-              "Confirm leaving when unsaved fields or photos exist, including drawer closure, another item/action, and workspace navigation. Cancellation keeps the draft; only explicit discard leaves, and saving blocks switching. An unknown dispatch result retains the original company/user/item request across remount/reload for explicit receipt reconciliation or an identical body/requestId retry."
+              "Confirm leaving when unsaved fields or photos exist, including drawer closure, another item/action, and workspace navigation. Cancellation keeps the draft; only explicit discard leaves, and saving blocks switching. An unknown dispatch result retains the original company/user/item request across remount/reload for explicit receipt reconciliation or an identical body/requestId retry.",
+              "First pair the Mac connected to the XP-235B in Printer settings and select that printer. Keep its connector and USB printer running. A print click then sends work directly to that paired computer, without opening a preview or choosing paper each time. Preview and browser printing remain separate explicit actions."
             ],
             "boundaries": [
               "The workbench must be enabled; operations still depend on company, grants, individual assignment and current progress. Creating a source case does not receive its physical goods. Existing mailroom read is independent of CSR intake eligibility. For the sourceCases awaiting-arrival source list, repair-only read shows REPAIR, while full CSR read still requires intake identity and company eligibility. Native RETURN refurbishment items retain their existing read eligibility. An ineligible combined CSR/repair role may retain only freshly verified repair read. Personal acceptance and write gates remain independent.",
@@ -4910,10 +4913,11 @@
               "Draft content stays in mailroom work. Repair detail shows only stage, editor and time until submission; then it shows that recorded revision’s results, saved labels and authorized photos. Changed actual identity makes old results stale. Preliminary evidence remains separate from formal repair media and does not become completion proof.",
               "Batch handoff checks current company, personal grants, custody, actual identity, document revision and source state for each piece. Rejected pieces do not advance. Retry unknown outcomes with the original complete body and batch/child request IDs; successful children return their immutable receipt without recreating cases or notifications. Previously confirmed actual discrepancies retain their existing manual workflow.",
               "Preliminary batches only create new pending records in the existing after-sales progress channel; they do not drain queues or send AI messages. Pending is not a source ACK, AI receipt or customer notification. Existing cases and notifications are not replayed.",
-              "Label QR data contains only the same-origin company/item link, not credentials, phone or customer name. Read grants, login and mandatory password changes still apply. Printing opens the system dialog; paper, drivers and scan quality require separate checks with the chosen printer. Direct Bluetooth printing is not promised for every phone.",
+              "Label QR data contains only the same-origin company/item link, not credentials, name, phone or issue text. Printed customer fields come only from the linked original after-sales case; missing data is marked unavailable, never replaced with internal notes or a technician assessment. Read grants, login and mandatory password changes still apply. Direct printing supports the calibrated XP-235B USB profile; universal phone Bluetooth printing is not promised.",
               "The rack uses thin shelves and front/back posts to suggest depth while each tier remains open and continuous. Mobile position labels may wrap. Names lead and stable codes remain secondary. Counts follow current physical custody links; decorative boxes do not represent capacity, fixed dividers or exact carton counts.",
               "The secondary discrepancy entry only reports MISMATCH through the existing CSR verification workflow. It cannot mark the item matched or add it to the new preliminary repair batch. Its existing sync and notification rules remain separate from new batch summaries.",
-              "The new receipt entry retains native validation and request identifiers. It notifies only recipients of newly registered correspondence and parcels; source-linked receipts and preliminary handoff create after-sales pending events without new AI customer-service events or an explicit scan of existing delivery queues. Existing background synchronization follows its original settings; inspect the specific event receipt to establish delivery. Legacy commands such as mismatch inspection retain their original behavior; the new-entry notification boundary does not apply to every operation."
+              "The new receipt entry retains native validation and request identifiers. It notifies only recipients of newly registered correspondence and parcels; source-linked receipts and preliminary handoff create after-sales pending events without new AI customer-service events or an explicit scan of existing delivery queues. Existing background synchronization follows its original settings; inspect the specific event receipt to establish delivery. Legacy commands such as mismatch inspection retain their original behavior; the new-entry notification boundary does not apply to every operation.",
+              "Pairing and printing recheck company, current mailroom grants and active employment. Device credentials do not grant normal system login or business actions. A queued job or CUPS acceptance does not prove paper output, attachment or custody acceptance. Unknown outcomes require reading the original job, never automatic reprinting, receiving again or recreating a case. Printing does not change case stages, payments, invoices, inventory or notifications. DEV release, pairing and actual five-field output/scanning need separate acceptance."
             ],
             "related": [
               "repair-workbench",
@@ -5019,7 +5023,22 @@
         "frontend/src/pages/repair/RepairPrecheckReadOnly.tsx",
         "frontend/src/pages/repair/repair-model.ts",
         "frontend/src/pages/repair/RepairWorkbenchPage.tsx",
-        "frontend/src/pages/repair/RepairPrecheckQueue.tsx"
+        "frontend/src/pages/repair/RepairPrecheckQueue.tsx",
+        "docs/copilot/mailroom-label-print.md",
+        "backend/src/modules/mailroom/mailroom-label.contract.ts",
+        "backend/src/modules/mailroom/mailroom-label.controller.ts",
+        "backend/src/modules/mailroom/mailroom-label.dto.ts",
+        "backend/src/modules/mailroom/mailroom-label.service.ts",
+        "backend/src/modules/mailroom/mailroom-label.export.ts",
+        "backend/src/modules/mailroom/printing/mailroom-print.auth.ts",
+        "backend/src/modules/mailroom/printing/mailroom-print.contract.ts",
+        "backend/src/modules/mailroom/printing/mailroom-print.controller.ts",
+        "backend/src/modules/mailroom/printing/mailroom-print.dto.ts",
+        "backend/src/modules/mailroom/printing/mailroom-print.service.ts",
+        "backend/src/modules/b2b/b2b-auth.guard.ts",
+        "frontend/src/services/mailroom-print.ts",
+        "frontend/src/pages/mailroom/MailroomPrinterSettings.tsx",
+        "backend/prisma/migrations/20261027080000_mailroom_direct_print/migration.sql"
       ],
       "permissions": [
         "mailroom:read"
