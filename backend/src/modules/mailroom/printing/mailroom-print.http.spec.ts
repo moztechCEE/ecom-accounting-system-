@@ -322,6 +322,101 @@ describe('actual Nest global device verifier and existing JWT pipeline over loop
     expect(f.labels.read).not.toHaveBeenCalled();
     expect(f.jobs.size).toBe(0);
   });
+  it('previews display-only edits through normal staff/company/Origin authorization without creating a job', async () => {
+    const response = await browserPost('print-label-preview')
+      .send({
+        entityId: COMPANY,
+        itemId: ITEM,
+        labelEdit: {
+          expectedVersion: 3,
+          customerName: '王小明',
+          customerIssue: '無法充電',
+        },
+      })
+      .expect(201)
+      .expect('Content-Type', /application\/pdf/)
+      .expect('Cache-Control', 'private, no-store');
+    expect(Buffer.from(response.body).toString()).toBe('%PDF-SYNTHETIC-PDF');
+    expect(f.jobs.size).toBe(0);
+    expect(f.db.mailroomPrintJob.create).not.toHaveBeenCalled();
+    expect(f.db.mailroomPrintJob.updateMany).not.toHaveBeenCalled();
+    expect(f.db.mailroomPrintDevice.findFirst).not.toHaveBeenCalled();
+    expect(f.oldBusiness).not.toHaveBeenCalled();
+  });
+  it('rejects nested display injection, nulls, duplicate identities and mismatched preview identities before rendering', async () => {
+    const attacks = [
+      { itemId: ITEM, qrLink: 'https://evil.example.test' },
+      { itemId: ITEM, customerName: null },
+      { itemId: ITEM, customerIssue: 'A\nB' },
+      { itemId: ITEM, productName: '字'.repeat(121) },
+      { itemId: DEVICE, customerName: 'Other item' },
+    ];
+    for (const labelEdit of attacks)
+      await browserPost('print-label-preview')
+        .send({ entityId: COMPANY, itemId: ITEM, labelEdit })
+        .expect(400);
+    await browserPost('print-label-preview')
+      .send({ entityId: COMPANY, itemId: ITEM, labelEdit: null })
+      .expect(400);
+    await browserPost('print-jobs')
+      .send({ ...f.body(), labelEdits: [{ customerName: 'No identity' }] })
+      .expect(400);
+    await browserPost('print-jobs')
+      .send({ ...f.body(), labelEdits: [{ itemId: ITEM }, { itemId: ITEM }] })
+      .expect(400);
+    await browserPost('print-jobs')
+      .send({ ...f.body(), labelEdits: [{ itemId: ITEM, pdf: '%PDF-forged' }] })
+      .expect(400);
+    expect(f.labels.read).not.toHaveBeenCalled();
+    expect(f.exporter.pdfMany).not.toHaveBeenCalled();
+    expect(f.jobs.size).toBe(0);
+  });
+  it('denies preview to cross-company staff, foreign origins and printer capabilities', async () => {
+    const body = { entityId: COMPANY, itemId: ITEM };
+    await browserPost('print-label-preview')
+      .send({ ...body, entityId: OTHER_COMPANY })
+      .expect(403);
+    await request(url)
+      .post('/api/v1/mailroom/print-label-preview')
+      .set('Authorization', 'Bearer ' + tokenFor())
+      .set('Origin', 'https://evil.example.test')
+      .send(body)
+      .expect(403);
+    await request(url)
+      .post('/api/v1/mailroom/print-label-preview')
+      .set('x-corely-print-device', DEVICE)
+      .set('Authorization', 'Bearer ' + TOKEN)
+      .set('Origin', 'https://erp.example.test')
+      .send(body)
+      .expect(401);
+    expect(f.labels.read).not.toHaveBeenCalled();
+    expect(f.jobs.size).toBe(0);
+    expect(f.oldBusiness).not.toHaveBeenCalled();
+  });
+  it('returns an actionable version conflict for stale display-only preview and print, without a job or PDF', async () => {
+    const labelEdit = {
+      itemId: ITEM,
+      expectedVersion: 2,
+      customerIssue: '舊版文字',
+    };
+    for (const response of [
+      await browserPost('print-label-preview')
+        .send({ entityId: COMPANY, itemId: ITEM, labelEdit })
+        .expect(409),
+      await browserPost('print-jobs')
+        .send({ ...f.body(), labelEdits: [labelEdit] })
+        .expect(409),
+    ]) {
+      expect(response.body).toEqual({
+        code: 'LABEL_VERSION_CHANGED',
+        message: '物件已更新，請重新載入標籤',
+      });
+    }
+    expect(f.exporter.pdfMany).not.toHaveBeenCalled();
+    expect(f.jobs.size).toBe(0);
+    expect(f.db.mailroomPrintJob.create).not.toHaveBeenCalled();
+    expect(f.oldBusiness).not.toHaveBeenCalled();
+  });
   it('returns same-device terminal 409 proof for expiry ACK races while cross-device 404 has no proof', async () => {
     const body = f.body();
     const made = await browserPost('print-jobs').send(body).expect(201);

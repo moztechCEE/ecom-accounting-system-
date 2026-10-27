@@ -7,3 +7,17 @@
 .mailroom-label-preview .mailroom-label-name{font-size:7.5pt;font-weight:700;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .mailroom-label-preview .mailroom-label-phone{margin:.6mm 0;font-size:6.5pt}
 .mailroom-label-preview .mailroom-label-issue{font-size:6.5pt;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.mailroom-label-preview .mailroom-label-product{font-size:6pt;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;margin:.4mm 0}
+.mailroom-label-editor-layout{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:20px;margin-top:16px;align-items:start}
+.mailroom-label-fields .ant-form-item{margin-bottom:12px}
+.mailroom-label-preview-caption{display:block;font-size:12px;text-align:center}
+.mailroom-label-pdf{display:grid;gap:8px;margin-top:12px}
+.mailroom-label-pdf iframe{width:100%;height:250px;border:1px solid #e2e7ec;border-radius:6px}
+.mailroom-print-progress{font-size:12px;color:#596579;max-width:140px;overflow-wrap:anywhere}
+.mailroom-label-more.ant-btn{width:28px;padding-inline:6px}
+@media(max-width:575px){.mailroom-label-editor-layout{grid-template-columns:minmax(0,1fr);gap:8px}.mailroom-label-editor .ant-modal-footer .ant-space{display:flex}.mailroom-label-editor .ant-modal-footer .ant-space-item{max-width:100%}}
+.mailroom-label-editor{top:32px;padding-bottom:0}
+.mailroom-label-editor .ant-modal-content{display:flex;flex-direction:column;max-height:calc(100dvh - 64px)}
+.mailroom-label-editor .ant-modal-body{min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.mailroom-label-editor .ant-modal-header,.mailroom-label-editor .ant-modal-footer{flex-shrink:0}
+@media(max-width:575px){.mailroom-label-editor{top:16px}.mailroom-label-editor .ant-modal-content{max-height:calc(100dvh - 32px)}}

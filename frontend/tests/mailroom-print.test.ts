@@ -194,3 +194,74 @@ test('only an explicit POST 409 followed by an authorized same-request 404 retir
   assert.equal(JSON.parse([...timedOut.session.values.values()][0]).length, 1)
   assert.equal(timedOut.posts.length, 1)
 })
+
+test('edited print payload is passed once while session receipts contain only an opaque content hash', async () => {
+  const f = fixture()
+  const edit = { itemId: itemA, expectedVersion: 12, customerName: ' 合成姓名 ', customerPhone: '0900-SECRET', productName: '萬能充 Pro', customerIssue: ' USB-C   無法輸出 ', caseNumber: '短案號' }
+  await f.direct()({ ...request(), labelEdits: [edit] })
+  assert.equal(f.posts.length, 1)
+  assert.deepEqual((f.posts[0] as { labelEdits: unknown }).labelEdits, [{ itemId: itemA, expectedVersion: 12, caseNumber: '短案號', customerName: '合成姓名', customerPhone: '0900-SECRET', productName: '萬能充 Pro', customerIssue: 'USB-C 無法輸出' }])
+  const serialized = [...f.session.values.values()].join(''), record = JSON.parse(serialized)[0]
+  assert.match(record.contentHash, /^[0-9a-f]{64}$/)
+  for (const value of ['合成姓名', '0900-SECRET', '短案號', 'customerName', 'customerPhone', 'customerIssue', 'labelEdits']) assert.ok(!serialized.includes(value), value)
+})
+test('different edited text reconciles an older terminal job without swallowing the edit or creating a same-click reprint', async () => {
+  const f = fixture(), original = request()
+  await f.direct()(original)
+  f.setExisting({ id: jobId, requestId: original.requestId, deviceId, status: 'SUBMITTED' })
+  const edited = { ...request(), labelEdits: [{ itemId: itemA, expectedVersion: 12, customerIssue: '新的精簡內容' }] }
+  await assert.rejects(f.direct()(edited), /已查詢上筆列印結果/)
+  assert.equal(f.posts.length, 1)
+  assert.equal(JSON.parse([...f.session.values.values()][0]).length, 0)
+  await f.direct()({ ...edited, requestId: crypto.randomUUID() })
+  assert.equal(f.posts.length, 2)
+  assert.equal((f.posts[1] as { labelEdits: { customerIssue: string }[] }).labelEdits[0].customerIssue, '新的精簡內容')
+})
+test('changed edits cannot bypass UNKNOWN or active work, while canonical equivalent edits resolve only their existing job', async () => {
+  const f = fixture(), first = { ...request(), labelEdits: [{ itemId: itemA, expectedVersion: 12, customerIssue: ' USB   故障 ' }] }
+  await f.direct()(first)
+  f.setExisting({ id: jobId, requestId: first.requestId, deviceId, status: 'UNKNOWN' })
+  await assert.rejects(f.direct()({ ...request(), labelEdits: [{ itemId: itemA, expectedVersion: 12, customerIssue: '另一次內容' }] }), /已查詢上筆/)
+  assert.equal(f.posts.length, 1); assert.equal(JSON.parse([...f.session.values.values()][0]).length, 1)
+  f.setExisting({ id: jobId, requestId: first.requestId, deviceId, status: 'SUBMITTED' })
+  const result = await f.direct()({ ...request(), labelEdits: [{ customerIssue: 'USB 故障', expectedVersion: 12, itemId: itemA }] })
+  assert.equal(result.status, 'accepted'); assert.equal(f.posts.length, 1)
+})
+test('bounded job observation shows actual server stages and stops without issuing any second print POST', async () => {
+  const f = fixture(), stages: string[] = [], originalGet = f.api.get
+  let reads = 0
+  f.api.get = async (path, config) => {
+    if (path.includes('/by-request/')) {
+      reads++
+      const body = f.posts[0] as { requestId: string }
+      return { data: { id: jobId, requestId: body.requestId, deviceId, status: reads === 1 ? 'SUBMITTING' : 'SUBMITTED' } }
+    }
+    return originalGet(path, config)
+  }
+  const result = await f.direct()({ ...request(), onProgress: value => stages.push(value) })
+  assert.deepEqual(stages, ['製作標籤', '等待電腦接收', '印表機處理中', '已送至印表機'])
+  assert.equal(result.status, 'accepted'); assert.equal(result.message, '已送至印表機')
+  assert.equal(f.posts.length, 1); assert.equal(reads, 2)
+  assert.equal(JSON.parse([...f.session.values.values()][0]).length, 0)
+})
+test('stale edited version gets an exact reload blocker only after an authorized no-job readback', async () => {
+  for (const readStatus of [404, 403]) {
+    const f = fixture()
+    f.setPostError({ response: { status: 409, data: { code: 'LABEL_VERSION_CHANGED' } } })
+    const get = f.api.get
+    f.api.get = async (path, config) => {
+      if (path.includes('/by-request/')) { f.gets.push(path); throw { response: { status: readStatus } } }
+      return get(path, config)
+    }
+    const edited = { ...request(), labelEdits: [{ itemId: itemA, expectedVersion: 12, customerIssue: '短摘要' }] }
+    if (readStatus === 404) await assert.rejects(f.direct()(edited), /物件已更新，請重新開啟標籤編輯/)
+    else assert.equal((await f.direct()(edited)).status, 'unknown')
+    assert.equal(f.posts.length, 1); assert.equal(f.gets.filter(path => path.includes('/by-request/')).length, 1)
+    assert.equal(JSON.parse([...f.session.values.values()][0]).length, readStatus === 404 ? 0 : 1)
+  }
+})
+test('PDF error blobs decode only bounded JSON and preserve the exact stale-editor message', async () => {
+  const { previewErrorText } = await import('../src/services/mailroom-print.ts')
+  assert.equal(await previewErrorText({ response: { status: 409, data: new Blob([JSON.stringify({ code: 'LABEL_VERSION_CHANGED' })], { type: 'application/json' }) } }), '物件已更新，請重新開啟標籤編輯')
+  for (const data of [new Blob(['not json'], { type: 'application/json' }), new Blob(['x'.repeat(8193)], { type: 'application/json' }), new Blob(['<html>'], { type: 'text/html' })]) assert.equal(await previewErrorText({ response: { status: 409, data } }), '標籤資料已更新，請重新開啟標籤編輯')
+})

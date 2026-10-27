@@ -170,7 +170,7 @@
 .mailroom-selected-source { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:18px; }
 .mailroom-receiving-actions { margin-bottom:12px; }
 .mailroom-receipt-labels { display:inline-flex; align-items:center; flex-wrap:wrap; gap:8px; }
-.mailroom-receiving-row,.mailroom-receiving-head { display:grid; grid-template-columns:28px 72px minmax(0,1fr) minmax(150px,.6fr) 96px; gap:14px; align-items:center; padding:14px 0; }
+.mailroom-receiving-row,.mailroom-receiving-head { display:grid; grid-template-columns:28px 72px minmax(0,1fr) minmax(150px,.6fr) 140px; gap:14px; align-items:center; padding:14px 0; }
 .mailroom-receiving-head { color:#596579; font-size:13px; border-bottom:1px solid #e7ebf0; }
 .mailroom-receiving-row { border-bottom:1px solid #e7ebf0; }
 .mailroom-receiving-photo { width:72px; height:72px; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); place-items:center; overflow:hidden; border:0; border-radius:8px; background:#f3f6fa; color:#68778a; cursor:zoom-in; padding:4px; }
@@ -184,8 +184,9 @@
 .mailroom-receiving-identity,.mailroom-receiving-stage { min-width:0; overflow-wrap:anywhere; }
 .mailroom-receiving-identity .ant-typography { font-size:12px; }
 .mailroom-receiving-stage .ant-tag { margin-bottom:4px; white-space:normal; }
-.mailroom-receiving-row-actions { display:flex; gap:8px; align-items:center; }
-.mailroom-receiving-edit.ant-btn,.mailroom-receiving-print.ant-btn { width:44px; height:44px; flex:none; }
+.mailroom-receiving-row-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.mailroom-receiving-row-actions .mailroom-print-progress { flex-basis:100%; text-align:right; }
+.mailroom-receiving-edit.ant-btn,.mailroom-receiving-print.ant-btn,.mailroom-receiving-row-actions .mailroom-label-more.ant-btn { width:44px; height:44px; flex:none; }
 .mailroom-receiving-pagination { margin-top:18px; width:100%; justify-content:flex-end; }
 .mailroom-precheck-navigation { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; margin-bottom:20px; }
 .mailroom-precheck-template { display:flex; gap:8px; margin:18px 0; }

@@ -4,13 +4,18 @@ import {
   ArrayUnique,
   IsArray,
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
   MaxLength,
+  Min,
+  ValidateIf,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { MailroomLabelQuery } from '../mailroom-label.dto';
 import {
   CAPABILITY,
@@ -26,6 +31,48 @@ export class PairPrintDeviceDto extends PrintEntityDto {
   @MaxLength(40)
   name!: string;
 }
+class LabelDisplayFieldsDto {
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsInt()
+  @Min(1)
+  expectedVersion?: number;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(64)
+  caseNumber?: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(80)
+  customerName?: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(40)
+  customerPhone?: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(120)
+  productName?: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(300)
+  customerIssue?: string;
+}
+export class PreviewLabelEditDto extends LabelDisplayFieldsDto {
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsUUID()
+  itemId?: string;
+}
+export class PrintLabelEditDto extends LabelDisplayFieldsDto {
+  @IsUUID()
+  itemId!: string;
+}
+export class PreviewPrintLabelDto extends PrintEntityDto {
+  @IsUUID() itemId!: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @ValidateNested()
+  @Type(() => PreviewLabelEditDto)
+  labelEdit?: PreviewLabelEditDto;
+}
 export class CreatePrintJobDto extends PrintEntityDto {
   @IsUUID() deviceId!: string;
   @IsUUID() requestId!: string;
@@ -35,6 +82,12 @@ export class CreatePrintJobDto extends PrintEntityDto {
   @ArrayUnique()
   @IsUUID('all', { each: true })
   itemIds!: string[];
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => PrintLabelEditDto)
+  labelEdits?: PrintLabelEditDto[];
   @IsOptional() @IsUUID() reprintOf?: string;
 }
 export class RedeemPrintDeviceDto {

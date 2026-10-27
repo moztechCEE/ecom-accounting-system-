@@ -6,6 +6,7 @@ import {
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { canonical } from '../mailroom.contract';
 import { labelOrigin } from '../mailroom-label.contract';
+import type { PrintLabelEdit } from './mailroom-print-label-edit.contract';
 
 export const PRINT_PROFILE = 'xp235b-50x30-v1';
 export const PAIR_TTL_MS = 5 * 60_000;
@@ -67,6 +68,7 @@ export function requestFingerprint(body: {
   deviceId: string;
   itemIds: string[];
   reprintOf?: string;
+  labelEdits?: PrintLabelEdit[];
 }) {
   return hash(
     canonical({
@@ -75,6 +77,7 @@ export function requestFingerprint(body: {
       itemIds: body.itemIds,
       reprintOf: body.reprintOf || null,
       profile: PRINT_PROFILE,
+      ...(body.labelEdits?.length ? { labelEdits: body.labelEdits } : {}),
     }),
   );
 }

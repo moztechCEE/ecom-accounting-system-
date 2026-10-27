@@ -19,6 +19,7 @@ import {
   PrintDevicePollDto,
   PrintEntityDto,
   PrintReceiptDto,
+  PreviewPrintLabelDto,
   RedeemPrintDeviceDto,
 } from './mailroom-print.dto';
 import { MailroomPrintService } from './mailroom-print.service';
@@ -57,6 +58,20 @@ export class MailroomPrintController {
   create(@Req() req: BrowserRequest, @Body() body: CreatePrintJobDto) {
     requireBrowserOrigin(req.headers.origin);
     return this.service.create(req.user.id, body);
+  }
+  @Post('print-label-preview')
+  @Header('Cache-Control', 'private, no-store')
+  async preview(
+    @Req() req: BrowserRequest,
+    @Body() body: PreviewPrintLabelDto,
+  ) {
+    requireBrowserOrigin(req.headers.origin);
+    const pdf = await this.service.preview(req.user.id, body);
+    return new StreamableFile(pdf, {
+      type: 'application/pdf',
+      length: pdf.length,
+      disposition: 'inline; filename="label-preview.pdf"',
+    });
   }
   @Get('print-jobs/by-request/:requestId')
   @Header('Cache-Control', 'private, no-store')

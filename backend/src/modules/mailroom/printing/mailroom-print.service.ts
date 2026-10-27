@@ -42,9 +42,16 @@ import {
 import type {
   CreatePrintJobDto,
   PairPrintDeviceDto,
+  PreviewPrintLabelDto,
   PrintReceiptDto,
   RedeemPrintDeviceDto,
 } from './mailroom-print.dto';
+import {
+  editedLabel,
+  labelVersionConflict,
+  normalizeLabelEdit,
+  normalizeLabelEdits,
+} from './mailroom-print-label-edit.contract';
 
 type Tx = Prisma.TransactionClient;
 const isTerminal = (state: string) =>
@@ -382,11 +389,13 @@ export class MailroomPrintService {
     if (new Set(itemIds).size !== itemIds.length)
       throw new BadRequestException('物件不能重複');
     if (body.reprintOf) requireUuid(body.reprintOf);
+    const labelEdits = normalizeLabelEdits(body.labelEdits, itemIds);
     return {
       entityId: body.entityId,
       deviceId: body.deviceId.toLowerCase(),
       requestId: body.requestId.toLowerCase(),
       itemIds,
+      ...(labelEdits.length ? { labelEdits } : {}),
       ...(body.reprintOf ? { reprintOf: body.reprintOf.toLowerCase() } : {}),
     };
   }
@@ -437,10 +446,15 @@ export class MailroomPrintService {
     const prior = await this.original(this.db, userId, body, requestHash);
     if (prior) return this.view(prior);
     await this.usableDevice(this.db, body.entityId, body.deviceId);
-    // Fresh company-scoped server data only. Caller never supplies document contents or QR data.
+    // Fresh company-scoped identity/QR only; the allowlisted edits affect this PDF's text.
     const labels: MailroomLabel[] = [];
     for (const id of body.itemIds)
-      labels.push(await this.labels.read(userId, body.entityId, id));
+      labels.push(
+        editedLabel(
+          await this.labels.read(userId, body.entityId, id),
+          body.labelEdits?.find((edit) => edit.itemId === id),
+        ),
+      );
     const pdf = await this.exporter.pdfMany(labels);
     if (
       !Buffer.isBuffer(pdf) ||
@@ -474,7 +488,7 @@ export class MailroomPrintService {
               ),
           )
         )
-          throw new ConflictException('物件已更新，請重新載入標籤');
+          throw labelVersionConflict();
         await this.expire(tx, body.entityId);
         // Serializable predicate reads also prevent overlapping batches/rows across
         // tabs, actors and devices from both observing no active work and inserting.
@@ -551,6 +565,44 @@ export class MailroomPrintService {
       }
       throw error;
     }
+  }
+  async preview(userId: string, body: PreviewPrintLabelDto): Promise<Buffer> {
+    requireUuid(body.itemId);
+    const itemId = body.itemId.toLowerCase();
+    const edit =
+      body.labelEdit === undefined
+        ? undefined
+        : normalizeLabelEdit(body.labelEdit, itemId);
+    await this.scope(userId, body.entityId);
+    const label = editedLabel(
+      await this.labels.read(userId, body.entityId, itemId),
+      edit,
+    );
+    // Use precisely the same exporter as a real job; preview never creates or expires jobs.
+    const pdf = await this.exporter.pdfMany([label]);
+    if (
+      !Buffer.isBuffer(pdf) ||
+      pdf.length < 5 ||
+      pdf.length > MAX_PDF_BYTES ||
+      pdf.subarray(0, 5).toString() !== '%PDF-'
+    )
+      throw new ServiceUnavailableException('標籤文件產生失敗');
+    await this.scope(userId, body.entityId);
+    const items = await this.db.mailroomItem.findMany({
+      where: {
+        id: { in: [itemId] },
+        entityId: body.entityId,
+        receipt: { entityId: body.entityId },
+      },
+      select: { id: true, version: true },
+    });
+    if (
+      items.length !== 1 ||
+      items[0].id !== label.id ||
+      items[0].version !== label.version
+    )
+      throw labelVersionConflict();
+    return pdf;
   }
   async status(userId: string, entityId: string, id: string) {
     requireUuid(id);
