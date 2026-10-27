@@ -1,13 +1,25 @@
 export const PRECHECK_RESULTS = { NORMAL: '正常', ABNORMAL: '異常', NOT_TESTED: '未測試', NOT_APPLICABLE: '不適用' } as const;
 export type PrecheckResult = keyof typeof PRECHECK_RESULTS;
 export const PRECHECK_STAGES: Record<string, string> = { NOT_STARTED: '待初檢', DRAFT: '初檢草稿', READY: '初檢完成', SUBMITTED: '已交維修部門', STALE: '實物資料已更新' };
+export function receivingPrecheckStageLabel(stage: string, itemStatus: string): string {
+  if (stage === 'NOT_STARTED' && ['WAITING_RETURN_ACCEPTANCE', 'READY_FOR_DISPATCH', 'DISPATCHED', 'PENDING_WELFARE_STOCK', 'STOCKED'].includes(itemStatus)) return '未留初檢紀錄';
+  return PRECHECK_STAGES[stage] || stage;
+}
 export type PrecheckBinding = { id: string; revision: number; contentHash: string };
 export type PrecheckCheck = { key: string; result: PrecheckResult; note?: string; evidenceIndexes?: number[] };
+export const WARRANTY_REVIEW_STATUSES = { CHECKED: '已人工核對', NEEDS_CORRECTION: '待修正', CORRECTED_EXTERNALLY: '已於保固後台修正' } as const;
+export type WarrantyReviewStatus = keyof typeof WARRANTY_REVIEW_STATUSES;
+export type PrecheckSupplementInput = {
+  warrantyReview?: { status: WarrantyReviewStatus; note?: string | null; warrantyNumber?: string | null } | null;
+  mailroomIssue?: { symptom?: string | null; preliminaryReason?: string | null } | null;
+};
 export type PrecheckSummary = { stage: string; revision: number; savedById: string | null; savedByName: string | null; savedAt: string | null; submittedAt?: string | null };
 export type PrecheckDocument = {
   contentHash?: string; revision: number; status: 'DRAFT' | 'READY' | 'SUBMITTED'; identityHash: string;
   templateBinding: PrecheckBinding | null; checks: PrecheckCheck[]; evidence: string[]; notRequiredReason: string | null;
   savedById: string; savedByName: string; savedAt: string;
+  warrantyReview?: { schema: 1; method: 'MANUAL_EXTERNAL'; status: WarrantyReviewStatus; note: string | null; warrantyNumber?: string | null; recordedById: string; recordedByName: string; recordedAt: string } | null;
+  mailroomIssue?: { schema: 1; symptom: string | null; preliminaryReason: string | null } | null;
 };
 export type PrecheckTemplate = PrecheckBinding & { title?: string; productId?: string; sku?: string; checks: { key: string; label: string; required: boolean }[] };
 export type PrecheckRead = {
@@ -19,12 +31,27 @@ export type PrecheckRead = {
   capabilities: { canStart: boolean; canSave: boolean; canMarkReady: boolean; canHandoff: boolean; reason: string | null };
   custody: { custodianId: string; location: string; storageLocationId: string | null };
 };
-export type PrecheckValues = { checks: PrecheckCheck[]; evidence: string[]; notRequiredReason?: string };
+export type PrecheckValues = {
+  checks: PrecheckCheck[]; evidence: string[]; notRequiredReason?: string;
+  warrantyReview?: { status?: WarrantyReviewStatus; note?: string; warrantyNumber?: string };
+  mailroomIssue?: { symptom?: string; preliminaryReason?: string };
+};
 export function precheckValues(record: PrecheckRead): PrecheckValues {
   const saved = record.document;
-  return { checks: record.template.template?.checks.map(check => ({ key: check.key, result: 'NOT_TESTED' as const, ...saved?.checks.find(row => row.key === check.key) })) || [], evidence: saved?.evidence || [], notRequiredReason: saved?.notRequiredReason || undefined };
+  return { checks: record.template.template?.checks.map(check => ({ key: check.key, result: 'NOT_TESTED' as const, ...saved?.checks.find(row => row.key === check.key) })) || [], evidence: saved?.evidence || [], notRequiredReason: saved?.notRequiredReason || undefined,
+    warrantyReview: { status: saved?.warrantyReview?.status, note: saved?.warrantyReview?.note || undefined, warrantyNumber: saved?.warrantyReview?.warrantyNumber || undefined },
+    mailroomIssue: { symptom: saved?.mailroomIssue?.symptom || undefined, preliminaryReason: saved?.mailroomIssue?.preliminaryReason || undefined },
+  };
+}
+export function precheckSupplementInput(values: PrecheckValues): PrecheckSupplementInput {
+  const review = values.warrantyReview, symptom = values.mailroomIssue?.symptom?.trim() || null, preliminaryReason = values.mailroomIssue?.preliminaryReason?.trim() || null;
+  return {
+    warrantyReview: review?.status ? { status: review.status, note: review.note?.trim() || null, warrantyNumber: review.warrantyNumber?.trim() || null } : null,
+    mailroomIssue: symptom || preliminaryReason ? { symptom, preliminaryReason } : null,
+  };
 }
 export function precheckValidation(record: PrecheckRead, values: PrecheckValues, ready: boolean): string | undefined {
+  if ((values.warrantyReview?.note?.trim() || values.warrantyReview?.warrantyNumber?.trim()) && !values.warrantyReview?.status) return '請選擇保固核對狀態';
   if (!ready) return;
   for (const check of values.checks) {
     const name = record.template.template?.checks.find(row => row.key === check.key)?.label || check.key;

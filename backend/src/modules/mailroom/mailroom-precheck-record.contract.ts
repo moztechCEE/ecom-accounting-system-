@@ -8,6 +8,7 @@ import {
   type PrecheckData,
 } from './mailroom-precheck.contract';
 import type { PrecheckTemplate } from './mailroom-precheck.templates';
+import { precheckContext } from './mailroom-precheck-context.contract';
 
 /** Only submitted, current-identity documents may leave the draft workspace. */
 export function recordedPrecheck(
@@ -66,6 +67,7 @@ export function recordedPrecheck(
       savedAt: new Date(doc.savedAt).toISOString(),
       submittedAt: new Date(doc.submittedAt).toISOString(),
       notRequiredReason: data.notRequiredReason ?? null,
+      ...precheckContext(data),
       checks: (data.checks ?? []).map((check) => ({
         key: check.key,
         label:

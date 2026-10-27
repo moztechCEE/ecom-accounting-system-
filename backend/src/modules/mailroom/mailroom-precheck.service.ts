@@ -26,6 +26,10 @@ import { caseIntake } from './mailroom-intake.contract';
 import { repairPhoto } from './repair-list.contract';
 import { recordedPrecheckPhoto } from './mailroom-precheck-record.contract';
 import {
+  precheckContext,
+  savePrecheckContext,
+} from './mailroom-precheck-context.contract';
+import {
   precheckIdentityHash,
   precheckContentHash,
   precheckItemBlocker,
@@ -179,6 +183,7 @@ export class MailroomPrecheckService {
       checks: data.checks,
       evidence: data.evidence,
       notRequiredReason: data.notRequiredReason,
+      ...precheckContext(data),
       savedById: doc.savedById,
       savedByName: doc.savedByName,
       savedAt: new Date(doc.savedAt).toISOString(),
@@ -599,7 +604,10 @@ export class MailroomPrecheckService {
         );
       if (changedTemplate && (input.status !== 'DRAFT' || input.checks.length))
         throw new BadRequestException('更換初檢表時請先清空檢查結果並保存草稿');
-      const data = validatePrecheckData(input, resolution);
+      const data = {
+        ...validatePrecheckData(input, resolution),
+        ...savePrecheckContext(input, doc.data, auth.actor, new Date()),
+      };
       const updated = await tx.mailroomPrecheckDocument.update({
         where: { id: doc.id, revision: doc.revision },
         data: {

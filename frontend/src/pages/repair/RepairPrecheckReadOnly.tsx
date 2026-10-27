@@ -24,6 +24,16 @@ export default function RepairPrecheckReadOnly({record,entityId,itemId}:{record:
       ...(record.templateTitle ? [{key:'template',label:'初檢表',children:`${record.templateTitle} · v${record.templateRevision}`}] : []),
     ]} />
     {record.notRequiredReason && <Descriptions size="small" column={1} items={[{key:'reason',label:'不需初檢原因',children:record.notRequiredReason}]} />}
+    {record.warrantyReview && <Descriptions size="small" column={1} items={[
+      {key:'warranty',label:'人工保固核對',children:({CHECKED:'已人工核對',NEEDS_CORRECTION:'待修正',CORRECTED_EXTERNALLY:'已於保固後台修正'} as const)[record.warrantyReview.status]},
+      {key:'warranty-author',label:'核對紀錄',children:`${record.warrantyReview.recordedByName} · ${date(record.warrantyReview.recordedAt)}`},
+      ...(record.warrantyReview.warrantyNumber ? [{key:'warranty-number',label:'保固編號',children:record.warrantyReview.warrantyNumber}] : []),
+      ...(record.warrantyReview.note ? [{key:'warranty-note',label:'核對說明',children:record.warrantyReview.note}] : []),
+    ]} />}
+    {record.mailroomIssue && <Descriptions size="small" column={1} items={[
+      ...(record.mailroomIssue.symptom ? [{key:'symptom',label:'收發補充問題',children:record.mailroomIssue.symptom}] : []),
+      ...(record.mailroomIssue.preliminaryReason ? [{key:'preliminary',label:'原因初判',children:record.mailroomIssue.preliminaryReason}] : []),
+    ]} />}
     <ul style={{listStyle:'none',padding:0,margin:0}}>{record.checks.map(check=><li key={check.key} style={{marginBottom:12}}>
       <Space wrap><Typography.Text strong>{check.label}</Typography.Text><Tag color={check.result==='ABNORMAL'?'orange':undefined}>{RESULTS[check.result]}</Tag></Space>
       {check.note && <div style={{whiteSpace:'pre-wrap'}}>{check.note}</div>}

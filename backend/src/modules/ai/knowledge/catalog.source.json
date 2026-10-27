@@ -4767,6 +4767,8 @@
           "選擇既有產品可帶入實收名稱、SKU及產品條碼；找不到時可手動登記。SN只能掃描或輸入實物序號，選產品不產生新SN。一般信件與包裹填公司或寄件人姓名、內容及具體收件同仁，不填SKU或SN。",
           "維修、退貨及找不到案件的實收物件，每件至少留一張照片；信件與包裹可選填。點拍照開啟裝置相機並確認照片，也可從相簿補入；無相機支援時由裝置拍照入口接續。核對摘要後才確認登記。收件清單完整顯示縮圖，點照片可放大，點案件名稱仍開啟案件，點筆型圖示可回到當件初檢。無照片、無法預覽、載入失敗與載入中分別顯示；照片讀取失敗不代表未提供照片。",
           "勾選數件後點「批次初檢」，再「建立初檢草稿」，讓同仁知道這批已在初檢中。開始或保存草稿只記初檢文件與操作者，不改保管人、不送維修交接通知。可先測完幾台，再逐件用筆型編輯補填及保存。",
+          "在初檢編輯中，先按「開啟保固後台」，由收發人員以既有員工權限查核或修正購買憑證與保固日期，再回工作台填人工核對結果、選填保固編號與備註。系統保存本次記錄人及時間；這是人員核對紀錄，不代表自動同步或代寫保固主檔。",
+          "以「收發補充問題」及「原因初判」保存現場所見，與逐項功能檢測分開。可先保存草稿再補測；換初檢表保留已保存的保固核對與問題紀錄。貼紙的產品問題仍取客服原述，補充紀錄不覆蓋原文。完成初檢後可回收件清單列印，再依原流程批次交接。",
           "初檢依已關聯的實收產品選擇伺服器提供的初檢表；萬能充 Pro 表包含自帶 Type-C 線、Lightning 線、USB-C 輸出、USB-A 輸出及無線充電。各項選正常、異常、未測或不適用。草稿允許未填完；標為可交接前，必要項目不可未測，異常須說明及對應照片，不適用須原因。換表先保存清空結果的草稿。",
           "勾選已保存為可交接的維修件，再一次交維修部門。系統逐件回報成功、拒絕或結果待確認；成功件進既有待認領清單，一批每位合格技師至多一則站內摘要。尚未本人簽收前仍由收發室保管。退貨初檢保留原 AA／A／B／C 分級及客服覆核路徑，不送維修批次。",
           "收件後，在「全部收件紀錄」每件旁按列印，或勾選數件一起印 50 × 30 mm 小張標籤。貼紙有 QR、姓名、電話、案件號與產品問題，並附品名／實物識別；同案多件各有一碼。過長問題只縮短貼紙顯示，案件原文不變。掃碼仍須登入及具同公司原物件的讀取權。",
@@ -4828,7 +4830,8 @@
           "貨架採薄層板與前後架柱的立體示意，每層仍是連續開放空間；手機位置標籤可換行。名稱為主、固定編碼為輔，件數依目前實物保管關聯計算；圖上箱體只作示意，不代表容量、固定隔間或精確箱數。",
           "品項差異的次要入口只回報 MISMATCH 並沿既有客服核對流程；不由此將物件設為一致或加入新初檢維修批次。此原有操作的同步與通知規則獨立於新的批次彙整。",
           "新的登記收件入口沿用原收件核對與操作識別碼，只通知本次新建的信件／包裹領件人；售後收件及初檢交接只建立售後待同步事件，不新增 AI 客服通知，也不主動掃描既有待送佇列。原有背景同步仍依原設定運作，須查看本次事件回執才能確認送達。品項差異等既有命令保留原流程，不能將新入口的通知範圍推及所有操作。",
-          "配對與送印重驗公司、現行收發權限及在職資格；裝置憑證不取得一般系統登入或業務操作權。列印工作已接收／CUPS 已接收不等於已出紙、已貼標或已簽收。結果未知先查原工作，禁止自動重印、重收或重建案件；列印不改案件節點、付款、開票、庫存及通知。DEV 發布、配對與真實五欄標籤出紙／掃碼仍須獨立驗收。"
+          "配對與送印重驗公司、現行收發權限及在職資格；裝置憑證不取得一般系統登入或業務操作權。列印工作已接收／CUPS 已接收不等於已出紙、已貼標或已簽收。結果未知先查原工作，禁止自動重印、重收或重建案件；列印不改案件節點、付款、開票、庫存及通知。DEV 發布、配對與真實五欄標籤出紙／掃碼仍須獨立驗收。",
+          "人工保固核對與收發補充問題是可選、具明確結構的初檢文件欄位，只能沿現有可編輯收件進度保存；不新增客服審核閘門、保固自動修改或 AI 發送。既有已交辦、維修中或待寄回物件不退回初檢、不補跑流程，原列印入口保持可用。未提交文件的補充內容不提供技師；提交後仍不是技師正式原因或保固判定。 已完工、待寄回或已寄出的舊件若沒有初檢文件，清單顯示「未留初檢紀錄」，不表示必須重新初檢。"
         ],
         "related": [
           "repair-workbench",
@@ -4856,6 +4859,8 @@
               "Select an existing product to fill its actual name, SKU, and product barcode, or record an unknown product manually. Scan or enter the physical serial number; choosing a product never creates a serial. Letters and staff parcels use sender company/name, contents, and a specific employee recipient, without SKU or serial fields.",
               "Repair, return and unmatched items require a photo per piece; correspondence photos are optional. Photograph opens the device camera for confirmation, with an album option and a device-camera fallback where needed. Review the summary before registration. The received list shows complete thumbnails: select a photo to enlarge it, the case name to open the case, or the pencil to edit that piece’s preliminary check. No photo, unavailable preview, load failure and loading are distinct states; a failed photo read does not establish that none was provided.",
               "Select several pieces, open Batch preliminary checks and create their drafts to show work in progress. Starting and saving drafts record the document and editor without changing custody or sending repair handoff notifications. Test multiple devices, then use each pencil to complete and save its results.",
+              "In the preliminary-check editor, open the existing warranty admin. The mailroom employee uses their existing staff permissions to review or correct purchase proof and warranty dates, then records the manual result, optional warranty number and note back in the workbench. The saved author and time identify this observation; it does not claim automatic synchronization or a warranty-master write.",
+              "Save local observations in Mailroom additional symptom and Preliminary cause, separately from individual functional tests. Save a draft before returning to finish tests; changing the checklist preserves saved warranty observations and issue notes. Printed issue text still comes from the original customer-service description, without replacing it with these notes. After completing checks, print from the receipt list and use the existing batch handoff.",
               "Choose a server-provided preliminary checklist for the linked actual product. The power-bank Pro preset covers built-in Type-C and Lightning cables, USB-C and USB-A output, and wireless charging. Results are Normal, Abnormal, Not tested or Not applicable. Incomplete drafts are allowed. Ready requires every mandatory check to be tested, abnormal notes and linked photos, and an explanation for Not applicable. Save an empty draft first when changing checklists.",
               "Select saved ready repair pieces and hand them to the repair department together. Each piece reports applied, rejected or unknown. Applied pieces enter the existing claim pool, with at most one internal summary per eligible technician per batch. Custody remains with the mailroom until personal acceptance. Returns retain AA/A/B/C grading and CSR review rather than entering this repair batch.",
               "After receipt, print beside each item in All receipt records, or select several items for 50 by 30 mm labels. Each label has a QR, name, phone, case number and customer issue, with product/unit identity. Multiple pieces in one case retain distinct codes. Long text is shortened only on the label; the original case text remains intact. Scanning still requires login and same-company item access.",
@@ -4917,7 +4922,8 @@
               "The rack uses thin shelves and front/back posts to suggest depth while each tier remains open and continuous. Mobile position labels may wrap. Names lead and stable codes remain secondary. Counts follow current physical custody links; decorative boxes do not represent capacity, fixed dividers or exact carton counts.",
               "The secondary discrepancy entry only reports MISMATCH through the existing CSR verification workflow. It cannot mark the item matched or add it to the new preliminary repair batch. Its existing sync and notification rules remain separate from new batch summaries.",
               "The new receipt entry retains native validation and request identifiers. It notifies only recipients of newly registered correspondence and parcels; source-linked receipts and preliminary handoff create after-sales pending events without new AI customer-service events or an explicit scan of existing delivery queues. Existing background synchronization follows its original settings; inspect the specific event receipt to establish delivery. Legacy commands such as mismatch inspection retain their original behavior; the new-entry notification boundary does not apply to every operation.",
-              "Pairing and printing recheck company, current mailroom grants and active employment. Device credentials do not grant normal system login or business actions. A queued job or CUPS acceptance does not prove paper output, attachment or custody acceptance. Unknown outcomes require reading the original job, never automatic reprinting, receiving again or recreating a case. Printing does not change case stages, payments, invoices, inventory or notifications. DEV release, pairing and actual five-field output/scanning need separate acceptance."
+              "Pairing and printing recheck company, current mailroom grants and active employment. Device credentials do not grant normal system login or business actions. A queued job or CUPS acceptance does not prove paper output, attachment or custody acceptance. Unknown outcomes require reading the original job, never automatic reprinting, receiving again or recreating a case. Printing does not change case stages, payments, invoices, inventory or notifications. DEV release, pairing and actual five-field output/scanning need separate acceptance.",
+              "Manual warranty review and additional issue notes are optional, explicitly structured preliminary-document fields, saved only under the existing editable receipt stages. They add no CSR approval gate, automatic warranty modification or AI sending. Already handed-off, in-repair and awaiting-dispatch items are not reopened or made to repeat checks; their original print entry remains available. Draft notes are not exposed to technicians; submitted observations remain distinct from formal technical cause and warranty decisions. For processed, awaiting-dispatch or dispatched legacy items without a document, the list says No preliminary record retained, without requiring checks to restart."
             ],
             "related": [
               "repair-workbench",
@@ -5038,7 +5044,8 @@
         "backend/src/modules/b2b/b2b-auth.guard.ts",
         "frontend/src/services/mailroom-print.ts",
         "frontend/src/pages/mailroom/MailroomPrinterSettings.tsx",
-        "backend/prisma/migrations/20261027080000_mailroom_direct_print/migration.sql"
+        "backend/prisma/migrations/20261027080000_mailroom_direct_print/migration.sql",
+        "backend/src/modules/mailroom/mailroom-precheck-context.contract.ts"
       ],
       "permissions": [
         "mailroom:read"
@@ -5100,7 +5107,8 @@
           "檢測標準管理需另開 repair_workbench:manage 權限；未知標準、材料或成本不代表已確認。",
           "檢修照片與錄影存私人儲存空間，對客報告只選擇已核對的故障、實際處理、複驗結果與影像。報告功能啟用後，由指定客服審核本版摘要，再發布有期限的連結；發布不等於已經 LINE 或 AI 送達。原因被退回補充、檢修改版、撤回或到期時，舊連結及其影像不得再提供；重新核准發布使用新連結，舊連結不恢復。結案保留原維修歷史，公開查閱仍以該份報告目前有效的授權為準；此提案不代表自動封存或刪除已上線。",
           "案件查詢的維修件進度以公司範圍內即時售後讀取及本件檢修／正式報價綁定核對；來源逾時、重複、不符或本件等待期間改版時保留待確認，不使用收件快照推定顧客同意、入帳或發票完成。來源的初始第1版空報價只作尚未正式報價資料，不能放行；公司退貨整新、我的待辦與原操作守門不變。",
-          "掃描只導覽原物件，不代表認領或實物簽收；初檢唯讀區按目前公司及選中物件核對，切案或讀取失敗時不沿用前案結果。"
+          "掃描只導覽原物件，不代表認領或實物簽收；初檢唯讀區按目前公司及選中物件核對，切案或讀取失敗時不沿用前案結果。",
+          "已交辦的收發初檢可包含人工保固核對、保固編號及收發補充問題／原因初判。核對人與時間表示收發人員的外部後台核對紀錄，不是主檔自動同步；初判不取代維修師正式檢修與保固判定。未交辦草稿仍只顯示進度摘要。"
         ],
         "related": [
           "mailroom-workbench",
@@ -5161,7 +5169,8 @@
               "Standard management separately requires repair_workbench:manage; unknown standards, materials and costs do not count as confirmed.",
               "Keep inspection photos and videos in private storage. Customer reports select only verified findings, actual handling, verification results and media. When the report release is enabled, the assigned CSR reviews the current summary before publishing an expiring link; publishing does not prove LINE or AI delivery. A return for more evidence, inspection revision, revocation or expiry must stop access to the old link and its media. Publishing after reapproval uses a new link and never revives the old one. Closure preserves repair history; public access still depends on that report's currently valid authorization. This proposal does not claim that automatic archival or deletion is deployed.",
               "Repair progress in Case lookup uses a fresh company-scoped after-sales read and the current item inspection/formal-quote binding. Timed-out, duplicate, mismatched or natively revised reads remain unconfirmed; receipt snapshots never establish consent, payment or invoice completion. The initial revision-1 empty quote remains unquoted data without release authority. Company-return refurbishment, My tasks and original action gates are unchanged.",
-              "Scanning only navigates to the original item, without claiming or physically accepting it. The readonly preliminary section checks the current company and selected item; switching items or a failed read cannot reuse the previous record."
+              "Scanning only navigates to the original item, without claiming or physically accepting it. The readonly preliminary section checks the current company and selected item; switching items or a failed read cannot reuse the previous record.",
+              "Submitted mailroom checks may include a manual warranty review, warranty reference and additional symptom or preliminary cause. The author and time identify an employee observation from the external admin, not automatic master synchronization. Preliminary notes do not replace the technician’s formal inspection or warranty decision; unsubmitted drafts still expose only progress summaries."
             ],
             "related": [
               "mailroom-workbench",
@@ -5255,7 +5264,8 @@
         "backend/src/modules/mailroom/repair-assessment-reader.contract.ts",
         "backend/src/modules/mailroom/repair-assessment-reader.service.ts",
         "backend/src/modules/mailroom/repair-assessment-reader.controller.ts",
-        "backend/src/modules/mailroom/mailroom.auth.ts"
+        "backend/src/modules/mailroom/mailroom.auth.ts",
+        "backend/src/modules/mailroom/mailroom-precheck-context.contract.ts"
       ],
       "permissions": [
         "repair_workbench:read"

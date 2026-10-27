@@ -16,6 +16,17 @@ export type MailroomPrecheckRecord = {
     savedAt: string;
     submittedAt: string;
     notRequiredReason: string | null;
+    warrantyReview?: {
+      schema: 1;
+      method: 'MANUAL_EXTERNAL';
+      status: 'CHECKED' | 'NEEDS_CORRECTION' | 'CORRECTED_EXTERNALLY';
+      note: string | null;
+      warrantyNumber: string | null;
+      recordedById: string;
+      recordedByName: string;
+      recordedAt: string;
+    } | null;
+    mailroomIssue?: { schema: 1; symptom: string | null; preliminaryReason: string | null } | null;
     checks: {
       key: string;
       label: string;

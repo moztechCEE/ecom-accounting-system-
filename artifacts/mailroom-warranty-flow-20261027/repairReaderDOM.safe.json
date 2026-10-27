@@ -1,0 +1,139 @@
+{
+  "node": "v24.19.0",
+  "execPath": "/opt/homebrew/Cellar/node@24/24.19.0/bin/node",
+  "browserVersion": "156.0.8078.48",
+  "executablePath": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "sourceBefore": {
+    "src/pages/repair/RepairPrecheckReadOnly.tsx": "d204083801ea7f6f498739d58ffc8b8bc1d891b65e2eaeea7a7d9232c401d0db",
+    "src/pages/repair/RepairWorkbenchPage.tsx": "ef33fb6f32407c2abe08267fe3dff7d88ef0beae5b69351353e02194aef67066",
+    "src/pages/repair/RepairPrecheckQueue.tsx": "daba691186afbb90eef1642b4fc0dd68fb37adacc8383021007e2b9dfe3b19ee",
+    "src/pages/repair/repair-model.ts": "a3030df396e7a3908c9e7733ec55fe0a00a861661b7fc70803252b7f0aa46cba",
+    "src/pages/mailroom/mailroom-precheck-record.ts": "3c6382ba78260c197c8091552397a033ae721b449b447f5836eb63068c7ae889",
+    "src/pages/mailroom/MailroomItemScan.tsx": "308945b902ef09760c19e17da1c1791158adedb9a75d6e3718e97bbd4910033a",
+    "src/utils/mailroom-item-link.ts": "d5cdc01932e3ea14f0470462fb49d041dbe823df1f97988ace6e681bd82fc749"
+  },
+  "sourceAfter": {
+    "src/pages/repair/RepairPrecheckReadOnly.tsx": "d204083801ea7f6f498739d58ffc8b8bc1d891b65e2eaeea7a7d9232c401d0db",
+    "src/pages/repair/RepairWorkbenchPage.tsx": "ef33fb6f32407c2abe08267fe3dff7d88ef0beae5b69351353e02194aef67066",
+    "src/pages/repair/RepairPrecheckQueue.tsx": "daba691186afbb90eef1642b4fc0dd68fb37adacc8383021007e2b9dfe3b19ee",
+    "src/pages/repair/repair-model.ts": "a3030df396e7a3908c9e7733ec55fe0a00a861661b7fc70803252b7f0aa46cba",
+    "src/pages/mailroom/mailroom-precheck-record.ts": "3c6382ba78260c197c8091552397a033ae721b449b447f5836eb63068c7ae889",
+    "src/pages/mailroom/MailroomItemScan.tsx": "308945b902ef09760c19e17da1c1791158adedb9a75d6e3718e97bbd4910033a",
+    "src/utils/mailroom-item-link.ts": "d5cdc01932e3ea14f0470462fb49d041dbe823df1f97988ace6e681bd82fc749"
+  },
+  "errors": [],
+  "external": [],
+  "networkWrites": [],
+  "geometry": [
+    {
+      "kind": "received-precheck-preview",
+      "width": 1280,
+      "documentWidth": 1280,
+      "bodyWidth": 1280,
+      "overflowX": [
+        "visible",
+        "visible",
+        "visible"
+      ]
+    },
+    {
+      "kind": "received-precheck-preview",
+      "width": 320,
+      "documentWidth": 320,
+      "bodyWidth": 320,
+      "overflowX": [
+        "visible",
+        "visible",
+        "visible"
+      ]
+    },
+    {
+      "kind": "received-precheck-preview",
+      "width": 390,
+      "documentWidth": 390,
+      "bodyWidth": 390,
+      "overflowX": [
+        "visible",
+        "visible",
+        "visible"
+      ]
+    },
+    {
+      "kind": "page-scan",
+      "width": 1280,
+      "documentWidth": 1280,
+      "bodyWidth": 1280,
+      "scanLeft": 1038,
+      "scanRight": 1225,
+      "compatMode": "CSS1Compat",
+      "overflowing": []
+    },
+    {
+      "kind": "pure-readonly",
+      "width": 1280,
+      "documentWidth": 1280,
+      "bodyWidth": 1280
+    },
+    {
+      "kind": "page-scan",
+      "width": 320,
+      "documentWidth": 320,
+      "bodyWidth": 320,
+      "scanLeft": 42,
+      "scanRight": 229,
+      "compatMode": "CSS1Compat",
+      "overflowing": []
+    },
+    {
+      "kind": "pure-readonly",
+      "width": 320,
+      "documentWidth": 320,
+      "bodyWidth": 320
+    },
+    {
+      "kind": "page-scan",
+      "width": 390,
+      "documentWidth": 390,
+      "bodyWidth": 390,
+      "scanLeft": 148,
+      "scanRight": 335,
+      "compatMode": "CSS1Compat",
+      "overflowing": []
+    },
+    {
+      "kind": "pure-readonly",
+      "width": 390,
+      "documentWidth": 390,
+      "bodyWidth": 390
+    }
+  ],
+  "readerSwitches": [
+    {
+      "pending": {
+        "readers": [],
+        "details": [
+          {
+            "selectedItemId": "22222222-2222-4222-8222-222222222222",
+            "renderedItemId": "11111111-1111-4111-8111-111111111111",
+            "regionText": null
+          }
+        ]
+      },
+      "afterFresh": [
+        {
+          "selectedItemId": "22222222-2222-4222-8222-222222222222",
+          "expectedItemId": "22222222-2222-4222-8222-222222222222",
+          "state": "SUBMITTED",
+          "recordedBy": "合成另一案件初檢記錄人",
+          "regionText": "版次v7記錄人合成另一案件初檢記錄人記錄時間2026/10/16 上午9:02:03交辦時間2026/10/16 上午10:03:04初檢表合成收發初檢標準 · v2合成通電檢查正常合成電源觀察合成顯示檢查異常合成螢幕異常合成防水檢查未測試合成缺少防水設備合成電池檢查不適用合成此型號無電池"
+        }
+      ]
+    }
+  ],
+  "cleanup": {
+    "browserDisconnected": true,
+    "serverStopped": true,
+    "pagesClosed": true
+  },
+  "scope": "actual adapter/read-only private Blob component/page/scan/router/repairService; formal document/readiness/workflow/standard-manager children stubbed; authoritative projection is synthetic fixed contract, not live backend acceptance"
+}

@@ -21,6 +21,10 @@ import {
   PRECHECK_RESULTS,
   type PrecheckResult,
 } from './mailroom-precheck.contract';
+import {
+  WARRANTY_REVIEW_STATUSES,
+  type WarrantyReviewStatus,
+} from './mailroom-precheck-context.contract';
 
 export class PrecheckQueryDto {
   @IsString() @IsNotEmpty() @MaxLength(128) entityId!: string;
@@ -75,6 +79,15 @@ export class PrecheckCheckDto {
   @Max(3, { each: true })
   evidenceIndexes?: number[];
 }
+export class WarrantyReviewDto {
+  @IsIn(WARRANTY_REVIEW_STATUSES) status!: WarrantyReviewStatus;
+  @IsOptional() @IsString() @MaxLength(2000) note?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) warrantyNumber?: string | null;
+}
+export class MailroomIssueDto {
+  @IsOptional() @IsString() @MaxLength(2000) symptom?: string | null;
+  @IsOptional() @IsString() @MaxLength(2000) preliminaryReason?: string | null;
+}
 export class SavePrecheckDto extends PrecheckRequestDto {
   @Transform(({ obj, key }) => (obj as Record<string, unknown>)[key])
   @IsInt()
@@ -104,6 +117,16 @@ export class SavePrecheckDto extends PrecheckRequestDto {
   @MaxLength(1400000, { each: true })
   evidence?: string[];
   @IsOptional() @IsString() @MaxLength(2000) notRequiredReason?: string;
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => WarrantyReviewDto)
+  warrantyReview?: WarrantyReviewDto | null;
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => MailroomIssueDto)
+  mailroomIssue?: MailroomIssueDto | null;
 }
 
 export class HandoffPrecheckItemDto extends StartPrecheckItemDto {

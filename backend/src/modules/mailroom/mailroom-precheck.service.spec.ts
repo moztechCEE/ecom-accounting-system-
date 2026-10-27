@@ -345,6 +345,67 @@ describe('native mailroom prechecks write only their own document/request tables
     });
     expect(docs[0].revision).toBe(3);
   });
+  it('saves and reads manual warranty review and independent intake observations without changing Source or the physical case', async () => {
+    await service.start('editor', startBody());
+    const before = clone(items[0]);
+    const body = saveBody(1, 30, {
+      warrantyReview: {
+        status: 'NEEDS_CORRECTION',
+        note: 'SYNTHETIC 憑證待核對',
+      },
+      mailroomIssue: {
+        symptom: 'SYNTHETIC 線材輸出異常',
+        preliminaryReason: '尚未確認',
+      },
+    });
+    const saved = await service.save('editor', id(1), body);
+    expect(saved.document?.warrantyReview).toMatchObject({
+      schema: 1,
+      method: 'MANUAL_EXTERNAL',
+      status: 'NEEDS_CORRECTION',
+      recordedById: actor.id,
+      recordedByName: actor.name,
+    });
+    expect(saved.document?.mailroomIssue).toEqual({
+      schema: 1,
+      symptom: 'SYNTHETIC 線材輸出異常',
+      preliminaryReason: '尚未確認',
+    });
+    expect(await service.read('editor', 'company-a', id(1))).toMatchObject({
+      document: saved.document,
+    });
+    expect(await service.save('editor', id(1), body)).toMatchObject({
+      duplicate: true,
+      document: saved.document,
+    });
+    const later = await service.save('editor', id(1), saveBody(2, 31));
+    expect(later.document?.warrantyReview).toEqual(
+      saved.document?.warrantyReview,
+    );
+    expect(later.document?.mailroomIssue).toEqual(
+      saved.document?.mailroomIssue,
+    );
+    expect(items[0]).toEqual(before);
+    expect(docs[0].revision).toBe(3);
+  });
+  it('does not reopen a completed case to add intake notes', async () => {
+    await service.start('editor', startBody());
+    items[0].version = 12;
+    items[0].status = 'READY_FOR_DISPATCH';
+    const before = clone(docs[0]);
+    await expect(
+      service.save(
+        'editor',
+        id(1),
+        saveBody(1, 30, {
+          expectedVersion: 12,
+          warrantyReview: { status: 'CHECKED' },
+        }),
+      ),
+    ).rejects.toThrow('目前進度不能編輯收發初檢');
+    expect(docs[0]).toEqual(before);
+    expect(items[0].version).toBe(12);
+  });
   it('rejects stale document revision, changed save retry and skipping a selected required form', async () => {
     await service.start('editor', startBody());
     const t = (await service.read('editor', 'company-a', id(1)))

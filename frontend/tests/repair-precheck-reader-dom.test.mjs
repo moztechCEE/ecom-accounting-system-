@@ -275,6 +275,21 @@ test('repair precheck read-only view and actual scan/deeplink reader use native 
     assert.equal(await page.getByText('DO_NOT_RENDER_GENERAL_CASE_PHOTO').count(), 0);
     await page.screenshot({ path: join(artifactDir, 'precheck-submitted-desktop.png'), fullPage: true });
   });
+  await t.test('submitted manual warranty and intake notes stay distinct, readonly and mobile scoped', async child => {
+    const raw = structuredClone(precheckContract);
+    raw.recorded.warrantyReview = { schema: 1, method: 'MANUAL_EXTERNAL', status: 'CORRECTED_EXTERNALLY', warrantyNumber: 'SYNTHETIC-WARRANTY', note: '合成人工核對備註', recordedById: 'synthetic-clerk', recordedByName: '合成保固核對人', recordedAt: '2026-10-27T09:00:00.000Z' };
+    raw.recorded.mailroomIssue = { schema: 1, symptom: '合成收發補充問題', preliminaryReason: '合成原因尚待確認' };
+    const page = await open(child, { mode: 'pure', raw, width: 320 });
+    const section = page.getByRole('region', { name: '收發初檢紀錄' });
+    for (const text of ['人工保固核對', '已於保固後台修正', 'SYNTHETIC-WARRANTY', '合成人工核對備註', '收發補充問題', '合成收發補充問題', '原因初判', '合成原因尚待確認']) await section.getByText(text, { exact: true }).waitFor();
+    assert.equal(await section.locator('input,textarea,button[type="submit"]').count(), 0);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await noWrites(page);
+    await page.evaluate(() => window.setPrecheckReaderRecord({ ...window.precheckReaderRecord, stage: 'DRAFT', recorded: null, submittedAt: null }));
+    await page.getByText('收發初檢中', { exact: true }).waitFor();
+    assert.equal(await page.getByText('合成收發補充問題', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('SYNTHETIC-WARRANTY', { exact: true }).count(), 0);
+  });
   await t.test('pending stages show only safe summary metadata while all non-submitted states hide draft facts and photos', async child => {
     for (const [stage, label] of Object.entries({ NOT_STARTED: '尚未初檢', DRAFT: '收發初檢中', READY: '初檢完成待交接', STALE: '初檢紀錄待更新' })) {
       const pending = ['DRAFT', 'READY'].includes(stage);

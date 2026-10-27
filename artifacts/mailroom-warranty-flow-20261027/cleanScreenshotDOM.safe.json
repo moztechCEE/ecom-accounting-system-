@@ -1,0 +1,134 @@
+[
+  {
+    "name": "manual warranty and issue drafts remain distinct and survive template changes at 320px",
+    "posts": [
+      {
+        "path": "/mailroom/prechecks/start",
+        "body": {
+          "entityId": "company-a",
+          "requestId": "58e48b5b-a425-4830-8732-8d7435e03402",
+          "items": [
+            {
+              "itemId": "11111111-1111-4111-8111-111111111111",
+              "expectedVersion": 7,
+              "requestId": "3dd81705-ca0f-46cc-a74f-b39b8a5f8512"
+            }
+          ]
+        }
+      },
+      {
+        "path": "/mailroom/prechecks/items/11111111-1111-4111-8111-111111111111/save",
+        "body": {
+          "entityId": "company-a",
+          "requestId": "9e3d1f42-faf6-4a7b-aa3a-83f52c8ffa5b",
+          "expectedVersion": 7,
+          "expectedRevision": 1,
+          "status": "DRAFT",
+          "templateBinding": {
+            "id": "product:synthetic-product",
+            "revision": 3,
+            "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "checks": [
+            {
+              "key": "power",
+              "result": "NOT_TESTED"
+            },
+            {
+              "key": "charging",
+              "result": "NOT_TESTED"
+            },
+            {
+              "key": "accessory",
+              "result": "NOT_TESTED"
+            },
+            {
+              "key": "appearance",
+              "result": "NOT_TESTED"
+            }
+          ],
+          "evidence": [],
+          "warrantyReview": null,
+          "mailroomIssue": null
+        }
+      },
+      {
+        "path": "/mailroom/prechecks/items/11111111-1111-4111-8111-111111111111/save",
+        "body": {
+          "entityId": "company-a",
+          "requestId": "66049b8d-d3e1-4158-9bea-aee01fb7301c",
+          "expectedVersion": 7,
+          "expectedRevision": 2,
+          "status": "DRAFT",
+          "templateBinding": {
+            "id": "MOZTECH_POWERBANK_PRO_V1",
+            "revision": 1,
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "checks": [],
+          "evidence": [],
+          "warrantyReview": {
+            "status": "CORRECTED_EXTERNALLY",
+            "note": "已於保固後台更正購買日期",
+            "warrantyNumber": "WARRANTY-SYNTHETIC-1"
+          },
+          "mailroomIssue": {
+            "symptom": "USB-C 輸出沒有反應",
+            "preliminaryReason": "需由維修檢查線路"
+          }
+        }
+      },
+      {
+        "path": "/mailroom/prechecks/items/11111111-1111-4111-8111-111111111111/save",
+        "body": {
+          "entityId": "company-a",
+          "requestId": "093ab360-0133-4c04-b451-313a5c0a977a",
+          "expectedVersion": 7,
+          "expectedRevision": 3,
+          "status": "DRAFT",
+          "templateBinding": {
+            "id": "MOZTECH_POWERBANK_PRO_V1",
+            "revision": 1,
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "checks": [
+            {
+              "key": "builtin_type_c",
+              "result": "NOT_TESTED"
+            },
+            {
+              "key": "builtin_lightning",
+              "result": "NOT_TESTED"
+            },
+            {
+              "key": "usb_c_output",
+              "result": "NOT_TESTED"
+            },
+            {
+              "key": "usb_a_output",
+              "result": "NOT_TESTED"
+            },
+            {
+              "key": "wireless_charging",
+              "result": "NOT_TESTED"
+            }
+          ],
+          "evidence": [],
+          "warrantyReview": null,
+          "mailroomIssue": null
+        }
+      }
+    ],
+    "unexpected": [],
+    "commits": 4,
+    "handoffApplied": 0,
+    "handoffReceipts": [],
+    "thumbnailCalls": [],
+    "photoAborted": [],
+    "objectURLs": [],
+    "revokedURLs": [],
+    "errors": [],
+    "external": [],
+    "httpWrites": []
+  }
+]

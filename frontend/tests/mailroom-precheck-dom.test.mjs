@@ -31,7 +31,7 @@ function Harness(){
   return <main style={{padding:'12px',minWidth:0}}>{contextHolder}<InitialInspectionDrawer entityId={entityId} itemIds={itemIds} open={open} feedback={message} guardChange={change=>change()} onDraftChange={draft=>window.precheckFixture.drafts.push(structuredClone(draft))} onClose={()=>setOpen(false)} onSaved={value=>window.precheckFixture.saved.push(structuredClone(value??null))}/></main>;
 }
 function ReceivingHarness(){
-  const [entityId,setEntityId]=useState('company-a'),[selectedIds,setSelectedIds]=useState([]),[photoVersion,setPhotoVersion]=useState(1);
+  const [entityId,setEntityId]=useState('company-a'),[selectedIds,setSelectedIds]=useState([]),[photoVersion,setPhotoVersion]=useState(new URLSearchParams(location.search).has('completedHistory')?12:1);
   window.precheckFixture.setEntity=setEntityId;window.precheckFixture.setPhotoVersion=setPhotoVersion;
   return <main id="receiving-fixture-list" style={{padding:'16px 12px',minWidth:0,marginTop:new URLSearchParams(location.search).has('spacer')?1600:0}}><ReceivingItemList entityId={entityId} items={window.precheckFixture.receivingRows(entityId).map(row=>({...row,version:photoVersion}))} total={8} page={1} loading={false} selectedIds={selectedIds} onSelect={ids=>{setSelectedIds(ids);window.precheckFixture.selections.push([...ids]);}} onPage={page=>window.precheckFixture.pages.push(page)} onOpen={id=>window.precheckFixture.opened.push(id)} onInspect={ids=>window.precheckFixture.inspected.push([...ids])} canEdit/></main>;
 }
@@ -55,7 +55,7 @@ function selected(item,document){return item.unbound?null:document?templates(ite
 function read(item){const document=state.documents[item.id]||null,template=selected(item,document),templateStale=!!document&&JSON.stringify(document.templateBinding)!==JSON.stringify(binding(template)),editable=item.status==='RECEIVED'&&document?.status!=='SUBMITTED';return {itemId:item.id,itemVersion:item.version,label:item.label,category:item.category,productName:'合成實收產品',productId:item.productId,sku:item.sku,serialNumber:item.serialNumber,stage:document?.status||'NOT_STARTED',document:clone(document),availableTemplates:clone(templates(item)),selectedTemplate:clone(template),template:{state:item.unbound?'PRODUCT_UNBOUND':template?'CONFIGURED':'UNCONFIGURED',template:clone(template),availableTemplates:clone(templates(item)),reason:item.unbound?'請先核對實物產品主檔':template?null:'請選擇初檢表或明確填寫不需初檢原因'},capabilities:{canStart:editable,canSave:!!document&&editable,canMarkReady:!!document&&editable&&!item.unbound&&!templateStale,canHandoff:!!document&&editable&&!templateStale&&document.status==='READY'&&item.category==='REPAIR'&&item.custodianId==='clerk'&&item.physicalCustody==='MAILROOM'&&!item.nextUserId,reason:!editable?'目前進度不能編輯收發初檢':templateStale?'產品初檢表已更新，請重新選擇並保存草稿':null},custody:{custodianId:item.custodianId,location:item.location,storageLocationId:item.storageLocationId,physicalCustody:item.physicalCustody},evidenceThumbnailUrl:null};}
 function reject(status,message){throw {response:{status,data:{message}}};}
 function scoped(id,entityId){const item=state.items[id];if(!item||item.entityId!==entityId)reject(404,'找不到本公司實物');return item;}
-function saveDocument(item,body){const previous=state.documents[item.id],revision=(previous?.revision||0)+1;const document={id:'synthetic-document-'+item.id,itemId:item.id,revision,status:body.status||'DRAFT',identityHash:item.id.replaceAll('-','').repeat(2),contentHash:item.id.replaceAll('-','')+revision.toString(16).padStart(32,'0'),templateBinding:clone(body.templateBinding===undefined?binding(selected(item,null)):body.templateBinding),checks:clone(body.checks||[]),evidence:clone(body.evidence||[]),notRequiredReason:body.notRequiredReason?.trim()||null,savedById:'clerk',savedByName:'合成收發人員',savedAt:'2026-10-16T00:00:00.000Z',submittedById:null,submittedAt:null};state.documents[item.id]=document;return read(item);}
+function saveDocument(item,body){const previous=state.documents[item.id],revision=(previous?.revision||0)+1;const document={id:'synthetic-document-'+item.id,itemId:item.id,revision,status:body.status||'DRAFT',identityHash:item.id.replaceAll('-','').repeat(2),contentHash:item.id.replaceAll('-','')+revision.toString(16).padStart(32,'0'),templateBinding:clone(body.templateBinding===undefined?binding(selected(item,null)):body.templateBinding),checks:clone(body.checks||[]),evidence:clone(body.evidence||[]),notRequiredReason:body.notRequiredReason?.trim()||null,warrantyReview:body.warrantyReview===undefined?clone(previous?.warrantyReview||null):body.warrantyReview?{schema:1,method:'MANUAL_EXTERNAL',...clone(body.warrantyReview),recordedById:'clerk',recordedByName:'合成收發人員',recordedAt:'2026-10-27T00:00:00.000Z'}:null,mailroomIssue:body.mailroomIssue===undefined?clone(previous?.mailroomIssue||null):body.mailroomIssue?{schema:1,...clone(body.mailroomIssue)}:null,savedById:'clerk',savedByName:'合成收發人員',savedAt:'2026-10-16T00:00:00.000Z',submittedById:null,submittedAt:null};state.documents[item.id]=document;return read(item);}
 if(new URLSearchParams(location.search).has('ready'))for(const name of (new URLSearchParams(location.search).get('items')||'repair-a').split(',')){const item=state.items[aliases[name]||name];saveDocument(item,{status:'READY',templateBinding:binding(selected(item,null)),checks:custom.checks.map(check=>({key:check.key,result:'NORMAL'})),evidence:[]});}
 function handoff(body){
   const batchKey=body.entityId+':'+body.requestId,hash=JSON.stringify(body),old=state.handoffBatches[batchKey];
@@ -79,6 +79,7 @@ function handoff(body){
 state.receivingRows=entityId=>Array.from({length:8},(_,index)=>({id:entityId+'-photo-'+(index+1),label:'MR-'+(index+1),productName:'合成實收產品 VeryLongActualProductName '+(index+1),sku:'ACTUAL-SKU-'+index,serialNumber:'SERIAL-'+(index+1),status:'RECEIVED',statusLabel:'已收到，待核對',version:1,matchResult:'PENDING',grade:null,disposition:null,conditionNote:null,location:'A1',custodianId:'clerk',custodianName:'合成收發人員',physicalCustody:'MAILROOM',nextUserId:null,nextUserName:null,recipientId:null,repairOwnerId:null,mine:false,evidenceCount:1,evidenceThumbnailUrl:'/mailroom/prechecks/items/'+entityId+'-photo-'+(index+1)+'/photo',receipt:{number:'RECEIPT-'+(index+1),category:index===7?'LETTER':'REPAIR',sourceCaseId:'synthetic-source',sourceNumber:'SYNTHETIC-SOURCE-'+(index+1),senderLabel:'合成寄件人'},precheck:{stage:'DRAFT',revision:1,savedById:'clerk',savedByName:'初檢同仁',savedAt:'2026-10-16T00:00:00Z'}}));
 const photoStates=new URLSearchParams(location.search).has('photoStates');
 if(photoStates){const rows=state.receivingRows;state.receivingRows=entityId=>rows(entityId).map((row,index)=>index===2?{...row,evidenceCount:0,evidenceThumbnailUrl:null}:index===3?{...row,evidenceThumbnailUrl:null}:index===4?{...row,evidenceThumbnailUrl:'https://untrusted.invalid/photo.png'}:row);}
+if(new URLSearchParams(location.search).has('completedHistory')){const rows=state.receivingRows;state.receivingRows=entityId=>rows(entityId).map((row,index)=>index===0?{...row,status:'READY_FOR_DISPATCH',statusLabel:'待安排寄回',version:12,precheck:{stage:'NOT_STARTED',revision:0,savedById:null,savedByName:null,savedAt:null}}:row);}
 const nativeCreate=URL.createObjectURL.bind(URL),nativeRevoke=URL.revokeObjectURL.bind(URL);
 URL.createObjectURL=blob=>{const src=nativeCreate(blob);state.objectURLs.push({src,entityId:blob.fixtureEntity||null});return src;};
 URL.revokeObjectURL=src=>{state.revokedURLs.push(src);return nativeRevoke(src);};
@@ -261,14 +262,108 @@ test('actual initial inspection drawer preserves physical identity, revisions an
     assert.equal(await page.evaluate(id => window.precheckFixture.items[id].physicalCustody, itemA), 'MAILROOM');
   });
 
+  await scene('manual warranty and issue drafts remain distinct and survive template changes at 320px', async page => {
+    await loaded(page);
+    await page.getByRole('link', { name: '開啟保固後台', exact: true }).waitFor();
+    assert.deepEqual(await posts(page),[], 'Opening the editor exposes the external entry before creating a preliminary document');
+    await start(page);
+    assert.equal(await page.evaluate(() => window.precheckFixture.drafts.at(-1).dirty), false, 'Registering new fields must not dirty a legacy draft');
+    const warranty = page.getByRole('link', { name: '開啟保固後台', exact: true });
+    assert.equal(await warranty.getAttribute('href'), 'https://admin-warranty.moztech.cc/login');
+    assert.equal(await warranty.getAttribute('target'), '_blank');
+    assert.equal(await warranty.getAttribute('rel'), 'noopener noreferrer');
+    for (const name of ['保固核對', '問題紀錄', '初步檢測', '列印標籤']) assert.equal(await page.getByRole('heading', { name, exact: true }).count(), 1);
+    await save(page);
+    assert.equal((await posts(page)).at(-1).body.warrantyReview, null, 'Legacy drafts must not become CHECKED merely by saving');
+    assert.equal((await posts(page)).at(-1).body.mailroomIssue, null);
+    await choose(page, '人工核對紀錄', '已於保固後台修正');
+    await page.getByRole('textbox', { name: '保固核對備註', exact: true }).fill('已於保固後台更正購買日期');
+    await page.getByRole('textbox', { name: '保固編號', exact: true }).fill('WARRANTY-SYNTHETIC-1');
+    await page.getByRole('textbox', { name: '收發補充問題', exact: true }).fill('USB-C 輸出沒有反應');
+    await page.getByRole('textbox', { name: '原因初判', exact: true }).fill('需由維修檢查線路');
+    assert.equal(await page.evaluate(() => window.precheckFixture.drafts.at(-1).dirty), true);
+    await choose(page, '初檢表', '萬能充 Pro 初檢表');await page.getByRole('button', { name: '套用初檢表', exact: true }).click();
+    await page.getByRole('combobox', { name: '自帶 Type-C 線結果', exact: true }).waitFor();
+    const body = (await posts(page)).at(-1).body;
+    assert.deepEqual(body.warrantyReview, { status: 'CORRECTED_EXTERNALLY', note: '已於保固後台更正購買日期', warrantyNumber: 'WARRANTY-SYNTHETIC-1' });
+    assert.deepEqual(body.mailroomIssue, { symptom: 'USB-C 輸出沒有反應', preliminaryReason: '需由維修檢查線路' });
+    assert.deepEqual(body.checks, []);assert.equal(body.status, 'DRAFT');
+    assert.equal(await page.getByRole('textbox', { name: '收發補充問題', exact: true }).inputValue(), 'USB-C 輸出沒有反應');
+    assert.equal(await page.getByRole('textbox', { name: '原因初判', exact: true }).inputValue(), '需由維修檢查線路');
+    assert.equal(await page.evaluate(() => window.precheckFixture.drafts.at(-1).dirty), false);
+    await page.getByRole('button', { name: /^關\s*閉$/ }).click();await page.locator('.ant-drawer-content:visible').waitFor({ state: 'hidden' });
+    await page.evaluate(() => window.precheckFixture.setOpen(true));await page.getByRole('combobox', { name: '人工核對紀錄', exact: true }).waitFor();
+    assert.equal(await page.getByRole('textbox', { name: '保固核對備註', exact: true }).inputValue(), '已於保固後台更正購買日期');
+    assert.match(await page.getByRole('region', { name: '保固核對', exact: true }).innerText(), /合成收發人員/);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.waitForFunction(() => Math.abs(document.querySelector('.ant-drawer-content-wrapper').getBoundingClientRect().left) < 1);
+    await page.waitForFunction(() => document.querySelectorAll('.ant-message-notice').length === 0);
+    await page.locator('.ant-drawer-body').evaluate(element => {element.scrollTop=0;});
+    await page.screenshot({ path: artifactPrefix + '-warranty-flow-320.png', fullPage: true });
+    const reviewSelect = page.locator('.ant-select').filter({ has: page.getByRole('combobox', { name: '人工核對紀錄', exact: true }) });
+    await reviewSelect.hover();await reviewSelect.locator('.ant-select-clear').click();
+    await page.getByRole('textbox', { name: '收發補充問題', exact: true }).fill('');await page.getByRole('textbox', { name: '原因初判', exact: true }).fill('');
+    assert.equal(await page.getByRole('textbox', { name: '保固核對備註', exact: true }).inputValue(), '');
+    assert.equal(await page.getByRole('textbox', { name: '保固編號', exact: true }).inputValue(), '');
+    await save(page);
+    assert.equal((await posts(page)).at(-1).body.warrantyReview, null);assert.equal((await posts(page)).at(-1).body.mailroomIssue, null);
+    assert.equal(await page.evaluate(id => window.precheckFixture.items[id].status, itemA), 'RECEIVED');
+    const beforeReturn=(await posts(page)).length;
+    await page.getByRole('button', { name: '回收件紀錄列印', exact: true }).click();
+    await page.locator('.ant-drawer-content:visible').waitFor({ state: 'hidden' });
+    assert.equal((await posts(page)).length,beforeReturn);
+  }, '', { width: 320, height: 740 });
+
+  await scene('warranty admin entry remains available before a draft and without a product binding', async page => {
+    await loaded(page);
+    const link=page.getByRole('link', { name: '開啟保固後台', exact: true });
+    assert.equal(await link.getAttribute('href'),'https://admin-warranty.moztech.cc/login');
+    assert.equal(await link.getAttribute('target'),'_blank');
+    assert.equal(await link.getAttribute('rel'),'noopener noreferrer');
+    await page.getByText('請先核對實物產品主檔', { exact: true }).waitFor();
+    assert.deepEqual(await posts(page),[]);
+    assert.equal(await page.getByRole('button', { name: '儲存草稿', exact: true }).count(),0);
+  }, '?items=unbound');
+  await scene('completed dispatch row describes missing precheck history and keeps label printing available', async page => {
+    const row=page.locator('.mailroom-receiving-row').first();
+    await row.getByText('待安排寄回', { exact: true }).waitFor();
+    await row.getByText('未留初檢紀錄', { exact: true }).waitFor();
+    assert.equal(await row.getByText('待初檢', { exact: true }).count(),0);
+    assert.equal(await row.getByRole('button', { name: '編輯初檢 MR-1', exact: true }).isDisabled(),true);
+    assert.equal(await row.getByRole('button', { name: '列印物件標籤 MR-1', exact: true }).isDisabled(),false);
+    assert.equal(await page.evaluate(() => window.precheckFixture.receivingRows('company-a')[0].version),12);
+    assert.deepEqual(await posts(page),[]);
+  }, '?fixture=receiving&completedHistory=1');
+  await scene('submitted dispatch items keep supplementary records readonly without restarting completed work', async page => {
+    await start(page);
+    await page.evaluate(id => {
+      const state=window.precheckFixture,item=state.items[id],document=state.documents[id];
+      item.status='READY_FOR_DISPATCH';item.version=12;document.status='SUBMITTED';
+      document.warrantyReview={schema:1,method:'MANUAL_EXTERNAL',status:'CHECKED',note:'原核對紀錄',recordedById:'clerk',recordedByName:'合成收發人員',recordedAt:'2026-10-27T00:00:00.000Z'};
+      document.mailroomIssue={schema:1,symptom:'原補充問題',preliminaryReason:'原原因初判'};state.setOpen(false);
+    }, itemA);
+    await page.locator('.ant-drawer-content:visible').waitFor({ state: 'hidden' });await page.evaluate(() => window.precheckFixture.setOpen(true));
+    await page.getByRole('textbox', { name: '收發補充問題', exact: true }).waitFor();
+    assert.equal(await page.getByRole('textbox', { name: '收發補充問題', exact: true }).inputValue(), '原補充問題');
+    assert.equal(await page.getByRole('textbox', { name: '收發補充問題', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('combobox', { name: '人工核對紀錄', exact: true }).isDisabled(), true);
+    for (const name of ['建立初檢草稿', '儲存草稿', '完成初檢', '交維修部門']) assert.equal(await page.getByRole('button', { name, exact: true }).count(), 0);
+    assert.equal((await posts(page)).length, 1, 'Readback must not restart or repeat completed work');
+    assert.equal(await page.evaluate(id => window.precheckFixture.items[id].version, itemA), 12);
+  });
+
   await scene('an unknown committed save retries the immutable body and revision exactly once', async page => {
     await start(page);await choose(page, '電源結果', '正常');
+    await choose(page, '人工核對紀錄', '待修正');await page.getByRole('textbox', { name: '保固核對備註', exact: true }).fill('購買日期待確認');
+    await page.getByRole('textbox', { name: '收發補充問題', exact: true }).fill('充電異常，先留草稿');
     await page.evaluate(() => { window.precheckFixture.commitThenLose = true; });await save(page);
     await page.getByText('保存結果尚未確認', { exact: true }).waitFor();
     assert.equal(await page.getByRole('combobox', { name: '電源結果', exact: true }).isDisabled(), true);
     assert.equal(await page.evaluate(() => window.precheckFixture.drafts.at(-1).uncertain), true);
     await page.getByRole('button', { name: '重試原保存', exact: true }).click();await page.getByRole('button', { name: '儲存草稿', exact: true }).waitFor();
     const requests = await posts(page);assert.equal(requests.length, 3);assert.deepEqual(requests[1], requests[2]);
+    assert.deepEqual(requests[1].body.warrantyReview, { status: 'NEEDS_CORRECTION', note: '購買日期待確認', warrantyNumber: null });
+    assert.deepEqual(requests[1].body.mailroomIssue, { symptom: '充電異常，先留草稿', preliminaryReason: null });
     assert.equal(await page.evaluate(() => window.precheckFixture.commits), 2);
     assert.equal(await page.evaluate(id => window.precheckFixture.documents[id].revision, itemA), 2);
     assert.equal(await page.evaluate(() => window.precheckFixture.drafts.at(-1).uncertain), false);

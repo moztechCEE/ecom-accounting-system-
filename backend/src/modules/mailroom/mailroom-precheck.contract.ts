@@ -6,6 +6,7 @@ import type {
   PrecheckTemplateBinding,
   PrecheckTemplateResolution,
 } from './mailroom-precheck.templates';
+import type { PrecheckContext } from './mailroom-precheck-context.contract';
 
 export const PRECHECK_RESULTS = [
   'NORMAL',
@@ -46,7 +47,7 @@ export type PrecheckItem = {
     sourceNumber?: string | null;
   };
 };
-export type PrecheckData = {
+export type PrecheckData = PrecheckContext & {
   checks: PrecheckCheck[];
   evidence: string[];
   notRequiredReason: string | null;

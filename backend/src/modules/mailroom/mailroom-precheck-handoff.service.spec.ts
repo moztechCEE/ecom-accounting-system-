@@ -334,6 +334,7 @@ describe('precheck handoff uses the existing physical transition without accepta
     'OTHER_CUSTODIAN',
     'NOT_READY',
     'BAD_HASH',
+    'CHANGED_INTAKE_NOTE',
     'NO_EMPLOYEE',
     'NO_CSR',
     'SOURCE_CHANGED',
@@ -348,6 +349,14 @@ describe('precheck handoff uses the existing physical transition without accepta
     if (kind === 'OTHER_CUSTODIAN') f.item.custodianId = 'other';
     if (kind === 'NOT_READY') f.doc.status = 'DRAFT';
     if (kind === 'BAD_HASH') f.doc.data.checks[0].note = 'CHANGED';
+    if (kind === 'CHANGED_INTAKE_NOTE')
+      Object.assign(f.doc.data, {
+        mailroomIssue: {
+          schema: 1,
+          symptom: 'CHANGED',
+          preliminaryReason: null,
+        },
+      });
     if (kind === 'NO_EMPLOYEE') f.db.employee.findFirst.mockResolvedValue(null);
     if (kind === 'NO_CSR')
       jest.spyOn(f.service, 'customerService').mockResolvedValue(null);
@@ -493,6 +502,37 @@ describe('read-only submitted precheck records', () => {
       );
     },
   );
+  it('exposes manual warranty and separate intake observations only after submission', () => {
+    const f = fixture();
+    const warrantyReview = {
+      schema: 1,
+      method: 'MANUAL_EXTERNAL',
+      status: 'CORRECTED_EXTERNALLY',
+      warrantyNumber: 'SYNTHETIC-WARRANTY',
+      note: 'SYNTHETIC MANUAL REVIEW',
+      recordedById: 'clerk',
+      recordedByName: 'SYNTHETIC CLERK',
+      recordedAt: '2026-10-27T09:00:00.000Z',
+    };
+    const mailroomIssue = {
+      schema: 1,
+      symptom: 'SYNTHETIC INTAKE ISSUE',
+      preliminaryReason: 'SYNTHETIC UNCONFIRMED REASON',
+    };
+    Object.assign(f.doc.data, { warrantyReview, mailroomIssue });
+    f.doc.status = 'DRAFT';
+    expect(recordedPrecheck(f.item, f.doc).recorded).toBeNull();
+    f.doc.status = 'READY';
+    expect(recordedPrecheck(f.item, f.doc).recorded).toBeNull();
+    f.doc.status = 'SUBMITTED';
+    f.doc.submittedAt = new Date();
+    expect(recordedPrecheck(f.item, f.doc).recorded).toMatchObject({
+      warrantyReview,
+      mailroomIssue,
+    });
+    f.item.serialNumber = 'DIFFERENT-IDENTITY';
+    expect(recordedPrecheck(f.item, f.doc).recorded).toBeNull();
+  });
   it('uses historical template labels and digest-bound photos; movement does not erase the record', () => {
     const f = fixture();
     f.doc.status = 'SUBMITTED';

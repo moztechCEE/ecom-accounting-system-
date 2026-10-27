@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { precheckValidation, precheckValues, type PrecheckRead } from '../src/pages/mailroom/initial-inspection-model.ts';
+import { precheckValidation, precheckValues, precheckSupplementInput, receivingPrecheckStageLabel, type PrecheckRead } from '../src/pages/mailroom/initial-inspection-model.ts';
+import { mailroomDraftFingerprint } from '../src/pages/mailroom/mailroom-draft.ts';
 import { canOpenPrecheck } from '../src/pages/mailroom/mailroom-workflow.ts';
 import type { Item } from '../src/pages/mailroom/model.ts';
 const record = { itemId:'one', itemVersion:7, label:'MR-1', category:'REPAIR', stage:'DRAFT', document:{revision:2,status:'DRAFT',identityHash:'identity',templateBinding:{id:'template',revision:1,contentHash:'hash'},checks:[{key:'power',result:'NOT_TESTED'}],evidence:[],notRequiredReason:null,savedById:'clerk',savedByName:'收發人員',savedAt:'2026-10-16T00:00:00Z'},template:{state:'CONFIGURED',template:{id:'template',revision:1,contentHash:'hash',checks:[{key:'power',label:'開機',required:true},{key:'optional',label:'選測',required:false}]},reason:null},capabilities:{canStart:false,canSave:true,canMarkReady:true,canHandoff:false,reason:null},custody:{custodianId:'clerk',location:'A1',storageLocationId:'bin'} } as PrecheckRead;
+test('completed items without a document describe missing history without restarting their workflow',()=>{
+  for (const status of ['WAITING_RETURN_ACCEPTANCE','READY_FOR_DISPATCH','DISPATCHED','PENDING_WELFARE_STOCK','STOCKED']) assert.equal(receivingPrecheckStageLabel('NOT_STARTED',status),'未留初檢紀錄');
+  assert.equal(receivingPrecheckStageLabel('NOT_STARTED','RECEIVED'),'待初檢');
+  assert.equal(receivingPrecheckStageLabel('SUBMITTED','READY_FOR_DISPATCH'),'已交維修部門');
+});
 test('saved drafts preserve results and initialize only new checks as untested',()=>{
   const before=JSON.stringify(record),values=precheckValues(record);
   assert.deepEqual(values.checks.map(check=>check.result),['NOT_TESTED','NOT_TESTED']);
@@ -11,6 +17,28 @@ test('saved drafts preserve results and initialize only new checks as untested',
   assert.equal(precheckValidation(record,values,true),'必要初檢項目尚未完成，可先儲存草稿');
   values.checks[0].result='NORMAL';assert.equal(precheckValidation(record,values,true),undefined);
   assert.equal(JSON.stringify(record),before);
+});
+test('legacy drafts stay unreviewed and supplementary draft edits participate in the discard fingerprint',()=>{
+  const values=precheckValues(record),before=mailroomDraftFingerprint(values);
+  assert.deepEqual(precheckSupplementInput(values),{warrantyReview:null,mailroomIssue:null});
+  assert.equal(values.warrantyReview?.status,undefined);
+  values.warrantyReview!.note='購買憑證日期不清楚';
+  assert.notEqual(mailroomDraftFingerprint(values),before);
+  assert.equal(precheckValidation(record,values,false),'請選擇保固核對狀態');
+  values.warrantyReview!.status='NEEDS_CORRECTION';
+  assert.equal(precheckValidation(record,values,false),undefined);
+  assert.deepEqual(precheckSupplementInput(values),{warrantyReview:{status:'NEEDS_CORRECTION',note:'購買憑證日期不清楚',warrantyNumber:null},mailroomIssue:null});
+  values.mailroomIssue!.symptom=' USB-C 不輸出 ';values.mailroomIssue!.preliminaryReason=' 線路待確認 ';
+  assert.deepEqual(precheckSupplementInput(values).mailroomIssue,{symptom:'USB-C 不輸出',preliminaryReason:'線路待確認'});
+  values.warrantyReview={};values.mailroomIssue={symptom:' ',preliminaryReason:''};
+  assert.deepEqual(precheckSupplementInput(values),{warrantyReview:null,mailroomIssue:null});
+});
+test('supplement readback retains recorded values but never sends server audit fields',()=>{
+  const saved={...record,document:{...record.document!,warrantyReview:{schema:1 as const,method:'MANUAL_EXTERNAL' as const,status:'CORRECTED_EXTERNALLY' as const,note:'已核對購買日期',recordedById:'clerk',recordedByName:'收發人員',recordedAt:'2026-10-27T00:00:00Z'},mailroomIssue:{schema:1 as const,symptom:'充電無反應',preliminaryReason:null}}};
+  const before=JSON.stringify(saved),values=precheckValues(saved);
+  assert.deepEqual(precheckSupplementInput(values),{warrantyReview:{status:'CORRECTED_EXTERNALLY',note:'已核對購買日期',warrantyNumber:null},mailroomIssue:{symptom:'充電無反應',preliminaryReason:null}});
+  assert.equal(JSON.stringify(saved),before);
+  assert.notEqual(mailroomDraftFingerprint(values),mailroomDraftFingerprint({...values,mailroomIssue:{...values.mailroomIssue,preliminaryReason:'待進一步檢測'}}));
 });
 test('abnormal drafts remain editable while ready requires a note and photo from this document',()=>{
   const values=precheckValues(record);values.checks[0]={key:'power',result:'ABNORMAL'};

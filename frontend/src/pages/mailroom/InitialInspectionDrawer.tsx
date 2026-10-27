@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Form, Input, Select, Space, Spin, Tag, Typography } from 'antd';
 import { mailroomReceiving, type PrecheckSave, type PrecheckStart } from '../../services/mailroom-receiving';
 import { CATEGORIES, errorText } from './model';
-import { PRECHECK_RESULTS, PRECHECK_STAGES, precheckValidation, precheckValues, precheckHandoffBlocker, type PrecheckRead, type PrecheckValues, type PrecheckHandoff, type PrecheckHandoffResult } from './initial-inspection-model';
+import { PRECHECK_RESULTS, PRECHECK_STAGES, WARRANTY_REVIEW_STATUSES, precheckValidation, precheckValues, precheckSupplementInput, precheckHandoffBlocker, type PrecheckRead, type PrecheckValues, type PrecheckHandoff, type PrecheckHandoffResult } from './initial-inspection-model';
 import { mailroomDraftFingerprint, type MailroomDraftState } from './mailroom-draft';
 import type { RepairMessage } from '../repair/repair-feedback';
 import ReceiptPhotoInput from './ReceiptPhotoInput';
@@ -85,12 +85,13 @@ export default function InitialInspectionDrawer({ entityId, itemIds, open, feedb
     if (!record?.document || working.current || reading.current) return;
     const data = form.getFieldsValue(true) as PrecheckValues;
     const selected = changeTemplate ? record.availableTemplates?.find(row => row.id === templateId) : record.selectedTemplate || record.template.template;
-    const problem = changeTemplate ? undefined : precheckValidation(record, data, ready);
+    const problem = precheckValidation(record, data, changeTemplate ? false : ready);
     if (problem) { setError(problem); return; }
     void execute({ kind: 'save', itemId: record.itemId, body: {
       entityId, requestId: crypto.randomUUID(), expectedVersion: record.itemVersion, expectedRevision: record.document.revision,
       status: ready ? 'READY' : 'DRAFT', templateBinding: selected ? { id: selected.id, revision: selected.revision, contentHash: selected.contentHash } : null,
       checks: changeTemplate ? [] : data.checks || [], evidence: data.evidence || [], ...(changeTemplate ? {} : { notRequiredReason: data.notRequiredReason }),
+      ...precheckSupplementInput(data),
     } });
   }
   function handoff() {
@@ -124,7 +125,22 @@ export default function InitialInspectionDrawer({ entityId, itemIds, open, feedb
       {record ? <>
         <Descriptions size="small" column={1} items={[{ key: 'item', label: '實物', children: record.label }, ...(record.productName ? [{ key: 'product', label: '實收產品', children: [record.productName, record.sku, record.serialNumber ? `SN ${record.serialNumber}` : null].filter(Boolean).join(' · ') }] : []), { key: 'location', label: '存放位置', children: record.custody.location }, { key: 'kind', label: '類型', children: CATEGORIES[record.category] || record.category }, { key: 'stage', label: '初檢', children: <Tag>{PRECHECK_STAGES[record.stage] || record.stage}</Tag> }, ...(record.document ? [{ key: 'version', label: '最近編輯', children: `${record.document.savedByName} · v${record.document.revision} · ${new Date(record.document.savedAt).toLocaleString('zh-TW')}` }] : [])]} />
         {(record.capabilities.reason || record.template.state === "PRODUCT_UNBOUND") && <Alert type="warning" message={record.capabilities.reason || record.template.reason || "請先核對實物產品主檔"} />}
+        <Button href="https://admin-warranty.moztech.cc/login" target="_blank" rel="noopener noreferrer">開啟保固後台</Button>
         {record.document && <Form form={form} layout="vertical" disabled={locked || !editable} onValuesChange={publish}>
+          <section aria-label="保固核對">
+            <Typography.Title level={5}>保固核對</Typography.Title>
+            <Form.Item name={['warrantyReview', 'status']} label="人工核對紀錄"><Select aria-label="人工核對紀錄" allowClear placeholder="尚未記錄" onChange={status => { if (!status) { form.setFieldsValue({ warrantyReview: { note: undefined, warrantyNumber: undefined } }); publish(); } }} options={Object.entries(WARRANTY_REVIEW_STATUSES).map(([value, label]) => ({ value, label }))} /></Form.Item>
+            <Form.Item name={['warrantyReview', 'warrantyNumber']} label="保固編號"><Input aria-label="保固編號" maxLength={200} /></Form.Item>
+            <Form.Item name={['warrantyReview', 'note']} label="保固核對備註"><Input.TextArea aria-label="保固核對備註" maxLength={2000} autoSize={{ minRows: 2, maxRows: 4 }} /></Form.Item>
+            {record.document.warrantyReview && <Typography.Paragraph type="secondary">{record.document.warrantyReview.recordedByName} · {new Date(record.document.warrantyReview.recordedAt).toLocaleString('zh-TW')}</Typography.Paragraph>}
+          </section>
+          <section aria-label="問題紀錄">
+            <Typography.Title level={5}>問題紀錄</Typography.Title>
+            <Form.Item name={['mailroomIssue', 'symptom']} label="收發補充問題"><Input.TextArea aria-label="收發補充問題" maxLength={2000} autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
+            <Form.Item name={['mailroomIssue', 'preliminaryReason']} label="原因初判"><Input.TextArea aria-label="原因初判" maxLength={2000} autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
+          </section>
+          <section aria-label="初步檢測">
+          <Typography.Title level={5}>初步檢測</Typography.Title>
           {!!record.availableTemplates?.length && <div className="mailroom-precheck-template"><Select aria-label="初檢表" placeholder="選擇初檢表" value={templateId} disabled={locked || !editable} onChange={setTemplateId} options={record.availableTemplates.map(row => ({ value: row.id, label: row.title }))} /><Button disabled={locked || !editable || !templateChanged} onClick={() => void save(false, true)}>套用初檢表</Button></div>}
           <Form.List name="checks">{fields => fields.map(field => {
             const definition = record.template.template?.checks.find(row => row.key === values?.checks?.[field.name]?.key);
@@ -142,6 +158,8 @@ export default function InitialInspectionDrawer({ entityId, itemIds, open, feedb
             form.setFieldValue('checks', (form.getFieldValue('checks') || []).map((check: PrecheckValues['checks'][number]) => ({ ...check, evidenceIndexes: [] })));
             publish();
           }} /></Form.Item>
+          </section>
+          <section aria-label="列印標籤"><Typography.Title level={5}>列印標籤</Typography.Title><Button disabled={locked} onClick={() => guardChange(onClose)}>回收件紀錄列印</Button></section>
         </Form>}
         {!record.document && !record.capabilities.canStart && <Empty description="此物件目前不能建立初檢" />}
       </> : !loading && !error ? <Empty description="未選擇實物" /> : null}

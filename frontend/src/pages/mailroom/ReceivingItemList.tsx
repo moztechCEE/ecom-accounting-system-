@@ -4,7 +4,7 @@ import { EditOutlined, PictureOutlined } from '@ant-design/icons';
 import api from '../../services/api';
 import { CATEGORIES, STATUS, type Item } from './model';
 import { canOpenPrecheck } from './mailroom-workflow';
-import { PRECHECK_STAGES } from './initial-inspection-model';
+import { receivingPrecheckStageLabel } from './initial-inspection-model';
 import MailroomLabelPrint from './MailroomLabelPrint';
 import type { DirectLabelPrint } from './mailroom-label';
 
@@ -83,7 +83,7 @@ export default function ReceivingItemList({ entityId, items, total, page, loadin
       <Checkbox aria-label={`選取 ${item.label}`} checked={selectedIds.includes(item.id)} onChange={event => onSelect(event.target.checked ? [...selectedIds, item.id] : selectedIds.filter(id => id !== item.id))} />
       <ItemThumbnail item={item} entityId={entityId} loadPhoto={loadPhoto} />
       <div className="mailroom-receiving-identity"><Button type="link" className="mailroom-item-link" onClick={() => onOpen(item.id)}>{item.productName}</Button><div>{item.receipt.sourceNumber || item.receipt.senderLabel || '待客服配對'}</div><Typography.Text type="secondary">{item.label}{item.serialNumber ? ` · SN ${item.serialNumber}` : ''}</Typography.Text></div>
-      <div className="mailroom-receiving-stage"><Tag>{item.statusLabel || STATUS[item.status] || item.status}</Tag><Tag>{CATEGORIES[item.receipt.category] || item.receipt.category}</Tag>{item.precheck && <div><Typography.Text type="secondary">{PRECHECK_STAGES[item.precheck.stage] || item.precheck.stage}{item.precheck.savedByName ? ` · ${item.precheck.savedByName} · v${item.precheck.revision}` : ''}</Typography.Text></div>}</div>
+      <div className="mailroom-receiving-stage"><Tag>{item.statusLabel || STATUS[item.status] || item.status}</Tag><Tag>{CATEGORIES[item.receipt.category] || item.receipt.category}</Tag>{item.precheck && <div><Typography.Text type="secondary">{receivingPrecheckStageLabel(item.precheck.stage, item.status)}{item.precheck.savedByName ? ` · ${item.precheck.savedByName} · v${item.precheck.revision}` : ''}</Typography.Text></div>}</div>
       <div className="mailroom-receiving-row-actions"><Button className="mailroom-receiving-edit" icon={<EditOutlined aria-hidden />} aria-label={`編輯初檢 ${item.label}`} title="編輯初檢" disabled={!canEdit || !canOpenPrecheck(item)} onClick={() => onInspect([item.id])} /><MailroomLabelPrint entityId={entityId} itemIds={[item.id]} directDisabled={!canEdit} iconOnly ariaLabel={`列印物件標籤 ${item.label}`} onDirectPrint={onDirectPrint} pendingActionLabel={pendingActionLabel} onBusyChange={busy => updateLabelBusy(item.id, busy)} /></div>
     </div>)}
     {!items.length && <Empty description="目前沒有符合條件的收件" />}

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:20496bd09fe26d700804439f84083e969a82a9a8f764e12d3f4448fd9ea05dc2",
+  "sourceVersion": "sha256:52e55e2ffd0d78a012fe463e2bd294c419a423b19e21787c2a6ceb10c83fa045",
   "reviewedBaseCommit": "470a5b499ce7a7af4b57117446395ded6b422bec",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "dbc864a5d7187a138488d5cf6f48e0bfeaf1733e702d54c7115071366facbf3b",
+  "catalogSha256": "7ea0212dd080e8ae8ba0f2f5fe0ea0d0957f4fdd2bd0c04ba1a9aba2d2f2c9e3",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -459,12 +459,16 @@
       "sha256": "d799fc05b0b41e37caa3261d2b4159903cdfb9f208bdd7249165fed78f80dd2a"
     },
     {
+      "path": "backend/src/modules/mailroom/mailroom-precheck-context.contract.ts",
+      "sha256": "5accc23b94719cd61fa247f77fd2a247753c5eebaf916913140b9c26c819cb70"
+    },
+    {
       "path": "backend/src/modules/mailroom/mailroom-precheck-record.contract.ts",
-      "sha256": "e26dacd478dd35fed71f7cb842d3a9bfd0757a1e11bbe9ee4f19ea29e6149c83"
+      "sha256": "9971eebb54aada3a9dc76cdbdbff99db42a6ed5e5079d32b56f4b3fadc33afb0"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-precheck.contract.ts",
-      "sha256": "c27b0100c45da2c8a7786b38a3ca087fdfc461653ea9476887bb86d14c3ad488"
+      "sha256": "a62a3fa3a6d7c71517017bda6fbbc1234aa1f26d557db017766c563c846c9a9c"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-precheck.controller.ts",
@@ -472,11 +476,11 @@
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-precheck.dto.ts",
-      "sha256": "816f95ae59bef56ad31259e61b185ced76a75a8c9b796a2952c566ab9a742aee"
+      "sha256": "584a84942ce7fe68ac0bc212ee219d3f0b35c46ea3055e883aa21fc42f170480"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-precheck.service.ts",
-      "sha256": "9d36741785f8f6075b73c727b71762cb49caffaf1117ec9341c810fe0603ced2"
+      "sha256": "289065004fcb416b8c47b1d74ec113809aed6592f7e89be05d56818487480af2"
     },
     {
       "path": "backend/src/modules/mailroom/mailroom-precheck.templates.ts",
@@ -1068,11 +1072,11 @@
     },
     {
       "path": "frontend/src/pages/mailroom/initial-inspection-model.ts",
-      "sha256": "f96dae14ffb83cd2c66b97c3bf07577e5b87f631522366ba14f794ceea0a8f75"
+      "sha256": "22338d61b3886ea3b7cd725ca773f2535d38ebfc864010531168d7d61a9e63a0"
     },
     {
       "path": "frontend/src/pages/mailroom/InitialInspectionDrawer.tsx",
-      "sha256": "8c1501c556fcea8bc411edf66efe56de2166e3586c99dfb14d291358f14043e7"
+      "sha256": "7d9e67071517af8fcb84d4fe25ad6e9c19e30e6490c7cc50fb722b441a1332f2"
     },
     {
       "path": "frontend/src/pages/mailroom/intake-actions.ts",
@@ -1100,7 +1104,7 @@
     },
     {
       "path": "frontend/src/pages/mailroom/mailroom-precheck-record.ts",
-      "sha256": "fcbd6174842c46ee361f6467c6bae9e223e0e7307931a835a04fe8dcefd4952b"
+      "sha256": "3c6382ba78260c197c8091552397a033ae721b449b447f5836eb63068c7ae889"
     },
     {
       "path": "frontend/src/pages/mailroom/mailroom-workflow.ts",
@@ -1160,7 +1164,7 @@
     },
     {
       "path": "frontend/src/pages/mailroom/ReceivingItemList.tsx",
-      "sha256": "6f62ca80467112fd65f0d00b304991c6970d6b1e05fcc30796501e9f20a85bed"
+      "sha256": "dec062f287be25a1291b62e329cf7494ebe43989c09e327209c7d50c6d40db5c"
     },
     {
       "path": "frontend/src/pages/mailroom/recipient-options.ts",
@@ -1252,7 +1256,7 @@
     },
     {
       "path": "frontend/src/pages/repair/repair-model.ts",
-      "sha256": "7d9a9d2b97e60a3bbaefd87f42a314d9772b9c2ee7afc334e5f2abd1d9af986a"
+      "sha256": "a3030df396e7a3908c9e7733ec55fe0a00a861661b7fc70803252b7f0aa46cba"
     },
     {
       "path": "frontend/src/pages/repair/repair-navigation.ts",
@@ -1284,7 +1288,7 @@
     },
     {
       "path": "frontend/src/pages/repair/RepairPrecheckReadOnly.tsx",
-      "sha256": "c72f1a2061020390b90797ba39ff167baab6a0e11b9699732e0ee01397c9f164"
+      "sha256": "d204083801ea7f6f498739d58ffc8b8bc1d891b65e2eaeea7a7d9232c401d0db"
     },
     {
       "path": "frontend/src/pages/repair/RepairPublicReportPage.tsx",
@@ -1412,7 +1416,7 @@
     },
     {
       "path": "frontend/src/services/mailroom-receiving.ts",
-      "sha256": "fff241c75cd1a21b6e3a4b015500b4f96f46067fee26a15eafa864b980b9d25b"
+      "sha256": "819b27c217364e48784f443c7f832af5d190e85e2df354287685b760ee866ea1"
     },
     {
       "path": "frontend/src/services/native-after-sales.service.ts",

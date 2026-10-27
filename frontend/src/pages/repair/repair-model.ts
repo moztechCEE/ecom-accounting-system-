@@ -114,6 +114,8 @@ export type RepairPrecheckView =
     templateTitle?:string;templateRevision?:number;
     checks:{key:string;label:string;result:'NORMAL'|'ABNORMAL'|'NOT_TESTED'|'NOT_APPLICABLE';note?:string;photoIds:string[]}[];
     photos:RepairPrecheckPhoto[];notRequiredReason?:string|null;
+    warrantyReview?:NonNullable<MailroomPrecheckRecord['recorded']>['warrantyReview'];
+    mailroomIssue?:NonNullable<MailroomPrecheckRecord['recorded']>['mailroomIssue'];
   };
 const precheckHash = (value:unknown):value is string => typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const precheckText = (value:unknown):value is string => typeof value==='string' && !!value.trim();
@@ -155,6 +157,14 @@ export function repairPrecheckView(value:unknown,entityId:string,itemId:string):
     || !precheckHash(record.template.contentHash) || !precheckText(record.template.title))) return unavailable;
   if (!record.checks.length && !precheckText(record.notRequiredReason)) return unavailable;
   if (record.photos.some(photo=>!repairPrecheckPhotoUrl(photo,itemId,record.revision))) return unavailable;
+  const review=record.warrantyReview, issue=record.mailroomIssue;
+  const optionalObservation=(text:unknown)=>text===null || (typeof text==='string' && text.length<=2000);
+  if (review!==undefined && review!==null && (review.schema!==1 || review.method!=='MANUAL_EXTERNAL'
+    || !['CHECKED','NEEDS_CORRECTION','CORRECTED_EXTERNALLY'].includes(review.status)
+    || !optionalObservation(review.note) || !(review.warrantyNumber===null || (typeof review.warrantyNumber==='string' && review.warrantyNumber.length<=200)) || !precheckText(review.recordedById)
+    || !precheckText(review.recordedByName) || !precheckTime(review.recordedAt))) return unavailable;
+  if (issue!==undefined && issue!==null && (issue.schema!==1 || !optionalObservation(issue.symptom)
+    || !optionalObservation(issue.preliminaryReason))) return unavailable;
   const photoIds=new Set(record.photos.map(photo=>photo.id));
   if (photoIds.size!==record.photos.length || new Set(record.checks.map(check=>check?.key)).size!==record.checks.length
     || record.checks.some(check=>!check || !precheckText(check.key) || !precheckText(check.label)
@@ -165,6 +175,8 @@ export function repairPrecheckView(value:unknown,entityId:string,itemId:string):
     state:'SUBMITTED',revision:record.revision,recordedBy:record.savedByName,recordedAt:record.savedAt,submittedAt:record.submittedAt,
     ...(record.template ? {templateTitle:record.template.title,templateRevision:record.template.revision} : {}),
     checks:record.checks.map(check=>({...check,note:check.note ?? undefined})),photos:record.photos,notRequiredReason:record.notRequiredReason,
+    ...(review!==undefined ? {warrantyReview:review} : {}),
+    ...(issue!==undefined ? {mailroomIssue:issue} : {}),
   };
 }
 export type RepairItem = Item & {

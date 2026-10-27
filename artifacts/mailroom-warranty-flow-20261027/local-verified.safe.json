@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "kind": "mailroom-warranty-flow-local-validation",
+  "baseSourceSha": "698486ed39bb4cf9af565a59622e02f9df23217c",
+  "branch": "codex/mailroom-warranty-flow-20261027",
+  "databaseChanges": false,
+  "deployment": false,
+  "customerWarrantyReadsOrWrites": false,
+  "physicalPrints": 0,
+  "scope": "structured optional manual warranty review and mailroom issue fields; saved precheck only; source customer issue and label contract unchanged",
+  "checks": {
+    "backendAffectedSuites": {
+      "passed": 87,
+      "failed": 0
+    },
+    "mailroomFullDOMAndModelBeforeFixedLinkRelocation": {
+      "passed": 31,
+      "failed": 0
+    },
+    "finalWarrantyEntryAndRoundtripDOM": {
+      "passed": 3,
+      "failed": 0
+    },
+    "repairReaderDOM": {
+      "passed": 27,
+      "failed": 0
+    },
+    "knowledgeTests": {
+      "passed": 20,
+      "failed": 0
+    },
+    "knowledgeCoverage": {
+      "guides": 82,
+      "routes": 106,
+      "sources": 326
+    },
+    "frontendBuild": "PASS",
+    "scopedFrontendLint": "PASS",
+    "scopedBackendLint": "PASS",
+    "diffCheck": "PASS",
+    "backendBuild": "PASS",
+    "cleanScreenshotRoundtripDOM": {
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "preservedOriginalCase": "Existing completed v12 is not written, reopened, re-received, rechecked, reprinted or notified by this local change.",
+  "sourceHashes": {
+    "backend/src/modules/ai/knowledge/catalog.generated.ts": "e6f2028e26c4ba895408845b6d3ee810a341d39ca2a1d5be67e7311c77779915",
+    "backend/src/modules/ai/knowledge/catalog.source.json": "7ea0212dd080e8ae8ba0f2f5fe0ea0d0957f4fdd2bd0c04ba1a9aba2d2f2c9e3",
+    "backend/src/modules/ai/knowledge/source-manifest.json": "57c2600288651fdd7f3db75396c53b2766930864a1d8e09e2b9b403faa4027e9",
+    "backend/src/modules/mailroom/mailroom-precheck-context.contract.spec.ts": "d5e8f8c85700cba854df8fecbcaeda94b21296bc99118d70be12a4fb4be54b05",
+    "backend/src/modules/mailroom/mailroom-precheck-context.contract.ts": "5accc23b94719cd61fa247f77fd2a247753c5eebaf916913140b9c26c819cb70",
+    "backend/src/modules/mailroom/mailroom-precheck-handoff.service.spec.ts": "bc08683d72055573edcd90d05c0d2e0e8b889a7cdeed995205f16f2bcb1eabb6",
+    "backend/src/modules/mailroom/mailroom-precheck-record.contract.ts": "9971eebb54aada3a9dc76cdbdbff99db42a6ed5e5079d32b56f4b3fadc33afb0",
+    "backend/src/modules/mailroom/mailroom-precheck.contract.ts": "a62a3fa3a6d7c71517017bda6fbbc1234aa1f26d557db017766c563c846c9a9c",
+    "backend/src/modules/mailroom/mailroom-precheck.dto.ts": "584a84942ce7fe68ac0bc212ee219d3f0b35c46ea3055e883aa21fc42f170480",
+    "backend/src/modules/mailroom/mailroom-precheck.service.spec.ts": "a6f461d1dfed80bcae6d1c7f14312e6ec059ab586deaeefbecb1e63cb06e5f62",
+    "backend/src/modules/mailroom/mailroom-precheck.service.ts": "289065004fcb416b8c47b1d74ec113809aed6592f7e89be05d56818487480af2",
+    "docs/dev/mailroom-warranty-flow-20261027.md": "56b56ddffe181905ccfc6c216e2f3f725c889b001e7fe94a5c982f385cba5143",
+    "frontend/src/pages/mailroom/InitialInspectionDrawer.tsx": "7d9e67071517af8fcb84d4fe25ad6e9c19e30e6490c7cc50fb722b441a1332f2",
+    "frontend/src/pages/mailroom/ReceivingItemList.tsx": "dec062f287be25a1291b62e329cf7494ebe43989c09e327209c7d50c6d40db5c",
+    "frontend/src/pages/mailroom/initial-inspection-model.ts": "22338d61b3886ea3b7cd725ca773f2535d38ebfc864010531168d7d61a9e63a0",
+    "frontend/src/pages/mailroom/mailroom-precheck-record.ts": "3c6382ba78260c197c8091552397a033ae721b449b447f5836eb63068c7ae889",
+    "frontend/src/pages/repair/RepairPrecheckReadOnly.tsx": "d204083801ea7f6f498739d58ffc8b8bc1d891b65e2eaeea7a7d9232c401d0db",
+    "frontend/src/pages/repair/repair-model.ts": "a3030df396e7a3908c9e7733ec55fe0a00a861661b7fc70803252b7f0aa46cba",
+    "frontend/src/services/mailroom-receiving.ts": "819b27c217364e48784f443c7f832af5d190e85e2df354287685b760ee866ea1",
+    "frontend/tests/mailroom-precheck-dom.test.mjs": "e24f87f30cc31214f00fd635f0894893c4bc3e1b8f89782f2f23914173770bb9",
+    "frontend/tests/mailroom-precheck-model.test.ts": "758ee16bd3078234542598561c5854c91790611ec2672e33068fa5d23b4a2a1b",
+    "frontend/tests/repair-precheck-reader-dom.test.mjs": "81ff917756054a90bf3201c983d8b9dcf52308c6bd5c29dd245bb9ed7f7ca69c"
+  },
+  "screenshot": {
+    "path": "artifacts/mailroom-warranty-flow-20261027/warranty-flow-320.png",
+    "sha256": "37cc276be1e8a2c72ab8394937ac8cfbb2c4bfd2f2c4caafe10360b617c94b95"
+  },
+  "evidence": {
+    "mailroomFullDOM": {
+      "path": "artifacts/mailroom-warranty-flow-20261027/mailroomFullDOM.safe.json",
+      "sha256": "b24810a541d9e3e07ea3fa3b7b5e28561c0d763264af8968e8eab1f3945175d2"
+    },
+    "finalWarrantyEntryDOM": {
+      "path": "artifacts/mailroom-warranty-flow-20261027/finalWarrantyEntryDOM.safe.json",
+      "sha256": "f4f4b2acb48feee89c87b4f1dde1de798aa27fa4b83078f330163694a4084f49"
+    },
+    "cleanScreenshotDOM": {
+      "path": "artifacts/mailroom-warranty-flow-20261027/cleanScreenshotDOM.safe.json",
+      "sha256": "c7fa3e487b3508f526bcb361a2a1fc05c7353af3089de8a0c868c478825c6715"
+    },
+    "repairReaderDOM": {
+      "path": "artifacts/mailroom-warranty-flow-20261027/repairReaderDOM.safe.json",
+      "sha256": "21341a4f80f126251175ba20f299ca7398b7b6a784a6f82075adb8b2233c0c56"
+    }
+  }
+}
