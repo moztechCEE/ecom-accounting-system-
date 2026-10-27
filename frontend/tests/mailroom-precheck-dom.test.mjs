@@ -31,9 +31,9 @@ function Harness(){
   return <main style={{padding:'12px',minWidth:0}}>{contextHolder}<InitialInspectionDrawer entityId={entityId} itemIds={itemIds} open={open} feedback={message} guardChange={change=>change()} onDraftChange={draft=>window.precheckFixture.drafts.push(structuredClone(draft))} onClose={()=>setOpen(false)} onSaved={value=>window.precheckFixture.saved.push(structuredClone(value??null))}/></main>;
 }
 function ReceivingHarness(){
-  const [entityId,setEntityId]=useState('company-a'),[selectedIds,setSelectedIds]=useState([]);
-  window.precheckFixture.setEntity=setEntityId;
-  return <main id="receiving-fixture-list" style={{padding:'16px 12px',minWidth:0,marginTop:new URLSearchParams(location.search).has('spacer')?1600:0}}><ReceivingItemList entityId={entityId} items={window.precheckFixture.receivingRows(entityId)} total={8} page={1} loading={false} selectedIds={selectedIds} onSelect={ids=>{setSelectedIds(ids);window.precheckFixture.selections.push([...ids]);}} onPage={page=>window.precheckFixture.pages.push(page)} onOpen={id=>window.precheckFixture.opened.push(id)} onInspect={ids=>window.precheckFixture.inspected.push([...ids])} canEdit/></main>;
+  const [entityId,setEntityId]=useState('company-a'),[selectedIds,setSelectedIds]=useState([]),[photoVersion,setPhotoVersion]=useState(1);
+  window.precheckFixture.setEntity=setEntityId;window.precheckFixture.setPhotoVersion=setPhotoVersion;
+  return <main id="receiving-fixture-list" style={{padding:'16px 12px',minWidth:0,marginTop:new URLSearchParams(location.search).has('spacer')?1600:0}}><ReceivingItemList entityId={entityId} items={window.precheckFixture.receivingRows(entityId).map(row=>({...row,version:photoVersion}))} total={8} page={1} loading={false} selectedIds={selectedIds} onSelect={ids=>{setSelectedIds(ids);window.precheckFixture.selections.push([...ids]);}} onPage={page=>window.precheckFixture.pages.push(page)} onOpen={id=>window.precheckFixture.opened.push(id)} onInspect={ids=>window.precheckFixture.inspected.push([...ids])} canEdit/></main>;
 }
 createRoot(document.getElementById('root')).render(new URLSearchParams(location.search).get('fixture')==='receiving'?<ReceivingHarness/>:<Harness/>);
 `;
@@ -77,10 +77,12 @@ function handoff(body){
   state.handoffReceipts.push(clone(result));return {data:clone(result)};
 }
 state.receivingRows=entityId=>Array.from({length:8},(_,index)=>({id:entityId+'-photo-'+(index+1),label:'MR-'+(index+1),productName:'合成實收產品 VeryLongActualProductName '+(index+1),sku:'ACTUAL-SKU-'+index,serialNumber:'SERIAL-'+(index+1),status:'RECEIVED',statusLabel:'已收到，待核對',version:1,matchResult:'PENDING',grade:null,disposition:null,conditionNote:null,location:'A1',custodianId:'clerk',custodianName:'合成收發人員',physicalCustody:'MAILROOM',nextUserId:null,nextUserName:null,recipientId:null,repairOwnerId:null,mine:false,evidenceCount:1,evidenceThumbnailUrl:'/mailroom/prechecks/items/'+entityId+'-photo-'+(index+1)+'/photo',receipt:{number:'RECEIPT-'+(index+1),category:index===7?'LETTER':'REPAIR',sourceCaseId:'synthetic-source',sourceNumber:'SYNTHETIC-SOURCE-'+(index+1),senderLabel:'合成寄件人'},precheck:{stage:'DRAFT',revision:1,savedById:'clerk',savedByName:'初檢同仁',savedAt:'2026-10-16T00:00:00Z'}}));
+const photoStates=new URLSearchParams(location.search).has('photoStates');
+if(photoStates){const rows=state.receivingRows;state.receivingRows=entityId=>rows(entityId).map((row,index)=>index===2?{...row,evidenceCount:0,evidenceThumbnailUrl:null}:index===3?{...row,evidenceThumbnailUrl:null}:index===4?{...row,evidenceThumbnailUrl:'https://untrusted.invalid/photo.png'}:row);}
 const nativeCreate=URL.createObjectURL.bind(URL),nativeRevoke=URL.revokeObjectURL.bind(URL);
 URL.createObjectURL=blob=>{const src=nativeCreate(blob);state.objectURLs.push({src,entityId:blob.fixtureEntity||null});return src;};
 URL.revokeObjectURL=src=>{state.revokedURLs.push(src);return nativeRevoke(src);};
-function photo(entityId){const canvas=document.createElement('canvas');canvas.width=canvas.height=2;const context=canvas.getContext('2d');context.fillStyle=entityId==='company-a'?'#1677ff':'#00aa55';context.fillRect(0,0,2,2);const bytes=Uint8Array.from(atob(canvas.toDataURL('image/png').split(',')[1]),char=>char.charCodeAt(0)),blob=new Blob([bytes],{type:'image/png'});Object.defineProperty(blob,'fixtureEntity',{value:entityId});return blob;}
+function photo(entityId,path){const canvas=document.createElement('canvas'),tall=path.includes('-photo-2/');canvas.width=photoStates?(tall?100:300):2;canvas.height=photoStates?(tall?300:100):2;const context=canvas.getContext('2d');context.fillStyle=entityId==='company-a'?'#1677ff':'#00aa55';context.fillRect(0,0,canvas.width,canvas.height);if(photoStates){context.fillStyle='#fff';context.fillRect(8,8,canvas.width-16,canvas.height-16);context.fillStyle='#253349';context.fillRect(tall?28:72,tall?54:24,tall?44:156,tall?192:52);context.fillStyle='#fff';context.font='bold 12px sans-serif';context.fillText('MOZTECH',tall?22:118,tall?150:55);}const bytes=Uint8Array.from(atob(canvas.toDataURL('image/png').split(',')[1]),char=>char.charCodeAt(0)),blob=new Blob([bytes],{type:'image/png'});Object.defineProperty(blob,'fixtureEntity',{value:entityId});return blob;}
 state.releasePhoto=entityId=>{const entry=state.photoPending.find(entry=>entry.entityId===entityId);if(entry)entry.release();};
 state.releasePhotos=entityId=>{for(const entry of [...state.photoPending])if(entry.entityId===entityId)entry.release();};
 state.updateCustomTemplate=()=>{custom.revision=4;custom.contentHash='d'.repeat(64);};
@@ -90,7 +92,9 @@ export default {
     state.calls.push({path,params:clone(config.params||{}),responseType:config.responseType||null});
     if(/^\\/mailroom\\/prechecks\\/items\\/[^/]+\\/photo$/.test(path)){
       if(config.responseType!=='blob'){state.unexpected.push('Non-blob photo GET '+path);throw Error('Photo must use authenticated blob response');}
-      return new Promise(resolve=>{const entityId=config.params.entityId,onAbort=()=>state.photoAborted.push({path,entityId}),entry={path,entityId,release:()=>{config.signal?.removeEventListener('abort',onAbort);state.photoPending=state.photoPending.filter(row=>row!==entry);resolve({data:photo(entityId)});}};state.photoPending.push(entry);config.signal?.addEventListener('abort',onAbort,{once:true});});
+      if(photoStates&&path.includes('-photo-6/'))reject(503,'Synthetic photo failure');
+      if(photoStates&&path.includes('-photo-7/'))return {data:new Blob(['not a photo'],{type:'text/html'})};
+      return new Promise(resolve=>{const entityId=config.params.entityId,onAbort=()=>state.photoAborted.push({path,entityId}),entry={path,entityId,release:()=>{config.signal?.removeEventListener('abort',onAbort);state.photoPending=state.photoPending.filter(row=>row!==entry);resolve({data:photoStates&&path.includes('-photo-8/')?new Blob(['broken image'],{type:'image/png'}):photo(entityId,path)});}};state.photoPending.push(entry);config.signal?.addEventListener('abort',onAbort,{once:true});});
     }
     const match=path.match(/^\\/mailroom\\/prechecks\\/items\\/([^/]+)$/);
     if(match){const item=scoped(decodeURIComponent(match[1]),config.params?.entityId),result=clone(read(item));if(state.holdReads[item.id])return new Promise(resolve=>state.held[item.id]=()=>{delete state.held[item.id];resolve({data:result});});return {data:result};}
@@ -415,6 +419,49 @@ test('actual initial inspection drawer preserves physical identity, revisions an
     assert.equal(await page.evaluate(() => window.precheckFixture.handoffReceipts[1].items.every(item => item.duplicate)), true);
   }, '?ready=1&items=repair-a,repair-b');
 
+  await scene('receiving photo previews contain the complete image and distinguish missing, unavailable and failed photos', async page => {
+    await page.waitForFunction(() => window.precheckFixture.calls.filter(call => call.path.endsWith('/photo')).length === 5);
+    assert.equal(await page.getByRole('button', { name: 'MR-1：載入中', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'MR-3：無照片', exact: true }).isDisabled(), true);
+    for (const label of ['MR-4', 'MR-5']) assert.equal(await page.getByRole('button', { name: label + '：無法預覽', exact: true }).isDisabled(), true);
+    await page.evaluate(() => window.precheckFixture.releasePhotos('company-a'));
+    await page.locator('.mailroom-receiving-photo img').nth(1).waitFor();
+    for (const label of ['MR-6', 'MR-7', 'MR-8']) await page.getByRole('button', { name: label + '：載入失敗', exact: true }).waitFor();
+    const thumb = page.getByRole('button', { name: '放大 MR-1 的實收照片', exact: true });
+    const image = thumb.locator('img'), source = await image.getAttribute('src');
+    assert.deepEqual(await image.evaluate(node => ({ width: node.naturalWidth, height: node.naturalHeight, fit: getComputedStyle(node).objectFit })), { width: 300, height: 100, fit: 'contain' });
+    assert.equal(await page.locator('.mailroom-receiving-photo img').evaluateAll(nodes => nodes.every(node => { const image = node.getBoundingClientRect(), button = node.parentElement.getBoundingClientRect();return image.width <= button.width && image.height <= button.height; })), true, 'Both wide and tall images stay inside the thumbnail instead of overflowing its grid track');
+    await page.screenshot({ path: artifactPrefix + '-photo-list-desktop.png', fullPage: true });
+    await thumb.focus();await thumb.press('Enter');
+    const preview = page.getByRole('dialog', { name: '合成實收產品 VeryLongActualProductName 1', exact: true });await preview.waitFor();
+    assert.equal(await preview.getByRole('img', { name: 'MR-1 實收照片放大', exact: true }).getAttribute('src'), source, 'Preview reuses the already authenticated scoped blob');
+    assert.equal(await page.evaluate(() => window.precheckFixture.calls.filter(call => call.path.endsWith('/photo')).length), 5, 'Opening a photo never makes another request');
+    assert.deepEqual(await page.evaluate(() => window.precheckFixture.opened), [], 'The photo button opens the photo, not the case');
+    await preview.evaluate(async modal => { await Promise.all(modal.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))); });
+    await page.waitForFunction(() => document.activeElement?.closest('[role="dialog"]'));
+    await page.screenshot({ path: artifactPrefix + '-photo-preview-desktop.png' });
+    await page.keyboard.press('Escape');await preview.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '放大 MR-1 的實收照片');
+    await page.locator('.mailroom-item-link').first().click();assert.deepEqual(await page.evaluate(() => window.precheckFixture.opened), ['company-a-photo-1'], 'The separate product link still opens the case');
+    await page.setViewportSize({ width: 320, height: 740 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
+    await page.screenshot({ path: artifactPrefix + '-photo-list-mobile.png', fullPage: true });
+    await page.getByRole('button', { name: '放大 MR-2 的實收照片', exact: true }).click();
+    const mobilePreview = page.getByRole('dialog', { name: '合成實收產品 VeryLongActualProductName 2', exact: true });await mobilePreview.waitFor();
+    const mobileImage = mobilePreview.getByRole('img', { name: 'MR-2 實收照片放大', exact: true });
+    const geometry = await mobileImage.evaluate(node => ({ naturalWidth: node.naturalWidth, naturalHeight: node.naturalHeight, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height, viewportWidth: innerWidth, viewportHeight: innerHeight, documentWidth: document.documentElement.scrollWidth }));
+    assert.equal(geometry.naturalWidth, 100);assert.equal(geometry.naturalHeight, 300);assert.ok(geometry.width < geometry.viewportWidth);assert.ok(geometry.height <= geometry.viewportHeight * .72 + 1);assert.equal(geometry.documentWidth, 320);
+    await mobilePreview.evaluate(async modal => { await Promise.all(modal.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))); });
+    await page.waitForFunction(() => document.activeElement?.closest('[role="dialog"]'));
+    await page.screenshot({ path: artifactPrefix + '-photo-preview-mobile.png' });
+    const oldSources = await page.locator('.mailroom-receiving-photo img').evaluateAll(nodes => nodes.map(node => node.src));
+    await page.evaluate(() => window.precheckFixture.setPhotoVersion(2));
+    await mobilePreview.waitFor({ state: 'detached' });
+    assert.equal(await page.locator('.mailroom-receiving-photo img').count(), 0, 'A new item version cannot retain the old image or preview');
+    assert.equal(await page.evaluate(sources => sources.every(src => window.precheckFixture.revokedURLs.includes(src)), oldSources), true);
+    assert.equal((await posts(page)).length, 0);
+  }, '?fixture=receiving&photoStates=1');
+
   await scene('receiving thumbnails wait for viewport intersection and start only four authenticated blobs at a time', async page => {
     await page.getByRole('button', { name: '編輯初檢 MR-1', exact: true }).waitFor();
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -438,9 +485,11 @@ test('actual initial inspection drawer preserves physical identity, revisions an
     await page.evaluate(() => window.precheckFixture.releasePhoto('company-a'));
     await page.waitForFunction(() => document.querySelectorAll('.mailroom-receiving-photo img').length === 1 && window.precheckFixture.calls.filter(call => call.path.endsWith('/photo')).length === 5);
     const oldSource = await page.locator('.mailroom-receiving-photo img').getAttribute('src');
+    await page.locator('.mailroom-receiving-photo:has(img)').click();await page.getByRole('dialog').waitFor();
     await page.evaluate(() => window.precheckFixture.setEntity('company-b'));
     await page.waitForFunction(() => window.precheckFixture.calls.filter(call => call.path.endsWith('/photo') && call.params.entityId === 'company-b').length === 4);
     assert.equal(await page.locator('.mailroom-receiving-photo img').count(), 0);
+    assert.equal(await page.getByRole('dialog').count(), 0, 'A company change removes the old photo preview immediately');
     assert.ok(await page.evaluate(src => window.precheckFixture.revokedURLs.includes(src), oldSource), 'An already rendered old-company blob is revoked');
     assert.equal(await page.evaluate(() => window.precheckFixture.photoAborted.filter(call => call.entityId === 'company-a').length), 4);
     await page.evaluate(() => window.precheckFixture.releasePhotos('company-a'));
