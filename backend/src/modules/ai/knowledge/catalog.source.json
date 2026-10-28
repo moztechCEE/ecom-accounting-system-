@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reviewedBaseCommit": "470a5b499ce7a7af4b57117446395ded6b422bec",
+  "reviewedBaseCommit": "0ae9b322aedf1ff3ca2df0a6ab68f65dcb922c09",
   "locales": [
     "zh-TW",
     "en"
@@ -5080,7 +5080,7 @@
       "sections": {
         "steps": [
           "維修工作台預設開啟「我的待辦」，另有「待認領與簽收」及「案件查詢」。清單保留照片、產品／案件名稱、顧客姓名、電話、案件編號及目前進度；用品名或「開啟案件」開案。實收 SN／SKU、位置、文件版次及所有原操作在案件詳情核對。",
-          "可在工作台掃描物件標籤，開啟同公司原案件。詳情中的收發初檢先顯示未開始、初檢中、待交接或已提交；只在提交後讀取存檔檢查項目、結果、說明、照片及編輯人／時間，實收變更造成待重核時不把舊結果當目前結果。收發初檢不代填正式檢修單。",
+          "工作台上方固定提供掃描輸入，掃碼槍送出 Enter 或按「開啟案件」。同公司原生實物 UUID／安全連結直接開啟原件；純系統案件號依完整精確查詢定位。單案多件或同號不同來源時先選產品與實物標籤，不從模糊搜尋取第一筆；查無、無權限、登入或公司切換均不開案。列印時修改的案件文字不是實物 QR 身份。",
           "待認領與簽收內可按需展開「收發初檢」，查看尚由收發處理的已收維修件及初檢節點；已收維修件總數與本頁初檢中、完成待交接數分開標示，不將本頁數當全部案件數。點原件查看時仍不自動認領或簽收。",
           "核對原申報及實收 SKU／SN、配件與位置；由本人認領或接受指派，再本人確認實物簽收。簽收後才開始實物檢測；交接前保管責任仍在原持有人。",
           "維修師本人填寫檢修單：顧客故障描述、測試項目與條件、測試結果、能否重現、原因與依據、保固／收費建議、處理方案及估價。 公平檢驗版經核准發布並啟用後，在原檢修單依五步作業：收件核對、重現問題、核心檢查、判斷與佐證、修復與複驗。BONSON 與 Moztech 都使用本件產品／SKU 已審核的機型測項與合格值，不套用其他機型或自行猜數值。原因保留「使用／外力因素已確認」、「產品本身異常已確認」或「原因待確認」；未重現、外觀刮傷或沒有找到故障，都不能單獨當作人為依據。已確認原因須說明客觀觀察與故障的關聯，選取本版已測的關鍵測項；使用／外力因素另需修前或檢測影像，或符合本版核准標準的實際量測佐證。保存草稿、正式提交與列印分開，列印採已保存版；檢修單不代替實際維修紀錄。 檢修單及維修單仍各自保存草稿、正式送出與版本歷史；內部列印不包含未保存修改。",
@@ -5094,7 +5094,8 @@
           "已交物流物件保留既有檢修、維修與寄出紀錄供查閱；核對承運商、單號及實際原件／替換品。既有同步回執標示「歷史」，不能當本次寄出同步或顧客通知成功。已交運不表示顧客已收件或案件已結案，後續由收發室與客服依實際結果處理。",
           "我的待辦列出目前本人可處理的檢測、文件／複驗、當版放行後施工、原件退回及原廠返還簽收。等待客服、顧客同意及付款留在當件進度；當版正式報價、同意、必要實收款及客服方案有效後才回施工待辦，免費案件仍需當版同意。已施工的文件／複驗待辦不代表可交回；完成仍須原伺服器放行、當版維修單、逐項 PASS 及本人實物交接。",
           "案件查詢保留原等待及歷史分類，按篩選選我的案件、等待中、已交辦收發室或完成紀錄；套用條件可見且能移除。原 all／mine／waiting／delivery／records 網址維持原查詢範圍，帶 itemId 可直接查原案；待到貨／在途資料在待認領與簽收按需展開。等待客服的案件依目前正式報價顯示等待接手、客服審核、顧客確認、款項或發票；客服尚未回覆完成也能核對當前卡點。此等待分支缺少或失效的來源綁定顯示進度待確認；我的待辦標籤仍優先。只有我的待辦與待認領顯示紅件數，案件查詢不標成新工作。",
-          "在案件內填寫本版檢修單，選擇已審核的產品檢測標準、登錄實際量測與有效設備校正；材料需領用、未耗用材料需本人退還後才能完工。"
+          "在案件內填寫本版檢修單，選擇已審核的產品檢測標準、登錄實際量測與有效設備校正；材料需領用、未耗用材料需本人退還後才能完工。",
+          "開案後先看產品、案件編號、目前進度、顧客原述與收發初檢。顧客原述只取核對相同來源身份的 customerIssue；未提供與暫無法取得分開顯示，不以技師描述或初判代替。初檢未提交只顯示進度，已提交才顯示目前實物的檢查結果與照片，記錄人、版次與保固核對按需展開。待簽收時優先認領／本人點收，檢修紀錄按需查看；維修或整新中預設開啟維修單。草稿離開確認後仍核對公司、登入與當前路由；掃描與查閱不自動認領、簽收、開工或改狀態。"
         ],
         "boundaries": [
           "「維修師」職務範本使用 REPAIR_TECHNICIAN，授予 repair_workbench:read 與 repair_workbench:update；它不授予客服審核、會計入帳確認、庫存核銷或跨公司權限。實際操作仍受啟用開關、公司、逐件指派、本人簽收及目前進度限制。",
@@ -5142,7 +5143,7 @@
           "sections": {
             "steps": [
               "The repair workspace opens My tasks by default, alongside Claim and sign-off and Case lookup. Lists retain the photo, product/case name, customer name, phone, case reference and current progress. Open through the product link or Open case; check physical serial/SKU, location, document revisions and original actions in the case detail.",
-              "Scan an item label to open the original same-company case. Preliminary mailroom checks show Not started, In progress, Ready or Submitted. Only submitted records expose saved check labels, results, notes, authorized photos, editor and timestamps. Changed actual identity marks the old record stale. Preliminary checks do not fill the formal technician inspection.",
+              "Use the scanner input above the three workbench entries. A scanner Enter or Open case opens a safe same-origin native item link or UUID within the current company. A plain system case number uses a complete exact lookup. Select the product and item label for multiple items or conflicting source identities; never use the first fuzzy result. Missing, denied or stale-company/login results do not open a case. Editable printed case text is not the physical QR identity.",
               "Expand Mailroom preliminary checks within Claim and acceptance to preview received repair pieces still being processed by the mailroom. Total received repair pieces is separate from in-progress and ready counts on the current page. Opening the original item does not claim or accept it.",
               "Compare claimed and actual SKU, serial number, accessories and location. Claim or accept an assignment, then personally confirm the physical item before inspection. Custody stays with the current holder until the next recipient accepts it.",
               "The technician personally completes the inspection sheet: customer symptom, test items and conditions, results, reproducibility, cause and supporting evidence, warranty/fee suggestion, proposed action and estimate. After the reviewed fair-inspection release is deployed and enabled, use the existing inspection form for five steps: receipt checks, symptom reproduction, core tests, cause and evidence, then repair and verification. For BONSON and Moztech, use the reviewed model tests and acceptance limits for this item's product/SKU; do not reuse another model or invent limits. Keep the cause as Confirmed use/external factors, Confirmed product fault, or Undetermined. A symptom not reproduced, a surface scratch, or no fault found cannot alone establish user-caused damage. For a confirmed cause, explain how objective findings relate to this fault and select the current tested checks. Use/external factors additionally require before-repair or diagnostic media, or actual measurements meeting the current reviewed standard. Draft, submission and printing remain separate; printing uses the saved version, and inspection is not a record of completed repair. Inspection and repair records each retain drafts, submitted versions and version history; internal printing excludes unsaved edits.",
@@ -5156,7 +5157,8 @@
               "Dispatched items retain inspection, repair and outbound records for review. Verify the carrier, tracking number and actual original or replacement item. Prior synchronization acknowledgements are labeled History; they prove neither this dispatch synchronization nor customer notification. Carrier handover does not prove customer receipt or case closure; mailroom and customer service follow the actual outcome.",
               "My tasks lists currently assigned and physically held inspection, document/verification, current-release work, original-item return and factory-return receipt work. Customer-service, consent and payment waits remain in the case. Work requiring release returns only after the current quotation, consent, required confirmed payment and native CSR review agree; free work still needs current consent. Ongoing document/verification tasks do not establish completion eligibility: original server release, the current repair report, passing checks and personal physical handoff still apply.",
               "Case lookup retains waiting and historical categories. Open filters for My cases, Waiting, Handed to mailroom or Completion records; applied filters remain visible and removable. Legacy all/mine/waiting/delivery/records URLs retain their original scope, and itemId opens the same case independently of the list. Arrival/transit records are optional under Claim and sign-off. Pending customer-service handoffs show the current quotation stage: awaiting acceptance, service review, customer consent, payment or invoice, even before the final service reply. Missing or invalid source bindings in this waiting branch show progress awaiting verification; My tasks labels still take priority. Only My tasks and Claim/sign-off show red counts; lookup is not labelled as new work.",
-              "Inside the case, use the reviewed product standard, actual measurements and valid calibration evidence; physically receive materials and return unused materials before completion."
+              "Inside the case, use the reviewed product standard, actual measurements and valid calibration evidence; physically receive materials and return unused materials before completion.",
+              "Inside a case, see the product, case number, current progress, original customer issue and mailroom preliminary checks first. Original issue comes only from customerIssue after an exact source identity check; distinguish not provided from unavailable, without substituting technician or preliminary notes. Unsubmitted checks expose progress only. Submitted checks show current-item results and photos, with author, revision and warranty-review records expandable on demand. Claim and personal receipt take priority before inspection; existing documents remain available on demand. Repairing or refurbishing opens the repair record by default. Departure confirmation rechecks company, login and route before changing the view. Scanning and reading never claim, accept, start work or change status."
             ],
             "boundaries": [
               "The Repair technician job template uses REPAIR_TECHNICIAN with repair_workbench:read and repair_workbench:update. It grants no customer-service review, accounting payment confirmation, inventory posting or cross-company access. Feature enablement, company, item assignment, personal acceptance and current state remain authoritative.",
@@ -5174,7 +5176,7 @@
               "Standard management separately requires repair_workbench:manage; unknown standards, materials and costs do not count as confirmed.",
               "Keep inspection photos and videos in private storage. Customer reports select only verified findings, actual handling, verification results and media. When the report release is enabled, the assigned CSR reviews the current summary before publishing an expiring link; publishing does not prove LINE or AI delivery. A return for more evidence, inspection revision, revocation or expiry must stop access to the old link and its media. Publishing after reapproval uses a new link and never revives the old one. Closure preserves repair history; public access still depends on that report's currently valid authorization. This proposal does not claim that automatic archival or deletion is deployed.",
               "Repair progress in Case lookup uses a fresh company-scoped after-sales read and the current item inspection/formal-quote binding. Timed-out, duplicate, mismatched or natively revised reads remain unconfirmed; receipt snapshots never establish consent, payment or invoice completion. The initial revision-1 empty quote remains unquoted data without release authority. Company-return refurbishment, My tasks and original action gates are unchanged.",
-              "Scanning only navigates to the original item, without claiming or physically accepting it. The readonly preliminary section checks the current company and selected item; switching items or a failed read cannot reuse the previous record.",
+              "Scanning only navigates to the original item, without claiming or physically accepting it. The readonly preliminary section checks the current company and selected item; switching items or a failed read cannot reuse the previous record. Exact case-number lookup is read only and verifies a complete population up to 200 items. Overflow never establishes uniqueness. Conflicting or unverified source-site identities remain ambiguous and require explicit item selection.",
               "Submitted mailroom checks may include a manual warranty review, warranty reference and additional symptom or preliminary cause. The author and time identify an employee observation from the external admin, not automatic master synchronization. Preliminary notes do not replace the technician’s formal inspection or warranty decision; unsubmitted drafts still expose only progress summaries."
             ],
             "related": [
@@ -5270,7 +5272,12 @@
         "backend/src/modules/mailroom/repair-assessment-reader.service.ts",
         "backend/src/modules/mailroom/repair-assessment-reader.controller.ts",
         "backend/src/modules/mailroom/mailroom.auth.ts",
-        "backend/src/modules/mailroom/mailroom-precheck-context.contract.ts"
+        "backend/src/modules/mailroom/mailroom-precheck-context.contract.ts",
+        "frontend/src/pages/repair/RepairCaseScan.tsx",
+        "frontend/src/pages/repair/repair-case-scan-model.ts",
+        "frontend/src/pages/repair/RepairCaseContext.tsx",
+        "backend/src/modules/mailroom/repair-lookup.dto.ts",
+        "backend/src/modules/mailroom/repair-lookup.contract.ts"
       ],
       "permissions": [
         "repair_workbench:read"

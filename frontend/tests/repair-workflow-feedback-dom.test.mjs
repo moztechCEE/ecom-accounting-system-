@@ -199,7 +199,7 @@ test('actual repair page and replacement stock preserve feedback, mounted forms 
     await note.evaluate(node => { window.__workflowOriginalTextarea = node; });
     await form.locator('button[type="submit"]').click();
     await page.waitForFunction(() => window.__workflowFeedbackProbe.pending.length === 1);
-    await page.waitForFunction(() => document.querySelector('.repair-editor-sidebar .ant-collapse-header')?.getAttribute('aria-disabled') === 'true');
+    await page.waitForFunction(() => document.querySelector('.repair-editor-sidebar > .ant-collapse > .ant-collapse-item > .ant-collapse-header')?.getAttribute('aria-disabled') === 'true');
     assert.equal(await disclosure.getAttribute('aria-expanded'), 'true');
     assert.equal(await disclosure.getAttribute('aria-disabled'), 'true');
     await disclosure.click({ force: true });
@@ -214,7 +214,7 @@ test('actual repair page and replacement stock preserve feedback, mounted forms 
     await rejectPending();
     const alert = drawer.locator('.repair-detail > .ant-alert-error');
     await alert.getByText('SYNTHETIC 403：原廠取消作業無權限', { exact: true }).waitFor();
-    await page.waitForFunction(() => document.querySelector('.repair-editor-sidebar .ant-collapse-header')?.getAttribute('aria-disabled') !== 'true');
+    await page.waitForFunction(() => document.querySelector('.repair-editor-sidebar > .ant-collapse > .ant-collapse-item > .ant-collapse-header')?.getAttribute('aria-disabled') !== 'true');
     await disclosure.click();
     assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
     await note.waitFor({ state: 'hidden' });

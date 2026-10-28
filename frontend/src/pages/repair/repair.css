@@ -93,7 +93,7 @@
 
 .repair-product-title > span { overflow-wrap: anywhere; }
 .repair-case-number { display: block; margin-top: 5px; overflow-wrap: anywhere; }
-.repair-case-contact { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 5px; font-size: 13px; }
+.repair-case-contact { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 5px; font-size: 14px; }
 .repair-case-contact .ant-typography { overflow-wrap: anywhere; }
 .repair-case-photo { width: 64px; height: 64px; border-radius: 8px; overflow: hidden; background: #f4f6f8; }
 .repair-case-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -104,7 +104,7 @@
 .repair-tab-label .ant-badge-count { position: static; transform: none; box-shadow: none; }
 .repair-list-loading { padding: 40px 0; text-align: center; color: #677384; }
 
-.repair-case-open { min-height: 38px; }
+.repair-case-open { min-height: 44px; }
 .repair-case-pagination { margin-top: 24px; justify-content: flex-end; }
 .repair-arrival-preview .ant-card { border: 0; }
 
@@ -114,14 +114,14 @@
 .repair-detail { display: grid; gap: 20px; min-width: 0; }
 .repair-detail-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; overflow-wrap: anywhere; }
 .repair-detail-summary .ant-tag { margin: 0; max-width: 100%; white-space: normal; }
-.repair-detail-summary .ant-typography { font-size: 12px; min-width: 0; }
-.repair-readiness-compact .ant-collapse-header { font-size: 12px; }
-.repair-documents-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; align-items: start; }
+.repair-detail-summary .ant-typography { font-size: 14px; min-width: 0; }
+.repair-readiness-compact .ant-collapse-header { font-size: 14px; }
+.repair-documents-layout { display: grid; grid-template-columns: minmax(0, 1fr) 296px; gap: 24px; align-items: start; }
 .repair-editor-main, .repair-editor-sidebar { min-width: 0; }
 .repair-editor-main { padding: 24px; background: white; border: 1px solid #e7ebf0; border-radius: 12px; }
 .repair-editor-sidebar { display: grid; gap: 16px; }
 .repair-editor-sidebar .ant-space-item { min-width: 0; max-width: 100%; }
-.repair-editor-sidebar .ant-btn { max-width: 100%; height: auto; min-height: 32px; white-space: normal; }
+.repair-editor-sidebar .ant-btn { max-width: 100%; height: auto; min-height: 40px; white-space: normal; }
 .repair-case-details .ant-descriptions { margin-bottom: 16px; }
 .repair-case-details .ant-descriptions-item-content { overflow-wrap: anywhere; }
 .repair-case-details .ant-card { border: 0; }
@@ -129,16 +129,16 @@
 .repair-documents-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
 .repair-document-heading { margin-bottom: 16px; }
 .repair-document-identity, .repair-document-meta, .repair-document-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.repair-document-meta { margin-top: 6px; font-size: 12px; }
-.repair-document-tools { margin-bottom: 16px; justify-content: space-between; font-size: 12px; }
+.repair-document-meta { margin-top: 6px; font-size: 14px; }
+.repair-document-tools { margin-bottom: 16px; justify-content: space-between; font-size: 14px; }
 .repair-document-section { border-top: 1px solid #edf0f4; margin-top: 24px; padding-top: 20px; }
 .repair-document-section:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
 .repair-document-section-heading { margin-bottom: 16px; }
 .repair-document-section-heading h5.ant-typography { font-size: 16px; margin: 0 0 6px; }
-.repair-document-section-heading .ant-typography-secondary { font-size: 12px; }
-.repair-document-guidance { margin: 10px 0 16px; color: #677384; font-size: 12px; }
-.repair-document-guidance .ant-collapse-header { font-size: 12px; }
-.repair-document-guidance .ant-typography { margin: 8px 0 0; font-size: 12px; }
+.repair-document-section-heading .ant-typography-secondary { font-size: 14px; }
+.repair-document-guidance { margin: 10px 0 16px; color: #677384; font-size: 14px; }
+.repair-document-guidance .ant-collapse-header { font-size: 14px; }
+.repair-document-guidance .ant-typography { margin: 8px 0 0; font-size: 14px; }
 .repair-document-actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 20px; border-top: 1px solid #edf0f4; }
 /* Repeated document groups sit directly on the work area, with one divider. */
 .repair-document-check.ant-card,
@@ -177,7 +177,7 @@
   .repair-case-row { grid-template-columns: 56px minmax(0, 1fr) minmax(90px, 150px) 100px; gap: 16px; }
 }
 
-@media (max-width: 850px) {
+@media (max-width: 1040px) {
   .repair-documents-layout { grid-template-columns: minmax(0, 1fr); }
 }
 
@@ -217,4 +217,103 @@
 @media (max-width: 600px) {
   .repair-query-tools { width: 100%; }
   .repair-query-tools .ant-space-item:first-child { flex: 1 1 180px; min-width: 0; }
+}
+
+/* Repair scope only: shared mailroom typography stays independent. */
+.repair-workbench-page, .repair-workbench-drawer { font-size: 16px; line-height: 1.6; }
+.repair-workbench-page .ant-typography, .repair-workbench-drawer .ant-typography,
+.repair-workbench-page .ant-collapse-header, .repair-workbench-drawer .ant-collapse-header,
+.repair-workbench-page .ant-tabs-tab-btn, .repair-workbench-drawer .ant-tabs-tab-btn,
+.repair-workbench-drawer .ant-form-item-label > label,
+.repair-workbench-drawer .ant-descriptions-item-label, .repair-workbench-drawer .ant-descriptions-item-content,
+.repair-workbench-page .ant-card-head-title, .repair-workbench-drawer .ant-card-head-title { font-size: 16px; line-height: 1.6; }
+.repair-workbench-page .mailroom-heading h2 { font-size: 30px; line-height: 1.35; margin: 0; }
+.repair-workbench-page .ant-btn:not(.ant-btn-link), .repair-workbench-drawer .ant-btn:not(.ant-btn-link) { min-height: 42px; font-size: 16px; }
+.repair-workbench-page .ant-input, .repair-workbench-drawer .ant-input,
+.repair-workbench-drawer .ant-input-number-input, .repair-workbench-drawer .ant-select-selection-item { font-size: 16px; }
+.repair-workbench-page .ant-input-affix-wrapper, .repair-workbench-page .ant-input-group-addon .ant-btn,
+.repair-workbench-drawer input.ant-input, .repair-workbench-drawer .ant-select-single .ant-select-selector { min-height: 42px; }
+.repair-workbench-page .ant-tabs-nav { margin: 0; }
+.repair-case-contact .ant-typography, .repair-case-number.ant-typography,
+.repair-document-meta .ant-typography, .repair-document-case-version.ant-typography { font-size: 14px; }
+.repair-product-title.ant-btn { font-size: 18px; }
+.repair-detail-identity h3.ant-typography { font-size: 22px; line-height: 1.4; }
+.repair-detail-summary { justify-content: flex-start; }
+.repair-detail-summary > .ant-btn { margin-inline-start: auto; }
+.repair-workbench-page .ant-tag, .repair-workbench-drawer .ant-tag { font-size: 14px; line-height: 1.6; padding: 3px 9px; overflow-wrap: anywhere; }
+.repair-case-context { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 20px; }
+.repair-case-context > .ant-card { min-width: 0; }
+.repair-case-context .ant-card-body { padding: 20px; }
+.repair-customer-issue-text.ant-typography { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.repair-precheck-record .ant-descriptions { margin-bottom: 16px; }
+.repair-precheck-record li + li { padding-top: 12px; border-top: 1px solid #edf0f4; }
+.repair-precheck-metadata { margin-top: 16px; }
+.repair-precheck-metadata > .ant-collapse-item > .ant-collapse-header { padding-inline: 0; }
+.repair-precheck-metadata > .ant-collapse-item > .ant-collapse-header .ant-collapse-header-text { font-size: 14px; color: #64748b; }
+.repair-precheck-metadata .ant-collapse-content-box { padding-inline: 0; }
+.repair-editor-sidebar .ant-card-body { padding: 20px; }
+.repair-editor-sidebar .ant-space { gap: 12px !important; }
+.repair-editor-sidebar .ant-alert { padding: 12px; }
+.repair-document-toolbar { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+.repair-document-toolbar .repair-document-heading { margin: 0; min-width: 0; flex: 1 1 260px; }
+.repair-document-heading-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.repair-document-identity { overflow-wrap: anywhere; }
+.repair-document-section-heading h5.ant-typography { font-size: 18px; }
+.repair-arrival-list { min-width: 0; }
+.repair-arrival-toolbar { display: flex; justify-content: flex-end; margin-bottom: 20px; }
+.repair-arrival-list ul { margin: 0; padding: 0; list-style: none; }
+.repair-arrival-columns, .repair-arrival-row { display: grid; grid-template-columns: minmax(170px, 1fr) 132px minmax(180px, 1.4fr) 90px; gap: 20px; align-items: start; }
+.repair-arrival-columns { padding: 0 8px 16px; font-weight: 600; border-bottom: 1px solid #e7ebf0; }
+.repair-arrival-columns > span:last-child { white-space: nowrap; }
+.repair-arrival-row { padding: 22px 8px; border-bottom: 1px solid #edf0f4; }
+.repair-arrival-row:last-child { border-bottom: 0; }
+.repair-arrival-row > * { min-width: 0; overflow-wrap: anywhere; }
+.repair-arrival-number.ant-typography { font-size: 16px; }
+.repair-arrival-row .ant-tag { margin: 0; }
+.repair-arrival-more { margin-top: 16px; }
+.repair-mobile-label { display: none; }
+.repair-case-scan { min-width: 0; }
+.repair-case-scan .ant-input-search { max-width: 640px; }
+.repair-case-scan .ant-input-search input { min-height: 44px; }
+.repair-case-scan .ant-input-search .ant-btn { min-height: 46px; }
+.repair-case-scan .ant-alert { margin-top: 12px; }
+.repair-case-scan-feedback { display: block; margin-top: 8px; }
+.repair-case-scan-results { margin-top: 16px; padding: 20px; background: white; border: 1px solid #e7ebf0; border-radius: 12px; }
+.repair-case-scan-options { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.repair-case-scan-option.ant-btn { display: flex; justify-content: space-between; align-items: center; gap: 16px; width: 100%; padding: 14px 16px; height: auto; text-align: left; white-space: normal; }
+.repair-case-scan-option-identity { display: grid; gap: 4px; min-width: 0; }
+.repair-case-scan-option-name { font-weight: 600; overflow-wrap: anywhere; }
+.repair-case-scan-option-meta { font-size: 14px; color: #64748b; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .repair-case-scan-results { padding: 16px; }
+  .repair-case-scan-option.ant-btn { flex-wrap: wrap; }
+}
+
+.repair-workbench-page .ant-card-body, .repair-workbench-page .ant-collapse-content,
+.repair-workbench-drawer .ant-card-body, .repair-workbench-drawer .ant-collapse-content,
+.repair-arrival-columns, .repair-arrival-row { font-size: 16px; line-height: 1.6; }
+@media (min-width: 601px) and (max-width: 1040px) {
+  .repair-case-row { grid-template-columns: 56px minmax(0, 1fr); gap: 16px 12px; }
+  .repair-case-product { grid-column: 2; }
+  .repair-case-progress { grid-column: 1 / -1; grid-row: 2; padding-right: 110px; }
+  .repair-case-open { grid-column: 2; grid-row: 2; justify-self: end; align-self: center; }
+}
+@media (min-width: 761px) and (max-width: 1040px) {
+  .repair-arrival-columns { display: none; }
+  .repair-arrival-row { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+  .repair-arrival-products, .repair-arrival-count { grid-column: 1 / -1; }
+  .repair-mobile-label { display: inline; }
+}
+@media (max-width: 1040px) {
+  .repair-case-context { grid-template-columns: minmax(0, 1fr); }
+  .repair-awaiting-receipt .repair-editor-sidebar { order: -1; }
+}
+@media (max-width: 760px) {
+  .repair-arrival-columns { display: none; }
+  .repair-arrival-row { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+  .repair-arrival-products, .repair-arrival-count { grid-column: 1 / -1; }
+  .repair-arrival-count { color: #64748b; }
+  .repair-mobile-label { display: inline; }
+  .repair-arrival-toolbar { margin-bottom: 8px; }
+  .repair-case-context .ant-card-body { padding: 16px; }
 }

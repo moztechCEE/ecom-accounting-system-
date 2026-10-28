@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Button, Descriptions, Image, Space, Spin, Tag, Typography } from 'antd';
+import { Button, Collapse, Descriptions, Image, Space, Spin, Tag, Typography } from 'antd';
 import api from '../../services/api';
 import { repairPrecheckPhotoUrl, type RepairPrecheckPhoto, type RepairPrecheckView } from './repair-model';
 
 const RESULTS = { NORMAL:'正常', ABNORMAL:'異常', NOT_TESTED:'未測試', NOT_APPLICABLE:'不適用' } as const;
 const date = (value:string) => new Date(value).toLocaleString('zh-TW');
-export default function RepairPrecheckReadOnly({record,entityId,itemId}:{record:RepairPrecheckView;entityId:string;itemId:string}) {
+export default function RepairPrecheckReadOnly({record,entityId,itemId,compact=false}:{record:RepairPrecheckView;entityId:string;itemId:string;compact?:boolean}) {
   if (record.state==='PENDING') return <section aria-label="收發初檢進度">
     <Tag>{record.stage==='DRAFT'?'收發初檢中':'初檢完成待交接'}</Tag>
     <Descriptions size="small" column={{xs:1,sm:2}} items={[
@@ -15,7 +15,7 @@ export default function RepairPrecheckReadOnly({record,entityId,itemId}:{record:
     ]} />
   </section>;
   if (record.state !== 'SUBMITTED') return <Typography.Text type="secondary">{{NOT_STARTED:'尚未初檢',STALE:'初檢紀錄待更新',UNAVAILABLE:'初檢紀錄暫無法取得'}[record.state]}</Typography.Text>;
-  return <section aria-label="收發初檢紀錄" style={{minWidth:0,overflowWrap:'anywhere'}}>
+  const metadata=<>
     <Descriptions size="small" column={{xs:1,sm:2}} items={[
       {key:'revision',label:'版次',children:`v${record.revision}`},
       {key:'author',label:'記錄人',children:record.recordedBy},
@@ -23,13 +23,16 @@ export default function RepairPrecheckReadOnly({record,entityId,itemId}:{record:
       {key:'submittedAt',label:'交辦時間',children:date(record.submittedAt)},
       ...(record.templateTitle ? [{key:'template',label:'初檢表',children:`${record.templateTitle} · v${record.templateRevision}`}] : []),
     ]} />
-    {record.notRequiredReason && <Descriptions size="small" column={1} items={[{key:'reason',label:'不需初檢原因',children:record.notRequiredReason}]} />}
     {record.warrantyReview && <Descriptions size="small" column={1} items={[
       {key:'warranty',label:'人工保固核對',children:({CHECKED:'已人工核對',NEEDS_CORRECTION:'待修正',CORRECTED_EXTERNALLY:'已於保固後台修正'} as const)[record.warrantyReview.status]},
       {key:'warranty-author',label:'核對紀錄',children:`${record.warrantyReview.recordedByName} · ${date(record.warrantyReview.recordedAt)}`},
       ...(record.warrantyReview.warrantyNumber ? [{key:'warranty-number',label:'保固編號',children:record.warrantyReview.warrantyNumber}] : []),
       ...(record.warrantyReview.note ? [{key:'warranty-note',label:'核對說明',children:record.warrantyReview.note}] : []),
     ]} />}
+  </>;
+  return <section aria-label="收發初檢紀錄" className="repair-precheck-record" style={{minWidth:0,overflowWrap:'anywhere'}}>
+    {!compact && metadata}
+    {record.notRequiredReason && <Descriptions size="small" column={1} items={[{key:'reason',label:'不需初檢原因',children:record.notRequiredReason}]} />}
     {record.mailroomIssue && <Descriptions size="small" column={1} items={[
       ...(record.mailroomIssue.symptom ? [{key:'symptom',label:'收發補充問題',children:record.mailroomIssue.symptom}] : []),
       ...(record.mailroomIssue.preliminaryReason ? [{key:'preliminary',label:'原因初判',children:record.mailroomIssue.preliminaryReason}] : []),
@@ -39,6 +42,7 @@ export default function RepairPrecheckReadOnly({record,entityId,itemId}:{record:
       {check.note && <div style={{whiteSpace:'pre-wrap'}}>{check.note}</div>}
     </li>)}</ul>
     {!!record.photos.length && <PrecheckPhotos entityId={entityId} itemId={itemId} revision={record.revision} photos={record.photos} />}
+    {compact && <Collapse ghost className="repair-precheck-metadata" items={[{key:'record',label:`初檢紀錄 · v${record.revision} · ${record.recordedBy}`,children:metadata}]} />}
   </section>;
 }
 

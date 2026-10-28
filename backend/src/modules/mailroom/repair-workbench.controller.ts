@@ -4,13 +4,23 @@ import { SaveInspectionDto, SaveRepairDto } from './repair-document.dto';
 import { RepairWorkbenchService } from './repair-workbench.service';
 import { RepairTodoQuery } from './repair-todo.dto';
 import { RepairTodoService } from './repair-todo.service';
+import { RepairLookupQuery } from './repair-lookup.dto';
 import {
   RepairCustomerQueueQuery,
   RepairWorkflowDto,
 } from './repair-workflow.dto';
 @Controller('repair-workbench')
 export class RepairWorkbenchController {
-  constructor(private readonly service: RepairWorkbenchService, private readonly todoService: RepairTodoService) {}
+  constructor(
+    private readonly service: RepairWorkbenchService,
+    private readonly todoService: RepairTodoService,
+  ) {}
+  @Get('lookup') lookup(
+    @Req() req: { user: { id: string } },
+    @Query() q: RepairLookupQuery,
+  ) {
+    return this.service.lookup(req.user.id, q);
+  }
   @Get('todo') todo(
     @Req() req: { user: { id: string } },
     @Query() q: RepairTodoQuery,

@@ -47,6 +47,14 @@ import {
   validateSubmittedInspectionAssessment,
 } from './repair-assessment.contract';
 import { requireRefurbishmentWorkStart } from './repair-work-start.contract';
+import { RepairLookupQuery } from './repair-lookup.dto';
+import { repairConditions } from './repair-list.contract';
+import {
+  REPAIR_LOOKUP_LIMIT,
+  repairCustomerContext,
+  repairLookupCode,
+  repairLookupResult,
+} from './repair-lookup.contract';
 import {
   RepairCustomerQueueQuery,
   RepairWorkflowDto,
@@ -73,6 +81,43 @@ export class RepairWorkbenchService {
     @Optional() private readonly prerequisites?: RepairPrerequisitesService,
     @Optional() private readonly media?: RepairMediaService,
   ) {}
+  async lookup(userId: string, query: RepairLookupQuery) {
+    this.mailroom.enabled();
+    const actor = await this.mailroom.actor(userId);
+    requireEntity(actor, query.entityId);
+    requirePermission(actor, 'repair_workbench:read');
+    const code = repairLookupCode(query.code);
+    const rows = await this.prisma.mailroomItem.findMany({
+      where: {
+        entityId: query.entityId,
+        receipt: { entityId: query.entityId, sourceNumber: code },
+        AND: repairConditions('all', userId),
+      },
+      select: {
+        id: true,
+        entityId: true,
+        receiptId: true,
+        productName: true,
+        label: true,
+        status: true,
+        repairOwnerId: true,
+        receipt: {
+          select: {
+            id: true,
+            entityId: true,
+            number: true,
+            category: true,
+            sourceCaseId: true,
+            sourceNumber: true,
+            sourceSnapshot: true,
+          },
+        },
+      },
+      orderBy: [{ receiptId: 'asc' }, { id: 'asc' }],
+      take: REPAIR_LOOKUP_LIMIT + 1,
+    });
+    return repairLookupResult(query.entityId, code, rows);
+  }
   async customerQueue(userId: string, q: RepairCustomerQueueQuery) {
     this.mailroom.enabled();
     const actor = await this.mailroom.actor(userId);
@@ -967,6 +1012,11 @@ export class RepairWorkbenchService {
     );
     return {
       ...detail,
+      customerContext: repairCustomerContext(
+        sourceId,
+        detail.receipt.category,
+        assessmentSource,
+      ),
       release,
       repairProposalBinding,
       repairPrerequisites: {

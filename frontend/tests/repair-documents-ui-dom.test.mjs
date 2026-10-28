@@ -23,12 +23,12 @@ const inspectionDocument={number:'SYNTHETIC-INS',revision:2,status:'SUBMITTED',a
   updatedAt:'2026-10-08T02:00:00Z',review:{inspectionRevision:1,actorId:'csr',name:'Synthetic CSR',
     confirmedAt:'2026-10-08T01:00:00Z',decision:'APPROVE',planHash:'prior-plan'},
   data:{complaint:'SAVED complaint',reproduction:'YES',testConditions:'SAVED conditions',checks:[check],
-    diagnosis:'SAVED diagnosis',causeStatus:'CONFIRMED',plan:'REPAIR',planNote:'SAVED plan',feeSuggestion:'PAID',estimateNote:'SAVED estimate'}};
+    diagnosis:'SAVED diagnosis',causeStatus:'CONFIRMED',plan:'REPAIR',planNote:'SAVED plan',feeSuggestion:'PAID',estimateNote:'SAVED estimate',materialPlan:{mode:'NONE',lines:[]}}};
 const report={number:'SYNTHETIC-REP',revision:1,status:'SUBMITTED',inspectionRevision:1,authorId:'tech',authorName:'Synthetic technician',
   updatedAt:'2026-10-08T01:00:00Z',data:{outcome:'REPAIRED',workPerformed:'SAVED work',
     parts:[{name:'SAVED part',sku:'SYNTHETIC-PART',quantity:1}],laborMinutes:5,checks:[check],
     qcResult:'PASS',qcNotes:'SAVED QC',deliveredAccessories:'SAVED accessories'}};
-const base={id:'synthetic',version:7,status:'INSPECTING',editable:true,repairOwnerId:'tech',custodianId:'tech',
+const base={id:'synthetic',version:7,status:new URLSearchParams(location.search).get('stage')||'INSPECTING',editable:true,repairOwnerId:'tech',custodianId:'tech',
   productName:'Synthetic product',sku:'SYNTHETIC-SKU',serialNumber:'SYNTHETIC-SN',label:'SYNTHETIC',
   receipt:{category:'REPAIR',number:'SYNTHETIC-RCPT',sourceCaseId:'synthetic-source',sourceNumber:'SYNTHETIC-CASE'},
   history:[],repairInspection:inspectionDocument,repairReport:report};
@@ -105,22 +105,49 @@ test('actual repair document forms preserve their save, print, validation and pe
     return route.continue();
   });
 
+  await t.test('stage opens the relevant document and switching preserves drafts without writes', async () => {
+    for (const stage of ['REPAIRING', 'REFURBISHING', 'WAITING_RETURN_ACCEPTANCE', 'READY_FOR_DISPATCH', 'DISPATCHED', 'STOCKED']) {
+      await page.goto(url + '?stage=' + stage);
+      await page.getByRole('tab', { name: '維修單', exact: true }).waitFor();
+      assert.equal(await page.getByRole('tab', { name: '維修單', exact: true }).getAttribute('aria-selected'), 'true', stage);
+      assert.equal(await page.locator('.repair-documents > .ant-tabs [role="tab"]').count(), 3, 'Only the existing document choices remain');
+      assert.equal(await page.locator('.repair-documents-header').count(), 0, 'No repeated work-order heading');
+      assert.equal(await page.locator('.repair-document-case-version').innerText(), '案件 v7');
+      const toolbar = page.locator('.ant-tabs-tabpane-active .repair-document-toolbar');
+      assert.match(await toolbar.innerText(), /SYNTHETIC-REP/);
+      assert.equal(await toolbar.getByRole('button', { name: /列印/ }).count(), 1);
+      if (!['REPAIRING', 'REFURBISHING'].includes(stage)) {
+        assert.equal(await page.locator('form#repair-report-synthetic').getByLabel('實際施工／替換內容', { exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole('button', { name: /儲存草稿|提交維修單/ }).count(), 0, 'Terminal records cannot become editable through their default tab');
+      }
+      assert.equal(await page.evaluate(() => window.__documentsProbe.posts.length), 0);
+    }
+    await page.goto(url);
+    const inspection = page.locator('form#repair-inspection-synthetic');
+    await inspection.getByLabel('顧客問題', { exact: true }).fill('UNSAVED tab-switch complaint');
+    await page.getByRole('tab', { name: '維修單', exact: true }).click();
+    await page.getByRole('tab', { name: '檢修單', exact: true }).click();
+    assert.equal(await inspection.getByLabel('顧客問題', { exact: true }).inputValue(), 'UNSAVED tab-switch complaint');
+    assert.equal(await page.evaluate(() => window.__documentsProbe.dirty), true);
+    assert.equal(await page.evaluate(() => window.__documentsProbe.posts.length), 0);
+  });
+
   await t.test('inspection keeps paid validation, dirty/busy state, save payload and saved-version printing', async () => {
     await page.goto(url);
     const inspection = page.locator('form#repair-inspection-synthetic');
     await inspection.waitFor();
-    for (const title of ['故障與檢測', '診斷與估價']) {
+    for (const title of ['收件核對', '重現問題', '核心檢查', '判斷與佐證']) {
       assert.equal(await inspection.getByRole('heading', { name: title, exact: true }).count(), 1);
     }
     await page.getByText('（非目前已提交版次）', { exact: false }).waitFor();
     await inspection.getByRole('button', { name: /提交檢修單/ }).click();
     await inspection.getByText('付費建議需正數估價；金額最多 10,000,000', { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => window.__documentsProbe.posts.length), 0);
-    await inspection.getByLabel('客訴／故障描述', { exact: true }).fill('');
+    await inspection.getByLabel('顧客問題', { exact: true }).fill('');
     await inspection.getByRole('button', { name: /提交檢修單/ }).click();
     await inspection.getByText('請填寫此項；未測或沒有配件也請明確註記', { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => window.__documentsProbe.posts.length), 0);
-    await inspection.getByLabel('客訴／故障描述', { exact: true }).fill('UNSAVED new complaint');
+    await inspection.getByLabel('顧客問題', { exact: true }).fill('UNSAVED new complaint');
     assert.equal(await page.evaluate(() => window.__documentsProbe.dirty), true);
     await page.getByRole('button', { name: /列印/ }).click();
     assert.equal(await page.evaluate(() => window.__documentsProbe.printed), 1);
@@ -131,7 +158,7 @@ test('actual repair document forms preserve their save, print, validation and pe
     assert.doesNotMatch(inspectionPrint, /UNSAVED new complaint/);
     assert.doesNotMatch(inspectionPrint, /僅供內部作業；本單為已保存版本/);
     assert.doesNotMatch(inspectionPrint, /此單不是對客維修報告/);
-    await inspection.getByLabel('內部估價金額', { exact: true }).fill('125.5');
+    await inspection.getByLabel('估價', { exact: true }).fill('125.5');
     await inspection.getByRole('button', { name: /提交檢修單/ }).click();
     await page.waitForFunction(() => window.__documentsProbe.posts.length === 1);
     assert.equal(await inspection.getByRole('button', { name: '儲存草稿', exact: true }).isDisabled(), true);
@@ -154,7 +181,7 @@ test('actual repair document forms preserve their save, print, validation and pe
     const repair = page.locator('form#repair-report-synthetic');
     await repair.waitFor();
     await page.getByText('維修單與目前檢修版次不一致', { exact: true }).waitFor();
-    for (const title of ['實際處置', '實際使用零件', '修後複驗']) {
+    for (const title of ['修復與複驗', '實際使用零件', '修後複驗']) {
       assert.equal(await repair.getByRole('heading', { name: title, exact: true }).count(), 1);
     }
     await repair.getByLabel('實際施工／替換內容', { exact: true }).fill('UNSAVED actual work');
@@ -183,21 +210,26 @@ test('actual repair document forms preserve their save, print, validation and pe
     await page.getByText('草稿已儲存', { exact: true }).waitFor();
   });
 
-  await t.test('readonly warning remains visible and disables the form without granting ownership', async () => {
+  await t.test('readonly forms stay disabled without routine explanation or ownership', async () => {
     await page.goto(url + '?readonly=1');
-    await page.getByText('唯讀：需本人簽收與編輯權限。', { exact: true }).waitFor();
-    assert.equal(await page.getByLabel('客訴／故障描述', { exact: true }).isDisabled(), true);
+    await page.locator('form#repair-inspection-synthetic').waitFor();
+    assert.equal(await page.getByText('唯讀：需本人簽收與編輯權限。', { exact: true }).count(), 0);
+    assert.equal(await page.getByLabel('顧客問題', { exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: /儲存草稿|提交檢修單/ }).count(), 0);
+    await page.getByRole('tab', { name: '維修單', exact: true }).click();
+    assert.equal(await page.getByLabel('實際施工／替換內容', { exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: /儲存草稿|提交維修單/ }).count(), 0);
     assert.equal(await page.evaluate(() => window.__documentsProbe.posts.length), 0);
   });
 
   await t.test('save failure remains visible and retains the unsaved draft', async () => {
     await page.goto(url);
-    await page.getByLabel('內部估價金額', { exact: true }).fill('125.5');
+    await page.getByLabel('估價', { exact: true }).fill('125.5');
     await page.evaluate(() => window.__documentsProbe.fail = true);
     await page.getByRole('button', { name: /提交檢修單/ }).click();
     await page.getByText('暫時無法完成，請稍後重試。', { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => window.__documentsProbe.dirty), true);
-    assert.equal(Number(await page.getByLabel('內部估價金額', { exact: true }).inputValue()), 125.5);
+    assert.equal(Number(await page.getByLabel('估價', { exact: true }).inputValue()), 125.5);
     assert.equal(await page.getByRole('button', { name: /提交檢修單/ }).isDisabled(), false);
   });
 

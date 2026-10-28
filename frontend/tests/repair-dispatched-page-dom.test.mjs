@@ -24,7 +24,7 @@ const router=createMemoryRouter([{path:'/operations/repair',element:React.create
 createRoot(document.getElementById('root')).render(React.createElement(RouterProvider,{router}));
 `;
 const api = `
-const base={id:'synthetic-item',label:'SYNTHETIC',productName:'合成測試品',sku:'SYNTHETIC-SKU',serialNumber:'SYNTHETIC-SN',
+const base={id:'synthetic-item',entityId:'synthetic-company',label:'SYNTHETIC',productName:'合成測試品',sku:'SYNTHETIC-SKU',serialNumber:'SYNTHETIC-SN',
   status:'DISPATCHED',statusLabel:'已交物流寄回，待顧客收件',version:12,matchResult:'MATCH',location:'合成歷史位置',
   custodianId:'synthetic-clerk',custodianName:'合成收發員',repairOwnerId:'synthetic-tech',nextUserId:null,nextUserName:null,
   recipientId:null,mine:false,evidenceCount:0,physicalCustody:'UNKNOWN',editable:false,allowedWorkflowActions:[],

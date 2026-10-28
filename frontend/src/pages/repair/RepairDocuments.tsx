@@ -68,10 +68,10 @@ function checkMeasurement(check: InspectionData['checks'][number]): string {
   return [measured ? `${measured}${check.unit ? ` ${check.unit}` : ''}` : '', check.instrumentId ? `設備 ${check.instrumentId}` : '', check.calibrationRecordId ? `校正 ${check.calibrationRecordId}` : '', check.measuredAt || ''].filter(Boolean).join(' · ')
 }
 
-function DocumentHeading({ document, title, inspection = false }: { document?: RepairDocument | null; title: string; inspection?: boolean }) {
+function DocumentHeading({ document, title, inspection = false, showTitle = true }: { document?: RepairDocument | null; title: string; inspection?: boolean; showTitle?: boolean }) {
   return <div className="repair-document-heading">
     <Space wrap className="repair-document-identity">
-      <Typography.Text strong>{title}</Typography.Text>
+      {showTitle && <Typography.Text strong>{title}</Typography.Text>}
       {document ? <>
         <Typography.Text>{document.number} · 文件 v{document.revision}</Typography.Text>
         <Tag color={document.status === 'SUBMITTED' ? 'green' : 'default'}>{document.status === 'SUBMITTED' ? '已提交' : '草稿'}</Tag>
@@ -82,7 +82,7 @@ function DocumentHeading({ document, title, inspection = false }: { document?: R
       <Typography.Text type="secondary">{document.authorName} · {date(document.updatedAt)}</Typography.Text>
       {inspection && <Space wrap>
         <Tag color={inspectionReviewCurrent(document) ? document.review?.decision==='DECLINE'?'orange':'green' : 'orange'}>{inspectionReviewCurrent(document) ? `客服${document.review?.decision==='DECLINE'?'拒修':'確認'}檢修 v${document.revision}` : '目前方案待客服確認'}</Tag>
-        <Typography.Text type="secondary">{document.review ? `${document.review.name} · 確認檢修 v${document.review.inspectionRevision} · ${date(document.review.confirmedAt)}${inspectionReviewCurrent(document) ? '' : '（非目前已提交版次）'}` : '尚無客服確認紀錄'}</Typography.Text>
+        {document.review && <Typography.Text type="secondary">{`${document.review.name} · 確認檢修 v${document.review.inspectionRevision} · ${date(document.review.confirmedAt)}${inspectionReviewCurrent(document) ? '' : '（非目前已提交版次）'}`}</Typography.Text>}
       </Space>}
     </div>}
   </div>
@@ -243,7 +243,8 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
   const [repairForm] = Form.useForm<RepairData>()
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState('')
-  const [activeTab,setActiveTab]=useState('inspection')
+  const [activeTab,setActiveTab]=useState(() => ['REPAIRING', 'REFURBISHING'].includes(item.status)
+    || !!item.repairReport && ['WAITING_RETURN_ACCEPTANCE', 'READY_FOR_DISPATCH', 'DISPATCHED', 'PENDING_WELFARE_STOCK', 'STOCKED'].includes(item.status) ? 'repair' : 'inspection')
   const pendingMedia=useRef({inspection:false,repair:false})
   const dirtyForms=useRef({inspection:false,repair:false})
   const [inspectionEditedVersion, setInspectionEditedVersion] = useState<number>()
@@ -384,7 +385,7 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
   const buttons = (kind: 'inspection' | 'repair', editable: boolean) => editable ? <div className="repair-document-actions"><Space wrap>
     <Button disabled={!!busy} loading={busy === `${kind}:DRAFT`} onClick={() => void save(kind, 'DRAFT')}>儲存草稿</Button>
     <Button type="primary" disabled={!!busy} loading={busy === `${kind}:SUBMITTED`} onClick={() => void save(kind, 'SUBMITTED')}>提交{kind === 'inspection' ? '檢修單' : '維修單'}</Button>
-  </Space></div> : ownSigned ? <div className="repair-document-actions"><Typography.Text type="secondary">目前流程不開放編輯此單。</Typography.Text></div> : null
+  </Space></div> : null
 
   type Snapshot = { repairInspection?: RepairDocument<InspectionData> | null; repairReport?: RepairDocument<RepairData> | null }
   const versions = new Map<string, { kind: 'inspection' | 'repair'; document: RepairDocument; recordedAt: string }>()
@@ -402,12 +403,13 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
 
   return <div className="repair-documents">
     {contextHolder}
-    <Space wrap className="repair-documents-header"><Typography.Text strong>工作單</Typography.Text><Tag>案件版本 {item.version}</Tag></Space>
     {failure && <Alert type="error" showIcon style={{ marginBottom: 16 }} message={failure} />}
-    <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
+    <Tabs activeKey={activeTab} onChange={setActiveTab} tabBarExtraContent={<Typography.Text type="secondary" className="repair-document-case-version">案件 v{item.version}</Typography.Text>} items={[
       { key: 'inspection', label: '檢修單', forceRender: true, children: <>
-        <DocumentHeading document={item.repairInspection} title="檢修單" inspection={customerRepair} />
-        <div className="repair-document-tools"><Button icon={<PrinterOutlined />} disabled={!item.repairInspection || !!busy} onClick={() => printDocument(item, 'inspection', message)}>列印</Button></div>
+        <div className="repair-document-toolbar">
+          <DocumentHeading document={item.repairInspection} title="檢修單" inspection={customerRepair} showTitle={false} />
+          <div className="repair-document-heading-actions"><Button icon={<PrinterOutlined />} disabled={!item.repairInspection || !!busy} onClick={() => printDocument(item, 'inspection', message)}>列印</Button></div>
+        </div>
         <Form name={`repair-inspection-${item.id}`} form={inspectionForm} layout="vertical" initialValues={inspectionInitial} onValuesChange={() => markDirty('inspection')} disabled={!canInspect || !!busy}>
           <DocumentSection title="收件核對">
           <Form.Item name="complaint" label="顧客問題" rules={requiredText()}><Input.TextArea rows={3} maxLength={2000} showCount /></Form.Item>
@@ -469,8 +471,10 @@ export default function RepairDocuments({ item, entityId, onSaved, onDirtyChange
         </Form>
       </> },
       { key: 'repair', label: '維修單', forceRender: true, children: <>
-        <DocumentHeading document={item.repairReport} title="維修單" />
-        <div className="repair-document-tools"><Button icon={<PrinterOutlined />} disabled={!item.repairReport || !!busy} onClick={() => printDocument(item, 'repair', message)}>列印</Button></div>
+        <div className="repair-document-toolbar">
+          <DocumentHeading document={item.repairReport} title="維修單" showTitle={false} />
+          <div className="repair-document-heading-actions"><Button icon={<PrinterOutlined />} disabled={!item.repairReport || !!busy} onClick={() => printDocument(item, 'repair', message)}>列印</Button></div>
+        </div>
         {item.repairReport && item.repairReport.inspectionRevision !== item.repairInspection?.revision && <Alert type="warning" showIcon style={{ marginBottom: 16 }} message="維修單與目前檢修版次不一致" description="請依目前檢修版次重新提交維修單。" />}
         <Form name={`repair-report-${item.id}`} form={repairForm} layout="vertical" initialValues={repairInitial} onValuesChange={() => markDirty('repair')} disabled={!canReport || !!busy}>
           <DocumentSection title="修復與複驗">

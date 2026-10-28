@@ -64,12 +64,14 @@ test('new document v2 actual forms and strict release projection', { skip: !exec
     await form.getByRole('button', { name: /提交檢修單/ }).click(); await form.getByText('請確認材料需求', { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => window.__v2Probe.posts.length), 0);
     await choose(form.getByLabel('材料需求', { exact: true }), '無需材料');
-    await choose(form.getByLabel('建議處理方式', { exact: true }), '報廢建議');
+    await choose(form.getByLabel('處理方式', { exact: true }), '報廢建議');
     await form.getByRole('button', { name: /提交檢修單/ }).click(); await page.waitForFunction(() => window.__v2Probe.posts.length === 1);
     const post = await page.evaluate(() => window.__v2Probe.posts[0]);
     assert.equal(post.path, '/repair-workbench/items/synthetic/inspection'); assert.equal(post.body.status, 'SUBMITTED'); assert.equal(post.body.expectedVersion, 7);
     assert.equal(post.body.data.protocol, 2); assert.deepEqual(post.body.data.materialPlan, { mode: 'NONE', lines: [] });
-    assert.equal(post.body.data.plan, 'SCRAP'); assert.equal(post.body.data.isUnderWarranty, false); assert.equal(post.body.data.isAccidentalDamage, true);
+    assert.equal(post.body.data.plan, 'SCRAP'); assert.equal(post.body.data.isUnderWarranty, false);
+    assert.equal(post.body.data.assessment.schema, 1); assert.equal(post.body.data.assessment.conclusion, 'UNDETERMINED');
+    assert.equal(Object.hasOwn(post.body.data, 'isAccidentalDamage'), false, 'A legacy flag is not current human-cause evidence');
     assert.equal(post.body.data.checks[0].key, 'synthetic-function'); assert.equal(post.body.data.templateBinding.revision, 2);
     assert.match(post.body.requestId, /^[a-f0-9-]{36}$/); assert.equal(await page.evaluate(() => window.__v2Probe.saved), 1);
   });
@@ -127,7 +129,7 @@ test('new document v2 actual forms and strict release projection', { skip: !exec
   await t.test('legacy working checks can explicitly apply reviewed keys and honestly submit NOT_TESTED without invented measurements',async()=>{
     await page.setViewportSize({width:1280,height:900});await page.goto(origin+'/__repair-v2?legacy=1');const form=page.locator('form#repair-inspection-synthetic');await form.waitFor();
     assert.equal(await form.getByRole('button',{name:'新增項目',exact:true}).count(),0);await form.getByRole('button',{name:'套用檢測基準',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:/套\s*用/,exact:false}).click();
-    await form.getByLabel('觀察結果／量測值／未測原因',{exact:true}).fill('Equipment unavailable; test was not performed');await collapse(form,'材料需求').click();await choose(form.getByLabel('材料需求',{exact:true}),'無需材料');
+    await form.getByLabel('觀察',{exact:true}).fill('Equipment unavailable; test was not performed');await collapse(form,'材料需求').click();await choose(form.getByLabel('材料需求',{exact:true}),'無需材料');
     await form.getByRole('button',{name:/提交檢修單/}).click();await page.waitForFunction(()=>window.__v2Probe.posts.length===1);const data=await page.evaluate(()=>window.__v2Probe.posts[0].body.data);
     assert.equal(data.templateBinding.id,'synthetic-template');assert.equal(data.checks[0].key,'synthetic-function');assert.equal(data.checks[0].result,'NOT_TESTED');assert.equal('measurementValue' in data.checks[0],false);assert.equal('calibrationRecordId' in data.checks[0],false);
   });

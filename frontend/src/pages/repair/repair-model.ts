@@ -181,6 +181,7 @@ export function repairPrecheckView(value:unknown,entityId:string,itemId:string):
 }
 export type RepairItem = Item & {
   entityId?:string;
+  customerContext?:{state:'AVAILABLE'|'NOT_PROVIDED'|'UNAVAILABLE';sourceCaseId?:string;sourceNumber?:string;customerIssue?:string};
   mailroomPrecheck?:MailroomPrecheckRecord;
   precheck?:unknown;
   repairWorkflow?:RepairWorkflow|null;

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:9aa39be2c8dc24002685beef72048fe1777121d1c97e51398e24e65e879de89d",
-  "reviewedBaseCommit": "470a5b499ce7a7af4b57117446395ded6b422bec",
+  "sourceVersion": "sha256:1b1e80ba533936b4f0ba6b903399d9a88149b70cbb6b336ebcc91023fd7b1bce",
+  "reviewedBaseCommit": "0ae9b322aedf1ff3ca2df0a6ab68f65dcb922c09",
   "entryCount": 82,
   "groups": [
     "admin",
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "253e877035341af91ff48d18090c5c896f2e89b7ac8fe0914d25cb9a8a6a9687",
+  "catalogSha256": "3c963c662a3ecd2cd13015257b9da568b06246961a1872102d159aaa13bfb911",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -627,6 +627,14 @@
       "sha256": "352664b79bc5e97f05372032c43ddf00aadc37b93a001daf9ae33e44ea667304"
     },
     {
+      "path": "backend/src/modules/mailroom/repair-lookup.contract.ts",
+      "sha256": "1feeb30c29d1ab6df878d2b0e22be7b52f986668ee68ae42fce53bad7bb7395e"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-lookup.dto.ts",
+      "sha256": "8bc87495c11196a0e832d522176107f18573420d0b28dfea5be4cb4bac44442e"
+    },
+    {
       "path": "backend/src/modules/mailroom/repair-materials.service.ts",
       "sha256": "e95de4e041feefcd699ba10713f5941afd517f7cfc7f67c6a75a76dcdfb630e9"
     },
@@ -660,11 +668,11 @@
     },
     {
       "path": "backend/src/modules/mailroom/repair-workbench.controller.ts",
-      "sha256": "550961d0d9c7f18f840136a0819452488aae5ab521a7deb0d51f95dfaa563a3b"
+      "sha256": "fb652f901abddb8c3943c634f540cf89439c1ab0cfe7409a80a187686443b762"
     },
     {
       "path": "backend/src/modules/mailroom/repair-workbench.service.ts",
-      "sha256": "2da656accb7521513d7a4c3c7509803a462026562f8563fa43520c884f22851a"
+      "sha256": "f2ff476a289e2de8bd7254eaf98043f45e4fcc88043371164fb4d14e67abc154"
     },
     {
       "path": "backend/src/modules/mailroom/repair-workflow.contract.ts",
@@ -1247,6 +1255,10 @@
       "sha256": "aa0f8a7a3a426d9d8145bc8605e8a0b88331cdbdfa0934ffde7e00865c60c344"
     },
     {
+      "path": "frontend/src/pages/repair/repair-case-scan-model.ts",
+      "sha256": "62385e416ba22f800356fee9cdb76d9740a18ddebca2f553c829cd5952b2d9ae"
+    },
+    {
       "path": "frontend/src/pages/repair/repair-evidence-client.ts",
       "sha256": "9edd4cca658b45a795fc8fd3f87a31437df65335e23abd8c8d0e6aec9ae8a1ca"
     },
@@ -1260,7 +1272,7 @@
     },
     {
       "path": "frontend/src/pages/repair/repair-model.ts",
-      "sha256": "a3030df396e7a3908c9e7733ec55fe0a00a861661b7fc70803252b7f0aa46cba"
+      "sha256": "5eead47e4505c5103d7b3182d7dc7177875d191f1446b7d5cfc89886a5638d9c"
     },
     {
       "path": "frontend/src/pages/repair/repair-navigation.ts",
@@ -1272,15 +1284,23 @@
     },
     {
       "path": "frontend/src/pages/repair/repair.css",
-      "sha256": "82675090a71a09ebff78e4ddf381182292b6525898c388cee6029a1e9551e94a"
+      "sha256": "1276d33d8648abd082b59df5a29a82bbd54d6fbb14c9b2666257b25e396e5293"
+    },
+    {
+      "path": "frontend/src/pages/repair/RepairCaseContext.tsx",
+      "sha256": "48be7d01850e35c21aa5d68753a81e4f3a05c6c71b8ca142f0c553490de85d0d"
     },
     {
       "path": "frontend/src/pages/repair/RepairCaseList.tsx",
       "sha256": "56efdb590c6a31a78391ece225a7bf4445fc104fff137a278de8a97c295e0049"
     },
     {
+      "path": "frontend/src/pages/repair/RepairCaseScan.tsx",
+      "sha256": "1062a0cd3040f8542b8da434afae062c78b1b41e6e23bad0c3fa5e77677e45ba"
+    },
+    {
       "path": "frontend/src/pages/repair/RepairDocuments.tsx",
-      "sha256": "10dc865844add0c122271a2d302232945a56ac869b17be4bc3ce6d676c603b6d"
+      "sha256": "47d873ddd9480880c05405ed7cc31df70594fae27f4bab26e96b86f74f807ba3"
     },
     {
       "path": "frontend/src/pages/repair/RepairEvidencePanel.tsx",
@@ -1292,7 +1312,7 @@
     },
     {
       "path": "frontend/src/pages/repair/RepairPrecheckReadOnly.tsx",
-      "sha256": "d204083801ea7f6f498739d58ffc8b8bc1d891b65e2eaeea7a7d9232c401d0db"
+      "sha256": "eb57ec1f9e9958c8f5c7cde8e7238a5d3c1e93d07f2569e20acbd716f0275c6c"
     },
     {
       "path": "frontend/src/pages/repair/RepairPublicReportPage.tsx",
@@ -1316,7 +1336,7 @@
     },
     {
       "path": "frontend/src/pages/repair/RepairWorkbenchPage.tsx",
-      "sha256": "ef33fb6f32407c2abe08267fe3dff7d88ef0beae5b69351353e02194aef67066"
+      "sha256": "a75225536c10d5ecfbcede6d6f0793afd2a4f73aabcd80f7dcb9ed7228a6b0fa"
     },
     {
       "path": "frontend/src/pages/repair/RepairWorkflowPanel.tsx",
@@ -1448,7 +1468,7 @@
     },
     {
       "path": "frontend/src/services/repair.ts",
-      "sha256": "636b3b91bfef9684b8400a0c49243caaec5382b59e76de47d2faaf416460ce9f"
+      "sha256": "c2fd781d9d3ffae9b58ebf9c2cf44f0c77e84c213680953b5e6cf08d085f8b8a"
     },
     {
       "path": "frontend/src/services/warehouse-native.ts",

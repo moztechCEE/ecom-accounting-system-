@@ -18,6 +18,7 @@ const caseNumber = 'DEV-REPAIR-LAYOUT-20261008-001';
 const nativeLabel = 'NATIVE-LAYOUT-001';
 const sku = 'MOZTECH-SKU-' + '1234567890'.repeat(9);
 const serial = 'MOZTECH-SN-' + 'ABCDEFGHIJ'.repeat(9);
+const customerIssue = '顧客原述：接上充電線後沒有反應，換線後仍無法充電。';
 const removedNotes = [
   '選擇產品與案件，完成檢測、維修及複驗紀錄。', '客服方案確認與售後放行分開核對',
   '售後來源案件的到貨預告；', '以上依目前保存資料與本人作業條件顯示。',
@@ -47,6 +48,12 @@ const primary={id:'layout-primary',entityId:'layout-company',label:${JSON.string
   receipt:{number:'DEV-RCPT-LAYOUT-001',category:'REPAIR',sourceCaseId:'layout-source',sourceNumber:${JSON.stringify(caseNumber)},
     customerServiceUserId:'layout-csr',receivedAt:'2026-10-08T02:00:00Z',carrier:'合成入件物流',trackingNumber:'IN-LAYOUT-001'},
   declared:{name:${JSON.stringify(productName)},sku:${JSON.stringify(sku)},serialNumber:${JSON.stringify(serial)}},
+  customerContext:{state:'AVAILABLE',sourceCaseId:'layout-source',sourceNumber:${JSON.stringify(caseNumber)},customerIssue:${JSON.stringify(customerIssue)}},
+  mailroomPrecheck:{schema:1,entityId:'layout-company',itemId:'layout-primary',stage:'SUBMITTED',revision:2,
+    savedByName:'合成收發人員',savedAt:'2026-10-08T02:10:00Z',submittedAt:'2026-10-08T02:15:00Z',
+    recorded:{id:'layout-precheck',revision:2,template:null,savedByName:'合成收發人員',savedAt:'2026-10-08T02:10:00Z',submittedAt:'2026-10-08T02:15:00Z',notRequiredReason:null,
+      checks:[{key:'appearance',label:'外觀初檢',result:'NORMAL',note:'外觀無明顯破損',photoIds:[]},{key:'power',label:'充電初檢',result:'ABNORMAL',note:'接線後指示燈未亮',photoIds:[]}],photos:[],
+      mailroomIssue:{schema:1,symptom:'收發補充：線材已核對',preliminaryReason:'原因仍待技師確認'}}},
   repairInspection:{number:'DEV-INS-LAYOUT-001',revision:2,status:'DRAFT',authorId:'layout-tech',authorName:'合成本人技師',
     updatedAt:'2026-10-08T03:00:00Z',data:{complaint:'合成原始故障描述',reproduction:'INTERMITTENT',testConditions:'合成測試條件與設備',
       checks:[{name:'合成功能檢測',result:'NOT_TESTED',observation:'合成未測原因'}],diagnosis:'合成診斷待排除',
@@ -81,10 +88,13 @@ export default {
     state.gets.push({path,params:clone(options.params||{})});
     if(path==='/repair-workbench/todo')return {data:{items:[],total:0,page:1,queueCounts:{todo:2,acceptance:0},countExact:true,unknownCount:0}};
     if(path==='/mailroom/items'){
+      if(options.params?.status==='RECEIVED')return {data:{items:[],total:0}};
       const items=options.params?.repairScope==='waiting'?state.waitingRows:Object.values(state.rows);
       return {data:{items:items.map(clone),total:items.length}};
     }
-    if(path==='/mailroom/source-cases')return {data:{items:[],nextCursor:null}};
+    if(path==='/mailroom/source-cases')return {data:{items:[
+      {id:'arrival-long',number:'CASE-20261015-135851-4f47ae620aff',status:'IN_TRANSIT',statusLabel:'逆物流途中',remainingQuantity:1,items:[{name:${JSON.stringify(productName)},quantity:1}]},
+      {id:'arrival-multi',number:'DEV-R-003',status:'IN_TRANSIT',statusLabel:'逆物流途中',remainingQuantity:4,items:[{name:'DEV 測試多件維修品',quantity:4}]}],nextCursor:null}};
     const match=path.match(/^\\/repair-workbench\\/items\\/([^/]+)\\/documents$/);
     if(match&&state.rows[match[1]])return {data:clone(state.rows[match[1]])};
     throw Error('Unexpected offline GET '+path);
@@ -114,7 +124,7 @@ test('actual repair UI keeps product/case legible in constrained layouts and pre
         if (id === virtual) return fixture;
         if (id.endsWith('/src/contexts/AuthContext.tsx')) return `export const useAuth=()=>({user:{id:'layout-tech',roles:[],permissions:['repair_workbench:read','repair_workbench:update']}});`;
         if (id.endsWith('/src/services/api.ts')) return api;
-        if (id.endsWith('/src/services/websocket.service.ts')) return `export const webSocketService={subscribe:()=>()=>{}};`;
+        if (id.endsWith('/src/services/websocket.service.ts')) return `export const webSocketService={subscribe:callback=>{window.__repairLayoutNotify=callback;return()=>{if(window.__repairLayoutNotify===callback)delete window.__repairLayoutNotify;}}};`;
       },
       configureServer(vite) {
         vite.middlewares.use(async (request, response, next) => {
@@ -136,6 +146,7 @@ test('actual repair UI keeps product/case legible in constrained layouts and pre
   const browser = await chromium.launch({ executablePath, headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
+  page.setDefaultTimeout(8000);
   const errors = [], external = [], networkWrites = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/*', route => {
@@ -160,7 +171,7 @@ test('actual repair UI keeps product/case legible in constrained layouts and pre
     assert.equal(await page.locator('.mailroom-heading .ant-typography-secondary').count(),0,'page heading has no explanatory subtitle');
     await assertCleanCopy(page.locator('body'));
   };
-  for (const viewport of [{name:'desktop',width:1537,height:972},{name:'compact-desktop',width:1024,height:972},{name:'mobile',width:390,height:844}]) {
+  for (const viewport of [{name:'desktop',width:1537,height:972},{name:'comment-desktop',width:1233,height:1066},{name:'compact-desktop',width:1024,height:972},{name:'narrow-desktop',width:900,height:972},{name:'mobile',width:390,height:844}]) {
     await page.setViewportSize({width:viewport.width,height:viewport.height});
     await page.goto(url);
     const product = page.getByRole('button', {name:productName,exact:true});
@@ -170,10 +181,12 @@ test('actual repair UI keeps product/case legible in constrained layouts and pre
     assert(box.height < 150, viewport.name + ': product must not become a vertical character column');
     await assertPageWidth();
     assert.equal(await page.locator('.repair-case-open').count(),2);
+    assert.equal(await page.locator('.repair-workbench-page > .ant-tabs [role="tab"]').count(),3);
+    await page.getByLabel('掃描 QR code 或輸入案件編號',{exact:true}).waitFor();
     const list = page.locator('.repair-workbench-list');
     assert.match(await list.innerText(), new RegExp(caseNumber));
     assert(!(await list.innerText()).includes(sku));assert(!(await list.innerText()).includes(serial));
-    await page.screenshot({path:`/tmp/corely-repair-clean-copy-20261008-${viewport.name}-list.png`,fullPage:true});
+    await page.screenshot({path:`/tmp/corely-repair-ux-20261029-${viewport.name}-list.png`,fullPage:true,animations:'disabled'});
     if(viewport.name==='compact-desktop')await page.locator('.repair-case-open').first().click();
     else await product.click();
     const drawer = page.locator('.ant-drawer-open');
@@ -187,28 +200,38 @@ test('actual repair UI keeps product/case legible in constrained layouts and pre
     assert.match(await identity.innerText(),new RegExp(caseNumber));
     assert((await identity.innerText()).includes(productName));
     assert.equal(await drawer.locator('textarea[id$="_complaint"]').inputValue(),'合成原始故障描述');
+    const context=drawer.locator('.repair-case-context');
+    await context.getByText(customerIssue,{exact:true}).waitFor();
+    await context.getByText('外觀初檢',{exact:true}).waitFor();
+    await context.getByText('接線後指示燈未亮',{exact:true}).waitFor();
+    assert(!((await context.locator('.repair-customer-issue').innerText()).includes('合成原始故障描述')),'Source issue must stay distinct from technician complaint');
+    assert(await context.evaluate(node=>!!(node.compareDocumentPosition(document.querySelector('.repair-documents-layout'))&Node.DOCUMENT_POSITION_FOLLOWING)),'Case context precedes the document editor');
     await assertCleanCopy(drawer);
     assert.equal(await drawer.getByRole('button',{name:'送客服確認',exact:true}).count(),1);
     assert.equal(await drawer.getByRole('button',{name:'開始維修',exact:true}).count(),1);
     for (const name of ['提交客服確認','認領此案件','本人確認實物簽收','複驗完成，交回收發室'])
       assert.equal(await drawer.getByRole('button',{name,exact:true}).count(),0,'action labels remain concise: '+name);
-    assert(await drawer.getByRole('heading',{name:'故障與檢測',exact:true}).isVisible());
-    assert(await drawer.getByRole('heading',{name:'診斷與估價',exact:true}).isVisible());
+    for(const name of ['收件核對','重現問題','核心檢查','判斷與佐證'])assert(await drawer.getByRole('heading',{name,exact:true}).isVisible());
     const summary = drawer.locator('.repair-detail-summary');
-    assert((await summary.innerText()).includes(sku));assert((await summary.innerText()).includes(serial));
+    assert(!(await summary.innerText()).includes(sku));assert(!(await summary.innerText()).includes(serial));
+    const dataToggle=drawer.locator('.repair-case-details .ant-collapse-header').filter({hasText:'案件資料與實物保管'});
+    await dataToggle.click();
+    const actualData=drawer.locator('.repair-case-details');
+    assert((await actualData.innerText()).includes(sku));assert((await actualData.innerText()).includes(serial));
+    await dataToggle.click();
     assert.equal(await page.evaluate(() => new URLSearchParams(window.repairLayoutRouter.state.location.search).get('itemId')),'layout-primary');
     await assertDrawerWidth(drawer);
     await drawer.getByRole('tab',{name:'維修單',exact:true}).click();
     await drawer.locator('textarea[id$="_workPerformed"]').waitFor();
     assert.equal(await drawer.locator('textarea[id$="_workPerformed"]').inputValue(),'合成保存的實際處置');
     await assertCleanCopy(drawer);
-    assert(await drawer.getByRole('heading',{name:'實際處置',exact:true}).isVisible());
+    assert(await drawer.getByRole('heading',{name:'修復與複驗',exact:true}).isVisible());
     assert(await drawer.getByRole('heading',{name:'實際使用零件',exact:true}).isVisible());
     assert(await drawer.getByRole('heading',{name:'修後複驗',exact:true}).isVisible());
     await assertDrawerWidth(drawer);
     await drawer.getByRole('tab',{name:'檢修單',exact:true}).click();
     await drawer.locator('.ant-drawer-body').evaluate(node => { node.scrollTop=0; });
-    await page.screenshot({path:`/tmp/corely-repair-clean-copy-20261008-${viewport.name}-drawer.png`});
+    await page.screenshot({path:`/tmp/corely-repair-ux-20261029-${viewport.name}-drawer.png`,animations:'disabled'});
     assert.equal(await page.evaluate(() => window.repairLayoutFixture.posts.length),0);
   }
 
@@ -234,13 +257,27 @@ test('actual repair UI keeps product/case legible in constrained layouts and pre
   await arrivalHeader.click();
   try {
     await page.waitForFunction(()=>document.querySelector('.repair-arrival-preview .ant-collapse-header')?.getAttribute('aria-expanded')==='true',undefined,{timeout:5000});
-    const arrivalUpdate=arrival.locator('.ant-card-extra button');
+    const arrivalUpdate=arrival.locator('.repair-arrival-toolbar button');
     await arrivalUpdate.waitFor({timeout:5000});
     assert.equal((await arrivalUpdate.innerText()).replace(/\s/g,''),'更新');
   } catch(error) {
     await page.screenshot({path:'/tmp/corely-repair-clean-copy-20261008-arrival-failure.png',fullPage:true});
     t.diagnostic(JSON.stringify({route:await page.evaluate(()=>window.repairLayoutRouter.state.location),arrival:await arrival.innerText(),header:await arrivalHeader.getAttribute('aria-expanded')}));
     throw error;
+  }
+  for(const viewport of [{width:1233,height:1066},{width:1024,height:972},{width:900,height:972},{width:390,height:844}]){
+    await page.setViewportSize(viewport);
+    await arrival.getByText('CASE-20261015-135851-4f47ae620aff',{exact:true}).waitFor();
+    assert.equal(await arrival.locator('.ant-table').count(),0,'Arrival rows avoid nested table/header borders');
+    const readable=await arrival.locator('.repair-arrival-number').first().evaluate(node=>({font:parseFloat(getComputedStyle(node).fontSize),width:node.getBoundingClientRect().width,height:node.getBoundingClientRect().height}));
+    assert(readable.font>=16&&readable.width>120&&readable.height<120,JSON.stringify({viewport,readable}));
+    const toolbar=await arrival.locator('.repair-arrival-toolbar').boundingBox(),first=await arrival.locator('.repair-arrival-row').first().boundingBox();
+    assert(toolbar&&first&&toolbar.y+toolbar.height<=first.y,'Arrival update controls must not overlap rows or their separator');
+    const quantity=await arrival.locator('.repair-arrival-count').first().boundingBox();
+    assert(quantity&&quantity.width>=30,'Quantity remains legible');
+    const availableWidth=await arrival.locator('.repair-arrival-list').evaluate(node=>({scroll:node.scrollWidth,client:node.clientWidth}));
+    assert(availableWidth.scroll<=availableWidth.client+1,'Arrival content must not be clipped inside Collapse: '+JSON.stringify({viewport,...availableWidth}));
+    await assertPageWidth();
   }
   await assertCleanCopy(page.locator('body'));
 
@@ -278,6 +315,16 @@ test('actual repair UI keeps product/case legible in constrained layouts and pre
   await page.locator('.ant-modal-confirm').getByRole('button',{name:'繼續編輯',exact:true}).click();
   assert.equal(await complaint.inputValue(),draft);
   assert.equal(await page.evaluate(() => window.repairLayoutRouter.state.location.pathname),'/operations/repair');
+  const beforeReload=await page.evaluate(()=>window.repairLayoutFixture.gets.filter(value=>value.path.endsWith('/documents')).length);
+  await page.evaluate(()=>window.__repairLayoutNotify({category:'mailroom',data:{itemId:'layout-primary'}}));
+  await drawer.getByRole('button',{name:'重新載入',exact:true}).click();
+  await page.locator('.ant-modal-confirm .ant-modal-confirm-title').waitFor();
+  await page.evaluate(()=>{window.__layoutOldToken=localStorage.getItem('access_token');localStorage.setItem('access_token','synthetic-new-login-token');});
+  await page.locator('.ant-modal-confirm').getByRole('button',{name:'放棄修改',exact:true}).click();
+  await page.locator('.ant-modal-confirm').waitFor({state:'detached'});
+  assert.equal(await complaint.inputValue(),draft,'A confirmation from a superseded login cannot discard the current draft');
+  assert.equal(await page.evaluate(()=>window.repairLayoutFixture.gets.filter(value=>value.path.endsWith('/documents')).length),beforeReload,'A stale reload confirmation makes no detail read');
+  await page.evaluate(()=>{if(window.__layoutOldToken===null)localStorage.removeItem('access_token');else localStorage.setItem('access_token',window.__layoutOldToken);});
   await drawer.getByRole('button',{name:'儲存草稿',exact:true}).first().click();
   await page.getByText('草稿已儲存',{exact:true}).waitFor();
   const writes = await page.evaluate(() => window.repairLayoutFixture.posts);
