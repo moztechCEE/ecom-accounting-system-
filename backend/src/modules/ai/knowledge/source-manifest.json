@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:ff871faa1dad25bc27bc7d520269b173064b7510e2d07b248886eaaebe9d3f58",
+  "sourceVersion": "sha256:9aa39be2c8dc24002685beef72048fe1777121d1c97e51398e24e65e879de89d",
   "reviewedBaseCommit": "470a5b499ce7a7af4b57117446395ded6b422bec",
   "entryCount": 82,
   "groups": [
@@ -276,7 +276,7 @@
     },
     {
       "path": "backend/src/modules/auth/dto/login-password.validator.ts",
-      "sha256": "9c8654b8d580e1190b675823b09eefc97d1af8f570f289b3df176a5b59ebfb9c"
+      "sha256": "96f85de61722ec66aa2dffd7047f8a351b47d3d8c3326bb905d70748dfee0965"
     },
     {
       "path": "backend/src/modules/auth/dto/login.dto.ts",

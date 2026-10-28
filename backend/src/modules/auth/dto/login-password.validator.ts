@@ -88,7 +88,11 @@ export function normalizeDevFixtureEmployeeNo(input: LoginInput): string {
 export function devFixtureShortPasswordIdentity(
   input: LoginInput,
 ): DevFixtureEmployeeIdentity | undefined {
-  return input.password === 'dev' ? devFixtureEmployeeLogin(input) : undefined;
+  const identity = devFixtureEmployeeLogin(input);
+  return input.password === 'dev' ||
+    (input.password === '123' && identity === DEV_TECHNICIAN_LOGIN)
+    ? identity
+    : undefined;
 }
 
 export function isValidLoginPassword(input: LoginInput): boolean {

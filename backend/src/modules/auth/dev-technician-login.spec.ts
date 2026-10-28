@@ -15,7 +15,7 @@ const EMPLOYEE_ID = 'c7585674-980b-4fb2-afb9-7f2adcca413e';
 const fixture = () => ({
   entityId: ENTITY_ID,
   employeeNo: 'DEV121',
-  password: 'dev',
+  password: '123',
 });
 
 describe('isolated DEV technician login compatibility', () => {
@@ -51,6 +51,12 @@ describe('isolated DEV technician login compatibility', () => {
     },
   );
 
+  it('retains the previous technician password predicate during deployment', async () => {
+    await expect(
+      input({ ...fixture(), password: 'dev' }),
+    ).resolves.toBeInstanceOf(LoginDto);
+  });
+
   it.each([undefined, 'false', 'TRUE', '1'])(
     'rejects the short password outside the exact sandbox flag (%s)',
     async (flag) => {
@@ -70,6 +76,7 @@ describe('isolated DEV technician login compatibility', () => {
     { employeeNo: 'QA7001' },
     { employeeNo: 'DEV1210' },
     { employeeNo: 'DEV122' },
+    { employeeNo: 'DEV123' },
     { employeeNo: undefined },
     { email: 'technician@example.test' },
     { email: '' },
@@ -88,6 +95,9 @@ describe('isolated DEV technician login compatibility', () => {
     'DEV',
     'dev ',
     ' dev',
+    '123 ',
+    ' 123',
+    '00123',
     '1234567',
     '😀😀😀😀',
     undefined,
@@ -96,7 +106,9 @@ describe('isolated DEV technician login compatibility', () => {
     12345678,
     true,
     ['dev'],
+    ['123'],
     { value: 'dev' },
+    { value: '123' },
   ])('rejects other short or malformed passwords (%j)', async (password) => {
     await expect(input({ ...fixture(), password })).rejects.toThrow();
   });
@@ -150,9 +162,11 @@ describe('isolated DEV technician login compatibility', () => {
     let users: ReturnType<typeof createUsers>;
     let jwt: ReturnType<typeof createJwt>;
     let fixtureHash: string;
+    let previousHash: string;
     let differentHash: string;
     beforeAll(async () => {
-      fixtureHash = await bcrypt.hash('dev', 4);
+      fixtureHash = await bcrypt.hash('123', 4);
+      previousHash = await bcrypt.hash('dev', 4);
       differentHash = await bcrypt.hash('different-password', 4);
     });
     beforeEach(() => {
@@ -264,6 +278,25 @@ describe('isolated DEV technician login compatibility', () => {
       expect(jwt.signAsync).not.toHaveBeenCalled();
     });
 
+    it('rejects the previous password after the stored password is changed', async () => {
+      await expect(
+        service.login(await input({ ...fixture(), password: 'dev' })),
+      ).rejects.toThrow('Invalid credentials');
+      expect(jwt.signAsync).not.toHaveBeenCalled();
+    });
+
+    it('uses the existing stored password until the password transition', async () => {
+      user.passwordHash = previousHash;
+      await expect(
+        service.login(await input({ ...fixture(), password: 'dev' })),
+      ).resolves.toMatchObject({ user: { id: USER_ID } });
+      jwt.signAsync.mockClear();
+      await expect(service.login(await input(fixture()))).rejects.toThrow(
+        'Invalid credentials',
+      );
+      expect(jwt.signAsync).not.toHaveBeenCalled();
+    });
+
     it.each([undefined, '', null])(
       'rejects a missing password hash (%j)',
       async (hash) => {
@@ -310,6 +343,7 @@ describe('isolated DEV technician login compatibility', () => {
       { entityId: 'another-company' },
       { employeeNo: 'DEV122' },
       { employeeNo: 'QA7001' },
+      { employeeNo: 'DEV123' },
       { email: 'synthetic-technician@example.test' },
       { platformLoginId: 'DEV121' },
     ])(
