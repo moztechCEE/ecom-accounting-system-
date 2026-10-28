@@ -123,7 +123,7 @@ test('new document v2 actual forms and strict release projection', { skip: !exec
       const blocked = structuredClone(base); blocked.release.releaseInfo.invoiceSatisfied = false; window.__setV2Item(blocked); return cases; });
     assert.equal(result.ready, true); assert.equal(result.deferredStart, true);
     for (const [key, value] of Object.entries(result)) if (!['ready', 'deferredStart'].includes(key)) assert.equal(value, false, key);
-    await page.getByText(/尚未可開工：必要發票/).waitFor();
+    await page.getByRole('status', { name: '目前進度' }).filter({ hasText: /發票/ }).waitFor();
     await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   });
   await t.test('legacy working checks can explicitly apply reviewed keys and honestly submit NOT_TESTED without invented measurements',async()=>{

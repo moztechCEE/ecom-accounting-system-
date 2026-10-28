@@ -1,8 +1,9 @@
-import { Alert, Collapse, Descriptions, Space, Tag, Typography } from 'antd';
+import { Collapse, Typography } from 'antd';
 import { repairReadiness } from './repair-readiness';
 import type { RepairReadinessCheck, RepairReadinessContext } from './repair-readiness';
 import { CSR_STATUS, PLANS, RESULTS } from './repair-model';
 import type { RepairItem } from './repair-model';
+import { repairCaseProgress } from './repair-list-model';
 
 const labels: Record<string, string> = {
   disposition_auth:'顧客處置授權',
@@ -61,14 +62,38 @@ function evidence(check: RepairReadinessCheck, item: RepairItem, note?: string):
 }
 
 function Checks({ title, items, item, note }: { title: string; items: RepairReadinessCheck[]; item: RepairItem; note?: string }) {
+  const pending = items.filter(value => !value.ready);
+  const complete = items.filter(value => value.ready);
+  const rows = (values: RepairReadinessCheck[]) => <ul className="repair-readiness-list">
+    {values.map(value => <li key={`${item.id}:${item.version}:${value.key}`}>
+      <details className="repair-readiness-check" data-check-key={value.key} data-check-ready={value.ready}>
+        <summary>{labels[value.key] || value.label}</summary>
+        <div className="repair-readiness-evidence">{evidence(value, item, note)}</div>
+      </details>
+    </li>)}
+  </ul>;
   return <section aria-label={title}>
     <Typography.Title level={5}>{title}</Typography.Title>
-    <Descriptions size="small" column={1} items={items.map(value => ({
-      key: value.key, label: labels[value.key] || value.label,
-      children: <Space size={6} wrap><Tag color={value.ready ? 'blue' : 'orange'}>{value.ready ? '符合' : '待確認'}</Tag><Typography.Text>{evidence(value, item, note)}</Typography.Text></Space>,
-    }))} />
+    {pending.length > 0 && <div className="repair-readiness-pending">
+      <div className="repair-readiness-group-title">待完成 <span>{pending.length}</span></div>
+      {rows(pending)}
+    </div>}
+    {complete.length > 0 && <details className="repair-readiness-complete" key={`${item.id}:${item.version}:complete`}>
+      <summary>已符合 <span>{complete.length}</span></summary>
+      {rows(complete)}
+    </details>}
   </section>;
 }
+
+const pendingLabels: Record<string, string> = {
+  own_signed: '等待本人簽收', inspection: '檢修單待提交', start_stage: '處理方案待確認',
+  csr_decision: '等待客服確認', csr_versions: '客服確認需更新', source_release: '維修放行待確認',
+  source_quote: '報價版本待確認', customer_consent: '等待顧客確認', payment: '款項待確認',
+  proposal_binding: '方案報價待核對', invoice: '發票待確認', materials: '材料待確認', test_standard: '檢測基準待確認',
+  disposition_auth: '顧客處置授權待確認', completion_stage: '交回階段待確認', report: '維修單待提交',
+  report_revision: '維修依據需更新', outcome: '實際處置待確認', qc: '修後複驗待完成', checks: '逐項複驗待完成',
+  factory_receipt: '等待原廠返還件簽收', handoff_note: '交回說明待填寫', work_start: '整新開工待確認',
+};
 
 export type RepairReadinessPanelProps = RepairReadinessContext & { item: RepairItem; compact?: boolean };
 
@@ -78,18 +103,32 @@ export default function RepairReadinessPanel({ item, canUpdate, viewerId, handof
   const missing = checks.filter(value => !value.ready);
   const pending = readiness.showDisposition && !readiness.dispositionReady || readiness.showStart && !readiness.startReady || readiness.showCompletion && !readiness.completionReady;
   const csr = item.repairWorkflow?.csr;
-  const details = <Space direction="vertical" size={16} style={{ width: '100%' }}>
-    <Descriptions size="small" column={1} items={[
-      { key: 'csr', label: '客服交辦', children: csr ? `${CSR_STATUS[csr.status] || csr.status}${csr.ownerName ? ` · ${csr.ownerName}` : ''} · 檢修 ${revision(csr.inspectionRevision)}${item.receipt.category==='RETURN'?'':` · 報價 ${revision(csr.quoteRevision)}`}` : '尚未交辦' },
-      { key: 'actual', label: '已保存處置', children: outcome(item.repairReport?.data.outcome) },
-      ...(readiness.sourceMessage ? [{ key: 'source', label: '售後回覆', children: <span style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{readiness.sourceMessage}</span> }] : []),
-    ]} />
+  const priority = readiness.showCompletion
+    ? ['own_signed', 'completion_stage', 'report', 'report_revision', 'outcome', 'qc', 'checks', 'factory_receipt', 'handoff_note', 'csr_decision', 'csr_versions', 'source_quote', 'proposal_binding', 'customer_consent', 'payment', 'invoice', 'materials', 'test_standard', 'source_release']
+    : ['own_signed', 'inspection', 'start_stage', 'csr_decision', 'csr_versions', 'source_quote', 'proposal_binding', 'customer_consent', 'payment', 'invoice', 'materials', 'test_standard', 'source_release'];
+  const firstMissing = priority.map(key => missing.find(value => value.key === key)).find(Boolean) || missing[0];
+  const progress = item.status === 'WAITING_CUSTOMER' && csr && ['SENT', 'ACCEPTED'].includes(csr.status)
+    ? repairCaseProgress(item) : undefined;
+  const pendingTitle = !readiness.showDisposition && item.receipt.category === 'REPAIR' && item.release?.available !== true
+    && !['own_signed', 'inspection', 'start_stage'].includes(firstMissing?.key)
+    ? '放行資料待確認'
+    : progress && !progress.startsWith('待開始') && !progress.endsWith('已開工')
+      ? progress : pendingLabels[firstMissing?.key] || '作業條件待確認';
+  const details = <div className="repair-readiness-details">
     {readiness.showStart && <Checks title="開工條件" items={readiness.startChecks} item={item} note={handoffNote} />}
     {readiness.showDisposition && <Checks title="原件處置核對" items={readiness.dispositionChecks} item={item} note={handoffNote} />}
     {readiness.showCompletion && <Checks title="交回條件" items={readiness.completionChecks} item={item} note={handoffNote} />}
-  </Space>;
+    {(csr || item.repairReport || readiness.sourceMessage) && <dl className="repair-readiness-records">
+      {csr && <div><dt>客服交辦</dt><dd>{CSR_STATUS[csr.status] || csr.status}{csr.ownerName ? ` · ${csr.ownerName}` : ''} · 檢修 {revision(csr.inspectionRevision)}{item.receipt.category === 'RETURN' ? '' : ` · 報價 ${revision(csr.quoteRevision)}`}</dd></div>}
+      {item.repairReport && <div><dt>已保存處置</dt><dd>{outcome(item.repairReport.data.outcome)}</dd></div>}
+      {readiness.sourceMessage && <div><dt>售後回覆</dt><dd>{readiness.sourceMessage}</dd></div>}
+    </dl>}
+  </div>;
   return <section className="repair-readiness-compact" aria-label="客服與放行">
-    {pending && readiness.ownSigned && <Alert showIcon type="warning" message={readiness.showDisposition ? missing.find(value=>value.key==='disposition_auth')?.detail || '目前處置條件未確認' : `尚未可${readiness.showCompletion ? '交回' : '開工'}：${missing.slice(0, 2).map(value => labels[value.key] || value.label).join('、')}${missing.length > 2 ? `等 ${missing.length} 項待確認` : ''}`} />}
+    {pending && readiness.ownSigned && <div className="repair-readiness-status" role="status" aria-label="目前進度">
+      <strong>{pendingTitle}</strong>
+      {firstMissing?.key.startsWith('csr_') && csr?.ownerName && <span>{csr.ownerName}</span>}
+    </div>}
     {compact ? <Collapse ghost items={[{ key: 'checks', label: '客服與放行', forceRender: true, children: details }]} /> : details}
   </section>;
 }

@@ -366,6 +366,7 @@ test('actual three-tab repair workbench preserves native navigation, case access
       const drawer = page.locator('.ant-drawer-open');
       await drawer.locator('.repair-detail-identity').getByText('邦森合成產品・待當版款項確認', { exact: true }).waitFor();
       await drawer.locator('.repair-readiness-compact .ant-collapse-header').click();
+      await drawer.locator('.repair-readiness-pending [data-check-key="payment"] > summary').click();
       await drawer.getByText('TWD 399 · 待確認報價 v4 款項', { exact: true }).waitFor();
       assert.equal(await drawer.getByRole('button', { name: '開始維修', exact: true }).isDisabled(), true);
       assert.equal(await page.locator('.repair-tab-label').filter({ hasText: '付款' }).count(), 0);
@@ -388,6 +389,8 @@ test('actual three-tab repair workbench preserves native navigation, case access
       await drawer.locator('.repair-detail-identity').getByText('邦森合成產品・待當版款項確認', { exact: true }).waitFor();
       assert.equal(await drawer.getByRole('button', { name: '開始維修', exact: true }).isEnabled(), true);
       await drawer.locator('.repair-readiness-compact .ant-collapse-header').click();
+      await drawer.locator('.repair-readiness-complete > summary').click();
+      await drawer.locator('.repair-readiness-complete [data-check-key="payment"] > summary').click();
       await drawer.getByText('TWD 399 · 已確認', { exact: true }).waitFor();
       assert.equal(await page.evaluate(() => window.repairActionFixture.posts.length), 0);
     } finally { await page.close(); }

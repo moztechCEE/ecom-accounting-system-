@@ -116,6 +116,35 @@
 .repair-detail-summary .ant-tag { margin: 0; max-width: 100%; white-space: normal; }
 .repair-detail-summary .ant-typography { font-size: 14px; min-width: 0; }
 .repair-readiness-compact .ant-collapse-header { font-size: 14px; }
+.repair-readiness-compact { min-width: 0; }
+.repair-readiness-status { display: grid; gap: 6px; padding: 14px 16px; border-left: 3px solid #e6a23c; border-radius: 8px; background: #fffaf0; }
+.repair-readiness-status strong { font-size: 16px; font-weight: 600; line-height: 1.5; }
+.repair-readiness-status > span { font-size: 14px; color: #677384; }
+.repair-readiness-details { display: grid; gap: 20px; min-width: 0; }
+.repair-readiness-details h5.ant-typography { font-size: 16px; margin: 0 0 12px; }
+.repair-readiness-compact .ant-collapse-content-box { padding: 4px 0 12px !important; }
+.repair-readiness-group-title { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 14px; color: #8c651c; }
+.repair-readiness-group-title > span { font-variant-numeric: tabular-nums; }
+.repair-readiness-list { margin: 0; padding: 0; list-style: none; }
+.repair-readiness-list > li { border-bottom: 1px solid #edf0f4; }
+.repair-readiness-list > li:last-child { border-bottom: 0; }
+.repair-readiness-check > summary,
+.repair-readiness-complete > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 10px 0; list-style: none; cursor: pointer; font-size: 15px; line-height: 1.5; }
+.repair-readiness-check > summary::-webkit-details-marker,
+.repair-readiness-complete > summary::-webkit-details-marker { display: none; }
+.repair-readiness-check > summary::after { content: ''; flex: 0 0 6px; height: 6px; border-right: 1.5px solid #8995a5; border-bottom: 1.5px solid #8995a5; transform: rotate(-45deg); margin-right: 4px; }
+.repair-readiness-check[open] > summary::after { transform: rotate(45deg); }
+.repair-readiness-check > summary:focus-visible,
+.repair-readiness-complete > summary:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; border-radius: 4px; }
+.repair-readiness-evidence { padding: 0 0 12px; color: #526174; font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.repair-readiness-complete { margin-top: 12px; color: #677384; }
+.repair-readiness-complete > summary { justify-content: flex-start; font-size: 14px; }
+.repair-readiness-complete > summary::before { content: '+'; width: 12px; color: #8995a5; }
+.repair-readiness-complete[open] > summary::before { content: '−'; }
+.repair-readiness-records { margin: 0; padding-top: 16px; border-top: 1px solid #edf0f4; min-width: 0; }
+.repair-readiness-records > div + div { margin-top: 14px; }
+.repair-readiness-records dt { margin-bottom: 4px; color: #8995a5; font-size: 14px; }
+.repair-readiness-records dd { margin: 0; font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .repair-documents-layout { display: grid; grid-template-columns: minmax(0, 1fr) 296px; gap: 24px; align-items: start; }
 .repair-editor-main, .repair-editor-sidebar { min-width: 0; }
 .repair-editor-main { padding: 24px; background: white; border: 1px solid #e7ebf0; border-radius: 12px; }

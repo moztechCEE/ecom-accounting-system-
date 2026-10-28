@@ -152,7 +152,8 @@ test('full repair page keeps dispatched refusal history consistent with readonly
     assert.equal(query.repairScope, 'records');
     if (refusal) {
       assert.match(text, /未修原件 · 已交物流寄回/);
-      assert.match(text, /已保存處置\s*未記錄/);
+      assert.equal(await drawer.locator('.repair-readiness-records dt').filter({ hasText: '已保存處置' }).count(), 0,
+        'an absent repair record does not create a placeholder disposition row');
       assert.equal(await page.evaluate(id => window.__repairPageFixture.rows[id].repairReport, `${plan}-refusal`), null);
     } else {
       await drawer.getByRole('tab', { name: '維修單', exact: true }).click();
