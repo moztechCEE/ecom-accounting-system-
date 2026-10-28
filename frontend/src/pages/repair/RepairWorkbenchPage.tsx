@@ -28,6 +28,7 @@ import './repair.css';
 import { currentItemCustody } from '../mailroom/item-custody';
 const { Title, Text, Paragraph } = Typography;
 const time = (value: string) => dayjs(value).format('MM/DD HH:mm');
+type DetailInstance={item:RepairItem;generation:number;scope:string;token:string|null};
 function historyNote(action: string, note: string): string {
   if (!['save_repair_inspection','submit_repair_inspection','save_repair_repair','submit_repair_repair'].includes(action)) return note;
   try {
@@ -69,12 +70,17 @@ export default function RepairWorkbenchPage() {
   const [loading, setLoading] = useState(false);
   const [listFailure, setListFailure] = useState<{scope: string; text: string}>();
   const [detail, setDetail] = useState<RepairItem>();
-  const currentDetail=detail?.id===selectedId && detail.entityId===entityId ? detail : undefined;
   const [detailBusy, setDetailBusy] = useState(false);
   const [changed, setChanged] = useState(false);
   const generation = useRef(0);
   const detailGeneration = useRef(0);
+  const detailInstance=useRef<DetailInstance|undefined>(undefined);
   const detailDirty = useRef(false);
+  const currentDetail=detail?.id===selectedId && detail.entityId===entityId && detailInstance.current?.item===detail
+    && detailInstance.current.scope===navigationScope && detailInstance.current.token===localStorage.getItem('access_token') ? detail : undefined;
+  const activeDetailInstance=currentDetail ? detailInstance.current : undefined;
+  const detailInstanceCurrent=(instance:DetailInstance|undefined)=>!!instance && detailInstance.current===instance
+    && instance.generation===detailGeneration.current && navigationCurrent(instance.scope,instance.token);
   useRepairNavigationGuard(detailDirty, confirmDiscard);
   const listScope = JSON.stringify([entityId, queue, page, search]);
   const currentList = list?.scope === listScope ? list.data : undefined;
@@ -116,19 +122,28 @@ export default function RepairWorkbenchPage() {
     }
     finally {if (request === generation.current) setLoading(false);}
   }, [enabled, entityId, canRead, queue, page, search, listScope]);
+  const latestRefresh=useRef(refresh);
+  latestRefresh.current=refresh;
   const loadDetail = useCallback(async (checkDraft = false) => {
     const scope=JSON.stringify([entityId,params.toString(),user?.id]),token=localStorage.getItem('access_token');
+    const instanceBeforeConfirm=detailInstance.current;
     if (checkDraft && detailDirty.current && !await confirmDiscard()) return;
     const currentScope=()=>mounted.current && scope===latestNavigation.current && token===localStorage.getItem('access_token');
-    if(!currentScope())return;
+    if(!currentScope() || checkDraft && detailInstance.current!==instanceBeforeConfirm)return;
     const request = ++detailGeneration.current;
+    detailInstance.current=undefined;
     detailDirty.current = false;
     setDetail(undefined);setChanged(false);setDetailBusy(false);
     if (!selectedId || !enabled || !entityId || !canRead) return;
     setDetailBusy(true);
     try {
       const result = await repairService.documents(entityId,selectedId);
-      if (request === detailGeneration.current && currentScope()) setDetail(result);
+      if (request === detailGeneration.current && currentScope()) {
+        const acceptedInstance={item:result,generation:request,scope,token};
+        detailInstance.current=acceptedInstance;
+        setDetail(result);
+        return acceptedInstance;
+      }
     } catch (error) {if (request === detailGeneration.current && currentScope()) message.error(errorText(error));}
     finally {if (request === detailGeneration.current && currentScope()) setDetailBusy(false);}
   }, [selectedId, entityId, enabled, canRead, confirmDiscard, message, params, user?.id]);
@@ -145,8 +160,9 @@ export default function RepairWorkbenchPage() {
   useEffect(() => {const requests = detailGeneration;void loadDetail();return () => {requests.current++;};}, [loadDetail]);
   async function open(id?: string) {
     const scope=navigationScope,token=localStorage.getItem('access_token');
+    const instance=detailInstance.current;
     if (selectedId && id !== selectedId && detailDirty.current && !await confirmDiscard()) return;
-    if(!navigationCurrent(scope,token))return;
+    if(!navigationCurrent(scope,token) || detailInstance.current!==instance)return;
     if(id!==selectedId)detailDirty.current=false;
     const next = new URLSearchParams(params);
     if (id) next.set('itemId', id);else next.delete('itemId');
@@ -154,10 +170,11 @@ export default function RepairWorkbenchPage() {
   }
   async function openScanned(target: {itemId:string;entityId:string}):Promise<boolean> {
     const scope=navigationScope,token=localStorage.getItem('access_token');
+    const instance=detailInstance.current;
     if (target.entityId !== entityId) return false;
     if (target.itemId===selectedId) return true;
     if (detailDirty.current && !await confirmDiscard()) return false;
-    if(!navigationCurrent(scope,token))return false;
+    if(!navigationCurrent(scope,token) || detailInstance.current!==instance)return false;
     detailDirty.current=false;
     const next = new URLSearchParams(params);
     next.set('entityId',entityId);next.set('itemId',target.itemId);next.set('queue','all');
@@ -165,8 +182,9 @@ export default function RepairWorkbenchPage() {
   }
   async function changeQueue(nextQueue: RepairListScope) {
     const scope=navigationScope,token=localStorage.getItem('access_token');
+    const instance=detailInstance.current;
     if (detailDirty.current && !await confirmDiscard()) return;
-    if(!navigationCurrent(scope,token))return;
+    if(!navigationCurrent(scope,token) || detailInstance.current!==instance)return;
     detailDirty.current=false;
     const next = new URLSearchParams(params);
     if (nextQueue === 'todo') next.delete('queue');else next.set('queue', nextQueue);
@@ -206,7 +224,12 @@ export default function RepairWorkbenchPage() {
     <Drawer rootClassName="repair-workbench-drawer" width="min(1180px, 100vw)" open={!!selectedId} title={<div className="repair-detail-identity"><Text type="secondary">{currentDetail?.receipt.sourceNumber || currentDetail?.label || '維修案件'}</Text><Title level={3}>{currentDetail?.productName || '載入案件…'}</Title></div>} onClose={()=>void open()} destroyOnHidden>
       <Spin spinning={detailBusy}>{currentDetail ? <>
         {changed && <Alert type="info" showIcon message="案件已更新" action={<Button onClick={()=>void loadDetail(true)}>重新載入</Button>} style={{marginBottom:16}} />}
-        <RepairDetail confirmDiscard={confirmDiscard} feedback={message} key={`${currentDetail.entityId}:${currentDetail.id}:${currentDetail.version}`} item={currentDetail} readerExpectedItemId={selectedId || ''} entityId={entityId} onDirtyChange={dirty=>{detailDirty.current=dirty;}} onSaved={async()=>{detailDirty.current=false;await loadDetail();await refresh(true);}} />
+        <RepairDetail confirmDiscard={confirmDiscard} feedback={message} key={`${currentDetail.entityId}:${currentDetail.id}:${currentDetail.version}:${activeDetailInstance?.generation}`} item={currentDetail} readerExpectedItemId={selectedId || ''} entityId={entityId} onDirtyChange={dirty=>{if(detailInstanceCurrent(activeDetailInstance))detailDirty.current=dirty;}} onSaved={async()=>{
+          if(!detailInstanceCurrent(activeDetailInstance))return;
+          detailDirty.current=false;
+          const adoptedInstance=await loadDetail();
+          if(detailInstanceCurrent(adoptedInstance))await latestRefresh.current(true);
+        }} />
       </> : !detailBusy && <Empty description="請重新載入案件" />}</Spin>
     </Drawer>
   </div>;
