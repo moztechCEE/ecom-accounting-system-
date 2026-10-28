@@ -109,11 +109,20 @@ export default function RepairReadinessPanel({ item, canUpdate, viewerId, handof
   const firstMissing = priority.map(key => missing.find(value => value.key === key)).find(Boolean) || missing[0];
   const progress = item.status === 'WAITING_CUSTOMER' && csr && ['SENT', 'ACCEPTED'].includes(csr.status)
     ? repairCaseProgress(item) : undefined;
+  const workflow = item.repairWorkflow;
+  const workflowKnown = Object.hasOwn(item, 'repairWorkflow') && (workflow === null
+    || !!workflow && 'schema' in workflow && workflow.schema === 1);
+  const unsent = readiness.showStart && !readiness.showCompletion && !readiness.showDisposition
+    && firstMissing?.key === 'csr_decision' && item.receipt.category === 'REPAIR'
+    && item.status === 'INSPECTING' && item.repairInspection?.status === 'SUBMITTED'
+    && workflowKnown && csr == null;
   const pendingTitle = !readiness.showDisposition && item.receipt.category === 'REPAIR' && item.release?.available !== true
     && !['own_signed', 'inspection', 'start_stage'].includes(firstMissing?.key)
     ? '放行資料待確認'
     : progress && !progress.startsWith('待開始') && !progress.endsWith('已開工')
-      ? progress : pendingLabels[firstMissing?.key] || '作業條件待確認';
+      ? progress : unsent ? '待送客服確認'
+        : firstMissing?.key === 'csr_decision' && item.receipt.category === 'REPAIR' && !workflowKnown
+          ? '客服交辦待確認' : pendingLabels[firstMissing?.key] || '作業條件待確認';
   const details = <div className="repair-readiness-details">
     {readiness.showStart && <Checks title="開工條件" items={readiness.startChecks} item={item} note={handoffNote} />}
     {readiness.showDisposition && <Checks title="原件處置核對" items={readiness.dispositionChecks} item={item} note={handoffNote} />}

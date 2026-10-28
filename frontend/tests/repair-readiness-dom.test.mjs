@@ -38,6 +38,9 @@ const base = {
   release:{available:true,repairAllowed:true,message:'合成來源回覆 <script>不執行</script>',releaseInfo:{quoteRevision:4,customerApprovedQuoteRevision:4,customerApprovedAt:'2026-10-08T03:00:00Z',amount:0,currency:'TWD',confirmedPaymentQuoteRevision:null}}
 };
 base.release.releaseInfo.quoteBindings=[{...base.repairProposalBinding,quoteRevision:4}];
+const preQuoteInfo=()=>({quoteRevision:1,amount:null,currency:'TWD',quotePlanVersion:null,quotePlanHash:null,quoteBindings:null,
+  customerApprovedQuoteRevision:null,customerApprovedAt:null,confirmedPaymentQuoteRevision:null,
+  invoiceRequired:false,invoiceStatus:'NOT_REQUIRED',invoiceQuoteRevision:null});
 function Harness() {
   const [scenario,setScenario]=useState('ready');
   const item=structuredClone(base);
@@ -68,6 +71,24 @@ function Harness() {
     item.release={available:false,repairAllowed:false,releaseInfo:null};
   }
   if(scenario==='metadata-absent'){item.repairWorkflow.csr=null;delete item.release.message;}
+  if(scenario.startsWith('unsent-')||scenario.startsWith('prequote-')||scenario==='native-null-workflow'){
+    item.receipt.sourceCaseId='fixture-native-source';item.repairInspection.review=null;
+    item.release={available:true,sourceCaseId:'fixture-native-source',sourceStatus:'RECEIVED',repairAllowed:false,releaseInfo:preQuoteInfo()};
+    item.repairWorkflow={schema:1,csr:null};delete item.repairProposalBinding;
+    if(scenario==='native-null-workflow')item.repairWorkflow=null;
+    if(scenario==='unsent-default')delete item.repairWorkflow.csr;
+    if(scenario==='unsent-workflow-unknown')delete item.repairWorkflow;
+    if(scenario==='unsent-source-unavailable')item.release.available=false;
+    if(scenario==='unsent-company-return')item.receipt.category='RETURN';
+    if(scenario.startsWith('prequote-')){
+      item.status='WAITING_CUSTOMER';item.statusLabel='等待客服處理';
+      const accepted=scenario==='prequote-accepted';
+      item.repairWorkflow.csr={status:accepted?'ACCEPTED':'SENT',ownerName:accepted?'合成客服':null,ownerId:accepted?'fixture-csr':null,
+        acceptedAt:accepted?'2026-10-08T01:00:00Z':null,resolvedAt:null,inspectionRevision:3,estimateRevision:3,quoteRevision:null,planHash,decision:null};
+      if(accepted)item.release.releaseInfo.quoteBindings=[];
+      if(scenario==='prequote-source-mismatch')item.release.sourceCaseId='another-native-source';
+    }
+  }
   if(scenario==='long-evidence'){item.release.repairAllowed=false;item.release.message='合成來源回覆 '+('LONG-SYNTHETIC-NATIVE-REFERENCE-'.repeat(30))+' <script>不執行</script>';}
   if(scenario==='inspection-draft'||scenario==='inspection-submitted'){
     item.repairReport={number:'SYNTHETIC-REP',revision:1,status:scenario==='inspection-draft'?'DRAFT':'SUBMITTED',inspectionRevision:3,
@@ -107,7 +128,9 @@ function Harness() {
     e('select',{id:'scenario',value:scenario,onChange:event=>setScenario(event.target.value)},
       ['ready','free-pending','paid-pending','new-quote','csr-accepted','csr-estimate-stale','csr-quote-stale','unknown-amount','inspection-draft','inspection-submitted','factory-reinspection','waiting-mailroom','dispatched-refusal','unclaimed','refusal','declined-original-plan','failed-qc','completed-new-quote',
         'paid-ready','invoice-pending','invoice-stale','invoice-unknown','source-unknown','metadata-absent','long-evidence','readonly','completed-ready',
-        'null-amount-invoice','missing-binding-payment','wrong-binding-payment','disposition-source-unavailable'].map(value=>e('option',{key:value,value},value))),
+        'null-amount-invoice','missing-binding-payment','wrong-binding-payment','disposition-source-unavailable',
+        'unsent-null','unsent-default','unsent-workflow-unknown','unsent-source-unavailable','unsent-company-return',
+        'prequote-sent','prequote-accepted','prequote-source-mismatch','native-null-workflow'].map(value=>e('option',{key:value,value},value))),
     e('div',{id:'panel',className:'repair-editor-sidebar'},e(RepairReadinessPanel,{item,canUpdate,viewerId:'fixture-tech',handoffNote:'合成交回說明',compact:true})));
 }
 createRoot(document.getElementById('root')).render(e(Harness));
@@ -217,6 +240,7 @@ test('actual React panel keeps pending consent, payment, CSR and QC distinct fro
   assert.equal(await evidence(completion,'維修依據版本'),'目前檢修 v4／維修依據 v3');
   assert.match(await panel.innerText(),/原廠維修/);
   assert.equal((await saved()).readiness.completionReady,false);
+  assert(!/待送客服確認/.test(await status().innerText()),'factory reinspection remains a completion review, not an unsent initial inspection');
   await inGroup(completion,'維修依據版本',false);
   for (const [scenario, label,expected] of [
     ['free-pending','顧客同意','待同意報價 v4'], ['paid-pending','款項確認','TWD 399 · 待確認報價 v4 款項'],
@@ -254,10 +278,12 @@ test('actual React panel keeps pending consent, payment, CSR and QC distinct fro
   assert.equal(await evidence(completion,'逐項複驗'),'合成功能：通過');await inGroup(completion,'逐項複驗',true);
   assert.equal(await evidence(completion,'報價版本'),'報價 v5／客服確認 v4');await inGroup(completion,'報價版本',false);
   assert.equal((await saved()).readiness.completionReady,false);
+  assert(!/待送客服確認/.test(await status().innerText()),'completed work with a changed quote never becomes an unsent initial inspection');
   await select('completed-ready');
   assert.equal((await saved()).readiness.completionReady,true,'current QC and release still satisfy the native completion predicate');
   assert.equal(await completion.locator('.repair-readiness-pending').count(),0);
   assert.equal(await status().count(),0,'completed saved checks create no routine success banner');
+  assert(!/待送客服確認/.test(await panel.innerText()),'completed work does not acquire an unsent-review label');
   await select('paid-ready');
   assert.equal(await evidence(start,'款項確認'),'TWD 399 · 已確認');await inGroup(start,'款項確認',true);
   assert.equal(await evidence(start,'必要發票'),'本版發票已開立 · 報價 v4');await inGroup(start,'必要發票',true);
@@ -301,6 +327,7 @@ test('actual React panel keeps pending consent, payment, CSR and QC distinct fro
   assert.equal(await evidence(disposition,'顧客處置授權'),'處置授權暫無法取得');
   assert.equal((await status().locator('strong').innerText()).trim(),'顧客處置授權待確認','repair release unavailability cannot replace disposition authorization status');
   assert(!/放行資料|維修放行|待開始/.test(await status().innerText()));
+  assert(!/待送客服確認/.test(await status().innerText()),'disposition review never becomes an unsent repair review');
   assert.equal(dispositionState.startReady,false);assert.equal(dispositionState.completionReady,false);
   await select('readonly');
   await inGroup(start,'本人簽收',false);assert.equal(await evidence(start,'本人簽收'),'未符合本人簽收條件');
@@ -308,6 +335,57 @@ test('actual React panel keeps pending consent, payment, CSR and QC distinct fro
   assert.equal(await status().count(),0,'readonly does not grant an actionable progress state');
   await select('metadata-absent');
   assert.equal(await panel.locator('.repair-readiness-records').count(),0,'missing CSR/source/outcome create no placeholder records');
+  for(const scenario of ['unsent-null','unsent-default']){
+    await select(scenario);const fixture=await saved();
+    assert.equal(fixture.item.repairWorkflow.schema,1,'workflow projection has actually been acquired');
+    assert.equal(fixture.item.repairInspection.status,'SUBMITTED');assert.equal(fixture.item.status,'INSPECTING');
+    if(scenario==='unsent-null')assert.equal(fixture.item.repairWorkflow.csr,null);
+    else assert.equal(Object.hasOwn(fixture.item.repairWorkflow,'csr'),false,'contract-default missing handoff remains distinct from an unknown workflow');
+    assert.equal((await status().locator('strong').innerText()).trim(),'待送客服確認');
+    await inGroup(start,'客服確認',false);assert.equal(await evidence(start,'客服確認'),'尚未交辦');
+    assert.equal(await panel.locator('.repair-readiness-records').count(),0,'no fabricated CSR/source/outcome record');
+    assert.equal(fixture.readiness.startReady,false);assert.equal(fixture.readiness.completionReady,false);
+    assert(!/等待客服接手|等待客服審核|待開始/.test(await status().innerText()),'unsent is neither an existing handoff nor a repair release');
+  }
+  await select('native-null-workflow');
+  const nativeNull=await saved();
+  assert.equal(Object.hasOwn(nativeNull.item,'repairWorkflow'),true,'the native wire explicitly carries the workflow field');
+  assert.equal(nativeNull.item.repairWorkflow,null,'native null normalizes to a known empty workflow, unlike an omitted or undefined projection');
+  assert.equal(nativeNull.item.status,'INSPECTING');assert.equal(nativeNull.item.repairInspection.status,'SUBMITTED');
+  assert.equal((await status().locator('strong').innerText()).trim(),'待送客服確認');
+  await inGroup(start,'客服確認',false);assert.equal(await evidence(start,'客服確認'),'尚未交辦');
+  assert.equal(await panel.locator('.repair-readiness-records').count(),0,'known empty native workflow creates no fictional handoff record');
+  assert.equal(nativeNull.readiness.startReady,false);assert.equal(nativeNull.readiness.completionReady,false);
+  for(const [scenario,expected] of [['unsent-workflow-unknown','客服交辦待確認'],['unsent-source-unavailable','放行資料待確認'],['unsent-company-return','等待客服確認']]){
+    await select(scenario);const fixture=await saved();
+    assert.equal((await status().locator('strong').innerText()).trim(),expected);
+    assert(!/待送客服確認/.test(await status().innerText()),'unknown, unavailable and company-return data cannot be presented as a known unsent repair: '+scenario);
+    if(scenario==='unsent-workflow-unknown')assert.equal(fixture.item.repairWorkflow,undefined);
+    if(scenario==='unsent-source-unavailable'){assert.equal(fixture.item.repairWorkflow.schema,1);assert.equal(fixture.item.release.available,false);}
+    if(scenario==='unsent-company-return')assert.equal(fixture.item.receipt.category,'RETURN');
+    assert.equal(fixture.readiness.startReady,false);assert.equal(fixture.readiness.completionReady,false);
+    assert.equal(await panel.locator('.repair-readiness-records').count(),0);
+  }
+  for(const [scenario,expected] of [['prequote-sent','等待客服接手'],['prequote-accepted','等待客服審核']]){
+    await select(scenario);const fixture=await saved(),info=fixture.item.release.releaseInfo;
+    assert.equal(fixture.item.repairWorkflow.schema,1);
+    assert.equal(fixture.item.status,'WAITING_CUSTOMER');assert.equal(fixture.item.release.available,true);
+    assert.equal(fixture.item.release.sourceCaseId,fixture.item.receipt.sourceCaseId,'strict native source identity is exact');
+    assert.equal(fixture.item.release.sourceStatus,'RECEIVED');assert.equal(fixture.item.release.repairAllowed,false);
+    assert.equal(info.quoteRevision,1);assert.equal(info.amount,null);assert.equal(info.quotePlanVersion,null);assert.equal(info.quotePlanHash,null);
+    assert.deepEqual(info.quoteBindings,scenario==='prequote-sent'?null:[]);
+    assert.equal(info.customerApprovedQuoteRevision,null);assert.equal(info.customerApprovedAt,null);assert.equal(info.confirmedPaymentQuoteRevision,null);
+    assert.equal(info.invoiceRequired,false);assert.equal(info.invoiceStatus,'NOT_REQUIRED');assert.equal(info.invoiceQuoteRevision,null);
+    assert.equal(fixture.caseProgress,expected);assert.equal((await status().locator('strong').innerText()).trim(),expected);
+    await inGroup(start,'客服確認',false);
+    assert.equal(await panel.locator('.repair-readiness-records dt').filter({hasText:'客服交辦'}).count(),1,'a real pending handoff remains an actual record');
+    assert.equal(fixture.readiness.startReady,false);assert.equal(fixture.readiness.completionReady,false);
+    assert(!/等待顧客確認|等待款項確認|等待發票完成|待開始/.test(await status().innerText()),'prequote handoff must not imply a quote, payment or repair release');
+  }
+  await select('prequote-source-mismatch');
+  assert.equal((await saved()).caseProgress,'進度待確認');
+  assert.equal((await status().locator('strong').innerText()).trim(),'進度待確認','a foreign source identity cannot take the strict native prequote branch');
+  assert.equal((await saved()).readiness.startReady,false);assert.equal((await saved()).readiness.completionReady,false);
   assert.equal(await panel.locator('button').count(), 0, 'The panel exposes evidence without creating new action authority');
   await select('long-evidence');
   for(const width of [1280,390,320]){
