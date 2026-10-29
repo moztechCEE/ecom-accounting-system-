@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:cb3ff6ccf36ea2d03ca35e97e46e8679ebc482d709fe1b207749e3570700b24c",
+  "sourceVersion": "sha256:110569ff25b00ab27f285c5e0a67b9cfb86784c549c97112cc14a73b58a5afec",
   "reviewedBaseCommit": "0ae9b322aedf1ff3ca2df0a6ab68f65dcb922c09",
   "entryCount": 82,
   "groups": [
@@ -1284,7 +1284,7 @@
     },
     {
       "path": "frontend/src/pages/repair/repair.css",
-      "sha256": "da33201b7f31182177245908379f0df10ce79838b6bebb08ab00aab92464b64e"
+      "sha256": "5f3433ff9ac81bef6391e8b5acf4316fad9499984b6024d5b64304417fa24a5d"
     },
     {
       "path": "frontend/src/pages/repair/RepairCaseContext.tsx",
