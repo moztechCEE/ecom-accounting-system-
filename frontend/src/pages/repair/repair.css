@@ -303,6 +303,10 @@
 .repair-mobile-label { display: none; }
 .repair-case-scan { min-width: 0; }
 .repair-case-scan .ant-input-search { max-width: 640px; }
+.repair-case-scan .ant-input-search .ant-input-group { display: flex; align-items: stretch; gap: 12px; }
+.repair-case-scan .ant-input-search .ant-input-group > .ant-input-affix-wrapper { flex: 1; min-width: 0; width: auto; height: 46px; padding-block: 0; border-start-end-radius: 8px; border-end-end-radius: 8px; }
+.repair-case-scan .ant-input-search .ant-input-group > .ant-input-group-addon:last-child { display: flex; flex: none; width: auto; inset-inline-start: 0; }
+.repair-case-scan .ant-input-search .ant-input-group > .ant-input-group-addon:last-child .ant-input-search-button { height: auto; margin: 0; border-radius: 8px; border-start-start-radius: 8px; border-end-start-radius: 8px; }
 .repair-case-scan .ant-input-search input { min-height: 44px; }
 .repair-case-scan .ant-input-search .ant-btn { min-height: 46px; }
 .repair-case-scan .ant-alert { margin-top: 12px; }
