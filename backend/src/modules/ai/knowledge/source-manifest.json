@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:3ff2ef9bcc4978e9417355e15614d9f5c54a6631a1dce4a5a520081b74c848d1",
+  "sourceVersion": "sha256:4e1d8d450d1489773302a3a39f35876b82914093bf31218d5cc9c566434154d0",
   "reviewedBaseCommit": "0ae9b322aedf1ff3ca2df0a6ab68f65dcb922c09",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "2660c169a10b6294b93e9ced0953ea131a41b73395e7d40773341f1507e61cf3",
+  "catalogSha256": "566f23ebc2b04fb019e9e6237227e1c05845a250a1c7e425ca480acf6ffad73f",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -1344,7 +1344,7 @@
     },
     {
       "path": "frontend/src/pages/repair/RepairTestStandardManager.tsx",
-      "sha256": "8c6899117114fd653098a761ec942a75c7cdf5bf0987a70b12faf6984cd13b5c"
+      "sha256": "3473840b4b1f5536d0d2ebf1a45f1e6e8a61352ff9162d9ae9ff6be30ee503fa"
     },
     {
       "path": "frontend/src/pages/repair/RepairWorkbenchPage.tsx",

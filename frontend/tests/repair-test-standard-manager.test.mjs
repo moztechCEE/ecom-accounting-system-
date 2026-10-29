@@ -9,7 +9,7 @@ const code = ts.transpileModule(source + '\nexport const __test = {definition,ca
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
 }).outputText;
 new Function('module', 'exports', 'require', code)(module, module.exports, specifier => {
-  if (['react', 'antd', 'react/jsx-runtime'].includes(specifier)) return {};
+  if (['react', 'antd', '@ant-design/icons', 'react/jsx-runtime'].includes(specifier)) return {};
   if (specifier === '../../services/api') return { default: { get() { throw Error('Unexpected network'); }, post() { throw Error('Unexpected network'); } } };
   if (specifier === '../mailroom/model') return { errorText: () => 'No network' };
   if (specifier === './repair-feedback') return { useRepairFeedback() { throw Error('Unexpected UI'); } };

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Col, DatePicker, Empty, Form, Input, Row, Select, Space, Spin, Table, Collapse, Tag, Typography } from 'antd';
+import { DownOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import api from '../../services/api';
 import { errorText } from '../mailroom/model';
@@ -143,6 +144,7 @@ function products(value: unknown): RepairManagedProduct[] {
 export default function RepairTestStandardManager({ entityId, product, canManage, canDraft = canManage, viewerId, onChanged, onBusyChange, onDirtyChange, confirmDiscard, feedback, transport = defaultTransport }: RepairTestStandardManagerProps) {
   const { modal, message, contextHolder } = useRepairFeedback(feedback);
   const [snapshot, setSnapshot] = useState<Registry>();
+  const [expandedStandardKeys, setExpandedStandardKeys] = useState<string[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<RepairManagedProduct | null>(null);
   const [productOptions, setProductOptions] = useState<RepairManagedProduct[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
@@ -205,7 +207,7 @@ export default function RepairTestStandardManager({ entityId, product, canManage
     return () => { productGeneration.current++; };
   }, [canRead, canDraft, canManage, entityId, viewerId, product?.id, product?.sku, searchProducts, standardForm, calibrationForm]);
   useEffect(() => {
-    setSnapshot(undefined);
+    setSnapshot(undefined); setExpandedStandardKeys([]);
     if (bound) void refresh().catch(() => undefined);
     return () => { generation.current++; };
   }, [bound, refresh]);
@@ -291,14 +293,29 @@ export default function RepairTestStandardManager({ entityId, product, canManage
       </Form.List>
       <Space wrap style={{ margin: '16px 0' }}><Button aria-label="保存草稿" type="primary" htmlType="submit" loading={busy}>保存草稿</Button><Button disabled={busy} onClick={() => void cancelEditing()}>取消</Button></Space>
     </Form>}
-    {snapshot && (snapshot.standards.length ? <Table size="small" rowKey="id" pagination={false} dataSource={snapshot.standards} tableLayout="fixed" scroll={{ x: 888 }} columns={[
-      { title: '版本', width: 96, onHeaderCell: headerCell(96), render: (_, row: StandardRow) => 'v' + row.revision },
-      { title: '機型', width: 180, onHeaderCell: headerCell(180), render: (_, row: StandardRow) => row.data.modelNumber || '—' },
-      { title: '狀態', width: 112, onHeaderCell: headerCell(112), render: (_, row: StandardRow) => <Tag color={row.status === 'REVIEWED' ? 'green' : undefined}>{standardStatus[row.status]}</Tag> },
-      { title: '測項', width: 100, onHeaderCell: headerCell(100), render: (_, row: StandardRow) => <details><summary>{row.data.checks.length + ' 項'}</summary>{row.data.checks.map(check => <div key={check.key} style={{ overflowWrap: 'anywhere' }}><Typography.Text strong>{check.name}</Typography.Text><div>{check.standard.instruction}</div><div>{check.standard.kind === 'NUMBER' ? (check.standard.min || '—') + '～' + (check.standard.max || '—') + ' ' + check.standard.unit : check.standard.kind === 'BOOLEAN' ? '預期：' + (check.standard.expected ? '是' : '否') : '觀察'}</div><div>{[check.requiredForInspection ? '檢修必測' : '', check.requiredForCompletion ? '複驗必測' : '', check.requiresCalibration ? check.equipmentType : ''].filter(Boolean).join(' · ')}</div></div>)}</details> },
-      { title: '核定時間', width: 220, onHeaderCell: headerCell(220), render: (_, row: StandardRow) => row.reviewedAt ? time(row.reviewedAt) : '—' },
-      { title: '操作', width: 180, onHeaderCell: headerCell(180), render: (_, row: StandardRow) => <Space>{canManage && <Button aria-label={'核定啟用 v' + row.revision} type={!editing && !calibrationOpen && row.status === 'DRAFT' && row.id === current?.id ? 'primary' : 'default'} disabled={!writable || editing || calibrationOpen || row.sku !== sku || row.status !== 'DRAFT' || row.id !== current?.id} onClick={() => decide(row, 'review')}>核定啟用</Button>}{canManage && <Button aria-label={'停用 v' + row.revision} disabled={!writable || editing || calibrationOpen || row.sku !== sku || row.status !== 'REVIEWED'} onClick={() => decide(row, 'retire')}>停用</Button>}</Space> },
-    ]} /> : <Empty description="尚無維修範本" />)}
+    {snapshot && (snapshot.standards.length ? <ul aria-label="範本版本" style={{ margin: 0, padding: 0, listStyle: 'none', minWidth: 0 }}>
+      {snapshot.standards.map(row => <li key={row.id} style={{ padding: '16px 0', borderBottom: '1px solid #edf0f4', minWidth: 0 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ flex: '1 1 260px', minWidth: 0, overflowWrap: 'anywhere' }}>
+            <Space wrap><Typography.Text strong>{'v' + row.revision}</Typography.Text><Tag color={row.status === 'REVIEWED' ? 'green' : undefined}>{standardStatus[row.status]}</Tag><Typography.Text>{'機型：' + (row.data.modelNumber || '—')}</Typography.Text></Space>
+            <div style={{ marginTop: 6 }}><Typography.Text type="secondary">{'核定時間：' + (row.reviewedAt ? time(row.reviewedAt) : '—')}</Typography.Text></div>
+          </div>
+          <Space wrap style={{ maxWidth: '100%' }}>
+            <Button type="link" aria-label={'檢測項目 v' + row.revision} aria-expanded={expandedStandardKeys.includes(row.id)} icon={<DownOutlined rotate={expandedStandardKeys.includes(row.id) ? 180 : 0} />} style={{ padding: 0 }} onClick={() => setExpandedStandardKeys(keys => keys.includes(row.id) ? keys.filter(key => key !== row.id) : [...keys, row.id])}>{row.data.checks.length + ' 項'}</Button>
+            {canManage && <Button aria-label={'核定啟用 v' + row.revision} type={!editing && !calibrationOpen && row.status === 'DRAFT' && row.id === current?.id ? 'primary' : 'default'} disabled={!writable || editing || calibrationOpen || row.sku !== sku || row.status !== 'DRAFT' || row.id !== current?.id} onClick={() => decide(row, 'review')}>核定啟用</Button>}
+            {canManage && <Button aria-label={'停用 v' + row.revision} disabled={!writable || editing || calibrationOpen || row.sku !== sku || row.status !== 'REVIEWED'} onClick={() => decide(row, 'retire')}>停用</Button>}
+          </Space>
+        </div>
+        {expandedStandardKeys.includes(row.id) && <section aria-label={'檢測項目 v' + row.revision} style={{ marginTop: 12, minWidth: 0, overflowWrap: 'anywhere' }}>
+          {row.data.checks.map(check => <div key={check.key} style={{ padding: '8px 0' }}>
+            <Typography.Text strong>{check.name}</Typography.Text>
+            <div style={{ margin: '6px 0', whiteSpace: 'pre-wrap' }}>{check.standard.instruction}</div>
+            <div>{check.standard.kind === 'NUMBER' ? (check.standard.min || '—') + '～' + (check.standard.max || '—') + ' ' + check.standard.unit : check.standard.kind === 'BOOLEAN' ? '預期：' + (check.standard.expected ? '是' : '否') : '觀察'}</div>
+            <div>{[check.requiredForInspection ? '檢修必測' : '', check.requiredForCompletion ? '複驗必測' : '', check.requiresCalibration ? check.equipmentType : ''].filter(Boolean).join(' · ')}</div>
+          </div>)}
+        </section>}
+      </li>)}
+    </ul> : <Empty description="尚無維修範本" />)}
   </>;
   const calibrationContent = <>
     <Button type="default" disabled={!writable || editing || calibrationOpen} onClick={() => { calibrationForm.resetFields(); setCalibrationOpen(true); }} style={{ marginBottom: 12 }}>登錄校正證明</Button>

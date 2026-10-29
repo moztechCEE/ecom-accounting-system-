@@ -104,15 +104,16 @@ import '/src/index.css';import React from 'react';import {createRoot} from 'reac
 import Manager from '/src/pages/repair/RepairTestStandardManager.tsx';
 const scenario=new URLSearchParams(location.search).get('scenario');
 const product=scenario==='missing-product'?null:{id:'actual-product',name:'合成實際產品',sku:'ACTUAL-SKU'};
-createRoot(document.getElementById('root')).render(React.createElement(Manager,{entityId:'company',product,canManage:scenario!=='readonly'&&!scenario?.startsWith('technician'),canDraft:scenario!=='readonly',viewerId:scenario?.startsWith('technician')?'technician':'technical-owner',onDirtyChange:v=>window.__standardManagerFixture.dirty=v,onChanged:()=>window.__standardManagerFixture.changed++}));
+createRoot(document.getElementById('root')).render(React.createElement('div',{style:scenario==='long-content'?{maxWidth:852}:undefined},React.createElement(Manager,{entityId:'company',product,canManage:scenario!=='readonly'&&!scenario?.startsWith('technician'),canDraft:scenario!=='readonly',viewerId:scenario?.startsWith('technician')?'technician':'technical-owner',onDirtyChange:v=>window.__standardManagerFixture.dirty=v,onChanged:()=>window.__standardManagerFixture.changed++})));
 `;
 const api = `
 const scenario=new URLSearchParams(location.search).get('scenario');
 const check={key:'synthetic-voltage',name:'合成電壓',requiredForInspection:true,requiredForCompletion:true,requiresCalibration:true,equipmentType:'synthetic-meter',standard:{kind:'NUMBER',instruction:'合成檢測條件',unit:'fixture-unit',min:'1.20',max:'1.25'}};
+if(scenario==='long-content'){check.name='長名稱檢驗項目：檢查產品充電、指示燈與連續運作時的狀態及實際量測結果';check.standard.instruction='使用合格設備測試產品，先確認電源與線材正常，再依序檢查充電、指示燈及連續運作結果。保留實際量測值，並記錄測試條件與觀察結果。';}
 const row={id:'server-standard',entityId:'company',productId:'actual-product',sku:'ACTUAL-SKU',createdById:scenario==='rejected'||scenario==='self-review'?'technical-owner':'technician',revision:1,status:'DRAFT',data:{modelNumber:'ACTUAL model',checks:[check]},contentHash:'a'.repeat(64),reviewedById:null,reviewedAt:null};
 const proof={id:'server-calibration',entityId:'company',instrumentId:'actual-meter',equipmentType:'synthetic-meter',proofReference:'ACTUAL-CERT',status:'VALID',validFrom:'2026-10-01T00:00:00Z',validUntil:'2027-10-01T00:00:00Z'};
 if(scenario==='active')Object.assign(row,{status:'REVIEWED',reviewedById:'technical-owner',reviewedAt:'2026-10-13T00:00:00.000Z'});
-const state={viewerId:scenario?.startsWith('technician')?'technician':'technical-owner',dirty:false,gets:[],posts:[],changed:0,behavior:scenario==='wrong-receipt'?'WRONG':scenario==='rejected'?'REJECT':'OK',standards:['existing','rejected','self-review','technician-existing','active'].includes(scenario)?[row]:[],calibrations:[proof],failReads:0};window.__standardManagerFixture=state;
+const state={viewerId:scenario?.startsWith('technician')?'technician':'technical-owner',dirty:false,gets:[],posts:[],changed:0,behavior:scenario==='wrong-receipt'?'WRONG':scenario==='rejected'?'REJECT':'OK',standards:['existing','rejected','self-review','technician-existing','active','long-content'].includes(scenario)?[row]:[],calibrations:[proof],failReads:0};window.__standardManagerFixture=state;
 const error=message=>({response:{status:503,data:{message}}});
 export default {
 async get(path,options){state.gets.push({path,options:structuredClone(options)});if(path.endsWith('/products'))return{data:{products:[{id:'actual-product',name:'合成實際產品',sku:'ACTUAL-SKU',modelNumber:'ACTUAL model'},{id:'another-product',name:'另一產品',sku:'ANOTHER-SKU',modelNumber:null}],hasMore:false}};if(scenario==='unavailable'||state.failReads-->0)throw error('檢測標準服務尚未就緒');return{data:{standards:structuredClone(state.standards),calibrations:structuredClone(state.calibrations)}}},
@@ -348,6 +349,47 @@ test('actual management panel uses configured capability and server-owned draft/
     assert.equal(post.body.validFrom, '2020-01-01T02:00:00.000Z'); assert.equal(post.body.validUntil, '2030-01-01T02:00:00.000Z');
     assert.equal('status' in post.body, false); assert.equal('id' in post.body, false);
   });
+  await t.test('long test details and all version actions stay inside desktop and mobile viewports', async () => {
+    const receipts = [];
+    for (const viewport of [{ width: 1371, height: 980 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport); await open('long-content');
+      const versions = page.getByRole('list', { name: '範本版本', exact: true });
+      const toggle = versions.getByRole('button', { name: '檢測項目 v1', exact: true });
+      await toggle.waitFor(); assert.equal(await toggle.getAttribute('aria-expanded'), 'false'); await toggle.click();
+      const details = page.getByRole('region', { name: '檢測項目 v1', exact: true }); await details.waitFor();
+      const measured = await versions.evaluate(element => {
+        const list = element.getBoundingClientRect(), detail = element.querySelector('section'), bounds = detail.getBoundingClientRect();
+        const lineRects = node => { const range = document.createRange(); range.selectNodeContents(node); return [...range.getClientRects()].map(rect => ({ left: rect.left, right: rect.right, width: rect.width })); };
+        const buttons = [...element.querySelectorAll('button')].map(button => {
+          const rect = button.getBoundingClientRect(), center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }, hit = document.elementFromPoint(center.x, center.y);
+          return { name: button.getAttribute('aria-label'), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, enabled: !button.disabled,
+            hit: !!hit && (hit === button || button.contains(hit)), center };
+        });
+        return { width: bounds.width, listLeft: list.left, listRight: list.right, listWidth: element.clientWidth, listScrollWidth: element.scrollWidth,
+          detailsLeft: bounds.left, detailsRight: bounds.right, nameLines: lineRects(detail.querySelector('strong')),
+          methodLines: lineRects(detail.querySelector('div > div')), buttons, documentWidth: document.documentElement.scrollWidth, viewportWidth: innerWidth };
+      });
+      assert(measured.width > (viewport.width > 400 ? 600 : 280), JSON.stringify(measured));
+      assert(measured.methodLines.some(line => line.width > (viewport.width > 400 ? 500 : 200)), JSON.stringify(measured));
+      for (const line of [...measured.nameLines, ...measured.methodLines]) {
+        assert(line.left >= measured.detailsLeft - 1 && line.right <= measured.detailsRight + 1, JSON.stringify({ line, measured }));
+        assert(line.left >= 0 && line.right <= viewport.width + 1, JSON.stringify({ line, viewport }));
+      }
+      assert(measured.listScrollWidth <= measured.listWidth + 1 && measured.documentWidth <= viewport.width, JSON.stringify(measured));
+      assert.deepEqual(measured.buttons.map(button => button.name), ['檢測項目 v1', '核定啟用 v1', '停用 v1']);
+      for (const button of measured.buttons) {
+        assert(button.left >= measured.listLeft - 1 && button.right <= measured.listRight + 1 && button.left >= 0 && button.right <= viewport.width + 1, JSON.stringify(button));
+        assert(button.top >= 0 && button.bottom <= viewport.height, JSON.stringify(button));
+        if (button.enabled) assert(button.hit, JSON.stringify(button));
+      }
+      await page.getByRole('region', { name: '維修範本', exact: true }).screenshot({ path: '/tmp/repair-template-version-list-' + (viewport.width > 400 ? 'desktop' : 'mobile') + '-20261029.png' });
+      assert.equal(await page.evaluate(() => window.__standardManagerFixture.posts.length), 0);
+      assert.equal(await page.evaluate(() => window.__standardManagerFixture.dirty), false);
+      await toggle.click(); await details.waitFor({ state: 'hidden' });
+      receipts.push(measured);
+    }
+    writeFileSync('/tmp/repair-template-version-list-layout-20261029.json', JSON.stringify(receipts, null, 2));
+  });
   await t.test('mobile authoring preserves one primary action and cancellation returns keyboard focus', async () => {
     await page.setViewportSize({ width: 390, height: 844 }); await open('new');
     const trigger = page.getByRole('button', { name: '建立草稿', exact: true }); await trigger.focus(); await page.keyboard.press('Enter'); await fillNumeric();
@@ -363,19 +405,16 @@ test('actual management panel uses configured capability and server-owned draft/
     assert.equal(await definitionForm().count(), 0);
     assert.equal(await page.evaluate(() => window.__standardManagerFixture.posts.length), 0);
   });
-  await t.test('390px tables render every header on one real text line and expose readable clickable right actions', async () => {
+  await t.test('390px version actions stay visible and calibration tables retain readable internally scrolled actions', async () => {
     await page.setViewportSize({ width: 390, height: 844 }); await open('existing');
     const region = page.getByRole('region', { name: '維修範本', exact: true });
-    const table = () => region.locator('.ant-table-wrapper').first();
+    const versions = region.getByRole('list', { name: '範本版本', exact: true });
     await region.getByRole('button', { name: '核定啟用 v1', exact: true }).waitFor();
-    const standards = await measureMobileHeaders(table(), page, ['版本', '機型', '狀態', '測項', '核定時間', '操作']);
-    await region.screenshot({ path: '/tmp/repair-standard-manager-table-left-mobile-20261013.png' });
-    await exposeMobileHeader(table(), '測項');
-    const reviewedHeader = await exposeMobileHeader(table(), '核定時間');
-    await region.screenshot({ path: '/tmp/repair-standard-manager-table-time-mobile-20261013.png' });
-    const reviewAction = await rightMobileAction(table(), '核定啟用 v1');
-    await region.screenshot({ path: '/tmp/repair-standard-manager-table-right-mobile-20261013.png' });
-    await page.mouse.click(reviewAction.center.x, reviewAction.center.y);
+    const standards = await versions.evaluate(element => ({ width: element.clientWidth, scrollWidth: element.scrollWidth,
+      buttons: [...element.querySelectorAll('button')].map(button => { const rect = button.getBoundingClientRect(); return { name: button.getAttribute('aria-label'), left: rect.left, right: rect.right }; }) }));
+    assert(standards.scrollWidth <= standards.width);
+    for (const button of standards.buttons) assert(button.left >= 0 && button.right <= 390);
+    await region.getByRole('button', { name: '核定啟用 v1', exact: true }).click();
     const review = page.getByRole('dialog', { name: '核定啟用範本 v1？', exact: true }); await review.waitFor();
     await review.getByRole('button', { name: /^取\s*消$/ }).click(); await review.waitFor({ state: 'hidden' });
     assert.equal(await page.evaluate(() => window.__standardManagerFixture.posts.length), 0);
@@ -391,7 +430,7 @@ test('actual management panel uses configured capability and server-owned draft/
     const revoke = page.getByRole('dialog', { name: '撤銷此校正證明？', exact: true }); await revoke.waitFor();
     await revoke.getByRole('button', { name: /^取\s*消$/ }).click(); await revoke.waitFor({ state: 'hidden' });
     assert.equal(await page.evaluate(() => window.__standardManagerFixture.posts.length), 0);
-    mobileTableReceipts.push({ standards, reviewedHeader, reviewAction, calibrations, periodHeader, revokeAction });
+    mobileTableReceipts.push({ standards, calibrations, periodHeader, revokeAction });
   });
   assert.deepEqual(errors, []); assert.deepEqual(external, []); assert.deepEqual(writes, []);
   writeFileSync('/tmp/repair-standard-manager-mobile-table-receipt-20261013.json', JSON.stringify({ scope: '390px actual local component with existing app CSS; glyph geometry, internal scroll and physical pointer hit checks; no real registry write', mobileTableReceipts, errors, external, writes }, null, 2));
