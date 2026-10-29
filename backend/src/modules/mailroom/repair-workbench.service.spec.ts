@@ -14,6 +14,7 @@ import { type MailroomService } from './mailroom.service';
 import { type MailroomSyncService } from './mailroom-sync.service';
 import {
   inspectionPlanHash,
+  verifiedDocumentTemplateBinding,
   type InspectionDocument,
 } from './repair-document.contract';
 import {
@@ -771,6 +772,73 @@ describe('RepairWorkbenchService document authorization, versions and release co
       }),
     ).rejects.toThrow('請完成');
     expect(prisma.mailroomItem.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('validates a first draft binding and writes only a server-derived template basis before any results are complete', async () => {
+    const bindingValidation = jest
+      .fn()
+      .mockResolvedValue({
+        state: 'KNOWN',
+        template,
+        context: {
+          entityId: 'company',
+          productId: template.productId,
+          sku: template.sku,
+          binding: templateBinding,
+        },
+        calibrations: [],
+      });
+    const recordValidation = jest.fn();
+    service = new RepairWorkbenchService(prisma, mailroom, sync, {
+      bindingValidation,
+      recordValidation,
+    } as unknown as RepairPrerequisitesService);
+    const draft = inspectionInput({
+      status: 'DRAFT',
+      data: { ...structuredClone(emptyInspectionData), templateBinding },
+    });
+    await service.save('tech', 'piece', 'inspection', draft);
+    expect(bindingValidation).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'piece' }),
+      'inspection',
+      draft.data,
+      prisma,
+    );
+    expect(recordValidation).not.toHaveBeenCalled();
+    expect(row.repairInspection.templateBasis).toMatchObject({
+      schema: 1,
+      binding: templateBinding,
+    });
+    expect(verifiedDocumentTemplateBinding(row.repairInspection)).toEqual(
+      templateBinding,
+    );
+    expect(row.repairInspection.data.checks).toEqual([]);
+    expect(
+      [...events.values()][0].snapshot.repairInspection.templateBasis,
+    ).toEqual(row.repairInspection.templateBasis);
+    expect(
+      await service.save('tech', 'piece', 'inspection', draft),
+    ).toMatchObject({ duplicate: true });
+    expect(bindingValidation).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a draft carrying an unapproved binding before saving a document or any history', async () => {
+    const bindingValidation = jest
+      .fn()
+      .mockRejectedValue(new Error('Unapproved template binding'));
+    service = new RepairWorkbenchService(prisma, mailroom, sync, {
+      bindingValidation,
+    } as unknown as RepairPrerequisitesService);
+    const draft = inspectionInput({
+      status: 'DRAFT',
+      data: { ...structuredClone(emptyInspectionData), templateBinding },
+    });
+    await expect(
+      service.save('tech', 'piece', 'inspection', draft),
+    ).rejects.toThrow('Unapproved template binding');
+    expect(prisma.mailroomItem.update).not.toHaveBeenCalled();
+    expect(mailroom.record).not.toHaveBeenCalled();
+    expect(events.size).toBe(0);
   });
 
   it('requires a submitted inspection before submitting work and records the exact inspection revision', async () => {

@@ -80,6 +80,10 @@ export class CreateRepairStandardDto extends RepairRegistryRequestDto {
   data!: RepairStandardDefinitionDto;
 }
 export class NewRepairStandardRevisionDto extends RepairRegistryRequestDto {
+  @Transform(raw)
+  @IsString()
+  @Matches(/^[a-f0-9]{64}$/)
+  expectedContentHash!: string;
   @Transform(raw) @IsInt() @Min(1) @Max(2147483645) expectedRevision!: number;
   @IsDefined()
   @ValidateNested()
@@ -87,6 +91,10 @@ export class NewRepairStandardRevisionDto extends RepairRegistryRequestDto {
   data!: RepairStandardDefinitionDto;
 }
 export class ReviewRepairStandardDto extends RepairRegistryRequestDto {
+  @Transform(raw)
+  @IsString()
+  @Matches(/^[a-f0-9]{64}$/)
+  expectedContentHash!: string;
   @Transform(raw) @IsInt() @Min(1) @Max(2147483646) expectedRevision!: number;
 }
 export class RecordRepairCalibrationDto extends RepairRegistryRequestDto {
@@ -104,4 +112,10 @@ export class RepairRegistryQueryDto {
 export class RepairItemStandardQueryDto {
   @IsString() @IsNotEmpty() @MaxLength(128) entityId!: string;
   @IsIn(['inspection', 'repair']) kind!: 'inspection' | 'repair';
+}
+
+export class UpdateRepairStandardDraftDto extends NewRepairStandardRevisionDto {}
+export class RepairRegistryProductsQueryDto {
+  @IsString() @IsNotEmpty() @MaxLength(128) entityId!: string;
+  @IsOptional() @IsString() @MaxLength(160) q?: string;
 }

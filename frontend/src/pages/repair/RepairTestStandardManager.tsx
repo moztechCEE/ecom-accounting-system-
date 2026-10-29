@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Col, DatePicker, Empty, Form, Input, Row, Select, Space, Spin, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, Button, Col, DatePicker, Empty, Form, Input, Row, Select, Space, Spin, Table, Collapse, Tag, Typography } from 'antd';
 import type { Dayjs } from 'dayjs';
 import api from '../../services/api';
 import { errorText } from '../mailroom/model';
 import { useRepairFeedback } from './repair-feedback';
 import type { RepairMessage } from './repair-feedback';
 
-export type RepairManagedProduct = { id: string; name: string; sku: string };
+export type RepairManagedProduct = { id: string; name: string; sku: string; modelNumber?: string | null };
 export type RepairRegistryTransport = {
-  get(path: string, options: { params: { entityId: string; productId: string } }): Promise<{ data: unknown }>;
+  get(path: string, options: { params: { entityId: string; productId?: string; q?: string } }): Promise<{ data: unknown }>;
   post(path: string, body: unknown): Promise<{ data: unknown }>;
 };
 export type RepairTestStandardManagerProps = {
-  entityId: string; product: RepairManagedProduct | null; canManage: boolean;
-  onChanged?: () => void | Promise<void>; onBusyChange?: (busy: boolean) => void; feedback?: RepairMessage; transport?: RepairRegistryTransport;
+  entityId: string; product: RepairManagedProduct | null; canManage: boolean; canDraft?: boolean; viewerId: string;
+  onChanged?: () => void | Promise<void>; onBusyChange?: (busy: boolean) => void; onDirtyChange?: (dirty: boolean) => void; confirmDiscard?: () => Promise<boolean>; feedback?: RepairMessage; transport?: RepairRegistryTransport;
 };
 type StandardCheck = {
   key: string; name: string; requiredForInspection: boolean; requiredForCompletion: boolean;
@@ -24,7 +24,7 @@ type Definition = { modelNumber?: string; checks: StandardCheck[] };
 type StandardRow = {
   id: string; entityId: string; productId: string; sku: string; revision: number;
   status: 'DRAFT' | 'REVIEWED' | 'RETIRED'; data: Definition; contentHash: string;
-  reviewedAt: string | null; reviewedById: string | null;
+  reviewedAt: string | null; reviewedById: string | null; createdById: string;
 };
 type CalibrationRow = {
   id: string; entityId: string; instrumentId: string; equipmentType: string; proofReference: string;
@@ -34,13 +34,13 @@ type Registry = { standards: StandardRow[]; calibrations: CalibrationRow[] };
 type StandardForm = Definition & { productId: string };
 type CalibrationForm = { instrumentId: string; equipmentType: string; proofReference: string; validFrom: Dayjs; validUntil: Dayjs };
 const path = '/repair-workbench/test-registry';
-const standardStatus = { DRAFT: '草稿', REVIEWED: '已審核', RETIRED: '已停用' };
+const standardStatus = { DRAFT: '草稿', REVIEWED: '已啟用', RETIRED: '已停用' };
 const yesNo = [{ value: true, label: '是' }, { value: false, label: '否' }];
 const kindOptions = [{ value: 'OBSERVATION', label: '觀察' }, { value: 'NUMBER', label: '數值' }, { value: 'BOOLEAN', label: '功能' }];
 const required = [{ required: true, whitespace: true, message: '請填寫此項' }];
 const booleanRules = [{ required: true, type: 'boolean' as const, message: '請明確選擇是或否' }];
 const decimalPattern = /^-?(?:0|[1-9]\d{0,11})(?:\.\d{1,6})?$/;
-const blankCheck = () => ({ key: '', name: '', standard: { instruction: '' } });
+const blankCheck = () => ({ key: crypto.randomUUID(), name: '', standard: { instruction: '' } });
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 class RegistryInputError extends Error {}
 const invalid = (message: string): never => { throw new RegistryInputError(message); };
@@ -100,12 +100,12 @@ function registry(value: unknown, entityId: string, productId: string): Registry
   if (!object(value) || !Array.isArray(value.standards) || !Array.isArray(value.calibrations)) return invalid('檢測標準服務尚未就緒');
   const standards = value.standards.map(row => {
     if (!object(row) || !text(row.id) || row.entityId !== entityId || row.productId !== productId || !text(row.sku, 100) ||
-      !revision(row.revision) || typeof row.status !== 'string' || !['DRAFT', 'REVIEWED', 'RETIRED'].includes(row.status) ||
+      !text(row.createdById) || !revision(row.revision) || typeof row.status !== 'string' || !['DRAFT', 'REVIEWED', 'RETIRED'].includes(row.status) ||
       typeof row.contentHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.contentHash) ||
       row.status === 'REVIEWED' && (!text(row.reviewedById) || !iso(row.reviewedAt)))
       return invalid('檢測標準與目前產品不符');
     return { id: row.id, entityId, productId, sku: row.sku, revision: row.revision, status: row.status as StandardRow['status'],
-      data: definition(row.data), contentHash: row.contentHash,
+      data: definition(row.data), contentHash: row.contentHash, createdById: row.createdById,
       reviewedAt: typeof row.reviewedAt === 'string' ? row.reviewedAt : null, reviewedById: typeof row.reviewedById === 'string' ? row.reviewedById : null };
   });
   const calibrations = value.calibrations.map(row => {
@@ -119,9 +119,9 @@ function registry(value: unknown, entityId: string, productId: string): Registry
     return invalid('檢測標準記錄不唯一');
   return { standards, calibrations };
 }
-function receipt(value: unknown, status: string, id?: string, expectedRevision?: number) {
+function receipt(value: unknown, status: string, id?: string, expectedRevision?: number, previousId?: string) {
   if (!object(value) || !text(value.id) || value.status !== status || id !== undefined && value.id !== id ||
-    expectedRevision !== undefined && value.revision !== expectedRevision || value.duplicate !== undefined && typeof value.duplicate !== 'boolean' ||
+    expectedRevision !== undefined && value.revision !== expectedRevision || previousId !== undefined && value.id === previousId || value.duplicate !== undefined && typeof value.duplicate !== 'boolean' ||
     status === 'REVIEWED' && (typeof value.contentHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.contentHash)))
     return invalid('服務回執不完整，請重新載入');
 }
@@ -130,90 +130,154 @@ const time = (value: string) => new Date(value).toLocaleString('zh-TW', { timeZo
 const headerCell = (width: number) => () => ({ style: { minWidth: width, whiteSpace: 'nowrap' as const } });
 const problem = (error: unknown) => error instanceof RegistryInputError ? error.message : errorText(error);
 
-export default function RepairTestStandardManager({ entityId, product, canManage, onChanged, onBusyChange, feedback, transport = defaultTransport }: RepairTestStandardManagerProps) {
+function products(value: unknown): RepairManagedProduct[] {
+  if (!object(value) || !Array.isArray(value.products) || value.products.length > 50 || typeof value.hasMore !== 'boolean') return invalid('產品資料尚未就緒');
+  const rows = value.products.map(row => {
+    if (!object(row) || !text(row.id) || !text(row.name, 500) || !text(row.sku, 100) || row.modelNumber !== null && row.modelNumber !== undefined && row.modelNumber !== '' && !text(row.modelNumber, 160)) return invalid('產品資料不完整');
+    return { id: row.id, name: row.name, sku: row.sku, modelNumber: typeof row.modelNumber === 'string' && row.modelNumber ? row.modelNumber : null };
+  });
+  if (new Set(rows.map(row => row.id)).size !== rows.length) return invalid('產品記錄不唯一');
+  return rows;
+}
+
+export default function RepairTestStandardManager({ entityId, product, canManage, canDraft = canManage, viewerId, onChanged, onBusyChange, onDirtyChange, confirmDiscard, feedback, transport = defaultTransport }: RepairTestStandardManagerProps) {
   const { modal, message, contextHolder } = useRepairFeedback(feedback);
   const [snapshot, setSnapshot] = useState<Registry>();
+  const [selectedProduct, setSelectedProduct] = useState<RepairManagedProduct | null>(null);
+  const [productOptions, setProductOptions] = useState<RepairManagedProduct[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
   const [loading, setLoading] = useState(false), [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
-  const [editing, setEditing] = useState(false), [calibrationOpen, setCalibrationOpen] = useState(false);
-  const [draftBase, setDraftBase] = useState<{ id: string; revision: number } | null>(null);
+  const [editing, setEditing] = useState(false), [calibrationOpen, setCalibrationOpen] = useState(false), [calibrationExpanded, setCalibrationExpanded] = useState(false);
+  const [draftBase, setDraftBase] = useState<{ id: string; revision: number; contentHash: string; mode: 'draft' | 'revision' } | null>(null);
   const [standardForm] = Form.useForm<StandardForm>(), [calibrationForm] = Form.useForm<CalibrationForm>();
   const checks = Form.useWatch('checks', standardForm) as StandardCheck[] | undefined;
-  const generation = useRef(0), running = useRef(false);
+  const generation = useRef(0), productGeneration = useRef(0), running = useRef(false), dirty = useRef(false), mounted = useRef(true), discarding = useRef(false);
   const operation = useRef<{ key: string; requestId: string } | undefined>(undefined);
   const trigger = useRef<HTMLButtonElement | HTMLAnchorElement | null>(null);
-  const productId = product?.id || '', sku = product?.sku || '';
-  const bound = text(entityId) && text(productId) && text(sku, 100) && !!product?.name.trim();
+  const dirtyCallback = useRef(onDirtyChange); dirtyCallback.current = onDirtyChange;
+  const productId = selectedProduct?.id || '', sku = selectedProduct?.sku || '';
+  const activeScope = useRef(''); activeScope.current = entityId + ':' + viewerId + ':' + productId + ':' + canDraft + ':' + canManage;
+  const canRead = (canDraft || canManage) && text(viewerId) && text(entityId);
+  const bound = canRead && text(productId) && text(sku, 100);
+  const markDirty = (value: boolean) => { dirty.current = value; dirtyCallback.current?.(value); };
+  const discard = async () => {
+    if (!dirty.current) return true;
+    if (discarding.current) return false;
+    discarding.current = true;
+    const requestScope = activeScope.current;
+    try {
+      const confirmed = confirmDiscard ? await confirmDiscard() : await new Promise<boolean>(resolve => modal.confirm({ title: '放棄未儲存的變更？', okText: '放棄', cancelText: '繼續編輯', onOk: () => resolve(true), onCancel: () => resolve(false) }));
+      return confirmed && mounted.current && requestScope === activeScope.current;
+    }
+    finally { discarding.current = false; }
+  };
   const refresh = useCallback(async () => {
-    if (!canManage || !entityId || !productId || !sku) return;
+    if (!canRead || !productId || !sku) return;
     const request = ++generation.current;
     setLoading(true);
     try {
       const value = registry((await transport.get(path, { params: { entityId, productId } })).data, entityId, productId);
-      if (request === generation.current) { setSnapshot(value); setFailure(''); }
+      if (mounted.current && request === generation.current) { setSnapshot(value); setFailure(''); }
     } catch (error) {
-      if (request === generation.current) { setSnapshot(undefined); setFailure(problem(error)); }
+      if (mounted.current && request === generation.current) { setSnapshot(undefined); setFailure(problem(error)); }
       throw error;
-    } finally { if (request === generation.current) setLoading(false); }
-  }, [canManage, entityId, productId, sku, transport]);
+    } finally { if (mounted.current && request === generation.current) setLoading(false); }
+  }, [canRead, canDraft, canManage, viewerId, entityId, productId, sku, transport]);
+  const searchProducts = useCallback(async (q: string, initialId?: string) => {
+    if (!canRead) return;
+    const request = ++productGeneration.current;
+    setProductsLoading(true);
+    try {
+      const options = products((await transport.get(path + '/products', { params: { entityId, q } })).data);
+      if (mounted.current && request === productGeneration.current) {
+        setProductOptions(options); setFailure('');
+        if (initialId) setSelectedProduct(options.find(row => row.id === initialId) || null);
+      }
+    } catch (error) { if (mounted.current && request === productGeneration.current) { setProductOptions([]); setFailure(problem(error)); } }
+    finally { if (mounted.current && request === productGeneration.current) setProductsLoading(false); }
+  }, [canRead, entityId, transport]);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; generation.current++; productGeneration.current++; }; }, []);
   useEffect(() => {
-    const requests = generation;
-    setSnapshot(undefined); setEditing(false); setCalibrationOpen(false); setFailure('');
-    standardForm.resetFields(); calibrationForm.resetFields();
-    if (bound && canManage) void refresh().catch(() => undefined);
-    return () => { requests.current++; };
-  }, [bound, canManage, refresh, standardForm, calibrationForm]);
+    setSelectedProduct(null); setProductOptions([]); setSnapshot(undefined); setFailure(''); setEditing(false); setCalibrationOpen(false);
+    standardForm.resetFields(); calibrationForm.resetFields(); dirty.current = false; dirtyCallback.current?.(false);
+    if (canRead) void searchProducts(product?.sku || '', product?.id);
+    return () => { productGeneration.current++; };
+  }, [canRead, canDraft, canManage, entityId, viewerId, product?.id, product?.sku, searchProducts, standardForm, calibrationForm]);
+  useEffect(() => {
+    setSnapshot(undefined);
+    if (bound) void refresh().catch(() => undefined);
+    return () => { generation.current++; };
+  }, [bound, refresh]);
   const current = snapshot?.standards.filter(row => row.sku === sku).sort((a, b) => b.revision - a.revision)[0];
-  const writable = canManage && bound && !!snapshot && !loading && !busy;
-  async function mutate(url: string, body: Record<string, unknown>, expectedStatus: string, id?: string, expectedRevision?: number) {
+  const writable = bound && !!snapshot && !loading && !busy && !productsLoading;
+  const canAuthorCurrent = canDraft && (!current || current.status !== 'DRAFT' || current.createdById === viewerId);
+  async function selectProduct(id: string) {
+    if (running.current || !await discard()) return;
+    const chosen = productOptions.find(row => row.id === id);
+    if (!chosen) return;
+    markDirty(false); setEditing(false); setCalibrationOpen(false); setFailure('');setSnapshot(undefined);setLoading(true);
+    standardForm.resetFields(); calibrationForm.resetFields(); setSelectedProduct(chosen);
+  }
+  async function cancelEditing() {
+    if (busy || !await discard()) return;
+    markDirty(false); standardForm.resetFields(); calibrationForm.resetFields(); setEditing(false); setCalibrationOpen(false);
+    requestAnimationFrame(() => trigger.current?.focus());
+  }
+  async function mutate(url: string, body: Record<string, unknown>, expectedStatus: string, id?: string, expectedRevision?: number, previousId?: string) {
     if (!writable || running.current) return;
+    const requestScope = activeScope.current;
     running.current = true; setBusy(true); onBusyChange?.(true); setFailure('');
     let saved = false;
     try {
       const key = JSON.stringify({ url, entityId, body });
       if (operation.current?.key !== key) operation.current = { key, requestId: crypto.randomUUID() };
-      receipt((await transport.post(url, { entityId, requestId: operation.current.requestId, ...body })).data, expectedStatus, id, expectedRevision);
+      receipt((await transport.post(url, { entityId, requestId: operation.current.requestId, ...body })).data, expectedStatus, id, expectedRevision, previousId);
       saved = true;
+      if (!mounted.current || requestScope !== activeScope.current) return;
+      markDirty(false); setEditing(false); setCalibrationOpen(false); standardForm.resetFields(); calibrationForm.resetFields();
       await onChanged?.();
+      if (!mounted.current || requestScope !== activeScope.current) return;
       await refresh();
-      setEditing(false); setCalibrationOpen(false);
-      standardForm.resetFields(); calibrationForm.resetFields();
-      message.success('已儲存');
-    } catch (error) { setFailure(saved ? '已儲存，資料暫無法重新載入。' : problem(error)); }
-    finally { running.current = false; setBusy(false); onBusyChange?.(false); }
+      if (mounted.current) message.success('已儲存');
+    } catch (error) { if (mounted.current && requestScope === activeScope.current) setFailure(saved ? '已儲存，資料暫無法重新載入。' : problem(error)); }
+    finally { running.current = false; if (mounted.current) { setBusy(false); onBusyChange?.(false); } }
   }
   function openDraft() {
-    if (!writable) return;
-    setDraftBase(current ? { id: current.id, revision: current.revision } : null);
-    standardForm.setFieldsValue({ productId, ...(current?.data ? structuredClone(current.data) : { modelNumber: '', checks: [blankCheck()] as unknown as StandardCheck[] }) });
-    setEditing(true); setFailure('');
+    if (!writable || !canAuthorCurrent) return;
+    setDraftBase(current ? { id: current.id, revision: current.revision, contentHash: current.contentHash, mode: current.status === 'DRAFT' ? 'draft' : 'revision' } : null);
+    standardForm.setFieldsValue({ productId, ...(current?.data ? structuredClone(current.data) : { checks: [blankCheck()] as unknown as StandardCheck[] }), modelNumber: selectedProduct?.modelNumber || '' });
+    markDirty(false); setEditing(true); setFailure('');
   }
   async function saveDraft(values: StandardForm) {
+    if (!canDraft) return;
     try {
-      const data = definition(values);
-      await mutate(draftBase ? path + '/standards/' + encodeURIComponent(draftBase.id) + '/revisions' : path + '/standards',
-        draftBase ? { expectedRevision: draftBase.revision, data } : { productId, sku, data }, 'DRAFT', undefined, (draftBase?.revision || 0) + 1);
+      const data = definition(values), editingDraft = draftBase?.mode === 'draft';
+      await mutate(draftBase ? path + '/standards/' + encodeURIComponent(draftBase.id) + (editingDraft ? '/draft' : '/revisions') : path + '/standards',
+        draftBase ? { expectedRevision: draftBase.revision, expectedContentHash: draftBase.contentHash, data } : { productId, sku, data }, 'DRAFT', undefined, draftBase ? draftBase.revision + 1 : 1, draftBase?.id);
     } catch (error) { setFailure(problem(error)); }
   }
-  const decide = (row: StandardRow, action: 'review' | 'retire') => modal.confirm({
-    title: (action === 'review' ? '審核檢測標準 v' : '停用檢測標準 v') + row.revision + '？',
-    okText: action === 'review' ? '審核' : '停用', cancelText: '取消',
-    onOk: () => mutate(path + '/standards/' + encodeURIComponent(row.id) + '/' + action,
-      { expectedRevision: row.revision }, action === 'review' ? 'REVIEWED' : 'RETIRED', row.id, row.revision),
-  });
+  const decide = (row: StandardRow, action: 'review' | 'retire') => {
+    if (!canManage) return;
+    modal.confirm({ title: (action === 'review' ? '核定啟用範本 v' : '停用範本 v') + row.revision + '？',
+      okText: action === 'review' ? '核定啟用' : '停用', cancelText: '取消',
+      onOk: () => mutate(path + '/standards/' + encodeURIComponent(row.id) + '/' + action,
+        { expectedRevision: row.revision, expectedContentHash: row.contentHash }, action === 'review' ? 'REVIEWED' : 'RETIRED', row.id, row.revision),
+    });
+  };
   const standardContent = <>
-    <Space wrap style={{ marginBottom: 12 }}><Button ref={node => { trigger.current = node; }} type={editing || current?.status === 'DRAFT' ? 'default' : 'primary'} disabled={!writable || editing || calibrationOpen} onClick={openDraft}>{current ? '新增版本' : '建立草稿'}</Button><Button disabled={loading || busy} onClick={() => void refresh().catch(() => undefined)}>重新載入</Button></Space>
-    {editing && <Form form={standardForm} name="repair-standard-definition" layout="vertical" disabled={busy} onFinish={values => void saveDraft(values)} scrollToFirstError>
+    <Space wrap style={{ marginBottom: 12 }}><Button ref={node => { trigger.current = node; }} type={editing || current?.status === 'DRAFT' ? 'default' : 'primary'} disabled={!writable || !canAuthorCurrent || editing || calibrationOpen} onClick={openDraft}>{current?.status === 'DRAFT' && current.createdById === viewerId ? '編輯草稿' : current ? '新增版本' : '建立草稿'}</Button><Button disabled={loading || busy || editing || calibrationOpen} onClick={() => void refresh().catch(() => undefined)}>重新載入</Button></Space>
+    {editing && <Form form={standardForm} name="repair-standard-definition" layout="vertical" disabled={busy} onValuesChange={() => markDirty(true)} onFinish={values => void saveDraft(values)} scrollToFirstError>
       <Form.Item name="productId" hidden><Input /></Form.Item>
-      <Form.Item name="modelNumber" label="機種"><Input maxLength={160} /></Form.Item>
+      <Form.Item name="modelNumber" label="機型"><Input readOnly maxLength={160} /></Form.Item>
       <Form.List name="checks" rules={[{ validator: (_, values) => { try { definition({ checks: values }); return Promise.resolve(); } catch (error) { return Promise.reject(error); } } }]}>
-        {(fields, { add, remove }, { errors }) => <>
+        {(fields, { add, remove, move }, { errors }) => <>
           {fields.map((field, index) => {
             const check = checks?.[field.name], selectedKind = check?.standard?.kind;
             return <section key={field.key} aria-label={'測項 ' + (index + 1)} style={{ padding: '12px 0', borderTop: '1px solid #edf0f4' }}>
-              <Space style={{ marginBottom: 8 }}><Typography.Text strong>{'測項 ' + (index + 1)}</Typography.Text><Button danger type="text" onClick={() => remove(field.name)}>移除測項</Button></Space>
-              <Row gutter={12}><Col xs={24} sm={10}><Form.Item name={[field.name, 'key']} label="測項代碼" rules={required}><Input autoFocus={index === 0} maxLength={128} /></Form.Item></Col><Col xs={24} sm={14}><Form.Item name={[field.name, 'name']} label="測項名稱" rules={required}><Input maxLength={160} /></Form.Item></Col></Row>
-              <Form.Item name={[field.name, 'standard', 'instruction']} label="測試條件" rules={required}><Input.TextArea rows={2} maxLength={2000} /></Form.Item>
+              <Space wrap style={{ marginBottom: 8 }}><Typography.Text strong>{'測項 ' + (index + 1)}</Typography.Text><Button aria-label={'上移測項 ' + (index + 1)} size="small" disabled={index === 0} onClick={() => { move(index, index - 1); markDirty(true); }}>上移</Button><Button aria-label={'下移測項 ' + (index + 1)} size="small" disabled={index === fields.length - 1} onClick={() => { move(index, index + 1); markDirty(true); }}>下移</Button><Button danger type="text" onClick={() => { remove(field.name); markDirty(true); }}>移除測項</Button></Space>
+              <Row gutter={12}><Col xs={24} sm={0}><Form.Item name={[field.name, 'key']} hidden><Input /></Form.Item></Col><Col xs={24} sm={24}><Form.Item name={[field.name, 'name']} label="測項名稱" rules={required}><Input maxLength={160} /></Form.Item></Col></Row>
+              <Form.Item name={[field.name, 'standard', 'instruction']} label="方法與通過標準" rules={required}><Input.TextArea rows={2} maxLength={2000} /></Form.Item>
               <Form.Item name={[field.name, 'standard', 'kind']} label="判定方式" rules={[{ required: true, message: '請選擇判定方式' }]}><Select options={kindOptions} /></Form.Item>
               {selectedKind === 'NUMBER' && <Row gutter={12}><Col xs={24} sm={8}><Form.Item name={[field.name, 'standard', 'unit']} label="單位" rules={required}><Input maxLength={30} /></Form.Item></Col>{(['min', 'max'] as const).map(key => <Col key={key} xs={24} sm={8}><Form.Item name={[field.name, 'standard', key]} label={key === 'min' ? '下限' : '上限'} rules={[{ pattern: decimalPattern, message: '請填最多六位小數的數值' }]}><Input inputMode="decimal" maxLength={20} /></Form.Item></Col>)}</Row>}
               {selectedKind === 'BOOLEAN' && <Form.Item name={[field.name, 'standard', 'expected']} label="預期結果" rules={booleanRules}><Select options={yesNo} /></Form.Item>}
@@ -222,23 +286,23 @@ export default function RepairTestStandardManager({ entityId, product, canManage
             </section>;
           })}
           <Form.ErrorList errors={errors} />
-          <Button disabled={fields.length >= 50} onClick={() => add(blankCheck())}>新增測項</Button>
+          <Button disabled={fields.length >= 50} onClick={() => { add(blankCheck()); markDirty(true); }}>新增測項</Button>
         </>}
       </Form.List>
-      <Space wrap style={{ margin: '16px 0' }}><Button aria-label="保存草稿" type="primary" htmlType="submit" loading={busy}>保存草稿</Button><Button disabled={busy} onClick={() => { standardForm.resetFields(); setEditing(false); requestAnimationFrame(() => trigger.current?.focus()); }}>取消</Button></Space>
+      <Space wrap style={{ margin: '16px 0' }}><Button aria-label="保存草稿" type="primary" htmlType="submit" loading={busy}>保存草稿</Button><Button disabled={busy} onClick={() => void cancelEditing()}>取消</Button></Space>
     </Form>}
     {snapshot && (snapshot.standards.length ? <Table size="small" rowKey="id" pagination={false} dataSource={snapshot.standards} tableLayout="fixed" scroll={{ x: 888 }} columns={[
       { title: '版本', width: 96, onHeaderCell: headerCell(96), render: (_, row: StandardRow) => 'v' + row.revision },
-      { title: 'SKU', width: 180, onHeaderCell: headerCell(180), dataIndex: 'sku' },
+      { title: '機型', width: 180, onHeaderCell: headerCell(180), render: (_, row: StandardRow) => row.data.modelNumber || '—' },
       { title: '狀態', width: 112, onHeaderCell: headerCell(112), render: (_, row: StandardRow) => <Tag color={row.status === 'REVIEWED' ? 'green' : undefined}>{standardStatus[row.status]}</Tag> },
       { title: '測項', width: 100, onHeaderCell: headerCell(100), render: (_, row: StandardRow) => <details><summary>{row.data.checks.length + ' 項'}</summary>{row.data.checks.map(check => <div key={check.key} style={{ overflowWrap: 'anywhere' }}><Typography.Text strong>{check.name}</Typography.Text><div>{check.standard.instruction}</div><div>{check.standard.kind === 'NUMBER' ? (check.standard.min || '—') + '～' + (check.standard.max || '—') + ' ' + check.standard.unit : check.standard.kind === 'BOOLEAN' ? '預期：' + (check.standard.expected ? '是' : '否') : '觀察'}</div><div>{[check.requiredForInspection ? '檢修必測' : '', check.requiredForCompletion ? '複驗必測' : '', check.requiresCalibration ? check.equipmentType : ''].filter(Boolean).join(' · ')}</div></div>)}</details> },
-      { title: '審核時間', width: 220, onHeaderCell: headerCell(220), render: (_, row: StandardRow) => row.reviewedAt ? time(row.reviewedAt) : '—' },
-      { title: '操作', width: 180, onHeaderCell: headerCell(180), render: (_, row: StandardRow) => <Space><Button aria-label={'審核 v' + row.revision} type={!editing && !calibrationOpen && row.status === 'DRAFT' && row.id === current?.id ? 'primary' : 'default'} disabled={!writable || editing || calibrationOpen || row.sku !== sku || row.status !== 'DRAFT' || row.id !== current?.id} onClick={() => decide(row, 'review')}>審核</Button><Button aria-label={'停用 v' + row.revision} disabled={!writable || editing || calibrationOpen || row.sku !== sku || row.status !== 'REVIEWED'} onClick={() => decide(row, 'retire')}>停用</Button></Space> },
-    ]} /> : <Empty description="尚無檢測標準" />)}
+      { title: '核定時間', width: 220, onHeaderCell: headerCell(220), render: (_, row: StandardRow) => row.reviewedAt ? time(row.reviewedAt) : '—' },
+      { title: '操作', width: 180, onHeaderCell: headerCell(180), render: (_, row: StandardRow) => <Space>{canManage && <Button aria-label={'核定啟用 v' + row.revision} type={!editing && !calibrationOpen && row.status === 'DRAFT' && row.id === current?.id ? 'primary' : 'default'} disabled={!writable || editing || calibrationOpen || row.sku !== sku || row.status !== 'DRAFT' || row.id !== current?.id} onClick={() => decide(row, 'review')}>核定啟用</Button>}{canManage && <Button aria-label={'停用 v' + row.revision} disabled={!writable || editing || calibrationOpen || row.sku !== sku || row.status !== 'REVIEWED'} onClick={() => decide(row, 'retire')}>停用</Button>}</Space> },
+    ]} /> : <Empty description="尚無維修範本" />)}
   </>;
   const calibrationContent = <>
-    <Button type={calibrationOpen ? 'default' : 'primary'} disabled={!writable || editing || calibrationOpen} onClick={() => { calibrationForm.resetFields(); setCalibrationOpen(true); }} style={{ marginBottom: 12 }}>登錄校正證明</Button>
-    {calibrationOpen && <Form form={calibrationForm} name="repair-calibration-definition" layout="vertical" disabled={busy} scrollToFirstError onKeyDown={event => {
+    <Button type="default" disabled={!writable || editing || calibrationOpen} onClick={() => { calibrationForm.resetFields(); setCalibrationOpen(true); }} style={{ marginBottom: 12 }}>登錄校正證明</Button>
+    {calibrationOpen && <Form form={calibrationForm} name="repair-calibration-definition" layout="vertical" disabled={busy} onValuesChange={() => markDirty(true)} scrollToFirstError onKeyDown={event => {
       if (event.key === 'Enter' && event.target instanceof HTMLElement && event.target.closest('.ant-picker')) event.preventDefault();
     }} onFinish={values => {
       try { const data = calibration({ ...values, validFrom: values.validFrom?.toISOString(), validUntil: values.validUntil?.toISOString() }); void mutate(path + '/calibrations', data, 'VALID'); }
@@ -248,7 +312,7 @@ export default function RepairTestStandardManager({ entityId, product, canManage
       <Form.Item name="equipmentType" label="設備類型" rules={required}><Input maxLength={100} /></Form.Item>
       <Form.Item name="proofReference" label="校正證明編號／依據" rules={required}><Input maxLength={500} /></Form.Item>
       <Row gutter={12}><Col xs={24} sm={12}><Form.Item name="validFrom" label="有效起日" rules={[{ required: true, message: '請選擇有效起日' }]}><DatePicker showTime format="YYYY-MM-DD HH:mm" style={{ width: '100%' }} /></Form.Item></Col><Col xs={24} sm={12}><Form.Item name="validUntil" label="有效迄日" rules={[{ required: true, message: '請選擇有效迄日' }]}><DatePicker showTime format="YYYY-MM-DD HH:mm" style={{ width: '100%' }} /></Form.Item></Col></Row>
-      <Space wrap style={{ marginBottom: 16 }}><Button aria-label="保存校正證明" type="primary" htmlType="submit" loading={busy}>保存校正證明</Button><Button disabled={busy} onClick={() => { calibrationForm.resetFields(); setCalibrationOpen(false); }}>取消</Button></Space>
+      <Space wrap style={{ marginBottom: 16 }}><Button aria-label="保存校正證明" type="primary" htmlType="submit" loading={busy}>保存校正證明</Button><Button disabled={busy} onClick={() => void cancelEditing()}>取消</Button></Space>
     </Form>}
     {snapshot && (snapshot.calibrations.length ? <Table size="small" rowKey="id" pagination={false} dataSource={snapshot.calibrations} tableLayout="fixed" scroll={{ x: 932 }} columns={[
       { title: '設備', width: 180, onHeaderCell: headerCell(180), render: (_, row: CalibrationRow) => <span>{row.instrumentId}<br />{row.equipmentType}</span> },
@@ -258,12 +322,19 @@ export default function RepairTestStandardManager({ entityId, product, canManage
       { title: '操作', width: 120, onHeaderCell: headerCell(120), render: (_, row: CalibrationRow) => <Button aria-label={'撤銷校正證明 ' + row.id} disabled={!writable || editing || calibrationOpen || row.status !== 'VALID'} onClick={() => modal.confirm({ title: '撤銷此校正證明？', okText: '撤銷', cancelText: '取消', onOk: () => mutate(path + '/calibrations/' + encodeURIComponent(row.id) + '/revoke', {}, 'REVOKED', row.id) })}>撤銷</Button> },
     ]} /> : <Empty description="尚無校正證明" />)}
   </>;
-  return <section aria-label="檢測標準與校正管理" style={{ minWidth: 0 }}>
+  const options = [...productOptions];
+  if (selectedProduct && !options.some(row => row.id === selectedProduct.id)) options.unshift(selectedProduct);
+  return <section aria-label="維修範本" style={{ minWidth: 0 }}>
     {contextHolder}
-    {!canManage ? <Alert type="warning" message="沒有檢測標準管理權限" /> : !bound ? <Alert type="warning" message="產品待確認" /> : <>
-      <Form layout="vertical"><Form.Item label="產品"><Select aria-label="管理產品" disabled value={productId} options={[{ value: productId, label: product!.name + ' · ' + sku }]} /></Form.Item></Form>
+    {!canRead ? <Alert type="warning" message="沒有維修範本權限" /> : <>
+      <Form layout="vertical"><Form.Item label="產品"><Select aria-label="管理產品" showSearch filterOption={false} value={selectedProduct?.id} loading={productsLoading} disabled={busy} onSearch={q => void searchProducts(q)} onChange={id => void selectProduct(id)} options={options.map(row => ({ value: row.id, label: [row.name, row.sku, row.modelNumber].filter(Boolean).join(' · ') }))} /></Form.Item></Form>
       {failure && <Alert type="error" showIcon message={failure} style={{ marginBottom: 12 }} />}
-      <Spin spinning={loading}><Tabs items={[{ key: 'standards', label: '檢測標準', children: standardContent }, { key: 'calibrations', label: '校正證明', children: calibrationContent }]} /></Spin>
+      {selectedProduct && <Spin spinning={loading}>{standardContent}
+        {canManage && <Collapse activeKey={calibrationExpanded ? ['calibrations'] : []} onChange={keys => {
+          if (busy || editing) return;
+          void (async () => { if (calibrationOpen && !await discard()) return; markDirty(false); setCalibrationOpen(false); setCalibrationExpanded(keys.length > 0); })();
+        }} items={[{ key: 'calibrations', label: '校正證明', children: calibrationContent }]} />}
+      </Spin>}
     </>}
   </section>;
 }

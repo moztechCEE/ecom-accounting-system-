@@ -86,6 +86,11 @@ export type RepairDocument<T = InspectionData | RepairData> = {
   authorName: string;
   updatedAt: string;
   submittedAt?: string;
+  templateBasis?: {
+    schema: 1;
+    binding: RepairTemplateBinding;
+    verifiedAt: string;
+  };
   inspectionRevision?: number;
   review?: {
     inspectionRevision: number;
@@ -99,6 +104,39 @@ export type RepairDocument<T = InspectionData | RepairData> = {
   data: T;
 };
 export type InspectionDocument = RepairDocument<InspectionData>;
+
+/** Only the server writes templateBasis; legacy unverified drafts confer no version authority. */
+export function verifiedDocumentTemplateBinding(
+  document: unknown,
+): RepairTemplateBinding | undefined {
+  if (!document || typeof document !== 'object' || Array.isArray(document))
+    return undefined;
+  const doc = document as RepairDocument;
+  const binding = doc.data?.templateBinding;
+  if (
+    doc.data?.protocol !== 2 ||
+    !binding ||
+    typeof binding.id !== 'string' ||
+    !binding.id.trim() ||
+    !Number.isInteger(binding.revision) ||
+    binding.revision < 1 ||
+    !/^[a-f0-9]{64}$/.test(binding.contentHash)
+  )
+    return undefined;
+  if (doc.status === 'SUBMITTED') return binding;
+  const basis = doc.templateBasis;
+  if (
+    doc.status === 'DRAFT' &&
+    basis?.schema === 1 &&
+    typeof basis.verifiedAt === 'string' &&
+    Number.isFinite(Date.parse(basis.verifiedAt)) &&
+    basis.binding?.id === binding.id &&
+    basis.binding.revision === binding.revision &&
+    basis.binding.contentHash === binding.contentHash
+  )
+    return binding;
+  return undefined;
+}
 
 // Estimates and the selected technical plan belong to this exact inspection revision.
 export function inspectionPlanHash(doc: InspectionDocument): string {

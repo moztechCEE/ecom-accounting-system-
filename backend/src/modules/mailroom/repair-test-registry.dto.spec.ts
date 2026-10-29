@@ -2,6 +2,10 @@ import { ValidationPipe } from '@nestjs/common';
 import {
   CreateRepairStandardDto,
   RecordRepairCalibrationDto,
+  NewRepairStandardRevisionDto,
+  UpdateRepairStandardDraftDto,
+  ReviewRepairStandardDto,
+  RepairRegistryProductsQueryDto,
 } from './repair-test-registry.dto';
 
 const pipe = new ValidationPipe({
@@ -88,6 +92,56 @@ describe('actual registry DTO pipe under global implicit conversion', () => {
           validUntil: 'tomorrow',
         },
         { type: 'body', metatype: RecordRepairCalibrationDto },
+      ),
+    ).rejects.toThrow();
+  });
+});
+
+describe('template version and product search DTO boundary', () => {
+  it.each([
+    NewRepairStandardRevisionDto,
+    UpdateRepairStandardDraftDto,
+    ReviewRepairStandardDto,
+  ])('requires a precise content hash for %p', async (metatype) => {
+    const input = {
+      entityId: 'company',
+      requestId: 'version-request-1',
+      expectedRevision: 1,
+      ...(metatype === ReviewRepairStandardDto ? {} : { data: body().data }),
+    };
+    await expect(
+      pipe.transform(input, { type: 'body', metatype }),
+    ).rejects.toThrow();
+    await expect(
+      pipe.transform(
+        { ...input, expectedContentHash: '0'.repeat(64) },
+        { type: 'body', metatype },
+      ),
+    ).resolves.toBeDefined();
+    await expect(
+      pipe.transform(
+        { ...input, expectedContentHash: 'bad-hash' },
+        { type: 'body', metatype },
+      ),
+    ).rejects.toThrow();
+  });
+  it('accepts product search text but does not accept client-selected employee or hidden scope', async () => {
+    await expect(
+      pipe.transform(
+        { entityId: 'company', q: 'Model A' },
+        { type: 'query', metatype: RepairRegistryProductsQueryDto },
+      ),
+    ).resolves.toBeDefined();
+    await expect(
+      pipe.transform(
+        { entityId: 'company', q: 'x'.repeat(161) },
+        { type: 'query', metatype: RepairRegistryProductsQueryDto },
+      ),
+    ).rejects.toThrow();
+    await expect(
+      pipe.transform(
+        { entityId: 'company', isActive: false },
+        { type: 'query', metatype: RepairRegistryProductsQueryDto },
       ),
     ).rejects.toThrow();
   });

@@ -48,6 +48,8 @@ export default function RepairWorkbenchPage() {
   })), [modal]);
   const { user } = useAuth();
   const canRead = hasPermission(user, 'repair_workbench:read');
+  const canDraftTemplates = hasPermission(user, 'repair_workbench:update') || hasPermission(user, 'repair_workbench:manage');
+  const canManageTemplates = hasPermission(user, 'repair_workbench:manage');
   const [params, setParams] = useSearchParams();
   const queue = repairListScope(params.get('queue'));
   const tab = repairWorkbenchTab(queue);
@@ -76,12 +78,18 @@ export default function RepairWorkbenchPage() {
   const detailGeneration = useRef(0);
   const detailInstance=useRef<DetailInstance|undefined>(undefined);
   const detailDirty = useRef(false);
+  const [templatesOpen,setTemplatesOpen]=useState(false);
+  const [templatesBusy,setTemplatesBusy]=useState(false);
+  const templatesDirty=useRef(false), templatesChanged=useRef(false), templatesClosing=useRef(false);
+  const templatesTrigger=useRef<HTMLButtonElement|HTMLAnchorElement|null>(null);
+  const pageDirty=useRef({get current(){return detailDirty.current || templatesDirty.current;},set current(value:boolean){if(!value){detailDirty.current=false;templatesDirty.current=false;}}}).current;
+  useEffect(()=>{templatesDirty.current=false;templatesChanged.current=false;setTemplatesOpen(false);setTemplatesBusy(false);},[navigationScope]);
   const currentDetail=detail?.id===selectedId && detail.entityId===entityId && detailInstance.current?.item===detail
     && detailInstance.current.scope===navigationScope && detailInstance.current.token===localStorage.getItem('access_token') ? detail : undefined;
   const activeDetailInstance=currentDetail ? detailInstance.current : undefined;
   const detailInstanceCurrent=(instance:DetailInstance|undefined)=>!!instance && detailInstance.current===instance
     && instance.generation===detailGeneration.current && navigationCurrent(instance.scope,instance.token);
-  useRepairNavigationGuard(detailDirty, confirmDiscard);
+  useRepairNavigationGuard(pageDirty, confirmDiscard);
   const listScope = JSON.stringify([entityId, queue, page, search]);
   const currentList = list?.scope === listScope ? list.data : undefined;
   const rows = currentList?.items || [];
@@ -192,12 +200,27 @@ export default function RepairWorkbenchPage() {
     setPagination({queue:nextQueue,page:1});
     setParams(next);
   }
+  async function closeTemplates() {
+    if(templatesBusy || templatesClosing.current)return;
+    templatesClosing.current=true;
+    const scope=navigationScope,token=localStorage.getItem('access_token');
+    try {
+      if(templatesDirty.current && !await confirmDiscard())return;
+      if(!navigationCurrent(scope,token))return;
+      templatesDirty.current=false;setTemplatesOpen(false);
+      if(templatesChanged.current){templatesChanged.current=false;if(selectedId)await loadDetail(true);if(navigationCurrent(scope,token))await latestRefresh.current(true);}
+      if(navigationCurrent(scope,token))requestAnimationFrame(()=>templatesTrigger.current?.focus());
+    } finally {templatesClosing.current=false;}
+  }
   if (!enabled) return <>{contextHolder}<Alert type="info" message="維修工作台尚未啟用" /></>;
   if (!canRead) return <>{contextHolder}<Alert type="warning" message="沒有維修工作台讀取權限" /></>;
   if (!entityId) return <>{contextHolder}<Alert type="warning" message="請先選擇作業公司" /></>;
   return <div className="mailroom-page repair-workbench-page">
     {contextHolder}
-    <div className="mailroom-heading"><div><Title level={2}><ToolOutlined /> 維修工作台</Title></div><Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading}>重新整理</Button></div>
+    <div className="mailroom-heading"><div><Title level={2}><ToolOutlined /> 維修工作台</Title></div><Space wrap>{canDraftTemplates && <Button ref={node=>{templatesTrigger.current=node;}} onClick={()=>setTemplatesOpen(true)}>維修範本</Button>}<Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading}>重新整理</Button></Space></div>
+    <Drawer title="維修範本" open={templatesOpen} width="min(900px, 100vw)" maskClosable={false} closable={!templatesBusy} onClose={()=>void closeTemplates()} destroyOnHidden>
+      <RepairTestStandardManager key={`${entityId}:${user?.id || ''}`} entityId={entityId} product={null} viewerId={user?.id || ''} canDraft={canDraftTemplates} canManage={canManageTemplates} confirmDiscard={confirmDiscard} onDirtyChange={dirty=>{templatesDirty.current=dirty;}} onBusyChange={setTemplatesBusy} onChanged={()=>{templatesChanged.current=true;}} feedback={message} />
+    </Drawer>
     <RepairCaseScan key={entityId} entityId={entityId} active={!selectedId} onOpen={openScanned} />
     <Tabs activeKey={tab} onChange={key => void changeQueue(key as RepairWorkbenchTab)} items={Object.entries(REPAIR_WORKBENCH_TABS).map(([key,label])=>{
       const count=key === 'all' ? undefined : repairQueueCount(queueCounts,key as RepairWorkbenchTab);
@@ -288,13 +311,14 @@ function RepairDetail({item,readerExpectedItemId,entityId,onSaved,onDirtyChange,
   const [standardsBusy,setStandardsBusy]=useState(false);
   const [standardsEpoch,setStandardsEpoch]=useState(0);
   const standardsChanged=useRef(false);
+  const standardsDirty=useRef(false);
   const closingStandards=useRef(false);
   const standardsTrigger=useRef<HTMLButtonElement|HTMLAnchorElement|null>(null);
   const [workflowOpen,setWorkflowOpen]=useState<string[]>(()=>item.allowedWorkflowActions?.some(action=>!['claim_customer','resolve_customer','review_assessment'].includes(action))?['workflow']:[]);
   const documentsDirty=useRef(false);
   const workflowDirty=useRef(false);
   const actionDirty=useRef(false);
-  const publishDirty=()=>onDirtyChange(documentsDirty.current || workflowDirty.current || actionDirty.current);
+  const publishDirty=()=>onDirtyChange(documentsDirty.current || workflowDirty.current || actionDirty.current || standardsDirty.current);
   const running=useRef(false);
   const canUpdate=hasPermission(user,'repair_workbench:update');
   const canManage=hasPermission(user,'repair_workbench:manage');
@@ -306,7 +330,8 @@ function RepairDetail({item,readerExpectedItemId,entityId,onSaved,onDirtyChange,
     if(closingStandards.current || standardsBusy || busy || workflowBusy)return;
     closingStandards.current=true;setStandardsClosing(true);
     try {
-      if(standardsChanged.current && (documentsDirty.current || workflowDirty.current || actionDirty.current) && !await confirmDiscard())return;
+      if((standardsDirty.current || standardsChanged.current && (documentsDirty.current || workflowDirty.current || actionDirty.current)) && !await confirmDiscard())return;
+      standardsDirty.current=false;publishDirty();
       setStandardsOpen(false);
       if(standardsChanged.current){
         await onSaved();standardsChanged.current=false;documentsDirty.current=false;workflowDirty.current=false;actionDirty.current=false;
@@ -321,7 +346,7 @@ function RepairDetail({item,readerExpectedItemId,entityId,onSaved,onDirtyChange,
     running.current=true;
     setBusy(true);setFailure('');
     try {
-      if((documentsDirty.current || workflowDirty.current)&&!await confirmDiscard())return;
+      if((documentsDirty.current || workflowDirty.current || standardsDirty.current)&&!await confirmDiscard())return;
       const payload={entityId,action,expectedVersion:item.version,...(action==='accept'?{confirmedItems:confirmed,location:location.trim()}:{}),...(['await_customer','complete_repair','complete_refurbish'].includes(action)?{note}: {})};
       const body=JSON.stringify(payload);
       if(operation.current?.body!==body)operation.current={body,id:crypto.randomUUID()};
@@ -332,9 +357,9 @@ function RepairDetail({item,readerExpectedItemId,entityId,onSaved,onDirtyChange,
   const primaryAction=actions.find(action=>!action.disabled && ['start_repair','complete_repair','complete_refurbish'].includes(action.name)) || actions.find(action=>!action.disabled) || actions[0];
   const hasWorkflow=!!(item.repairWorkflow?.csr || item.repairWorkflow?.factory || item.repairWorkflow?.release || item.repairWorkflow?.workStart || item.repairWorkflow?.dispositionAuthorization || item.repairPrerequisites?.disposition?.authorization || item.allowedWorkflowActions?.some(action=>!['claim_customer','resolve_customer','review_assessment'].includes(action)));
   return <div className="repair-detail">
-    <div className="repair-detail-summary"><Tag color="blue">{repairCaseProgress(item) || item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag>{item.receipt.category==='RETURN'&&<Tag>退貨整新</Tag>}{canManage&&<Button ref={node=>{standardsTrigger.current=node;}} disabled={busy || workflowBusy || standardsClosing} onClick={()=>setStandardsOpen(true)}>檢測標準</Button>}</div>
-    <Drawer title="檢測標準" open={standardsOpen} width="min(900px, 100vw)" maskClosable={false} onClose={()=>void closeStandards()} closable={!standardsBusy && !standardsClosing && !busy && !workflowBusy} destroyOnHidden>
-      <RepairTestStandardManager key={`${entityId}:${item.productId || ''}`} entityId={entityId} product={item.productId && item.productName && item.sku?{id:item.productId,name:item.productName,sku:item.sku}:null} canManage={canManage} feedback={message} onChanged={()=>{standardsChanged.current=true;}} onBusyChange={setStandardsBusy} />
+    <div className="repair-detail-summary"><Tag color="blue">{repairCaseProgress(item) || item.statusLabel || REPAIR_STATUS[item.status] || STATUS[item.status] || item.status}</Tag>{item.receipt.category==='RETURN'&&<Tag>退貨整新</Tag>}{(canUpdate || canManage)&&<Button ref={node=>{standardsTrigger.current=node;}} disabled={busy || workflowBusy || standardsClosing} onClick={()=>setStandardsOpen(true)}>維修範本</Button>}</div>
+    <Drawer title="維修範本" open={standardsOpen} width="min(900px, 100vw)" maskClosable={false} onClose={()=>void closeStandards()} closable={!standardsBusy && !standardsClosing && !busy && !workflowBusy} destroyOnHidden>
+      <RepairTestStandardManager key={`${entityId}:${user?.id || ''}:${item.productId || ''}`} entityId={entityId} product={item.productId && item.productName && item.sku?{id:item.productId,name:item.productName,sku:item.sku}:null} canManage={canManage} canDraft={canUpdate || canManage} viewerId={user?.id || ''} confirmDiscard={confirmDiscard} onDirtyChange={dirty=>{standardsDirty.current=dirty;publishDirty();}} feedback={message} onChanged={()=>{standardsChanged.current=true;}} onBusyChange={setStandardsBusy} />
     </Drawer>
     <RepairCaseContext item={item} entityId={entityId} expectedItemId={readerExpectedItemId} />
     {workflowFailure&&<Alert type="error" showIcon message={workflowFailure} />}

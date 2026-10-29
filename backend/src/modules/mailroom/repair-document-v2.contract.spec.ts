@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { ValidationPipe } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { SaveInspectionDto } from './repair-document.dto';
@@ -144,5 +145,54 @@ describe('new repair document protocol and honest unpublished customer draft', (
     expect(dto.data.materialPlan?.lines[0].requiredForStart).toBe('false');
     expect(JSON.stringify(validateSync(dto))).toContain('isBoolean');
     expect(JSON.stringify(validateSync(dto))).toContain('requiredQuantity');
+  });
+});
+
+describe('server-owned template basis DTO boundary', () => {
+  it('rejects a client templateBasis at either the document or data level', async () => {
+    const pipe = new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+    const input = {
+      entityId: 'company',
+      requestId: 'basis-client-injection',
+      expectedVersion: 1,
+      status: 'DRAFT',
+      data: {
+        protocol: 2,
+        complaint: '',
+        reproduction: 'NOT_TESTED',
+        testConditions: '',
+        checks: [],
+        diagnosis: '',
+        causeStatus: 'UNKNOWN',
+        plan: 'REPAIR',
+        planNote: '',
+        feeSuggestion: 'REVIEW',
+        estimateNote: '',
+      },
+    };
+    const templateBasis = {
+      schema: 1,
+      binding: { id: 'old-standard', revision: 1, contentHash: '0'.repeat(64) },
+      verifiedAt: new Date().toISOString(),
+    };
+    await expect(
+      pipe.transform(input, { type: 'body', metatype: SaveInspectionDto }),
+    ).resolves.toBeDefined();
+    await expect(
+      pipe.transform(
+        { ...input, templateBasis },
+        { type: 'body', metatype: SaveInspectionDto },
+      ),
+    ).rejects.toThrow();
+    await expect(
+      pipe.transform(
+        { ...input, data: { ...input.data, templateBasis } },
+        { type: 'body', metatype: SaveInspectionDto },
+      ),
+    ).rejects.toThrow();
   });
 });

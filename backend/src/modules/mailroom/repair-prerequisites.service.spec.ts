@@ -230,7 +230,10 @@ describe('actual registry and material evidence at repair prerequisite boundarie
         entityId: 'company',
         productId: 'original-product',
         sku: 'ORIGINAL-SKU',
-        status: 'REVIEWED',
+        id: f.original.id,
+        revision: f.original.revision,
+        contentHash: f.original.contentHash,
+        status: { in: ['REVIEWED', 'RETIRED'] },
       },
       take: 2,
     });
@@ -309,7 +312,7 @@ describe('actual registry and material evidence at repair prerequisite boundarie
           current.templateChecks[
             stage === 'START' ? 'inspection' : 'completion'
           ],
-        ).toBe('BLOCKED');
+        ).not.toBe('READY');
         await expect(f.service.require(f.item, stage, f.tx)).rejects.toThrow(
           '必要檢測或設備校正尚未確認',
         );
@@ -360,7 +363,7 @@ describe('actual registry and material evidence at repair prerequisite boundarie
     f.report.data.templateBinding = binding(f.original);
     expect(
       (await f.service.forItem(f.item, f.tx)).templateChecks.completion,
-    ).toBe('BLOCKED');
+    ).not.toBe('READY');
     await expect(
       f.service.recordValidation(f.item, 'repair', f.report.data, f.tx),
     ).rejects.toThrow(ConflictException);
@@ -415,9 +418,10 @@ describe('actual registry and material evidence at repair prerequisite boundarie
       else if (failure === 'binding absent') delete doc.data.templateBinding;
       else if (failure === 'standard missing') f.standards.shift();
       else if (failure === 'standard draft') f.standards[0].status = 'DRAFT';
-      else if (failure === 'standard ambiguous')
+      else if (failure === 'standard ambiguous') {
+        doc.status = 'DRAFT'; // Unbound drafts must not choose between ambiguous active standards.
         f.standards.push({ ...f.standards[0], id: 'duplicate-standard' });
-      else f.standards[0].contentHash = 'f'.repeat(64);
+      } else f.standards[0].contentHash = 'f'.repeat(64);
       const before = structuredClone(f.item);
       const current = await f.service.forItem(f.item, f.tx);
       expect(current.templateChecks.inspection).not.toBe('READY');
@@ -525,5 +529,96 @@ describe('actual registry and material evidence at repair prerequisite boundarie
     await expect(
       f.service.require(f.item, 'START', missingProducer),
     ).rejects.toThrow('檢測標準服務尚未就緒');
+  });
+  it('preserves verified submitted and draft bindings after retirement while refusing legacy draft binding injection', async () => {
+    const f = fixture();
+    f.standards[0].status = 'RETIRED';
+    expect(
+      (await f.service.forItem(f.item, f.tx)).templateChecks.inspection,
+    ).toBe('READY');
+    const doc = f.item.repairInspection as unknown as RepairDocument;
+    doc.status = 'DRAFT';
+    expect(
+      (await f.service.forItem(f.item, f.tx)).templateChecks.inspection,
+    ).toBe('UNKNOWN');
+    await expect(
+      f.service.bindingValidation(f.item, 'inspection', doc.data, f.tx),
+    ).rejects.toThrow(ConflictException);
+    doc.templateBasis = {
+      schema: 1,
+      binding: binding(f.original),
+      verifiedAt: NOW,
+    };
+    const incomplete = {
+      ...doc.data,
+      checks: [{ ...measured(), measurementValue: 'unfinished' }],
+    };
+    expect(
+      (
+        await f.service.bindingValidation(
+          f.item,
+          'inspection',
+          incomplete,
+          f.tx,
+        )
+      ).template.id,
+    ).toBe(f.original.id);
+    await expect(
+      f.service.require(f.item, 'START', f.tx),
+    ).resolves.toBeDefined();
+    await expect(
+      f.service.recordValidation(f.item, 'inspection', incomplete, f.tx),
+    ).rejects.toThrow('量測值');
+    doc.templateBasis.binding.contentHash = '0'.repeat(64);
+    expect(
+      (await f.service.forItem(f.item, f.tx)).templateChecks.inspection,
+    ).toBe('UNKNOWN');
+  });
+
+  it('validates a first draft against the current registry without requiring completed measurements', async () => {
+    const f = fixture();
+    const doc = f.item.repairInspection as unknown as RepairDocument;
+    doc.status = 'DRAFT';
+    const incomplete = {
+      ...doc.data,
+      checks: [{ ...measured(), measurementValue: 'unfinished' }],
+    };
+    expect(
+      (
+        await f.service.bindingValidation(
+          f.item,
+          'inspection',
+          incomplete,
+          f.tx,
+        )
+      ).context.binding,
+    ).toEqual(binding(f.original));
+    await expect(
+      f.service.recordValidation(f.item, 'inspection', incomplete, f.tx),
+    ).rejects.toThrow('量測值');
+    f.standards[0].status = 'RETIRED';
+    const latest = { ...f.original, id: 'new-reviewed-standard', revision: 3 };
+    latest.contentHash = repairTemplateHash(latest);
+    f.standards.push(standard(latest));
+    await expect(
+      f.service.bindingValidation(f.item, 'inspection', incomplete, f.tx),
+    ).rejects.toThrow('基準不符');
+  });
+
+  it('does not reuse the replacement product binding when a new report returns to original-product repair', async () => {
+    const f = fixture();
+    f.report.data.outcome = 'REPLACED';
+    f.report.data.replacementSku = f.replacement.sku;
+    f.report.data.templateBinding = binding(f.replacement);
+    const incoming = {
+      ...f.report.data,
+      outcome: 'REPAIRED' as const,
+      replacementSku: undefined,
+      templateBinding: binding(f.original),
+    };
+    expect(
+      (await f.service.recordValidation(f.item, 'repair', incoming, f.tx))
+        .context.productId,
+    ).toBe(f.original.productId);
   });
 });

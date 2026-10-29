@@ -5,7 +5,7 @@ import test from 'node:test';
 const require = createRequire(import.meta.url), ts = require('typescript');
 const module = { exports: {} };
 const source = readFileSync(new URL('../src/pages/repair/RepairTestStandardManager.tsx', import.meta.url), 'utf8');
-const code = ts.transpileModule(source + '\nexport const __test = {definition,calibration,registry,receipt};', {
+const code = ts.transpileModule(source + '\nexport const __test = {definition,calibration,registry,receipt,products};', {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
 }).outputText;
 new Function('module', 'exports', 'require', code)(module, module.exports, specifier => {
@@ -15,12 +15,12 @@ new Function('module', 'exports', 'require', code)(module, module.exports, speci
   if (specifier === './repair-feedback') return { useRepairFeedback() { throw Error('Unexpected UI'); } };
   throw Error('Unexpected dependency ' + specifier);
 });
-const { definition, calibration, registry, receipt } = module.exports.__test;
+const { definition, calibration, registry, receipt, products } = module.exports.__test;
 const checks = () => [{ key: 'synthetic-voltage', name: 'SYNTHETIC voltage', requiredForInspection: true,
   requiredForCompletion: false, requiresCalibration: true, equipmentType: 'synthetic-meter',
   standard: { kind: 'NUMBER', instruction: 'SYNTHETIC laboratory condition', unit: 'fixture-unit', min: '-1.200000', max: '1.250001' } }];
 const standard = () => ({ id: 'server-standard', entityId: 'company', productId: 'actual-product', sku: 'ACTUAL-SKU',
-  revision: 1, status: 'DRAFT', data: { checks: checks() }, contentHash: 'a'.repeat(64), reviewedById: null, reviewedAt: null });
+  createdById: 'technician', revision: 1, status: 'DRAFT', data: { checks: checks() }, contentHash: 'a'.repeat(64), reviewedById: null, reviewedAt: null });
 const proof = () => ({ id: 'server-calibration', entityId: 'company', instrumentId: 'actual-meter',
   equipmentType: 'synthetic-meter', proofReference: 'ACTUAL certificate reference', status: 'VALID',
   validFrom: '2026-10-01T08:00:00+08:00', validUntil: '2027-10-01T08:00:00+08:00' });
@@ -59,8 +59,19 @@ test('registry reads reject wrong company/product and preserve server draft vers
 test('only real matching revision/status receipts authorize a displayed management result', () => {
   assert.doesNotThrow(() => receipt({ id: 'server-standard', revision: 2, status: 'DRAFT', duplicate: false }, 'DRAFT', undefined, 2));
   for (const value of [{ id: 'server-standard', revision: 2, status: 'DRAFT' }, { id: 'foreign', revision: 2, status: 'REVIEWED', contentHash: 'a'.repeat(64) },
-    { id: 'server-standard', revision: 1, status: 'REVIEWED', contentHash: 'a'.repeat(64) },
+    { id: 'server-standard', createdById: 'technician', revision: 1, status: 'REVIEWED', contentHash: 'a'.repeat(64) },
     { id: 'server-standard', revision: 2, status: 'REVIEWED', contentHash: 'a'.repeat(64), duplicate: 'true' }])
     assert.throws(() => receipt(value, 'REVIEWED', 'server-standard', 2));
   assert.doesNotThrow(() => receipt({ id: 'server-standard', revision: 2, status: 'REVIEWED', contentHash: 'a'.repeat(64) }, 'REVIEWED', 'server-standard', 2));
+});
+
+test('catalog results keep optional empty models honest and reject malformed product identities', () => {
+  assert.deepEqual(products({products:[{id:'catalog-product',name:'Actual catalog product',sku:'ACTUAL',modelNumber:''}],hasMore:false}), [{id:'catalog-product',name:'Actual catalog product',sku:'ACTUAL',modelNumber:null}]);
+  for(const productsValue of [[{id:'actual',name:'Product',sku:''}], [{id:'actual',name:'Product',sku:'SKU',modelNumber:17}], [{id:'same',name:'A',sku:'A'},{id:'same',name:'B',sku:'B'}]]) assert.throws(()=>products({products:productsValue,hasMore:false}));
+  assert.throws(()=>products({products:[]}));
+});
+test('append-only draft and revision receipts require a new identity and next revision', () => {
+  assert.throws(()=>receipt({id:'old',revision:2,status:'DRAFT'},'DRAFT',undefined,2,'old'));
+  assert.throws(()=>receipt({id:'new',revision:1,status:'DRAFT'},'DRAFT',undefined,2,'old'));
+  assert.doesNotThrow(()=>receipt({id:'new',revision:2,status:'DRAFT'},'DRAFT',undefined,2,'old'));
 });

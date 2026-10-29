@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:110569ff25b00ab27f285c5e0a67b9cfb86784c549c97112cc14a73b58a5afec",
+  "sourceVersion": "sha256:3ff2ef9bcc4978e9417355e15614d9f5c54a6631a1dce4a5a520081b74c848d1",
   "reviewedBaseCommit": "0ae9b322aedf1ff3ca2df0a6ab68f65dcb922c09",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "589e4239a722a869ad3f95839d49026467d293b2fca6841730b082e86b73b4aa",
+  "catalogSha256": "2660c169a10b6294b93e9ced0953ea131a41b73395e7d40773341f1507e61cf3",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -608,7 +608,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/repair-document.contract.ts",
-      "sha256": "7c260d5c1cf00f811d6206ffd06ddf53cd1a73646d3b5979165b0131f67037b1"
+      "sha256": "3cdc54e625391e80263ca40e3b56b3f0e35143622084bea159b05c7e72a20ddd"
     },
     {
       "path": "backend/src/modules/mailroom/repair-document.dto.ts",
@@ -644,15 +644,27 @@
     },
     {
       "path": "backend/src/modules/mailroom/repair-prerequisites.service.ts",
-      "sha256": "c49d65a804cb60f93088b1d7fab3f07e09395faba51fa921e86d61888a4e359a"
+      "sha256": "aa811f39d1e554ec5d8e7139f8343a2da6b3cfe055c0789c5fe0027050cb4598"
     },
     {
       "path": "backend/src/modules/mailroom/repair-stock-custody.contract.ts",
       "sha256": "c290d0b5a1072d4e9035d50ea38bed8698fd9e8d86e50cd7ff4ab86212141e8d"
     },
     {
+      "path": "backend/src/modules/mailroom/repair-template.contract.ts",
+      "sha256": "93b54c59eb22b67b2926d8cb8a521fa4f944ff6b5957e99be67c516722362c2d"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-test-registry.controller.ts",
+      "sha256": "24ac44db0a45d82ebfb1b3dd8f22eae1b4619d2355812b79af6353122497cbc3"
+    },
+    {
+      "path": "backend/src/modules/mailroom/repair-test-registry.dto.ts",
+      "sha256": "3c2af22bff9d73c2eba079549cbf8323319755c5221938be96b539d4771dbff1"
+    },
+    {
       "path": "backend/src/modules/mailroom/repair-test-registry.service.ts",
-      "sha256": "2660b963f17f61706e4bb4f8ee9872897e4f6303b8604431ad2bebfe4ca5da78"
+      "sha256": "d65915c2b447a10d783a62af059a2824768c691b779eb58eb96bdf1110cc4ed1"
     },
     {
       "path": "backend/src/modules/mailroom/repair-todo.contract.ts",
@@ -672,7 +684,7 @@
     },
     {
       "path": "backend/src/modules/mailroom/repair-workbench.service.ts",
-      "sha256": "f2ff476a289e2de8bd7254eaf98043f45e4fcc88043371164fb4d14e67abc154"
+      "sha256": "4b307792af6bd12cf3e4bc0ad67c7da0585c264675154291928c9a8ae5e6c355"
     },
     {
       "path": "backend/src/modules/mailroom/repair-workflow.contract.ts",
@@ -1332,11 +1344,11 @@
     },
     {
       "path": "frontend/src/pages/repair/RepairTestStandardManager.tsx",
-      "sha256": "d8945fbf1b30e0c9b406737cd2d2c5f50593b60b6f69bb04a3f9555f888861b5"
+      "sha256": "8c6899117114fd653098a761ec942a75c7cdf5bf0987a70b12faf6984cd13b5c"
     },
     {
       "path": "frontend/src/pages/repair/RepairWorkbenchPage.tsx",
-      "sha256": "245b2055edaec9eb89128ec3b71abee33f50d8e2b813891559809fcad900a83a"
+      "sha256": "e51fbb3915b29a37e53d575078bea69862bac9b6c4e88850416325d69ba173c4"
     },
     {
       "path": "frontend/src/pages/repair/RepairWorkflowPanel.tsx",

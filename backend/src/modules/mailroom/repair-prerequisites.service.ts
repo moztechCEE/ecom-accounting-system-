@@ -14,6 +14,7 @@ import { RepairTestRegistryService } from './repair-test-registry.service';
 import { RepairMaterialsService } from './repair-materials.service';
 import {
   templateReadiness,
+  validateRepairTemplate,
   validateTemplateChecks,
 } from './repair-template.contract';
 type Item = Prisma.MailroomItemGetPayload<{ include: { receipt: true } }>;
@@ -53,12 +54,14 @@ export class RepairPrerequisitesService {
     }
     return this.registry.resolve(item, kind, tx);
   }
-  async recordValidation(
+  async bindingValidation(
     item: Item,
     kind: 'inspection' | 'repair',
     data: InspectionData | RepairData,
     tx: Prisma.TransactionClient,
   ) {
+    if (data.protocol !== 2)
+      throw new ConflictException('請使用目前工作單版本綁定檢測標準');
     const resolution =
       kind === 'repair' && (data as RepairData).outcome === 'REPLACED'
         ? await this.registry.resolveReplacement(
@@ -66,7 +69,7 @@ export class RepairPrerequisitesService {
             (data as RepairData).replacementSku || '',
             tx,
           )
-        : await this.registry.resolve(item, kind, tx);
+        : await this.registry.resolveOriginal(item, kind, tx);
     if (
       resolution.state !== 'KNOWN' ||
       !resolution.template ||
@@ -74,16 +77,32 @@ export class RepairPrerequisitesService {
       !data.templateBinding
     )
       throw new ConflictException('請先確認此機種的檢測標準');
+    validateRepairTemplate(resolution.template, {
+      ...resolution.context,
+      binding: data.templateBinding,
+    });
+    return {
+      ...resolution,
+      context: { ...resolution.context, binding: data.templateBinding },
+    };
+  }
+  async recordValidation(
+    item: Item,
+    kind: 'inspection' | 'repair',
+    data: InspectionData | RepairData,
+    tx: Prisma.TransactionClient,
+  ) {
+    const resolution = await this.bindingValidation(item, kind, data, tx);
     validateTemplateChecks(
       resolution.template,
       data.checks,
-      { ...resolution.context, binding: data.templateBinding },
+      resolution.context,
       'RECORD',
       resolution.calibrations,
     );
     return {
       ...resolution,
-      context: { ...resolution.context, binding: data.templateBinding },
+      context: resolution.context,
     };
   }
   async forItem(item: ReadItem, tx?: Prisma.TransactionClient) {

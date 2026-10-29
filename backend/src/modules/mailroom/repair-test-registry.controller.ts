@@ -8,6 +8,8 @@ import {
   RepairRegistryQueryDto,
   RepairRegistryRequestDto,
   ReviewRepairStandardDto,
+  UpdateRepairStandardDraftDto,
+  RepairRegistryProductsQueryDto,
 } from './repair-test-registry.dto';
 type StaffRequest = { user: { id: string } };
 @Controller('repair-workbench/test-registry')
@@ -18,6 +20,12 @@ export class RepairTestRegistryController {
     @Query() query: RepairRegistryQueryDto,
   ) {
     return this.service.list(req.user.id, query);
+  }
+  @Get('products') products(
+    @Req() req: StaffRequest,
+    @Query() query: RepairRegistryProductsQueryDto,
+  ) {
+    return this.service.products(req.user.id, query);
   }
   @Get('items/:id') item(
     @Req() req: StaffRequest,
@@ -36,6 +44,13 @@ export class RepairTestRegistryController {
     @Body() input: CreateRepairStandardDto,
   ) {
     return this.service.createDraft(req.user.id, input);
+  }
+  @Post('standards/:id/draft') draft(
+    @Req() req: StaffRequest,
+    @Param('id') id: string,
+    @Body() input: UpdateRepairStandardDraftDto,
+  ) {
+    return this.service.updateDraft(req.user.id, id, input);
   }
   @Post('standards/:id/revisions') revision(
     @Req() req: StaffRequest,

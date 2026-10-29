@@ -35,6 +35,7 @@ import {
   validateRepairData,
   validateDocumentV2,
   validateDocumentMediaReferences,
+  verifiedDocumentTemplateBinding,
 } from './repair-document.contract';
 import { materialReadiness } from './repair-material.contract';
 import { repairSourceCaseBrand } from './repair-source-brand.contract';
@@ -1122,6 +1123,20 @@ export class RepairWorkbenchService {
           input.data,
           tx,
         );
+      } else if (
+        input.data.templateBinding ||
+        verifiedDocumentTemplateBinding(
+          kind === 'inspection' ? row.repairInspection : row.repairReport,
+        )
+      ) {
+        if (!this.prerequisites)
+          throw new ConflictException('檢修證據服務尚未就緒');
+        resolution = await this.prerequisites.bindingValidation(
+          row,
+          kind,
+          input.data,
+          tx,
+        );
       }
       if (input.status === 'SUBMITTED' && kind === 'inspection') {
         for (const line of (input as SaveInspectionDto).data.materialPlan
@@ -1282,6 +1297,15 @@ export class RepairWorkbenchService {
         authorName: fresh.name,
         updatedAt: now,
         ...(input.status === 'SUBMITTED' ? { submittedAt: now } : {}),
+        ...(resolution
+          ? {
+              templateBasis: {
+                schema: 1,
+                binding: resolution.context.binding,
+                verifiedAt: now,
+              },
+            }
+          : {}),
         ...(kind === 'repair'
           ? {
               inspectionRevision:

@@ -13,6 +13,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { MailroomService } from './mailroom.service';
 import {
   type Actor,
+  can,
   fingerprint,
   requireEntity,
   requirePermission,
@@ -22,9 +23,11 @@ import {
   type RepairCalibrationProof,
   type RepairTemplateCheck,
   type RepairTemplateContext,
+  type RepairTemplateBinding,
   repairTemplateHash,
   validateRepairTemplate,
 } from './repair-template.contract';
+import { verifiedDocumentTemplateBinding } from './repair-document.contract';
 import {
   type CreateRepairStandardDto,
   type NewRepairStandardRevisionDto,
@@ -32,8 +35,14 @@ import {
   type ReviewRepairStandardDto,
   type RecordRepairCalibrationDto,
   type RepairRegistryQueryDto,
+  type RepairRegistryProductsQueryDto,
+  type UpdateRepairStandardDraftDto,
 } from './repair-test-registry.dto';
 
+const DRAFT_PERMISSIONS = [
+  'repair_workbench:update',
+  'repair_workbench:manage',
+];
 type Definition = { modelNumber?: string; checks: RepairTemplateCheck[] };
 type Commands = Record<
   string,
@@ -72,6 +81,8 @@ type CalibrationRow = RegistryRow & {
   revokedAt: Date | null;
 };
 type ProductRow = {
+  name?: string;
+  modelNumber?: string | null;
   id: string;
   entityId: string;
   sku: string;
@@ -98,6 +109,8 @@ export type RepairRegistryItem = {
   entityId: string;
   productId: string | null;
   sku: string | null;
+  repairInspection?: unknown;
+  repairReport?: unknown;
 };
 type UnknownReason =
   | 'PRODUCT_UNBOUND'
@@ -196,13 +209,16 @@ export class RepairTestRegistryService {
   private async actor(
     userId: string,
     entityId: string,
-    permission: string,
+    permission: string | string[],
     tx?: Prisma.TransactionClient,
   ): Promise<Actor> {
     this.mailroom.enabled();
     const actor = await this.mailroom.actor(userId, tx);
     requireEntity(actor, entityId);
-    requirePermission(actor, permission);
+    if (Array.isArray(permission)) {
+      if (!permission.some((value) => can(actor, value)))
+        throw new ForbiddenException('沒有此作業權限');
+    } else requirePermission(actor, permission);
     if (
       !(await this.db(tx).employee.findFirst({
         where: { userId, entityId, isActive: true },
@@ -223,6 +239,7 @@ export class RepairTestRegistryService {
       key: string,
       hash: string,
     ) => Promise<Record<string, unknown>>,
+    permission: string | string[] = 'repair_workbench:manage',
   ) {
     text(input.entityId);
     if (
@@ -230,7 +247,7 @@ export class RepairTestRegistryService {
       !/^[A-Za-z0-9_-]{8,80}$/.test(input.requestId)
     )
       throw new BadRequestException('操作識別碼不符');
-    await this.actor(userId, input.entityId, 'repair_workbench:manage');
+    await this.actor(userId, input.entityId, permission);
     const hash = fingerprint({ operation, input }),
       key = userId + ':' + input.requestId;
     return this.prisma.$transaction(async (tx) => {
@@ -238,12 +255,7 @@ export class RepairTestRegistryService {
       await db.$executeRaw(
         Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${input.entityId + ':repair-registry:' + key}))`,
       );
-      const actor = await this.actor(
-        userId,
-        input.entityId,
-        'repair_workbench:manage',
-        tx,
-      );
+      const actor = await this.actor(userId, input.entityId, permission, tx);
       const rows = await Promise.all([
         db.repairTestStandard.findFirst({
           where: { entityId: input.entityId, commandKeys: { has: key } },
@@ -299,6 +311,7 @@ export class RepairTestRegistryService {
       rows[0].isActive !== true
     )
       throw new ConflictException('品項與公司或目前 SKU 不符');
+    return rows[0];
   }
   private template(
     row: StandardRow,
@@ -330,10 +343,11 @@ export class RepairTestRegistryService {
     row: StandardRow,
     actor: Actor,
     now: Date,
+    product: ProductRow,
   ): Prisma.InputJsonValue {
     if (!value || typeof value !== 'object' || Array.isArray(value))
       throw new BadRequestException('測項定義不符');
-    const data = value as Definition;
+    const data = structuredClone(value) as Definition;
     if (
       Object.keys(data).some(
         (key) => !['modelNumber', 'checks'].includes(key),
@@ -341,11 +355,80 @@ export class RepairTestRegistryService {
       (data.modelNumber !== undefined && !text(data.modelNumber, 160))
     )
       throw new BadRequestException('測項定義欄位不符');
+    const model = product.modelNumber?.trim();
+    if (
+      data.modelNumber !== undefined &&
+      data.modelNumber.trim() !== (model || '')
+    )
+      throw new ConflictException('機型與產品主檔不符');
+    if (model) data.modelNumber = model;
+    else delete data.modelNumber;
     const candidate = this.template({ ...row, data }, actor.id, now);
     candidate.contentHash = repairTemplateHash(candidate);
     // Shape validation of a draft candidate does not persist a review or expose READY.
     validateRepairTemplate(candidate);
     return json(data);
+  }
+  private expected(
+    row: StandardRow,
+    input: { expectedRevision: number; expectedContentHash: string },
+  ) {
+    if (
+      !Number.isInteger(input.expectedRevision) ||
+      input.expectedRevision !== row.revision ||
+      !/^[a-f0-9]{64}$/.test(input.expectedContentHash || '') ||
+      input.expectedContentHash !== row.contentHash
+    )
+      throw new ConflictException('檢測標準內容已更新，請重新載入');
+  }
+  async products(userId: string, query: RepairRegistryProductsQueryDto) {
+    await this.actor(userId, query.entityId, DRAFT_PERMISSIONS);
+    if (
+      query.q !== undefined &&
+      (typeof query.q !== 'string' || query.q.length > 160)
+    )
+      throw new BadRequestException('搜尋內容格式不符');
+    const q = query.q?.trim();
+    const rows = await this.db().product.findMany({
+      where: {
+        entityId: query.entityId,
+        isActive: true,
+        ...(q
+          ? {
+              OR: ['name', 'sku', 'modelNumber'].map((field) => ({
+                [field]: { contains: q, mode: 'insensitive' },
+              })),
+            }
+          : {}),
+      },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        entityId: true,
+        name: true,
+        sku: true,
+        modelNumber: true,
+        isActive: true,
+      },
+      take: 51,
+    });
+    const scoped = rows.filter(
+      (row) =>
+        row.entityId === query.entityId &&
+        row.isActive === true &&
+        row.id &&
+        row.sku &&
+        typeof row.name === 'string',
+    );
+    return {
+      products: scoped.slice(0, 50).map((row) => ({
+        id: row.id,
+        name: row.name!,
+        sku: row.sku,
+        modelNumber: row.modelNumber || null,
+      })),
+      hasMore: scoped.length > 50,
+    };
   }
   async createDraft(userId: string, input: CreateRepairStandardDto) {
     return this.mutate(
@@ -355,13 +438,13 @@ export class RepairTestRegistryService {
       async (tx, db, actor, key, hash) => {
         text(input.productId);
         text(input.sku, 100);
-        await this.lockProduct(db, input.entityId, input.productId, input.sku);
-        await this.actor(
-          actor.id,
+        const product = await this.lockProduct(
+          db,
           input.entityId,
-          'repair_workbench:manage',
-          tx,
+          input.productId,
+          input.sku,
         );
+        await this.actor(actor.id, input.entityId, DRAFT_PERMISSIONS, tx);
         if (
           await db.repairTestStandard.findFirst({
             where: {
@@ -391,7 +474,7 @@ export class RepairTestRegistryService {
           commands: {},
           commandKeys: [],
         };
-        row.data = this.definition(input.data, row, actor, now);
+        row.data = this.definition(input.data, row, actor, now, product);
         row.contentHash = fingerprint({
           entityId: row.entityId,
           productId: row.productId,
@@ -403,6 +486,7 @@ export class RepairTestRegistryService {
           id: row.id,
           revision: row.revision,
           status: 'DRAFT',
+          contentHash: row.contentHash,
           duplicate: false,
         };
         await db.repairTestStandard.create({
@@ -410,6 +494,82 @@ export class RepairTestRegistryService {
         });
         return response;
       },
+      DRAFT_PERMISSIONS,
+    );
+  }
+  async updateDraft(
+    userId: string,
+    id: string,
+    input: UpdateRepairStandardDraftDto,
+  ) {
+    return this.mutate(
+      userId,
+      input,
+      'update-standard-draft:' + text(id),
+      async (tx, db, actor, key, hash) => {
+        const initial = await db.repairTestStandard.findFirst({
+          where: { id, entityId: input.entityId },
+        });
+        if (!initial) throw new NotFoundException('找不到檢測標準');
+        const product = await this.lockProduct(
+          db,
+          input.entityId,
+          initial.productId,
+          initial.sku,
+        );
+        await this.actor(actor.id, input.entityId, DRAFT_PERMISSIONS, tx);
+        const current = await db.repairTestStandard.findFirst({
+          where: {
+            entityId: input.entityId,
+            productId: initial.productId,
+            sku: initial.sku,
+          },
+          orderBy: { revision: 'desc' },
+        });
+        if (!current || current.id !== id || current.status !== 'DRAFT')
+          throw new ConflictException('只能修改最新草稿');
+        if (current.createdById !== actor.id)
+          throw new ForbiddenException('只能修改本人建立的草稿');
+        this.expected(current, input);
+        if (current.revision >= 2147483646)
+          throw new ConflictException('檢測標準版本已達上限');
+        const now = new Date();
+        const row: StandardRow = {
+          ...current,
+          id: randomUUID(),
+          revision: current.revision + 1,
+          status: 'DRAFT',
+          createdById: actor.id,
+          createdAt: now,
+          reviewedById: null,
+          reviewedAt: null,
+          retiredById: null,
+          retiredAt: null,
+          commandKeys: [],
+          commands: {},
+        };
+        row.data = this.definition(input.data, row, actor, now, product);
+        row.contentHash = fingerprint({
+          entityId: row.entityId,
+          productId: row.productId,
+          sku: row.sku,
+          revision: row.revision,
+          data: row.data,
+        });
+        const response = {
+          id: row.id,
+          revision: row.revision,
+          status: 'DRAFT',
+          contentHash: row.contentHash,
+          duplicate: false,
+        };
+        // Native rows are immutable even while DRAFT. Every save appends a version.
+        await db.repairTestStandard.create({
+          data: { ...row, ...this.log(null, key, hash, response) },
+        });
+        return response;
+      },
+      DRAFT_PERMISSIONS,
     );
   }
   async newRevision(
@@ -426,13 +586,13 @@ export class RepairTestRegistryService {
           where: { id, entityId: input.entityId },
         });
         if (!base) throw new NotFoundException('找不到檢測標準');
-        await this.lockProduct(db, input.entityId, base.productId, base.sku);
-        await this.actor(
-          actor.id,
+        const product = await this.lockProduct(
+          db,
           input.entityId,
-          'repair_workbench:manage',
-          tx,
+          base.productId,
+          base.sku,
         );
+        await this.actor(actor.id, input.entityId, DRAFT_PERMISSIONS, tx);
         const current = await db.repairTestStandard.findFirst({
           where: {
             entityId: input.entityId,
@@ -441,6 +601,8 @@ export class RepairTestRegistryService {
           },
           orderBy: { revision: 'desc' },
         });
+        if (current?.status === 'DRAFT' && current.createdById !== actor.id)
+          throw new ConflictException('此品項已有待核定草稿');
         if (
           !current ||
           current.id !== base.id ||
@@ -448,6 +610,7 @@ export class RepairTestRegistryService {
           !Number.isInteger(input.expectedRevision)
         )
           throw new ConflictException('檢測標準已改版，請重新載入');
+        this.expected(current, input);
         if (current.revision >= 2147483646)
           throw new ConflictException('檢測標準版本已達上限');
         const now = new Date();
@@ -467,7 +630,7 @@ export class RepairTestRegistryService {
           commands: {},
           commandKeys: [],
         };
-        row.data = this.definition(input.data, row, actor, now);
+        row.data = this.definition(input.data, row, actor, now, product);
         row.contentHash = fingerprint({
           entityId: row.entityId,
           productId: row.productId,
@@ -479,6 +642,7 @@ export class RepairTestRegistryService {
           id: row.id,
           revision: row.revision,
           status: 'DRAFT',
+          contentHash: row.contentHash,
           duplicate: false,
         };
         await db.repairTestStandard.create({
@@ -486,6 +650,7 @@ export class RepairTestRegistryService {
         });
         return response;
       },
+      DRAFT_PERMISSIONS,
     );
   }
   async review(userId: string, id: string, input: ReviewRepairStandardDto) {
@@ -498,7 +663,7 @@ export class RepairTestRegistryService {
           where: { id, entityId: input.entityId },
         });
         if (!initial) throw new NotFoundException('找不到檢測標準');
-        await this.lockProduct(
+        const product = await this.lockProduct(
           db,
           input.entityId,
           initial.productId,
@@ -529,6 +694,18 @@ export class RepairTestRegistryService {
           row.revision !== input.expectedRevision
         )
           throw new ConflictException('只能審核最新草稿版本');
+        this.expected(row, input);
+        if (
+          ((row.data as Definition).modelNumber || '') !==
+          (product.modelNumber?.trim() || '')
+        )
+          throw new ConflictException('機型與產品主檔不符，請更新草稿');
+        await this.actor(
+          actor.id,
+          input.entityId,
+          'repair_workbench:manage',
+          tx,
+        );
         const now = new Date(),
           template = this.template(row, actor.id, now);
         template.contentHash = repairTemplateHash(template);
@@ -595,6 +772,7 @@ export class RepairTestRegistryService {
           row.revision !== input.expectedRevision
         )
           throw new ConflictException('檢測標準版本或狀態已更新');
+        this.expected(row, input);
         const response = {
           id,
           revision: row.revision,
@@ -710,25 +888,38 @@ export class RepairTestRegistryService {
     );
   }
   async list(userId: string, query: RepairRegistryQueryDto) {
-    await this.actor(userId, query.entityId, 'repair_workbench:manage');
+    const actor = await this.actor(userId, query.entityId, DRAFT_PERMISSIONS);
+    const manages = can(actor, 'repair_workbench:manage');
     const db = this.db();
     const [standards, calibrations] = await Promise.all([
       db.repairTestStandard.findMany({
         where: {
           entityId: query.entityId,
           ...(query.productId ? { productId: query.productId } : {}),
+          ...(!manages
+            ? {
+                OR: [
+                  { status: { in: ['REVIEWED', 'RETIRED'] } },
+                  { status: 'DRAFT', createdById: actor.id },
+                ],
+              }
+            : {}),
         },
         orderBy: [{ productId: 'asc' }, { revision: 'desc' }],
         take: 200,
       }),
-      db.repairCalibrationRecord.findMany({
-        where: {
-          entityId: query.entityId,
-          ...(query.instrumentId ? { instrumentId: query.instrumentId } : {}),
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-      }),
+      manages
+        ? db.repairCalibrationRecord.findMany({
+            where: {
+              entityId: query.entityId,
+              ...(query.instrumentId
+                ? { instrumentId: query.instrumentId }
+                : {}),
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 200,
+          })
+        : Promise.resolve([]),
     ]);
     return {
       standards: standards.map(standardView),
@@ -761,12 +952,41 @@ export class RepairTestRegistryService {
   ): Promise<RepairRegistryResolution> {
     if (!['inspection', 'repair'].includes(kind))
       throw new BadRequestException('檢測階段不符');
+    const report = item.repairReport as {
+      data?: { outcome?: string; replacementSku?: string };
+    } | null;
+    if (kind === 'repair' && report?.data?.outcome === 'REPLACED')
+      return this.resolveReplacement(
+        item,
+        report.data.replacementSku || '',
+        tx,
+      );
+    return this.resolveOriginal(item, kind, tx);
+  }
+  async resolveOriginal(
+    item: RepairRegistryItem,
+    kind: 'inspection' | 'repair',
+    tx?: Prisma.TransactionClient,
+  ): Promise<RepairRegistryResolution> {
+    if (!['inspection', 'repair'].includes(kind))
+      throw new BadRequestException('檢測階段不符');
     if (!item.productId || !item.sku) return this.unknown('PRODUCT_UNBOUND');
+    const report = item.repairReport as { data?: { outcome?: string } } | null;
+    const inspectionBinding = verifiedDocumentTemplateBinding(
+      item.repairInspection,
+    );
+    const binding =
+      kind === 'inspection'
+        ? inspectionBinding
+        : (report?.data?.outcome !== 'REPLACED'
+            ? verifiedDocumentTemplateBinding(report)
+            : undefined) || inspectionBinding;
     return this.resolveProduct(
       item.entityId,
       item.productId,
       item.sku,
       this.db(tx),
+      binding,
     );
   }
   async resolveReplacement(
@@ -774,6 +994,7 @@ export class RepairTestRegistryService {
     replacementSku: string,
     tx?: Prisma.TransactionClient,
   ): Promise<RepairRegistryResolution> {
+    if (!replacementSku) return this.unknown('PRODUCT_UNBOUND');
     const db = this.db(tx);
     const products = await db.product.findMany({
       where: {
@@ -795,6 +1016,15 @@ export class RepairTestRegistryService {
       products[0].id,
       replacementSku,
       db,
+      (
+        item.repairReport as {
+          data?: { outcome?: string; replacementSku?: string };
+        } | null
+      )?.data?.outcome === 'REPLACED' &&
+        (item.repairReport as { data?: { replacementSku?: string } }).data
+          ?.replacementSku === replacementSku
+        ? verifiedDocumentTemplateBinding(item.repairReport)
+        : undefined,
     );
   }
   private unknown(reason: UnknownReason): RepairRegistryResolution {
@@ -811,6 +1041,7 @@ export class RepairTestRegistryService {
     productId: string,
     sku: string,
     db: RegistryDb,
+    binding?: RepairTemplateBinding,
   ): Promise<RepairRegistryResolution> {
     const products = await db.product.findMany({
       where: { entityId, id: productId, sku, isActive: true },
@@ -825,7 +1056,19 @@ export class RepairTestRegistryService {
     )
       return this.unknown('PRODUCT_AMBIGUOUS');
     const standards = await db.repairTestStandard.findMany({
-      where: { entityId, productId, sku, status: 'REVIEWED' },
+      where: {
+        entityId,
+        productId,
+        sku,
+        ...(binding
+          ? {
+              id: binding.id,
+              revision: binding.revision,
+              contentHash: binding.contentHash,
+              status: { in: ['REVIEWED', 'RETIRED'] },
+            }
+          : { status: 'REVIEWED' }),
+      },
       take: 2,
     });
     if (!standards.length) return this.unknown('STANDARD_MISSING');
@@ -834,7 +1077,14 @@ export class RepairTestRegistryService {
     let template: RepairTestTemplate;
     try {
       if (
-        row.status !== 'REVIEWED' ||
+        (row.status !== 'REVIEWED' && !(binding && row.status === 'RETIRED')) ||
+        (binding &&
+          (row.id !== binding.id ||
+            row.revision !== binding.revision ||
+            row.contentHash !== binding.contentHash)) ||
+        (!binding &&
+          ((row.data as Definition).modelNumber || '') !==
+            (products[0].modelNumber?.trim() || '')) ||
         row.entityId !== entityId ||
         row.productId !== productId ||
         row.sku !== sku

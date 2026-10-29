@@ -41,7 +41,7 @@ export const useAuth=()=>({user:useSyncExternalStore(listener=>{listeners.add(li
 `;
 const api = `
 const clone=value=>structuredClone(value),now='2026-10-29T01:00:00Z';
-function item(id,name){return {id,entityId:'instance-company',label:id,productName:name,sku:'SYNTHETIC-SKU',serialNumber:null,status:'INSPECTING',statusLabel:'檢測中',version:7,
+function item(id,name){return {id,entityId:'instance-company',label:id,productId:'instance-product',productName:name,sku:'SYNTHETIC-SKU',serialNumber:null,status:'INSPECTING',statusLabel:'檢測中',version:7,
   matchResult:'MATCH',location:'合成檢測區',custodianId:'instance-tech',custodianName:'合成維修師',repairOwnerId:'instance-tech',nextUserId:null,nextUserName:null,
   recipientId:null,mine:true,evidenceCount:0,evidence:[],physicalCustody:'TECHNICIAN',editable:true,allowedWorkflowActions:[],
   receipt:{number:'RCPT-'+id,category:'REPAIR',sourceCaseId:'source-'+id,sourceNumber:'CASE-'+id,customerServiceUserId:'synthetic-csr',receivedAt:now},
@@ -58,6 +58,8 @@ export const API_URL='/offline-detail-instance';
 export default {
  async get(path,options={}){const params=clone(options.params||{});state.gets.push({path,params});
    if(path==='/mailroom/items')return {data:{items:params.status==='RECEIVED'?[]:Object.values(state.rows).filter(item=>item.entityId===params.entityId).map(clone),total:params.status==='RECEIVED'?0:Object.values(state.rows).filter(item=>item.entityId===params.entityId).length}};
+   if(path==='/repair-workbench/test-registry/products')return{data:{products:[{id:'instance-product',name:'合成產品',sku:'SYNTHETIC-SKU',modelNumber:'SYNTHETIC-MODEL'}],hasMore:false}};
+   if(path==='/repair-workbench/test-registry')return{data:{standards:[],calibrations:[]}};
    if(path==='/repair-workbench/todo')return {data:{items:[],total:0,queueCounts:{todo:0},countExact:true,unknownCount:0}};
    if(path==='/mailroom/source-cases')return {data:{items:[],nextCursor:null}};
    const match=path.match(/^\\/repair-workbench\\/items\\/([^/]+)\\/documents$/);
@@ -80,7 +82,7 @@ test('detail instances fence late real document-save callbacks and adopted respo
 }, async t => {
   const cacheDir = mkdtempSync(join(tmpdir(), 'repair-detail-instance-'));
   const virtual = '\0repair-detail-instance-dom';
-  const server = await createServer({ root, cacheDir, configFile: false, server: { host: '127.0.0.1', port: 0, hmr: false }, plugins: [react(), {
+  const server = await createServer({ root, cacheDir, configFile: false, optimizeDeps:{noDiscovery:true,include:['react','react/jsx-runtime','react-dom/client','react-router-dom','antd','@ant-design/icons','dayjs']}, server: { host: '127.0.0.1', port: 0, hmr: false }, plugins: [react(), {
     name: 'offline-detail-instance', resolveId(id) { if (id === 'virtual:repair-detail-instance-dom') return virtual; },
     load(id) {
       if (id === virtual) return fixture;
@@ -215,6 +217,49 @@ test('detail instances fence late real document-save callbacks and adopted respo
     assert.equal(reads.filter(value => value.path === '/mailroom/items').length, 1, 'A current save still refreshes the visible list');
     assert.equal(reads.filter(value => value.path === '/repair-workbench/todo').length, 1);
     await close(false); assert.equal(await page.locator('.ant-modal-confirm').count(), 0);
+  });
+
+  await scenario('header template authoring requires no case and keeps three global entries', async () => {
+    await load(); assert.equal(await drawer().count(),0);
+    assert.equal(await page.locator('.repair-workbench-page > .ant-tabs [role=tablist]').first().getByRole('tab').count(),3);
+    await page.locator('.mailroom-heading').getByRole('button',{name:'維修範本',exact:true}).click();
+    const manager=page.getByRole('dialog',{name:'維修範本',exact:true});
+    const product=manager.getByRole('combobox',{name:'管理產品',exact:true});
+    await product.locator('xpath=ancestor::div[contains(@class,"ant-select-selector")]').click();
+    const list=await product.getAttribute('aria-controls');
+    await page.locator('[id="'+list+'"]').locator('xpath=ancestor::div[contains(@class,"ant-select-dropdown")]').getByText('合成產品 · SYNTHETIC-SKU · SYNTHETIC-MODEL',{exact:true}).click();
+    await manager.getByRole('button',{name:'建立草稿',exact:true}).click();
+    await manager.getByLabel('測項名稱',{exact:true}).fill('無案件範本草稿');
+    await manager.getByRole('button',{name:'Close',exact:true}).click();
+    await page.locator('.ant-modal-confirm').getByRole('button',{name:'繼續編輯',exact:true}).click();
+    assert.equal(await manager.getByLabel('測項名稱',{exact:true}).inputValue(),'無案件範本草稿');
+    await page.evaluate(()=>{void window.__instanceRouter.navigate('/other')});
+    await page.locator('.ant-modal-confirm').getByRole('button',{name:'繼續編輯',exact:true}).click();
+    assert.equal(await manager.getByLabel('測項名稱',{exact:true}).inputValue(),'無案件範本草稿');
+    await page.evaluate(()=>{void window.__instanceRouter.navigate('/other')});
+    await page.locator('.ant-modal-confirm').getByRole('button',{name:'放棄修改',exact:true}).click();
+    await page.getByRole('heading',{name:'合成其他頁面',exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>window.__instance.posts.length),0);
+  });
+
+  await scenario('template draft protects nested drawer close and navigation to another case', async () => {
+    await load(); await open('item-a');
+    await drawer().getByRole('button',{name:'維修範本',exact:true}).click();
+    const manager=page.getByRole('dialog',{name:'維修範本',exact:true});
+    await manager.getByRole('button',{name:'建立草稿',exact:true}).click();
+    await manager.getByLabel('測項名稱',{exact:true}).fill('案件 A 尚未保存的範本');
+    await manager.getByRole('button',{name:'Close',exact:true}).click();
+    await page.locator('.ant-modal-confirm').getByRole('button',{name:'繼續編輯',exact:true}).click();
+    assert.equal(await manager.getByLabel('測項名稱',{exact:true}).inputValue(),'案件 A 尚未保存的範本');
+    await page.evaluate(()=>{void window.__instanceRouter.navigate('/operations/repair?entityId=instance-company&queue=all&itemId=item-b')});
+    await page.locator('.ant-modal-confirm').getByRole('button',{name:'繼續編輯',exact:true}).click();
+    assert.equal(await manager.getByLabel('測項名稱',{exact:true}).inputValue(),'案件 A 尚未保存的範本');
+    await page.evaluate(()=>{void window.__instanceRouter.navigate('/operations/repair?entityId=instance-company&queue=all&itemId=item-b')});
+    await page.locator('.ant-modal-confirm').getByRole('button',{name:'放棄修改',exact:true}).click();
+    await page.getByRole('heading',{name:'合成 B 產品',exact:true}).waitFor();
+    assert.equal(await page.getByRole('dialog',{name:'維修範本',exact:true}).count(),0);
+    assert.equal(await page.evaluate(()=>window.__instance.posts.length),0);
+    assert.equal(await page.locator('.repair-workbench-page > .ant-tabs [role=tablist]').first().getByRole('tab').count(),3);
   });
 
   const currentHashes = Object.fromEntries([pagePath, documentsPath].map(path => [path, digest(readFileSync(join(root, path)))]));
