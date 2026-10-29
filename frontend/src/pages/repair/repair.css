@@ -117,7 +117,7 @@
 .repair-detail-summary .ant-typography { font-size: 14px; min-width: 0; }
 .repair-readiness-compact .ant-collapse-header { font-size: 14px; }
 .repair-readiness-compact { min-width: 0; }
-.repair-readiness-status { display: grid; gap: 6px; padding: 14px 16px; border-left: 3px solid #e6a23c; border-radius: 8px; background: #fffaf0; }
+.repair-readiness-status { display: grid; gap: 6px; padding: 8px 0; }
 .repair-readiness-status strong { font-size: 16px; font-weight: 600; line-height: 1.5; }
 .repair-readiness-status > span { font-size: 14px; color: #677384; }
 .repair-readiness-details { display: grid; gap: 20px; min-width: 0; }
