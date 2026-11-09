@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:4e1d8d450d1489773302a3a39f35876b82914093bf31218d5cc9c566434154d0",
+  "sourceVersion": "sha256:9475ba0c3bc10298abc90a17511b2a6efab738e0f787bfb9fd608cb2683e519d",
   "reviewedBaseCommit": "0ae9b322aedf1ff3ca2df0a6ab68f65dcb922c09",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "566f23ebc2b04fb019e9e6237227e1c05845a250a1c7e425ca480acf6ffad73f",
+  "catalogSha256": "22d8c56ba5326f7c08cbc89834ce00ae918a4e9492926b05c8700b28954b3375",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -1396,7 +1396,7 @@
     },
     {
       "path": "frontend/src/pages/WarehousePortalPage.tsx",
-      "sha256": "17259b58d451a3adb605f99d6f8116ae2577f2655535a30065488cf99cfad031"
+      "sha256": "5451a7d8fe0df04266d826d2da82932d2f6ece085c1336d46c33ebd0ec6749b4"
     },
     {
       "path": "frontend/src/pages/WarehouseReportsPage.tsx",

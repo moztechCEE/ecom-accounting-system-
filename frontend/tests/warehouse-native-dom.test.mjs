@@ -42,7 +42,7 @@ const routes=[{path:'/warehouse',element:e(React.Fragment,null,e(Current),e(Ware
 const router=createMemoryRouter(routes,{initialEntries:['/warehouse?entityId=warehouse-A']});
 window.__routeTo=path=>router.navigate(path);window.__routeBack=()=>router.navigate(-1);
 function Harness(){
-const [user,setUser]=useState({id:'operator-A',name:'Synthetic operator',roles:window.__stationRole==='admin'?['ADMIN']:window.__stationRole==='superadmin'?['SUPER_ADMIN']:['STAFF'],permissions:['admin','superadmin'].includes(window.__stationRole)?[]:window.__stationRole==='csr'?['wms_tasks:read']:['wms_tasks:read',window.__stationRole==='picker'?'wms_picking:execute':'wms_packing:execute']});
+const [user,setUser]=useState({id:'operator-A',name:'Synthetic operator',roles:window.__stationRole==='admin'?['ADMIN']:window.__stationRole==='superadmin'?['SUPER_ADMIN']:['STAFF'],permissions:['admin','superadmin'].includes(window.__stationRole)?[]:window.__stationRole==='csr'?['wms_tasks:read']:['wms_tasks:read',window.__stationRole==='dispatcher'?'wms_orders:create':window.__stationRole==='picker'?'wms_picking:execute':'wms_packing:execute']});
 window.__changeActor=id=>{localStorage.setItem('access_token','erp-token-'+id);setUser({...user,id});};
 return e(FixtureAuth,{value:{user,refreshCurrentUser:async()=>{window.__refreshes++;return user;}}},e(RouterProvider,{router}));
 }
@@ -137,8 +137,8 @@ test('real warehouse host stays in one browser and retires old identity, company
           assert.match(body.nonce, /^[a-f0-9]{64}$/); assert.equal(body.entityId, request.headers()['x-wms-entity'])
           if (new URLSearchParams(query).has('permission-denied')) return json({ message: 'Missing permissions: [wms_orders:create]' }, 403)
           if (body.entityId !== 'warehouse-A') return json({ message: 'WMS_NATIVE_ENTITY_MISMATCH' }, 403)
-          const selectedStation = new URLSearchParams(query).get('station') || 'admin', stationRole = selectedStation === 'superadmin' ? 'admin' : selectedStation
-          return json({ accessToken: 'synthetic.wms.session', destination: body.entry === 'marketplace' ? '/admin/marketplace-converter' : body.entry === 'picking' ? '/tasks?group=pick' : body.entry === 'packing' ? '/tasks?group=pack' : body.entry === 'intakes' ? '/warehouse-intakes' : '/tasks',
+          const selectedStation = new URLSearchParams(query).get('station') || 'admin', stationRole = body.entry === 'dispatch' ? 'dispatcher' : selectedStation === 'superadmin' ? 'admin' : selectedStation
+          return json({ accessToken: 'synthetic.wms.session', destination: body.entry === 'dispatch' ? '/admin' : body.entry === 'marketplace' ? '/admin/marketplace-converter' : body.entry === 'picking' ? '/tasks?group=pick' : body.entry === 'packing' ? '/tasks?group=pack' : body.entry === 'intakes' ? '/warehouse-intakes' : '/tasks',
             user: { id: 41, role: stationRole, erpSubject: actor, entityId: body.entityId } })
         }
         if (path === '/api/v1/wms/native/proxy/api/orders/update_item' && request.method() === 'POST') return json({ code: 'WMS_NATIVE_RESULT_UNKNOWN' }, 503)
@@ -169,6 +169,27 @@ test('real warehouse host stays in one browser and retires old identity, company
       await page.getByRole('button', { name: '模組返回工作台', exact: true }).click(); await page.getByRole('heading', { name: 'SDK 作業 /tasks', exact: true }).waitFor()
       const current = new URL(await route(page), origin); assert.equal(current.pathname, '/warehouse'); assert.equal(current.searchParams.get('entityId'), 'warehouse-A'); assert.equal(current.searchParams.get('wms'), '/tasks')
       assert.equal((await records(page))[0].disposed, true); await healthy(result)
+    })
+    await t.test('only ERP admins get the dispatch carton shortcut and it retains the company in a new work session', async () => {
+      for (const station of ['admin', 'superadmin', 'dispatcher']) {
+        const result = await open('?station=' + station), { page } = result
+        await page.evaluate(() => window.__routeTo('/warehouse/dispatch?entityId=warehouse-A'))
+        await page.getByRole('heading', { name: 'SDK 作業 /admin', exact: true }).waitFor()
+        const link = page.getByRole('link', { name: '箱號管理', exact: true })
+        if (station === 'dispatcher') {
+          assert.equal(await link.count(), 0)
+        } else {
+          assert.equal(await link.getAttribute('href'), '/warehouse?wms=%2Fcartons&entityId=warehouse-A')
+          await link.click()
+          await page.getByRole('heading', { name: 'SDK 作業 /cartons', exact: true }).waitFor()
+          assert.equal(await route(page), '/warehouse?wms=%2Fcartons&entityId=warehouse-A')
+          assert.equal(await link.count(), 0)
+          assert.deepEqual(result.calls.filter(call => call.path.endsWith('/native/session')).map(call => [call.body.entry, call.body.entityId]),
+            [['dispatch', 'warehouse-A'], ['tasks', 'warehouse-A']])
+          assert.equal((await records(page))[0].disposed, true)
+        }
+        await healthy(result)
+      }
     })
     for (const [stationRole, section] of [['picker', 'picking'], ['packer', 'packing']]) {
       await t.test(`${stationRole} intake return retires the intake session and opens its assigned station inside ERP`, async () => {

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Result, Spin } from 'antd'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useEntityContext } from '../hooks/useEntityContext'
 import { companyNavigationDestination } from '../config/workspaces'
 import { wmsPortalDestination, wmsPortalOrigin } from '../config/wms-portal'
+import { isAdminUser } from '../utils/access'
 import { loadWarehouseModule, nativeEntryPath, nativeHostSection, nativeSessionRequest, nativeSessionExpired, nativeTransport, nativeRecoveryRequest, type WarehouseHandle } from '../services/warehouse-native'
 
 export default function WarehousePortalPage() {
@@ -140,6 +141,9 @@ export default function WarehousePortalPage() {
   if (!path) return <Result status="404" title="找不到這筆儲運作業" />
   if (!token || !entityId) return <Result status="403" title="請重新登入並選擇公司" />
   return <section aria-label={destination.label} style={{ minHeight: 420 }}>
+    {key === '/warehouse/dispatch' && isAdminUser(user) && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+      <Link to={companyNavigationDestination('/warehouse?wms=%2Fcartons', location.search)}>箱號管理</Link>
+    </div>}
     {status === 'loading' && <div role="status" style={{ display: 'grid', placeItems: 'center', minHeight: 240 }}><Spin tip="載入儲運作業" size="large"><div style={{ width: 160, height: 80 }} /></Spin></div>}
     {(status === 'error' || status === 'auth') && <Alert type={status === 'auth' ? 'warning' : 'error'} message={error} showIcon
       action={companyRecovery?.identity === identity ? <Button onClick={companyRecovery.switchCompany}>切換至倉儲公司</Button> : <Button onClick={() => setAttempt(value => value + 1)}>重新連線</Button>} />}
