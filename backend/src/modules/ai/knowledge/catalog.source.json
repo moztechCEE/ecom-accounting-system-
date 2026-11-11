@@ -1476,11 +1476,14 @@
         "steps": [
           "選擇產品並填入批次資料，先檢查序號規則與標籤預覽。",
           "有庫存修改權限者將草稿儲存成正式批次，再依批次進行箱號配對與標籤下載。",
-          "規格箱貼紙用箱號條碼掃描箱號；有 SN 版本的 QR Code 以半形逗號分隔箱內序號。核對匯出的箱號、序號與箱內順序，再進行實際列印與掃描驗收。"
+          "規格箱貼紙用箱號條碼掃描箱號；有 SN 版本的 QR Code 以半形逗號分隔箱內序號。核對匯出的箱號、序號與箱內順序，再進行實際列印與掃描驗收。",
+          "有 SN 和無 SN 的已啟用批次都可按箱序下載「箱號倉儲明細 XLSX」。一次最多 100 箱，下載後可直接匯入 WMS 箱號管理。",
+          "需要退回已啟用批次時，提交原因給主管覆核。主管核對 ECOUNT 進貨查詢及 WMS 使用狀態，留下證據後決定。"
         ],
         "boundaries": [
           "瀏覽器草稿與伺服器批次分開；看到預覽不表示已建立正式序號。",
-          "規格箱貼紙不印產品國際條碼，但產品資料與匯出明細仍保留該欄位。請保留 SKU、序號、箱號來源關係；目前指南不代表支援任意倉庫 Excel 匯入。"
+          "箱號倉儲明細保留實際數量、WMS／ECOUNT 品號、國條、來源批次和完整箱內 SN。無 SN 的箱子留空 SN 欄。",
+          "ECOUNT 進貨單有任一部分收貨或箱號／SN 已使用時，整批不可退回。證據不足須維持待覆核。退回後保留原配號歷程，並建立可編輯的新草稿。"
         ],
         "related": [
           "products",
@@ -1500,11 +1503,14 @@
             "steps": [
               "Choose the product, fill in batch data and check serial rules and label preview.",
               "With inventory-update access, save the draft as a persisted batch, then pair cartons and download labels.",
-              "Use the carton barcode to scan the carton ID. The QR Code on the SN carton label joins the serials with ASCII commas. Check exported carton IDs, serials and their order before physical printing and scanner acceptance."
+              "Use the carton barcode to scan the carton ID. The QR Code on the SN carton label joins the serials with ASCII commas. Check exported carton IDs, serials and their order before physical printing and scanner acceptance.",
+              "Download Warehouse Carton Details (XLSX) by carton ordinal for an active batch with or without serials. Export up to 100 cartons at a time and import the file directly into WMS Carton management.",
+              "To return an active batch to draft, submit a reason for supervisor review. The reviewer records evidence from the ECOUNT purchase receipt search and the WMS usage check before deciding."
             ],
             "boundaries": [
               "Browser drafts and persisted batches are distinct; a preview is not a registered serial batch.",
-              "The carton label omits the product barcode, while product data and detailed exports still retain it. Preserve SKU, serial and carton links. This guide does not imply arbitrary warehouse Excel import support."
+              "The carton workbook preserves actual quantities, WMS/ECOUNT item codes, barcodes, source batches, and full carton serial lists. The SN column is blank for nonserial cartons.",
+              "An ECOUNT receipt for any part of the batch or evidence that a carton or serial was used blocks reversion. Incomplete evidence leaves the review pending. A successful reversion preserves the original assignment history and creates editable drafts."
             ],
             "related": [
               "products",
@@ -2985,7 +2991,8 @@
       "sections": {
         "steps": [
           "從 ERP 儲運工作台或功能導覽選擇「揀貨作業」，原 WMS 作業畫面會直接顯示在 ERP 內。",
-          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
+          "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。",
+          "拆箱時開啟「掃箱／拆箱」，掃來源箱號，逐件掃本單要取出的 SN 後確認。出貨箱號明細可查看來源箱號及實際 SN。"
         ],
         "boundaries": [
           "需要儲運工作台讀取權限與此功能既有授權；ERP 公司範圍及原 WMS 的身分、角色與資料權限仍須通過。",
@@ -3009,7 +3016,8 @@
           "sections": {
             "steps": [
               "Select Picking from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
-              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
+              "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing.",
+              "For a partial carton, open Scan carton / Split carton, scan the source carton and each serial to pick, then confirm. Open shipment carton details to view the source carton and the actual serials."
             ],
             "boundaries": [
               "Warehouse task-read permission and the existing destination grants are required. ERP company scope and the original WMS identity, role and data checks still apply.",
@@ -3206,7 +3214,7 @@
       "sections": {
         "steps": [
           "從 ERP 儲運工作台或功能導覽選擇「出貨管理」，原 WMS 作業畫面會直接顯示在 ERP 內。",
-          "ERP 管理員可點「箱號管理」。具倉儲管理權限即可下載 Excel 範本及匯入箱號。",
+          "有倉儲管理權限者可從「箱號管理」匯入 ERP 箱號倉儲明細或 WMS Excel 範本。核對實物後可一次勾選多箱，確認所選箱子的內容。",
           "確認目前帳號、公司與目的功能，再依原 WMS 畫面查閱或操作；作業身分過期或連線中斷時重新連線，先核對原作業紀錄再繼續。"
         ],
         "boundaries": [
@@ -3231,7 +3239,7 @@
           "sections": {
             "steps": [
               "Select Dispatch management from the ERP warehouse workspace or navigation. The original WMS screen opens directly inside ERP.",
-              "ERP administrators can open Carton management. Warehouse management access is required to download the Excel template and import cartons.",
+              "With warehouse management access, open Carton management and import the ERP warehouse carton workbook or WMS Excel template. Verify the physical cartons, then select and confirm multiple cartons together.",
               "Verify the current account, company and destination before using the original WMS screen. If the warehouse session expires or the connection is interrupted, reconnect and check the original work records before continuing."
             ],
             "boundaries": [

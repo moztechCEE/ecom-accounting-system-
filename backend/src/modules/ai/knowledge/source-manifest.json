@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:9475ba0c3bc10298abc90a17511b2a6efab738e0f787bfb9fd608cb2683e519d",
+  "sourceVersion": "sha256:5d4ae8b22f3b0b86249d64b0cfe6a50a0f353a849bc85bc614b06ab4d8d9ba44",
   "reviewedBaseCommit": "0ae9b322aedf1ff3ca2df0a6ab68f65dcb922c09",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "22d8c56ba5326f7c08cbc89834ce00ae918a4e9492926b05c8700b28954b3375",
+  "catalogSha256": "e7d802da6a4bd10b780b8774b7313c4b068df28d022344aaecf4ea4fc8e77cb1",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -792,11 +792,11 @@
     },
     {
       "path": "backend/src/modules/sn-labels/sn-labels.controller.ts",
-      "sha256": "9135b6f0b462cc61f1d8301069fc9924bf0747acc9603bf275032a6a99126887"
+      "sha256": "a0bf777296487db5b2d46147ce4871cb49208d0d17e9cfa3b2f6d3d3ac737201"
     },
     {
       "path": "backend/src/modules/sn-labels/sn-labels.export.ts",
-      "sha256": "3bad67b1b5af0f6a62364dc873afa07023276dc0d1b2a6b2b2c906a6ea1b5292"
+      "sha256": "63f6412c7acfeb4f5340b68edb49e734a5faa5910b7c76e089641aba53447f61"
     },
     {
       "path": "backend/src/modules/users/users.controller.ts",
@@ -1372,7 +1372,7 @@
     },
     {
       "path": "frontend/src/pages/SnLabelsPage.tsx",
-      "sha256": "4174d8bf15a7739df444f023d5b3bb88df3b5754e562ab6e5069a47530f9ebf4"
+      "sha256": "e2ebf9a37d1d58ed5d1173ce27421915212f6f414186f170d4caa43ab5780b4c"
     },
     {
       "path": "frontend/src/pages/SupplierAccountsPage.tsx",
