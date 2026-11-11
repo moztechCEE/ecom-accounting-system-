@@ -15,12 +15,14 @@ import {
 import type { Response } from 'express';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { EntityAccessService } from '../../common/entity-access/entity-access.service';
 import { resolveCompanyRead } from '../../common/entity-access/resolve-company-read';
-import { PrismaService } from '../../common/prisma/prisma.service';
 import { SnLabelsService } from './sn-labels.service';
 import { EXPORT_KINDS, SnLabelsExport } from './sn-labels.export';
+import { SnLabelBatchReviewService } from './sn-label-batch-review';
 @Controller('sn-labels')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SnLabelsController {
@@ -28,7 +30,7 @@ export class SnLabelsController {
     private readonly service: SnLabelsService,
     private readonly access: EntityAccessService,
     private readonly exporter: SnLabelsExport,
-    private readonly db: PrismaService,
+    private readonly reviews: SnLabelBatchReviewService,
   ) {}
   private company(req: any, entityId?: string) {
     return resolveCompanyRead(this.access, req.user?.id, 'inventory', entityId);
@@ -134,23 +136,16 @@ export class SnLabelsController {
       : excel
         ? this.exporter.workbook(body.kind, data, items, body.columns)
         : await this.exporter.pdf(body.kind, data, items, boxes);
-    await this.service.event(
-      this.db,
-      entity,
-      req.user.id,
-      'EXPORT',
-      {
-        kind: body.kind,
-        reason: body.reason,
-        from: body.from,
-        to: body.to,
-        serialCount: body.kind === 'warehouse-cartons'
-          ? boxes.reduce((count, box) => count + box.serials.length, 0)
-          : items.length,
-        cartons: boxes.map((b) => b.id),
-      },
-      id,
-    );
+    await this.reviews.recordOutput(entity, req.user.id, id, {
+      kind: body.kind,
+      reason: body.reason,
+      from: body.from,
+      to: body.to,
+      serialCount: body.kind === 'warehouse-cartons'
+        ? boxes.reduce((count, box) => count + box.serials.length, 0)
+        : items.length,
+      cartons: boxes.map((b) => b.id),
+    });
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader(
       'Content-Type',
@@ -163,5 +158,39 @@ export class SnLabelsController {
       `attachment; filename="SN-${body.kind}-${id}.${excel ? 'xlsx' : 'pdf'}"`,
     );
     res.send(buffer);
+  }
+  @Post('batches/:id/reversion')
+  @RequirePermissions({ resource: 'inventory', action: 'update' })
+  async requestReversion(
+    @Request() req: { user: { id: string } },
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Query('entityId') e?: string,
+  ) {
+    return this.reviews.request(
+      await this.company(req, e),
+      req.user.id,
+      id,
+      body,
+    );
+  }
+  @Post('batches/:id/reversion/:reviewId/decision')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions({ resource: 'inventory', action: 'update' })
+  async decideReversion(
+    @Request() req: { user: { id: string } },
+    @Param('id') id: string,
+    @Param('reviewId') reviewId: string,
+    @Body() body: unknown,
+    @Query('entityId') e?: string,
+  ) {
+    return this.reviews.decide(
+      await this.company(req, e),
+      req.user.id,
+      id,
+      reviewId,
+      body,
+    );
   }
 }

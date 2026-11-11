@@ -22,6 +22,7 @@ import { productService } from "../services/product.service";
 import type { Product } from "../services/product.service";
 import LabelDesigner from "../features/sn-labels/LabelDesigner";
 import CartonPreview from "../features/sn-labels/CartonPreview";
+import BatchReviewControls from "../features/sn-labels/BatchReviewControls";
 import {
   CONFIRMED_RULES,
   draftStorageKey,
@@ -31,7 +32,7 @@ import {
   sampleSerial,
 } from "../features/sn-labels/model";
 import type { SnDraft } from "../features/sn-labels/model";
-import { errorText, productDefaults, snApi } from "../features/sn-labels/api";
+import { errorText, productDefaults, reviewStateText, snApi } from "../features/sn-labels/api";
 import type { Detail, Entry } from "../features/sn-labels/api";
 import "./SnLabelsPage.css";
 
@@ -49,6 +50,8 @@ export default function SnLabelsPage() {
       entityId={entityId}
       storageKey={draftStorageKey(entityId, user.id)}
       canWrite={canWrite}
+      actorId={user.id}
+      canReview={user.roles.some((r) => ["ADMIN", "SUPER_ADMIN"].includes(r))}
     />
   );
 }
@@ -56,10 +59,14 @@ function Workspace({
   entityId,
   storageKey,
   canWrite,
+  actorId,
+  canReview,
 }: {
   entityId: string;
   storageKey: string;
   canWrite: boolean;
+  actorId: string;
+  canReview: boolean;
 }) {
   const api = useMemo(() => snApi(entityId), [entityId]);
   const [draft, setDraft] = useState(() => newDraft(crypto.randomUUID())),
@@ -218,7 +225,7 @@ function Workspace({
   const open = (e: Entry) =>
     replace(() => {
       void run(async () => {
-        if (e.status === "active") await showActive(e.id);
+        if (e.status !== "draft") await showActive(e.id);
         else {
           setActive(null);
           setDraft({
@@ -285,7 +292,7 @@ function Workspace({
       });
     });
   const append = () => {
-    if (!active) return;
+    if (!active || active.status === "retired" || active.review?.state === "pending") return;
     setDraft({
       ...active.data,
       id: crypto.randomUUID(),
@@ -404,15 +411,40 @@ function Workspace({
         </div>
         <Space wrap>
           <Tag color={active ? "green" : undefined}>
-            {active ? "已啟用" : dirty ? "尚未儲存" : "草稿"}
+            {active ? (reviewStateText(active.review) || (active.status === "retired" ? "已退回" : "已啟用")) : dirty ? "尚未儲存" : "草稿"}
           </Tag>
           <Button onClick={create} disabled={busy}>
             新增草稿
           </Button>
           {active ? (
-            <Button onClick={append} disabled={!canWrite || busy}>
-              追加數量
-            </Button>
+            <>
+              {active.status !== "retired" && active.review?.state !== "pending" && (
+                <Button onClick={append} disabled={!canWrite || busy}>
+                  追加數量
+                </Button>
+              )}
+              <BatchReviewControls
+                key={active.id}
+                active={active}
+                api={api}
+                actorId={actorId}
+                canWrite={canWrite}
+                canReview={canReview}
+                disabled={busy}
+                onChange={(review) => {
+                  setActive((current) => current?.id === active.id
+                    ? { ...current, review, status: review.state === "approved" ? "retired" : current.status }
+                    : current);
+                  setRefresh((n) => n + 1);
+                  if (review.state === "approved") {
+                    setStatus("draft");
+                    setPage(1);
+                    msg.success(`已退回，建立 ${review.replacementDraftIds.length} 份草稿`);
+                  } else if (review.state === "pending") msg.success("已送出覆核");
+                  else msg.success("已記錄覆核結果");
+                }}
+              />
+            </>
           ) : (
             <>
               <Button
@@ -446,10 +478,14 @@ function Workspace({
       )}
       {active && (
         <Alert
-          type="success"
+          type={active.status === "retired" || active.review?.state === "pending" ? "info" : "success"}
           showIcon
           message={
-            noSerial
+            active.status === "retired"
+              ? `已建立 ${active.review?.replacementDraftIds.length ?? 0} 份草稿，原箱號與序號保留。`
+              : active.review?.state === "pending"
+                ? `待退回覆核：${active.review.reason}`
+                : noSerial
               ? `已建立 ${active.data.quantity} 件／${active.cartons} 箱，無單品 SN。`
               : `已配發 ${active.data.quantity} 個 SN／${active.cartons} 箱。漏印與破損補印沿用原 SN。`
           }
@@ -883,6 +919,7 @@ function Workspace({
               { value: "", label: "全部狀態" },
               { value: "draft", label: "草稿" },
               { value: "active", label: "已啟用" },
+              { value: "retired", label: "已退回" },
             ]}
           />
           <DatePicker.RangePicker
@@ -938,7 +975,7 @@ function Workspace({
               title: "狀態",
               render: (_, e) => (
                 <Tag color={e.status === "active" ? "green" : undefined}>
-                  {e.status === "active" ? "已啟用" : "草稿"}
+                  {e.status === "active" ? "已啟用" : e.status === "retired" ? "已退回" : "草稿"}
                 </Tag>
               ),
             },

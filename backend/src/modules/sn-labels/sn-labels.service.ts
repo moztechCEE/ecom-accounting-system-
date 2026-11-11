@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { SnLabelsExport } from './sn-labels.export';
+import { lockSnLabelAllocation, SnLabelBatchReviewService } from './sn-label-batch-review';
 import { createHash, randomUUID } from 'crypto';
 import { isDeepStrictEqual } from 'util';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -21,6 +22,7 @@ export class SnLabelsService {
   constructor(
     private readonly db: PrismaService,
     private readonly exporter: SnLabelsExport,
+    private readonly reviews: SnLabelBatchReviewService,
   ) {}
   async event(
     tx: any,
@@ -109,7 +111,12 @@ export class SnLabelsService {
     const last = r.noSerial ? null : first + d.quantity - 1;
     if (!r.noSerial) serial(r.prefix, last);
     const [batch] =
-      await tx.$queryRaw`SELECT * FROM sn_label_batches WHERE merge_key=${r.mergeKey}`;
+      await tx.$queryRaw`SELECT b.*, EXISTS (
+        SELECT 1 FROM sn_label_batch_reversions r WHERE r.batch_id=b.id AND r.state='pending'
+      ) AS pending_review FROM sn_label_batches b WHERE b.merge_key=${r.mergeKey} AND b.retired_at IS NULL`;
+    if (batch?.pending_review) {
+      throw new ConflictException('同批箱號正在退回覆核，暫停追加');
+    }
     if (
       batch &&
       (batch.data.capacity !== d.capacity ||
@@ -194,12 +201,12 @@ export class SnLabelsService {
       end = String(q.end || ''),
       manufactureStart = String(q.manufactureStart || ''),
       manufactureEnd = String(q.manufactureEnd || '');
-    const status = ['draft', 'active'].includes(q.status) ? q.status : '';
+    const status = ['draft', 'active', 'retired'].includes(q.status) ? q.status : '';
     const page = Math.max(1, Math.min(100000, Number(q.page) || 1));
     const rows = await this.db.$queryRaw<any[]>`
    SELECT *,count(*) OVER()::int AS total FROM (
     SELECT id,'draft' AS status,revision,data,updated_at FROM sn_label_drafts WHERE entity_id=${entity} AND batch_id IS NULL
-    UNION ALL SELECT id,'active' AS status,0 AS revision,data || jsonb_build_object('quantity',quantity),updated_at FROM sn_label_batches WHERE entity_id=${entity}
+    UNION ALL SELECT id,CASE WHEN retired_at IS NULL THEN 'active' ELSE 'retired' END AS status,0 AS revision,data || jsonb_build_object('quantity',quantity),updated_at FROM sn_label_batches WHERE entity_id=${entity}
    ) entries WHERE (${status}='' OR status=${status})
     AND (${term}='' OR strpos(lower(data->>'name'),lower(${term}))>0 OR strpos(lower(data->>'productName'),lower(${term}))>0 OR strpos(data->>'barcode',${term})>0 OR strpos(lower(data->>'model'),lower(${term}))>0)
     AND (${start}='' OR data->>'orderDate'>=${start}) AND (${end}='' OR data->>'orderDate'<=${end})
@@ -221,7 +228,7 @@ export class SnLabelsService {
       async (tx) => {
         // All allocations share this database lock, across processes and companies.
         // It also serializes printable-prefix registration and global carton numbering.
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(726220926)`;
+        await lockSnLabelAllocation(tx);
         const [draft] = await tx.$queryRaw<
           any[]
         >`SELECT * FROM sn_label_drafts WHERE id=${id} AND entity_id=${entity} FOR UPDATE`;
@@ -323,7 +330,7 @@ export class SnLabelsService {
   async detail(entity: string, id: string, page = 1) {
     const [b] = await this.db.$queryRaw<
       any[]
-    >`SELECT * FROM sn_label_batches WHERE id=${id} AND entity_id=${entity}`;
+    >`SELECT *, updated_at::text AS batch_revision FROM sn_label_batches WHERE id=${id} AND entity_id=${entity}`;
     if (!b) throw new NotFoundException('找不到已啟用批次');
     const [counts] = await this.db.$queryRaw<
       any[]
@@ -334,8 +341,12 @@ export class SnLabelsService {
     const events = await this.db.$queryRaw<
       any[]
     >`SELECT actor_id,action,data,created_at FROM sn_label_events WHERE batch_id=${id} ORDER BY created_at DESC LIMIT 100`;
+    const review = await this.reviews.read(id);
     return {
       id: b.id,
+      status: b.retired_at ? 'retired' : 'active',
+      batchRevision: b.batch_revision,
+      review,
       data: { ...b.data, quantity: b.quantity },
       ...counts,
       boxes,

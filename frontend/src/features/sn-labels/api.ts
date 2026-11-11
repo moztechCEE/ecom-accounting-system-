@@ -2,7 +2,7 @@ import api from "../../services/api";
 import type { SnDraft } from "./model";
 export type Entry = {
   id: string;
-  status: "draft" | "active";
+  status: "draft" | "active" | "retired";
   revision: number;
   data: SnDraft;
   updated_at: string;
@@ -18,6 +18,9 @@ export type AllocationPreview = {
 };
 export type Detail = {
   id: string;
+  status?: "active" | "retired";
+  batchRevision?: string;
+  review?: BatchReview | null;
   data: SnDraft;
   first: number | null;
   last: number | null;
@@ -30,6 +33,32 @@ export type Detail = {
     data: Record<string, unknown>;
   }[];
 };
+export type BatchReview = {
+  id: string;
+  state: "pending" | "approved" | "rejected" | "blocked";
+  requestedBy: string;
+  reason: string;
+  requestedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  blocker: "ECOUNT_RECEIVED" | "ERP_SERIAL_IN_USE" | "WMS_USED" | null;
+  replacementDraftIds: string[];
+};
+const blockerText = {
+  ECOUNT_RECEIVED: "已有 ECOUNT 進貨紀錄",
+  ERP_SERIAL_IN_USE: "序號已有庫存使用紀錄",
+  WMS_USED: "已有 WMS 使用紀錄",
+};
+export const reviewStateText = (review?: BatchReview | null) =>
+  review?.state === "pending"
+    ? "待退回覆核"
+    : review?.state === "approved"
+      ? "已退回"
+      : review?.state === "blocked"
+        ? (review.blocker ? blockerText[review.blocker] : "不可退回")
+        : review?.state === "rejected"
+          ? "退回申請已駁回"
+          : "";
 export const snApi = (entityId: string) => ({
   list: async (query: Record<string, unknown>) =>
     (
@@ -99,6 +128,22 @@ export const snApi = (entityId: string) => ({
       throw e;
     }
   },
+  requestReversion: async (id: string, batchRevision: string, reason: string) =>
+    (
+      await api.post<BatchReview>(
+        `/sn-labels/batches/${id}/reversion`,
+        { batchRevision, reason },
+        { params: { entityId } },
+      )
+    ).data,
+  decideReversion: async (id: string, reviewId: string, body: Record<string, unknown>) =>
+    (
+      await api.post<BatchReview>(
+        `/sn-labels/batches/${id}/reversion/${reviewId}/decision`,
+        body,
+        { params: { entityId } },
+      )
+    ).data,
 });
 export function errorText(e: unknown) {
   const v = e as {
