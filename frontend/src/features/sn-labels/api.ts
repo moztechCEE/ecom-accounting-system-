@@ -41,13 +41,14 @@ export type BatchReview = {
   requestedAt: string;
   reviewedBy: string | null;
   reviewedAt: string | null;
-  blocker: "ECOUNT_RECEIVED" | "ERP_SERIAL_IN_USE" | "WMS_USED" | null;
+  blocker: "ECOUNT_RECEIVED" | "ERP_SERIAL_IN_USE" | "WMS_USED" | "PHYSICAL_USED" | null;
   replacementDraftIds: string[];
 };
 const blockerText = {
   ECOUNT_RECEIVED: "已有 ECOUNT 進貨紀錄",
   ERP_SERIAL_IN_USE: "序號已有庫存使用紀錄",
   WMS_USED: "已有 WMS 使用紀錄",
+  PHYSICAL_USED: "已有實物使用紀錄",
 };
 export const reviewStateText = (review?: BatchReview | null) =>
   review?.state === "pending"

@@ -140,6 +140,8 @@ test('review uses the actual migration and service transaction contracts', { ski
     check.decision = 'used';
     check.usage.wmsState = 'used';
     assert.equal((await review.decide('company', 'supervisor', wmsBatch.id, wmsPending.id, check)).blocker, 'WMS_USED');
+    assert.equal((await engine.query('SELECT evidence FROM sn_label_batch_reversions WHERE id=$1',
+      [wmsPending.id])).rows[0].evidence.usage.usageSource, 'wms');
     const snBatch = await activate('local', form('DDD'));
     const snPending = await request(snBatch);
     await engine.query('INSERT INTO inventory_serial_numbers VALUES ($1,$2,$3)', [
@@ -147,5 +149,26 @@ test('review uses the actual migration and service transaction contracts', { ski
     ]);
     assert.equal((await review.decide('company', 'supervisor', snBatch.id, snPending.id, evidence())).blocker, 'ERP_SERIAL_IN_USE');
     assert.equal((await labels.detail('company', snBatch.id)).status, 'active');
+  });
+
+  await t.test('documented physical use outside WMS is terminal without guessing receipt state', async () => {
+    const batch = await activate('physical', form('EEE', true));
+    const pending = await request(batch);
+    const check = {
+      decision: 'used', reason: 'Synthetic physical issue', usage: {
+        checkedAt: new Date().toISOString(), usageSource: 'physical',
+        physicalReference: 'DEV-PHYSICAL-ISSUE',
+      },
+    };
+    const result = await review.decide('company', 'supervisor', batch.id, pending.id, check);
+    assert.equal(result.blocker, 'PHYSICAL_USED');
+    assert.deepEqual(result.replacementDraftIds, []);
+    const saved = (await engine.query('SELECT evidence FROM sn_label_batch_reversions WHERE id=$1',
+      [pending.id])).rows[0].evidence;
+    assert.equal(saved.usage.usageSource, 'physical');
+    assert.equal(saved.usage.physicalReference, 'DEV-PHYSICAL-ISSUE');
+    assert.equal(saved.receipt, undefined);
+    assert.equal((await labels.detail('company', batch.id)).status, 'active');
+    await assert.rejects(request(batch), /已有收貨或使用/);
   });
 });

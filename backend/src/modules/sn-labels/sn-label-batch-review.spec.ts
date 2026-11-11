@@ -102,4 +102,28 @@ describe('supervisor receipt and usage evidence', () => {
       ).receivedQuantity,
     ).toBe(0);
   });
+  it('records explicit sources for documented physical use and compatible WMS use', () => {
+    const physical = {
+      checkedAt: usage.checkedAt,
+      usageSource: 'physical',
+      physicalReference: 'DEV-PHYSICAL-ISSUE',
+    };
+    expect(validateUsageEvidence(physical, false, now)).toMatchObject({
+      ...physical,
+      checkedAt: new Date(physical.checkedAt).toISOString(),
+    });
+    expect(() =>
+      validateUsageEvidence({ ...physical, physicalReference: '' }, false, now),
+    ).toThrow();
+    expect(
+      validateUsageEvidence({ ...usage, wmsState: 'used' }, false, now),
+    ).toMatchObject({
+      usageSource: 'wms',
+      wmsState: 'used',
+      wmsReference: usage.wmsReference,
+    });
+    expect(() =>
+      validateUsageEvidence({ ...usage, usageSource: 'other' }, false, now),
+    ).toThrow();
+  });
 });

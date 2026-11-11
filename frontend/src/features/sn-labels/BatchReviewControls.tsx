@@ -16,7 +16,7 @@ import { errorText } from "./api";
 import type { BatchReview, Detail, snApi } from "./api";
 
 const required = [{ required: true, message: "此欄必填" }];
-type Decision = "approve" | "reject" | "received" | "used";
+type Decision = "approve" | "reject" | "received" | "used" | "physically-used";
 type ReviewValues = {
   reason: string;
   decision: Decision;
@@ -27,7 +27,7 @@ type ReviewValues = {
     receivedQuantity: number;
     fullScope?: boolean;
   };
-  usage?: { checkedAt: Dayjs };
+  usage?: { checkedAt: Dayjs; confirmedUseReference?: string };
 };
 export default function BatchReviewControls({
   active,
@@ -58,7 +58,7 @@ export default function BatchReviewControls({
       review?.state === "blocked" || review?.state === "approved" ||
       (isReview && (!canReview || review.requestedBy === actorId))) return null;
   const receiptRequired = decision === "approve" || decision === "received";
-  const usageRequired = decision === "approve" || decision === "used";
+  const usageRequired = decision === "approve" || decision === "used" || decision === "physically-used";
   const openModal = () => {
     form.resetFields();
     setError("");
@@ -77,17 +77,25 @@ export default function BatchReviewControls({
     setSaving(true);
     setError("");
     try {
-      const body: Record<string, unknown> = { decision: values.decision, reason: values.reason };
+      const body: Record<string, unknown> = {
+        decision: values.decision === "physically-used" ? "used" : values.decision,
+        reason: values.reason,
+      };
       if ((values.decision === "approve" || values.decision === "received") && values.receipt) body.receipt = {
         ...values.receipt,
         checkedAt: values.receipt.checkedAt.toISOString(),
         from: values.receipt.from.format("YYYY-MM-DD"),
         to: (values.receipt.to || values.receipt.from).format("YYYY-MM-DD"),
       };
-      if ((values.decision === "approve" || values.decision === "used") && values.usage) body.usage = {
+      if (values.decision === "physically-used" && values.usage) body.usage = {
+        usageSource: "physical",
+        physicalReference: values.usage.confirmedUseReference,
+        checkedAt: values.usage.checkedAt.toISOString(),
+      };
+      else if ((values.decision === "approve" || values.decision === "used") && values.usage) body.usage = {
         ...values.usage,
         checkedAt: values.usage.checkedAt.toISOString(),
-        ...(values.decision === "used" ? { wmsState: "used" } : {}),
+        ...(values.decision === "used" ? { usageSource: "wms", wmsState: "used" } : {}),
       };
       const result = isReview
         ? await api.decideReversion(active.id, review.id, body)
@@ -135,6 +143,7 @@ export default function BatchReviewControls({
                 { value: "approve", label: "核准退回" },
                 { value: "received", label: "已有 ECOUNT 進貨紀錄" },
                 { value: "used", label: "已有 WMS 使用紀錄" },
+                { value: "physically-used", label: "已有實物使用紀錄" },
                 { value: "reject", label: "駁回申請" },
               ]} />
             </Form.Item>
@@ -193,14 +202,20 @@ export default function BatchReviewControls({
                 <Form.Item name={["usage", "wmsState"]} label="WMS 核對結果" rules={required}>
                   <Select options={[
                     { value: "not-found", label: "無匯入或使用紀錄" },
-                    { value: "draft-cleared", label: "未使用，原匯入草稿已解除" },
+                    { value: "draft-cleared", label: "未使用，WMS 草稿箱已作廢" },
                   ]} />
                 </Form.Item>
               )}
-              <Form.Item name={["usage", "wmsReference"]} label="WMS 箱號核對紀錄" rules={required}>
-                <Input maxLength={200} />
-              </Form.Item>
-              <Form.Item name={["usage", "checkedAt"]} label="WMS 核對時間" rules={required}>
+              {decision === "physically-used" ? (
+                <Form.Item name={["usage", "confirmedUseReference"]} label="實物使用紀錄" rules={required}>
+                  <Input maxLength={200} />
+                </Form.Item>
+              ) : (
+                <Form.Item name={["usage", "wmsReference"]} label="WMS 箱號核對紀錄" rules={required}>
+                  <Input maxLength={200} />
+                </Form.Item>
+              )}
+              <Form.Item name={["usage", "checkedAt"]} label={decision === "physically-used" ? "實物核對時間" : "WMS 核對時間"} rules={required}>
                 <DatePicker showTime />
               </Form.Item>
               {decision === "approve" && (

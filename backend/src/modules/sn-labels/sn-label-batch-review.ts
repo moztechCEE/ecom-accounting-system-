@@ -153,9 +153,24 @@ export function validateUsageEvidence(
 ) {
   const input = getRecord(value);
   const checkedAt = lookupTime(input.checkedAt, now, requestedAt);
+  if (input.usageSource === 'physical') {
+    return {
+      checkedAt,
+      usageSource: 'physical' as const,
+      physicalReference: field(input.physicalReference, '實物使用紀錄'),
+    };
+  }
+  if (input.usageSource !== undefined && input.usageSource !== 'wms') {
+    throw new BadRequestException('請選擇有效的使用紀錄來源');
+  }
   const wmsReference = field(input.wmsReference, 'WMS 箱號核對紀錄');
   if (input.wmsState === 'used') {
-    return { checkedAt, wmsReference, wmsState: 'used' as const };
+    return {
+      checkedAt,
+      usageSource: 'wms' as const,
+      wmsReference,
+      wmsState: 'used' as const,
+    };
   }
   if (
     (input.wmsState !== 'not-found' && input.wmsState !== 'draft-cleared') ||
@@ -165,7 +180,7 @@ export function validateUsageEvidence(
     input.holdConfirmed !== true
   ) {
     throw new BadRequestException(
-      '請確認 WMS 未使用或草稿已解除、已輸出檔案與貼紙未使用，並暫停收貨及使用',
+      '請確認 WMS 未使用或草稿箱已作廢、已輸出檔案與貼紙未使用，並暫停收貨及使用',
     );
   }
   return {
@@ -177,6 +192,13 @@ export function validateUsageEvidence(
     holdConfirmed: true,
   };
 }
+
+const blockerFromUsage = (usage: ReturnType<typeof validateUsageEvidence>) =>
+  usage.usageSource === 'physical'
+    ? 'PHYSICAL_USED'
+    : usage.wmsState === 'used'
+      ? 'WMS_USED'
+      : null;
 
 export async function lockSnLabelAllocation(tx: Tx) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(726220926)`;
@@ -304,7 +326,19 @@ export class SnLabelBatchReviewService {
       let state: State = 'rejected';
       const replacementDraftIds: string[] = [];
       if (decision !== 'reject') {
-        if (decision !== 'used') {
+        if (decision === 'used') {
+          const usage = validateUsageEvidence(
+            input.usage,
+            false,
+            now,
+            review.requested_at,
+          );
+          const blocker = blockerFromUsage(usage);
+          if (!blocker)
+            throw new BadRequestException('請填寫已使用的 WMS 或實物紀錄');
+          evidence.usage = usage;
+          evidence.blocker = blocker;
+        } else {
           const receipt = validateReceiptEvidence(
             input.receipt,
             batch.data.orderDate,
@@ -344,10 +378,7 @@ export class SnLabelBatchReviewService {
             review.requested_at,
           );
           evidence.usage = usage;
-          if (usage.wmsState === 'used') evidence.blocker = 'WMS_USED';
-          if (decision === 'used' && !evidence.blocker) {
-            throw new BadRequestException('請填寫已使用的 WMS 紀錄');
-          }
+          evidence.blocker = blockerFromUsage(usage);
         }
         if (evidence.blocker) state = 'blocked';
         else {
