@@ -84,6 +84,8 @@ function Workspace({
     [cartonPage, setCartonPage] = useState(1);
   const [from, setFrom] = useState(1),
     [to, setTo] = useState(100),
+    [warehouseFrom, setWarehouseFrom] = useState(1),
+    [warehouseTo, setWarehouseTo] = useState(100),
     [reason, setReason] = useState("initial");
   const [columns, setColumns] = useState([
     "一般序號",
@@ -193,6 +195,8 @@ function Workspace({
     setDraft({ ...v.data, id, version: 2, updatedAt: "" });
     setDirty(false);
     setCartonPage(1);
+    setWarehouseFrom(1);
+    setWarehouseTo(Math.min(v.cartons, 100));
     setFrom(isNoSerial(v.data) ? 1 : v.first!);
     setTo(
       isNoSerial(v.data)
@@ -298,9 +302,16 @@ function Workspace({
   const output = (kind: string) =>
     void run(async () => {
       if (!active) return;
-      await api.export(active.id, { kind, from, to, reason, columns });
+      const warehouseCartons = kind === "warehouse-cartons";
+      await api.export(active.id, {
+        kind,
+        from: warehouseCartons ? warehouseFrom : from,
+        to: warehouseCartons ? warehouseTo : to,
+        reason,
+        columns,
+      });
       setActive(await api.detail(active.id, cartonPage));
-      msg.success("已產生檔案；實際列印結果請核對");
+      msg.success(warehouseCartons ? "已下載箱號倉儲明細" : "已產生檔案；實際列印結果請核對");
     });
   const importLegacy = () =>
     void run(async () => {
@@ -706,6 +717,36 @@ function Workspace({
                               {label}
                             </Button>
                           ))}
+                      </Space>
+                      <Space wrap style={{ marginTop: 12 }}>
+                        <span>倉儲明細箱序</span>
+                        <InputNumber
+                          aria-label="倉儲明細起始箱序"
+                          min={1}
+                          max={active.cartons}
+                          precision={0}
+                          value={warehouseFrom}
+                          onChange={(v) => {
+                            if (v === null) return;
+                            setWarehouseFrom(v);
+                            setWarehouseTo((end) => Math.min(Math.max(end, v), v + 99));
+                          }}
+                        />
+                        <span>～</span>
+                        <InputNumber
+                          aria-label="倉儲明細結束箱序"
+                          min={warehouseFrom}
+                          max={Math.min(warehouseFrom + 99, active.cartons)}
+                          precision={0}
+                          value={warehouseTo}
+                          onChange={(v) => v !== null && setWarehouseTo(v)}
+                        />
+                        <Button
+                          disabled={!canWrite || busy}
+                          onClick={() => output("warehouse-cartons")}
+                        >
+                          箱號倉儲明細 XLSX
+                        </Button>
                       </Space>
                       <Form
                         layout="vertical"

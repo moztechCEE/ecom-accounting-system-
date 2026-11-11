@@ -128,8 +128,10 @@ export class SnLabelsController {
         body.to,
         body.kind,
       );
-    const excel = ['warranty', 'warehouse'].includes(body.kind),
-      buffer = excel
+    const excel = ['warranty', 'warehouse', 'warehouse-cartons'].includes(body.kind);
+    const buffer = body.kind === 'warehouse-cartons'
+      ? this.exporter.warehouseCartons(data, boxes, id)
+      : excel
         ? this.exporter.workbook(body.kind, data, items, body.columns)
         : await this.exporter.pdf(body.kind, data, items, boxes);
     await this.service.event(
@@ -142,7 +144,9 @@ export class SnLabelsController {
         reason: body.reason,
         from: body.from,
         to: body.to,
-        serialCount: items.length,
+        serialCount: body.kind === 'warehouse-cartons'
+          ? boxes.reduce((count, box) => count + box.serials.length, 0)
+          : items.length,
         cartons: boxes.map((b) => b.id),
       },
       id,

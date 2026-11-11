@@ -83,7 +83,7 @@ export const snApi = (entityId: string) => ({
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `SN-${body.kind}-${id}.${["warranty", "warehouse"].includes(String(body.kind)) ? "xlsx" : "pdf"}`;
+      a.download = `SN-${body.kind}-${id}.${["warranty", "warehouse", "warehouse-cartons"].includes(String(body.kind)) ? "xlsx" : "pdf"}`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 30000);
     } catch (e: unknown) {

@@ -13,9 +13,43 @@ export const EXPORT_KINDS = [
   'cartons-no-sn',
   'warranty',
   'warehouse',
+  'warehouse-cartons',
 ];
+type WarehouseCarton = { id: string; quantity: number; serials: string[] };
+
 @Injectable()
 export class SnLabelsExport {
+  warehouseCartons(d: SnData, boxes: WarehouseCarton[], batchId: string) {
+    if (!d.sku || boxes.length < 1 || boxes.length > 100)
+      throw new BadRequestException('請核對商品品號及箱序範圍（每次最多 100 箱）');
+    const rows = boxes.map((box) => [
+      d.barcode, d.productName, d.model, box.quantity, box.id,
+      box.serials.join(','), d.sku, '', 'corely-erp-sn-labels', batchId,
+    ]);
+    const headers = [
+      '國際條碼', '品名', '產品型號', '數量', '箱號', 'SN', '品號',
+      '內部掃描碼', '來源系統', '來源識別',
+    ];
+    const workbook = XLSX.utils.book_new();
+    const cartonSheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    cartonSheet['!cols'] = [20, 32, 18, 10, 26, 50, 20, 20, 25, 38].map(
+      (wch) => ({ wch }),
+    );
+    XLSX.utils.book_append_sheet(workbook, cartonSheet, '箱號明細');
+    const warehouseSheet = XLSX.utils.aoa_to_sheet([
+      ['收貨倉庫', ...headers.slice(0, 4), '單價', ...headers.slice(4)],
+      ...rows.map((row) => ['', ...row.slice(0, 4), '', ...row.slice(4)]),
+    ]);
+    warehouseSheet['!cols'] = [
+      { wch: 18 }, ...cartonSheet['!cols'].slice(0, 4), { wch: 10 },
+      ...cartonSheet['!cols'].slice(4),
+    ];
+    XLSX.utils.book_append_sheet(workbook, warehouseSheet, '倉儲明細');
+    return XLSX.write(workbook, {
+      type: 'buffer', bookType: 'xlsx', compression: true,
+    }) as Buffer;
+  }
+
   workbook(kind: string, d: SnData, items: any[], columns?: string[]) {
     const mapping: Record<string, (s: any) => string> = {
       一般序號: (s) => s.sn,
