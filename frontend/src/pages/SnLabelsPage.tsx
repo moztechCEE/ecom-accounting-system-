@@ -306,9 +306,10 @@ function Workspace({
     setTab("batch");
     msg.info("請輸入本次追加數量；啟用後併入同日批次");
   };
+  const canOutput = canWrite && active?.status !== "retired" && active?.review?.state !== "pending";
   const output = (kind: string) =>
     void run(async () => {
-      if (!active) return;
+      if (!active || !canOutput) return;
       const warehouseCartons = kind === "warehouse-cartons";
       await api.export(active.id, {
         kind,
@@ -747,7 +748,7 @@ function Workspace({
                           .map(([k, label]) => (
                             <Button
                               key={k}
-                              disabled={!canWrite || busy}
+                              disabled={!canOutput || busy}
                               onClick={() => output(k)}
                             >
                               {label}
@@ -778,7 +779,7 @@ function Workspace({
                           onChange={(v) => v !== null && setWarehouseTo(v)}
                         />
                         <Button
-                          disabled={!canWrite || busy}
+                          disabled={!canOutput || busy}
                           onClick={() => output("warehouse-cartons")}
                         >
                           箱號倉儲明細 XLSX

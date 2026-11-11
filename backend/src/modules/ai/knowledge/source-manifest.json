@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:5d4ae8b22f3b0b86249d64b0cfe6a50a0f353a849bc85bc614b06ab4d8d9ba44",
+  "sourceVersion": "sha256:142167459dc9fb34ea127e2c98440b897f38595be3cdf354c8ff6420148854db",
   "reviewedBaseCommit": "0ae9b322aedf1ff3ca2df0a6ab68f65dcb922c09",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "e7d802da6a4bd10b780b8774b7313c4b068df28d022344aaecf4ea4fc8e77cb1",
+  "catalogSha256": "f155d0b725577616995a7c483edb1f1ffe348e602037242be37d65677c419797",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -791,8 +791,12 @@
       "sha256": "e11a24eee3951689e49c611243983f151235d0de935c4753269800470e9f45ef"
     },
     {
+      "path": "backend/src/modules/sn-labels/sn-label-batch-review.ts",
+      "sha256": "4802fe65c824c2607d2130dee9437a7e3486502311ece47c367d6292f930c417"
+    },
+    {
       "path": "backend/src/modules/sn-labels/sn-labels.controller.ts",
-      "sha256": "a0bf777296487db5b2d46147ce4871cb49208d0d17e9cfa3b2f6d3d3ac737201"
+      "sha256": "5a745ac3cc56ffbfc16856560a4d7eae3c99cb480dba84f177a162d91384c704"
     },
     {
       "path": "backend/src/modules/sn-labels/sn-labels.export.ts",
@@ -865,6 +869,10 @@
     {
       "path": "frontend/src/contexts/AuthContext.tsx",
       "sha256": "ada0c17f2b474129d29451af3681103ecb36861e8078ee18b061358cace21f04"
+    },
+    {
+      "path": "frontend/src/features/sn-labels/BatchReviewControls.tsx",
+      "sha256": "7627a8166c2159e39e128252d599f54ddcfe88a2b21c0510640e5ddf08bce0b2"
     },
     {
       "path": "frontend/src/hooks/useEntityContext.ts",
@@ -1372,7 +1380,7 @@
     },
     {
       "path": "frontend/src/pages/SnLabelsPage.tsx",
-      "sha256": "e2ebf9a37d1d58ed5d1173ce27421915212f6f414186f170d4caa43ab5780b4c"
+      "sha256": "235525d02a98f51737e4c317b5da90b39a3fbc01c3f315da81458175aea3247e"
     },
     {
       "path": "frontend/src/pages/SupplierAccountsPage.tsx",

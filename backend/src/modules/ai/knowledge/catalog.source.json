@@ -1525,7 +1525,9 @@
         "frontend/src/pages/SnLabelsPage.tsx",
         "backend/src/modules/sn-labels/sn-labels.controller.ts",
         "backend/src/modules/sn-labels/sn-labels.export.ts",
-        "frontend/src/hooks/useEntityContext.ts"
+        "frontend/src/hooks/useEntityContext.ts",
+        "frontend/src/features/sn-labels/BatchReviewControls.tsx",
+        "backend/src/modules/sn-labels/sn-label-batch-review.ts"
       ],
       "permissions": [
         "inventory:read"
