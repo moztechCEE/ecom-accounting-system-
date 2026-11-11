@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:142167459dc9fb34ea127e2c98440b897f38595be3cdf354c8ff6420148854db",
+  "sourceVersion": "sha256:a3c482515f0184b3fafa297d930f601cd1b0cbcd648947647a8a77cebc0a7a0c",
   "reviewedBaseCommit": "0ae9b322aedf1ff3ca2df0a6ab68f65dcb922c09",
   "entryCount": 82,
   "groups": [
@@ -792,7 +792,7 @@
     },
     {
       "path": "backend/src/modules/sn-labels/sn-label-batch-review.ts",
-      "sha256": "4802fe65c824c2607d2130dee9437a7e3486502311ece47c367d6292f930c417"
+      "sha256": "b6e3ba1e61d1e93bee1d027fa5edd479e53f03d74cd6f65d115c9556ac0c4f6e"
     },
     {
       "path": "backend/src/modules/sn-labels/sn-labels.controller.ts",
@@ -872,7 +872,7 @@
     },
     {
       "path": "frontend/src/features/sn-labels/BatchReviewControls.tsx",
-      "sha256": "7627a8166c2159e39e128252d599f54ddcfe88a2b21c0510640e5ddf08bce0b2"
+      "sha256": "bf703a74acc087c8e3776f198d6aaa26ea369edc60153c6c59d20afdb206d668"
     },
     {
       "path": "frontend/src/hooks/useEntityContext.ts",
