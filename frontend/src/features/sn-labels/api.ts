@@ -6,6 +6,7 @@ export type Entry = {
   revision: number;
   data: SnDraft;
   updated_at: string;
+  pending_review_requested_by?: string | null;
 };
 export type AllocationPreview = {
   first: number | null;

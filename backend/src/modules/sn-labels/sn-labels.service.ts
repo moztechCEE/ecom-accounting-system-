@@ -201,13 +201,23 @@ export class SnLabelsService {
       end = String(q.end || ''),
       manufactureStart = String(q.manufactureStart || ''),
       manufactureEnd = String(q.manufactureEnd || '');
-    const status = ['draft', 'active', 'retired'].includes(q.status) ? q.status : '';
+    const pendingReviewOnly = q.status === 'pending-review';
+    const status = pendingReviewOnly
+      ? 'active'
+      : ['draft', 'active', 'retired'].includes(q.status) ? q.status : '';
     const page = Math.max(1, Math.min(100000, Number(q.page) || 1));
     const rows = await this.db.$queryRaw<any[]>`
    SELECT *,count(*) OVER()::int AS total FROM (
-    SELECT id,'draft' AS status,revision,data,updated_at FROM sn_label_drafts WHERE entity_id=${entity} AND batch_id IS NULL
-    UNION ALL SELECT id,CASE WHEN retired_at IS NULL THEN 'active' ELSE 'retired' END AS status,0 AS revision,data || jsonb_build_object('quantity',quantity),updated_at FROM sn_label_batches WHERE entity_id=${entity}
+    SELECT id,'draft' AS status,revision,data,updated_at,NULL::text AS pending_review_requested_by
+    FROM sn_label_drafts WHERE entity_id=${entity} AND batch_id IS NULL
+    UNION ALL
+    SELECT b.id,CASE WHEN b.retired_at IS NULL THEN 'active' ELSE 'retired' END AS status,0 AS revision,
+      b.data || jsonb_build_object('quantity',b.quantity),b.updated_at,r.requested_by
+    FROM sn_label_batches b
+    LEFT JOIN sn_label_batch_reversions r ON r.batch_id=b.id AND r.state='pending' AND b.retired_at IS NULL
+    WHERE b.entity_id=${entity}
    ) entries WHERE (${status}='' OR status=${status})
+    AND (NOT ${pendingReviewOnly} OR pending_review_requested_by IS NOT NULL)
     AND (${term}='' OR strpos(lower(data->>'name'),lower(${term}))>0 OR strpos(lower(data->>'productName'),lower(${term}))>0 OR strpos(data->>'barcode',${term})>0 OR strpos(lower(data->>'model'),lower(${term}))>0)
     AND (${start}='' OR data->>'orderDate'>=${start}) AND (${end}='' OR data->>'orderDate'<=${end})
     AND (${manufactureStart}='' OR data->>'manufactureDate'>=${manufactureStart}) AND (${manufactureEnd}='' OR data->>'manufactureDate'<=${manufactureEnd})

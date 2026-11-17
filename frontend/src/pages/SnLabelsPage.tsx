@@ -74,6 +74,7 @@ function Workspace({
     [dirty, setDirty] = useState(false);
   const noSerial = isNoSerial(draft);
   const [active, setActive] = useState<Detail | null>(null),
+    [reviewRequest, setReviewRequest] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("batch"),
     [products, setProducts] = useState<Product[]>([]);
@@ -196,8 +197,16 @@ function Workspace({
     setRefresh((n) => n + 1);
     return v.revision;
   };
-  const showActive = async (id: string) => {
+  const showActive = async (id: string, startReview = false) => {
     const v = await api.detail(id);
+    const reviewReady = canWrite && canReview && !!v.batchRevision &&
+      v.status !== "retired" && v.review?.state === "pending" &&
+      v.review.requestedBy !== actorId;
+    setReviewRequest(startReview && reviewReady ? crypto.randomUUID() : null);
+    if (startReview && !reviewReady) {
+      setRefresh((n) => n + 1);
+      msg.warning("此批次目前無法覆核");
+    }
     setActive(v);
     setDraft({ ...v.data, id, version: 2, updatedAt: "" });
     setDirty(false);
@@ -222,10 +231,10 @@ function Workspace({
       });
     else fn();
   };
-  const open = (e: Entry) =>
+  const open = (e: Entry, startReview = false) =>
     replace(() => {
       void run(async () => {
-        if (e.status !== "draft") await showActive(e.id);
+        if (e.status !== "draft") await showActive(e.id, startReview);
         else {
           setActive(null);
           setDraft({
@@ -425,13 +434,14 @@ function Workspace({
                 </Button>
               )}
               <BatchReviewControls
-                key={active.id}
+                key={reviewRequest ?? active.id}
                 active={active}
                 api={api}
                 actorId={actorId}
                 canWrite={canWrite}
                 canReview={canReview}
                 disabled={busy}
+                initialOpen={reviewRequest !== null}
                 onChange={(review) => {
                   setActive((current) => current?.id === active.id
                     ? { ...current, review, status: review.state === "approved" ? "retired" : current.status }
@@ -920,6 +930,7 @@ function Workspace({
               { value: "", label: "全部狀態" },
               { value: "draft", label: "草稿" },
               { value: "active", label: "已啟用" },
+              { value: "pending-review", label: "待退回覆核" },
               { value: "retired", label: "已退回" },
             ]}
           />
@@ -975,30 +986,36 @@ function Workspace({
             {
               title: "狀態",
               render: (_, e) => (
-                <Tag color={e.status === "active" ? "green" : undefined}>
-                  {e.status === "active" ? "已啟用" : e.status === "retired" ? "已退回" : "草稿"}
+                <Tag color={e.pending_review_requested_by ? "gold" : e.status === "active" ? "green" : undefined}>
+                  {e.pending_review_requested_by
+                    ? "待退回覆核"
+                    : e.status === "active" ? "已啟用" : e.status === "retired" ? "已退回" : "草稿"}
                 </Tag>
               ),
             },
             {
               title: "操作",
-              render: (_, e) => (
-                <Space>
-                  <Button size="small" disabled={busy} onClick={() => open(e)}>
-                    開啟
-                  </Button>
-                  {e.status === "draft" && canWrite && (
-                    <Button
-                      danger
-                      size="small"
-                      disabled={busy}
-                      onClick={() => removeDraft(e)}
-                    >
-                      刪除草稿
+              render: (_, e) => {
+                const startReview = canWrite && canReview &&
+                  !!e.pending_review_requested_by && e.pending_review_requested_by !== actorId;
+                return (
+                  <Space>
+                    <Button size="small" disabled={busy} onClick={() => open(e, startReview)}>
+                      {startReview ? "覆核退回" : "開啟"}
                     </Button>
-                  )}
-                </Space>
-              ),
+                    {e.status === "draft" && canWrite && (
+                      <Button
+                        danger
+                        size="small"
+                        disabled={busy}
+                        onClick={() => removeDraft(e)}
+                      >
+                        刪除草稿
+                      </Button>
+                    )}
+                  </Space>
+                );
+              },
             },
           ]}
         />

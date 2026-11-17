@@ -36,6 +36,7 @@ export default function BatchReviewControls({
   canWrite,
   canReview,
   disabled,
+  initialOpen,
   onChange,
 }: {
   active: Detail;
@@ -44,11 +45,12 @@ export default function BatchReviewControls({
   canWrite: boolean;
   canReview: boolean;
   disabled: boolean;
+  initialOpen: boolean;
   onChange: (review: BatchReview) => void;
 }) {
   const [form] = Form.useForm<ReviewValues>();
   const decision = Form.useWatch("decision", form);
-  const [open, setOpen] = useState(false),
+  const [open, setOpen] = useState(initialOpen),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const submitting = useRef(false);
