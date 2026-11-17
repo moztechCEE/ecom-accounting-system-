@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:15c8876eaea219fb15db99b9d30b9c9dd546f96ccf1f0eba42c84809e2ff9b47",
+  "sourceVersion": "sha256:d75af1521071381562ae7471305351207db9300ba9cfe246312dffc5a909c408",
   "reviewedBaseCommit": "0ae9b322aedf1ff3ca2df0a6ab68f65dcb922c09",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "cdb765e1f0e3e9c95d4bccc33da5a7bb8b56a4c8a015a24f9a34edbd04fb6e28",
+  "catalogSha256": "1df73174cfd679de671b7bd1d2be1817c66725e2be1c415d4ada1b31ba8d0d58",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -1384,7 +1384,7 @@
     },
     {
       "path": "frontend/src/pages/SnLabelsPage.tsx",
-      "sha256": "594da4be38c902e3ccf5fba9db64a99739534d96c09270e27d259ef964fc72eb"
+      "sha256": "2a607fa9670babd37827227df6ac70cdb3d1b266b1ff28362890f857f10163f8"
     },
     {
       "path": "frontend/src/pages/SupplierAccountsPage.tsx",

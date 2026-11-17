@@ -1478,7 +1478,7 @@
           "有庫存修改權限者將草稿儲存成正式批次，再依批次進行箱號配對與標籤下載。",
           "規格箱貼紙用箱號條碼掃描箱號；有 SN 版本的 QR Code 以半形逗號分隔箱內序號。核對匯出的箱號、序號與箱內順序，再進行實際列印與掃描驗收。",
           "有 SN 和無 SN 的已啟用批次都可按箱序下載「箱號倉儲明細 XLSX」。一次最多 100 箱，下載後可直接匯入 WMS 箱號管理。",
-          "需要退回已啟用批次時，提交原因給主管覆核。另一位管理員在「批次查詢」篩選「待退回覆核」，點選該列的「覆核退回」，查證 ECOUNT 進貨及 WMS 與現場使用狀態後決定。"
+          "需要退回已啟用批次時，提交原因給主管覆核。「查看待覆核批次」會清除原搜尋與日期篩選並移至待覆核清單，也可使用網址參數 status=pending-review 直接開啟。另一位管理員點選該列的「覆核退回」，查證 ECOUNT 進貨及 WMS 與現場使用狀態後決定。"
         ],
         "boundaries": [
           "瀏覽器草稿與伺服器批次分開；看到預覽不表示已建立正式序號。",
@@ -1505,7 +1505,7 @@
               "With inventory-update access, save the draft as a persisted batch, then pair cartons and download labels.",
               "Use the carton barcode to scan the carton ID. The QR Code on the SN carton label joins the serials with ASCII commas. Check exported carton IDs, serials and their order before physical printing and scanner acceptance.",
               "Download Warehouse Carton Details (XLSX) by carton ordinal for an active batch with or without serials. Export up to 100 cartons at a time and import the file directly into WMS Carton management.",
-              "To return an active batch to draft, submit a reason for review. A different administrator filters Batch Search to Pending Return Review and selects Review Return on the batch row. Verify ECOUNT receipts and WMS and physical use before deciding."
+              "To return an active batch to draft, submit a reason for review. View Pending Reviews clears the search and date filters and moves to the pending list. The URL parameter status=pending-review also opens this list. A different administrator selects Review Return on the batch row and verifies ECOUNT receipts and WMS and physical use before deciding."
             ],
             "boundaries": [
               "Browser drafts and persisted batches are distinct; a preview is not a registered serial batch.",

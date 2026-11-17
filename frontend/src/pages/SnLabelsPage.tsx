@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -16,6 +16,7 @@ import {
   message,
 } from "antd";
 import dayjs from "dayjs";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useEntityContext } from "../hooks/useEntityContext";
 import { productService } from "../services/product.service";
@@ -68,6 +69,9 @@ function Workspace({
   actorId: string;
   canReview: boolean;
 }) {
+  const [query, setQuery] = useSearchParams();
+  const pendingReviewRequested = query.get("status") === "pending-review";
+  const batchListHeading = useRef<HTMLHeadingElement>(null);
   const api = useMemo(() => snApi(entityId), [entityId]);
   const [draft, setDraft] = useState(() => newDraft(crypto.randomUUID())),
     [revision, setRevision] = useState(0),
@@ -82,7 +86,7 @@ function Workspace({
     [total, setTotal] = useState(0),
     [page, setPage] = useState(1),
     [search, setSearch] = useState(""),
-    [status, setStatus] = useState(""),
+    [status, setStatus] = useState(pendingReviewRequested ? "pending-review" : ""),
     [sort, setSort] = useState("desc"),
     [dates, setDates] = useState<string[]>([]),
     [manufactureDates, setManufactureDates] = useState<string[]>([]),
@@ -118,6 +122,32 @@ function Workspace({
       return [];
     }
   });
+  const showPendingReviews = useCallback(() => {
+    setStatus("pending-review");
+    setSearch("");
+    setDates([]);
+    setManufactureDates([]);
+    setSort("desc");
+    setPage(1);
+    batchListHeading.current?.scrollIntoView({ block: "start" });
+    batchListHeading.current?.focus({ preventScroll: true });
+  }, []);
+  useEffect(() => {
+    if (pendingReviewRequested) showPendingReviews();
+  }, [pendingReviewRequested, showPendingReviews]);
+  const viewPendingReviews = () => {
+    if (pendingReviewRequested) showPendingReviews();
+    else {
+      const next = new URLSearchParams(query);
+      next.set("status", "pending-review");
+      setQuery(next, { replace: true });
+    }
+  };
+  const reviewBlocker = active?.review?.state === "pending"
+    ? active.review.requestedBy === actorId
+      ? "本人申請，需由其他管理員覆核"
+      : !canReview || !canWrite ? "需管理員覆核" : ""
+    : "";
   useEffect(() => {
     let live = true;
     productService
@@ -423,6 +453,8 @@ function Workspace({
           <Tag color={active ? "green" : undefined}>
             {active ? (reviewStateText(active.review) || (active.status === "retired" ? "已退回" : "已啟用")) : dirty ? "尚未儲存" : "草稿"}
           </Tag>
+          <Button onClick={viewPendingReviews}>查看待覆核批次</Button>
+          {reviewBlocker && <span>{reviewBlocker}</span>}
           <Button onClick={create} disabled={busy}>
             新增草稿
           </Button>
@@ -450,6 +482,11 @@ function Workspace({
                   if (review.state === "approved") {
                     setStatus("draft");
                     setPage(1);
+                    if (pendingReviewRequested) {
+                      const next = new URLSearchParams(query);
+                      next.delete("status");
+                      setQuery(next, { replace: true });
+                    }
                     msg.success(`已退回，建立 ${review.replacementDraftIds.length} 份草稿`);
                   } else if (review.state === "pending") msg.success("已送出覆核");
                   else msg.success("已記錄覆核結果");
@@ -495,7 +532,7 @@ function Workspace({
             active.status === "retired"
               ? `已建立 ${active.review?.replacementDraftIds.length ?? 0} 份草稿，原箱號與序號保留。`
               : active.review?.state === "pending"
-                ? `待退回覆核：${active.review.reason}`
+                ? `退回原因：${active.review.reason}`
                 : noSerial
               ? `已建立 ${active.data.quantity} 件／${active.cartons} 箱，無單品 SN。`
               : `已配發 ${active.data.quantity} 個 SN／${active.cartons} 箱。漏印與破損補印沿用原 SN。`
@@ -908,7 +945,7 @@ function Workspace({
         ]}
       />
       <section className="sn-panel sn-saved">
-        <h2>批次查詢</h2>
+        <h2 ref={batchListHeading} tabIndex={-1}>批次查詢</h2>
         <Space wrap style={{ marginBottom: 16 }}>
           <Input.Search
             aria-label="搜尋批次"
@@ -925,6 +962,11 @@ function Workspace({
             onChange={(v) => {
               setStatus(v);
               setPage(1);
+              if (pendingReviewRequested && v !== "pending-review") {
+                const next = new URLSearchParams(query);
+                next.delete("status");
+                setQuery(next, { replace: true });
+              }
             }}
             options={[
               { value: "", label: "全部狀態" },
@@ -937,6 +979,7 @@ function Workspace({
           <DatePicker.RangePicker
             aria-label="下單日期篩選"
             placeholder={["下單日期起", "下單日期迄"]}
+            value={dates.length === 2 ? [dayjs(dates[0]), dayjs(dates[1])] : null}
             onChange={(v) => {
               setDates(v?.map((d) => d?.format("YYYY-MM-DD") || "") || []);
               setPage(1);
@@ -945,6 +988,8 @@ function Workspace({
           <DatePicker.RangePicker
             aria-label="製造日期篩選"
             placeholder={["製造日期起", "製造日期迄"]}
+            value={manufactureDates.length === 2
+              ? [dayjs(manufactureDates[0]), dayjs(manufactureDates[1])] : null}
             onChange={(v) => {
               setManufactureDates(
                 v?.map((d) => d?.format("YYYY-MM-DD") || "") || [],
