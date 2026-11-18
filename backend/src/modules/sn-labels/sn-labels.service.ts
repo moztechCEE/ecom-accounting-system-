@@ -296,6 +296,9 @@ export class SnLabelsService {
         if (!batch) {
           batch = { id: randomUUID() };
           await tx.$executeRaw`INSERT INTO sn_label_batches(id,entity_id,merge_key,data,created_by) VALUES(${batch.id},${entity},${r.mergeKey},${JSON.stringify(d)}::jsonb,${actor})`;
+          await this.event(tx, entity, actor, 'INBOUND_STATUS_RECORDED', {
+            status: 'not-received', source: 'activation',
+          }, batch.id);
         }
         await tx.$executeRaw`INSERT INTO sn_label_carton_counters(scope) VALUES(${r.cartonScope}) ON CONFLICT(scope) DO NOTHING`;
         const boxes: any[] = [],

@@ -294,21 +294,7 @@ export class SnLabelBatchReviewService {
     if (!ids.length) return new Map<string, ReceivingStatus>();
     const rows = await db.$queryRaw<{ id: string; status: ReceivingStatus }[]>`
       SELECT b.id, CASE
-        WHEN EXISTS (
-          SELECT 1 FROM sn_label_batch_reversions r WHERE r.batch_id=b.id AND (
-            r.evidence->>'blocker' IN ('ECOUNT_RECEIVED','ERP_SERIAL_IN_USE','WMS_USED','PHYSICAL_USED')
-            OR CASE WHEN jsonb_typeof(r.evidence->'receipt'->'receivedQuantity')='number'
-              THEN (r.evidence->'receipt'->>'receivedQuantity')::numeric > 0 ELSE false END
-          )
-        ) OR EXISTS (
-          SELECT 1 FROM sn_label_serials s
-          JOIN inventory_serial_numbers n ON n.serial_number=s.sn AND n.entity_id=b.entity_id
-            AND n.product_id=b.data->>'productId'
-          WHERE s.batch_id=b.id
-        ) OR EXISTS (
-          SELECT 1 FROM sn_label_events e WHERE e.batch_id=b.id AND e.entity_id=b.entity_id
-            AND e.action='INBOUND_STATUS_RECORDED' AND e.data->>'status'='received'
-        ) THEN 'received'
+        WHEN sn_label_has_receipt(b.entity_id, b.id, b.data->>'productId') THEN 'received'
         WHEN EXISTS (
           SELECT 1 FROM sn_label_events e WHERE e.batch_id=b.id AND e.entity_id=b.entity_id
             AND e.action='INBOUND_STATUS_RECORDED' AND e.data->>'status'='not-received'
@@ -317,6 +303,38 @@ export class SnLabelBatchReviewService {
       END AS status
       FROM sn_label_batches b WHERE b.entity_id=${entity} AND b.id=ANY(${ids}::text[])`;
     return new Map(rows.map((row) => [row.id, row.status]));
+  }
+
+  async markReceived(entity: string, actor: string, id: string, body: unknown) {
+    const revision = field(getRecord(body).batchRevision, '批次版本', 100);
+    return this.db.$transaction(async (tx) => {
+      await lockSnLabelAllocation(tx);
+      const batch = await batchFor(tx, entity, id);
+      requireActive(batch);
+      if (revision !== batch.revision)
+        throw new ConflictException('批次已更新，請重新載入');
+      const [manual] = await tx.$queryRaw<{ recorded: boolean }[]>`
+        SELECT EXISTS (SELECT 1 FROM sn_label_events WHERE entity_id=${entity} AND batch_id=${id}
+          AND action='INBOUND_STATUS_RECORDED' AND data->>'status'='received'
+          AND data->>'source'='manual') AS recorded`;
+      if (!manual.recorded) {
+        await event(tx, entity, actor, id, 'INBOUND_STATUS_RECORDED', {
+          status: 'received', source: 'manual', batchRevision: revision,
+        });
+      }
+      const pending = await latestReview(tx, id);
+      if (pending?.state === 'pending') {
+        const evidence = { method: 'manual-receipt-confirmed', blocker: 'BATCH_RECEIVED' };
+        await tx.$executeRaw`
+          UPDATE sn_label_batch_reversions SET state='blocked',reviewed_by=${actor},
+            reviewed_at=now(),evidence=${JSON.stringify(evidence)}::jsonb
+          WHERE id=${pending.id} AND state='pending'`;
+        await event(tx, entity, actor, id, 'REVERT_REVIEWED', {
+          reviewId: pending.id, state: 'blocked', ...evidence,
+        });
+      }
+      return { batchId: id, receivingStatus: 'received' as const };
+    });
   }
 
   async returnToDraft(entity: string, actor: string, id: string, body: unknown) {
@@ -337,8 +355,13 @@ export class SnLabelBatchReviewService {
       const status = (await this.receivingStates(entity, [id], tx)).get(id);
       if (status === 'received')
         throw new ConflictException('此批次已入庫，不可退回');
-      if (status !== 'not-received')
+      if (status === 'unconfirmed' && input.confirmNotReceived === true) {
+        await event(tx, entity, actor, id, 'INBOUND_STATUS_RECORDED', {
+          status: 'not-received', source: 'manual', batchRevision: revision,
+        });
+      } else if (status !== 'not-received') {
         throw new ConflictException('請先確認此批次的入庫狀態');
+      }
       const reviewId = randomUUID();
       if (current?.state === 'pending') {
         const superseded = { method: 'superseded-by-direct-return', directReturnId: reviewId };
@@ -350,7 +373,7 @@ export class SnLabelBatchReviewService {
       const draftIds = await replacementDrafts(tx, entity, actor, id, reviewId);
       const evidence = {
         method: 'direct-return-before-receipt',
-        receivingStatus: status,
+        receivingStatus: 'not-received',
         ...(current?.state === 'pending' ? { supersededReviewId: current.id } : {}),
       };
       const snapshot = { revision, quantity: batch.quantity, data: batch.data };
@@ -360,7 +383,7 @@ export class SnLabelBatchReviewService {
         VALUES (${reviewId},${id},${actor},${reason},${JSON.stringify(snapshot)}::jsonb,'approved',${actor},
           now(),${JSON.stringify(evidence)}::jsonb,${JSON.stringify(draftIds)}::jsonb) RETURNING *`;
       await event(tx, entity, actor, id, 'REVERT_RETURNED_TO_DRAFT', {
-        reviewId, reason, receivingStatus: status, replacementDraftIds: draftIds,
+        reviewId, reason, receivingStatus: 'not-received', replacementDraftIds: draftIds,
         ...(current?.state === 'pending' ? { supersededReviewId: current.id } : {}),
       });
       return summarize(result);
@@ -478,7 +501,7 @@ export class SnLabelBatchReviewService {
         }
         if (!evidence.blocker &&
             (await this.receivingStates(entity, [id], tx)).get(id) === 'received') {
-          evidence.blocker = 'ECOUNT_RECEIVED';
+          evidence.blocker = 'BATCH_RECEIVED';
         }
         if (!evidence.blocker) {
           const [output] = await tx.$queryRaw<

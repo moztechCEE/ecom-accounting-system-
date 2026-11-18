@@ -159,6 +159,16 @@ export class SnLabelsController {
     );
     res.send(buffer);
   }
+  @Post('batches/:id/mark-received')
+  @RequirePermissions({ resource: 'inventory', action: 'update' })
+  async markReceived(
+    @Request() req: { user: { id: string } },
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Query('entityId') e?: string,
+  ) {
+    return this.reviews.markReceived(await this.company(req, e), req.user.id, id, body);
+  }
   @Post('batches/:id/reversion')
   @RequirePermissions({ resource: 'inventory', action: 'update' })
   async requestReversion(

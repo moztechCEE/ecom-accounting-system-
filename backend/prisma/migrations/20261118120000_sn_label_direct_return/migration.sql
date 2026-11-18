@@ -22,9 +22,43 @@ ALTER TABLE sn_label_batch_reversions
         reviewed_by<>requested_by
         OR (state='approved' AND COALESCE(evidence->>'method','')='direct-return-before-receipt')
         OR (state='rejected' AND COALESCE(evidence->>'method','')='superseded-by-direct-return')
+        OR (state='blocked' AND COALESCE(evidence->>'method','')='manual-receipt-confirmed'
+            AND COALESCE(evidence->>'blocker','')='BATCH_RECEIVED')
       )
     )
   );
+
+CREATE FUNCTION sn_label_has_receipt(label_entity text, label_batch text, label_product text)
+RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM sn_label_events e WHERE e.batch_id=label_batch AND e.entity_id=label_entity
+      AND e.action='INBOUND_STATUS_RECORDED' AND e.data->>'status'='received'
+  ) OR EXISTS (
+    SELECT 1 FROM sn_label_batch_reversions r WHERE r.batch_id=label_batch AND (
+      r.evidence->>'blocker' IN ('BATCH_RECEIVED','ECOUNT_RECEIVED','ERP_SERIAL_IN_USE','WMS_USED','PHYSICAL_USED')
+      OR CASE WHEN jsonb_typeof(r.evidence->'receipt'->'receivedQuantity')='number'
+        THEN (r.evidence->'receipt'->>'receivedQuantity')::numeric>0 ELSE false END
+    )
+  ) OR EXISTS (
+    SELECT 1 FROM sn_label_serials s JOIN inventory_serial_numbers n
+      ON n.serial_number=s.sn AND n.entity_id=label_entity AND n.product_id=label_product
+      WHERE s.batch_id=label_batch
+  );
+$$;
+
+-- Older tagged services can still try to approve legacy reviews against this database.
+CREATE FUNCTION sn_label_retire_receipt_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF sn_label_has_receipt(OLD.entity_id,OLD.id,OLD.data->>'productId') THEN
+    RAISE EXCEPTION 'SN label received batch cannot be retired' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER sn_label_retire_receipt_guard
+  BEFORE UPDATE OF retired_at ON sn_label_batches FOR EACH ROW
+  WHEN (OLD.retired_at IS NULL AND NEW.retired_at IS NOT NULL)
+  EXECUTE FUNCTION sn_label_retire_receipt_guard();
 
 CREATE FUNCTION sn_label_inbound_status_guard() RETURNS trigger
 LANGUAGE plpgsql AS $$
@@ -45,22 +79,8 @@ BEGIN
   IF batch_retired_at IS NOT NULL THEN
     RAISE EXCEPTION 'SN label retired batch cannot receive stock' USING ERRCODE='23514';
   END IF;
-  IF NEW.data->>'status'='not-received' AND (
-    EXISTS (
-      SELECT 1 FROM sn_label_events e WHERE e.batch_id=NEW.batch_id
-        AND e.action='INBOUND_STATUS_RECORDED' AND e.data->>'status'='received'
-    ) OR EXISTS (
-      SELECT 1 FROM sn_label_batch_reversions r WHERE r.batch_id=NEW.batch_id AND (
-        r.evidence->>'blocker' IN ('ECOUNT_RECEIVED','ERP_SERIAL_IN_USE','WMS_USED','PHYSICAL_USED')
-        OR CASE WHEN jsonb_typeof(r.evidence->'receipt'->'receivedQuantity')='number'
-          THEN (r.evidence->'receipt'->>'receivedQuantity')::numeric>0 ELSE false END
-      )
-    ) OR EXISTS (
-      SELECT 1 FROM sn_label_serials s JOIN inventory_serial_numbers n
-        ON n.serial_number=s.sn AND n.entity_id=NEW.entity_id
-        AND n.product_id=(SELECT b.data->>'productId' FROM sn_label_batches b WHERE b.id=NEW.batch_id)
-      WHERE s.batch_id=NEW.batch_id
-    )
+  IF NEW.data->>'status'='not-received' AND sn_label_has_receipt(
+    NEW.entity_id,NEW.batch_id,(SELECT data->>'productId' FROM sn_label_batches WHERE id=NEW.batch_id)
   ) THEN
     RAISE EXCEPTION 'SN label batch is already received' USING ERRCODE='23514';
   END IF;

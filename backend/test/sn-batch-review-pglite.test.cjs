@@ -178,12 +178,10 @@ test('review uses the actual migration and service transaction contracts', { ski
     await assert.rejects(request(batch), /已有收貨或使用/);
   });
 
-  await t.test('direct return requires a known unreceived state and retains original identifiers on retry', async () => {
+  await t.test('new batches start unreceived and retain original identifiers on reason-only return and retry', async () => {
     const batch = await activate('direct', form('FFF'));
-    assert.equal(batch.receivingStatus, 'unconfirmed');
-    await assert.rejects(direct(batch), /確認此批次的入庫狀態/);
-    await inbound(batch, 'not-received');
-    assert.equal((await labels.detail('company', batch.id)).receivingStatus, 'not-received');
+    assert.equal(batch.receivingStatus, 'not-received');
+    assert.equal(batch.events.find(event => event.action === 'INBOUND_STATUS_RECORDED').data.source, 'activation');
     const serials = batch.boxes.flatMap(box => box.serials);
     const cartonIds = batch.boxes.map(box => box.id);
     const first = await direct(batch);
@@ -203,6 +201,66 @@ test('review uses the actual migration and service transaction contracts', { ski
     await assert.rejects(direct(batch, 'operator', 'different reason'), /已退回/);
     const next = await labels.activate('company', 'operator', first.replacementDraftIds[0], 1);
     assert.ok(next.first > batch.last);
+  });
+
+  await t.test('historical batches require an explicit per-batch confirmation, recorded atomically with the return', async () => {
+    const batch = await activate('legacy-direct', form('JJJ', true));
+    await engine.query("DELETE FROM sn_label_events WHERE batch_id=$1 AND action='INBOUND_STATUS_RECORDED'", [batch.id]);
+    assert.equal((await labels.detail('company', batch.id)).receivingStatus, 'unconfirmed');
+    const body = { batchRevision: batch.batchRevision, reason: 'Correct historical batch' };
+    const attempt = (confirmation) => review.returnToDraft('company', 'legacy-editor', batch.id, {
+      ...body, confirmNotReceived: confirmation,
+    });
+    for (const flag of [undefined, false, 'true']) {
+      await assert.rejects(attempt(flag), /確認此批次的入庫狀態/);
+    }
+    const result = await attempt(true);
+    assert.equal(result.state, 'approved');
+    assert.deepEqual(await attempt(true), result);
+    const detail = await labels.detail('company', batch.id);
+    assert.equal(detail.receivingStatus, 'not-received');
+    const events = detail.events.filter(event => event.action === 'INBOUND_STATUS_RECORDED');
+    assert.equal(events.length, 1);
+    assert.equal(events[0].actor_id, 'legacy-editor');
+    assert.deepEqual(events[0].data, { status: 'not-received', source: 'manual', batchRevision: batch.batchRevision });
+    await assert.rejects(review.markReceived('company', 'receiver', batch.id, body), /已退回/);
+  });
+
+  await t.test('manual batch receipt is scoped, audited once, terminal for returns, and independent of stock posting', async () => {
+    const data = form('KKK', true);
+    const batch = await activate('manual-receipt', data);
+    const body = { batchRevision: batch.batchRevision };
+    const mark = (company, actor, params) => review.markReceived(company, actor, batch.id, params);
+    const pending = await request(batch);
+    await assert.rejects(mark('other', 'receiver', body), /找不到/);
+    await assert.rejects(mark('company', 'operator', { batchRevision: 'stale' }), /批次已更新/);
+    const initialStock = await count('SELECT count(*)::int AS n FROM inventory_serial_numbers');
+    const marked = await mark('company', 'operator', body);
+    assert.deepEqual(marked, { batchId: batch.id, receivingStatus: 'received' });
+    assert.deepEqual(await mark('company', 'receiver', body), marked);
+    const detail = await labels.detail('company', batch.id);
+    assert.equal(detail.receivingStatus, 'received');
+    assert.equal(detail.review.id, pending.id);
+    assert.equal(detail.review.state, 'blocked');
+    assert.equal(detail.review.blocker, 'BATCH_RECEIVED');
+    assert.deepEqual(detail.review.replacementDraftIds, []);
+    const received = detail.events.filter(event => event.action === 'INBOUND_STATUS_RECORDED' && event.data.status === 'received');
+    assert.equal(received.length, 1);
+    assert.equal(received[0].actor_id, 'operator');
+    assert.equal(received[0].data.source, 'manual');
+    assert.equal(await count('SELECT count(*)::int AS n FROM inventory_serial_numbers'), initialStock);
+    await assert.rejects(direct(batch), /已入庫，不可退回/);
+    await assert.rejects(review.returnToDraft('company', 'editor', batch.id, {
+      ...body, reason: 'Historical form', confirmNotReceived: true,
+    }), /已入庫，不可退回/);
+    await assert.rejects(engine.query('UPDATE sn_label_batches SET retired_at=now() WHERE id=$1', [batch.id]), /received batch cannot be retired/);
+    await review.recordOutput('company', 'operator', batch.id, { kind: 'warehouse' });
+    await assert.rejects(review.decide('company', 'supervisor', batch.id, pending.id, evidence()), /已覆核/);
+    const appended = await activate('same-day-append', data);
+    assert.equal(appended.id, batch.id);
+    assert.equal(appended.receivingStatus, 'received');
+    assert.equal(appended.events.filter(event => event.action === 'INBOUND_STATUS_RECORDED').length, 2);
+    await assert.rejects(direct(appended), /已入庫，不可退回/);
   });
 
   await t.test('an old pending request can be completed directly by its requester without changing the original request', async () => {
