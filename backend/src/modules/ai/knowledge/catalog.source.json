@@ -1478,7 +1478,8 @@
           "有庫存修改權限者將草稿儲存成正式批次，再依批次進行箱號配對與標籤下載。",
           "規格箱貼紙用箱號條碼掃描箱號；有 SN 版本的 QR Code 以半形逗號分隔箱內序號。核對匯出的箱號、序號與箱內順序，再進行實際列印與掃描驗收。",
           "有 SN 和無 SN 的已啟用批次都可按箱序下載「箱號倉儲明細 XLSX」。一次最多 100 箱，下載後可直接匯入 WMS 箱號管理。",
-          "批次確認尚未入庫時，點「退回修改」填寫退回原因，再按「確認退回」建立可編輯草稿。"
+          "新批次配號時顯示「尚未入庫」。收貨人員核對 ECOUNT 進貨單後，在批次按「標記已入庫」並確認。只要已收其中一部分，就應標記該批次。這項操作只記錄批次狀態。",
+          "尚未入庫的批次可點「退回修改」，填寫退回原因並確認，系統會建立可編輯草稿。舊批次若顯示「入庫狀態待確認」，請先核對 ECOUNT 進貨單，並在退回視窗勾選確認。"
         ],
         "boundaries": [
           "瀏覽器草稿與伺服器批次分開；看到預覽不表示已建立正式序號。",
@@ -1505,7 +1506,8 @@
               "With inventory-update access, save the draft as a persisted batch, then pair cartons and download labels.",
               "Use the carton barcode to scan the carton ID. The QR Code on the SN carton label joins the serials with ASCII commas. Check exported carton IDs, serials and their order before physical printing and scanner acceptance.",
               "Download Warehouse Carton Details (XLSX) by carton ordinal for an active batch with or without serials. Export up to 100 cartons at a time and import the file directly into WMS Carton management.",
-              "For a batch confirmed as not received, select Return for Editing, enter the return reason and confirm to create editable drafts."
+              "New batches start as Not Received. After checking the ECOUNT purchase receipt, select Mark as Received on the batch and confirm, including for a partial receipt. This records the batch status only.",
+              "For an unreceived batch, select Return for Editing, enter the reason and confirm to create editable drafts. For an older batch with unconfirmed status, check ECOUNT purchase receipts and tick the confirmation in the return dialog."
             ],
             "boundaries": [
               "Browser drafts and persisted batches are distinct; a preview is not a registered serial batch.",
