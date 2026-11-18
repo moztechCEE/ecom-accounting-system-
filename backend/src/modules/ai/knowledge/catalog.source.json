@@ -1478,12 +1478,12 @@
           "有庫存修改權限者將草稿儲存成正式批次，再依批次進行箱號配對與標籤下載。",
           "規格箱貼紙用箱號條碼掃描箱號；有 SN 版本的 QR Code 以半形逗號分隔箱內序號。核對匯出的箱號、序號與箱內順序，再進行實際列印與掃描驗收。",
           "有 SN 和無 SN 的已啟用批次都可按箱序下載「箱號倉儲明細 XLSX」。一次最多 100 箱，下載後可直接匯入 WMS 箱號管理。",
-          "需要退回已啟用批次時，提交原因給主管覆核。「查看待覆核批次」會清除原搜尋與日期篩選並移至待覆核清單，也可使用網址參數 status=pending-review 直接開啟。另一位管理員點選該列的「覆核退回」，查證 ECOUNT 進貨及 WMS 與現場使用狀態後決定。"
+          "批次確認尚未入庫時，點「退回修改」填寫退回原因，再按「確認退回」建立可編輯草稿。"
         ],
         "boundaries": [
           "瀏覽器草稿與伺服器批次分開；看到預覽不表示已建立正式序號。",
           "箱號倉儲明細保留實際數量、WMS／ECOUNT 品號、國條、來源批次和完整箱內 SN。無 SN 的箱子留空 SN 欄。",
-          "ECOUNT 進貨單有任一部分收貨或箱號／SN 已使用時，整批不可退回。證據不足須維持待覆核。退回後保留原配號歷程，並建立可編輯的新草稿。"
+          "已入庫批次不可退回。退回修改後保留原序號、箱號與操作紀錄，並建立可編輯的新草稿。"
         ],
         "related": [
           "products",
@@ -1505,12 +1505,12 @@
               "With inventory-update access, save the draft as a persisted batch, then pair cartons and download labels.",
               "Use the carton barcode to scan the carton ID. The QR Code on the SN carton label joins the serials with ASCII commas. Check exported carton IDs, serials and their order before physical printing and scanner acceptance.",
               "Download Warehouse Carton Details (XLSX) by carton ordinal for an active batch with or without serials. Export up to 100 cartons at a time and import the file directly into WMS Carton management.",
-              "To return an active batch to draft, submit a reason for review. View Pending Reviews clears the search and date filters and moves to the pending list. The URL parameter status=pending-review also opens this list. A different administrator selects Review Return on the batch row and verifies ECOUNT receipts and WMS and physical use before deciding."
+              "For a batch confirmed as not received, select Return for Editing, enter the return reason and confirm to create editable drafts."
             ],
             "boundaries": [
               "Browser drafts and persisted batches are distinct; a preview is not a registered serial batch.",
               "The carton workbook preserves actual quantities, WMS/ECOUNT item codes, barcodes, source batches, and full carton serial lists. The SN column is blank for nonserial cartons.",
-              "An ECOUNT receipt for any part of the batch or evidence that a carton or serial was used blocks reversion. Incomplete evidence leaves the review pending. A successful reversion preserves the original assignment history and creates editable drafts."
+              "Received batches cannot be returned for editing. A return retains the original serials, carton IDs and audit history and creates editable drafts."
             ],
             "related": [
               "products",
@@ -1528,7 +1528,8 @@
         "backend/src/modules/sn-labels/sn-labels.export.ts",
         "frontend/src/hooks/useEntityContext.ts",
         "frontend/src/features/sn-labels/BatchReviewControls.tsx",
-        "backend/src/modules/sn-labels/sn-label-batch-review.ts"
+        "backend/src/modules/sn-labels/sn-label-batch-review.ts",
+        "backend/prisma/migrations/20261118120000_sn_label_direct_return/migration.sql"
       ],
       "permissions": [
         "inventory:read"

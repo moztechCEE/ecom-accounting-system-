@@ -1,5 +1,6 @@
 import api from "../../services/api";
 import type { SnDraft } from "./model";
+export type ReceivingStatus = "not-received" | "received" | "unconfirmed";
 export type Entry = {
   id: string;
   status: "draft" | "active" | "retired";
@@ -7,6 +8,7 @@ export type Entry = {
   data: SnDraft;
   updated_at: string;
   pending_review_requested_by?: string | null;
+  receivingStatus?: ReceivingStatus;
 };
 export type AllocationPreview = {
   first: number | null;
@@ -22,6 +24,7 @@ export type Detail = {
   status?: "active" | "retired";
   batchRevision?: string;
   review?: BatchReview | null;
+  receivingStatus?: ReceivingStatus;
   data: SnDraft;
   first: number | null;
   last: number | null;
@@ -53,7 +56,7 @@ const blockerText = {
 };
 export const reviewStateText = (review?: BatchReview | null) =>
   review?.state === "pending"
-    ? "待退回覆核"
+    ? "待退回處理"
     : review?.state === "approved"
       ? "已退回"
       : review?.state === "blocked"
@@ -135,14 +138,6 @@ export const snApi = (entityId: string) => ({
       await api.post<BatchReview>(
         `/sn-labels/batches/${id}/reversion`,
         { batchRevision, reason },
-        { params: { entityId } },
-      )
-    ).data,
-  decideReversion: async (id: string, reviewId: string, body: Record<string, unknown>) =>
-    (
-      await api.post<BatchReview>(
-        `/sn-labels/batches/${id}/reversion/${reviewId}/decision`,
-        body,
         { params: { entityId } },
       )
     ).data,

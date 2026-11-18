@@ -51,8 +51,6 @@ export default function SnLabelsPage() {
       entityId={entityId}
       storageKey={draftStorageKey(entityId, user.id)}
       canWrite={canWrite}
-      actorId={user.id}
-      canReview={user.roles.some((r) => ["ADMIN", "SUPER_ADMIN"].includes(r))}
     />
   );
 }
@@ -60,14 +58,10 @@ function Workspace({
   entityId,
   storageKey,
   canWrite,
-  actorId,
-  canReview,
 }: {
   entityId: string;
   storageKey: string;
   canWrite: boolean;
-  actorId: string;
-  canReview: boolean;
 }) {
   const [query, setQuery] = useSearchParams();
   const pendingReviewRequested = query.get("status") === "pending-review";
@@ -78,7 +72,7 @@ function Workspace({
     [dirty, setDirty] = useState(false);
   const noSerial = isNoSerial(draft);
   const [active, setActive] = useState<Detail | null>(null),
-    [reviewRequest, setReviewRequest] = useState<string | null>(null),
+    [returnRequest, setReturnRequest] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("batch"),
     [products, setProducts] = useState<Product[]>([]);
@@ -135,19 +129,6 @@ function Workspace({
   useEffect(() => {
     if (pendingReviewRequested) showPendingReviews();
   }, [pendingReviewRequested, showPendingReviews]);
-  const viewPendingReviews = () => {
-    if (pendingReviewRequested) showPendingReviews();
-    else {
-      const next = new URLSearchParams(query);
-      next.set("status", "pending-review");
-      setQuery(next, { replace: true });
-    }
-  };
-  const reviewBlocker = active?.review?.state === "pending"
-    ? active.review.requestedBy === actorId
-      ? "本人申請，需由其他管理員覆核"
-      : !canReview || !canWrite ? "需管理員覆核" : ""
-    : "";
   useEffect(() => {
     let live = true;
     productService
@@ -227,15 +208,14 @@ function Workspace({
     setRefresh((n) => n + 1);
     return v.revision;
   };
-  const showActive = async (id: string, startReview = false) => {
+  const showActive = async (id: string, startReturn = false) => {
     const v = await api.detail(id);
-    const reviewReady = canWrite && canReview && !!v.batchRevision &&
-      v.status !== "retired" && v.review?.state === "pending" &&
-      v.review.requestedBy !== actorId;
-    setReviewRequest(startReview && reviewReady ? crypto.randomUUID() : null);
-    if (startReview && !reviewReady) {
+    const returnReady = canWrite && !!v.batchRevision && v.status !== "retired" &&
+      v.receivingStatus !== "received";
+    setReturnRequest(startReturn && returnReady ? crypto.randomUUID() : null);
+    if (startReturn && !returnReady) {
       setRefresh((n) => n + 1);
-      msg.warning("此批次目前無法覆核");
+      msg.warning(v.receivingStatus === "received" ? "已入庫，不可退回" : "此批次目前無法退回");
     }
     setActive(v);
     setDraft({ ...v.data, id, version: 2, updatedAt: "" });
@@ -261,10 +241,10 @@ function Workspace({
       });
     else fn();
   };
-  const open = (e: Entry, startReview = false) =>
+  const open = (e: Entry, startReturn = false) =>
     replace(() => {
       void run(async () => {
-        if (e.status !== "draft") await showActive(e.id, startReview);
+        if (e.status !== "draft") await showActive(e.id, startReturn);
         else {
           setActive(null);
           setDraft({
@@ -451,10 +431,13 @@ function Workspace({
         </div>
         <Space wrap>
           <Tag color={active ? "green" : undefined}>
-            {active ? (reviewStateText(active.review) || (active.status === "retired" ? "已退回" : "已啟用")) : dirty ? "尚未儲存" : "草稿"}
+            {active ? active.status === "retired" ? "已退回"
+              : active.receivingStatus === "received" ? "已入庫"
+              : active.receivingStatus === "not-received" ? "尚未入庫"
+              : active.receivingStatus === "unconfirmed" ? "入庫狀態待確認"
+              : reviewStateText(active.review) || "已啟用"
+              : dirty ? "尚未儲存" : "草稿"}
           </Tag>
-          <Button onClick={viewPendingReviews}>查看待覆核批次</Button>
-          {reviewBlocker && <span>{reviewBlocker}</span>}
           <Button onClick={create} disabled={busy}>
             新增草稿
           </Button>
@@ -466,14 +449,12 @@ function Workspace({
                 </Button>
               )}
               <BatchReviewControls
-                key={reviewRequest ?? active.id}
+                key={returnRequest ?? active.id}
                 active={active}
                 api={api}
-                actorId={actorId}
                 canWrite={canWrite}
-                canReview={canReview}
                 disabled={busy}
-                initialOpen={reviewRequest !== null}
+                initialOpen={returnRequest !== null}
                 onChange={(review) => {
                   setActive((current) => current?.id === active.id
                     ? { ...current, review, status: review.state === "approved" ? "retired" : current.status }
@@ -488,8 +469,9 @@ function Workspace({
                       setQuery(next, { replace: true });
                     }
                     msg.success(`已退回，建立 ${review.replacementDraftIds.length} 份草稿`);
-                  } else if (review.state === "pending") msg.success("已送出覆核");
-                  else msg.success("已記錄覆核結果");
+                  } else {
+                    msg.warning("退回尚未完成，請重新載入批次");
+                  }
                 }}
               />
             </>
@@ -972,7 +954,7 @@ function Workspace({
               { value: "", label: "全部狀態" },
               { value: "draft", label: "草稿" },
               { value: "active", label: "已啟用" },
-              { value: "pending-review", label: "待退回覆核" },
+              { value: "pending-review", label: "舊退回申請" },
               { value: "retired", label: "已退回" },
             ]}
           />
@@ -1029,11 +1011,17 @@ function Workspace({
             { title: "製造日期", render: (_, e) => e.data.manufactureDate },
             { title: "數量", render: (_, e) => e.data.quantity },
             {
+              title: "入庫狀態",
+              render: (_, e) => e.status === "draft" || e.status === "retired" ? "—"
+                : e.receivingStatus === "received" ? "已入庫"
+                : e.receivingStatus === "not-received" ? "尚未入庫" : "待確認",
+            },
+            {
               title: "狀態",
               render: (_, e) => (
                 <Tag color={e.pending_review_requested_by ? "gold" : e.status === "active" ? "green" : undefined}>
                   {e.pending_review_requested_by
-                    ? "待退回覆核"
+                    ? "待退回處理"
                     : e.status === "active" ? "已啟用" : e.status === "retired" ? "已退回" : "草稿"}
                 </Tag>
               ),
@@ -1041,12 +1029,13 @@ function Workspace({
             {
               title: "操作",
               render: (_, e) => {
-                const startReview = canWrite && canReview &&
-                  !!e.pending_review_requested_by && e.pending_review_requested_by !== actorId;
+                const startReturn = canWrite && e.status === "active" &&
+                  e.receivingStatus !== "received" &&
+                  (e.receivingStatus === "not-received" || !!e.pending_review_requested_by);
                 return (
                   <Space>
-                    <Button size="small" disabled={busy} onClick={() => open(e, startReview)}>
-                      {startReview ? "覆核退回" : "開啟"}
+                    <Button size="small" disabled={busy} onClick={() => open(e, startReturn)}>
+                      {startReturn ? "退回修改" : "開啟"}
                     </Button>
                     {e.status === "draft" && canWrite && (
                       <Button

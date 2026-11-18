@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:d75af1521071381562ae7471305351207db9300ba9cfe246312dffc5a909c408",
+  "sourceVersion": "sha256:7cf0fa0a918b0efe2be8d24d57fe836b0937cb398a491948804b2c39ed7521be",
   "reviewedBaseCommit": "0ae9b322aedf1ff3ca2df0a6ab68f65dcb922c09",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "1df73174cfd679de671b7bd1d2be1817c66725e2be1c415d4ada1b31ba8d0d58",
+  "catalogSha256": "174611fa9aac10d6f5cd50192f066a02a6f14e94cc864fded801ea17fa77afff",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -209,6 +209,10 @@
     {
       "path": "backend/prisma/migrations/20261027080000_mailroom_direct_print/migration.sql",
       "sha256": "fcdb358cf8b03d61bc0783c045ec300ea594cd1ce2f38e414704a056d7d5f45e"
+    },
+    {
+      "path": "backend/prisma/migrations/20261118120000_sn_label_direct_return/migration.sql",
+      "sha256": "e5389dcede9aecafbd24ac87c65d8eafd776aa2131cdd8c6beecbd3d66541e1a"
     },
     {
       "path": "backend/prisma/schema.prisma",
@@ -792,11 +796,11 @@
     },
     {
       "path": "backend/src/modules/sn-labels/sn-label-batch-review.ts",
-      "sha256": "b6e3ba1e61d1e93bee1d027fa5edd479e53f03d74cd6f65d115c9556ac0c4f6e"
+      "sha256": "27542090043b4d5374443a6ae8a67007e7a7021ea4450431c6e58668479976cd"
     },
     {
       "path": "backend/src/modules/sn-labels/sn-labels.controller.ts",
-      "sha256": "5a745ac3cc56ffbfc16856560a4d7eae3c99cb480dba84f177a162d91384c704"
+      "sha256": "411be2608bbfb55979c87c3b54fda6e5e8365197b63a05195d179d180c4c59f1"
     },
     {
       "path": "backend/src/modules/sn-labels/sn-labels.export.ts",
@@ -804,7 +808,7 @@
     },
     {
       "path": "backend/src/modules/sn-labels/sn-labels.service.ts",
-      "sha256": "23f6c16f7b7cdbeb0fcc6eb209149bd8ce101f11b5ba0033ed9200542587e7c2"
+      "sha256": "03527f23a32c45d6ef8261eabe64cb04e51b8eb620fc96b28c657507c8a50f70"
     },
     {
       "path": "backend/src/modules/users/users.controller.ts",
@@ -876,7 +880,7 @@
     },
     {
       "path": "frontend/src/features/sn-labels/BatchReviewControls.tsx",
-      "sha256": "46d4b533e3cf802b3aac6cd5fefa4c3aa1d5af676fc4c679374429770772cea1"
+      "sha256": "68ee4c2e2edf760fa79af15cbab5d41e00ba0bb9f0a42c9759466a5e3e22a8ff"
     },
     {
       "path": "frontend/src/hooks/useEntityContext.ts",
@@ -1384,7 +1388,7 @@
     },
     {
       "path": "frontend/src/pages/SnLabelsPage.tsx",
-      "sha256": "2a607fa9670babd37827227df6ac70cdb3d1b266b1ff28362890f857f10163f8"
+      "sha256": "f0821b2f701cb7ecf8542bffae3f75816bd27f3299fd4e4e0c551b337b51fd04"
     },
     {
       "path": "frontend/src/pages/SupplierAccountsPage.tsx",
