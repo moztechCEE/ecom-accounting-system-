@@ -23,7 +23,7 @@ import { productService } from "../services/product.service";
 import type { Product } from "../services/product.service";
 import LabelDesigner from "../features/sn-labels/LabelDesigner";
 import CartonPreview from "../features/sn-labels/CartonPreview";
-import BatchReviewControls from "../features/sn-labels/BatchReviewControls";
+import BatchReviewControls, { type BatchAction } from "../features/sn-labels/BatchReviewControls";
 import {
   CONFIRMED_RULES,
   draftStorageKey,
@@ -72,7 +72,7 @@ function Workspace({
     [dirty, setDirty] = useState(false);
   const noSerial = isNoSerial(draft);
   const [active, setActive] = useState<Detail | null>(null),
-    [returnRequest, setReturnRequest] = useState<string | null>(null),
+    [batchAction, setBatchAction] = useState<{ key: string; action: BatchAction } | null>(null),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("batch"),
     [products, setProducts] = useState<Product[]>([]);
@@ -208,14 +208,14 @@ function Workspace({
     setRefresh((n) => n + 1);
     return v.revision;
   };
-  const showActive = async (id: string, startReturn = false) => {
+  const showActive = async (id: string, action?: BatchAction) => {
     const v = await api.detail(id);
-    const returnReady = canWrite && !!v.batchRevision && v.status !== "retired" &&
+    const actionable = canWrite && !!v.batchRevision && v.status !== "retired" &&
       v.receivingStatus !== "received";
-    setReturnRequest(startReturn && returnReady ? crypto.randomUUID() : null);
-    if (startReturn && !returnReady) {
+    setBatchAction(action && actionable ? { key: crypto.randomUUID(), action } : null);
+    if (action && !actionable) {
       setRefresh((n) => n + 1);
-      msg.warning(v.receivingStatus === "received" ? "已入庫，不可退回" : "此批次目前無法退回");
+      msg.warning(v.receivingStatus === "received" ? "此批次已入庫" : "批次狀態已變更，請重新確認");
     }
     setActive(v);
     setDraft({ ...v.data, id, version: 2, updatedAt: "" });
@@ -241,10 +241,10 @@ function Workspace({
       });
     else fn();
   };
-  const open = (e: Entry, startReturn = false) =>
+  const open = (e: Entry, action?: BatchAction) =>
     replace(() => {
       void run(async () => {
-        if (e.status !== "draft") await showActive(e.id, startReturn);
+        if (e.status !== "draft") await showActive(e.id, action);
         else {
           setActive(null);
           setDraft({
@@ -449,12 +449,22 @@ function Workspace({
                 </Button>
               )}
               <BatchReviewControls
-                key={returnRequest ?? active.id}
+                key={batchAction?.key ?? active.id}
                 active={active}
                 api={api}
                 canWrite={canWrite}
                 disabled={busy}
-                initialOpen={returnRequest !== null}
+                initialAction={batchAction?.action ?? null}
+                onReceived={() => {
+                  setActive(current => current?.id === active.id
+                    ? { ...current, receivingStatus: "received" } : current);
+                  setRefresh(n => n + 1);
+                  msg.success("已標記入庫");
+                  void run(async () => {
+                    const detail = await api.detail(active.id, cartonPage);
+                    setActive(current => current?.id === detail.id ? detail : current);
+                  });
+                }}
                 onChange={(review) => {
                   setActive((current) => current?.id === active.id
                     ? { ...current, review, status: review.state === "approved" ? "retired" : current.status }
@@ -890,7 +900,7 @@ function Workspace({
                           })
                         }
                       />
-                      <h2 className="sn-section-title">配號與輸出紀錄</h2>
+                      <h2 className="sn-section-title">批次作業紀錄</h2>
                       <Table
                         rowKey={(_, i) => String(i)}
                         size="small"
@@ -905,17 +915,26 @@ function Workspace({
                           {
                             title: "操作",
                             dataIndex: "action",
-                            render: (v) => (v === "ALLOCATE" ? "配號" : "輸出"),
+                            render: (v: string) => ({
+                              ALLOCATE: "配號", EXPORT: "輸出", INBOUND_STATUS_RECORDED: "登記入庫狀態",
+                              REVERT_REQUESTED: "申請退回", REVERT_REVIEWED: "審核退回",
+                              REVERT_DRAFT_CREATED: "建立修改草稿", REVERT_RETURNED_TO_DRAFT: "退回修改",
+                            })[v] ?? v,
                           },
                           {
                             title: "明細",
                             dataIndex: "data",
-                            render: (v) =>
-                              v.kind
+                            render: (v, event) => {
+                              if (event.action === "INBOUND_STATUS_RECORDED")
+                                return v.status === "received" ? "已入庫" : "尚未入庫";
+                              if (event.action !== "ALLOCATE" && event.action !== "EXPORT")
+                                return v.reason || "—";
+                              return v.kind
                                 ? `${({ labels: "產品標籤", cartons: "規格箱標籤", "cartons-no-sn": "規格箱（無 SN）", warranty: "保固匯入", warehouse: "倉儲明細" } as Record<string, string>)[String(v.kind)] || v.kind} · ${v.from}～${v.to} · ${v.reason === "missed" ? "漏印補印" : v.reason === "damaged" ? "破損重印" : v.reason === "copy" ? "副本" : "首次輸出"}`
                                 : v.first === null
                                   ? `無 SN 裝箱，共 ${v.quantity} 件`
-                                  : `${v.first}～${v.last}，共 ${v.quantity} 個`,
+                                  : `${v.first}～${v.last}，共 ${v.quantity} 個`;
+                            },
                           },
                         ]}
                       />
@@ -1029,14 +1048,14 @@ function Workspace({
             {
               title: "操作",
               render: (_, e) => {
-                const startReturn = canWrite && e.status === "active" &&
-                  e.receivingStatus !== "received" &&
-                  (e.receivingStatus === "not-received" || !!e.pending_review_requested_by);
+                const canChange = canWrite && e.status === "active" && e.receivingStatus !== "received";
                 return (
                   <Space>
-                    <Button size="small" disabled={busy} onClick={() => open(e, startReturn)}>
-                      {startReturn ? "退回修改" : "開啟"}
-                    </Button>
+                    <Button size="small" disabled={busy} onClick={() => open(e)}>開啟</Button>
+                    {canChange && <>
+                      <Button size="small" disabled={busy} onClick={() => open(e, "receive")}>標記已入庫</Button>
+                      <Button size="small" disabled={busy} onClick={() => open(e, "return")}>退回修改</Button>
+                    </>}
                     {e.status === "draft" && canWrite && (
                       <Button
                         danger

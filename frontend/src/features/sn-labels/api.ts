@@ -133,11 +133,19 @@ export const snApi = (entityId: string) => ({
       throw e;
     }
   },
-  requestReversion: async (id: string, batchRevision: string, reason: string) =>
+  markReceived: async (id: string, batchRevision: string) =>
+    (
+      await api.post<{ batchId: string; receivingStatus: "received" }>(
+        `/sn-labels/batches/${id}/mark-received`,
+        { batchRevision },
+        { params: { entityId } },
+      )
+    ).data,
+  requestReversion: async (id: string, batchRevision: string, reason: string, confirmNotReceived?: true) =>
     (
       await api.post<BatchReview>(
         `/sn-labels/batches/${id}/reversion`,
-        { batchRevision, reason },
+        { batchRevision, reason, ...(confirmNotReceived && { confirmNotReceived }) },
         { params: { entityId } },
       )
     ).data,
