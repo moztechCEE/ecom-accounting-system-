@@ -223,7 +223,18 @@ export class SnLabelsService {
     AND (${manufactureStart}='' OR data->>'manufactureDate'>=${manufactureStart}) AND (${manufactureEnd}='' OR data->>'manufactureDate'<=${manufactureEnd})
    ORDER BY CASE WHEN ${q.sort === 'asc'} THEN data->>'orderDate' END ASC,
     CASE WHEN ${q.sort !== 'asc'} THEN data->>'orderDate' END DESC,updated_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}`;
-    return { rows, total: rows[0]?.total || 0, page };
+    const receivingStates = await this.reviews.receivingStates(
+      entity,
+      rows.filter((row) => row.status !== 'draft').map((row) => row.id),
+    );
+    return {
+      rows: rows.map((row) => ({
+        ...row,
+        ...(row.status !== 'draft' ? { receivingStatus: receivingStates.get(row.id) || 'unconfirmed' } : {}),
+      })),
+      total: rows[0]?.total || 0,
+      page,
+    };
   }
   async activate(
     entity: string,
@@ -352,11 +363,13 @@ export class SnLabelsService {
       any[]
     >`SELECT actor_id,action,data,created_at FROM sn_label_events WHERE batch_id=${id} ORDER BY created_at DESC LIMIT 100`;
     const review = await this.reviews.read(id);
+    const receivingStatus = (await this.reviews.receivingStates(entity, [id])).get(id) || 'unconfirmed';
     return {
       id: b.id,
       status: b.retired_at ? 'retired' : 'active',
       batchRevision: b.batch_revision,
       review,
+      receivingStatus,
       data: { ...b.data, quantity: b.quantity },
       ...counts,
       boxes,

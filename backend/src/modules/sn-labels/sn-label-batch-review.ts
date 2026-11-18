@@ -27,10 +27,11 @@ type Review = {
   batch_snapshot: { revision: string };
   reviewed_by: string | null;
   reviewed_at: Date | null;
-  evidence: { blocker?: string } | null;
+  evidence: { blocker?: string; method?: string } | null;
   replacement_draft_ids: string[];
 };
 type Decision = 'approve' | 'reject' | 'received' | 'used';
+export type ReceivingStatus = 'not-received' | 'received' | 'unconfirmed';
 
 const getRecord = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -248,12 +249,122 @@ async function event(
     VALUES (${randomUUID()},${entity},${batch},${actor},${action},${JSON.stringify(data)}::jsonb)`;
 }
 
+async function replacementDrafts(
+  tx: Tx,
+  entity: string,
+  actor: string,
+  batchId: string,
+  reviewId: string,
+) {
+  const sources = await tx.$queryRaw<{ data: unknown; id: string }[]>`
+    SELECT id, data FROM sn_label_drafts WHERE entity_id=${entity} AND batch_id=${batchId}
+    ORDER BY updated_at, id FOR UPDATE`;
+  if (!sources.length)
+    throw new ConflictException('找不到原始草稿，請人工核對批次');
+  const draftIds: string[] = [];
+  for (const source of sources) {
+    const newDraftId = randomUUID();
+    await tx.$executeRaw`
+      INSERT INTO sn_label_drafts (id,entity_id,data,created_by)
+      VALUES (${newDraftId},${entity},${JSON.stringify(source.data)}::jsonb,${actor})`;
+    draftIds.push(newDraftId);
+    await event(tx, entity, actor, batchId, 'REVERT_DRAFT_CREATED', {
+      reviewId,
+      sourceDraftId: source.id,
+      newDraftId,
+    });
+  }
+  await tx.$executeRaw`UPDATE sn_label_batches SET retired_at=now(),updated_at=now() WHERE id=${batchId}`;
+  return draftIds;
+}
+
 @Injectable()
 export class SnLabelBatchReviewService {
   constructor(private readonly db: PrismaService) {}
 
   async read(id: string) {
     return summarize(await latestReview(this.db, id));
+  }
+
+  async receivingStates(
+    entity: string,
+    ids: string[],
+    db: Tx | PrismaService = this.db,
+  ) {
+    if (!ids.length) return new Map<string, ReceivingStatus>();
+    const rows = await db.$queryRaw<{ id: string; status: ReceivingStatus }[]>`
+      SELECT b.id, CASE
+        WHEN EXISTS (
+          SELECT 1 FROM sn_label_batch_reversions r WHERE r.batch_id=b.id AND (
+            r.evidence->>'blocker' IN ('ECOUNT_RECEIVED','ERP_SERIAL_IN_USE','WMS_USED','PHYSICAL_USED')
+            OR CASE WHEN jsonb_typeof(r.evidence->'receipt'->'receivedQuantity')='number'
+              THEN (r.evidence->'receipt'->>'receivedQuantity')::numeric > 0 ELSE false END
+          )
+        ) OR EXISTS (
+          SELECT 1 FROM sn_label_serials s
+          JOIN inventory_serial_numbers n ON n.serial_number=s.sn AND n.entity_id=b.entity_id
+            AND n.product_id=b.data->>'productId'
+          WHERE s.batch_id=b.id
+        ) OR EXISTS (
+          SELECT 1 FROM sn_label_events e WHERE e.batch_id=b.id AND e.entity_id=b.entity_id
+            AND e.action='INBOUND_STATUS_RECORDED' AND e.data->>'status'='received'
+        ) THEN 'received'
+        WHEN EXISTS (
+          SELECT 1 FROM sn_label_events e WHERE e.batch_id=b.id AND e.entity_id=b.entity_id
+            AND e.action='INBOUND_STATUS_RECORDED' AND e.data->>'status'='not-received'
+        ) THEN 'not-received'
+        ELSE 'unconfirmed'
+      END AS status
+      FROM sn_label_batches b WHERE b.entity_id=${entity} AND b.id=ANY(${ids}::text[])`;
+    return new Map(rows.map((row) => [row.id, row.status]));
+  }
+
+  async returnToDraft(entity: string, actor: string, id: string, body: unknown) {
+    const input = getRecord(body);
+    const reason = field(input.reason, '退回原因', 400);
+    const revision = field(input.batchRevision, '批次版本', 100);
+    return this.db.$transaction(async (tx) => {
+      await lockSnLabelAllocation(tx);
+      const batch = await batchFor(tx, entity, id);
+      const current = await latestReview(tx, id);
+      if (batch.retired_at && current?.state === 'approved' &&
+          current.evidence?.method === 'direct-return-before-receipt' &&
+          current.requested_by === actor && current.request_reason === reason &&
+          current.batch_snapshot.revision === revision) return summarize(current);
+      requireActive(batch);
+      if (revision !== batch.revision)
+        throw new ConflictException('批次已更新，請重新載入');
+      const status = (await this.receivingStates(entity, [id], tx)).get(id);
+      if (status === 'received')
+        throw new ConflictException('此批次已入庫，不可退回');
+      if (status !== 'not-received')
+        throw new ConflictException('請先確認此批次的入庫狀態');
+      const reviewId = randomUUID();
+      if (current?.state === 'pending') {
+        const superseded = { method: 'superseded-by-direct-return', directReturnId: reviewId };
+        await tx.$executeRaw`
+          UPDATE sn_label_batch_reversions SET state='rejected',reviewed_by=${actor},
+            reviewed_at=now(),evidence=${JSON.stringify(superseded)}::jsonb
+          WHERE id=${current.id} AND state='pending'`;
+      }
+      const draftIds = await replacementDrafts(tx, entity, actor, id, reviewId);
+      const evidence = {
+        method: 'direct-return-before-receipt',
+        receivingStatus: status,
+        ...(current?.state === 'pending' ? { supersededReviewId: current.id } : {}),
+      };
+      const snapshot = { revision, quantity: batch.quantity, data: batch.data };
+      const [result] = await tx.$queryRaw<Review[]>`
+        INSERT INTO sn_label_batch_reversions
+          (id,batch_id,requested_by,request_reason,batch_snapshot,state,reviewed_by,reviewed_at,evidence,replacement_draft_ids)
+        VALUES (${reviewId},${id},${actor},${reason},${JSON.stringify(snapshot)}::jsonb,'approved',${actor},
+          now(),${JSON.stringify(evidence)}::jsonb,${JSON.stringify(draftIds)}::jsonb) RETURNING *`;
+      await event(tx, entity, actor, id, 'REVERT_RETURNED_TO_DRAFT', {
+        reviewId, reason, receivingStatus: status, replacementDraftIds: draftIds,
+        ...(current?.state === 'pending' ? { supersededReviewId: current.id } : {}),
+      });
+      return summarize(result);
+    });
   }
 
   async request(entity: string, actor: string, id: string, body: unknown) {
@@ -365,6 +476,10 @@ export class SnLabelBatchReviewService {
           ) AS present`;
           if (local.present) evidence.blocker = 'ERP_SERIAL_IN_USE';
         }
+        if (!evidence.blocker &&
+            (await this.receivingStates(entity, [id], tx)).get(id) === 'received') {
+          evidence.blocker = 'ECOUNT_RECEIVED';
+        }
         if (!evidence.blocker) {
           const [output] = await tx.$queryRaw<
             { present: boolean }[]
@@ -382,24 +497,7 @@ export class SnLabelBatchReviewService {
         }
         if (evidence.blocker) state = 'blocked';
         else {
-          const sources = await tx.$queryRaw<{ data: unknown; id: string }[]>`
-            SELECT id, data FROM sn_label_drafts WHERE entity_id=${entity} AND batch_id=${id}
-            ORDER BY updated_at, id FOR UPDATE`;
-          if (!sources.length)
-            throw new ConflictException('找不到原始草稿，請人工核對批次');
-          for (const source of sources) {
-            const newId = randomUUID();
-            await tx.$executeRaw`
-              INSERT INTO sn_label_drafts (id,entity_id,data,created_by)
-              VALUES (${newId},${entity},${JSON.stringify(source.data)}::jsonb,${actor})`;
-            replacementDraftIds.push(newId);
-            await event(tx, entity, actor, id, 'REVERT_DRAFT_CREATED', {
-              reviewId,
-              sourceDraftId: source.id,
-              newDraftId: newId,
-            });
-          }
-          await tx.$executeRaw`UPDATE sn_label_batches SET retired_at=now(),updated_at=now() WHERE id=${id}`;
+          replacementDraftIds.push(...await replacementDrafts(tx, entity, actor, id, reviewId));
           state = 'approved';
         }
       }

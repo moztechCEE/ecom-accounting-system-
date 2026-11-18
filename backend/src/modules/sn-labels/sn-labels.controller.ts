@@ -167,7 +167,7 @@ export class SnLabelsController {
     @Body() body: unknown,
     @Query('entityId') e?: string,
   ) {
-    return this.reviews.request(
+    return this.reviews.returnToDraft(
       await this.company(req, e),
       req.user.id,
       id,
