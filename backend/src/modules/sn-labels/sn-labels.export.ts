@@ -20,8 +20,8 @@ type WarehouseCarton = { id: string; quantity: number; serials: string[] };
 @Injectable()
 export class SnLabelsExport {
   warehouseCartons(d: SnData, boxes: WarehouseCarton[], batchId: string) {
-    if (!d.sku || boxes.length < 1 || boxes.length > 100)
-      throw new BadRequestException('請核對商品品號及箱序範圍（每次最多 100 箱）');
+    if (!d.sku || boxes.length < 1)
+      throw new BadRequestException('請核對商品品號及箱序範圍');
     const rows = boxes.map((box) => [
       d.barcode, d.productName, d.model, box.quantity, box.id,
       box.serials.join(','), d.sku, '', 'corely-erp-sn-labels', batchId,

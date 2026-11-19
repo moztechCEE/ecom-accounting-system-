@@ -1477,13 +1477,14 @@
           "選擇產品並填入批次資料，先檢查序號規則與標籤預覽。",
           "有庫存修改權限者將草稿儲存成正式批次，再依批次進行箱號配對與標籤下載。",
           "規格箱貼紙用箱號條碼掃描箱號；有 SN 版本的 QR Code 以半形逗號分隔箱內序號。核對匯出的箱號、序號與箱內順序，再進行實際列印與掃描驗收。",
-          "有 SN 和無 SN 的已啟用批次都可按箱序下載「箱號倉儲明細 XLSX」。一次最多 100 箱，下載後可直接匯入 WMS 箱號管理。",
+          "有 SN 和無 SN 的已啟用批次都可下載「箱號倉儲明細 XLSX」。開啟批次預設選取全部箱號，也可指定箱序範圍；按「選取全部箱號」可恢復整批匯出。",
           "新批次配號時顯示「尚未入庫」。收貨人員核對 ECOUNT 進貨單後，在批次按「標記已入庫」並確認。只要已收其中一部分，就應標記該批次。這項操作只記錄批次狀態。",
           "尚未入庫的批次可點「退回修改」，填寫退回原因並確認，系統會建立可編輯草稿。舊批次若顯示「入庫狀態待確認」，請先核對 ECOUNT 進貨單，並在退回視窗勾選確認。"
         ],
         "boundaries": [
           "瀏覽器草稿與伺服器批次分開；看到預覽不表示已建立正式序號。",
           "箱號倉儲明細保留實際數量、WMS／ECOUNT 品號、國條、來源批次和完整箱內 SN。無 SN 的箱子留空 SN 欄。",
+          "箱號倉儲明細可一次匯出整個批次。WMS 箱號匯入仍以每次 100 箱／10,000 個 SN 為限；較大批次要匯入 WMS 時，請分段選取箱序下載。",
           "已入庫批次不可退回。退回修改後保留原序號、箱號與操作紀錄，並建立可編輯的新草稿。"
         ],
         "related": [
@@ -1505,13 +1506,14 @@
               "Choose the product, fill in batch data and check serial rules and label preview.",
               "With inventory-update access, save the draft as a persisted batch, then pair cartons and download labels.",
               "Use the carton barcode to scan the carton ID. The QR Code on the SN carton label joins the serials with ASCII commas. Check exported carton IDs, serials and their order before physical printing and scanner acceptance.",
-              "Download Warehouse Carton Details (XLSX) by carton ordinal for an active batch with or without serials. Export up to 100 cartons at a time and import the file directly into WMS Carton management.",
+              "Download Warehouse Carton Details (XLSX) for an active batch with or without serials. Opening a batch selects every carton by default. Choose a carton range or use Select All Cartons to restore the full batch range.",
               "New batches start as Not Received. After checking the ECOUNT purchase receipt, select Mark as Received on the batch and confirm, including for a partial receipt. This records the batch status only.",
               "For an unreceived batch, select Return for Editing, enter the reason and confirm to create editable drafts. For an older batch with unconfirmed status, check ECOUNT purchase receipts and tick the confirmation in the return dialog."
             ],
             "boundaries": [
               "Browser drafts and persisted batches are distinct; a preview is not a registered serial batch.",
               "The carton workbook preserves actual quantities, WMS/ECOUNT item codes, barcodes, source batches, and full carton serial lists. The SN column is blank for nonserial cartons.",
+              "The carton workbook can export the entire batch at once. WMS carton imports still allow up to 100 cartons and 10,000 serials per file; select smaller carton ranges when downloading a large batch for WMS import.",
               "Received batches cannot be returned for editing. A return retains the original serials, carton IDs and audit history and creates editable drafts."
             ],
             "related": [
