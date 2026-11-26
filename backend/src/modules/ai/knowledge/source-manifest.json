@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "sha256:0538a5f30bc31c60062a9da522737c5511eecd5488a0a62526eb29fd7a9c0dc7",
+  "sourceVersion": "sha256:a7cb5585e4128cddc6167da34831944da1de824c403b6b8e4690907d1ec02d0e",
   "reviewedBaseCommit": "0ae9b322aedf1ff3ca2df0a6ab68f65dcb922c09",
   "entryCount": 82,
   "groups": [
@@ -21,7 +21,7 @@
     "zh-TW",
     "en"
   ],
-  "catalogSha256": "e2b5cc1976281e8378c1f5a32332709c61fb73c6999ef06fa647527b9ca92bfd",
+  "catalogSha256": "8f6a3891c93c826e156615a364322790aa2eb756b17cb872f232b601fb82d661",
   "legacySha256": "3f48c7d799a82fdbf4936ef48f230068f42b57f6245cd6799c9c1351d4f87295",
   "coverage": {
     "routes": [
@@ -795,6 +795,10 @@
       "sha256": "e11a24eee3951689e49c611243983f151235d0de935c4753269800470e9f45ef"
     },
     {
+      "path": "backend/src/modules/sn-labels/carton-label-layout.ts",
+      "sha256": "1d541f38b3c6d2c254f58a19e3eaeb962f7077105d8a4fd087daee135db791e4"
+    },
+    {
       "path": "backend/src/modules/sn-labels/sn-label-batch-review.ts",
       "sha256": "458f560167c263196e7cacebd2dae79140c2669b9197b65e1ab301af019aa2f8"
     },
@@ -804,7 +808,7 @@
     },
     {
       "path": "backend/src/modules/sn-labels/sn-labels.export.ts",
-      "sha256": "10fddebdd1c41025dc626549b177268d4f87aa4e357b101c979c2afe24506a03"
+      "sha256": "e80b01a23c515625e534b021c67ed9248b7f96234e487e5dc245a441c10a86f3"
     },
     {
       "path": "backend/src/modules/sn-labels/sn-labels.service.ts",

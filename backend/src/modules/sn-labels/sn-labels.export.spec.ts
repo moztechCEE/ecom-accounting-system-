@@ -52,6 +52,16 @@ describe('carton label PDF scan contents', () => {
 
   afterEach(() => jest.restoreAllMocks());
 
+  it.each([60, 120])('keeps 11 pt text and a 25 mm serial QR on %i mm paper', async (width) => {
+    const font = jest.spyOn(PDFDocument.prototype, 'fontSize');
+    const rectangles = jest.spyOn(PDFDocument.prototype, 'rect');
+    await new SnLabelsExport().pdf('cartons', { ...data, cartonWidth: width }, [], [carton]);
+    expect(font.mock.calls.map(([size]) => size)).toContain(11);
+    expect(font.mock.calls.every(([size]) => size === 11 || size === 12)).toBe(true);
+    const edge = 25 * 72 / 25.4;
+    expect(rectangles.mock.calls.filter(([, , w, h]) => Math.abs(w-edge) < 0.001 && Math.abs(h-edge) < 0.001)).toHaveLength(1);
+  });
+
   it.each([
     ['cartons', true],
     ['cartons-no-sn', false],

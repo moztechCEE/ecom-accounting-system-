@@ -3,6 +3,7 @@ import PDFDocument from 'pdfkit';
 import { join } from 'path';
 import * as XLSX from 'xlsx';
 import { SnData } from './sn-labels.rules';
+import { drawCartonLabel } from './carton-label-layout';
 const QR = require('qrcode');
 const BWIP = require('bwip-js');
 const mm = 72 / 25.4;
@@ -133,29 +134,34 @@ export class SnLabelsExport {
         throw new BadRequestException('標籤文字超出範圍，請縮小字級或放大標籤');
       doc.fillColor('black').text(s, x * mm, y * mm, { lineBreak: false });
     };
-    const fit = (s: string, x: number, y: number, size: number, w: number) => {
-      doc.font(font).fontSize(size * mm);
-      const actual = Math.min(
-        size,
-        (size * w * mm) / Math.max(1, doc.widthOfString(s)),
-      );
-      if (actual < 1)
-        throw new BadRequestException('外箱文字過長，請調整產品名稱或標籤尺寸');
-      text(s, x, y, actual, w);
-    };
-    const qr = (value: string, x: number, y: number, size: number) => {
-      const q = QR.create(value, { errorCorrectionLevel: 'M' }).modules,
-        n = q.size,
-        unit = size / (n + 8);
-      if (unit < 0.2)
-        throw new BadRequestException(
-          'QR Code 過密，請放大標籤或降低每箱容量後再配號',
-        );
+    const qr = (value: string, x: number, y: number, size: number, serialList = false) => {
+      let q = QR.create(value, { errorCorrectionLevel: 'M' }).modules;
+      // A long comma-separated SN list needs a coarser module grid on the fixed-size label.
+      if (serialList && size / (q.size + 8) < 0.2)
+        q = QR.create(value, { errorCorrectionLevel: 'L' }).modules;
+      const n = q.size, unit = size / (n + 8);
+      if (unit < (serialList ? 2 / 12 : 0.2))
+        throw new BadRequestException(serialList
+          ? '25 mm QR Code 無法清楚容納這箱的 SN，請降低每箱容量。'
+          : 'QR Code 過密，請放大標籤或降低每箱容量後再配號');
       doc
         .fillColor('white')
         .rect(x * mm, y * mm, size * mm, size * mm)
         .fill();
       doc.fillColor('black');
+      if (isCarton) {
+        // Fill a single vector path to avoid pale seams between adjacent modules on thermal rasters.
+        for (let row = 0; row < n; row++) {
+          for (let col = 0; col < n;) {
+            if (!q.get(row, col)) { col++; continue; }
+            const first = col++;
+            while (col < n && q.get(row, col)) col++;
+            doc.rect((x + (first + 4) * unit) * mm, (y + (row + 4) * unit) * mm, (col - first) * unit * mm, unit * mm);
+          }
+        }
+        doc.fill();
+        return;
+      }
       for (let row = 0; row < n; row++)
         for (let col = 0; col < n; col++)
           if (q.get(row, col))
@@ -229,26 +235,7 @@ export class SnLabelsExport {
           );
           if (l.showQr) qr(item.sn, l.qrX, l.qrY, l.qrSize);
         } else {
-          const s = scale;
-          fit('型號: ' + d.model, 3 * s, 3 * s, 3 * s, 32 * s);
-          fit('一箱共 ' + item.quantity + ' 入', 37 * s, 3 * s, 3 * s, 20 * s);
-          fit('款式: ' + (d.style || '—'), 3 * s, 9 * s, 2.5 * s, 28 * s);
-          fit('顏色: ' + (d.color || '—'), 3 * s, 14 * s, 2.5 * s, 28 * s);
-          bars(item.id, 3 * s, 24 * s, 54 * s, 9 * s);
-          fit('箱號: ' + item.id, 3 * s, 35 * s, 2.5 * s, 54 * s);
-          if (kind !== 'cartons-no-sn') {
-            qr(item.serials.join(','), 3 * s, 41 * s, 31 * s);
-            fit('箱內序號', 36 * s, 44 * s, 2.4 * s, 21 * s);
-            fit(item.serials[0], 35 * s, 52 * s, 2.2 * s, 22 * s);
-            text('至', 43 * s, 58 * s, 2 * s, 10 * s);
-            fit(
-              item.serials[item.serials.length - 1],
-              35 * s,
-              64 * s,
-              2.2 * s,
-              22 * s,
-            );
-          }
+          drawCartonLabel(doc, font, width, height, d, item, kind !== 'cartons-no-sn', false, qr, bars);
         }
       }
       doc.end();
